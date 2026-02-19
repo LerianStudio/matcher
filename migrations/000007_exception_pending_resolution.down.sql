@@ -1,0 +1,5 @@
+-- PostgreSQL does not support removing individual enum values.
+-- The PENDING_RESOLUTION value will remain in the type but will no longer
+-- be used by application code after rollback. This is safe because
+-- ALTER TYPE ADD VALUE is not transactional in PostgreSQL anyway.
+-- No action needed.

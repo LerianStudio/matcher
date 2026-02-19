@@ -1,0 +1,5 @@
+[
+  {"id":"LEDGER-JSON-001","amount":"100.00","currency":"USD","date":"2026-01-15","description":"Monthly subscription"},
+  {"id":"LEDGER-JSON-002","amount":"250.50","currency":"USD","date":"2026-01-16","description":"Consulting fee"},
+  {"id":"LEDGER-JSON-003","amount":"75.00","currency":"EUR","date":"2026-01-17","description":"Office supplies"}
+]

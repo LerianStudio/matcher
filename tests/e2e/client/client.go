@@ -1,0 +1,209 @@
+//go:build e2e
+
+package client
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"mime/multipart"
+	"net/http"
+	"time"
+
+	"github.com/google/uuid"
+)
+
+// Client is the base HTTP client for e2e tests.
+type Client struct {
+	baseURL    string
+	httpClient *http.Client
+	tenantID   string
+	userID     string
+}
+
+// DefaultUserID is the default user ID for e2e tests when auth is disabled.
+const DefaultUserID = "e2e-test-user@example.com"
+
+// NewClient creates a new base client.
+func NewClient(baseURL, tenantID string, timeout time.Duration) *Client {
+	return &Client{
+		baseURL:    baseURL,
+		tenantID:   tenantID,
+		userID:     DefaultUserID,
+		httpClient: &http.Client{Timeout: timeout},
+	}
+}
+
+// SetTenantID updates the tenant ID for subsequent requests.
+func (c *Client) SetTenantID(tenantID string) {
+	c.tenantID = tenantID
+}
+
+// TenantID returns the configured tenant ID.
+func (c *Client) TenantID() string {
+	return c.tenantID
+}
+
+// Do performs an HTTP request with tenant headers.
+// For POST/PUT/PATCH requests, it automatically adds a unique idempotency key.
+func (c *Client) Do(
+	ctx context.Context,
+	method, path string,
+	body io.Reader,
+	contentType string,
+) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
+	req.Header.Set("X-Tenant-ID", c.tenantID)
+	req.Header.Set("X-User-ID", c.userID)
+	req.Header.Set("Accept", "application/json")
+
+	// Add unique idempotency key for write operations to prevent caching between tests
+	if method == http.MethodPost || method == http.MethodPut || method == http.MethodPatch {
+		req.Header.Set("X-Idempotency-Key", uuid.New().String())
+	}
+
+	return c.httpClient.Do(req)
+}
+
+// DoJSON performs a JSON request and decodes the response.
+// The response body is read and closed internally.
+func (c *Client) DoJSON(ctx context.Context, method, path string, reqBody, respBody any) error {
+	var body io.Reader
+	if reqBody != nil {
+		data, err := json.Marshal(reqBody)
+		if err != nil {
+			return fmt.Errorf("failed to marshal request: %w", err)
+		}
+		body = bytes.NewReader(data)
+	}
+
+	resp, err := c.Do(ctx, method, path, body, "application/json")
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	respData, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode >= 400 {
+		return &APIError{
+			StatusCode: resp.StatusCode,
+			Body:       respData,
+		}
+	}
+
+	if respBody != nil && len(respData) > 0 {
+		if err := json.Unmarshal(respData, respBody); err != nil {
+			return fmt.Errorf("failed to unmarshal response: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// DoMultipart performs a multipart file upload.
+func (c *Client) DoMultipart(
+	ctx context.Context,
+	path, fieldName, fileName string,
+	fileContent []byte,
+	formFields map[string]string,
+) (*http.Response, []byte, error) {
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+
+	part, err := writer.CreateFormFile(fieldName, fileName)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create form file: %w", err)
+	}
+	if _, err := part.Write(fileContent); err != nil {
+		return nil, nil, fmt.Errorf("failed to write file content: %w", err)
+	}
+
+	for key, val := range formFields {
+		if err := writer.WriteField(key, val); err != nil {
+			return nil, nil, fmt.Errorf("failed to write field %s: %w", key, err)
+		}
+	}
+
+	if err := writer.Close(); err != nil {
+		return nil, nil, fmt.Errorf("failed to close multipart writer: %w", err)
+	}
+
+	resp, err := c.Do(ctx, http.MethodPost, path, &buf, writer.FormDataContentType())
+	if err != nil {
+		return nil, nil, err
+	}
+	defer resp.Body.Close()
+
+	respData, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return resp, nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	return resp, respData, nil
+}
+
+// DoRaw performs a request and returns raw response data.
+func (c *Client) DoRaw(
+	ctx context.Context,
+	method, path string,
+	body io.Reader,
+	contentType string,
+) (*http.Response, []byte, error) {
+	resp, err := c.Do(ctx, method, path, body, contentType)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer resp.Body.Close()
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return resp, nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode >= 400 {
+		return resp, data, &APIError{
+			StatusCode: resp.StatusCode,
+			Body:       data,
+		}
+	}
+
+	return resp, data, nil
+}
+
+// APIError represents an HTTP error response.
+type APIError struct {
+	StatusCode int
+	Body       []byte
+}
+
+func (e *APIError) Error() string {
+	return fmt.Sprintf("API error %d: %s", e.StatusCode, string(e.Body))
+}
+
+// IsNotFound returns true if the error is a 404.
+func (e *APIError) IsNotFound() bool {
+	return e.StatusCode == http.StatusNotFound
+}
+
+// IsBadRequest returns true if the error is a 400.
+func (e *APIError) IsBadRequest() bool {
+	return e.StatusCode == http.StatusBadRequest
+}
+
+// IsConflict returns true if the error is a 409.
+func (e *APIError) IsConflict() bool {
+	return e.StatusCode == http.StatusConflict
+}

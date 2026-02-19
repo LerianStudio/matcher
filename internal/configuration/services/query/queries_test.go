@@ -1,0 +1,292 @@
+//go:build unit
+
+package query
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+
+	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+
+	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
+	"github.com/LerianStudio/matcher/internal/configuration/domain/repositories/mocks"
+	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+)
+
+// errDBError is a sentinel error for database errors in tests.
+var errDBError = errors.New("db error")
+
+func TestNewUseCase_Success(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	contextRepo := mocks.NewMockContextRepository(ctrl)
+	sourceRepo := mocks.NewMockSourceRepository(ctrl)
+	fieldMapRepo := mocks.NewMockFieldMapRepository(ctrl)
+	matchRuleRepo := mocks.NewMockMatchRuleRepository(ctrl)
+
+	uc, err := NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
+
+	require.NoError(t, err)
+	require.NotNil(t, uc)
+	assert.NotNil(t, uc.contextRepo)
+	assert.NotNil(t, uc.sourceRepo)
+	assert.NotNil(t, uc.fieldMapRepo)
+	assert.NotNil(t, uc.matchRuleRepo)
+}
+
+func TestNewUseCase_NilContextRepository(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	sourceRepo := mocks.NewMockSourceRepository(ctrl)
+	fieldMapRepo := mocks.NewMockFieldMapRepository(ctrl)
+	matchRuleRepo := mocks.NewMockMatchRuleRepository(ctrl)
+
+	uc, err := NewUseCase(nil, sourceRepo, fieldMapRepo, matchRuleRepo)
+
+	require.Nil(t, uc)
+	require.ErrorIs(t, err, ErrNilContextRepository)
+}
+
+func TestNewUseCase_NilSourceRepository(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	contextRepo := mocks.NewMockContextRepository(ctrl)
+	fieldMapRepo := mocks.NewMockFieldMapRepository(ctrl)
+	matchRuleRepo := mocks.NewMockMatchRuleRepository(ctrl)
+
+	uc, err := NewUseCase(contextRepo, nil, fieldMapRepo, matchRuleRepo)
+
+	require.Nil(t, uc)
+	require.ErrorIs(t, err, ErrNilSourceRepository)
+}
+
+func TestNewUseCase_NilFieldMapRepository(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	contextRepo := mocks.NewMockContextRepository(ctrl)
+	sourceRepo := mocks.NewMockSourceRepository(ctrl)
+	matchRuleRepo := mocks.NewMockMatchRuleRepository(ctrl)
+
+	uc, err := NewUseCase(contextRepo, sourceRepo, nil, matchRuleRepo)
+
+	require.Nil(t, uc)
+	require.ErrorIs(t, err, ErrNilFieldMapRepository)
+}
+
+func TestNewUseCase_NilMatchRuleRepository(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	contextRepo := mocks.NewMockContextRepository(ctrl)
+	sourceRepo := mocks.NewMockSourceRepository(ctrl)
+	fieldMapRepo := mocks.NewMockFieldMapRepository(ctrl)
+
+	uc, err := NewUseCase(contextRepo, sourceRepo, fieldMapRepo, nil)
+
+	require.Nil(t, uc)
+	require.ErrorIs(t, err, ErrNilMatchRuleRepository)
+}
+
+func TestContextQueries(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	contextRepo := mocks.NewMockContextRepository(ctrl)
+	sourceRepo := mocks.NewMockSourceRepository(ctrl)
+	fieldMapRepo := mocks.NewMockFieldMapRepository(ctrl)
+	matchRuleRepo := mocks.NewMockMatchRuleRepository(ctrl)
+
+	uc, err := NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	tenantID := uuid.New()
+	contextID := uuid.New()
+
+	expected := &entities.ReconciliationContext{ID: contextID, TenantID: tenantID}
+	contextRepo.EXPECT().FindByID(gomock.Any(), contextID).Return(expected, nil)
+
+	result, err := uc.GetContext(ctx, contextID)
+	require.NoError(t, err)
+	require.Equal(t, expected, result)
+
+	contextType := value_objects.ContextTypeOneToOne
+	status := value_objects.ContextStatusActive
+	expectedList := []*entities.ReconciliationContext{expected}
+	contextRepo.EXPECT().
+		FindAll(gomock.Any(), "", 10, &contextType, &status).
+		Return(expectedList, libHTTP.CursorPagination{}, nil)
+
+	list, _, err := uc.ListContexts(ctx, "", 10, &contextType, &status)
+	require.NoError(t, err)
+	require.Equal(t, expectedList, list)
+
+	contextRepo.EXPECT().Count(gomock.Any()).Return(int64(2), nil)
+
+	count, err := uc.CountContexts(ctx)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), count)
+}
+
+func TestContextQueryErrorsBubble(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	contextRepo := mocks.NewMockContextRepository(ctrl)
+	sourceRepo := mocks.NewMockSourceRepository(ctrl)
+	fieldMapRepo := mocks.NewMockFieldMapRepository(ctrl)
+	matchRuleRepo := mocks.NewMockMatchRuleRepository(ctrl)
+
+	uc, err := NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	contextID := uuid.New()
+
+	contextRepo.EXPECT().FindByID(gomock.Any(), contextID).Return(nil, errDBError)
+
+	_, err = uc.GetContext(ctx, contextID)
+	require.ErrorIs(t, err, errDBError)
+}
+
+func TestSourceQueries(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	contextRepo := mocks.NewMockContextRepository(ctrl)
+	sourceRepo := mocks.NewMockSourceRepository(ctrl)
+	fieldMapRepo := mocks.NewMockFieldMapRepository(ctrl)
+	matchRuleRepo := mocks.NewMockMatchRuleRepository(ctrl)
+
+	uc, err := NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	contextID := uuid.New()
+	sourceID := uuid.New()
+
+	expected := &entities.ReconciliationSource{ID: sourceID}
+	sourceRepo.EXPECT().FindByID(gomock.Any(), contextID, sourceID).Return(expected, nil)
+
+	result, err := uc.GetSource(ctx, contextID, sourceID)
+	require.NoError(t, err)
+	require.Equal(t, expected, result)
+
+	sourceType := value_objects.SourceTypeBank
+	expectedList := []*entities.ReconciliationSource{expected}
+	sourceRepo.EXPECT().
+		FindByContextIDAndType(gomock.Any(), contextID, sourceType, "", 10).
+		Return(expectedList, libHTTP.CursorPagination{}, nil)
+
+	list, _, err := uc.ListSources(ctx, contextID, "", 10, &sourceType)
+	require.NoError(t, err)
+	require.Equal(t, expectedList, list)
+
+	fallbackList := []*entities.ReconciliationSource{expected}
+	sourceRepo.EXPECT().FindByContextID(gomock.Any(), contextID, "", 10).Return(fallbackList, libHTTP.CursorPagination{}, nil)
+	list, _, err = uc.ListSources(ctx, contextID, "", 10, nil)
+	require.NoError(t, err)
+	require.Equal(t, fallbackList, list)
+}
+
+func TestFieldMapQueries(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	contextRepo := mocks.NewMockContextRepository(ctrl)
+	sourceRepo := mocks.NewMockSourceRepository(ctrl)
+	fieldMapRepo := mocks.NewMockFieldMapRepository(ctrl)
+	matchRuleRepo := mocks.NewMockMatchRuleRepository(ctrl)
+
+	uc, err := NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	fieldMapID := uuid.New()
+	sourceID := uuid.New()
+
+	expected := &entities.FieldMap{ID: fieldMapID}
+	fieldMapRepo.EXPECT().FindByID(gomock.Any(), fieldMapID).Return(expected, nil)
+
+	result, err := uc.GetFieldMap(ctx, fieldMapID)
+	require.NoError(t, err)
+	require.Equal(t, expected, result)
+
+	fieldMapRepo.EXPECT().FindBySourceID(gomock.Any(), sourceID).Return(expected, nil)
+
+	result, err = uc.GetFieldMapBySource(ctx, sourceID)
+	require.NoError(t, err)
+	require.Equal(t, expected, result)
+}
+
+func TestMatchRuleQueries(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	contextRepo := mocks.NewMockContextRepository(ctrl)
+	sourceRepo := mocks.NewMockSourceRepository(ctrl)
+	fieldMapRepo := mocks.NewMockFieldMapRepository(ctrl)
+	matchRuleRepo := mocks.NewMockMatchRuleRepository(ctrl)
+
+	uc, err := NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	contextID := uuid.New()
+	ruleID := uuid.New()
+
+	expected := &entities.MatchRule{ID: ruleID}
+	matchRuleRepo.EXPECT().FindByID(gomock.Any(), contextID, ruleID).Return(expected, nil)
+
+	result, err := uc.GetMatchRule(ctx, contextID, ruleID)
+	require.NoError(t, err)
+	require.Equal(t, expected, result)
+
+	ruleType := value_objects.RuleTypeExact
+	expectedList := entities.MatchRules{expected}
+	matchRuleRepo.EXPECT().
+		FindByContextIDAndType(gomock.Any(), contextID, ruleType, "", 10).
+		Return(expectedList, libHTTP.CursorPagination{}, nil)
+
+	list, _, err := uc.ListMatchRules(ctx, contextID, "", 10, &ruleType)
+	require.NoError(t, err)
+	require.Equal(t, expectedList, list)
+
+	fallbackList := entities.MatchRules{expected}
+	matchRuleRepo.EXPECT().
+		FindByContextID(gomock.Any(), contextID, "", 10).
+		Return(fallbackList, libHTTP.CursorPagination{}, nil)
+	list, _, err = uc.ListMatchRules(ctx, contextID, "", 10, nil)
+	require.NoError(t, err)
+	require.Equal(t, fallbackList, list)
+}

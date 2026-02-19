@@ -1,0 +1,199 @@
+//go:build integration
+
+package configuration
+
+import (
+	"database/sql"
+	"testing"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
+	contextRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/context"
+	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
+	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	"github.com/LerianStudio/matcher/tests/integration"
+)
+
+func TestContextRepository_CreateAndFindByID(t *testing.T) {
+	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
+		repo := contextRepo.NewRepository(h.Provider())
+		ctx := h.Ctx()
+
+		entity, err := entities.NewReconciliationContext(
+			ctx,
+			h.Seed.TenantID,
+			entities.CreateReconciliationContextInput{
+				Name:     "Test Context",
+				Type:     value_objects.ContextTypeOneToMany,
+				Interval: "0 */6 * * *",
+			},
+		)
+		require.NoError(t, err)
+
+		created, err := repo.Create(ctx, entity)
+		require.NoError(t, err)
+		require.NotEqual(t, uuid.Nil, created.ID)
+		require.Equal(t, "Test Context", created.Name)
+
+		fetched, err := repo.FindByID(ctx, created.ID)
+		require.NoError(t, err)
+		require.Equal(t, created.ID, fetched.ID)
+		require.Equal(t, created.Name, fetched.Name)
+		require.Equal(t, created.Type, fetched.Type)
+	})
+}
+
+func TestContextRepository_FindByName(t *testing.T) {
+	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
+		repo := contextRepo.NewRepository(h.Provider())
+		ctx := h.Ctx()
+
+		entity, err := entities.NewReconciliationContext(
+			ctx,
+			h.Seed.TenantID,
+			entities.CreateReconciliationContextInput{
+				Name:     "Unique Name Context",
+				Type:     value_objects.ContextTypeOneToOne,
+				Interval: "0 0 * * *",
+			},
+		)
+		require.NoError(t, err)
+
+		created, err := repo.Create(ctx, entity)
+		require.NoError(t, err)
+
+		fetched, err := repo.FindByName(ctx, "Unique Name Context")
+		require.NoError(t, err)
+		require.NotNil(t, fetched)
+		require.Equal(t, created.ID, fetched.ID)
+
+		notFound, err := repo.FindByName(ctx, "Non Existent")
+		require.NoError(t, err)
+		require.Nil(t, notFound)
+	})
+}
+
+func TestContextRepository_FindAll(t *testing.T) {
+	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
+		repo := contextRepo.NewRepository(h.Provider())
+		ctx := h.Ctx()
+
+		for i := 0; i < 3; i++ {
+			entity, err := entities.NewReconciliationContext(
+				ctx,
+				h.Seed.TenantID,
+				entities.CreateReconciliationContextInput{
+					Name:     "List Context " + string(rune('A'+i)),
+					Type:     value_objects.ContextTypeOneToOne,
+					Interval: "0 0 * * *",
+				},
+			)
+			require.NoError(t, err)
+			_, err = repo.Create(ctx, entity)
+			require.NoError(t, err)
+		}
+
+		contexts, _, err := repo.FindAll(ctx, "", 10, nil, nil)
+		require.NoError(t, err)
+		require.GreaterOrEqual(t, len(contexts), 3)
+
+		contexts, _, err = repo.FindAll(ctx, "", 2, nil, nil)
+		require.NoError(t, err)
+		require.Len(t, contexts, 2)
+	})
+}
+
+func TestContextRepository_Update(t *testing.T) {
+	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
+		repo := contextRepo.NewRepository(h.Provider())
+		ctx := h.Ctx()
+
+		entity, err := entities.NewReconciliationContext(
+			ctx,
+			h.Seed.TenantID,
+			entities.CreateReconciliationContextInput{
+				Name:     "Original Name",
+				Type:     value_objects.ContextTypeOneToOne,
+				Interval: "0 0 * * *",
+			},
+		)
+		require.NoError(t, err)
+
+		created, err := repo.Create(ctx, entity)
+		require.NoError(t, err)
+
+		created.Name = "Updated Name"
+		updated, err := repo.Update(ctx, created)
+		require.NoError(t, err)
+		require.Equal(t, "Updated Name", updated.Name)
+
+		fetched, err := repo.FindByID(ctx, created.ID)
+		require.NoError(t, err)
+		require.Equal(t, "Updated Name", fetched.Name)
+	})
+}
+
+func TestContextRepository_Delete(t *testing.T) {
+	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
+		repo := contextRepo.NewRepository(h.Provider())
+		ctx := h.Ctx()
+
+		entity, err := entities.NewReconciliationContext(
+			ctx,
+			h.Seed.TenantID,
+			entities.CreateReconciliationContextInput{
+				Name:     "To Be Deleted",
+				Type:     value_objects.ContextTypeOneToOne,
+				Interval: "0 0 * * *",
+			},
+		)
+		require.NoError(t, err)
+
+		created, err := repo.Create(ctx, entity)
+		require.NoError(t, err)
+
+		err = repo.Delete(ctx, created.ID)
+		require.NoError(t, err)
+
+		_, err = repo.FindByID(ctx, created.ID)
+		require.ErrorIs(t, err, sql.ErrNoRows)
+	})
+}
+
+func TestContextRepository_Count(t *testing.T) {
+	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
+		repo := contextRepo.NewRepository(h.Provider())
+		ctx := h.Ctx()
+
+		initialCount, err := repo.Count(ctx)
+		require.NoError(t, err)
+
+		entity, err := entities.NewReconciliationContext(
+			ctx,
+			h.Seed.TenantID,
+			entities.CreateReconciliationContextInput{
+				Name:     "Count Test",
+				Type:     value_objects.ContextTypeOneToOne,
+				Interval: "0 0 * * *",
+			},
+		)
+		require.NoError(t, err)
+		_, err = repo.Create(ctx, entity)
+		require.NoError(t, err)
+
+		newCount, err := repo.Count(ctx)
+		require.NoError(t, err)
+		require.Equal(t, initialCount+1, newCount)
+	})
+}
+
+func TestContextRepository_FindByID_NotFound(t *testing.T) {
+	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
+		repo := contextRepo.NewRepository(h.Provider())
+		ctx := h.Ctx()
+
+		_, err := repo.FindByID(ctx, uuid.New())
+		require.ErrorIs(t, err, sql.ErrNoRows)
+	})
+}

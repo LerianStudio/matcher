@@ -1,0 +1,56 @@
+# OS and editor files
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Build artifacts
+bin/
+tmp/
+artifacts/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+.gocache/
+
+# Go test and coverage artifacts
+*.test
+cover.out
+coverage*.out
+coverage*.html
+*.prof
+*.out
+boilerplate/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Local tooling and runtime
+.air.toml
+.golangci.yml
+.ring/
+console/
+
+# Local development folders
+.old/
+.opencode/
+.references/
+worktrees/
+.worktrees/
+docs/codereview/
+docs/plans/old/
+.codegraph/
+.ruff_cache/
+vendor/
+tests/e2e/journeys/fuzz_artifacts/
+docs/pre-dev/
+
+# Test data
+internal/bootstrap/testdata/fuzz/
+**/testdata/fuzz/

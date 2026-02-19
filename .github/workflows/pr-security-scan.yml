@@ -1,0 +1,29 @@
+name: "PR Security Scan"
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - release-candidate
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/**'
+      - 'LICENSE'
+      - 'CODEOWNERS'
+      - '.gitignore'
+      - 'images/**'
+      - '*.txt'
+
+jobs:
+  security-scan:
+    uses: LerianStudio/github-actions-shared-workflows/.github/workflows/pr-security-scan.yml@v1.10.2
+    with:
+      runner_type: "blacksmith-4vcpu-ubuntu-2404"
+      dockerhub_org: "lerianstudio"
+    secrets: inherit

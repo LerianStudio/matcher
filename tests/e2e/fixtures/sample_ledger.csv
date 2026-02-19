@@ -1,0 +1,6 @@
+id,amount,currency,date,description
+LEDGER-001,100.00,USD,2026-01-15,Monthly subscription
+LEDGER-002,250.50,USD,2026-01-16,Consulting fee
+LEDGER-003,75.00,EUR,2026-01-17,Office supplies
+LEDGER-004,500.00,USD,2026-01-18,Software license
+LEDGER-005,150.25,GBP,2026-01-19,Equipment rental

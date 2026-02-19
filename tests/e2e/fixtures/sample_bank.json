@@ -1,0 +1,5 @@
+[
+  {"id":"bank-json-001","amount":"100.00","currency":"USD","date":"2026-01-15","description":"Wire transfer received"},
+  {"id":"bank-json-002","amount":"250.50","currency":"USD","date":"2026-01-16","description":"ACH deposit"},
+  {"id":"bank-json-003","amount":"75.00","currency":"EUR","date":"2026-01-17","description":"SEPA transfer"}
+]

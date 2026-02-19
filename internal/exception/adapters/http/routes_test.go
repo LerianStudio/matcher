@@ -1,0 +1,111 @@
+//go:build unit
+
+package http
+
+import (
+	"testing"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func noopMiddleware(c *fiber.Ctx) error {
+	return c.Next()
+}
+
+func TestRegisterRoutes_NilProtected(t *testing.T) {
+	t.Parallel()
+
+	handlers := &Handlers{}
+	err := RegisterRoutes(nil, handlers, noopMiddleware)
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrProtectedRouteHelperRequired)
+}
+
+func TestRegisterRoutes_NilHandlers(t *testing.T) {
+	t.Parallel()
+
+	protected := func(resource, action string) fiber.Router {
+		return nil
+	}
+	err := RegisterRoutes(protected, nil, noopMiddleware)
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrHandlersRequired)
+}
+
+func TestRegisterRoutes_NilDispatchLimiter(t *testing.T) {
+	t.Parallel()
+
+	protected := func(resource, action string) fiber.Router {
+		return nil
+	}
+	handlers := &Handlers{}
+	err := RegisterRoutes(protected, handlers, nil)
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrDispatchLimiterRequired)
+}
+
+func TestRegisterRoutes_Success(t *testing.T) {
+	t.Parallel()
+
+	app := fiber.New()
+	defer app.Shutdown()
+
+	registeredRoutes := make(map[string]bool)
+
+	protected := func(resource, action string) fiber.Router {
+		return app
+	}
+
+	handlers := &Handlers{}
+
+	err := RegisterRoutes(protected, handlers, noopMiddleware)
+	require.NoError(t, err)
+
+	for _, route := range app.GetRoutes() {
+		registeredRoutes[route.Method+" "+route.Path] = true
+	}
+
+	expectedRoutes := []string{
+		"GET /v1/exceptions",
+		"GET /v1/exceptions/:exceptionId",
+		"GET /v1/exceptions/:exceptionId/history",
+		"POST /v1/exceptions/:exceptionId/force-match",
+		"POST /v1/exceptions/:exceptionId/adjust-entry",
+		"POST /v1/exceptions/:exceptionId/dispatch",
+		"POST /v1/exceptions/:exceptionId/callback",
+		"GET /v1/exceptions/:exceptionId/comments",
+		"POST /v1/exceptions/:exceptionId/comments",
+		"DELETE /v1/exceptions/:exceptionId/comments/:commentId",
+		"POST /v1/exceptions/:exceptionId/disputes",
+		"POST /v1/disputes/:disputeId/close",
+		"POST /v1/disputes/:disputeId/evidence",
+	}
+
+	for _, route := range expectedRoutes {
+		assert.True(t, registeredRoutes[route], "route %s should be registered", route)
+	}
+}
+
+func TestRoutesErrors_AreDistinct(t *testing.T) {
+	t.Parallel()
+
+	require.NotErrorIs(t, ErrProtectedRouteHelperRequired, ErrHandlersRequired)
+	require.NotErrorIs(t, ErrProtectedRouteHelperRequired, ErrDispatchLimiterRequired)
+	require.NotErrorIs(t, ErrHandlersRequired, ErrDispatchLimiterRequired)
+}
+
+func TestRoutesErrors_HaveMessages(t *testing.T) {
+	t.Parallel()
+
+	assert.Contains(
+		t,
+		ErrProtectedRouteHelperRequired.Error(),
+		"protected route helper is required",
+	)
+	assert.Contains(t, ErrHandlersRequired.Error(), "exception handlers are required")
+}

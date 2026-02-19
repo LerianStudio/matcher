@@ -1,0 +1,67 @@
+# Build artifacts
+bin/
+tmp/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test artifacts
+*.test
+coverage*.out
+coverage*.html
+*.prof
+
+# Test files (not needed in build context)
+**/*_test.go
+
+# IDE and editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# Documentation (keep swagger for build)
+docs/audits/
+docs/pre-dev/
+docs/plans/
+*.md
+!LICENSE.md
+
+# Development files
+.air.toml
+.golangci.yml
+.env
+.env.*
+!.env.example
+
+# Config secrets (config/.env is NOT matched by root-level .env pattern)
+config/.env
+config/.env.*
+!config/.env.example
+
+# CI/CD
+.github/
+
+# Local development
+worktrees/
+.references/
+.old/
+.opencode/
+.ring/
+
+# Test data
+**/testdata/fuzz/
+tests/
+
+# Misc
+Makefile
+docker-compose.yml
+docker-compose.prod.yml
+console/

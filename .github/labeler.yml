@@ -1,0 +1,51 @@
+'area: documentation':
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/*.md'
+          - docs/**/*
+
+'area: ci/cd':
+  - changed-files:
+      - any-glob-to-any-file:
+          - .github/**/*
+          - .golangci.yml
+          - .goreleaser.yml
+
+'area: dependencies':
+  - changed-files:
+      - any-glob-to-any-file:
+          - go.mod
+          - go.sum
+
+'area: build':
+  - changed-files:
+      - any-glob-to-any-file:
+          - Makefile
+          - Dockerfile
+          - build/**/*
+
+'area: tests':
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/*_test.go'
+          - tests/**/*
+
+'area: api':
+  - changed-files:
+      - any-glob-to-any-file:
+          - api/**/*
+
+'area: cmd':
+  - changed-files:
+      - any-glob-to-any-file:
+          - cmd/**/*
+
+'area: internal':
+  - changed-files:
+      - any-glob-to-any-file:
+          - internal/**/*
+
+'area: migrations':
+  - changed-files:
+      - any-glob-to-any-file:
+          - migrations/**/*

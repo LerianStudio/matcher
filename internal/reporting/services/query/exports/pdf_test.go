@@ -1,0 +1,379 @@
+//go:build unit
+
+package exports
+
+import (
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
+)
+
+func TestBuildMatchedPDF(t *testing.T) {
+	t.Parallel()
+
+	items := []*entities.MatchedItem{
+		{
+			TransactionID: uuid.New(),
+			MatchGroupID:  uuid.New(),
+			SourceID:      uuid.New(),
+			Amount:        decimal.NewFromInt(100),
+			Currency:      "USD",
+			Date:          time.Now().UTC(),
+		},
+	}
+
+	output, err := BuildMatchedPDF(items)
+	require.NoError(t, err)
+	assert.NotEmpty(t, output)
+	require.GreaterOrEqual(t, len(output), 4)
+	assert.Equal(t, "%PDF", string(output[:4]))
+}
+
+func TestBuildMatchedPDF_NilItems(t *testing.T) {
+	t.Parallel()
+
+	items := []*entities.MatchedItem{nil, nil}
+
+	output, err := BuildMatchedPDF(items)
+	require.NoError(t, err)
+	assert.NotEmpty(t, output)
+	require.GreaterOrEqual(t, len(output), 4)
+	assert.Equal(t, "%PDF", string(output[:4]))
+}
+
+func TestBuildMatchedPDF_Empty(t *testing.T) {
+	t.Parallel()
+
+	output, err := BuildMatchedPDF(nil)
+	require.NoError(t, err)
+	assert.NotEmpty(t, output)
+}
+
+func TestBuildUnmatchedPDF(t *testing.T) {
+	t.Parallel()
+
+	exceptionID := uuid.New()
+	dueAt := time.Now().Add(24 * time.Hour)
+
+	items := []*entities.UnmatchedItem{
+		{
+			TransactionID: uuid.New(),
+			SourceID:      uuid.New(),
+			Amount:        decimal.NewFromInt(200),
+			Currency:      "EUR",
+			Status:        "PENDING",
+			Date:          time.Now().UTC(),
+			ExceptionID:   &exceptionID,
+			DueAt:         &dueAt,
+		},
+		{
+			TransactionID: uuid.New(),
+			SourceID:      uuid.New(),
+			Amount:        decimal.NewFromInt(100),
+			Currency:      "EUR",
+			Status:        "UNMATCHED",
+			Date:          time.Now().UTC(),
+		},
+	}
+
+	output, err := BuildUnmatchedPDF(items)
+	require.NoError(t, err)
+	assert.NotEmpty(t, output)
+	require.GreaterOrEqual(t, len(output), 4)
+	assert.Equal(t, "%PDF", string(output[:4]))
+}
+
+func TestBuildSummaryPDF(t *testing.T) {
+	t.Parallel()
+
+	summary := &entities.SummaryReport{
+		MatchedCount:    10,
+		UnmatchedCount:  5,
+		TotalAmount:     decimal.NewFromFloat(1500.50),
+		MatchedAmount:   decimal.NewFromFloat(1000.25),
+		UnmatchedAmount: decimal.NewFromFloat(500.25),
+	}
+
+	output, err := BuildSummaryPDF(summary)
+	require.NoError(t, err)
+	assert.NotEmpty(t, output)
+	require.GreaterOrEqual(t, len(output), 4)
+	assert.Equal(t, "%PDF", string(output[:4]))
+}
+
+func TestBuildSummaryPDF_NilSummary(t *testing.T) {
+	t.Parallel()
+
+	_, err := BuildSummaryPDF(nil)
+	require.ErrorIs(t, err, ErrSummaryRequired)
+}
+
+func TestBuildVariancePDF(t *testing.T) {
+	t.Parallel()
+
+	variancePct := decimal.NewFromFloat(10.0)
+	rows := []*entities.VarianceReportRow{
+		{
+			SourceID:      uuid.New(),
+			Currency:      "USD",
+			FeeType:       "PERCENTAGE",
+			TotalExpected: decimal.NewFromInt(100),
+			TotalActual:   decimal.NewFromInt(110),
+			NetVariance:   decimal.NewFromInt(10),
+			VariancePct:   &variancePct,
+		},
+		{
+			SourceID:      uuid.New(),
+			Currency:      "EUR",
+			FeeType:       "FLAT",
+			TotalExpected: decimal.NewFromInt(50),
+			TotalActual:   decimal.NewFromInt(50),
+			NetVariance:   decimal.Zero,
+			VariancePct:   nil,
+		},
+	}
+
+	output, err := BuildVariancePDF(rows)
+	require.NoError(t, err)
+	assert.NotEmpty(t, output)
+	require.GreaterOrEqual(t, len(output), 4)
+	assert.Equal(t, "%PDF", string(output[:4]))
+}
+
+func TestBuildVariancePDF_NilRowsSkipped(t *testing.T) {
+	t.Parallel()
+
+	variancePct := decimal.NewFromFloat(5.0)
+	rows := []*entities.VarianceReportRow{
+		nil,
+		{
+			SourceID:      uuid.New(),
+			Currency:      "EUR",
+			FeeType:       "TIERED",
+			TotalExpected: decimal.NewFromInt(200),
+			TotalActual:   decimal.NewFromInt(210),
+			NetVariance:   decimal.NewFromInt(10),
+			VariancePct:   &variancePct,
+		},
+	}
+
+	output, err := BuildVariancePDF(rows)
+	require.NoError(t, err)
+	assert.NotEmpty(t, output)
+}
+
+func TestBuildVariancePDF_Empty(t *testing.T) {
+	t.Parallel()
+
+	output, err := BuildVariancePDF([]*entities.VarianceReportRow{})
+	require.NoError(t, err)
+	assert.NotEmpty(t, output)
+	require.GreaterOrEqual(t, len(output), 4)
+	assert.Equal(t, "%PDF", string(output[:4]))
+}
+
+func TestBuildMatchedPDF_Sorting(t *testing.T) {
+	t.Parallel()
+
+	id1 := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	id2 := uuid.MustParse("00000000-0000-0000-0000-000000000002")
+
+	items := []*entities.MatchedItem{
+		{
+			TransactionID: id2,
+			MatchGroupID:  uuid.New(),
+			SourceID:      uuid.New(),
+			Amount:        decimal.NewFromInt(200),
+			Currency:      "USD",
+			Date:          time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			TransactionID: id1,
+			MatchGroupID:  uuid.New(),
+			SourceID:      uuid.New(),
+			Amount:        decimal.NewFromInt(100),
+			Currency:      "USD",
+			Date:          time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		},
+	}
+
+	output, err := BuildMatchedPDF(items)
+	require.NoError(t, err)
+	assert.NotEmpty(t, output)
+	assert.Equal(t, "%PDF", string(output[:4]))
+}
+
+func TestBuildUnmatchedPDF_Empty(t *testing.T) {
+	t.Parallel()
+
+	output, err := BuildUnmatchedPDF([]*entities.UnmatchedItem{})
+	require.NoError(t, err)
+	assert.NotEmpty(t, output)
+	require.GreaterOrEqual(t, len(output), 4)
+	assert.Equal(t, "%PDF", string(output[:4]))
+}
+
+func TestBuildUnmatchedPDF_NilItems(t *testing.T) {
+	t.Parallel()
+
+	items := []*entities.UnmatchedItem{nil, nil}
+
+	output, err := BuildUnmatchedPDF(items)
+	require.NoError(t, err)
+	assert.NotEmpty(t, output)
+}
+
+func TestBuildUnmatchedPDF_NilOptionalFields(t *testing.T) {
+	t.Parallel()
+
+	items := []*entities.UnmatchedItem{
+		{
+			TransactionID: uuid.New(),
+			SourceID:      uuid.New(),
+			Amount:        decimal.NewFromInt(100),
+			Currency:      "USD",
+			Status:        "UNMATCHED",
+			Date:          time.Now().UTC(),
+			ExceptionID:   nil,
+			DueAt:         nil,
+		},
+	}
+
+	output, err := BuildUnmatchedPDF(items)
+	require.NoError(t, err)
+	assert.NotEmpty(t, output)
+	require.GreaterOrEqual(t, len(output), 4)
+	assert.Equal(t, "%PDF", string(output[:4]))
+}
+
+func TestBuildVariancePDF_NilVariancePct(t *testing.T) {
+	t.Parallel()
+
+	rows := []*entities.VarianceReportRow{
+		{
+			SourceID:      uuid.New(),
+			Currency:      "USD",
+			FeeType:       "FLAT",
+			TotalExpected: decimal.NewFromInt(100),
+			TotalActual:   decimal.NewFromInt(100),
+			NetVariance:   decimal.Zero,
+			VariancePct:   nil,
+		},
+	}
+
+	output, err := BuildVariancePDF(rows)
+	require.NoError(t, err)
+	assert.NotEmpty(t, output)
+	require.GreaterOrEqual(t, len(output), 4)
+	assert.Equal(t, "%PDF", string(output[:4]))
+}
+
+func TestBuildVariancePDF_Sorting(t *testing.T) {
+	t.Parallel()
+
+	sourceA := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	sourceB := uuid.MustParse("00000000-0000-0000-0000-000000000002")
+
+	rows := []*entities.VarianceReportRow{
+		{
+			SourceID:      sourceB,
+			Currency:      "USD",
+			FeeType:       "PERCENTAGE",
+			TotalExpected: decimal.NewFromInt(100),
+			TotalActual:   decimal.NewFromInt(110),
+			NetVariance:   decimal.NewFromInt(10),
+		},
+		{
+			SourceID:      sourceA,
+			Currency:      "EUR",
+			FeeType:       "FLAT",
+			TotalExpected: decimal.NewFromInt(50),
+			TotalActual:   decimal.NewFromInt(50),
+			NetVariance:   decimal.Zero,
+		},
+	}
+
+	output, err := BuildVariancePDF(rows)
+	require.NoError(t, err)
+	assert.NotEmpty(t, output)
+	require.GreaterOrEqual(t, len(output), 4)
+	assert.Equal(t, "%PDF", string(output[:4]))
+}
+
+func TestBuildMatchedPDF_LargeDataset(t *testing.T) {
+	t.Parallel()
+
+	items := make([]*entities.MatchedItem, 100)
+	for i := 0; i < 100; i++ {
+		items[i] = &entities.MatchedItem{
+			TransactionID: uuid.New(),
+			MatchGroupID:  uuid.New(),
+			SourceID:      uuid.New(),
+			Amount:        decimal.NewFromInt(int64(i * 10)),
+			Currency:      "USD",
+			Date:          time.Now().UTC(),
+		}
+	}
+
+	output, err := BuildMatchedPDF(items)
+	require.NoError(t, err)
+	assert.NotEmpty(t, output)
+	require.GreaterOrEqual(t, len(output), 4)
+	assert.Equal(t, "%PDF", string(output[:4]))
+}
+
+func TestBuildUnmatchedPDF_LargeDataset(t *testing.T) {
+	t.Parallel()
+
+	items := make([]*entities.UnmatchedItem, 100)
+	for i := 0; i < 100; i++ {
+		exceptionID := uuid.New()
+		dueAt := time.Now().UTC().Add(24 * time.Hour)
+		items[i] = &entities.UnmatchedItem{
+			TransactionID: uuid.New(),
+			SourceID:      uuid.New(),
+			Amount:        decimal.NewFromInt(int64(i * 10)),
+			Currency:      "USD",
+			Status:        "PENDING",
+			Date:          time.Now().UTC(),
+			ExceptionID:   &exceptionID,
+			DueAt:         &dueAt,
+		}
+	}
+
+	output, err := BuildUnmatchedPDF(items)
+	require.NoError(t, err)
+	assert.NotEmpty(t, output)
+	require.GreaterOrEqual(t, len(output), 4)
+	assert.Equal(t, "%PDF", string(output[:4]))
+}
+
+func TestBuildVariancePDF_LargeDataset(t *testing.T) {
+	t.Parallel()
+
+	rows := make([]*entities.VarianceReportRow, 100)
+	for i := 0; i < 100; i++ {
+		pct := decimal.NewFromFloat(float64(i) * 0.1)
+		rows[i] = &entities.VarianceReportRow{
+			SourceID:      uuid.New(),
+			Currency:      "USD",
+			FeeType:       "PERCENTAGE",
+			TotalExpected: decimal.NewFromInt(int64(i * 100)),
+			TotalActual:   decimal.NewFromInt(int64(i*100 + i)),
+			NetVariance:   decimal.NewFromInt(int64(i)),
+			VariancePct:   &pct,
+		}
+	}
+
+	output, err := BuildVariancePDF(rows)
+	require.NoError(t, err)
+	assert.NotEmpty(t, output)
+	require.GreaterOrEqual(t, len(output), 4)
+	assert.Equal(t, "%PDF", string(output[:4]))
+}

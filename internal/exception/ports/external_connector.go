@@ -1,0 +1,29 @@
+package ports
+
+import (
+	"context"
+
+	"github.com/LerianStudio/matcher/internal/exception/domain/services"
+)
+
+//go:generate mockgen -destination=mocks/external_connector_mock.go -package=mocks . ExternalConnector
+
+// DispatchResult contains the result of an external dispatch operation.
+type DispatchResult struct {
+	Target            services.RoutingTarget
+	ExternalReference string
+	Acknowledged      bool
+}
+
+// ExternalConnector dispatches exceptions to external systems.
+type ExternalConnector interface {
+	// Dispatch sends the exception to an external system based on the routing decision.
+	// The payload must be a JSON-encoded byte slice representing the exception data
+	// formatted for the target system (e.g., JIRA issue payload, webhook event).
+	Dispatch(
+		ctx context.Context,
+		exceptionID string,
+		decision services.RoutingDecision,
+		payload []byte,
+	) (DispatchResult, error)
+}

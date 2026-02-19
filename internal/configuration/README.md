@@ -1,0 +1,153 @@
+# Configuration Context
+
+The `internal/configuration` bounded context manages the metadata and rules that drive the reconciliation engine. It allows users to define *what* to reconcile (Sources), *how* to normalize data (Field Maps), and *how* to match transactions (Match Rules).
+
+## Overview
+
+This context implements a **Hexagonal Architecture** with **CQRS** (Command Query Responsibility Segregation) to separate write and read concerns.
+
+- **Domain**: Defines core entities (`ReconciliationContext`, `Source`, `MatchRule`, `FeeSchedule`, `ReconciliationSchedule`) and business rules.
+- **Adapters**:
+  - **Audit**: Outbox-based audit event publisher.
+  - **HTTP**: Fiber handlers exposing REST endpoints.
+  - **PostgreSQL**: Database persistence with multi-tenant schema isolation.
+- **Ports**: External dependency interfaces (audit publisher, fee schedule, schedule repository).
+- **Services**: Application logic split into `Command` (mutations, including clone), `Query` (retrieval), and `Worker` (background scheduler) use cases.
+
+## Domain Model
+
+### Entities
+
+1.  **ReconciliationContext**: The top-level aggregate representing a reconciliation process (e.g., "Credit Card vs. Ledger").
+    -   Attributes: `Type` (1:1, 1:N), `Interval` (cron schedule), `Status` (Active/Paused).
+2.  **Source**: Represents an input data stream (e.g., "Bank CSV", "Internal Ledger API").
+    -   Types: `Ingestion` (External), `Ledger` (Internal).
+3.  **FieldMap**: Defines how raw source fields map to the canonical internal format.
+4.  **MatchRule**: Ordered list of logic to identify matching sets of transactions.
+5.  **FeeSchedule**: Fee rates and tolerances for fee verification during matching.
+6.  **ReconciliationSchedule**: Cron-based scheduling for automated reconciliation runs.
+
+## Architecture
+
+### Hexagonal Layers
+
+```
+internal/configuration/
+├── adapters/
+│   ├── audit/           # Outbox-based audit event publisher
+│   ├── http/            # REST API Handlers (Fiber)
+│   │   └── dto/         # Request/response DTOs
+│   └── postgres/        # Repository Implementations
+│       ├── common/      # Shared transaction utilities
+│       ├── context/     # ReconciliationContext repository
+│       ├── field_map/   # FieldMap repository
+│       ├── match_rule/  # MatchRule repository
+│       ├── schedule/    # ReconciliationSchedule repository
+│       └── source/      # Source repository
+├── domain/
+│   ├── entities/        # Core Business Logic
+│   ├── repositories/    # Repository Interfaces
+│   └── value_objects/   # Enums and Value Types
+├── ports/               # External dependency interfaces (audit, fees, schedules)
+└── services/
+    ├── command/         # Write Operations (Create, Update, Delete, Clone)
+    ├── query/           # Read Operations (Get, List)
+    └── worker/          # Background scheduler worker
+```
+
+### CQRS Pattern
+
+The service layer is explicitly split:
+-   **Command UseCase**: Handles side-effects. Validates inputs and updates state via repositories.
+-   **Query UseCase**: Handles data retrieval.
+
+### Multi-Tenancy
+
+Persistence is handled via `adapters/postgres`. All repository methods utilize `common.WithTenantTx` to ensure queries run within the correct PostgreSQL schema (`SET LOCAL search_path`), enforcing strict data isolation per tenant.
+
+## API Endpoints
+
+The context exposes a RESTful API protected by the Auth layer:
+
+| Resource | Method | Path | Description |
+|----------|--------|------|-------------|
+| **Context** | POST | `/api/config/contexts` | Create a new reconciliation context |
+| | GET | `/api/config/contexts` | List contexts |
+| | GET | `/api/config/contexts/:contextId` | Get a context by ID |
+| | PATCH | `/api/config/contexts/:contextId` | Update a context |
+| | DELETE | `/api/config/contexts/:contextId` | Delete a context |
+| **Source** | POST | `/api/config/contexts/:contextId/sources` | Add a data source |
+| | GET | `/api/config/contexts/:contextId/sources` | List sources |
+| | GET | `/api/config/contexts/:contextId/sources/:sourceId` | Get a source by ID |
+| | PATCH | `/api/config/contexts/:contextId/sources/:sourceId` | Update a source |
+| | DELETE | `/api/config/contexts/:contextId/sources/:sourceId` | Delete a source |
+| **FieldMap** | POST | `/api/config/contexts/:contextId/sources/:sourceId/field-maps` | Define field mappings |
+| | GET | `/api/config/contexts/:contextId/sources/:sourceId/field-maps` | Get field map for a source |
+| | PATCH | `/api/config/field-maps/:fieldMapId` | Update a field map |
+| | DELETE | `/api/config/field-maps/:fieldMapId` | Delete a field map |
+| **MatchRule** | POST | `/api/config/contexts/:contextId/rules` | Add matching logic |
+| | GET | `/api/config/contexts/:contextId/rules` | List match rules |
+| | GET | `/api/config/contexts/:contextId/rules/:ruleId` | Get a match rule by ID |
+| | PATCH | `/api/config/contexts/:contextId/rules/:ruleId` | Update a match rule |
+| | DELETE | `/api/config/contexts/:contextId/rules/:ruleId` | Delete a match rule |
+| | POST | `/api/config/contexts/:contextId/rules/reorder` | Change rule execution order |
+| **FeeSchedule** | POST | `/v1/config/fee-schedules` | Create a fee schedule |
+| | GET | `/v1/config/fee-schedules` | List fee schedules |
+| | GET | `/v1/config/fee-schedules/:scheduleId` | Get a fee schedule |
+| | PATCH | `/v1/config/fee-schedules/:scheduleId` | Update a fee schedule |
+| | DELETE | `/v1/config/fee-schedules/:scheduleId` | Delete a fee schedule |
+| | POST | `/v1/config/fee-schedules/:scheduleId/simulate` | Simulate fee calculation |
+| **Schedule** | POST | `/v1/config/contexts/:contextId/schedules` | Create a reconciliation schedule |
+| | GET | `/v1/config/contexts/:contextId/schedules` | List schedules |
+| | GET | `/v1/config/contexts/:contextId/schedules/:scheduleId` | Get a schedule |
+| | PATCH | `/v1/config/contexts/:contextId/schedules/:scheduleId` | Update a schedule |
+| | DELETE | `/v1/config/contexts/:contextId/schedules/:scheduleId` | Delete a schedule |
+| **Clone** | POST | `/v1/config/contexts/:contextId/clone` | Clone a context with all its configuration |
+
+## Usage
+
+### Dependency Injection
+
+The module is initialized in `internal/bootstrap/init.go` and registered under the `/api` group created in `internal/bootstrap/routes.go`:
+
+```go
+// 1. Repositories (Postgres)
+configContextRepository := configContextRepo.NewRepository(postgresConnection)
+configSourceRepository, err := configSourceRepo.NewRepository(postgresConnection)
+if err != nil {
+    return fmt.Errorf("create source repository: %w", err)
+}
+configFieldMapRepository := configFieldMapRepo.NewRepository(postgresConnection)
+configMatchRuleRepository := configMatchRuleRepo.NewRepository(postgresConnection)
+
+// 2. Services (CQRS)
+configCommandUseCase, err := configCommand.NewUseCase(
+    configContextRepository,
+    configSourceRepository,
+    configFieldMapRepository,
+    configMatchRuleRepository,
+)
+if err != nil {
+    return fmt.Errorf("create config command use case: %w", err)
+}
+configQueryUseCase, err := configQuery.NewUseCase(
+    configContextRepository,
+    configSourceRepository,
+    configFieldMapRepository,
+    configMatchRuleRepository,
+)
+if err != nil {
+    return fmt.Errorf("create config query use case: %w", err)
+}
+
+// 3. Adapter (HTTP)
+configHandler, err := configHTTP.NewHandler(configCommandUseCase, configQueryUseCase)
+if err != nil {
+    return fmt.Errorf("create config handler: %w", err)
+}
+
+// 4. Routes
+if err := configHTTP.RegisterRoutes(routes.Protected, configHandler); err != nil {
+    return fmt.Errorf("register configuration routes: %w", err)
+}
+```

@@ -1,0 +1,31 @@
+name: "Build"
+
+on:
+  push:
+    tags:
+      - '**'
+
+jobs:
+  build:
+    uses: LerianStudio/github-actions-shared-workflows/.github/workflows/build.yml@v1.10.2
+    with:
+      runner_type: "blacksmith-4vcpu-ubuntu-2404"
+      enable_dockerhub: true
+      enable_ghcr: true
+      dockerhub_org: lerianstudio
+      enable_gitops_artifacts: true
+    secrets: inherit
+
+  update_gitops:
+    needs: [build]
+    if: needs.build.result == 'success'
+    uses: LerianStudio/github-actions-shared-workflows/.github/workflows/gitops-update.yml@v1.10.2
+    with:
+      runner_type: "firmino-lxc-runners"
+      artifact_pattern: "gitops-tags-matcher"
+      gitops_file_dev: "gitops/environments/firmino/helmfile/applications/dev/matcher/values.yaml"
+      gitops_file_stg: "gitops/environments/firmino/helmfile/applications/stg/matcher/values.yaml"
+      gitops_file_prd: "gitops/environments/firmino/helmfile/applications/prd/matcher/values.yaml"
+      gitops_file_sandbox: "gitops/environments/firmino/helmfile/applications/sandbox/matcher/values.yaml"
+      yaml_key_mappings: '{"matcher.tag": ".matcher.image.tag"}'
+    secrets: inherit

@@ -1,0 +1,179 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: matcher-postgres
+    restart: unless-stopped
+    env_file:
+      - ./config/.env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-matcher}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-matcher_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-matcher}
+      REPLICATOR_PASSWORD: ${REPLICATOR_PASSWORD:-replicator_secure_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/postgres/init-primary.sh:/docker-entrypoint-initdb.d/init-primary.sh:ro
+    command: >
+      postgres
+      -c wal_level=replica
+      -c max_wal_senders=3
+      -c max_replication_slots=3
+      -c hot_standby=on
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-matcher}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  postgres-replica:
+    image: postgres:17
+    container_name: matcher-postgres-replica
+    restart: unless-stopped
+    env_file:
+      - ./config/.env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-matcher}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-matcher_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-matcher}
+      PGUSER: ${POSTGRES_USER:-matcher}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-matcher_dev_password}
+      REPLICATOR_PASSWORD: ${REPLICATOR_PASSWORD:-replicator_secure_password}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_replica_data:/var/lib/postgresql/data
+      - ./scripts/postgres/init-replica.sh:/init-replica.sh:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "/init-replica.sh"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-matcher}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  redis:
+    image: valkey/valkey:8
+    container_name: matcher-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:4.1.3-management-alpine
+    container_name: matcher-rabbitmq
+    restart: unless-stopped
+    env_file:
+      - ./config/.env
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-matcher_admin}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-matcher_dev_password}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  seaweedfs:
+    image: chrislusf/seaweedfs:3.80
+    container_name: matcher-seaweedfs
+    restart: unless-stopped
+    command: server -s3 -dir=/data -s3.config=/etc/seaweedfs/s3.json
+    ports:
+      - "8333:8333"  # S3 API
+      - "9333:9333"  # Master API
+    volumes:
+      - seaweedfs_data:/data
+      - ./config/seaweedfs-s3.json:/etc/seaweedfs/s3.json:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:9333/cluster/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+#  otel-lgtm:
+#    image: grafana/otel-lgtm:0.13.0
+#    container_name: matcher-otel-lgtm
+#    environment:
+#      GF_SECURITY_ADMIN_USER: admin
+#      GF_SECURITY_ADMIN_PASSWORD: admin
+#    ports:
+#      - "3030:3000"
+#      - "4317:4317"
+#      - "4318:4318"
+
+  app:
+    image: golang:1.26.0-alpine
+    container_name: matcher-app
+    restart: unless-stopped
+    working_dir: /app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      postgres-replica:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      seaweedfs:
+        condition: service_healthy
+    env_file:
+      - ./config/.env
+    environment:
+      # Override hosts to use Docker service names
+      POSTGRES_HOST: postgres
+      POSTGRES_REPLICA_HOST: postgres-replica
+      POSTGRES_REPLICA_PORT: 5432
+      REDIS_HOST: redis:6379
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_HEALTH_URL: http://rabbitmq:15672
+      OTEL_EXPORTER_ENDPOINT: ${OTEL_EXPORTER_ENDPOINT:-localhost:4317}
+      # Object storage (SeaweedFS)
+      OBJECT_STORAGE_ENDPOINT: http://seaweedfs:8333
+      OBJECT_STORAGE_BUCKET: matcher-exports
+      OBJECT_STORAGE_ACCESS_KEY_ID: "any"
+      OBJECT_STORAGE_SECRET_ACCESS_KEY: "any"
+      # Rate limiting - disabled for development/e2e testing
+      RATE_LIMIT_ENABLED: "false"
+      # Build settings
+      CGO_ENABLED: "0"
+      GOFLAGS: "-mod=vendor"
+    ports:
+      - "4018:4018"
+    volumes:
+      - ./:/app
+      - go_build_cache:/root/.cache/go-build
+    command: >
+      sh -c '
+        if ! command -v air >/dev/null 2>&1; then
+          wget -qO- https://raw.githubusercontent.com/air-verse/air/master/install.sh | sh -s -- -b /usr/local/bin
+        fi &&
+        air -c .air.toml
+      '
+
+volumes:
+  postgres_data:
+  postgres_replica_data:
+  redis_data:
+  rabbitmq_data:
+  seaweedfs_data:
+  go_build_cache:

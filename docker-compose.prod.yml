@@ -1,0 +1,274 @@
+# Production Docker Compose Configuration
+# 
+# This file is optimized for production deployments with:
+# - No development volumes or hot-reload
+# - Resource limits and reservations
+# - Security hardening (read-only filesystems, no privileged containers)
+# - Proper logging configuration
+# - Health checks with production-appropriate intervals
+#
+# Usage:
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Required environment variables (set via .env or environment):
+#   - POSTGRES_PASSWORD (strong password, not the default)
+#   - REPLICATOR_PASSWORD (strong password for streaming replication)
+#   - RABBITMQ_PASSWORD (strong password)
+#   - REDIS_PASSWORD (strong password)
+#   - AUTH_JWT_SECRET (for JWT validation)
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: matcher-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-matcher}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-matcher}
+      REPLICATOR_PASSWORD: ${REPLICATOR_PASSWORD:?REPLICATOR_PASSWORD is required}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/postgres/init-primary.sh:/docker-entrypoint-initdb.d/init-primary.sh:ro
+    command: >
+      postgres
+      -c wal_level=replica
+      -c max_wal_senders=3
+      -c max_replication_slots=3
+      -c hot_standby=on
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-matcher}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+
+  postgres-replica:
+    image: postgres:17-alpine
+    container_name: matcher-postgres-replica
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-matcher}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-matcher}
+      PGUSER: ${POSTGRES_USER:-matcher}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      REPLICATOR_PASSWORD: ${REPLICATOR_PASSWORD:?REPLICATOR_PASSWORD is required}
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - postgres_replica_data:/var/lib/postgresql/data
+      - ./scripts/postgres/init-replica.sh:/init-replica.sh:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "/init-replica.sh"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-matcher}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+
+  redis:
+    image: valkey/valkey:8-alpine
+    container_name: matcher-redis
+    restart: unless-stopped
+    command: >
+      valkey-server
+      --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      --appendonly yes
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 768M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  rabbitmq:
+    image: rabbitmq:4.1.3-alpine
+    container_name: matcher-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-matcher_admin}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD is required}
+    ports:
+      - "127.0.0.1:5672:5672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1G
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+
+  app:
+    image: ${MATCHER_IMAGE:-ghcr.io/lerianstudio/matcher}:${MATCHER_TAG:-latest}
+    container_name: matcher-app
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      postgres:
+        condition: service_healthy
+      postgres-replica:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      # Application
+      ENV_NAME: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      SERVER_ADDRESS: :4018
+      
+      # Database (Primary)
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-matcher}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-matcher}
+      # Use 'require' or 'verify-full' when Postgres is configured with TLS.
+      # For container-to-container on the same Docker network, 'disable' is safe.
+      POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-disable}
+      POSTGRES_MAX_OPEN_CONNS: ${POSTGRES_MAX_OPEN_CONNS:-25}
+      POSTGRES_MAX_IDLE_CONNS: ${POSTGRES_MAX_IDLE_CONNS:-5}
+      
+      # Database (Replica - for CQRS read scaling)
+      POSTGRES_REPLICA_HOST: postgres-replica
+      POSTGRES_REPLICA_PORT: 5432
+      
+      # Redis
+      REDIS_HOST: redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      
+      # RabbitMQ
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_USER:-matcher_admin}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      
+      # Auth
+      AUTH_ENABLED: ${AUTH_ENABLED:-true}
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET is required}
+      
+      # TLS (optional, provide cert paths if using TLS)
+      SERVER_TLS_CERT_FILE: ${SERVER_TLS_CERT_FILE:-}
+      SERVER_TLS_KEY_FILE: ${SERVER_TLS_KEY_FILE:-}
+      
+      # Observability
+      ENABLE_TELEMETRY: ${ENABLE_TELEMETRY:-true}
+      OTEL_LIBRARY_NAME: matcher
+      OTEL_RESOURCE_SERVICE_NAME: matcher
+      OTEL_RESOURCE_SERVICE_VERSION: ${VERSION:-1.0.0}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_RESOURCE_DEPLOYMENT_ENVIRONMENT: production
+      
+      # Object Storage (optional)
+      OBJECT_STORAGE_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:-}
+      OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:-matcher-exports}
+      OBJECT_STORAGE_ACCESS_KEY: ${OBJECT_STORAGE_ACCESS_KEY:-}
+      OBJECT_STORAGE_SECRET_KEY: ${OBJECT_STORAGE_SECRET_KEY:-}
+    ports:
+      - "4018:4018"
+    tmpfs:
+      - /tmp:size=100M,mode=1777
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 1G
+        reservations:
+          cpus: "0.5"
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200m"
+        max-file: "10"
+    healthcheck:
+      test: ["CMD", "/health-probe"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  postgres_data:
+    driver: local
+  postgres_replica_data:
+    driver: local
+  redis_data:
+    driver: local
+  rabbitmq_data:
+    driver: local
+
+networks:
+  default:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
