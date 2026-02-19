@@ -1,0 +1,932 @@
+version: "2"
+run:
+  tests: true
+linters:
+  enable:
+    # ===========================================
+    # Security & Bug Detection
+    # ===========================================
+    - bidichk        # Dangerous unicode characters
+    - copyloopvar    # Loop variable capture issues (replaces exportloopref)
+    - errcheck       # Unchecked errors
+    - gosec          # Security vulnerabilities
+    - govet          # Standard Go vet checks
+    - staticcheck    # Advanced static analysis (includes gosimple, stylecheck)
+
+    # ===========================================
+    # Unused Code Detection
+    # ===========================================
+    - ineffassign    # Ineffectual assignments
+    - unparam        # Unused function parameters
+    - unused         # Unused constants, variables, functions, types
+    - wastedassign   # Wasted assignment statements (more aggressive than ineffassign)
+
+    # ===========================================
+    # Error Handling
+    # ===========================================
+    - err113         # Error handling expressions (replaces goerr113)
+    - errchkjson     # JSON error checking
+    - errname        # Error naming conventions
+    - errorlint      # Error wrapping issues
+    - nilerr         # Return nil with non-nil error
+    - wrapcheck      # Ensure errors are wrapped properly
+
+    # ===========================================
+    # Performance
+    # ===========================================
+    - bodyclose      # HTTP body close
+    - perfsprint     # fmt.Sprintf performance
+    - prealloc       # Slice preallocation
+
+    # ===========================================
+    # Complexity & Maintainability
+    # ===========================================
+    - cyclop         # Package cyclomatic complexity
+    - gocognit       # Cognitive complexity
+    - gocyclo        # Cyclomatic complexity
+    - nestif         # Nested if depth
+
+    # ===========================================
+    # Code Quality & Style
+    # ===========================================
+    - dogsled        # Blank identifier assignments (x, _, _, _ = ...)
+    - dupword        # Duplicate words in comments
+    - goconst        # Repeated strings as constants
+    - gocritic       # Opinionated checks
+    - misspell       # Spelling mistakes
+    - nakedret       # Naked returns in long functions
+    - nolintlint     # Proper nolint directive usage
+    - predeclared    # Shadowing of predeclared identifiers
+    - revive         # Comprehensive linting rules
+    - unconvert      # Unnecessary type conversions
+    - usestdlibvars  # Use stdlib variables (http.MethodGet, etc.)
+    - whitespace     # Whitespace issues
+    - wsl_v5         # Whitespace linter v5
+
+    # Note: gci and gofumpt are formatters (see formatters section)
+
+    # ===========================================
+    # Nil Safety & Additional Quality
+    # ===========================================
+    - nilnil         # Check (nil, nil) returns
+    - funlen         # Function length limits
+    - godot          # Check comment punctuation
+    - forcetypeassert # Find forced type assertions (panic risk)
+
+    # ===========================================
+    # Test Quality Enhancement
+    # ===========================================
+    - testifylint    # Detect testify assertion issues
+
+    # ===========================================
+    # Best Practices
+    # ===========================================
+    - durationcheck     # Time.Duration multiplication issues
+    - exhaustive        # Exhaustive enum switch coverage
+    - loggercheck       # Logger argument consistency
+    - mnd               # Magic number detection (replaces gomnd)
+    - nosprintfhostport # Host:port in sprintf (use net.JoinHostPort)
+    - reassign          # Reassignment of package variables
+    - varnamelen        # Enforce minimum variable name length
+
+    # ===========================================
+    # Context & Concurrency
+    # ===========================================
+    - contextcheck   # Context usage validation
+    - noctx          # HTTP requests without context
+
+    # ===========================================
+    # Database
+    # ===========================================
+    - rowserrcheck   # SQL rows.Err() checks
+    - sqlclosecheck  # SQL Close() calls
+
+    # ===========================================
+    # Dependencies & Custom Rules
+    # ===========================================
+    - depguard       # Dependency guard (block specific imports)
+    - forbidigo      # Forbid specific function calls
+
+    # ===========================================
+    # Test Quality
+    # ===========================================
+    - paralleltest   # Detect tests missing t.Parallel()
+    - thelper        # Test helper functions should call t.Helper()
+    - tparallel      # Enforce t.Parallel() usage in tests
+  settings:
+    wsl_v5:
+      allow-first-in-block: true
+      allow-whole-block: false
+      branch-max-lines: 2
+    # Note: gofumpt and gci settings are in formatters section
+    # ===========================================
+    # Function Length Limits
+    # Slightly higher thresholds for repository patterns
+    # ===========================================
+    funlen:
+      lines: 120
+      statements: 60
+      ignore-comments: true
+    # ===========================================
+    # Comment Punctuation
+    # ===========================================
+    godot:
+      scope: toplevel
+      exclude:
+        - "^\\s*//\\s*nolint"
+        - "^\\s*//\\s*TODO"
+        - "^\\s*//\\s*FIXME"
+        - "^\\s*//\\s*@"
+      capital: false
+    # ===========================================
+    # Nil Return Checking
+    # Note: Some (nil, nil) returns are intentional:
+    # - HTTP handlers when body is empty
+    # - Repositories when record not found (with specific handling)
+    # ===========================================
+    nilnil:
+      checked-types:
+        - func
+        - iface
+        - map
+        - chan
+    # ===========================================
+    # Testify Linter Configuration
+    # ===========================================
+    testifylint:
+      enable-all: true
+      disable:
+        - go-require
+    forbidigo:
+      analyze-types: true
+      forbid:
+        # Enforce SafeGoWithContextAndComponent for better observability
+        - pattern: '^runtime\.SafeGoWithContext$'
+          msg: 'use runtime.SafeGoWithContextAndComponent(ctx, logger, "<component>", name, policy, fn) for better observability'
+        # Avoid panics/exits in production paths
+        - pattern: '^panic$'
+          msg: 'avoid panics in production code; return errors instead'
+        - pattern: '^log\.Panic'
+          msg: 'avoid log.Panic* in production code; return errors instead'
+        - pattern: '^log\.Fatal'
+          msg: 'avoid log.Fatal* in production code; return errors instead'
+        - pattern: '^os\.Exit$'
+          msg: 'avoid os.Exit in production code; return errors instead'
+        # ===========================================
+        # Prevent Direct fmt.Print* in Production
+        # Use structured logging instead
+        # ===========================================
+        - pattern: '^fmt\.Print(ln|f)?$'
+          msg: 'use structured logging (logger.Info/Warn/Error) instead of fmt.Print*'
+        # ===========================================
+        # Tenant Ownership Verification Enforcement
+        # Prevents direct contextId access without ownership verification
+        # ===========================================
+        - pattern: '\.Params\("contextId"\)'
+          msg: 'use sharedhttp.ParseAndVerifyContextParam() for tenant ownership verification'
+        - pattern: '\.Query\("contextId"\)'
+          msg: 'use sharedhttp.ParseAndVerifyContextQuery() for tenant ownership verification'
+        - pattern: 'parseUUIDParam\([^,]+,\s*"contextId"\)'
+          msg: 'use sharedhttp.ParseAndVerifyContextParam() for tenant ownership verification'
+        - pattern: 'parseUUIDQuery\([^,]+,\s*"contextId"\)'
+          msg: 'use sharedhttp.ParseAndVerifyContextQuery() for tenant ownership verification'
+        # ===========================================
+        # Multi-Tenancy Security Enforcement
+        # Tenant info ONLY from JWT claims via context
+        # ===========================================
+        - pattern: 'json:"tenant_id"'
+          msg: 'SECURITY: Never accept tenant_id in JSON payloads - extract from JWT claims via auth.GetTenantID(ctx)'
+        - pattern: 'json:"tenant_slug"'
+          msg: 'SECURITY: Never accept tenant_slug in JSON payloads - extract from JWT claims via auth.GetTenantSlug(ctx)'
+        - pattern: '\.Params\("tenantId"\)'
+          msg: 'SECURITY: Never accept tenantId from path params - extract from JWT claims via auth.GetTenantID(ctx)'
+        - pattern: '\.Params\("tenant_id"\)'
+          msg: 'SECURITY: Never accept tenant_id from path params - extract from JWT claims via auth.GetTenantID(ctx)'
+        - pattern: '\.Query\("tenant'
+          msg: 'SECURITY: Never accept tenant from query params - extract from JWT claims'
+        # ===========================================
+        # UTC Timestamp Enforcement
+        # Reconciliation requires consistent timezone handling
+        # ===========================================
+        - pattern: 'time\.Now\(\)[^.]'
+          msg: 'Always use time.Now().UTC() for consistent timezone handling across tenants'
+        - pattern: 'time\.Now\(\),'
+          msg: 'Always use time.Now().UTC() for consistent timezone handling across tenants'
+        - pattern: 'time\.Now\(\)\)'
+          msg: 'Always use time.Now().UTC() for consistent timezone handling across tenants'
+        - pattern: 'time\.Now\(\)}'
+          msg: 'Always use time.Now().UTC() for consistent timezone handling across tenants'
+        # ===========================================
+        # SQL Injection Prevention
+        # Always use parameterized queries ($1, $2, ...)
+        # ===========================================
+        - pattern: 'fmt\.Sprintf\([^)]*"[^"]*(?:SELECT|INSERT|UPDATE|DELETE|WHERE)[^"]*%s'
+          msg: 'Use parameterized queries ($1, $2, ...) instead of fmt.Sprintf with %s for SQL - risk of SQL injection'
+        - pattern: '"\s*\+\s*[^"]+\s*\+\s*".*(?:SELECT|INSERT|UPDATE|DELETE|WHERE)'
+          msg: 'Use parameterized queries ($1, $2, ...) instead of string concatenation for SQL - risk of SQL injection'
+        # ===========================================
+        # Error Handling Enforcement
+        # Always wrap errors with %w, never %v
+        # ===========================================
+        - pattern: 'fmt\.Errorf\([^)]*%v[^)]*err\)'
+          msg: 'Use %w instead of %v for error wrapping to preserve error chain for errors.Is() checks'
+    depguard:
+      rules:
+        main:
+          deny:
+            - pkg: io/ioutil
+              desc: The io/ioutil package has been deprecated, see https://go.dev/doc/go1.16#ioutil
+        # ===========================================
+        # Hexagonal Architecture Boundary Enforcement
+        # ===========================================
+        # HTTP handlers must use service interfaces, not data adapters directly
+        http-handlers-boundary:
+          list-mode: lax
+          files:
+            - "**/adapters/http/**/*.go"
+          deny:
+            - pkg: "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres"
+              desc: "Hexagonal violation: HTTP handlers must use services, not postgres adapters directly"
+            - pkg: "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres"
+              desc: "Hexagonal violation: HTTP handlers must use services, not postgres adapters directly"
+            - pkg: "github.com/LerianStudio/matcher/internal/matching/adapters/postgres"
+              desc: "Hexagonal violation: HTTP handlers must use services, not postgres adapters directly"
+        # ===========================================
+        # Cross-Context Isolation (STRICT)
+        # Bounded contexts must be fully isolated.
+        # Shared types belong in internal/domain/shared/ (shared kernel).
+        # Inter-context communication uses ports/interfaces only.
+        # ===========================================
+        cross-context-configuration:
+          list-mode: lax
+          files:
+            - "**/internal/configuration/**/*.go"
+          deny:
+            # Block ALL imports from Ingestion context
+            - pkg: "github.com/LerianStudio/matcher/internal/ingestion"
+              desc: "Cross-context violation: Configuration cannot import Ingestion. Use shared kernel (internal/domain/shared/) or port interfaces."
+            # Block ALL imports from Matching context
+            - pkg: "github.com/LerianStudio/matcher/internal/matching"
+              desc: "Cross-context violation: Configuration cannot import Matching. Use shared kernel (internal/domain/shared/) or port interfaces."
+        cross-context-ingestion:
+          list-mode: lax
+          files:
+            - "**/internal/ingestion/**/*.go"
+          deny:
+            # Block ALL imports from Configuration context
+            - pkg: "github.com/LerianStudio/matcher/internal/configuration"
+              desc: "Cross-context violation: Ingestion cannot import Configuration. Use shared kernel (internal/domain/shared/) or port interfaces."
+            # Block ALL imports from Matching context
+            - pkg: "github.com/LerianStudio/matcher/internal/matching"
+              desc: "Cross-context violation: Ingestion cannot import Matching. Use shared kernel (internal/domain/shared/) or port interfaces."
+        cross-context-matching:
+          list-mode: lax
+          files:
+            - "**/internal/matching/**/*.go"
+          deny:
+            # Block ALL imports from Configuration context
+            - pkg: "github.com/LerianStudio/matcher/internal/configuration"
+              desc: "Cross-context violation: Matching cannot import Configuration. Move shared types to internal/domain/shared/ or use port interfaces."
+            # Block ALL imports from Ingestion context
+            - pkg: "github.com/LerianStudio/matcher/internal/ingestion"
+              desc: "Cross-context violation: Matching cannot import Ingestion. Move Transaction entity to internal/domain/shared/ as shared kernel."
+        # ===========================================
+        # Outbox Context Isolation
+        # ===========================================
+        cross-context-outbox:
+          list-mode: lax
+          files:
+            - "**/internal/outbox/**/*.go"
+          deny:
+            - pkg: "github.com/LerianStudio/matcher/internal/configuration"
+              desc: "Cross-context violation: Outbox cannot import Configuration directly."
+            - pkg: "github.com/LerianStudio/matcher/internal/matching"
+              desc: "Cross-context violation: Outbox cannot import Matching directly."
+        # ===========================================
+        # Future Bounded Contexts (add as they're created)
+        # ===========================================
+        cross-context-exception:
+          list-mode: lax
+          files:
+            - "**/internal/exception/**/*.go"
+          deny:
+            - pkg: "github.com/LerianStudio/matcher/internal/configuration"
+              desc: "Cross-context violation: Exception cannot import Configuration directly."
+            - pkg: "github.com/LerianStudio/matcher/internal/ingestion"
+              desc: "Cross-context violation: Exception cannot import Ingestion directly."
+            - pkg: "github.com/LerianStudio/matcher/internal/matching"
+              desc: "Cross-context violation: Exception cannot import Matching directly."
+        cross-context-governance:
+          list-mode: lax
+          files:
+            - "**/internal/governance/**/*.go"
+          deny:
+            - pkg: "github.com/LerianStudio/matcher/internal/configuration"
+              desc: "Cross-context violation: Governance cannot import Configuration directly."
+            - pkg: "github.com/LerianStudio/matcher/internal/ingestion"
+              desc: "Cross-context violation: Governance cannot import Ingestion directly."
+            - pkg: "github.com/LerianStudio/matcher/internal/matching"
+              desc: "Cross-context violation: Governance cannot import Matching directly."
+            - pkg: "github.com/LerianStudio/matcher/internal/exception"
+              desc: "Cross-context violation: Governance cannot import Exception directly."
+        # ===========================================
+        # CQRS Enforcement
+        # Commands and Queries must be strictly separated.
+        # Commands handle writes, Queries handle reads.
+        # ===========================================
+        cqrs-command-isolation:
+          list-mode: lax
+          files:
+            - "**/services/command/**/*.go"
+          deny:
+            # Commands cannot import query packages (no reading via query use cases)
+            - pkg: "github.com/LerianStudio/matcher/internal/configuration/services/query"
+              desc: "CQRS violation: Command cannot import Query package. Commands should not depend on query use cases."
+            - pkg: "github.com/LerianStudio/matcher/internal/ingestion/services/query"
+              desc: "CQRS violation: Command cannot import Query package. Commands should not depend on query use cases."
+            - pkg: "github.com/LerianStudio/matcher/internal/matching/services/query"
+              desc: "CQRS violation: Command cannot import Query package. Commands should not depend on query use cases."
+        cqrs-query-isolation:
+          list-mode: lax
+          files:
+            - "**/services/query/**/*.go"
+          deny:
+            # Queries cannot import command packages (no writing via command use cases)
+            - pkg: "github.com/LerianStudio/matcher/internal/configuration/services/command"
+              desc: "CQRS violation: Query cannot import Command package. Queries must be read-only."
+            - pkg: "github.com/LerianStudio/matcher/internal/ingestion/services/command"
+              desc: "CQRS violation: Query cannot import Command package. Queries must be read-only."
+            - pkg: "github.com/LerianStudio/matcher/internal/matching/services/command"
+              desc: "CQRS violation: Query cannot import Command package. Queries must be read-only."
+        # ===========================================
+        # Domain Layer Purity
+        # Domain services should contain pure business logic.
+        # They should not depend on application services (command/query).
+        # ===========================================
+        domain-purity:
+          list-mode: lax
+          files:
+            - "**/domain/services/**/*.go"
+          deny:
+            # Domain cannot import application-layer command services
+            - pkg: "github.com/LerianStudio/matcher/internal/configuration/services/command"
+              desc: "Domain purity violation: Domain services cannot import application-layer command services."
+            - pkg: "github.com/LerianStudio/matcher/internal/ingestion/services/command"
+              desc: "Domain purity violation: Domain services cannot import application-layer command services."
+            - pkg: "github.com/LerianStudio/matcher/internal/matching/services/command"
+              desc: "Domain purity violation: Domain services cannot import application-layer command services."
+            # Domain cannot import application-layer query services
+            - pkg: "github.com/LerianStudio/matcher/internal/configuration/services/query"
+              desc: "Domain purity violation: Domain services cannot import application-layer query services."
+            - pkg: "github.com/LerianStudio/matcher/internal/ingestion/services/query"
+              desc: "Domain purity violation: Domain services cannot import application-layer query services."
+            - pkg: "github.com/LerianStudio/matcher/internal/matching/services/query"
+              desc: "Domain purity violation: Domain services cannot import application-layer query services."
+            # Domain cannot import HTTP adapters
+            - pkg: "github.com/LerianStudio/matcher/internal/configuration/adapters/http"
+              desc: "Domain purity violation: Domain services cannot import HTTP adapters."
+            - pkg: "github.com/LerianStudio/matcher/internal/ingestion/adapters/http"
+              desc: "Domain purity violation: Domain services cannot import HTTP adapters."
+            - pkg: "github.com/LerianStudio/matcher/internal/matching/adapters/http"
+              desc: "Domain purity violation: Domain services cannot import HTTP adapters."
+            # Domain cannot import Postgres adapters
+            - pkg: "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres"
+              desc: "Domain purity violation: Domain services cannot import Postgres adapters."
+            - pkg: "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres"
+              desc: "Domain purity violation: Domain services cannot import Postgres adapters."
+            - pkg: "github.com/LerianStudio/matcher/internal/matching/adapters/postgres"
+              desc: "Domain purity violation: Domain services cannot import Postgres adapters."
+        # ===========================================
+        # Domain Layer: no logging/tracing dependencies
+        # ===========================================
+        domain-no-logging:
+          list-mode: lax
+          files:
+            - "**/domain/**/*.go"
+          deny:
+            - pkg: "log"
+              desc: "Domain purity violation: avoid logging in domain layer."
+            - pkg: "log/slog"
+              desc: "Domain purity violation: avoid logging in domain layer."
+            - pkg: "github.com/rs/zerolog"
+              desc: "Domain purity violation: avoid logging in domain layer."
+            - pkg: "github.com/sirupsen/logrus"
+              desc: "Domain purity violation: avoid logging in domain layer."
+            - pkg: "go.uber.org/zap"
+              desc: "Domain purity violation: avoid logging in domain layer."
+            - pkg: "go.opentelemetry.io/otel"
+              desc: "Domain purity violation: avoid tracing in domain layer."
+            - pkg: "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
+              desc: "Domain purity violation: avoid tracing in domain layer."
+            - pkg: "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
+              desc: "Domain purity violation: avoid logging in domain layer."
+            - pkg: "github.com/LerianStudio/lib-uncommons/v2/uncommons/zap"
+              desc: "Domain purity violation: avoid logging in domain layer."
+            - pkg: "github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres"
+              desc: "Domain purity violation: avoid infrastructure dependencies in domain layer."
+            - pkg: "github.com/LerianStudio/lib-uncommons/v2/uncommons/redis"
+              desc: "Domain purity violation: avoid infrastructure dependencies in domain layer."
+            - pkg: "github.com/LerianStudio/lib-uncommons/v2/uncommons/rabbitmq"
+              desc: "Domain purity violation: avoid infrastructure dependencies in domain layer."
+        # ===========================================
+        # Shared Kernel Boundaries
+        # Shared adapters must use shared kernel, not cross-context domain
+        # Exception: cross/ package is the anti-corruption layer
+        # ===========================================
+        shared-adapters-boundary:
+          list-mode: lax
+          files:
+            - "**/internal/shared/adapters/postgres/**/*.go"
+            - "**/internal/shared/adapters/redis/**/*.go"
+            - "**/internal/shared/adapters/rabbitmq/**/*.go"
+          deny:
+            - pkg: "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
+              desc: "Shared adapters must use shared kernel (internal/shared/domain), not configuration entities."
+            - pkg: "github.com/LerianStudio/matcher/internal/matching/domain/entities"
+              desc: "Shared adapters must use shared kernel (internal/shared/domain), not matching entities."
+        # ===========================================
+        # Anti-Corruption Layer (cross/) Constraints
+        # Cross adapters can import other contexts but must convert to shared types
+        # ===========================================
+        cross-adapter-output:
+          list-mode: lax
+          files:
+            - "**/internal/shared/adapters/cross/**/*.go"
+          deny:
+            # Cross adapters should not import HTTP adapters
+            - pkg: "github.com/LerianStudio/matcher/internal/configuration/adapters/http"
+              desc: "Cross adapters should only import domain types, not HTTP adapters."
+            - pkg: "github.com/LerianStudio/matcher/internal/ingestion/adapters/http"
+              desc: "Cross adapters should only import domain types, not HTTP adapters."
+            - pkg: "github.com/LerianStudio/matcher/internal/matching/adapters/http"
+              desc: "Cross adapters should only import domain types, not HTTP adapters."
+        # ===========================================
+        # Ports Must Be Pure Interfaces
+        # Ports cannot import adapters (dependency inversion)
+        # ===========================================
+        ports-no-adapters:
+          list-mode: lax
+          files:
+            - "**/ports/**/*.go"
+          deny:
+            - pkg: "github.com/LerianStudio/matcher/internal/configuration/adapters"
+              desc: "Hexagonal violation: Ports cannot import adapters. Ports define interfaces; adapters implement them."
+            - pkg: "github.com/LerianStudio/matcher/internal/ingestion/adapters"
+              desc: "Hexagonal violation: Ports cannot import adapters. Ports define interfaces; adapters implement them."
+            - pkg: "github.com/LerianStudio/matcher/internal/matching/adapters"
+              desc: "Hexagonal violation: Ports cannot import adapters. Ports define interfaces; adapters implement them."
+            - pkg: "github.com/gofiber/fiber"
+              desc: "Ports should be infrastructure-agnostic. Use abstract types instead of Fiber."
+        # ===========================================
+        # Entities Cannot Import Repositories
+        # Domain entities must remain pure (no infrastructure dependencies)
+        # ===========================================
+        entity-purity:
+          list-mode: lax
+          files:
+            - "**/domain/entities/**/*.go"
+          deny:
+            - pkg: "github.com/LerianStudio/matcher/internal/configuration/domain/repositories"
+              desc: "Domain purity violation: Entities cannot import repositories."
+            - pkg: "github.com/LerianStudio/matcher/internal/ingestion/domain/repositories"
+              desc: "Domain purity violation: Entities cannot import repositories."
+            - pkg: "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
+              desc: "Domain purity violation: Entities cannot import repositories."
+            - pkg: "github.com/LerianStudio/matcher/internal/configuration/adapters"
+              desc: "Domain purity violation: Entities cannot import adapters."
+            - pkg: "github.com/LerianStudio/matcher/internal/ingestion/adapters"
+              desc: "Domain purity violation: Entities cannot import adapters."
+            - pkg: "github.com/LerianStudio/matcher/internal/matching/adapters"
+              desc: "Domain purity violation: Entities cannot import adapters."
+            - pkg: "database/sql"
+              desc: "Domain purity violation: Entities cannot import database/sql."
+        # ===========================================
+        # Test Helpers Isolation
+        # Testutil cannot import production adapters
+        # ===========================================
+        testutil-isolation:
+          list-mode: lax
+          files:
+            - "**/testutil/**/*.go"
+          deny:
+            - pkg: "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres"
+              desc: "Test utilities should not depend on production postgres adapters."
+            - pkg: "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres"
+              desc: "Test utilities should not depend on production postgres adapters."
+            - pkg: "github.com/LerianStudio/matcher/internal/matching/adapters/postgres"
+              desc: "Test utilities should not depend on production postgres adapters."
+            - pkg: "github.com/LerianStudio/matcher/internal/configuration/adapters/rabbitmq"
+              desc: "Test utilities should not depend on production rabbitmq adapters."
+            - pkg: "github.com/LerianStudio/matcher/internal/ingestion/adapters/rabbitmq"
+              desc: "Test utilities should not depend on production rabbitmq adapters."
+            - pkg: "github.com/LerianStudio/matcher/internal/matching/adapters/rabbitmq"
+              desc: "Test utilities should not depend on production rabbitmq adapters."
+    # ===========================================
+    # Exhaustive Switch Coverage for Enums
+    # Ensures all enum cases are handled
+    # ===========================================
+    exhaustive:
+      default-signifies-exhaustive: true
+    cyclop:
+      max-complexity: 13  # Allow slightly higher for repository patterns with query building
+    gocyclo:
+      min-complexity: 15  # Lowered from 18 for better maintainability
+    goconst:
+      min-len: 3            # Minimum string length to consider
+      min-occurrences: 3    # Minimum occurrences before flagging
+    nestif:
+      min-complexity: 4     # Flag functions with >4 levels of nesting
+    wrapcheck:
+      # Ignore error helper functions that already wrap errors
+      ignore-sigs:
+        # fmt.Errorf is used with %w for proper error wrapping throughout the codebase
+        - "func fmt.Errorf(format string, a ...any) error"
+        # Go 1.25+ uses a named return value in fmt.Errorf
+        - "func fmt.Errorf(format string, a ...any) (err error)"
+        # pkg/assert helpers - already produce well-formed errors with full context
+        - "func (*github.com/LerianStudio/matcher/pkg/assert.Asserter).That(ok bool, msg string, kv ...any) error"
+        - "func (*github.com/LerianStudio/matcher/pkg/assert.Asserter).NotNil(v any, msg string, kv ...any) error"
+        - "func (*github.com/LerianStudio/matcher/pkg/assert.Asserter).NotEmpty(s string, msg string, kv ...any) error"
+        # errors.New is used to define sentinel errors which are returned directly
+        - "func errors.New(text string) error"
+        # errors.Join aggregates multiple errors - already a combined error type
+        - "func errors.Join(errs ...error) error"
+        # Fiber native response functions - terminal HTTP operations
+        - "func (*github.com/gofiber/fiber/v2.Ctx).JSON(data interface{}, ctype ...string) error"
+        - "func (*github.com/gofiber/fiber/v2.Ctx).SendString(body string) error"
+        - "func (*github.com/gofiber/fiber/v2.App).Listen(addr string) error"
+        # lib-uncommons HTTP response helpers - terminal operations in handlers
+        - "func github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http.Respond(c *github.com/gofiber/fiber/v2.Ctx, status int, payload any) error"
+        - "func github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http.RespondStatus(c *github.com/gofiber/fiber/v2.Ctx, status int) error"
+        - "func github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http.RespondError(c *github.com/gofiber/fiber/v2.Ctx, status int, title string, message string) error"
+        - "func github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http.RenderError(ctx *github.com/gofiber/fiber/v2.Ctx, err error) error"
+        # pkg/http error response helpers - terminal HTTP operations
+        - "func github.com/LerianStudio/matcher/pkg/http.WriteError(c *github.com/gofiber/fiber/v2.Ctx, status int, title string, message string) error"
+        - "func github.com/LerianStudio/matcher/pkg/http.BadRequestError(c *github.com/gofiber/fiber/v2.Ctx, title string, message string) error"
+        - "func github.com/LerianStudio/matcher/pkg/http.UnauthorizedError(c *github.com/gofiber/fiber/v2.Ctx, title string, message string) error"
+        - "func github.com/LerianStudio/matcher/pkg/http.ForbiddenError(c *github.com/gofiber/fiber/v2.Ctx, title string, message string) error"
+        - "func github.com/LerianStudio/matcher/pkg/http.NotFoundError(c *github.com/gofiber/fiber/v2.Ctx, title string, message string) error"
+        - "func github.com/LerianStudio/matcher/pkg/http.ConflictError(c *github.com/gofiber/fiber/v2.Ctx, title string, message string) error"
+        - "func github.com/LerianStudio/matcher/pkg/http.RequestEntityTooLargeError(c *github.com/gofiber/fiber/v2.Ctx, title string, message string) error"
+        - "func github.com/LerianStudio/matcher/pkg/http.InternalServerError(c *github.com/gofiber/fiber/v2.Ctx) error"
+        - "func github.com/LerianStudio/matcher/pkg/http.InternalServerErrorWithTitle(c *github.com/gofiber/fiber/v2.Ctx, title string) error"
+        # Fiber response and middleware chain operations - errors return to framework
+        - "func (*github.com/gofiber/fiber/v2.Ctx).SendStatus(status int) error"
+        - "func (*github.com/gofiber/fiber/v2.Ctx).Next() error"
+        - "func (*github.com/gofiber/fiber/v2.Ctx).Send(body []byte) error"
+        - "func (*github.com/gofiber/fiber/v2.Ctx).Status(status int) *github.com/gofiber/fiber/v2.Ctx"
+        # Database operations - common patterns in repository implementations
+        - "func (*database/sql.Tx).ExecContext(ctx context.Context, query string, args ...any) (database/sql.Result, error)"
+        - "func (*database/sql.Tx).QueryContext(ctx context.Context, query string, args ...any) (*database/sql.Rows, error)"
+        - "func (*database/sql.Tx).QueryRowContext(ctx context.Context, query string, args ...any) *database/sql.Row"
+        - "func (*database/sql.Row).Scan(dest ...any) error"
+        - "func (*database/sql.Rows).Scan(dest ...any) error"
+        - "func (*database/sql.Rows).Err() error"
+        - "func (database/sql.Result).RowsAffected() (int64, error)"
+        # Internal WithTenantTx helper - already handles tenant context and error wrapping
+        - "func github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/common.WithTenantTx[T any](ctx context.Context, conn *github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres.PostgresConnection, fn func(*database/sql.Tx) (T, error)) (T, error)"
+        # InfrastructureProvider interface methods - thin wrapper for tenant-aware connection resolution
+        - "func (github.com/LerianStudio/matcher/internal/shared/ports.InfrastructureProvider).GetPostgresConnection(ctx context.Context) (*github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres.PostgresConnection, error)"
+        - "func (github.com/LerianStudio/matcher/internal/shared/ports.InfrastructureProvider).GetRedisConnection(ctx context.Context) (*github.com/LerianStudio/lib-uncommons/v2/uncommons/redis.RedisConnection, error)"
+        # Interface Scan method
+        - "func (interface).Scan(dest ...any) error"
+        # Additional lib-uncommons HTTP helpers
+        # JSON marshal operations - typically handled locally
+        - "func encoding/json.Marshal(v any) ([]byte, error)"
+        - "func encoding/json.Unmarshal(data []byte, v any) error"
+        # Domain entity factory and method errors - these are domain validation errors that should bubble up as-is
+        - "func github.com/LerianStudio/matcher/internal/configuration/domain/entities.NewReconciliationContext(tenantID github.com/google/uuid.UUID, input github.com/LerianStudio/matcher/internal/configuration/domain/entities.CreateReconciliationContextInput) (*github.com/LerianStudio/matcher/internal/configuration/domain/entities.ReconciliationContext, error)"
+        - "func github.com/LerianStudio/matcher/internal/configuration/domain/entities.NewFieldMap(contextID github.com/google/uuid.UUID, sourceID github.com/google/uuid.UUID, input github.com/LerianStudio/matcher/internal/configuration/domain/entities.CreateFieldMapInput) (*github.com/LerianStudio/matcher/internal/configuration/domain/entities.FieldMap, error)"
+        - "func github.com/LerianStudio/matcher/internal/configuration/domain/entities.NewMatchRule(contextID github.com/google/uuid.UUID, input github.com/LerianStudio/matcher/internal/configuration/domain/entities.CreateMatchRuleInput) (*github.com/LerianStudio/matcher/internal/configuration/domain/entities.MatchRule, error)"
+        - "func github.com/LerianStudio/matcher/internal/configuration/domain/entities.NewReconciliationSource(contextID github.com/google/uuid.UUID, input github.com/LerianStudio/matcher/internal/configuration/domain/entities.CreateReconciliationSourceInput) (*github.com/LerianStudio/matcher/internal/configuration/domain/entities.ReconciliationSource, error)"
+        # Domain entity Update methods - domain validation errors bubble up
+        - "func (*github.com/LerianStudio/matcher/internal/configuration/domain/entities.ReconciliationContext).Update(input github.com/LerianStudio/matcher/internal/configuration/domain/entities.UpdateReconciliationContextInput) error"
+        - "func (*github.com/LerianStudio/matcher/internal/configuration/domain/entities.FieldMap).Update(input github.com/LerianStudio/matcher/internal/configuration/domain/entities.UpdateFieldMapInput) error"
+        - "func (*github.com/LerianStudio/matcher/internal/configuration/domain/entities.MatchRule).Update(input github.com/LerianStudio/matcher/internal/configuration/domain/entities.UpdateMatchRuleInput) error"
+        - "func (*github.com/LerianStudio/matcher/internal/configuration/domain/entities.ReconciliationSource).Update(input github.com/LerianStudio/matcher/internal/configuration/domain/entities.UpdateReconciliationSourceInput) error"
+      # Package globs to ignore - internal packages where errors are already context-rich
+      ignore-package-globs:
+        - github.com/LerianStudio/matcher/internal/configuration/domain/*
+        - github.com/LerianStudio/matcher/internal/ingestion/domain/*
+        - github.com/LerianStudio/matcher/internal/matching/domain/*
+        - github.com/LerianStudio/matcher/internal/*/domain/repositories
+      # Interface regex patterns for repository methods - their errors should bubble up as-is
+      ignore-interface-regexps:
+        - "ContextRepository"
+        - "SourceRepository"
+        - "FieldMapRepository"
+        - "MatchRuleRepository"
+    govet:
+      enable:
+        - shadow
+        - unusedresult   # Unused results of certain function calls
+        - unusedwrite    # Writes to struct fields never read
+      settings:
+        shadow:
+          strict: true
+    revive:
+      rules:
+        - name: import-shadowing
+          severity: warning
+          disabled: false
+        - name: empty-block
+          severity: warning
+          disabled: false
+        - name: empty-lines
+          severity: warning
+          disabled: false
+        - name: use-any
+          severity: warning
+          disabled: false
+        # Additional rules for code quality enforcement
+        - name: package-comments
+          severity: warning
+          disabled: false
+        - name: context-as-argument
+          severity: error
+          disabled: false
+        - name: error-return
+          severity: warning
+          disabled: false
+        - name: error-naming
+          severity: warning
+          disabled: false
+        - name: exported
+          severity: warning
+          disabled: false
+          arguments:
+            - checkPrivateReceivers
+            - disableStutteringCheck
+        - name: unexported-return
+          severity: warning
+          disabled: false
+        - name: indent-error-flow
+          severity: warning
+          disabled: false
+        - name: range
+          severity: warning
+          disabled: false
+        - name: receiver-naming
+          severity: warning
+          disabled: false
+        - name: time-naming
+          severity: warning
+          disabled: false
+        - name: var-declaration
+          severity: warning
+          disabled: false
+        - name: unconditional-recursion
+          severity: error
+          disabled: false
+        - name: waitgroup-by-value
+          severity: error
+          disabled: false
+        - name: error-strings
+          severity: warning
+          disabled: false
+        # ===========================================
+        # Enhanced Revive Rules (Phase 3)
+        # ===========================================
+        - name: defer
+          severity: warning
+          disabled: false
+          arguments:
+            - ["call-chain", "loop"]
+        - name: deep-exit
+          severity: warning
+          disabled: false
+        - name: unnecessary-stmt
+          severity: warning
+          disabled: false
+        - name: redefines-builtin-id
+          severity: warning
+          disabled: false
+        - name: superfluous-else
+          severity: warning
+          disabled: false
+          arguments:
+            - preserveScope
+        # Note: confusing-naming, unused-parameter, unused-receiver disabled
+        # These are valid in many cases (interface implementations, future-proofing)
+        # and the Create/create pattern is idiomatic Go
+    # ===========================================
+    # Gocritic Enhanced Checks
+    # ===========================================
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+      disabled-checks:
+        - hugeParam
+        - rangeValCopy
+        - unnamedResult
+        - whyNoLint
+        - ptrToRefParam      # trace.Span pointers are OpenTelemetry convention
+        - emptyStringTest    # len(s) == 0 is fine and common pattern
+        - appendCombine      # Multiple appends can be clearer for readability
+        - paramTypeCombine   # Explicit parameter types preferred for clarity
+      settings:
+        captLocal:
+          paramsOnly: true
+        ifElseChain:
+          minThreshold: 3
+    varnamelen:
+      min-name-length: 2
+      check-receiver: true
+      check-return: true
+      check-type-param: true
+      ignore-decls:
+        - err error
+        - ok bool
+        - id string
+        - id int
+        - id int64
+        - id uint64
+        - tx *sql.Tx
+        - db *sql.DB
+        - ctx context.Context
+        - t *testing.T
+        - i int
+        - j int
+        - k int
+  exclusions:
+    generated: lax
+    rules:
+      - linters:
+          - errcheck
+        text: Error return value of .((os\.)?std(out|err)\..*|.*Close|.*Flush|os\.Remove(All)?|.*print(f|ln)?|os\.(Un)?Setenv). is not checked
+      - linters:
+          - revive
+        text: func name will be used as test\.Test.* by other packages, and that stutters; consider calling this
+      - linters:
+          - gosec
+        text: Use of unsafe calls should be audited
+      - linters:
+          - gosec
+        text: Subprocess launch(ed with variable|ing should be audited)
+      - linters:
+          - gosec
+        text: G307
+      - linters:
+          - gosec
+        text: (Expect directory permissions to be 0750 or less|Expect file permissions to be 0600 or less)
+      - linters:
+          - gosec
+        text: Potential file inclusion via variable
+      - linters:
+          - gosec
+        text: G113
+      - linters:
+          - gosec
+        text: G104
+      - linters:
+          - gosec
+        text: 'G204: Subprocess launched with a potential tainted input or cmd arguments'
+      - linters:
+          - gosec
+        text: 'G306: Expect WriteFile permissions to be 0600 or less'
+      - linters:
+          - errcheck
+          - gosec
+        path: _test\.go
+      - linters:
+          - govet
+        text: '^shadow: declaration of "(err|ok)" shadows declaration'
+      # Allow forced type assertions in custom linters (AST inspector patterns)
+      - linters:
+          - forcetypeassert
+        path: tools/linters/
+      - path: (.+)\.go$
+        text: parameter .* always receives
+      - linters:
+          - forbidigo
+        path: pkg/runtime/
+      - linters:
+          - forbidigo
+        path: _test\.go
+      # Allow panic in testutil (test helper code)
+      - linters:
+          - forbidigo
+        path: internal/shared/testutil/
+      # Exclude goconst from test files
+      - linters:
+          - goconst
+        path: _test\.go
+      # Allow fmt.Print* in tests, main, and pkg/assert (for fallback logging)
+      - linters:
+          - forbidigo
+        path: (cmd/|pkg/assert/)
+        text: 'fmt\.Print'
+      # Allow os.Exit in main.go (program entry point)
+      - linters:
+          - forbidigo
+        path: cmd/.*/main\.go
+        text: 'os\.Exit'
+      # Exclude wrapcheck for service layer - repository interface errors bubble up
+      - linters:
+          - wrapcheck
+        path: internal/.*/services/(command|query)/.*\.go
+        text: "error returned from interface method should be wrapped"
+      # Note: Test files are linted with same rules as production code
+      # to maintain quality standards
+      # ===========================================
+      # Complex Repository Functions
+      # Query building with pagination requires more lines
+      # ===========================================
+      - linters:
+          - funlen
+        path: internal/.*/adapters/postgres/.*\.go
+      - linters:
+          - funlen
+        path: internal/reporting/adapters/postgres/.*\.go
+      # ===========================================
+      # Bootstrap/Init Functions
+      # Module initialization requires more statements
+      # ===========================================
+      - linters:
+          - funlen
+        path: internal/bootstrap/init\.go
+      # ===========================================
+      # Complex Matching Engine Functions
+      # Orchestration logic requires more statements
+      # ===========================================
+      - linters:
+          - funlen
+        path: internal/matching/services/command/.*\.go
+      - linters:
+          - funlen
+        path: internal/ingestion/services/command/.*\.go
+      - linters:
+          - funlen
+        path: internal/ingestion/adapters/parsers/.*\.go
+      # ===========================================
+      # Nil returns in bootstrap (optional connections)
+      # ===========================================
+      - linters:
+          - nilnil
+        path: internal/bootstrap/
+      # ===========================================
+      # Defer patterns in pkg/runtime (intentional recover patterns)
+      # ===========================================
+      - linters:
+          - revive
+        path: pkg/runtime/
+        text: "defer: recover must be called"
+      # ===========================================
+      # Swagger Comment Exclusions
+      # Allow longer lines in Swagger annotations
+      # ===========================================
+      - linters:
+          - godot
+        source: "^// @"
+      # ===========================================
+      # Migration/SQL File Exclusions
+      # ===========================================
+      - linters:
+          - godot
+        path: migrations/
+      # ===========================================
+      # Generated Code Exclusions
+      # ===========================================
+      - linters:
+          - gofumpt
+        path: docs/swagger/
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+formatters:
+  enable:
+    - gci            # Enforce import grouping (stdlib, third-party, local)
+    - gofumpt        # Stricter formatting (superset of gofmt)
+  settings:
+    # ===========================================
+    # Import Grouping Configuration
+    # Enforces consistent import organization:
+    # 1. Standard library
+    # 2. Third-party packages
+    # 3. Lerian libraries
+    # 4. This project
+    # ===========================================
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/LerianStudio)
+        - prefix(github.com/LerianStudio/matcher)
+    # ===========================================
+    # Stricter Formatting (gofumpt)
+    # ===========================================
+    gofumpt:
+      extra-rules: true
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+      - docs/swagger$

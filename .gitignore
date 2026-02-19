@@ -32,15 +32,11 @@ boilerplate/
 !.env.example
 
 # Local tooling and runtime
-.air.toml
-.golangci.yml
 .ring/
 console/
 
 # Local development folders
-.old/
 .opencode/
-.references/
 worktrees/
 .worktrees/
 docs/codereview/

@@ -1,0 +1,68 @@
+#:schema https://json.schemastore.org/any.json
+# Air configuration for live reload
+# https://github.com/air-verse/air
+
+root = "."
+tmp_dir = "tmp"
+
+[build]
+# Binary output path
+entrypoint = "./tmp/main"
+# Build command
+cmd = "go build -mod=vendor -o ./tmp/main ./cmd/matcher"
+# Watch these extensions
+include_ext = ["go", "tpl", "tmpl", "html", "sql"]
+# Exclude directories
+exclude_dir = [
+  "tests",
+  "tools",
+  "assets",
+  "tmp",
+  "testdata",
+  "vendor",
+  "node_modules",
+  ".git",
+  "docs",
+  "console",
+  "worktrees",
+  "bin",
+  "migrations",
+  "config",
+  ".references",
+]
+# Exclude files
+exclude_file = []
+# Exclude regex patterns
+exclude_regex = ["_test.go"]
+# Exclude unchanged files
+exclude_unchanged = false
+# Follow symbolic links
+follow_symlink = false
+# Full binary path
+full_bin = ""
+# Log build output
+log = "build-errors.log"
+# Send interrupt signal
+send_interrupt = false
+# Delay after file change (ms)
+delay = 1000
+# Stop on error
+stop_on_error = true
+# Kill delay (duration string)
+kill_delay = "500ms"
+
+[log]
+# Show build log
+time = false
+# Log colors
+main_only = false
+
+[color]
+main = "magenta"
+watcher = "cyan"
+build = "yellow"
+runner = "green"
+
+[misc]
+# Clean on exit
+clean_on_exit = true
