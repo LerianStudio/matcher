@@ -1838,6 +1838,58 @@ func TestParseExportJobRequest_LowercaseNormalization(t *testing.T) {
 	assert.Equal(t, "CSV", parsed.format)
 }
 
+func TestParseExportJobRequest_LegacyReportTypeAliases(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{name: "MATCHES alias", input: "MATCHES", expected: entities.ExportReportTypeMatched},
+		{name: "unmatched transactions alias", input: "UNMATCHED_TRANSACTIONS", expected: entities.ExportReportTypeUnmatched},
+	}
+
+	for _, tt := range tests {
+		tc := tt
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			req := &CreateExportJobRequest{
+				ReportType: tc.input,
+				Format:     "CSV",
+				DateFrom:   "2024-01-01",
+				DateTo:     "2024-01-31",
+			}
+
+			parsed, msg, err := parseExportJobRequest(req)
+
+			require.NotNil(t, parsed)
+			assert.Empty(t, msg)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expected, parsed.reportType)
+		})
+	}
+
+	t.Run("EXCEPTIONS canonical type accepted", func(t *testing.T) {
+		t.Parallel()
+
+		req := &CreateExportJobRequest{
+			ReportType: "EXCEPTIONS",
+			Format:     "CSV",
+			DateFrom:   "2024-01-01",
+			DateTo:     "2024-01-31",
+		}
+
+		parsed, msg, err := parseExportJobRequest(req)
+
+		require.NotNil(t, parsed)
+		assert.Empty(t, msg)
+		assert.NoError(t, err)
+		assert.Equal(t, entities.ExportReportTypeExceptions, parsed.reportType)
+	})
+}
+
 // --- mapJobToResponse coverage ---
 
 func TestMapJobToResponse_WithErrorField(t *testing.T) {

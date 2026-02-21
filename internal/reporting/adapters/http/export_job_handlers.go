@@ -24,6 +24,11 @@ import (
 	sharedadaptershttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 )
 
+const (
+	// maxAsyncExportDateRangeDays defines the maximum date range permitted for async export jobs.
+	maxAsyncExportDateRangeDays = 365
+)
+
 var (
 	// ErrNilExportJobUseCase indicates export job use case is nil.
 	ErrNilExportJobUseCase = errors.New("export job use case is required")
@@ -45,6 +50,8 @@ var (
 	ErrTenantMismatch = errors.New("export job does not belong to this tenant")
 	// ErrDateRangeInvalid indicates dateFrom is after dateTo.
 	ErrDateRangeInvalid = errors.New("dateFrom must be before or equal to dateTo")
+	// ErrAsyncExportDateRangeExceeded indicates the date range exceeds the maximum for async export jobs.
+	ErrAsyncExportDateRangeExceeded = errors.New("date range exceeds maximum allowed for export jobs")
 )
 
 // ExportJobHandlers provides HTTP handlers for export job operations.
@@ -100,8 +107,8 @@ func NewExportJobHandlers(
 // CreateExportJobRequest represents the request body for creating an export job.
 type CreateExportJobRequest struct {
 	// ReportType specifies the type of report to export
-	// @enum MATCHED,UNMATCHED,SUMMARY,VARIANCE
-	ReportType string `json:"reportType" validate:"required,oneof=MATCHED UNMATCHED SUMMARY VARIANCE matched unmatched summary variance" example:"MATCHED"`
+	// @enum MATCHED,UNMATCHED,SUMMARY,VARIANCE,EXCEPTIONS,MATCHES,UNMATCHED_TRANSACTIONS
+	ReportType string `json:"reportType" validate:"required,oneof=MATCHED UNMATCHED SUMMARY VARIANCE EXCEPTIONS MATCHES UNMATCHED_TRANSACTIONS matched unmatched summary variance exceptions matches unmatched_transactions" example:"MATCHED"`
 	// Format specifies the export file format (server normalizes to uppercase)
 	Format string `json:"format" validate:"required,oneof=CSV JSON XML csv json xml" enums:"CSV,JSON,XML,csv,json,xml" example:"CSV"`
 	// DateFrom is the start date for the report (YYYY-MM-DD)
@@ -131,12 +138,13 @@ type parsedExportJobRequest struct {
 // parseExportJobRequest parses and applies business rules to the request.
 // Note: Struct validation (required, oneof, uuid) is done by libHTTP.ParseBodyAndValidate.
 func parseExportJobRequest(req *CreateExportJobRequest) (*parsedExportJobRequest, string, error) {
-	req.ReportType = strings.ToUpper(req.ReportType)
-	req.Format = strings.ToUpper(req.Format)
-
-	if !entities.IsValidReportType(req.ReportType) {
-		return nil, "invalid report_type: must be MATCHED, UNMATCHED, SUMMARY, or VARIANCE", entities.ErrInvalidReportType
+	normalizedReportType, ok := normalizeReportTypeAlias(req.ReportType)
+	if !ok {
+		return nil, "invalid report_type: must be MATCHED, UNMATCHED, SUMMARY, VARIANCE, EXCEPTIONS, MATCHES, or UNMATCHED_TRANSACTIONS", entities.ErrInvalidReportType
 	}
+
+	req.ReportType = normalizedReportType
+	req.Format = strings.ToUpper(strings.TrimSpace(req.Format))
 
 	if !entities.IsValidExportFormat(req.Format) {
 		return nil, "invalid format: must be CSV, JSON, XML, or PDF", entities.ErrInvalidExportFormat
@@ -164,6 +172,10 @@ func parseExportJobRequest(req *CreateExportJobRequest) (*parsedExportJobRequest
 		return nil, "dateFrom must be before or equal to dateTo", ErrDateRangeInvalid
 	}
 
+	if dateTo.Sub(dateFrom).Hours()/hoursPerDay > float64(maxAsyncExportDateRangeDays) {
+		return nil, fmt.Sprintf("date range exceeds maximum of %d days for export jobs", maxAsyncExportDateRangeDays), ErrAsyncExportDateRangeExceeded
+	}
+
 	dateTo = dateTo.Add(hoursPerDay*time.Hour - time.Nanosecond)
 
 	var sourceID *uuid.UUID
@@ -184,6 +196,23 @@ func parseExportJobRequest(req *CreateExportJobRequest) (*parsedExportJobRequest
 		dateTo:     dateTo,
 		sourceID:   sourceID,
 	}, "", nil
+}
+
+func normalizeReportTypeAlias(reportType string) (string, bool) {
+	switch strings.ToUpper(strings.TrimSpace(reportType)) {
+	case entities.ExportReportTypeMatched, "MATCHES":
+		return entities.ExportReportTypeMatched, true
+	case entities.ExportReportTypeUnmatched, "UNMATCHED_TRANSACTIONS":
+		return entities.ExportReportTypeUnmatched, true
+	case entities.ExportReportTypeSummary:
+		return entities.ExportReportTypeSummary, true
+	case entities.ExportReportTypeVariance:
+		return entities.ExportReportTypeVariance, true
+	case entities.ExportReportTypeExceptions:
+		return entities.ExportReportTypeExceptions, true
+	default:
+		return "", false
+	}
 }
 
 // ExportJobResponse represents an export job in API responses.
@@ -499,10 +528,12 @@ func (handler *ExportJobHandlers) CancelExportJob(fiberCtx *fiber.Ctx) error {
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	if existingJob != nil {
-		if err := verifyJobTenantOwnership(ctx, existingJob); err != nil {
-			return notFound(ctx, fiberCtx, span, logger, "export job not found", err)
-		}
+	if existingJob == nil {
+		return notFound(ctx, fiberCtx, span, logger, "export job not found", query.ErrExportJobNotFound)
+	}
+
+	if err := verifyJobTenantOwnership(ctx, existingJob); err != nil {
+		return notFound(ctx, fiberCtx, span, logger, "export job not found", err)
 	}
 
 	if err := handler.exportJobUC.CancelExportJob(ctx, jobID); err != nil {
@@ -716,6 +747,10 @@ func (handler *ExportJobHandlers) mapJobToResponse(
 	_ context.Context,
 	job *entities.ExportJob,
 ) *ExportJobResponse {
+	if job == nil {
+		return nil
+	}
+
 	response := &ExportJobResponse{
 		ID:             job.ID.String(),
 		ReportType:     job.ReportType,

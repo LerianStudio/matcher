@@ -288,6 +288,74 @@ func TestExportJobHandlers_CreateExportJob(t *testing.T) {
 		assert.Equal(t, entities.ExportJobStatusQueued, response.Status)
 	})
 
+	t.Run("accepts MATCHES alias and normalizes to MATCHED", func(t *testing.T) {
+		t.Parallel()
+
+		contextID := uuid.New()
+		repo := newExportJobRepoMock(t)
+		repo.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, job *entities.ExportJob) error {
+			assert.Equal(t, entities.ExportReportTypeMatched, job.ReportType)
+			return nil
+		}).Times(1)
+
+		handlers := setupCreateExportJobHandlers(t, contextID, repo)
+		app := setupExportJobTestAppWithContext(handlers.CreateExportJob, "create", contextID)
+
+		reqBody := CreateExportJobRequest{
+			ReportType: "MATCHES",
+			Format:     "CSV",
+			DateFrom:   "2024-01-01",
+			DateTo:     "2024-01-31",
+		}
+
+		resp := makeCreateExportJobRequest(t, app, contextID, reqBody)
+		defer resp.Body.Close()
+
+		assert.Equal(t, fiber.StatusAccepted, resp.StatusCode)
+
+		var response CreateExportJobResponse
+
+		err := json.NewDecoder(resp.Body).Decode(&response)
+		require.NoError(t, err)
+
+		assert.NotEmpty(t, response.JobID)
+		assert.Equal(t, entities.ExportJobStatusQueued, response.Status)
+	})
+
+	t.Run("accepts EXCEPTIONS report type and creates job", func(t *testing.T) {
+		t.Parallel()
+
+		contextID := uuid.New()
+		repo := newExportJobRepoMock(t)
+		repo.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, job *entities.ExportJob) error {
+			assert.Equal(t, entities.ExportReportTypeExceptions, job.ReportType)
+			return nil
+		}).Times(1)
+
+		handlers := setupCreateExportJobHandlers(t, contextID, repo)
+		app := setupExportJobTestAppWithContext(handlers.CreateExportJob, "create", contextID)
+
+		reqBody := CreateExportJobRequest{
+			ReportType: "EXCEPTIONS",
+			Format:     "CSV",
+			DateFrom:   "2024-01-01",
+			DateTo:     "2024-01-31",
+		}
+
+		resp := makeCreateExportJobRequest(t, app, contextID, reqBody)
+		defer resp.Body.Close()
+
+		assert.Equal(t, fiber.StatusAccepted, resp.StatusCode)
+
+		var response CreateExportJobResponse
+
+		err := json.NewDecoder(resp.Body).Decode(&response)
+		require.NoError(t, err)
+
+		assert.NotEmpty(t, response.JobID)
+		assert.Equal(t, entities.ExportJobStatusQueued, response.Status)
+	})
+
 	t.Run("rejects SUMMARY report type for async export", func(t *testing.T) {
 		t.Parallel()
 
@@ -371,6 +439,50 @@ func TestExportJobHandlers_CreateExportJob(t *testing.T) {
 
 		assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 	})
+
+	t.Run("rejects date range exceeding 365 days", func(t *testing.T) {
+		t.Parallel()
+
+		contextID := uuid.New()
+		repo := newExportJobRepoMock(t)
+		handlers := setupCreateExportJobHandlers(t, contextID, repo)
+		app := setupExportJobTestAppWithContext(handlers.CreateExportJob, "create", contextID)
+
+		reqBody := CreateExportJobRequest{
+			ReportType: "MATCHED",
+			Format:     "CSV",
+			DateFrom:   "2022-01-01",
+			DateTo:     "2024-01-01",
+		}
+
+		resp := makeCreateExportJobRequest(t, app, contextID, reqBody)
+		defer resp.Body.Close()
+
+		assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+	})
+
+	t.Run("accepts date range within 365 days", func(t *testing.T) {
+		t.Parallel()
+
+		contextID := uuid.New()
+		repo := newExportJobRepoMock(t)
+		repo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+
+		handlers := setupCreateExportJobHandlers(t, contextID, repo)
+		app := setupExportJobTestAppWithContext(handlers.CreateExportJob, "create", contextID)
+
+		reqBody := CreateExportJobRequest{
+			ReportType: "MATCHED",
+			Format:     "CSV",
+			DateFrom:   "2023-01-01",
+			DateTo:     "2023-12-31",
+		}
+
+		resp := makeCreateExportJobRequest(t, app, contextID, reqBody)
+		defer resp.Body.Close()
+
+		assert.Equal(t, fiber.StatusAccepted, resp.StatusCode)
+	})
 }
 
 func TestExportJobHandlers_GetExportJob(t *testing.T) {
@@ -378,6 +490,7 @@ func TestExportJobHandlers_GetExportJob(t *testing.T) {
 
 	jobID := uuid.New()
 	ctxProvider := &mockContextProvider{info: &ReconciliationContextInfo{ID: uuid.New()}}
+	getHandler := func(h *ExportJobHandlers) fiber.Handler { return h.GetExportJob }
 
 	t.Run("returns job successfully", func(t *testing.T) {
 		t.Parallel()
@@ -397,18 +510,7 @@ func TestExportJobHandlers_GetExportJob(t *testing.T) {
 		repo := newExportJobRepoMock(t)
 		repo.EXPECT().GetByID(gomock.Any(), jobID).Return(job, nil).Times(1)
 
-		storage := newStorageClientMock(t, storageClientMockConfig{})
-
-		uc, err := command.NewExportJobUseCase(repo)
-		require.NoError(t, err)
-
-		querySvc, err := query.NewExportJobQueryService(repo)
-		require.NoError(t, err)
-
-		handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour)
-		require.NoError(t, err)
-
-		app := setupExportJobTestApp(handlers.GetExportJob, "get")
+		app := setupExportJobHandlersForRoute(t, repo, storageClientMockConfig{}, ctxProvider, getHandler, "get")
 
 		req := httptest.NewRequest(
 			stdhttp.MethodGet,
@@ -441,18 +543,7 @@ func TestExportJobHandlers_GetExportJob(t *testing.T) {
 			Return(nil, command.ErrExportJobNotFound).
 			Times(1)
 
-		storage := newStorageClientMock(t, storageClientMockConfig{})
-
-		uc, err := command.NewExportJobUseCase(repo)
-		require.NoError(t, err)
-
-		querySvc, err := query.NewExportJobQueryService(repo)
-		require.NoError(t, err)
-
-		handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour)
-		require.NoError(t, err)
-
-		app := setupExportJobTestApp(handlers.GetExportJob, "get")
+		app := setupExportJobHandlersForRoute(t, repo, storageClientMockConfig{}, ctxProvider, getHandler, "get")
 
 		req := httptest.NewRequest(
 			stdhttp.MethodGet,
@@ -487,18 +578,7 @@ func TestExportJobHandlers_GetExportJob(t *testing.T) {
 		repo := newExportJobRepoMock(t)
 		repo.EXPECT().GetByID(gomock.Any(), jobID).Return(job, nil).Times(1)
 
-		storage := newStorageClientMock(t, storageClientMockConfig{})
-
-		uc, err := command.NewExportJobUseCase(repo)
-		require.NoError(t, err)
-
-		querySvc, err := query.NewExportJobQueryService(repo)
-		require.NoError(t, err)
-
-		handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour)
-		require.NoError(t, err)
-
-		app := setupExportJobTestApp(handlers.GetExportJob, "get")
+		app := setupExportJobHandlersForRoute(t, repo, storageClientMockConfig{}, ctxProvider, getHandler, "get")
 
 		req := httptest.NewRequest(
 			stdhttp.MethodGet,
@@ -518,18 +598,8 @@ func TestExportJobHandlers_GetExportJob(t *testing.T) {
 		t.Parallel()
 
 		repo := newExportJobRepoMock(t)
-		storage := newStorageClientMock(t, storageClientMockConfig{})
 
-		uc, err := command.NewExportJobUseCase(repo)
-		require.NoError(t, err)
-
-		querySvc, err := query.NewExportJobQueryService(repo)
-		require.NoError(t, err)
-
-		handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour)
-		require.NoError(t, err)
-
-		app := setupExportJobTestApp(handlers.GetExportJob, "get")
+		app := setupExportJobHandlersForRoute(t, repo, storageClientMockConfig{}, ctxProvider, getHandler, "get")
 
 		req := httptest.NewRequest(
 			stdhttp.MethodGet,
@@ -760,6 +830,7 @@ func TestExportJobHandlers_CancelExportJob(t *testing.T) {
 	t.Parallel()
 
 	ctxProvider := &mockContextProvider{info: &ReconciliationContextInfo{ID: uuid.New()}}
+	cancelHandler := func(h *ExportJobHandlers) fiber.Handler { return h.CancelExportJob }
 
 	t.Run("cancels queued job successfully", func(t *testing.T) {
 		t.Parallel()
@@ -781,18 +852,7 @@ func TestExportJobHandlers_CancelExportJob(t *testing.T) {
 		repo.EXPECT().GetByID(gomock.Any(), jobID).Return(job, nil).Times(3)
 		repo.EXPECT().UpdateStatus(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 
-		storage := newStorageClientMock(t, storageClientMockConfig{})
-
-		uc, err := command.NewExportJobUseCase(repo)
-		require.NoError(t, err)
-
-		querySvc, err := query.NewExportJobQueryService(repo)
-		require.NoError(t, err)
-
-		handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour)
-		require.NoError(t, err)
-
-		app := setupExportJobTestApp(handlers.CancelExportJob, "cancel")
+		app := setupExportJobHandlersForRoute(t, repo, storageClientMockConfig{}, ctxProvider, cancelHandler, "cancel")
 
 		req := httptest.NewRequest(
 			stdhttp.MethodPost,
@@ -827,18 +887,7 @@ func TestExportJobHandlers_CancelExportJob(t *testing.T) {
 		repo := newExportJobRepoMock(t)
 		repo.EXPECT().GetByID(gomock.Any(), jobID).Return(job, nil).Times(2)
 
-		storage := newStorageClientMock(t, storageClientMockConfig{})
-
-		uc, err := command.NewExportJobUseCase(repo)
-		require.NoError(t, err)
-
-		querySvc, err := query.NewExportJobQueryService(repo)
-		require.NoError(t, err)
-
-		handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour)
-		require.NoError(t, err)
-
-		app := setupExportJobTestApp(handlers.CancelExportJob, "cancel")
+		app := setupExportJobHandlersForRoute(t, repo, storageClientMockConfig{}, ctxProvider, cancelHandler, "cancel")
 
 		req := httptest.NewRequest(
 			stdhttp.MethodPost,
@@ -858,18 +907,8 @@ func TestExportJobHandlers_CancelExportJob(t *testing.T) {
 		t.Parallel()
 
 		repo := newExportJobRepoMock(t)
-		storage := newStorageClientMock(t, storageClientMockConfig{})
 
-		uc, err := command.NewExportJobUseCase(repo)
-		require.NoError(t, err)
-
-		querySvc, err := query.NewExportJobQueryService(repo)
-		require.NoError(t, err)
-
-		handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour)
-		require.NoError(t, err)
-
-		app := setupExportJobTestApp(handlers.CancelExportJob, "cancel")
+		app := setupExportJobHandlersForRoute(t, repo, storageClientMockConfig{}, ctxProvider, cancelHandler, "cancel")
 
 		req := httptest.NewRequest(
 			stdhttp.MethodPost,
@@ -893,18 +932,7 @@ func TestExportJobHandlers_CancelExportJob(t *testing.T) {
 		repo := newExportJobRepoMock(t)
 		repo.EXPECT().GetByID(gomock.Any(), jobID).Return(nil, command.ErrExportJobNotFound).Times(1)
 
-		storage := newStorageClientMock(t, storageClientMockConfig{})
-
-		uc, err := command.NewExportJobUseCase(repo)
-		require.NoError(t, err)
-
-		querySvc, err := query.NewExportJobQueryService(repo)
-		require.NoError(t, err)
-
-		handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour)
-		require.NoError(t, err)
-
-		app := setupExportJobTestApp(handlers.CancelExportJob, "cancel")
+		app := setupExportJobHandlersForRoute(t, repo, storageClientMockConfig{}, ctxProvider, cancelHandler, "cancel")
 
 		req := httptest.NewRequest(
 			stdhttp.MethodPost,
@@ -940,18 +968,7 @@ func TestExportJobHandlers_CancelExportJob(t *testing.T) {
 		repo.EXPECT().GetByID(gomock.Any(), jobID).Return(job, nil).Times(2)
 		repo.EXPECT().UpdateStatus(gomock.Any(), gomock.Any()).Return(errors.New("database error")).Times(1)
 
-		storage := newStorageClientMock(t, storageClientMockConfig{})
-
-		uc, err := command.NewExportJobUseCase(repo)
-		require.NoError(t, err)
-
-		querySvc, err := query.NewExportJobQueryService(repo)
-		require.NoError(t, err)
-
-		handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour)
-		require.NoError(t, err)
-
-		app := setupExportJobTestApp(handlers.CancelExportJob, "cancel")
+		app := setupExportJobHandlersForRoute(t, repo, storageClientMockConfig{}, ctxProvider, cancelHandler, "cancel")
 
 		req := httptest.NewRequest(
 			stdhttp.MethodPost,
@@ -987,18 +1004,7 @@ func TestExportJobHandlers_CancelExportJob(t *testing.T) {
 		repo := newExportJobRepoMock(t)
 		repo.EXPECT().GetByID(gomock.Any(), jobID).Return(job, nil).Times(1)
 
-		storage := newStorageClientMock(t, storageClientMockConfig{})
-
-		uc, err := command.NewExportJobUseCase(repo)
-		require.NoError(t, err)
-
-		querySvc, err := query.NewExportJobQueryService(repo)
-		require.NoError(t, err)
-
-		handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour)
-		require.NoError(t, err)
-
-		app := setupExportJobTestApp(handlers.CancelExportJob, "cancel")
+		app := setupExportJobHandlersForRoute(t, repo, storageClientMockConfig{}, ctxProvider, cancelHandler, "cancel")
 
 		req := httptest.NewRequest(
 			stdhttp.MethodPost,
@@ -1015,11 +1021,13 @@ func TestExportJobHandlers_CancelExportJob(t *testing.T) {
 	})
 }
 
-func setupDownloadExportJobHandlers(
+func setupExportJobHandlersForRoute(
 	t *testing.T,
 	repo *repomocks.MockExportJobRepository,
 	storageCfg storageClientMockConfig,
 	ctxProvider *mockContextProvider,
+	handler func(*ExportJobHandlers) fiber.Handler,
+	route string,
 ) *fiber.App {
 	t.Helper()
 
@@ -1034,7 +1042,7 @@ func setupDownloadExportJobHandlers(
 	handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour)
 	require.NoError(t, err)
 
-	app := setupExportJobTestApp(handlers.DownloadExportJob, "download")
+	app := setupExportJobTestApp(handler(handlers), route)
 
 	return app
 }
@@ -1058,6 +1066,7 @@ func TestExportJobHandlers_DownloadExportJob(t *testing.T) {
 	t.Parallel()
 
 	ctxProvider := &mockContextProvider{info: &ReconciliationContextInfo{ID: uuid.New()}}
+	downloadHandler := func(h *ExportJobHandlers) fiber.Handler { return h.DownloadExportJob }
 
 	t.Run("returns presigned URL for succeeded job", func(t *testing.T) {
 		t.Parallel()
@@ -1081,11 +1090,13 @@ func TestExportJobHandlers_DownloadExportJob(t *testing.T) {
 		repo := newExportJobRepoMock(t)
 		repo.EXPECT().GetByID(gomock.Any(), jobID).Return(job, nil).Times(1)
 
-		app := setupDownloadExportJobHandlers(
+		app := setupExportJobHandlersForRoute(
 			t,
 			repo,
 			storageClientMockConfig{presignURL: "https://storage.example.com/test.csv?presigned"},
 			ctxProvider,
+			downloadHandler,
+			"download",
 		)
 
 		resp := makeDownloadRequest(t, app, jobID)
@@ -1122,7 +1133,7 @@ func TestExportJobHandlers_DownloadExportJob(t *testing.T) {
 		repo := newExportJobRepoMock(t)
 		repo.EXPECT().GetByID(gomock.Any(), jobID).Return(job, nil).Times(1)
 
-		app := setupDownloadExportJobHandlers(t, repo, storageClientMockConfig{}, ctxProvider)
+		app := setupExportJobHandlersForRoute(t, repo, storageClientMockConfig{}, ctxProvider, downloadHandler, "download")
 
 		resp := makeDownloadRequest(t, app, jobID)
 
@@ -1152,7 +1163,7 @@ func TestExportJobHandlers_DownloadExportJob(t *testing.T) {
 		repo := newExportJobRepoMock(t)
 		repo.EXPECT().GetByID(gomock.Any(), jobID).Return(job, nil).Times(1)
 
-		app := setupDownloadExportJobHandlers(t, repo, storageClientMockConfig{}, ctxProvider)
+		app := setupExportJobHandlersForRoute(t, repo, storageClientMockConfig{}, ctxProvider, downloadHandler, "download")
 
 		resp := makeDownloadRequest(t, app, jobID)
 
@@ -1166,7 +1177,7 @@ func TestExportJobHandlers_DownloadExportJob(t *testing.T) {
 
 		repo := newExportJobRepoMock(t)
 
-		app := setupDownloadExportJobHandlers(t, repo, storageClientMockConfig{}, ctxProvider)
+		app := setupExportJobHandlersForRoute(t, repo, storageClientMockConfig{}, ctxProvider, downloadHandler, "download")
 
 		req := httptest.NewRequest(
 			stdhttp.MethodGet,
@@ -1190,7 +1201,7 @@ func TestExportJobHandlers_DownloadExportJob(t *testing.T) {
 		repo := newExportJobRepoMock(t)
 		repo.EXPECT().GetByID(gomock.Any(), jobID).Return(nil, query.ErrExportJobNotFound).Times(1)
 
-		app := setupDownloadExportJobHandlers(t, repo, storageClientMockConfig{}, ctxProvider)
+		app := setupExportJobHandlersForRoute(t, repo, storageClientMockConfig{}, ctxProvider, downloadHandler, "download")
 
 		resp := makeDownloadRequest(t, app, jobID)
 
@@ -1222,7 +1233,7 @@ func TestExportJobHandlers_DownloadExportJob(t *testing.T) {
 		repo := newExportJobRepoMock(t)
 		repo.EXPECT().GetByID(gomock.Any(), jobID).Return(job, nil).Times(1)
 
-		app := setupDownloadExportJobHandlers(t, repo, storageClientMockConfig{}, ctxProvider)
+		app := setupExportJobHandlersForRoute(t, repo, storageClientMockConfig{}, ctxProvider, downloadHandler, "download")
 
 		resp := makeDownloadRequest(t, app, jobID)
 
@@ -1253,11 +1264,13 @@ func TestExportJobHandlers_DownloadExportJob(t *testing.T) {
 		repo := newExportJobRepoMock(t)
 		repo.EXPECT().GetByID(gomock.Any(), jobID).Return(job, nil).Times(1)
 
-		app := setupDownloadExportJobHandlers(
+		app := setupExportJobHandlersForRoute(
 			t,
 			repo,
 			storageClientMockConfig{presignErr: errors.New("storage error")},
 			ctxProvider,
+			downloadHandler,
+			"download",
 		)
 
 		resp := makeDownloadRequest(t, app, jobID)

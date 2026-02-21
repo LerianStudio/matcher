@@ -59,10 +59,11 @@ const (
 
 // Export report type constants.
 const (
-	ExportReportTypeMatched   = "MATCHED"
-	ExportReportTypeUnmatched = "UNMATCHED"
-	ExportReportTypeSummary   = "SUMMARY"
-	ExportReportTypeVariance  = "VARIANCE"
+	ExportReportTypeMatched    = "MATCHED"
+	ExportReportTypeUnmatched  = "UNMATCHED"
+	ExportReportTypeSummary    = "SUMMARY"
+	ExportReportTypeVariance   = "VARIANCE"
+	ExportReportTypeExceptions = "EXCEPTIONS"
 )
 
 // DefaultExportExpiry defines the default expiration time for export files.
@@ -292,7 +293,8 @@ func IsValidReportType(reportType string) bool {
 	case ExportReportTypeMatched,
 		ExportReportTypeUnmatched,
 		ExportReportTypeSummary,
-		ExportReportTypeVariance:
+		ExportReportTypeVariance,
+		ExportReportTypeExceptions:
 		return true
 	default:
 		return false
