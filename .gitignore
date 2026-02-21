@@ -50,3 +50,4 @@ docs/pre-dev/
 # Test data
 internal/bootstrap/testdata/fuzz/
 **/testdata/fuzz/
+.dmux/
