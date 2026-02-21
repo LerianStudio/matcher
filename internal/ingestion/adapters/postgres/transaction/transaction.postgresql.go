@@ -1454,8 +1454,8 @@ func (repo *Repository) SearchTransactions(
 
 			dataQuery = dataQuery.
 				OrderBy("created_at DESC").
-				Limit(uint64(limit)).  //nolint:gosec //#nosec G115 -- limit is capped at maxSearchLimit
-				Offset(uint64(offset)) //nolint:gosec //#nosec G115 -- offset validated non-negative
+				Limit(sharedpg.SafeIntToUint64(limit)).
+				Offset(sharedpg.SafeIntToUint64(offset))
 
 			// Execute count query
 			countSQL, countArgs, err := countQuery.ToSql()

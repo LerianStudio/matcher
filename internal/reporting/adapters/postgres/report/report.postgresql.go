@@ -327,7 +327,7 @@ func (repo *Repository) listMatchedQuery(
 
 	findAll = findAll.
 		OrderBy("t.id " + effectiveOrder).
-		Limit(uint64(args.limit + 1)) //nolint:gosec //#nosec G115 -- limit is validated positive by buildPaginationArgs
+		Limit(safeLimitForPage(args.limit) + 1)
 
 	query, queryArgs, err := findAll.ToSql()
 	if err != nil {
@@ -417,7 +417,7 @@ func (repo *Repository) listUnmatchedQuery(
 
 	findAll = findAll.
 		OrderBy("t.id " + effectiveOrder).
-		Limit(uint64(args.limit + 1)) //nolint:gosec //#nosec G115 -- limit is validated positive by buildPaginationArgs
+		Limit(safeLimitForPage(args.limit) + 1)
 
 	query, queryArgs, err := findAll.ToSql()
 	if err != nil {

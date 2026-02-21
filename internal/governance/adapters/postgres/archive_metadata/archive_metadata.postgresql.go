@@ -386,8 +386,8 @@ func buildListByTenantQuery(
 		From(tableName).
 		Where(squirrel.Eq{"tenant_id": tenantID}).
 		OrderBy("created_at DESC").
-		Limit(uint64(limit)).  //nolint:gosec //#nosec G115 -- limit is validated positive by caller
-		Offset(uint64(offset)) //nolint:gosec //#nosec G115 -- offset is validated non-negative by caller
+		Limit(pgcommon.SafeIntToUint64(limit)).
+		Offset(pgcommon.SafeIntToUint64(offset))
 
 	if status != "" {
 		qb = qb.Where(squirrel.Eq{"status": status})

@@ -317,7 +317,7 @@ func (repo *Repository) FindAll(
 
 			findAll = findAll.
 				OrderBy("id " + effectiveOrder).
-				Limit(uint64(limit + 1)) //nolint:gosec //#nosec G115 -- limit is validated positive by ValidateLimit
+				Limit(pgcommon.SafeIntToUint64(limit) + 1)
 
 			contexts, err = executeContextQuery(ctx, tx, findAll, limit)
 			if err != nil {

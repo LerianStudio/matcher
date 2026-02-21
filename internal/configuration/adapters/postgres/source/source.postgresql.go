@@ -20,6 +20,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/common"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	sharedpg "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -697,7 +698,7 @@ func buildPaginatedSourceQuery(
 
 	return baseQuery.
 		OrderBy("id " + effectiveOrder).
-		Limit(uint64(limit + 1)), nil //nolint:gosec //#nosec G115 -- limit is validated positive by caller
+		Limit(sharedpg.SafeIntToUint64(limit) + 1), nil
 }
 
 // executeSourceRows runs the query and scans all source rows.
