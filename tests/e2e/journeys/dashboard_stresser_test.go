@@ -583,10 +583,9 @@ func TestDashboardStresser_FullJourney(t *testing.T) {
 // Entries prefixed with "bug:" are tracked backend issues to fix.
 // When a known failure starts passing, the test will remind you to remove it.
 var knownFailures = map[string]string{
-	"ForceMatch":               "bug: MatchingGateway/ResolutionExecutor nil in bootstrap",
-	"BulkDispatch":             "bug: UUID validation issue",
-	"DispatchToExternal":       "env: no external dispatch target configured",
-	"WaitForExportJobComplete": "env: export worker may not complete within poll timeout",
+	"ForceMatch":         "bug: MatchingGateway/ResolutionExecutor nil in bootstrap",
+	"BulkDispatch":       "bug: UUID validation issue",
+	"DispatchToExternal": "env: no external dispatch target configured",
 }
 
 // TestDashboardStresser_HighVolume creates ~500k transactions for dashboard stress testing.
@@ -1714,9 +1713,10 @@ func TestDashboardStresser_HighVolume(t *testing.T) {
 			// STEP 22: Fee Schedule CRUD + Simulation
 			// ============================================================
 			tc.Logf("\n[STEP 22/22] Fee schedule CRUD + simulation...")
+			feeScheduleName := tc.UniqueName("stresser-fee-schedule")
 
 			feeSchedule, err := apiClient.FeeSchedule.CreateFeeSchedule(ctx, client.CreateFeeScheduleRequest{
-				Name:             "stresser-fee-schedule",
+				Name:             feeScheduleName,
 				Currency:         "USD",
 				ApplicationOrder: "PARALLEL",
 				RoundingScale:    2,
@@ -1750,7 +1750,7 @@ func TestDashboardStresser_HighVolume(t *testing.T) {
 					enrichedEndpoints++
 				}
 
-				newName := "stresser-fee-updated"
+				newName := tc.UniqueName("stresser-fee-updated")
 				if _, err := apiClient.FeeSchedule.UpdateFeeSchedule(ctx, feeSchedule.ID, client.UpdateFeeScheduleRequest{
 					Name: &newName,
 				}); err != nil {
