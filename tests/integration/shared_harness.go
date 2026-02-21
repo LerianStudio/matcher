@@ -144,21 +144,7 @@ func createSharedInfra(ctx context.Context) (*SharedInfra, error) {
 	infra.RedisAddr = redisAddr
 
 	// Start RabbitMQ
-	rabbitReq := testcontainers.ContainerRequest{
-		Image:        "rabbitmq:4.1.3-management-alpine",
-		ExposedPorts: []string{"5672/tcp", "15672/tcp"},
-		WaitingFor: wait.ForAll(
-			wait.ForListeningPort("5672/tcp"),
-			wait.ForLog("Server startup complete").WithStartupTimeout(120*time.Second),
-		).WithStartupTimeout(120 * time.Second),
-	}
-	rabbitContainer, err := testcontainers.GenericContainer(
-		startupCtx,
-		testcontainers.GenericContainerRequest{
-			ContainerRequest: rabbitReq,
-			Started:          true,
-		},
-	)
+	rabbitContainer, err := startRabbitMQContainer(startupCtx)
 	if err != nil {
 		_ = pgContainer.Terminate(ctx)
 		_ = redisContainer.Terminate(ctx)
@@ -166,25 +152,25 @@ func createSharedInfra(ctx context.Context) (*SharedInfra, error) {
 	}
 	infra.RabbitMQContainer = rabbitContainer
 
-	rabbitHost, err := rabbitContainer.Host(startupCtx)
+	rabbitHost, err := containerHostWithRetry(startupCtx, rabbitContainer)
 	if err != nil {
 		_ = infra.Cleanup(ctx)
 		return nil, fmt.Errorf("failed to get rabbitmq host: %w", err)
 	}
-	rabbitPort, err := rabbitContainer.MappedPort(startupCtx, "5672/tcp")
+	rabbitPort, err := mappedPortWithRetry(startupCtx, rabbitContainer, "5672/tcp")
 	if err != nil {
 		_ = infra.Cleanup(ctx)
 		return nil, fmt.Errorf("failed to get rabbitmq port: %w", err)
 	}
-	rabbitHealthPort, err := rabbitContainer.MappedPort(startupCtx, "15672/tcp")
+	rabbitHealthPort, err := mappedPortWithRetry(startupCtx, rabbitContainer, "15672/tcp")
 	if err != nil {
 		_ = infra.Cleanup(ctx)
 		return nil, fmt.Errorf("failed to get rabbitmq health port: %w", err)
 	}
 
 	infra.RabbitMQHost = rabbitHost
-	infra.RabbitMQPort = rabbitPort.Port()
-	infra.RabbitMQHealthURL = fmt.Sprintf("http://%s:%s", rabbitHost, rabbitHealthPort.Port())
+	infra.RabbitMQPort = rabbitPort
+	infra.RabbitMQHealthURL = fmt.Sprintf("http://%s:%s", rabbitHost, rabbitHealthPort)
 
 	return infra, nil
 }

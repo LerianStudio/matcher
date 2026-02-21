@@ -148,22 +148,7 @@ func NewTestHarness(ctx context.Context, t *testing.T) (*TestHarness, error) {
 
 	harness.RedisAddr = redisAddr
 
-	rabbitReq := testcontainers.ContainerRequest{
-		Image:        "rabbitmq:4.1.3-management-alpine",
-		ExposedPorts: []string{"5672/tcp", "15672/tcp"},
-		WaitingFor: wait.ForAll(
-			wait.ForListeningPort("5672/tcp"),
-			wait.ForLog("Server startup complete"),
-		).WithDeadline(120 * time.Second),
-	}
-
-	rabbitContainer, err := testcontainers.GenericContainer(
-		startupCtx,
-		testcontainers.GenericContainerRequest{
-			ContainerRequest: rabbitReq,
-			Started:          true,
-		},
-	)
+	rabbitContainer, err := startRabbitMQContainer(startupCtx)
 	if err != nil {
 		if terminateErr := terminateContainer(ctx, pgContainer); terminateErr != nil {
 			return nil, fmt.Errorf(
@@ -186,7 +171,7 @@ func NewTestHarness(ctx context.Context, t *testing.T) (*TestHarness, error) {
 
 	harness.RabbitMQContainer = rabbitContainer
 
-	rabbitHost, err := rabbitContainer.Host(startupCtx)
+	rabbitHost, err := containerHostWithRetry(startupCtx, rabbitContainer)
 	if err != nil {
 		if cleanupErr := harness.Cleanup(ctx); cleanupErr != nil {
 			return nil, fmt.Errorf(
@@ -199,7 +184,7 @@ func NewTestHarness(ctx context.Context, t *testing.T) (*TestHarness, error) {
 		return nil, fmt.Errorf("failed to get rabbitmq host: %w", err)
 	}
 
-	rabbitPort, err := rabbitContainer.MappedPort(startupCtx, "5672/tcp")
+	rabbitPort, err := mappedPortWithRetry(startupCtx, rabbitContainer, "5672/tcp")
 	if err != nil {
 		if cleanupErr := harness.Cleanup(ctx); cleanupErr != nil {
 			return nil, fmt.Errorf(
@@ -212,7 +197,7 @@ func NewTestHarness(ctx context.Context, t *testing.T) (*TestHarness, error) {
 		return nil, fmt.Errorf("failed to get rabbitmq port: %w", err)
 	}
 
-	rabbitHealthPort, err := rabbitContainer.MappedPort(startupCtx, "15672/tcp")
+	rabbitHealthPort, err := mappedPortWithRetry(startupCtx, rabbitContainer, "15672/tcp")
 	if err != nil {
 		if cleanupErr := harness.Cleanup(ctx); cleanupErr != nil {
 			return nil, fmt.Errorf(
@@ -226,8 +211,8 @@ func NewTestHarness(ctx context.Context, t *testing.T) (*TestHarness, error) {
 	}
 
 	harness.RabbitMQHost = rabbitHost
-	harness.RabbitMQPort = rabbitPort.Port()
-	harness.RabbitMQHealthURL = fmt.Sprintf("http://%s:%s", rabbitHost, rabbitHealthPort.Port())
+	harness.RabbitMQPort = rabbitPort
+	harness.RabbitMQHealthURL = fmt.Sprintf("http://%s:%s", rabbitHost, rabbitHealthPort)
 
 	return harness, nil
 }
