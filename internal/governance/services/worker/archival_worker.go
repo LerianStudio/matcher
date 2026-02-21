@@ -589,11 +589,8 @@ func (aw *ArchivalWorker) exportPartition(
 		return nil, 0, "", fmt.Errorf("apply tenant schema: %w", err)
 	}
 
-	//nolint:gosec //#nosec G201 -- partition name is validated by partition manager regex
-	query := fmt.Sprintf(
-		"SELECT id, tenant_id, entity_type, entity_id, action, actor_id, changes, created_at, tenant_seq, prev_hash, record_hash, hash_version FROM %s ORDER BY created_at",
-		metadata.PartitionName,
-	)
+	query := "SELECT id, tenant_id, entity_type, entity_id, action, actor_id, changes, created_at, tenant_seq, prev_hash, record_hash, hash_version FROM " +
+		metadata.PartitionName + " ORDER BY created_at" // #nosec G202 -- partition name is validated by partition manager regex
 
 	rows, err := tx.QueryContext(ctx, query)
 	if err != nil {

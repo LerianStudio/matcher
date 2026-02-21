@@ -1013,7 +1013,7 @@ func checkRabbitMQHTTPHealth(ctx context.Context, healthURL string) error {
 		return fmt.Errorf("rabbitmq health check: create request: %w", err)
 	}
 
-	resp, err := rabbitMQHTTPClient.Do(req) //nolint:gosec // #nosec G107 -- internal RabbitMQ health check, URL is from application config
+	resp, err := rabbitMQHTTPClient.Do(req) // #nosec G704 -- internal RabbitMQ health check, URL is from application config
 	if err != nil {
 		return fmt.Errorf("rabbitmq health check: request failed: %w", err)
 	}

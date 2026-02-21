@@ -367,7 +367,7 @@ func (conn *HTTPConnector) executeAttempt(
 		reqCopy.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 	}
 
-	resp, err := client.Do(reqCopy) //nolint:gosec // #nosec G107 -- URL is from validated connector configuration, not user input
+	resp, err := client.Do(reqCopy) // #nosec G704 -- URL is from validated connector configuration, not user input
 	if err != nil {
 		retry := attempt < maxRetries-1
 		return nil, retry, fmt.Errorf("attempt %d/%d: %w", attempt+1, maxRetries, err)

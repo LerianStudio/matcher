@@ -103,13 +103,7 @@ func (pm *PartitionManager) EnsurePartitionsExist(ctx context.Context, lookahead
 		end := monthStart(now, i+1)
 		name := partitionName(start)
 
-		//nolint:gosec //#nosec G201 -- partition name is generated from time values via partitionName(), not user input
-		ddl := fmt.Sprintf(
-			"CREATE TABLE IF NOT EXISTS %s PARTITION OF audit_logs FOR VALUES FROM ('%s') TO ('%s')",
-			name,
-			start.Format("2006-01-02"),
-			end.Format("2006-01-02"),
-		)
+		ddl := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s PARTITION OF audit_logs FOR VALUES FROM ('%s') TO ('%s')", name, start.Format("2006-01-02"), end.Format("2006-01-02")) // #nosec G201 -- partition name is generated from time values via partitionName(), not user input
 
 		if _, err := tx.ExecContext(ctx, ddl); err != nil {
 			libOpentelemetry.HandleSpanError(span, "failed to create partition", err)
@@ -268,7 +262,7 @@ func (pm *PartitionManager) DetachPartition(ctx context.Context, partitionName s
 		return fmt.Errorf("apply tenant schema: %w", err)
 	}
 
-	ddl := "ALTER TABLE audit_logs DETACH PARTITION " + partitionName //nolint:gosec // G202 -- partition name validated by partitionNameRegex, not from user input
+	ddl := "ALTER TABLE audit_logs DETACH PARTITION " + partitionName // #nosec G202 -- partition name validated by partitionNameRegex, not from user input
 
 	if _, err := tx.ExecContext(ctx, ddl); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to detach partition", err)
@@ -315,7 +309,7 @@ func (pm *PartitionManager) DropPartition(ctx context.Context, partitionName str
 		return fmt.Errorf("apply tenant schema: %w", err)
 	}
 
-	ddl := "DROP TABLE IF EXISTS " + partitionName //nolint:gosec // G202 -- partition name validated by partitionNameRegex, not from user input
+	ddl := "DROP TABLE IF EXISTS " + partitionName // #nosec G202 -- partition name validated by partitionNameRegex, not from user input
 
 	if _, err := tx.ExecContext(ctx, ddl); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to drop partition", err)

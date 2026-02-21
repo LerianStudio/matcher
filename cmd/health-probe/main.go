@@ -34,7 +34,8 @@ func main() {
 func probe(url string) int {
 	client := &http.Client{Timeout: timeout}
 
-	resp, err := client.Get(url) //nolint:gosec,noctx // #nosec G107 -- health probe binary; URL is from env var validated by operator
+	// #nosec G704 -- health probe binary; URL is from env var validated by operator
+	resp, err := client.Get(url) //nolint:noctx
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "health probe failed: %v\n", err)
 		return 1
