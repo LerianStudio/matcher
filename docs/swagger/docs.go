@@ -8946,6 +8946,20 @@ const docTemplate = `{
                     "format": "uuid",
                     "example": "550e8400-e29b-41d4-a716-446655440000"
                 },
+                "rules": {
+                    "type": "array",
+                    "maxItems": 50,
+                    "items": {
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateMatchRuleRequest"
+                    }
+                },
+                "sources": {
+                    "type": "array",
+                    "maxItems": 10,
+                    "items": {
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateContextSourceRequest"
+                    }
+                },
                 "type": {
                     "type": "string",
                     "enum": [
@@ -8954,6 +8968,44 @@ const docTemplate = `{
                         "N:M"
                     ],
                     "example": "1:1"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateContextSourceRequest": {
+            "description": "Request payload for creating a source inline with a context",
+            "type": "object",
+            "required": [
+                "name",
+                "type"
+            ],
+            "properties": {
+                "config": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "feeScheduleId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                "mapping": {
+                    "type": "object"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 50,
+                    "minLength": 1,
+                    "example": "Primary Bank Account"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "LEDGER",
+                        "BANK",
+                        "GATEWAY",
+                        "CUSTOM"
+                    ],
+                    "example": "BANK"
                 }
             }
         },
@@ -11962,17 +12014,23 @@ const docTemplate = `{
                     "example": "CSV"
                 },
                 "reportType": {
-                    "description": "ReportType specifies the type of report to export\n@enum MATCHED,UNMATCHED,SUMMARY,VARIANCE",
+                    "description": "ReportType specifies the type of report to export\n@enum MATCHED,UNMATCHED,SUMMARY,VARIANCE,EXCEPTIONS,MATCHES,UNMATCHED_TRANSACTIONS",
                     "type": "string",
                     "enum": [
                         "MATCHED",
                         "UNMATCHED",
                         "SUMMARY",
                         "VARIANCE",
+                        "EXCEPTIONS",
+                        "MATCHES",
+                        "UNMATCHED_TRANSACTIONS",
                         "matched",
                         "unmatched",
                         "summary",
-                        "variance"
+                        "variance",
+                        "exceptions",
+                        "matches",
+                        "unmatched_transactions"
                     ],
                     "example": "MATCHED"
                 },

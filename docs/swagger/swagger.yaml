@@ -116,6 +116,16 @@ definitions:
         example: 550e8400-e29b-41d4-a716-446655440000
         format: uuid
         type: string
+      rules:
+        items:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateMatchRuleRequest'
+        maxItems: 50
+        type: array
+      sources:
+        items:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateContextSourceRequest'
+        maxItems: 10
+        type: array
       type:
         enum:
         - "1:1"
@@ -125,6 +135,35 @@ definitions:
         type: string
     required:
     - interval
+    - name
+    - type
+    type: object
+  github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateContextSourceRequest:
+    description: Request payload for creating a source inline with a context
+    properties:
+      config:
+        additionalProperties: {}
+        type: object
+      feeScheduleId:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        format: uuid
+        type: string
+      mapping:
+        type: object
+      name:
+        example: Primary Bank Account
+        maxLength: 50
+        minLength: 1
+        type: string
+      type:
+        enum:
+        - LEDGER
+        - BANK
+        - GATEWAY
+        - CUSTOM
+        example: BANK
+        type: string
+    required:
     - name
     - type
     type: object
@@ -2424,16 +2463,22 @@ definitions:
       reportType:
         description: |-
           ReportType specifies the type of report to export
-          @enum MATCHED,UNMATCHED,SUMMARY,VARIANCE
+          @enum MATCHED,UNMATCHED,SUMMARY,VARIANCE,EXCEPTIONS,MATCHES,UNMATCHED_TRANSACTIONS
         enum:
         - MATCHED
         - UNMATCHED
         - SUMMARY
         - VARIANCE
+        - EXCEPTIONS
+        - MATCHES
+        - UNMATCHED_TRANSACTIONS
         - matched
         - unmatched
         - summary
         - variance
+        - exceptions
+        - matches
+        - unmatched_transactions
         example: MATCHED
         type: string
       sourceId:
