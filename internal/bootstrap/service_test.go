@@ -28,8 +28,10 @@ type mockApp struct{}
 
 func (m *mockApp) Run(_ *libCommons.Launcher) error { return nil }
 
-var errWorkerStart = errors.New("worker start failed")
-var errWorkerStop = errors.New("worker stop failed")
+var (
+	errWorkerStart = errors.New("worker start failed")
+	errWorkerStop  = errors.New("worker stop failed")
+)
 
 func TestServiceRun(t *testing.T) {
 	t.Parallel()
