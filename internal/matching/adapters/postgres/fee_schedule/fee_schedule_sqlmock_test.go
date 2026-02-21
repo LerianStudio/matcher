@@ -531,6 +531,7 @@ func TestRepository_Update_NotFound_Sqlmock(t *testing.T) {
 
 	require.Error(t, err)
 	require.Nil(t, result)
+	assert.ErrorIs(t, err, fee.ErrFeeScheduleNotFound)
 }
 
 func TestRepository_Update_ExecError_Sqlmock(t *testing.T) {

@@ -6,9 +6,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strconv"
-	"strings"
 
+	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 
 	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
@@ -250,7 +249,7 @@ func (repo *Repository) updateInternal(ctx context.Context, tx *sql.Tx, schedule
 			}
 
 			if rowsAffected == 0 {
-				return nil, sql.ErrNoRows
+				return nil, fee.ErrFeeScheduleNotFound
 			}
 
 			// Replace items: delete old, insert new
@@ -284,6 +283,10 @@ func (repo *Repository) updateInternal(ctx context.Context, tx *sql.Tx, schedule
 		},
 	)
 	if err != nil {
+		if errors.Is(err, fee.ErrFeeScheduleNotFound) {
+			return nil, fee.ErrFeeScheduleNotFound
+		}
+
 		wrappedErr := fmt.Errorf("update fee schedule: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to update fee schedule", wrappedErr)
 
@@ -460,12 +463,22 @@ func (repo *Repository) GetByIDs(ctx context.Context, ids []uuid.UUID) (map[uuid
 		ctx,
 		repo.provider,
 		func(tx *sql.Tx) (map[uuid.UUID]*fee.FeeSchedule, error) {
-			placeholders, args := buildINClause(ids)
+			scheduleIDs := make([]string, 0, len(ids))
+			for _, id := range ids {
+				scheduleIDs = append(scheduleIDs, id.String())
+			}
 
-			rows, queryErr := tx.QueryContext(ctx,
-				"SELECT "+scheduleColumns+" FROM fee_schedules WHERE id IN ("+placeholders+")", //nolint:gosec //#nosec G202 -- placeholders are parameterized ($1,$2,...), columns are constants
-				args...,
-			)
+			query, args, queryErr := squirrel.StatementBuilder.
+				PlaceholderFormat(squirrel.Dollar).
+				Select(scheduleColumns).
+				From("fee_schedules").
+				Where(squirrel.Eq{"id": scheduleIDs}).
+				ToSql()
+			if queryErr != nil {
+				return nil, fmt.Errorf("build fee schedules by ids query: %w", queryErr)
+			}
+
+			rows, queryErr := tx.QueryContext(ctx, query, args...)
 			if queryErr != nil {
 				return nil, queryErr
 			}
@@ -599,18 +612,18 @@ func queryItemsForSchedules(ctx context.Context, tx *sql.Tx, scheduleIDs []strin
 		return make(map[string][]ItemPostgreSQLModel), nil
 	}
 
-	placeholders := make([]string, len(scheduleIDs))
-	args := make([]any, len(scheduleIDs))
-
-	for i, id := range scheduleIDs {
-		placeholders[i] = "$" + strconv.Itoa(i+1)
-		args[i] = id
+	query, args, err := squirrel.StatementBuilder.
+		PlaceholderFormat(squirrel.Dollar).
+		Select(itemColumns).
+		From("fee_schedule_items").
+		Where(squirrel.Eq{"fee_schedule_id": scheduleIDs}).
+		OrderBy("fee_schedule_id, priority").
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build fee schedule items batch query: %w", err)
 	}
 
-	rows, err := tx.QueryContext(ctx,
-		"SELECT "+itemColumns+" FROM fee_schedule_items WHERE fee_schedule_id IN ("+strings.Join(placeholders, ", ")+") ORDER BY fee_schedule_id, priority", //nolint:gosec //#nosec G202 -- placeholders are parameterized, columns are constants
-		args...,
-	)
+	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query fee schedule items batch: %w", err)
 	}
@@ -642,18 +655,6 @@ func queryItemsForSchedules(ctx context.Context, tx *sql.Tx, scheduleIDs []strin
 	}
 
 	return grouped, nil
-}
-
-func buildINClause(ids []uuid.UUID) (string, []any) {
-	placeholders := make([]string, len(ids))
-	args := make([]any, len(ids))
-
-	for i, id := range ids {
-		placeholders[i] = "$" + strconv.Itoa(i+1)
-		args[i] = id.String()
-	}
-
-	return strings.Join(placeholders, ", "), args
 }
 
 var _ matchingRepos.FeeScheduleRepository = (*Repository)(nil)
