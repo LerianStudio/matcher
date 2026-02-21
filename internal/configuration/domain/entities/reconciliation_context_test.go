@@ -77,6 +77,28 @@ func TestNewReconciliationContext(t *testing.T) {
 		assert.False(t, contextEntity.CreatedAt.IsZero())
 	})
 
+	t.Run("accepts inline sources and rules in input", func(t *testing.T) {
+		t.Parallel()
+
+		input := CreateReconciliationContextInput{
+			Name:     "Inline Setup",
+			Type:     value_objects.ContextTypeOneToOne,
+			Interval: "0 0 * * *",
+			Sources: []CreateContextSourceInput{
+				{Name: "Bank", Type: value_objects.SourceTypeBank},
+			},
+			Rules: []CreateMatchRuleInput{
+				{Priority: 1, Type: value_objects.RuleTypeExact, Config: map[string]any{"matchAmount": true}},
+			},
+		}
+
+		contextEntity, err := NewReconciliationContext(context.Background(), tenantID, input)
+		require.NoError(t, err)
+		require.NotNil(t, contextEntity)
+		assert.Equal(t, "Inline Setup", contextEntity.Name)
+		assert.Equal(t, value_objects.ContextStatusDraft, contextEntity.Status)
+	})
+
 	t.Run("fails with nil tenant", func(t *testing.T) {
 		t.Parallel()
 

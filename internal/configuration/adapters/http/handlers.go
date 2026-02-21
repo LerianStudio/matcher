@@ -233,6 +233,10 @@ func (handler *Handler) CreateContext(fiberCtx *fiber.Ctx) error {
 			return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "duplicate_name", err.Error())
 		}
 
+		if errors.Is(err, entities.ErrRulePriorityConflict) {
+			return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "priority_conflict", err.Error())
+		}
+
 		return writeServiceError(fiberCtx, err)
 	}
 
@@ -1222,7 +1226,12 @@ func (handler *Handler) CreateMatchRule(fiberCtx *fiber.Ctx) error {
 		return badRequest(ctx, fiberCtx, span, logger, "invalid match rule payload", err)
 	}
 
-	result, err := handler.command.CreateMatchRule(ctx, contextID, req.ToDomainInput())
+	domainInput, err := req.ToDomainInput()
+	if err != nil {
+		return badRequest(ctx, fiberCtx, span, logger, "invalid match rule payload", err)
+	}
+
+	result, err := handler.command.CreateMatchRule(ctx, contextID, domainInput)
 	if err != nil {
 		logSpanError(ctx, span, logger, "failed to create match rule", err)
 

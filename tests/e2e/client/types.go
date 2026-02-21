@@ -20,11 +20,29 @@ type Context struct {
 
 // CreateContextRequest is the payload for creating a context.
 type CreateContextRequest struct {
-	Name             string `json:"name"`
-	Type             string `json:"type"`
-	Interval         string `json:"interval"`
-	Description      string `json:"description,omitempty"`
-	FeeNormalization string `json:"feeNormalization,omitempty"`
+	Name             string                             `json:"name"`
+	Type             string                             `json:"type"`
+	Interval         string                             `json:"interval"`
+	Description      string                             `json:"description,omitempty"`
+	FeeNormalization string                             `json:"feeNormalization,omitempty"`
+	Sources          []CreateContextInlineSourceRequest `json:"sources,omitempty"`
+	Rules            []CreateContextInlineRuleRequest   `json:"rules,omitempty"`
+}
+
+// CreateContextInlineSourceRequest is an inline source payload for context creation.
+type CreateContextInlineSourceRequest struct {
+	Name          string         `json:"name"`
+	Type          string         `json:"type"`
+	Config        map[string]any `json:"config,omitempty"`
+	FeeScheduleID *string        `json:"feeScheduleId,omitempty"`
+	Mapping       map[string]any `json:"mapping,omitempty"`
+}
+
+// CreateContextInlineRuleRequest is an inline rule payload for context creation.
+type CreateContextInlineRuleRequest struct {
+	Priority int            `json:"priority"`
+	Type     string         `json:"type"`
+	Config   map[string]any `json:"config,omitempty"`
 }
 
 // UpdateContextRequest is the payload for updating a context.

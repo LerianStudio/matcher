@@ -86,14 +86,16 @@ type ReconciliationContext struct {
 
 // CreateReconciliationContextInput defines the input required to create a context.
 type CreateReconciliationContextInput struct {
-	Name              string                    `json:"name"                      validate:"required,max=100" example:"Bank Reconciliation Q1"               minLength:"1" maxLength:"100"`
-	Type              value_objects.ContextType `json:"type"                      validate:"required"         example:"1:1"                                                                enums:"1:1,1:N,N:M"`
-	Interval          string                    `json:"interval"                  validate:"required,max=100" example:"daily"                                minLength:"1" maxLength:"100"`
-	RateID            *uuid.UUID                `json:"rateId,omitempty"                                      example:"550e8400-e29b-41d4-a716-446655440000"`
-	FeeToleranceAbs   *string                   `json:"feeToleranceAbs,omitempty"                             example:"0.01"`
-	FeeTolerancePct   *string                   `json:"feeTolerancePct,omitempty"                             example:"0.5"`
-	FeeNormalization  *string                   `json:"feeNormalization,omitempty"                            example:"NET"                                                                enums:"NET,GROSS"`
-	AutoMatchOnUpload *bool                     `json:"autoMatchOnUpload,omitempty"                           example:"false"`
+	Name              string                     `json:"name"                      validate:"required,max=100" example:"Bank Reconciliation Q1"               minLength:"1" maxLength:"100"`
+	Type              value_objects.ContextType  `json:"type"                      validate:"required"         example:"1:1"                                                                enums:"1:1,1:N,N:M"`
+	Interval          string                     `json:"interval"                  validate:"required,max=100" example:"daily"                                minLength:"1" maxLength:"100"`
+	RateID            *uuid.UUID                 `json:"rateId,omitempty"                                      example:"550e8400-e29b-41d4-a716-446655440000"`
+	FeeToleranceAbs   *string                    `json:"feeToleranceAbs,omitempty"                             example:"0.01"`
+	FeeTolerancePct   *string                    `json:"feeTolerancePct,omitempty"                             example:"0.5"`
+	FeeNormalization  *string                    `json:"feeNormalization,omitempty"                            example:"NET"                                                                enums:"NET,GROSS"`
+	AutoMatchOnUpload *bool                      `json:"autoMatchOnUpload,omitempty"                           example:"false"`
+	Sources           []CreateContextSourceInput `json:"sources,omitempty"`
+	Rules             []CreateMatchRuleInput     `json:"rules,omitempty"`
 }
 
 // UpdateReconciliationContextInput defines fields that can be updated on a context.

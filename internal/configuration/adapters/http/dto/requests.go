@@ -1,6 +1,8 @@
 package dto
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -10,19 +12,44 @@ import (
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
+// Sentinel errors for JSON field validation.
+var (
+	ErrJSONFieldTooLarge  = errors.New("JSON field exceeds maximum size")
+	ErrJSONNestingTooDeep = errors.New("JSON field exceeds maximum nesting depth")
+	ErrJSONTooManyKeys    = errors.New("JSON field exceeds maximum key count")
+)
+
+const (
+	maxJSONFieldBytes = 64 * 1024
+	maxJSONFieldDepth = 5
+	maxJSONFieldKeys  = 100
+)
+
 // Reconciliation Context DTOs.
 
 // CreateContextRequest is the API request body for creating a reconciliation context.
 // @Description Request payload for creating a reconciliation context
 type CreateContextRequest struct {
-	Name              string  `json:"name"                       validate:"required,max=100" example:"Bank Reconciliation Q1"               minLength:"1" maxLength:"100"`
-	Type              string  `json:"type"                       validate:"required,oneof=1:1 1:N N:M" example:"1:1"                                                  enums:"1:1,1:N,N:M"`
-	Interval          string  `json:"interval"                   validate:"required,max=100" example:"daily"                                minLength:"1" maxLength:"100"`
-	RateID            *string `json:"rateId,omitempty"           validate:"omitempty,uuid"   example:"550e8400-e29b-41d4-a716-446655440000" format:"uuid"`
-	FeeToleranceAbs   *string `json:"feeToleranceAbs,omitempty"                              example:"0.01"`
-	FeeTolerancePct   *string `json:"feeTolerancePct,omitempty"                              example:"0.5"`
-	FeeNormalization  *string `json:"feeNormalization,omitempty"                              example:"NET"                                                                enums:"NET,GROSS"`
-	AutoMatchOnUpload *bool   `json:"autoMatchOnUpload,omitempty"                            example:"false"`
+	Name              string                       `json:"name"                       validate:"required,max=100" example:"Bank Reconciliation Q1"               minLength:"1" maxLength:"100"`
+	Type              string                       `json:"type"                       validate:"required,oneof=1:1 1:N N:M" example:"1:1"                                                  enums:"1:1,1:N,N:M"`
+	Interval          string                       `json:"interval"                   validate:"required,max=100" example:"daily"                                minLength:"1" maxLength:"100"`
+	RateID            *string                      `json:"rateId,omitempty"           validate:"omitempty,uuid"   example:"550e8400-e29b-41d4-a716-446655440000" format:"uuid"`
+	FeeToleranceAbs   *string                      `json:"feeToleranceAbs,omitempty"                              example:"0.01"`
+	FeeTolerancePct   *string                      `json:"feeTolerancePct,omitempty"                              example:"0.5"`
+	FeeNormalization  *string                      `json:"feeNormalization,omitempty"                             example:"NET"                                                                enums:"NET,GROSS"`
+	AutoMatchOnUpload *bool                        `json:"autoMatchOnUpload,omitempty"                            example:"false"`
+	Sources           []CreateContextSourceRequest `json:"sources,omitempty"          validate:"omitempty,max=10,dive" maxItems:"10"`
+	Rules             []CreateMatchRuleRequest     `json:"rules,omitempty"            validate:"omitempty,max=50,dive" maxItems:"50"`
+}
+
+// CreateContextSourceRequest represents a source created inline with a context.
+// @Description Request payload for creating a source inline with a context
+type CreateContextSourceRequest struct {
+	Name          string         `json:"name"                    validate:"required,max=50" example:"Primary Bank Account"               minLength:"1" maxLength:"50"`
+	Type          string         `json:"type"                    validate:"required,oneof=LEDGER BANK GATEWAY CUSTOM" example:"BANK"                              enums:"LEDGER,BANK,GATEWAY,CUSTOM"`
+	Config        map[string]any `json:"config"`
+	FeeScheduleID *string        `json:"feeScheduleId,omitempty" validate:"omitempty,uuid" example:"550e8400-e29b-41d4-a716-446655440000" format:"uuid"`
+	Mapping       map[string]any `json:"mapping,omitempty"       validate:"omitempty"   swaggertype:"object"`
 }
 
 // ToDomainInput converts the API request to a domain input struct.
@@ -45,6 +72,59 @@ func (req *CreateContextRequest) ToDomainInput() (entities.CreateReconciliationC
 		}
 
 		input.RateID = &parsed
+	}
+
+	if len(req.Sources) > 0 {
+		input.Sources = make([]entities.CreateContextSourceInput, 0, len(req.Sources))
+		for _, src := range req.Sources {
+			srcInput, err := src.ToDomainInput()
+			if err != nil {
+				return entities.CreateReconciliationContextInput{}, fmt.Errorf("invalid source: %w", err)
+			}
+
+			input.Sources = append(input.Sources, srcInput)
+		}
+	}
+
+	if len(req.Rules) > 0 {
+		input.Rules = make([]entities.CreateMatchRuleInput, 0, len(req.Rules))
+		for _, rule := range req.Rules {
+			ruleInput, err := rule.ToDomainInput()
+			if err != nil {
+				return entities.CreateReconciliationContextInput{}, fmt.Errorf("invalid rule: %w", err)
+			}
+
+			input.Rules = append(input.Rules, ruleInput)
+		}
+	}
+
+	return input, nil
+}
+
+// ToDomainInput converts the API request to a domain input struct.
+func (req *CreateContextSourceRequest) ToDomainInput() (entities.CreateContextSourceInput, error) {
+	if err := validateJSONField("source.config", req.Config); err != nil {
+		return entities.CreateContextSourceInput{}, err
+	}
+
+	if err := validateJSONField("source.mapping", req.Mapping); err != nil {
+		return entities.CreateContextSourceInput{}, err
+	}
+
+	input := entities.CreateContextSourceInput{
+		Name:    req.Name,
+		Type:    value_objects.SourceType(req.Type),
+		Config:  req.Config,
+		Mapping: req.Mapping,
+	}
+
+	if req.FeeScheduleID != nil {
+		parsed, err := uuid.Parse(*req.FeeScheduleID)
+		if err != nil {
+			return entities.CreateContextSourceInput{}, fmt.Errorf("invalid feeScheduleId: %w", err)
+		}
+
+		input.FeeScheduleID = &parsed
 	}
 
 	return input, nil
@@ -112,6 +192,10 @@ type CreateSourceRequest struct {
 // ToDomainInput converts the API request to a domain input struct.
 // Callers must validate the request (via ParseBodyAndValidate) before calling this method.
 func (req *CreateSourceRequest) ToDomainInput() (entities.CreateReconciliationSourceInput, error) {
+	if err := validateJSONField("source.config", req.Config); err != nil {
+		return entities.CreateReconciliationSourceInput{}, err
+	}
+
 	input := entities.CreateReconciliationSourceInput{
 		Name:   req.Name,
 		Type:   value_objects.SourceType(req.Type),
@@ -142,6 +226,10 @@ type UpdateSourceRequest struct {
 // ToDomainInput converts the API request to a domain input struct.
 // Callers must validate the request (via ParseBodyAndValidate) before calling this method.
 func (req *UpdateSourceRequest) ToDomainInput() (entities.UpdateReconciliationSourceInput, error) {
+	if err := validateJSONField("source.config", req.Config); err != nil {
+		return entities.UpdateReconciliationSourceInput{}, err
+	}
+
 	input := entities.UpdateReconciliationSourceInput{
 		Name:   req.Name,
 		Config: req.Config,
@@ -203,12 +291,16 @@ type CreateMatchRuleRequest struct {
 }
 
 // ToDomainInput converts the API request to a domain input struct.
-func (r *CreateMatchRuleRequest) ToDomainInput() entities.CreateMatchRuleInput {
-	return entities.CreateMatchRuleInput{
-		Priority: r.Priority,
-		Type:     shared.RuleType(r.Type),
-		Config:   r.Config,
+func (req *CreateMatchRuleRequest) ToDomainInput() (entities.CreateMatchRuleInput, error) {
+	if err := validateJSONField("rule.config", req.Config); err != nil {
+		return entities.CreateMatchRuleInput{}, err
 	}
+
+	return entities.CreateMatchRuleInput{
+		Priority: req.Priority,
+		Type:     shared.RuleType(req.Type),
+		Config:   req.Config,
+	}, nil
 }
 
 // UpdateMatchRuleRequest is the API request body for updating a match rule.
@@ -232,6 +324,61 @@ func (req *UpdateMatchRuleRequest) ToDomainInput() entities.UpdateMatchRuleInput
 	}
 
 	return input
+}
+
+func validateJSONField(fieldPath string, value map[string]any) error {
+	if len(value) == 0 {
+		return nil
+	}
+
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Errorf("%s contains non-serializable data: %w", fieldPath, err)
+	}
+
+	if len(encoded) > maxJSONFieldBytes {
+		return fmt.Errorf("%s exceeds maximum size of %d bytes: %w", fieldPath, maxJSONFieldBytes, ErrJSONFieldTooLarge)
+	}
+
+	keyCount := 0
+	if err := validateJSONNode(fieldPath, value, 1, &keyCount); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func validateJSONNode(fieldPath string, node any, depth int, keyCount *int) error {
+	if depth > maxJSONFieldDepth {
+		return fmt.Errorf("%s exceeds maximum nesting depth of %d: %w", fieldPath, maxJSONFieldDepth, ErrJSONNestingTooDeep)
+	}
+
+	switch typed := node.(type) {
+	case map[string]any:
+		*keyCount += len(typed)
+		if *keyCount > maxJSONFieldKeys {
+			return fmt.Errorf("%s exceeds maximum key count of %d: %w", fieldPath, maxJSONFieldKeys, ErrJSONTooManyKeys)
+		}
+
+		for key, child := range typed {
+			if err := validateJSONNode(fieldPath+"."+key, child, depth+1, keyCount); err != nil {
+				return err
+			}
+		}
+	case []any:
+		for i, item := range typed {
+			*keyCount++
+			if *keyCount > maxJSONFieldKeys {
+				return fmt.Errorf("%s exceeds maximum number of keys (%d): %w", fieldPath, maxJSONFieldKeys, ErrJSONTooManyKeys)
+			}
+
+			if err := validateJSONNode(fmt.Sprintf("%s[%d]", fieldPath, i), item, depth+1, keyCount); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 // Schedule DTOs.
