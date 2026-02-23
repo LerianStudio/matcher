@@ -23,8 +23,8 @@ github.com/LerianStudio/lib-auth/v2 v2.4.0 h1:ENesoLJ1v9DL1fR3F4G9qay3Upk7uqIUBI
 github.com/LerianStudio/lib-auth/v2 v2.4.0/go.mod h1:SBu9aj37eB1ogARnUY7PRKZppHt/YpMwrfcwsm6EoWU=
 github.com/LerianStudio/lib-commons/v2 v2.3.0 h1:y6FS1nu9su28WmvcwMgbGuBbcC3aBqXDg4jCnNXeb2U=
 github.com/LerianStudio/lib-commons/v2 v2.3.0/go.mod h1:W7DGRqBc53yjssdsZUJ/TlPMxk1IYwyB1lYNaMq+tX4=
-github.com/LerianStudio/lib-uncommons/v2 v2.2.0 h1:BoVu/YafuLbVLsveGaPUDpRSNUVesezLXCl7OEXw2e0=
-github.com/LerianStudio/lib-uncommons/v2 v2.2.0/go.mod h1:wxbSbcFba9SGwcABT+hMAntH4cjcG4HPcWjQK3Bg3WI=
+github.com/LerianStudio/lib-uncommons/v2 v2.3.0 h1:QOawhY4q9WzS5VgzqPcD50+KvbUzv4YqALJnkJ81k20=
+github.com/LerianStudio/lib-uncommons/v2 v2.3.0/go.mod h1:wxbSbcFba9SGwcABT+hMAntH4cjcG4HPcWjQK3Bg3WI=
 github.com/Masterminds/squirrel v1.5.4 h1:uUcX/aBc8O7Fg9kaISIUsHXdKuqehiXAMQTYX8afzqM=
 github.com/Masterminds/squirrel v1.5.4/go.mod h1:NNaOrjSoIDfDA40n7sr2tPNZRfjzjA400rg+riTZj10=
 github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=
