@@ -35,7 +35,7 @@ exclude_file = []
 # Exclude regex patterns
 exclude_regex = ["_test.go"]
 # Exclude unchanged files
-exclude_unchanged = false
+exclude_unchanged = true
 # Follow symbolic links
 follow_symlink = false
 # Full binary path

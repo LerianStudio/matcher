@@ -3,6 +3,8 @@
 package fee_schedule
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -741,4 +743,20 @@ func TestBuildINClause_Empty(t *testing.T) {
 
 	assert.Equal(t, "", placeholders)
 	assert.Empty(t, args)
+}
+
+func buildINClause(ids []uuid.UUID) (string, []any) {
+	if len(ids) == 0 {
+		return "", nil
+	}
+
+	placeholders := make([]string, len(ids))
+	args := make([]any, 0, len(ids))
+
+	for idx, id := range ids {
+		placeholders[idx] = fmt.Sprintf("$%d", idx+1)
+		args = append(args, id.String())
+	}
+
+	return strings.Join(placeholders, ", "), args
 }
