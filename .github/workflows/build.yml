@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    uses: LerianStudio/github-actions-shared-workflows/.github/workflows/build.yml@v1.10.2
+    uses: LerianStudio/github-actions-shared-workflows/.github/workflows/build.yml@v1.11.0
     with:
       runner_type: "blacksmith-4vcpu-ubuntu-2404"
       enable_dockerhub: true
@@ -19,7 +19,7 @@ jobs:
   update_gitops:
     needs: [build]
     if: needs.build.result == 'success'
-    uses: LerianStudio/github-actions-shared-workflows/.github/workflows/gitops-update.yml@v1.10.2
+    uses: LerianStudio/github-actions-shared-workflows/.github/workflows/gitops-update.yml@v1.11.0
     with:
       runner_type: "firmino-lxc-runners"
       artifact_pattern: "gitops-tags-matcher"
