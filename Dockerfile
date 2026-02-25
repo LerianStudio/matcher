@@ -6,6 +6,7 @@ FROM --platform=$BUILDPLATFORM golang:1.26.0-alpine AS builder
 WORKDIR /matcher-app
 
 COPY . .
+RUN go mod download && go mod vendor
 
 ARG TARGETARCH
 ARG VERSION=dev
