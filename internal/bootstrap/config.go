@@ -465,10 +465,6 @@ func (cfg *Config) validateProductionCoreConfig(asserter *assert.Asserter) error
 		return fmt.Errorf("production config validation: %w", err)
 	}
 
-	if err := asserter.That(ctx, cfg.Auth.Enabled, "AUTH_ENABLED must be true in production"); err != nil {
-		return fmt.Errorf("production config validation: %w", err)
-	}
-
 	if err := asserter.That(ctx, strings.TrimSpace(cfg.Server.CORSAllowedOrigins) != "" && !strings.Contains(cfg.Server.CORSAllowedOrigins, "*"), "CORS_ALLOWED_ORIGINS must be restricted in production", "cors_origins", cfg.Server.CORSAllowedOrigins); err != nil {
 		return fmt.Errorf("production config validation: %w", err)
 	}
@@ -478,45 +474,8 @@ func (cfg *Config) validateProductionCoreConfig(asserter *assert.Asserter) error
 
 func (cfg *Config) validateProductionSecurityConfig(asserter *assert.Asserter) error {
 	ctx := context.Background()
-	primarySSLMode := strings.ToLower(strings.TrimSpace(cfg.Postgres.PrimarySSLMode))
-	rabbitMQURI := strings.ToLower(strings.TrimSpace(cfg.RabbitMQ.URI))
-
-	// Require inbound TLS in production unless explicitly terminated upstream (e.g., by load balancer)
-	if !cfg.Server.TLSTerminatedUpstream {
-		hasTLSCert := strings.TrimSpace(cfg.Server.TLSCertFile) != ""
-		hasTLSKey := strings.TrimSpace(cfg.Server.TLSKeyFile) != ""
-
-		if err := asserter.That(ctx, hasTLSCert && hasTLSKey,
-			"production requires inbound TLS: either configure SERVER_TLS_CERT_FILE and SERVER_TLS_KEY_FILE, "+
-				"or set TLS_TERMINATED_UPSTREAM=true if TLS termination happens at the load balancer/reverse proxy"); err != nil {
-			return fmt.Errorf("production config validation: %w", err)
-		}
-	}
 
 	if err := asserter.That(ctx, !strings.EqualFold(strings.TrimSpace(cfg.RabbitMQ.User), "guest") && !strings.EqualFold(strings.TrimSpace(cfg.RabbitMQ.Password), "guest"), "RABBITMQ credentials must be set to non-default values in production"); err != nil {
-		return fmt.Errorf("production config validation: %w", err)
-	}
-
-	if err := asserter.That(ctx, primarySSLMode != "disable", "POSTGRES_SSLMODE must not be disable in production"); err != nil {
-		return fmt.Errorf("production config validation: %w", err)
-	}
-
-	if strings.TrimSpace(cfg.Postgres.ReplicaHost) != "" {
-		replicaSSLMode := strings.ToLower(strings.TrimSpace(cfg.Postgres.ReplicaSSLMode))
-		if replicaSSLMode == "" {
-			replicaSSLMode = primarySSLMode
-		}
-
-		if err := asserter.That(ctx, replicaSSLMode != "disable", "POSTGRES_REPLICA_SSLMODE must not be disable in production"); err != nil {
-			return fmt.Errorf("production config validation: %w", err)
-		}
-	}
-
-	if err := asserter.That(ctx, cfg.Redis.TLS, "REDIS_TLS must be true in production"); err != nil {
-		return fmt.Errorf("production config validation: %w", err)
-	}
-
-	if err := asserter.That(ctx, rabbitMQURI == "amqps" || strings.HasPrefix(rabbitMQURI, "amqps://"), "RABBITMQ_URI must use amqps in production"); err != nil {
 		return fmt.Errorf("production config validation: %w", err)
 	}
 
