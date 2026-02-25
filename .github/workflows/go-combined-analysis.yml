@@ -28,7 +28,7 @@ jobs:
       runner_type: "blacksmith-4vcpu-ubuntu-2404"
       app_name_prefix: "matcher"
       go_version: "1.26"
-      golangci_lint_version: "v2.6.2"
+      golangci_lint_version: "v2.10.1"
       golangci_lint_args: "--timeout=5m"
       coverage_threshold: 70
       fail_on_coverage_threshold: true
