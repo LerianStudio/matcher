@@ -523,7 +523,8 @@ func TestGetHistory_WithCursor(t *testing.T) {
 
 	cursorTimestamp := time.Now().UTC()
 	cursorID := uuid.New()
-	encodedCursor := libHTTP.EncodeTimestampCursor(cursorTimestamp, cursorID)
+	encodedCursor, err := libHTTP.EncodeTimestampCursor(cursorTimestamp, cursorID)
+	require.NoError(t, err)
 
 	auditLogs := []*govEntities.AuditLog{
 		{

@@ -12,8 +12,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
-
 	"github.com/LerianStudio/matcher/internal/matching/ports"
 	"github.com/LerianStudio/matcher/internal/matching/services/command"
 	matchingQuery "github.com/LerianStudio/matcher/internal/matching/services/query"
@@ -235,11 +233,9 @@ func TestHandlerSentinelErrors(t *testing.T) {
 	}
 }
 
-func TestPaginationConstants(t *testing.T) {
+func TestHandlerConstants(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, 20, libHTTP.DefaultLimit)
-	assert.Equal(t, 200, libHTTP.MaxLimit)
 	assert.Equal(t, "desc", sortOrderDesc)
 	assert.Equal(t, 2, minTransactionIDsForManualMatch)
 }

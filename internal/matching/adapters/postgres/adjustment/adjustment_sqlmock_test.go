@@ -295,6 +295,12 @@ func TestAdjustmentSortValue(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+
+	t.Run("nil adjustment returns empty string", func(t *testing.T) {
+		t.Parallel()
+
+		assert.Empty(t, adjustmentSortValue(nil, sortColumnCreatedAt))
+	})
 }
 
 // --- ListByContextID with sort by created_at ---

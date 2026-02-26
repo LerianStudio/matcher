@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -17,8 +18,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
 	pgcommon "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/common"
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/repositories"
+	sharedpg "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
+	"github.com/LerianStudio/matcher/internal/shared/constants"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 )
@@ -62,6 +66,12 @@ func TestTransactionSortValue(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+
+	t.Run("nil transaction returns empty string", func(t *testing.T) {
+		t.Parallel()
+
+		assert.Empty(t, transactionSortValue(nil, columnCreatedAt))
+	})
 }
 
 // =============================================================================
@@ -289,6 +299,74 @@ func TestCalculateTransactionPagination_SingleTransaction(t *testing.T) {
 	)
 	require.NoError(t, err)
 	assert.NotNil(t, pagination)
+}
+
+func TestCalculateTransactionSortPagination_PropagatesCalculatorError(t *testing.T) {
+	t.Parallel()
+
+	_, err := calculateTransactionSortPagination(
+		true,
+		true,
+		true,
+		columnCreatedAt,
+		time.Now().UTC().Format(time.RFC3339Nano),
+		uuid.New().String(),
+		time.Now().UTC().Add(time.Minute).Format(time.RFC3339Nano),
+		uuid.New().String(),
+		func(
+			_ bool,
+			_ bool,
+			_ bool,
+			_ string,
+			_ string,
+			_ string,
+			_ string,
+			_ string,
+		) (string, string, error) {
+			return "", "", sql.ErrTxDone
+		},
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, sql.ErrTxDone)
+	assert.Contains(t, err.Error(), "calculate sort cursor pagination")
+}
+
+func TestCalculateTransactionSortPagination_NilCalculator(t *testing.T) {
+	t.Parallel()
+
+	_, err := calculateTransactionSortPagination(
+		true,
+		true,
+		true,
+		columnCreatedAt,
+		time.Now().UTC().Format(time.RFC3339Nano),
+		uuid.New().String(),
+		time.Now().UTC().Add(time.Minute).Format(time.RFC3339Nano),
+		uuid.New().String(),
+		nil,
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, sharedpg.ErrSortCursorCalculatorRequired)
+	assert.Contains(t, err.Error(), "calculate sort cursor pagination")
+}
+
+func TestCalculateTransactionPagination_NilBoundaryRecord(t *testing.T) {
+	t.Parallel()
+
+	_, err := calculateTransactionPagination(
+		[]*shared.Transaction{nil},
+		true,
+		true,
+		false,
+		libHTTP.CursorDirectionNext,
+		columnCreatedAt,
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, sharedpg.ErrSortCursorBoundaryRecordNil)
+	assert.Contains(t, err.Error(), "validate transaction pagination boundaries")
 }
 
 // =============================================================================
@@ -997,6 +1075,32 @@ func TestRepository_FindByJobAndContextID_ExtractionStatusSort(t *testing.T) {
 	require.Len(t, result, 1)
 }
 
+func TestRepository_FindByJobAndContextID_LimitCappedAtMaximum(t *testing.T) {
+	t.Parallel()
+
+	repo, mock, finish := setupRepositoryWithMock(t)
+	defer finish()
+
+	ctx := context.Background()
+	jobID := uuid.New()
+	contextID := uuid.New()
+
+	mock.ExpectQuery(fmt.Sprintf("LIMIT %d", constants.MaximumPaginationLimit+1)).
+		WillReturnRows(sqlmock.NewRows(testTransactionColumns()))
+
+	filter := repositories.CursorFilter{
+		Limit:     constants.MaximumPaginationLimit + 999,
+		SortBy:    "id",
+		SortOrder: "ASC",
+	}
+
+	result, pagination, err := repo.FindByJobAndContextID(ctx, jobID, contextID, filter)
+	require.NoError(t, err)
+	assert.Empty(t, result)
+	assert.Empty(t, pagination.Next)
+	assert.Empty(t, pagination.Prev)
+}
+
 // =============================================================================
 // Repository — FindByJobID with pagination (more results than limit)
 // =============================================================================
@@ -1034,6 +1138,31 @@ func TestRepository_FindByJobID_Pagination(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result, 2)
 	assert.NotEmpty(t, pagination.Next)
+}
+
+func TestRepository_FindByJobID_LimitCappedAtMaximum(t *testing.T) {
+	t.Parallel()
+
+	repo, mock, finish := setupRepositoryWithMock(t)
+	defer finish()
+
+	ctx := context.Background()
+	jobID := uuid.New()
+
+	mock.ExpectQuery(fmt.Sprintf("LIMIT %d", constants.MaximumPaginationLimit+1)).
+		WillReturnRows(sqlmock.NewRows(testTransactionColumns()))
+
+	filter := repositories.CursorFilter{
+		Limit:     constants.MaximumPaginationLimit + 500,
+		SortBy:    "id",
+		SortOrder: "ASC",
+	}
+
+	result, pagination, err := repo.FindByJobID(ctx, jobID, filter)
+	require.NoError(t, err)
+	assert.Empty(t, result)
+	assert.Empty(t, pagination.Next)
+	assert.Empty(t, pagination.Prev)
 }
 
 // =============================================================================

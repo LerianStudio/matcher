@@ -22,6 +22,7 @@ import (
 	matchingVO "github.com/LerianStudio/matcher/internal/matching/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/matching/ports"
 	"github.com/LerianStudio/matcher/internal/matching/services/command"
+	"github.com/LerianStudio/matcher/internal/shared/constants"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
@@ -362,9 +363,9 @@ func TestListMatchRunsHandler_LimitBounds(t *testing.T) {
 		limitParam    string
 		expectedLimit int
 	}{
-		{"below minimum clamps to default", "0", sharedhttp.DefaultLimit},
-		{"negative clamps to default", "-10", sharedhttp.DefaultLimit},
-		{"above maximum capped", "500", sharedhttp.MaxLimit},
+		{"below minimum clamps to default", "0", constants.DefaultPaginationLimit},
+		{"negative clamps to default", "-10", constants.DefaultPaginationLimit},
+		{"above maximum capped", "500", constants.MaximumPaginationLimit},
 	}
 
 	for _, tc := range testCases {
@@ -918,9 +919,9 @@ func TestGetMatchRunResultsHandler_LimitBounds(t *testing.T) {
 		expectedStatus int
 		expectedLimit  int
 	}{
-		{"below minimum clamps to default", "0", fiber.StatusOK, sharedhttp.DefaultLimit},
-		{"negative clamps to default", "-10", fiber.StatusOK, sharedhttp.DefaultLimit},
-		{"above maximum capped", "500", fiber.StatusOK, sharedhttp.MaxLimit},
+		{"below minimum clamps to default", "0", fiber.StatusOK, constants.DefaultPaginationLimit},
+		{"negative clamps to default", "-10", fiber.StatusOK, constants.DefaultPaginationLimit},
+		{"above maximum capped", "500", fiber.StatusOK, constants.MaximumPaginationLimit},
 	}
 
 	for _, tc := range testCases {

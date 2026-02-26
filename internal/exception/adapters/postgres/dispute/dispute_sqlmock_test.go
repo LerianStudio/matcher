@@ -18,6 +18,8 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/dispute"
 	"github.com/LerianStudio/matcher/internal/exception/domain/repositories"
+	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
+	"github.com/LerianStudio/matcher/internal/shared/constants"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 )
 
@@ -376,6 +378,28 @@ func TestNormalizeDisputeSortColumn(t *testing.T) {
 	}
 }
 
+func TestPrepareDisputeListParams(t *testing.T) {
+	t.Parallel()
+
+	t.Run("uses default limit for non-positive values", func(t *testing.T) {
+		t.Parallel()
+
+		params := prepareDisputeListParams(repositories.CursorFilter{Limit: 0})
+
+		assert.Equal(t, constants.DefaultPaginationLimit, params.limit)
+		assert.Equal(t, "id", params.sortColumn)
+		assert.True(t, params.useIDCursor)
+	})
+
+	t.Run("caps limit at configured maximum", func(t *testing.T) {
+		t.Parallel()
+
+		params := prepareDisputeListParams(repositories.CursorFilter{Limit: constants.MaximumPaginationLimit + 50})
+
+		assert.Equal(t, constants.MaximumPaginationLimit, params.limit)
+	})
+}
+
 func TestDisputeSortValue(t *testing.T) {
 	t.Parallel()
 
@@ -408,6 +432,102 @@ func TestDisputeSortValue(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+
+	t.Run("nil dispute returns empty string", func(t *testing.T) {
+		t.Parallel()
+
+		assert.Empty(t, disputeSortValue(nil, "created_at"))
+	})
+}
+
+func TestCalculateDisputeSortPagination_PropagatesCalculatorError(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	disputes := []*dispute.Dispute{
+		{ID: uuid.New(), CreatedAt: now, UpdatedAt: now, State: dispute.DisputeStateOpen, Category: dispute.DisputeCategoryOther},
+		{ID: uuid.New(), CreatedAt: now.Add(time.Minute), UpdatedAt: now.Add(time.Minute), State: dispute.DisputeStateDraft, Category: dispute.DisputeCategoryBankFeeError},
+	}
+
+	_, err := calculateDisputeSortPagination(
+		disputes,
+		true,
+		true,
+		disputeListQueryParams{sortColumn: "created_at"},
+		libHTTP.CursorDirectionNext,
+		func(
+			_ bool,
+			_ bool,
+			_ bool,
+			_ string,
+			_ string,
+			_ string,
+			_ string,
+			_ string,
+		) (string, string, error) {
+			return "", "", errSqlmockDB
+		},
+	)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "calculate sort cursor pagination")
+	assert.ErrorIs(t, err, errSqlmockDB)
+}
+
+func TestCalculateDisputeSortPagination_NilCalculator(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	disputes := []*dispute.Dispute{
+		{ID: uuid.New(), CreatedAt: now, UpdatedAt: now, State: dispute.DisputeStateOpen, Category: dispute.DisputeCategoryOther},
+		{ID: uuid.New(), CreatedAt: now.Add(time.Minute), UpdatedAt: now.Add(time.Minute), State: dispute.DisputeStateDraft, Category: dispute.DisputeCategoryBankFeeError},
+	}
+
+	_, err := calculateDisputeSortPagination(
+		disputes,
+		true,
+		true,
+		disputeListQueryParams{sortColumn: "created_at"},
+		libHTTP.CursorDirectionNext,
+		nil,
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, pgcommon.ErrSortCursorCalculatorRequired)
+	assert.Contains(t, err.Error(), "calculate sort cursor pagination")
+}
+
+func TestCalculateDisputePagination_NilBoundaryRecord(t *testing.T) {
+	t.Parallel()
+
+	_, err := calculateDisputePagination(
+		[]*dispute.Dispute{nil},
+		true,
+		false,
+		disputeListQueryParams{useIDCursor: true},
+		libHTTP.CursorDirectionNext,
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, pgcommon.ErrSortCursorBoundaryRecordNil)
+	assert.Contains(t, err.Error(), "validate dispute pagination boundaries")
+}
+
+func TestCalculateDisputeSortPagination_NilBoundaryRecord(t *testing.T) {
+	t.Parallel()
+
+	_, err := calculateDisputeSortPagination(
+		[]*dispute.Dispute{nil},
+		true,
+		false,
+		disputeListQueryParams{sortColumn: "created_at"},
+		libHTTP.CursorDirectionNext,
+		libHTTP.CalculateSortCursorPagination,
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, pgcommon.ErrSortCursorBoundaryRecordNil)
+	assert.Contains(t, err.Error(), "validate dispute pagination boundaries")
 }
 
 // --- Scan model tests ---

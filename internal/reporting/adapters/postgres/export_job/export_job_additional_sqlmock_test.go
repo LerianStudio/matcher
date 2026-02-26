@@ -560,6 +560,46 @@ func TestRepository_List_HasMoreResults(t *testing.T) {
 	assert.NotEmpty(t, pagination.Next, "should have a next cursor when there are more results")
 }
 
+func TestTrimExportJobsAndEncodeNextCursor_PropagatesEncoderError(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	records := []*entities.ExportJob{
+		{ID: uuid.New(), CreatedAt: now},
+		{ID: uuid.New(), CreatedAt: now.Add(-time.Minute)},
+	}
+
+	trimmed, cursor, err := trimExportJobsAndEncodeNextCursor(
+		records,
+		1,
+		func(_ time.Time, _ uuid.UUID) (string, error) {
+			return "", sql.ErrTxDone
+		},
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, sql.ErrTxDone)
+	assert.Len(t, trimmed, 1)
+	assert.Empty(t, cursor)
+}
+
+func TestTrimExportJobsAndEncodeNextCursor_NilEncoder(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	records := []*entities.ExportJob{
+		{ID: uuid.New(), CreatedAt: now},
+		{ID: uuid.New(), CreatedAt: now.Add(-time.Minute)},
+	}
+
+	trimmed, cursor, err := trimExportJobsAndEncodeNextCursor(records, 1, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrCursorEncoderRequired)
+	assert.Len(t, trimmed, 1)
+	assert.Empty(t, cursor)
+}
+
 // --- ListByContext error paths ---
 
 func TestRepository_ListByContext_QueryError(t *testing.T) {

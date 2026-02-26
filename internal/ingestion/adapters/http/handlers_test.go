@@ -37,6 +37,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/ingestion/services/query"
 	outboxEntities "github.com/LerianStudio/matcher/internal/outbox/domain/entities"
 	outboxMocks "github.com/LerianStudio/matcher/internal/outbox/domain/repositories/mocks"
+	"github.com/LerianStudio/matcher/internal/shared/constants"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/testutil"
 )
@@ -873,7 +874,7 @@ func TestListJobsByContextSuccess(t *testing.T) {
 
 	require.Equal(t, fiber.StatusOK, resp.StatusCode)
 	require.Len(t, payload.Items, 1)
-	require.Equal(t, libHTTP.DefaultLimit, payload.Limit)
+	require.Equal(t, constants.DefaultPaginationLimit, payload.Limit)
 	require.Empty(t, payload.NextCursor)
 	require.Empty(t, payload.PrevCursor)
 }
@@ -985,7 +986,7 @@ func TestListTransactionsByJobSuccess(t *testing.T) {
 
 	require.Equal(t, fiber.StatusOK, resp.StatusCode)
 	require.Len(t, payload.Items, 1)
-	require.Equal(t, libHTTP.DefaultLimit, payload.Limit)
+	require.Equal(t, constants.DefaultPaginationLimit, payload.Limit)
 	require.Empty(t, payload.NextCursor)
 	require.Empty(t, payload.PrevCursor)
 }

@@ -20,6 +20,8 @@ import (
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
+	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
+	"github.com/LerianStudio/matcher/internal/shared/constants"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 )
 
@@ -377,7 +379,7 @@ func TestPrepareListParams(t *testing.T) {
 
 		params := prepareListParams(repositories.CursorFilter{})
 
-		assert.Equal(t, 20, params.limit)
+		assert.Equal(t, constants.DefaultPaginationLimit, params.limit)
 		assert.Equal(t, "id", params.sortColumn)
 		assert.True(t, params.useIDCursor)
 	})
@@ -395,7 +397,15 @@ func TestPrepareListParams(t *testing.T) {
 
 		params := prepareListParams(repositories.CursorFilter{Limit: -5})
 
-		assert.Equal(t, 20, params.limit)
+		assert.Equal(t, constants.DefaultPaginationLimit, params.limit)
+	})
+
+	t.Run("limit above maximum is capped", func(t *testing.T) {
+		t.Parallel()
+
+		params := prepareListParams(repositories.CursorFilter{Limit: constants.MaximumPaginationLimit + 1})
+
+		assert.Equal(t, constants.MaximumPaginationLimit, params.limit)
 	})
 
 	t.Run("sort by non-id column", func(t *testing.T) {
@@ -675,6 +685,85 @@ func TestCalculatePagination(t *testing.T) {
 
 		require.NotNil(t, pagination)
 	})
+}
+
+func TestCalculateExceptionSortPagination_PropagatesCalculatorError(t *testing.T) {
+	t.Parallel()
+
+	_, err := calculateExceptionSortPagination(
+		true,
+		true,
+		true,
+		"created_at",
+		time.Now().UTC().Format(time.RFC3339Nano),
+		uuid.New().String(),
+		time.Now().UTC().Add(time.Minute).Format(time.RFC3339Nano),
+		uuid.New().String(),
+		func(
+			_ bool,
+			_ bool,
+			_ bool,
+			_ string,
+			_ string,
+			_ string,
+			_ string,
+			_ string,
+		) (string, string, error) {
+			return "", "", sql.ErrTxDone
+		},
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, sql.ErrTxDone)
+	assert.Contains(t, err.Error(), "calculate sort cursor pagination")
+}
+
+func TestCalculatePagination_NilBoundaryRecord(t *testing.T) {
+	t.Parallel()
+
+	params := listQueryParams{
+		limit:       10,
+		sortColumn:  "id",
+		useIDCursor: true,
+	}
+
+	_, err := calculatePagination(
+		[]*entities.Exception{nil},
+		true,
+		false,
+		params,
+		pkgHTTP.CursorDirectionNext,
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, pgcommon.ErrSortCursorBoundaryRecordNil)
+	assert.Contains(t, err.Error(), "validate pagination boundaries")
+}
+
+func TestCalculateExceptionSortPagination_NilCalculator(t *testing.T) {
+	t.Parallel()
+
+	_, err := calculateExceptionSortPagination(
+		true,
+		true,
+		true,
+		"created_at",
+		time.Now().UTC().Format(time.RFC3339Nano),
+		uuid.New().String(),
+		time.Now().UTC().Add(time.Minute).Format(time.RFC3339Nano),
+		uuid.New().String(),
+		nil,
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, pgcommon.ErrSortCursorCalculatorRequired)
+	assert.Contains(t, err.Error(), "calculate sort cursor pagination")
+}
+
+func TestExceptionSortValue_NilException(t *testing.T) {
+	t.Parallel()
+
+	assert.Empty(t, exceptionSortValue(nil, "created_at"))
 }
 
 func TestRepository_Update_ConcurrentModification(t *testing.T) {

@@ -27,12 +27,8 @@ import (
 	portsmocks "github.com/LerianStudio/matcher/internal/reporting/ports/mocks"
 	"github.com/LerianStudio/matcher/internal/reporting/services/command"
 	"github.com/LerianStudio/matcher/internal/reporting/services/query"
+	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
-
-// defaultExportJobListLimit is the expected default limit for export job list queries.
-// Defined here because it is only used in tests; the production handler reads the limit
-// from ParseTimestampCursorPagination which applies its own default.
-const defaultExportJobListLimit = 20
 
 // testTenantID is the tenant ID used in test middleware (setupExportJobTestApp).
 var testTenantID = uuid.MustParse("11111111-1111-1111-1111-111111111111")
@@ -640,7 +636,7 @@ func TestExportJobHandlers_ListExportJobs(t *testing.T) {
 
 		repo := newExportJobRepoMock(t)
 		repo.EXPECT().
-			List(gomock.Any(), gomock.Nil(), (*libHTTP.TimestampCursor)(nil), defaultExportJobListLimit).
+			List(gomock.Any(), gomock.Nil(), (*libHTTP.TimestampCursor)(nil), constants.DefaultPaginationLimit).
 			Return(jobs, libHTTP.CursorPagination{}, nil).
 			Times(1)
 
@@ -672,7 +668,7 @@ func TestExportJobHandlers_ListExportJobs(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Len(t, response.Items, 1)
-		assert.Equal(t, defaultExportJobListLimit, response.Limit)
+		assert.Equal(t, constants.DefaultPaginationLimit, response.Limit)
 		assert.False(t, response.HasMore)
 		assert.Empty(t, response.NextCursor)
 	})
@@ -697,7 +693,7 @@ func TestExportJobHandlers_ListExportJobs(t *testing.T) {
 		statusFilter := entities.ExportJobStatusSucceeded
 		repo := newExportJobRepoMock(t)
 		repo.EXPECT().
-			List(gomock.Any(), gomock.Eq(&statusFilter), (*libHTTP.TimestampCursor)(nil), defaultExportJobListLimit).
+			List(gomock.Any(), gomock.Eq(&statusFilter), (*libHTTP.TimestampCursor)(nil), constants.DefaultPaginationLimit).
 			Return(jobs, libHTTP.CursorPagination{}, nil).
 			Times(1)
 
@@ -791,7 +787,7 @@ func TestExportJobHandlers_ListExportJobs(t *testing.T) {
 
 		repo := newExportJobRepoMock(t)
 		repo.EXPECT().
-			List(gomock.Any(), gomock.Nil(), (*libHTTP.TimestampCursor)(nil), libHTTP.MaxLimit).
+			List(gomock.Any(), gomock.Nil(), (*libHTTP.TimestampCursor)(nil), constants.MaximumPaginationLimit).
 			Return([]*entities.ExportJob{}, libHTTP.CursorPagination{}, nil).
 			Times(1)
 
@@ -822,7 +818,7 @@ func TestExportJobHandlers_ListExportJobs(t *testing.T) {
 		err = json.NewDecoder(resp.Body).Decode(&response)
 		require.NoError(t, err)
 
-		assert.Equal(t, libHTTP.MaxLimit, response.Limit)
+		assert.Equal(t, constants.MaximumPaginationLimit, response.Limit)
 	})
 }
 

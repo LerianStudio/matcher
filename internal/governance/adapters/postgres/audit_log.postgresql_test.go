@@ -1046,7 +1046,8 @@ func TestBuildNextCursor(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			result, cursor := buildNextCursor(tt.logs, tt.limit)
+			result, cursor, err := buildNextCursor(tt.logs, tt.limit)
+			require.NoError(t, err)
 
 			require.Len(t, result, tt.expectTrimmed)
 
@@ -1057,6 +1058,48 @@ func TestBuildNextCursor(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBuildNextCursorWithEncoder_EncodeFailure(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	logs := []*entities.AuditLog{
+		{ID: uuid.New(), CreatedAt: now},
+		{ID: uuid.New(), CreatedAt: now.Add(-time.Second)},
+	}
+
+	trimmed, cursor, err := buildNextCursorWithEncoder(
+		logs,
+		1,
+		func(_ time.Time, _ uuid.UUID) (string, error) {
+			return "", errTestDatabaseError
+		},
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errTestDatabaseError)
+	assert.Contains(t, err.Error(), "encode next cursor")
+	require.Len(t, trimmed, 1)
+	assert.Empty(t, cursor)
+}
+
+func TestBuildNextCursorWithEncoder_NilEncoder(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	logs := []*entities.AuditLog{
+		{ID: uuid.New(), CreatedAt: now},
+		{ID: uuid.New(), CreatedAt: now.Add(-time.Second)},
+	}
+
+	trimmed, cursor, err := buildNextCursorWithEncoder(logs, 1, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrCursorEncoderRequired)
+	assert.Contains(t, err.Error(), "encode next cursor")
+	require.Len(t, trimmed, 1)
+	assert.Empty(t, cursor)
 }
 
 func TestCreate_NilAuditLog(t *testing.T) {
