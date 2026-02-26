@@ -184,6 +184,13 @@ Build tags are the authoritative test type discriminator:
 - **Scope**: Used only in `internal/reporting/services/query/exports/pdf.go` for report PDF generation (matched, unmatched, summary, variance reports).
 - **Risk**: Low. Same library, same maintainers, MIT license, no external dependencies beyond Go stdlib. If Codeberg hosting becomes unavailable, the library is pure Go with zero transitive dependencies and could be vendored trivially.
 
+### Core Runtime Dependency Refresh Policy
+
+- **Scope**: Infrastructure/runtime upgrades (framework, logging, telemetry, messaging, networking, and datastore clients) must be treated as operationally sensitive.
+- **Soak policy**: Stage for at least 7 days with `make test-int`, `make test-e2e-fast`, and readiness/health probes validated under representative load.
+- **Rollback plan**: Keep a tested rollback path (revert dependency bump or pin previous known-good versions in `go.mod`), run `go mod tidy`, then re-run `make test` + `make test-int` before redeploy.
+- **Owner**: Platform/Runtime maintainers must sign off rollout and rollback readiness during review.
+
 ## Misc
 
 - Avoid one-letter variable names unless required.
