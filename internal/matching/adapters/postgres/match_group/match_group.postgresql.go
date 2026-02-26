@@ -20,6 +20,7 @@ import (
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	matchingRepos "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
+	"github.com/LerianStudio/matcher/internal/shared/constants"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -239,10 +240,11 @@ func (repo *Repository) ListByRunID(
 		func(qe pgcommon.QueryExecutor) (groups []*matchingEntities.MatchGroup, err error) {
 			orderDirection := libHTTP.ValidateSortDirection(filter.SortOrder)
 
-			limit := filter.Limit
-			if limit <= 0 {
-				limit = 20
-			}
+			limit := libHTTP.ValidateLimit(
+				filter.Limit,
+				constants.DefaultPaginationLimit,
+				constants.MaximumPaginationLimit,
+			)
 
 			sortColumn := normalizeSortColumn(filter.SortBy)
 			useIDCursor := sortColumn == "id"
@@ -317,28 +319,39 @@ func (repo *Repository) ListByRunID(
 				return groups, nil
 			}
 
+			first, last := groups[0], groups[len(groups)-1]
+			if boundaryErr := pgcommon.ValidateSortCursorBoundaries(first, last); boundaryErr != nil {
+				return nil, fmt.Errorf("validate match group pagination boundaries: %w", boundaryErr)
+			}
+
 			if useIDCursor {
 				pagination, err = libHTTP.CalculateCursor(
 					isFirstPage,
 					hasPagination,
 					cursorDirection,
-					groups[0].ID.String(),
-					groups[len(groups)-1].ID.String(),
+					first.ID.String(),
+					last.ID.String(),
 				)
 				if err != nil {
 					return nil, fmt.Errorf("failed to calculate cursor: %w", err)
 				}
 			} else {
-				first, last := groups[0], groups[len(groups)-1]
-
-				next, prev := libHTTP.CalculateSortCursorPagination(
-					isFirstPage, hasPagination, cursorDirection == libHTTP.CursorDirectionNext,
+				calculatedPagination, calculateErr := calculateMatchGroupSortPagination(
+					isFirstPage,
+					hasPagination,
+					cursorDirection == libHTTP.CursorDirectionNext,
 					sortColumn,
-					matchGroupSortValue(first, sortColumn), first.ID.String(),
-					matchGroupSortValue(last, sortColumn), last.ID.String(),
+					matchGroupSortValue(first, sortColumn),
+					first.ID.String(),
+					matchGroupSortValue(last, sortColumn),
+					last.ID.String(),
+					libHTTP.CalculateSortCursorPagination,
 				)
+				if calculateErr != nil {
+					return nil, fmt.Errorf("failed to calculate sort cursor pagination: %w", calculateErr)
+				}
 
-				pagination = libHTTP.CursorPagination{Next: next, Prev: prev}
+				pagination = calculatedPagination
 			}
 
 			return groups, nil
@@ -359,6 +372,10 @@ func (repo *Repository) ListByRunID(
 }
 
 func matchGroupSortValue(group *matchingEntities.MatchGroup, column string) string {
+	if group == nil {
+		return ""
+	}
+
 	switch column {
 	case sortColumnCreatedAt:
 		return group.CreatedAt.UTC().Format(time.RFC3339Nano)
@@ -374,6 +391,34 @@ var allowedMatchGroupSortColumns = []string{"id", sortColumnCreatedAt, sortColum
 
 func normalizeSortColumn(sortBy string) string {
 	return libHTTP.ValidateSortColumn(sortBy, allowedMatchGroupSortColumns, "id")
+}
+
+func calculateMatchGroupSortPagination(
+	isFirstPage, hasPagination, pointsNext bool,
+	sortColumn,
+	firstSortValue,
+	firstID,
+	lastSortValue,
+	lastID string,
+	calculateSortCursor pgcommon.SortCursorCalculator,
+) (libHTTP.CursorPagination, error) {
+	pagination, err := pgcommon.CalculateSortCursorPaginationWrapped(
+		isFirstPage,
+		hasPagination,
+		pointsNext,
+		sortColumn,
+		firstSortValue,
+		firstID,
+		lastSortValue,
+		lastID,
+		calculateSortCursor,
+		"calculate match group cursor pagination",
+	)
+	if err != nil {
+		return libHTTP.CursorPagination{}, fmt.Errorf("calculate match group sort cursor pagination: %w", err)
+	}
+
+	return pagination, nil
 }
 
 // scan converts a SQL row into a match group entity.

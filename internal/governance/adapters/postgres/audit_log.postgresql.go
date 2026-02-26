@@ -42,16 +42,36 @@ func safeLimit(n int) uint64 {
 // The "+1" pattern fetches one extra row to determine if more pages exist:
 // if we get limit+1 rows, there's a next page; we return only limit rows plus a cursor.
 // Returns trimmed logs and the cursor string (empty if no more pages).
-func buildNextCursor(logs []*entities.AuditLog, limit int) ([]*entities.AuditLog, string) {
-	if len(logs) <= limit || limit <= 0 {
-		return logs, ""
+func buildNextCursor(logs []*entities.AuditLog, limit int) ([]*entities.AuditLog, string, error) {
+	return buildNextCursorWithEncoder(logs, limit, sharedhttp.EncodeTimestampCursor)
+}
+
+func buildNextCursorWithEncoder(
+	logs []*entities.AuditLog,
+	limit int,
+	encodeCursor func(time.Time, uuid.UUID) (string, error),
+) ([]*entities.AuditLog, string, error) {
+	trimmedLogs, nextCursor, err := pgcommon.TrimRecordsAndEncodeTimestampNextCursor(
+		logs,
+		limit,
+		func(log *entities.AuditLog) (time.Time, uuid.UUID) {
+			if log == nil {
+				return time.Time{}, uuid.Nil
+			}
+
+			return log.CreatedAt, log.ID
+		},
+		encodeCursor,
+	)
+	if err != nil {
+		if errors.Is(err, pgcommon.ErrCursorEncoderRequired) {
+			return trimmedLogs, "", fmt.Errorf("encode next cursor: %w", ErrCursorEncoderRequired)
+		}
+
+		return trimmedLogs, "", fmt.Errorf("trim records and encode cursor: %w", err)
 	}
 
-	lastItem := logs[limit-1]
-
-	cursor := sharedhttp.EncodeTimestampCursor(lastItem.CreatedAt, lastItem.ID)
-
-	return logs[:limit], cursor
+	return trimmedLogs, nextCursor, nil
 }
 
 // Repository persists audit logs in Postgres.
@@ -565,7 +585,10 @@ func (repo *Repository) ListByEntity(
 				return nil, fmt.Errorf("iterating audit logs: %w", err)
 			}
 
-			logs, nextCursor := buildNextCursor(logs, limit)
+			logs, nextCursor, err := buildNextCursor(logs, limit)
+			if err != nil {
+				return nil, fmt.Errorf("build next cursor: %w", err)
+			}
 
 			return &listResult{logs: logs, nextCursor: nextCursor}, nil
 		},
@@ -687,7 +710,10 @@ func (repo *Repository) List(
 				return nil, fmt.Errorf("iterating audit logs: %w", err)
 			}
 
-			logs, nextCursor := buildNextCursor(logs, limit)
+			logs, nextCursor, err := buildNextCursor(logs, limit)
+			if err != nil {
+				return nil, fmt.Errorf("build next cursor: %w", err)
+			}
 
 			return &listResult{logs: logs, nextCursor: nextCursor}, nil
 		},

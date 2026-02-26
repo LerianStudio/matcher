@@ -22,6 +22,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/governance/adapters/postgres"
 	governanceEntities "github.com/LerianStudio/matcher/internal/governance/domain/entities"
 	"github.com/LerianStudio/matcher/internal/governance/domain/repositories"
+	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
 
 // Sentinel errors for handler validation.
@@ -274,13 +275,9 @@ func (handler *Handler) ListAuditLogsByEntity(
 		)
 	}
 
-	cursor, limit, err := libHTTP.ParseTimestampCursorPagination(fiberCtx)
+	cursor, limit, err := parseTimestampCursorPagination(fiberCtx)
 	if err != nil {
 		return badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
-	}
-
-	if limit > libHTTP.MaxLimit {
-		limit = libHTTP.MaxLimit
 	}
 
 	logs, nextCursor, err := handler.repo.ListByEntity(ctx, entityType, entityID, cursor, limit)
@@ -343,13 +340,9 @@ func (handler *Handler) ListAuditLogs(
 		return badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
 	}
 
-	cursor, limit, err := libHTTP.ParseTimestampCursorPagination(fiberCtx)
+	cursor, limit, err := parseTimestampCursorPagination(fiberCtx)
 	if err != nil {
 		return badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
-	}
-
-	if limit > libHTTP.MaxLimit {
-		limit = libHTTP.MaxLimit
 	}
 
 	logs, nextCursor, err := handler.repo.List(ctx, filter, cursor, limit)
@@ -422,6 +415,17 @@ func parseAuditLogFilter(fiberCtx *fiber.Ctx) (governanceEntities.AuditLogFilter
 	}
 
 	return filter, nil
+}
+
+func parseTimestampCursorPagination(fiberCtx *fiber.Ctx) (*libHTTP.TimestampCursor, int, error) {
+	cursor, limit, err := libHTTP.ParseTimestampCursorPagination(fiberCtx)
+	if err != nil {
+		return nil, 0, fmt.Errorf("parse timestamp cursor pagination: %w", err)
+	}
+
+	limit = libHTTP.ValidateLimit(limit, constants.DefaultPaginationLimit, constants.MaximumPaginationLimit)
+
+	return cursor, limit, nil
 }
 
 func parseDate(dateStr string) (time.Time, error) {

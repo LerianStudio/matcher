@@ -19,6 +19,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/common"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	"github.com/LerianStudio/matcher/internal/shared/constants"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -227,7 +228,7 @@ func (repo *Repository) FindByContextID(
 		return nil, libHTTP.CursorPagination{}, fmt.Errorf("get postgres connection: %w", err)
 	}
 
-	limit = libHTTP.ValidateLimit(limit, libHTTP.DefaultLimit, libHTTP.MaxLimit)
+	limit = libHTTP.ValidateLimit(limit, constants.DefaultPaginationLimit, constants.MaximumPaginationLimit)
 
 	decodedCursor, cursorID, err := parseCursor(cursor)
 	if err != nil {
@@ -320,7 +321,7 @@ func (repo *Repository) FindByContextIDAndType(
 		return nil, libHTTP.CursorPagination{}, fmt.Errorf("get postgres connection: %w", err)
 	}
 
-	limit = libHTTP.ValidateLimit(limit, libHTTP.DefaultLimit, libHTTP.MaxLimit)
+	limit = libHTTP.ValidateLimit(limit, constants.DefaultPaginationLimit, constants.MaximumPaginationLimit)
 
 	decodedCursor, cursorID, err := parseCursor(cursor)
 	if err != nil {

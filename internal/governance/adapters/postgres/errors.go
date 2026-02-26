@@ -28,4 +28,7 @@ var (
 
 	// ErrPreviousRecordNotFound is returned when the previous record in the hash chain is not found.
 	ErrPreviousRecordNotFound = errors.New("previous record not found")
+
+	// ErrCursorEncoderRequired is returned when a cursor encoder callback is required but nil.
+	ErrCursorEncoderRequired = errors.New("cursor encoder is required")
 )

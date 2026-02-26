@@ -20,6 +20,7 @@ import (
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	matchingRepos "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
+	"github.com/LerianStudio/matcher/internal/shared/constants"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -265,10 +266,11 @@ func (repo *Repository) ListByContextID(
 		func(qe pgcommon.QueryExecutor) (_ []*matchingEntities.Adjustment, err error) {
 			orderDirection := libHTTP.ValidateSortDirection(filter.SortOrder)
 
-			limit := filter.Limit
-			if limit <= 0 {
-				limit = 20
-			}
+			limit := libHTTP.ValidateLimit(
+				filter.Limit,
+				constants.DefaultPaginationLimit,
+				constants.MaximumPaginationLimit,
+			)
 
 			sortColumn := normalizeSortColumn(filter.SortBy)
 			useIDCursor := sortColumn == "id"
@@ -342,28 +344,39 @@ func (repo *Repository) ListByContextID(
 				return adjustments, nil
 			}
 
+			first, last := adjustments[0], adjustments[len(adjustments)-1]
+			if boundaryErr := pgcommon.ValidateSortCursorBoundaries(first, last); boundaryErr != nil {
+				return nil, fmt.Errorf("validate adjustment pagination boundaries: %w", boundaryErr)
+			}
+
 			if useIDCursor {
 				pagination, err = libHTTP.CalculateCursor(
 					isFirstPage,
 					hasPagination,
 					cursorDirection,
-					adjustments[0].ID.String(),
-					adjustments[len(adjustments)-1].ID.String(),
+					first.ID.String(),
+					last.ID.String(),
 				)
 				if err != nil {
 					return nil, fmt.Errorf("failed to calculate cursor: %w", err)
 				}
 			} else {
-				first, last := adjustments[0], adjustments[len(adjustments)-1]
-
-				next, prev := libHTTP.CalculateSortCursorPagination(
-					isFirstPage, hasPagination, cursorDirection == libHTTP.CursorDirectionNext,
+				calculatedPagination, calculateErr := calculateAdjustmentSortPagination(
+					isFirstPage,
+					hasPagination,
+					cursorDirection == libHTTP.CursorDirectionNext,
 					sortColumn,
-					adjustmentSortValue(first, sortColumn), first.ID.String(),
-					adjustmentSortValue(last, sortColumn), last.ID.String(),
+					adjustmentSortValue(first, sortColumn),
+					first.ID.String(),
+					adjustmentSortValue(last, sortColumn),
+					last.ID.String(),
+					libHTTP.CalculateSortCursorPagination,
 				)
+				if calculateErr != nil {
+					return nil, fmt.Errorf("failed to calculate sort cursor pagination: %w", calculateErr)
+				}
 
-				pagination = libHTTP.CursorPagination{Next: next, Prev: prev}
+				pagination = calculatedPagination
 			}
 
 			return adjustments, nil
@@ -452,6 +465,10 @@ func (repo *Repository) ListByMatchGroupID(
 }
 
 func adjustmentSortValue(adj *matchingEntities.Adjustment, column string) string {
+	if adj == nil {
+		return ""
+	}
+
 	switch column {
 	case sortColumnCreatedAt:
 		return adj.CreatedAt.UTC().Format(time.RFC3339Nano)
@@ -467,6 +484,34 @@ var allowedAdjustmentSortColumns = []string{"id", sortColumnCreatedAt, sortColum
 
 func normalizeSortColumn(sortBy string) string {
 	return libHTTP.ValidateSortColumn(sortBy, allowedAdjustmentSortColumns, "id")
+}
+
+func calculateAdjustmentSortPagination(
+	isFirstPage, hasPagination, pointsNext bool,
+	sortColumn,
+	firstSortValue,
+	firstID,
+	lastSortValue,
+	lastID string,
+	calculateSortCursor pgcommon.SortCursorCalculator,
+) (libHTTP.CursorPagination, error) {
+	pagination, err := pgcommon.CalculateSortCursorPaginationWrapped(
+		isFirstPage,
+		hasPagination,
+		pointsNext,
+		sortColumn,
+		firstSortValue,
+		firstID,
+		lastSortValue,
+		lastID,
+		calculateSortCursor,
+		"calculate adjustment cursor pagination",
+	)
+	if err != nil {
+		return libHTTP.CursorPagination{}, fmt.Errorf("calculate adjustment sort cursor pagination: %w", err)
+	}
+
+	return pagination, nil
 }
 
 func scan(scanner interface{ Scan(dest ...any) error }) (*matchingEntities.Adjustment, error) {

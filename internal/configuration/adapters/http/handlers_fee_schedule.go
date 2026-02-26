@@ -12,6 +12,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/configuration/services/command"
+	"github.com/LerianStudio/matcher/internal/shared/constants"
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
@@ -106,12 +107,14 @@ func (handler *Handler) ListFeeSchedules(fiberCtx *fiber.Ctx) error {
 
 	libHTTP.SetTenantSpanAttribute(span, tenantID)
 
-	limitStr := fiberCtx.Query("limit", "20")
+	limitStr := fiberCtx.Query("limit", strconv.Itoa(constants.DefaultPaginationLimit))
 
 	limit, parseErr := strconv.Atoi(limitStr)
-	if parseErr != nil || limit < 1 || limit > 200 {
-		limit = 20
+	if parseErr != nil || limit < 1 {
+		limit = constants.DefaultPaginationLimit
 	}
+
+	limit = libHTTP.ValidateLimit(limit, constants.DefaultPaginationLimit, constants.MaximumPaginationLimit)
 
 	result, err := handler.query.ListFeeSchedules(ctx, limit)
 	if err != nil {

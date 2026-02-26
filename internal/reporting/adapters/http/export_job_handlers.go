@@ -22,6 +22,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/reporting/services/command"
 	"github.com/LerianStudio/matcher/internal/reporting/services/query"
 	sharedadaptershttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
+	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
 
 const (
@@ -445,7 +446,7 @@ func (handler *ExportJobHandlers) ListExportJobs(fiberCtx *fiber.Ctx) error {
 
 	defer span.End()
 
-	cursor, limit, err := libHTTP.ParseTimestampCursorPagination(fiberCtx)
+	cursor, limit, err := parseTimestampCursorPagination(fiberCtx)
 	if err != nil {
 		return badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
 	}
@@ -485,6 +486,17 @@ func (handler *ExportJobHandlers) ListExportJobs(fiberCtx *fiber.Ctx) error {
 	}
 
 	return nil
+}
+
+func parseTimestampCursorPagination(fiberCtx *fiber.Ctx) (*libHTTP.TimestampCursor, int, error) {
+	cursor, limit, err := libHTTP.ParseTimestampCursorPagination(fiberCtx)
+	if err != nil {
+		return nil, 0, fmt.Errorf("parse timestamp cursor pagination: %w", err)
+	}
+
+	limit = libHTTP.ValidateLimit(limit, constants.DefaultPaginationLimit, constants.MaximumPaginationLimit)
+
+	return cursor, limit, nil
 }
 
 // CancelExportJob handles POST /v1/export-jobs/:jobId/cancel

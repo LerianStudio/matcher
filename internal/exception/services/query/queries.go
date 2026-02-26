@@ -15,6 +15,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/repositories"
 	govRepositories "github.com/LerianStudio/matcher/internal/governance/domain/repositories"
+	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
 
 // Query use case errors.
@@ -171,7 +172,7 @@ func (uc *UseCase) GetHistory(
 	}
 
 	if limit <= 0 {
-		limit = 20
+		limit = constants.DefaultPaginationLimit
 	}
 
 	logs, nextCursor, err := uc.auditRepo.ListByEntity(

@@ -21,6 +21,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
+	"github.com/LerianStudio/matcher/internal/shared/constants"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -289,7 +290,7 @@ func (repo *Repository) FindAll(
 		return nil, libHTTP.CursorPagination{}, fmt.Errorf("get postgres connection: %w", err)
 	}
 
-	limit = libHTTP.ValidateLimit(limit, libHTTP.DefaultLimit, libHTTP.MaxLimit)
+	limit = libHTTP.ValidateLimit(limit, constants.DefaultPaginationLimit, constants.MaximumPaginationLimit)
 
 	decodedCursor, err := decodeCursorParam(cursor)
 	if err != nil {

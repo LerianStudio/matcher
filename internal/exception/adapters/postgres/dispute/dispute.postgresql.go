@@ -19,6 +19,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/exception/domain/dispute"
 	"github.com/LerianStudio/matcher/internal/exception/domain/repositories"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
+	"github.com/LerianStudio/matcher/internal/shared/constants"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -432,7 +433,10 @@ func (repo *Repository) executeDisputeListQuery(
 				params.limit,
 			)
 
-			pagination = calculateDisputePagination(disputes, isFirstPage, hasPagination, params, cursorDirection)
+			pagination, err = calculateDisputePagination(disputes, isFirstPage, hasPagination, params, cursorDirection)
+			if err != nil {
+				return nil, fmt.Errorf("calculate dispute pagination: %w", err)
+			}
 
 			return disputes, nil
 		},
@@ -504,11 +508,7 @@ type disputeListQueryParams struct {
 
 func prepareDisputeListParams(cursor repositories.CursorFilter) disputeListQueryParams {
 	orderDirection := libHTTP.ValidateSortDirection(cursor.SortOrder)
-
-	limit := cursor.Limit
-	if limit <= 0 {
-		limit = 20
-	}
+	limit := libHTTP.ValidateLimit(cursor.Limit, constants.DefaultPaginationLimit, constants.MaximumPaginationLimit)
 
 	sortColumn := normalizeDisputeSortColumn(cursor.SortBy)
 
@@ -612,9 +612,14 @@ func calculateDisputePagination(
 	isFirstPage, hasPagination bool,
 	params disputeListQueryParams,
 	cursorDirection string,
-) libHTTP.CursorPagination {
+) (libHTTP.CursorPagination, error) {
 	if len(disputes) == 0 {
-		return libHTTP.CursorPagination{}
+		return libHTTP.CursorPagination{}, nil
+	}
+
+	first, last := disputes[0], disputes[len(disputes)-1]
+	if err := pgcommon.ValidateSortCursorBoundaries(first, last); err != nil {
+		return libHTTP.CursorPagination{}, fmt.Errorf("validate dispute pagination boundaries: %w", err)
 	}
 
 	if params.useIDCursor {
@@ -622,30 +627,57 @@ func calculateDisputePagination(
 			isFirstPage,
 			hasPagination,
 			cursorDirection,
-			disputes[0].ID.String(),
-			disputes[len(disputes)-1].ID.String(),
+			first.ID.String(),
+			last.ID.String(),
 		)
 		if err != nil {
-			return libHTTP.CursorPagination{}
+			return libHTTP.CursorPagination{}, fmt.Errorf("calculate ID cursor pagination: %w", err)
 		}
 
-		return pagination
+		return pagination, nil
+	}
+
+	return calculateDisputeSortPagination(disputes, isFirstPage, hasPagination, params, cursorDirection, libHTTP.CalculateSortCursorPagination)
+}
+
+func calculateDisputeSortPagination(
+	disputes []*dispute.Dispute,
+	isFirstPage, hasPagination bool,
+	params disputeListQueryParams,
+	cursorDirection string,
+	calculateSortCursor pgcommon.SortCursorCalculator,
+) (libHTTP.CursorPagination, error) {
+	if len(disputes) == 0 {
+		return libHTTP.CursorPagination{}, nil
 	}
 
 	first, last := disputes[0], disputes[len(disputes)-1]
+	if err := pgcommon.ValidateSortCursorBoundaries(first, last); err != nil {
+		return libHTTP.CursorPagination{}, fmt.Errorf("validate dispute pagination boundaries: %w", err)
+	}
+
 	pointsNext := cursorDirection == libHTTP.CursorDirectionNext
 
-	next, prev := libHTTP.CalculateSortCursorPagination(
+	pagination, err := pgcommon.CalculateSortCursorPaginationWrapped(
 		isFirstPage, hasPagination, pointsNext,
 		params.sortColumn,
 		disputeSortValue(first, params.sortColumn), first.ID.String(),
 		disputeSortValue(last, params.sortColumn), last.ID.String(),
+		calculateSortCursor,
+		"calculate sort cursor pagination",
 	)
+	if err != nil {
+		return libHTTP.CursorPagination{}, fmt.Errorf("calculate dispute sort cursor pagination: %w", err)
+	}
 
-	return libHTTP.CursorPagination{Next: next, Prev: prev}
+	return pagination, nil
 }
 
 func disputeSortValue(disp *dispute.Dispute, column string) string {
+	if disp == nil {
+		return ""
+	}
+
 	switch column {
 	case "created_at":
 		return disp.CreatedAt.UTC().Format(time.RFC3339Nano)

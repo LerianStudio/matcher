@@ -33,6 +33,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/exception/services/command"
 	"github.com/LerianStudio/matcher/internal/exception/services/query"
 	crossAdapters "github.com/LerianStudio/matcher/internal/shared/adapters/cross"
+	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
 
 // Handlers provides HTTP handlers for exception operations.
@@ -1169,7 +1170,7 @@ func (handler *Handlers) GetHistory(fiberCtx *fiber.Ctx) error {
 	cursorParam := fiberCtx.Query("cursor")
 
 	// cursorPtr validates/parses the timestamp cursor; the raw cursorParam is forwarded as-is.
-	cursorPtr, limit, err := libHTTP.ParseTimestampCursorPagination(fiberCtx)
+	cursorPtr, limit, err := parseTimestampCursorPagination(fiberCtx)
 	if err != nil {
 		return badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
 	}
@@ -1224,4 +1225,15 @@ func (handler *Handlers) GetHistory(fiberCtx *fiber.Ctx) error {
 			HasMore:    nextCursor != "",
 		},
 	})
+}
+
+func parseTimestampCursorPagination(fiberCtx *fiber.Ctx) (*libHTTP.TimestampCursor, int, error) {
+	cursor, limit, err := libHTTP.ParseTimestampCursorPagination(fiberCtx)
+	if err != nil {
+		return nil, 0, fmt.Errorf("parse timestamp cursor pagination: %w", err)
+	}
+
+	limit = libHTTP.ValidateLimit(limit, constants.DefaultPaginationLimit, constants.MaximumPaginationLimit)
+
+	return cursor, limit, nil
 }
