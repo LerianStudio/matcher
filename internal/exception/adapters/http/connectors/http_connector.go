@@ -469,7 +469,7 @@ func retryDelay(baseBackoff time.Duration, attempt int) time.Duration {
 }
 
 func sleepWithContext(ctx context.Context, duration time.Duration) error {
-	if err := backoff.SleepWithContext(ctx, duration); err != nil {
+	if err := backoff.WaitContext(ctx, duration); err != nil {
 		return fmt.Errorf("sleep interrupted: %w", err)
 	}
 

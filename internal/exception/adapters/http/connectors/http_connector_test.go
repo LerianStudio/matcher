@@ -322,11 +322,13 @@ func TestHTTPConnector_RetryStopsOnContextCancel(t *testing.T) {
 	t.Parallel()
 
 	var once sync.Once
+	var requestCount atomic.Int32
 
 	requestSeen := make(chan struct{})
 
 	server := httptest.NewServer(
 		http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+			requestCount.Add(1)
 			writer.WriteHeader(http.StatusServiceUnavailable)
 			once.Do(func() {
 				close(requestSeen)
@@ -365,6 +367,7 @@ func TestHTTPConnector_RetryStopsOnContextCancel(t *testing.T) {
 	_, err = connector.Dispatch(ctx, "exc-123", decision, []byte(`{"test":"cancel"}`))
 	require.Error(t, err)
 	require.ErrorIs(t, err, context.Canceled)
+	require.Equal(t, int32(1), requestCount.Load(), "dispatch should stop while waiting retry backoff")
 }
 
 func TestHTTPConnector_TimeoutHonored(t *testing.T) {

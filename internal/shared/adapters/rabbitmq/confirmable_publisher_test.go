@@ -820,6 +820,51 @@ func TestWithHealthCallback_NilIgnored(t *testing.T) {
 // Auto-recovery integration tests
 // ---------------------------------------------------------------------------
 
+func TestWaitRecoveryBackoff_AbortsWhenRecoveryStopClosed(t *testing.T) {
+	t.Parallel()
+
+	ch := newMockChannel()
+	disconnected := make(chan struct{}, 1)
+
+	publisher, err := NewConfirmablePublisherFromChannel(
+		ch,
+		WithAutoRecovery(func() (ConfirmableChannel, error) {
+			return newMockChannel(), nil
+		}),
+		WithRecoveryBackoff(500*time.Millisecond, 500*time.Millisecond),
+		WithHealthCallback(func(state HealthState) {
+			if state == HealthStateDisconnected {
+				select {
+				case disconnected <- struct{}{}:
+				default:
+				}
+			}
+		}),
+	)
+	require.NoError(t, err)
+
+	t.Cleanup(func() { _ = publisher.Close() })
+
+	recoveryStop := make(chan struct{})
+	close(recoveryStop)
+
+	aborted := publisher.waitRecoveryBackoff(
+		publisher.recovery,
+		&libLog.NopLogger{},
+		recoveryStop,
+		0,
+	)
+
+	require.True(t, aborted)
+
+	select {
+	case <-disconnected:
+		// Expected health transition after cancellation.
+	case <-time.After(2 * time.Second):
+		t.Fatal("expected disconnected health state after recovery backoff cancellation")
+	}
+}
+
 // TestAutoRecovery_SuccessOnFirstAttempt verifies that when the channel closes
 // and the provider returns a valid channel on the first try, the publisher
 // recovers and becomes operational again.

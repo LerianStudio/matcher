@@ -563,7 +563,7 @@ func (pub *ConfirmablePublisher) waitRecoveryBackoff(
 		}
 	})
 
-	sleepErr := backoff.SleepWithContext(sleepCtx, delay)
+	sleepErr := backoff.WaitContext(sleepCtx, delay)
 
 	close(sleepDone)
 	sleepCancel()

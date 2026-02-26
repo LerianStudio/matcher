@@ -157,6 +157,29 @@ func TestDedupeServiceMarkSeenWithRetryDefaultsWhenZero(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestDedupeServiceMarkSeenWithRetry_InterruptedByContextCancellation(t *testing.T) {
+	t.Parallel()
+
+	server, client := setupRedis(t)
+	conn := testutil.NewRedisClientWithMock(client)
+	provider := &testutil.MockInfrastructureProvider{RedisConn: conn}
+	service := NewDedupeService(provider)
+	contextID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	sourceID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
+	hash := service.CalculateHash(sourceID, "ext")
+
+	server.SetError("LOADING Redis is loading the dataset in memory")
+	defer server.SetError("")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := service.MarkSeenWithRetry(ctx, contextID, hash, 0, 2)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "retry interrupted")
+	require.ErrorIs(t, err, context.Canceled)
+}
+
 func TestDedupeServiceIsDuplicateRedisError(t *testing.T) {
 	t.Parallel()
 

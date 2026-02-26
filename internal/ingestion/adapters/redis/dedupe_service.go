@@ -160,7 +160,7 @@ func (svc *DedupeService) MarkSeenWithRetry(
 			lastErr = fmt.Errorf("redis setnx failed: %w", err)
 
 			delay := backoff.ExponentialWithJitter(retryBackoffBaseTime, i)
-			if sleepErr := backoff.SleepWithContext(ctx, delay); sleepErr != nil {
+			if sleepErr := backoff.WaitContext(ctx, delay); sleepErr != nil {
 				return fmt.Errorf("retry interrupted: %w", sleepErr)
 			}
 
