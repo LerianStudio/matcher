@@ -146,6 +146,8 @@ services:
       REDIS_HOST: redis:6379
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_HEALTH_URL: http://rabbitmq:15672
+      # Keep insecure HTTP health checks opt-in to avoid accidental reuse in shared envs.
+      RABBITMQ_ALLOW_INSECURE_HEALTH_CHECK: ${RABBITMQ_ALLOW_INSECURE_HEALTH_CHECK:-false}
       OTEL_EXPORTER_ENDPOINT: ${OTEL_EXPORTER_ENDPOINT:-localhost:4317}
       # Object storage (SeaweedFS)
       OBJECT_STORAGE_ENDPOINT: http://seaweedfs:8333

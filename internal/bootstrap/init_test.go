@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	libCommonsLog "github.com/LerianStudio/lib-commons/v2/commons/log"
 	libAssert "github.com/LerianStudio/lib-uncommons/v2/uncommons/assert"
 	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
 	libPostgres "github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres"
@@ -238,7 +239,405 @@ func TestCreateRabbitMQConnection(t *testing.T) {
 		assert.Equal(t, "localhost", conn.Host)
 		assert.Equal(t, "5672", conn.Port)
 		assert.Equal(t, "guest", conn.User)
+		assert.False(t, conn.AllowInsecureHealthCheck)
 	})
+
+	t.Run("does not allow insecure health check for https url by default", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := &Config{
+			RabbitMQ: RabbitMQConfig{
+				HealthURL: "https://rabbitmq.example.com/api/health/checks/alarms",
+			},
+		}
+
+		conn := createRabbitMQConnection(cfg, &libLog.NopLogger{})
+
+		require.NotNil(t, conn)
+		assert.False(t, conn.AllowInsecureHealthCheck)
+	})
+
+	t.Run("warns when HTTP health URL is configured but insecure checks stay disabled", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := &Config{
+			RabbitMQ: RabbitMQConfig{
+				HealthURL:                "http://localhost:15672/api/health/checks/alarms",
+				AllowInsecureHealthCheck: false,
+			},
+		}
+
+		logger := &recordingInitLogger{}
+		conn := createRabbitMQConnection(cfg, logger)
+
+		require.NotNil(t, conn)
+		assert.False(t, conn.AllowInsecureHealthCheck)
+		assert.True(
+			t,
+			logger.hasEntry(
+				libLog.LevelWarn,
+				"RabbitMQ health URL uses HTTP while insecure checks are disabled; set RABBITMQ_ALLOW_INSECURE_HEALTH_CHECK=true only for local/internal non-production environments",
+			),
+		)
+	})
+
+	t.Run("allows insecure health check when explicitly enabled for local http URL", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := &Config{
+			RabbitMQ: RabbitMQConfig{
+				HealthURL:                "http://localhost:15672/api/health/checks/alarms",
+				AllowInsecureHealthCheck: true,
+			},
+		}
+
+		conn := createRabbitMQConnection(cfg, &libLog.NopLogger{})
+
+		require.NotNil(t, conn)
+		assert.True(t, conn.AllowInsecureHealthCheck)
+	})
+
+	t.Run("disables insecure health check for external host", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := &Config{
+			App: AppConfig{EnvName: "staging"},
+			RabbitMQ: RabbitMQConfig{
+				HealthURL:                "http://rabbitmq.example.com/api/health/checks/alarms",
+				AllowInsecureHealthCheck: true,
+			},
+		}
+
+		logger := &recordingInitLogger{}
+		conn := createRabbitMQConnection(cfg, logger)
+
+		require.NotNil(t, conn)
+		assert.False(t, conn.AllowInsecureHealthCheck)
+		assert.True(
+			t,
+			logger.hasEntry(libLog.LevelWarn, "RabbitMQ insecure health check is restricted to local/internal hosts"),
+		)
+	})
+
+	t.Run("warns when insecure health check is enabled in production", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := &Config{
+			App: AppConfig{EnvName: "production"},
+			RabbitMQ: RabbitMQConfig{
+				HealthURL:                "http://rabbitmq.example.com/api/health/checks/alarms",
+				AllowInsecureHealthCheck: true,
+			},
+		}
+
+		logger := &recordingInitLogger{}
+		conn := createRabbitMQConnection(cfg, logger)
+
+		require.NotNil(t, conn)
+		assert.False(t, conn.AllowInsecureHealthCheck)
+		assert.True(
+			t,
+			logger.hasEntry(libLog.LevelWarn, "RabbitMQ health check insecure HTTP is disabled in production"),
+		)
+	})
+
+	t.Run("handles nil logger safely", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := &Config{
+			RabbitMQ: RabbitMQConfig{
+				HealthURL:                "http://localhost:15672/api/health/checks/alarms",
+				AllowInsecureHealthCheck: true,
+			},
+		}
+
+		assert.NotPanics(t, func() {
+			conn := createRabbitMQConnection(cfg, nil)
+			require.NotNil(t, conn)
+		})
+	})
+
+	t.Run("handles nil config safely", func(t *testing.T) {
+		t.Parallel()
+
+		logger := &recordingInitLogger{}
+		conn := createRabbitMQConnection(nil, logger)
+
+		require.NotNil(t, conn)
+		assert.Empty(t, conn.Host)
+		assert.Empty(t, conn.HealthCheckURL)
+		assert.False(t, conn.AllowInsecureHealthCheck)
+		assert.True(
+			t,
+			logger.hasEntry(
+				libLog.LevelError,
+				"RabbitMQ connection configuration is nil; using empty defaults and disabling insecure health checks",
+			),
+		)
+	})
+}
+
+func TestEvaluateInsecureRabbitMQHealthCheckPolicy(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil config returns false", func(t *testing.T) {
+		t.Parallel()
+
+		allowed, reason := evaluateInsecureRabbitMQHealthCheckPolicy(nil)
+
+		assert.False(t, allowed)
+		assert.Equal(t, "RabbitMQ health check insecure HTTP is disabled because configuration is nil", reason)
+	})
+
+	t.Run("default config returns false", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := &Config{}
+		allowed, reason := evaluateInsecureRabbitMQHealthCheckPolicy(cfg)
+
+		assert.False(t, allowed)
+		assert.Empty(t, reason)
+	})
+
+	t.Run("explicit true returns true", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := &Config{RabbitMQ: RabbitMQConfig{
+			AllowInsecureHealthCheck: true,
+			HealthURL:                "http://localhost:15672/api/health/checks/alarms",
+		}}
+
+		allowed, reason := evaluateInsecureRabbitMQHealthCheckPolicy(cfg)
+
+		assert.True(t, allowed)
+		assert.Empty(t, reason)
+	})
+
+	t.Run("external host returns false", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := &Config{App: AppConfig{EnvName: "staging"}, RabbitMQ: RabbitMQConfig{
+			AllowInsecureHealthCheck: true,
+			HealthURL:                "http://rabbitmq.example.com/api/health/checks/alarms",
+		}}
+
+		allowed, reason := evaluateInsecureRabbitMQHealthCheckPolicy(cfg)
+
+		assert.False(t, allowed)
+		assert.Equal(t, "RabbitMQ insecure health check is restricted to local/internal hosts", reason)
+	})
+
+	t.Run("single-label host requires configured RabbitMQ host match", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := &Config{App: AppConfig{EnvName: "staging"}, RabbitMQ: RabbitMQConfig{
+			AllowInsecureHealthCheck: true,
+			Host:                     "broker",
+			HealthURL:                "http://rabbitmq:15672/api/health/checks/alarms",
+		}}
+
+		allowed, reason := evaluateInsecureRabbitMQHealthCheckPolicy(cfg)
+
+		assert.False(t, allowed)
+		assert.Equal(t, "RabbitMQ insecure health check is restricted to local/internal hosts", reason)
+	})
+
+	t.Run("single-label host is allowed when it matches configured RabbitMQ host", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := &Config{App: AppConfig{EnvName: "staging"}, RabbitMQ: RabbitMQConfig{
+			AllowInsecureHealthCheck: true,
+			Host:                     "rabbitmq",
+			HealthURL:                "http://rabbitmq:15672/api/health/checks/alarms",
+		}}
+
+		allowed, reason := evaluateInsecureRabbitMQHealthCheckPolicy(cfg)
+
+		assert.True(t, allowed)
+		assert.Empty(t, reason)
+	})
+
+	t.Run("requires HTTP health URL when insecure checks are requested", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := &Config{App: AppConfig{EnvName: "staging"}, RabbitMQ: RabbitMQConfig{
+			AllowInsecureHealthCheck: true,
+			HealthURL:                "https://rabbitmq.internal/api/health/checks/alarms",
+		}}
+
+		allowed, reason := evaluateInsecureRabbitMQHealthCheckPolicy(cfg)
+
+		assert.False(t, allowed)
+		assert.Equal(t, "RabbitMQ insecure health check requires an HTTP health URL", reason)
+	})
+
+	t.Run("allows private IP host in non production", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := &Config{App: AppConfig{EnvName: "staging"}, RabbitMQ: RabbitMQConfig{
+			AllowInsecureHealthCheck: true,
+			HealthURL:                "http://10.42.0.7:15672/api/health/checks/alarms",
+		}}
+
+		allowed, reason := evaluateInsecureRabbitMQHealthCheckPolicy(cfg)
+
+		assert.True(t, allowed)
+		assert.Empty(t, reason)
+	})
+}
+
+func TestIsInsecureHTTPHealthCheckURL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		url      string
+		expected bool
+	}{
+		{"HTTP URL returns true", "http://localhost:15672/api/health", true},
+		{"HTTPS URL returns false", "https://localhost:15672/api/health", false},
+		{"empty string returns false", "", false},
+		{"malformed URL returns false", "://bad-url", false},
+		{"HTTP uppercase scheme returns true", "HTTP://localhost:15672/api/health", true},
+		{"no scheme returns false", "localhost:15672/api/health", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := isInsecureHTTPHealthCheckURL(tt.url)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestIsAllowedInsecureHealthCheckHost(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		healthURL      string
+		configuredHost string
+		expected       bool
+	}{
+		{"localhost returns true", "http://localhost:15672/api/health", "", true},
+		{"IPv4 loopback returns true", "http://127.0.0.1:15672/api/health", "", true},
+		{"IPv6 loopback returns true", "http://[::1]:15672/api/health", "", true},
+		{"private 10.x IP returns true", "http://10.0.0.5:15672/api/health", "", true},
+		{"private 172.16.x IP returns true", "http://172.16.0.1:15672/api/health", "", true},
+		{"private 192.168.x IP returns true", "http://192.168.1.1:15672/api/health", "", true},
+		{"public IP returns false", "http://8.8.8.8:15672/api/health", "", false},
+		{".local suffix returns true", "http://rabbitmq.local:15672/api/health", "", true},
+		{".internal suffix returns true", "http://rabbitmq.internal:15672/api/health", "", true},
+		{".cluster.local suffix returns true", "http://rabbitmq.svc.cluster.local:15672/api/health", "", true},
+		{"external FQDN returns false", "http://rabbitmq.example.com:15672/api/health", "", false},
+		{"single-label matching configured host returns true", "http://rabbitmq:15672/api/health", "rabbitmq", true},
+		{"single-label not matching configured host returns false", "http://rabbitmq:15672/api/health", "broker", false},
+		{"single-label with empty configured host returns false", "http://rabbitmq:15672/api/health", "", false},
+		{"malformed URL returns false", "://bad-url", "", false},
+		{"empty hostname returns false", "http://:15672/api/health", "", false},
+		{"configured host case insensitive match", "http://RABBITMQ:15672/api/health", "rabbitmq", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := isAllowedInsecureHealthCheckHost(tt.healthURL, tt.configuredHost)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestInitializeAuthBoundaryLogger(t *testing.T) {
+	originalFn := initializeAuthBoundaryLoggerFn
+	t.Cleanup(func() {
+		initializeAuthBoundaryLoggerFn = originalFn
+	})
+
+	t.Run("wraps initializer error", func(t *testing.T) {
+		initializeAuthBoundaryLoggerFn = func() (libCommonsLog.Logger, error) {
+			return nil, errMatchRuleAdapterRequired
+		}
+
+		logger, err := initializeAuthBoundaryLogger()
+
+		require.Error(t, err)
+		assert.Nil(t, logger)
+		assert.Contains(t, err.Error(), "initialize auth boundary logger")
+		assert.ErrorIs(t, err, errMatchRuleAdapterRequired)
+	})
+
+	t.Run("returns logger on success", func(t *testing.T) {
+		expectedLogger := &libCommonsLog.NoneLogger{}
+		initializeAuthBoundaryLoggerFn = func() (libCommonsLog.Logger, error) {
+			return expectedLogger, nil
+		}
+
+		logger, err := initializeAuthBoundaryLogger()
+
+		require.NoError(t, err)
+		assert.Equal(t, expectedLogger, logger)
+	})
+
+	t.Run("returns error when initializer yields nil logger", func(t *testing.T) {
+		initializeAuthBoundaryLoggerFn = func() (libCommonsLog.Logger, error) {
+			return nil, nil
+		}
+
+		logger, err := initializeAuthBoundaryLogger()
+
+		require.Error(t, err)
+		assert.Nil(t, logger)
+		assert.ErrorIs(t, err, errAuthBoundaryLoggerNil)
+	})
+}
+
+type initLogEntry struct {
+	level libLog.Level
+	msg   string
+}
+
+type recordingInitLogger struct {
+	mu      sync.Mutex
+	entries []initLogEntry
+}
+
+func (l *recordingInitLogger) Log(_ context.Context, level libLog.Level, msg string, _ ...libLog.Field) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	l.entries = append(l.entries, initLogEntry{level: level, msg: msg})
+}
+
+func (l *recordingInitLogger) With(_ ...libLog.Field) libLog.Logger {
+	return l
+}
+
+func (l *recordingInitLogger) WithGroup(_ string) libLog.Logger {
+	return l
+}
+
+func (l *recordingInitLogger) Enabled(_ libLog.Level) bool {
+	return true
+}
+
+func (l *recordingInitLogger) Sync(_ context.Context) error {
+	return nil
+}
+
+func (l *recordingInitLogger) hasEntry(level libLog.Level, msg string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	for _, entry := range l.entries {
+		if entry.level == level && entry.msg == msg {
+			return true
+		}
+	}
+
+	return false
 }
 
 func TestCleanupPostgres(t *testing.T) {

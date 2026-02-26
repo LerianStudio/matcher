@@ -109,13 +109,14 @@ type RedisConfig struct {
 
 // RabbitMQConfig configures RabbitMQ connection settings.
 type RabbitMQConfig struct {
-	URI       string `env:"RABBITMQ_URI"        envDefault:"amqp"`
-	Host      string `env:"RABBITMQ_HOST"       envDefault:"localhost"`
-	Port      string `env:"RABBITMQ_PORT"       envDefault:"5672"`
-	User      string `env:"RABBITMQ_USER"       envDefault:"guest"`
-	Password  string `env:"RABBITMQ_PASSWORD"   envDefault:"guest" json:"-"`
-	VHost     string `env:"RABBITMQ_VHOST"      envDefault:"/"`
-	HealthURL string `env:"RABBITMQ_HEALTH_URL" envDefault:"http://localhost:15672"`
+	URI                      string `env:"RABBITMQ_URI"                         envDefault:"amqp"`
+	Host                     string `env:"RABBITMQ_HOST"                        envDefault:"localhost"`
+	Port                     string `env:"RABBITMQ_PORT"                        envDefault:"5672"`
+	User                     string `env:"RABBITMQ_USER"                        envDefault:"guest"`
+	Password                 string `env:"RABBITMQ_PASSWORD"                    envDefault:"guest" json:"-"`
+	VHost                    string `env:"RABBITMQ_VHOST"                       envDefault:"/"`
+	HealthURL                string `env:"RABBITMQ_HEALTH_URL"                  envDefault:"http://localhost:15672"`
+	AllowInsecureHealthCheck bool   `env:"RABBITMQ_ALLOW_INSECURE_HEALTH_CHECK" envDefault:"false"`
 }
 
 // AuthConfig configures authentication and authorization.
@@ -476,6 +477,10 @@ func (cfg *Config) validateProductionSecurityConfig(asserter *assert.Asserter) e
 	ctx := context.Background()
 
 	if err := asserter.That(ctx, !strings.EqualFold(strings.TrimSpace(cfg.RabbitMQ.User), "guest") && !strings.EqualFold(strings.TrimSpace(cfg.RabbitMQ.Password), "guest"), "RABBITMQ credentials must be set to non-default values in production"); err != nil {
+		return fmt.Errorf("production config validation: %w", err)
+	}
+
+	if err := asserter.That(ctx, !cfg.RabbitMQ.AllowInsecureHealthCheck, "RABBITMQ_ALLOW_INSECURE_HEALTH_CHECK must be false in production"); err != nil {
 		return fmt.Errorf("production config validation: %w", err)
 	}
 

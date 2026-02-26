@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -18,6 +20,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/LerianStudio/lib-auth/v2/auth/middleware"
+	libCommonsLog "github.com/LerianStudio/lib-commons/v2/commons/log"
 	libCommonsZap "github.com/LerianStudio/lib-commons/v2/commons/zap"
 	"github.com/LerianStudio/lib-uncommons/v2/uncommons/assert"
 	"github.com/LerianStudio/lib-uncommons/v2/uncommons/errgroup"
@@ -134,6 +137,7 @@ var (
 	errPostgresClientRequired   = errors.New("postgres client is required")
 	errRabbitMQClientRequired   = errors.New("rabbitmq connection is required")
 	errPostgresResolverRequired = errors.New("postgres resolver is nil")
+	errAuthBoundaryLoggerNil    = errors.New("auth boundary logger is nil")
 
 	// cleanupMetrics holds initialized metrics for cleanup operations.
 	// Lazily initialized on first cleanup call.
@@ -181,6 +185,8 @@ var (
 
 		return publisher.Close()
 	}
+
+	initializeAuthBoundaryLoggerFn = libCommonsZap.InitializeLoggerWithError
 
 	newS3ClientFn = reportingStorage.NewS3Client
 )
@@ -497,7 +503,17 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 
 	// Bridge: lib-auth still depends on lib-commons types.
 	// Create a separate lib-commons logger for the auth boundary until lib-auth migrates.
-	authLogger := libCommonsZap.InitializeLogger()
+	authLogger, authLoggerErr := initializeAuthBoundaryLogger()
+	if authLoggerErr != nil {
+		logger.Log(
+			ctx,
+			libLog.LevelWarn,
+			fmt.Sprintf("failed to initialize auth boundary logger, using no-op logger: %v", authLoggerErr),
+		)
+
+		authLogger = &libCommonsLog.NoneLogger{}
+	}
+
 	authClient := middleware.NewAuthClient(cfg.Auth.Host, cfg.Auth.Enabled, &authLogger)
 
 	tenantExtractor, err := buildTenantExtractor(cfg)
@@ -953,15 +969,119 @@ func createRedisConnection(ctx context.Context, cfg *Config, logger libLog.Logge
 }
 
 func createRabbitMQConnection(cfg *Config, logger libLog.Logger) *libRabbitmq.RabbitMQConnection {
-	return &libRabbitmq.RabbitMQConnection{
-		ConnectionStringSource: cfg.RabbitMQDSN(),
-		HealthCheckURL:         cfg.RabbitMQ.HealthURL,
-		Host:                   cfg.RabbitMQ.Host,
-		Port:                   cfg.RabbitMQ.Port,
-		User:                   cfg.RabbitMQ.User,
-		Pass:                   cfg.RabbitMQ.Password,
-		Logger:                 logger,
+	if logger == nil {
+		logger = &libLog.NopLogger{}
 	}
+
+	if cfg == nil {
+		logger.Log(
+			context.Background(),
+			libLog.LevelError,
+			"RabbitMQ connection configuration is nil; using empty defaults and disabling insecure health checks",
+		)
+
+		cfg = &Config{}
+	}
+
+	allowInsecureHealthCheck, denialReason := evaluateInsecureRabbitMQHealthCheckPolicy(cfg)
+	if denialReason != "" {
+		logger.Log(context.Background(), libLog.LevelWarn, denialReason)
+	}
+
+	if !allowInsecureHealthCheck && isInsecureHTTPHealthCheckURL(cfg.RabbitMQ.HealthURL) {
+		logger.Log(
+			context.Background(),
+			libLog.LevelWarn,
+			"RabbitMQ health URL uses HTTP while insecure checks are disabled; set RABBITMQ_ALLOW_INSECURE_HEALTH_CHECK=true only for local/internal non-production environments",
+		)
+	}
+
+	return &libRabbitmq.RabbitMQConnection{
+		ConnectionStringSource:   cfg.RabbitMQDSN(),
+		HealthCheckURL:           cfg.RabbitMQ.HealthURL,
+		Host:                     cfg.RabbitMQ.Host,
+		Port:                     cfg.RabbitMQ.Port,
+		User:                     cfg.RabbitMQ.User,
+		Pass:                     cfg.RabbitMQ.Password,
+		Logger:                   logger,
+		AllowInsecureHealthCheck: allowInsecureHealthCheck,
+	}
+}
+
+func initializeAuthBoundaryLogger() (libCommonsLog.Logger, error) {
+	authLogger, authLoggerErr := initializeAuthBoundaryLoggerFn()
+	if authLoggerErr != nil {
+		return nil, fmt.Errorf("initialize auth boundary logger: %w", authLoggerErr)
+	}
+
+	if authLogger == nil {
+		return nil, fmt.Errorf("initialize auth boundary logger: %w", errAuthBoundaryLoggerNil)
+	}
+
+	return authLogger, nil
+}
+
+func evaluateInsecureRabbitMQHealthCheckPolicy(cfg *Config) (bool, string) {
+	if cfg == nil {
+		return false, "RabbitMQ health check insecure HTTP is disabled because configuration is nil"
+	}
+
+	if !cfg.RabbitMQ.AllowInsecureHealthCheck {
+		return false, ""
+	}
+
+	if IsProductionEnvironment(cfg.App.EnvName) {
+		return false, "RabbitMQ health check insecure HTTP is disabled in production"
+	}
+
+	if !isInsecureHTTPHealthCheckURL(cfg.RabbitMQ.HealthURL) {
+		return false, "RabbitMQ insecure health check requires an HTTP health URL"
+	}
+
+	if !isAllowedInsecureHealthCheckHost(cfg.RabbitMQ.HealthURL, cfg.RabbitMQ.Host) {
+		return false, "RabbitMQ insecure health check is restricted to local/internal hosts"
+	}
+
+	return true, ""
+}
+
+func isInsecureHTTPHealthCheckURL(healthURL string) bool {
+	parsed, err := url.Parse(healthURL)
+	if err != nil {
+		return false
+	}
+
+	return strings.EqualFold(parsed.Scheme, "http")
+}
+
+func isAllowedInsecureHealthCheckHost(healthURL, configuredRabbitHost string) bool {
+	parsed, err := url.Parse(healthURL)
+	if err != nil {
+		return false
+	}
+
+	hostname := strings.ToLower(strings.TrimSpace(parsed.Hostname()))
+	if hostname == "" {
+		return false
+	}
+
+	if hostname == "localhost" {
+		return true
+	}
+
+	ip := net.ParseIP(hostname)
+	if ip != nil {
+		return ip.IsLoopback() || ip.IsPrivate()
+	}
+
+	configuredHost := strings.ToLower(strings.TrimSpace(configuredRabbitHost))
+	if configuredHost != "" && !strings.Contains(hostname, ".") && hostname == configuredHost {
+		return true
+	}
+
+	return strings.HasSuffix(hostname, ".local") ||
+		strings.HasSuffix(hostname, ".internal") ||
+		strings.HasSuffix(hostname, ".cluster.local")
 }
 
 func cleanupConnections(

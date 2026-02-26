@@ -280,7 +280,7 @@ sec:
 		echo "Installing gosec..."; \
 		go install github.com/securego/gosec/v2/cmd/gosec@latest; \
 	fi
-	@gosec ./...
+	@gosec ./cmd/... ./internal/... ./pkg/... ./tests/...
 	@echo "[ok] Security checks completed"
 
 vulncheck:

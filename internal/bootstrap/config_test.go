@@ -57,6 +57,7 @@ type flatConfig struct {
 	RabbitMQPassword            string
 	RabbitMQVHost               string
 	RabbitMQHealthURL           string
+	RabbitMQAllowInsecureHealth bool
 	AuthEnabled                 bool
 	AuthHost                    string
 	AuthTokenSecret             string
@@ -141,6 +142,7 @@ func buildConfig(fc flatConfig) Config {
 	cfg.RabbitMQ.Password = fc.RabbitMQPassword
 	cfg.RabbitMQ.VHost = fc.RabbitMQVHost
 	cfg.RabbitMQ.HealthURL = fc.RabbitMQHealthURL
+	cfg.RabbitMQ.AllowInsecureHealthCheck = fc.RabbitMQAllowInsecureHealth
 	cfg.Auth.Enabled = fc.AuthEnabled
 	cfg.Auth.Host = fc.AuthHost
 	cfg.Auth.TokenSecret = fc.AuthTokenSecret
@@ -376,6 +378,29 @@ func testConfigProductionValidations(t *testing.T) {
 				LogLevel:           "info",
 			}),
 			errMsg: "CORS_ALLOWED_ORIGINS must be restricted in production",
+		},
+		{
+			name: "production requires insecure health check disabled",
+			config: buildConfig(flatConfig{
+				EnvName:                     "production",
+				DefaultTenantID:             validTenantID,
+				PrimaryDBPassword:           "secret",
+				PrimaryDBSSLMode:            "require",
+				RedisTLS:                    true,
+				RedisPassword:               "redis-secret",
+				RabbitMQURI:                 "amqps",
+				RabbitMQUser:                "matcher",
+				RabbitMQPassword:            "secure",
+				RabbitMQAllowInsecureHealth: true,
+				AuthEnabled:                 true,
+				AuthHost:                    "http://auth:8080",
+				AuthTokenSecret:             "secret",
+				CORSAllowedOrigins:          "https://example.com",
+				BodyLimitBytes:              1024,
+				LogLevel:                    "info",
+				TLSTerminatedUpstream:       true,
+			}),
+			errMsg: "RABBITMQ_ALLOW_INSECURE_HEALTH_CHECK must be false in production",
 		},
 	}
 
