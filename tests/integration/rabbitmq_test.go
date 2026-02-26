@@ -577,13 +577,14 @@ func createRabbitMQConnectionFromHarness(
 	connStr := "amqp://guest:guest@" + harness.RabbitMQHost + ":" + harness.RabbitMQPort + "/"
 
 	return &libRabbitmq.RabbitMQConnection{
-		ConnectionStringSource: connStr,
-		HealthCheckURL:         harness.RabbitMQHealthURL,
-		Host:                   harness.RabbitMQHost,
-		Port:                   harness.RabbitMQPort,
-		User:                   "guest",
-		Pass:                   "guest",
-		Logger:                 &libLog.NopLogger{},
+		ConnectionStringSource:   connStr,
+		HealthCheckURL:           harness.RabbitMQHealthURL,
+		Host:                     harness.RabbitMQHost,
+		Port:                     harness.RabbitMQPort,
+		User:                     "guest",
+		Pass:                     "guest",
+		Logger:                   &libLog.NopLogger{},
+		AllowInsecureHealthCheck: true,
 	}
 }
 

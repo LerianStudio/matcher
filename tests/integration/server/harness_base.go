@@ -248,13 +248,14 @@ func (sh *serverHarnessBase) setEnvFromContainers(t *testing.T) error {
 		"REDIS_TLS":      "false",
 
 		// RabbitMQ
-		"RABBITMQ_HOST":       sh.RabbitMQHost,
-		"RABBITMQ_PORT":       sh.RabbitMQPort,
-		"RABBITMQ_USER":       "guest",
-		"RABBITMQ_PASSWORD":   "guest",
-		"RABBITMQ_VHOST":      "/",
-		"RABBITMQ_URI":        "amqp",
-		"RABBITMQ_HEALTH_URL": sh.RabbitMQHealthURL,
+		"RABBITMQ_HOST":                        sh.RabbitMQHost,
+		"RABBITMQ_PORT":                        sh.RabbitMQPort,
+		"RABBITMQ_USER":                        "guest",
+		"RABBITMQ_PASSWORD":                    "guest",
+		"RABBITMQ_VHOST":                       "/",
+		"RABBITMQ_URI":                         "amqp",
+		"RABBITMQ_HEALTH_URL":                  sh.RabbitMQHealthURL,
+		"RABBITMQ_ALLOW_INSECURE_HEALTH_CHECK": "true",
 
 		// Auth disabled for tests
 		"AUTH_ENABLED": "false",
@@ -366,10 +367,11 @@ func (sh *serverHarnessBase) RabbitMQConnection() *libRabbitmq.RabbitMQConnectio
 			sh.RabbitMQHost,
 			sh.RabbitMQPort,
 		),
-		HealthCheckURL: sh.RabbitMQHealthURL,
-		Host:           sh.RabbitMQHost,
-		Port:           sh.RabbitMQPort,
-		User:           "guest",
-		Pass:           "guest",
+		HealthCheckURL:           sh.RabbitMQHealthURL,
+		Host:                     sh.RabbitMQHost,
+		Port:                     sh.RabbitMQPort,
+		User:                     "guest",
+		Pass:                     "guest",
+		AllowInsecureHealthCheck: true,
 	}
 }

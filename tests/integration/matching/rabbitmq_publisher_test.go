@@ -26,11 +26,12 @@ func TestEventPublisherPublishesMatchConfirmed(t *testing.T) {
 		defer cancel()
 
 		conn := &libRabbitmq.RabbitMQConnection{
-			ConnectionStringSource: "amqp://guest:guest@" + harness.RabbitMQHost + ":" + harness.RabbitMQPort + "/",
-			HealthCheckURL:         harness.RabbitMQHealthURL,
-			User:                   "guest",
-			Pass:                   "guest",
-			Logger:                 &libLog.NopLogger{},
+			ConnectionStringSource:   "amqp://guest:guest@" + harness.RabbitMQHost + ":" + harness.RabbitMQPort + "/",
+			HealthCheckURL:           harness.RabbitMQHealthURL,
+			User:                     "guest",
+			Pass:                     "guest",
+			Logger:                   &libLog.NopLogger{},
+			AllowInsecureHealthCheck: true,
 		}
 		require.NoError(t, conn.Connect())
 		t.Cleanup(func() {

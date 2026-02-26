@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/docker/go-connections/nat"
@@ -105,9 +106,9 @@ func mappedPortWithRetry(
 	var lastErr error
 
 	for attempt := 1; attempt <= rabbitMQRetryCount; attempt++ {
-		mappedPort, err := container.MappedPort(ctx, nat.Port(containerPort))
-		if err == nil && mappedPort.Port() != "" {
-			return mappedPort.Port(), nil
+		resolvedPort, err := resolveMappedPort(ctx, container, containerPort)
+		if err == nil && resolvedPort != "" {
+			return resolvedPort, nil
 		}
 
 		if err == nil {
@@ -126,6 +127,61 @@ func mappedPortWithRetry(
 	}
 
 	return "", fmt.Errorf("get rabbitmq mapped port %s: %w", containerPort, lastErr)
+}
+
+func resolveMappedPort(
+	ctx context.Context,
+	container testcontainers.Container,
+	containerPort string,
+) (string, error) {
+	mappedPort, err := container.MappedPort(ctx, nat.Port(containerPort))
+	if err == nil {
+		if mappedPort.Port() == "" {
+			return "", fmt.Errorf("empty mapped port for %s", containerPort)
+		}
+
+		return mappedPort.Port(), nil
+	}
+
+	rawPort := containerPort
+	if idx := strings.Index(containerPort, "/"); idx != -1 {
+		rawPort = containerPort[:idx]
+	}
+
+	mappedPortNoProtocol, noProtocolErr := container.MappedPort(ctx, nat.Port(rawPort))
+	if noProtocolErr == nil {
+		if mappedPortNoProtocol.Port() == "" {
+			return "", fmt.Errorf("empty mapped port for %s", containerPort)
+		}
+
+		return mappedPortNoProtocol.Port(), nil
+	}
+
+	inspect, inspectErr := container.Inspect(ctx)
+	if inspectErr == nil {
+		if inspect.NetworkSettings != nil {
+			for exposedPort, bindings := range inspect.NetworkSettings.Ports {
+				if len(bindings) == 0 {
+					continue
+				}
+
+				exposedPortRaw := string(exposedPort)
+				if idx := strings.Index(exposedPortRaw, "/"); idx != -1 {
+					exposedPortRaw = exposedPortRaw[:idx]
+				}
+
+				if exposedPortRaw == rawPort && bindings[0].HostPort != "" {
+					return bindings[0].HostPort, nil
+				}
+			}
+		}
+
+		if inspect.HostConfig != nil && string(inspect.HostConfig.NetworkMode) == "host" {
+			return rawPort, nil
+		}
+	}
+
+	return "", err
 }
 
 func waitWithContext(ctx context.Context, delay time.Duration) error {

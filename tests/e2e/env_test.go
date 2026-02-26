@@ -16,7 +16,7 @@ func TestLoadConfig_Defaults(t *testing.T) {
 		"E2E_APP_URL",
 		"POSTGRES_HOST", "POSTGRES_PORT", "POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB",
 		"REDIS_HOST",
-		"RABBITMQ_HOST", "RABBITMQ_PORT", "RABBITMQ_USER", "RABBITMQ_PASSWORD", "RABBITMQ_HEALTH_URL",
+		"RABBITMQ_HOST", "RABBITMQ_PORT", "RABBITMQ_USER", "RABBITMQ_PASSWORD", "RABBITMQ_HEALTH_URL", "RABBITMQ_ALLOW_INSECURE_HEALTH_CHECK",
 		"E2E_STACK_CHECK_TIMEOUT", "E2E_REQUEST_TIMEOUT", "E2E_POLL_INTERVAL", "E2E_POLL_TIMEOUT",
 		"DEFAULT_TENANT_ID", "DEFAULT_TENANT_SLUG",
 	}
@@ -49,6 +49,7 @@ func TestLoadConfig_Defaults(t *testing.T) {
 	assert.Equal(t, "matcher_admin", cfg.RabbitMQUser)
 	assert.Equal(t, "matcher_dev_password", cfg.RabbitMQPassword)
 	assert.Equal(t, "http://localhost:15672", cfg.RabbitMQHealthURL)
+	assert.False(t, cfg.RabbitMQAllowInsecureHealthCheck)
 	assert.Equal(t, 10*time.Second, cfg.StackCheckTimeout)
 	assert.Equal(t, 30*time.Second, cfg.RequestTimeout)
 	assert.Equal(t, 500*time.Millisecond, cfg.PollInterval)
@@ -133,6 +134,32 @@ func TestGetDurationEnv_ReturnsDefaultOnInvalidValue(t *testing.T) {
 
 	result := getDurationEnv("TEST_DURATION_INVALID", 5*time.Second)
 	assert.Equal(t, 5*time.Second, result)
+}
+
+func TestGetBoolEnv_ReturnsDefaultWhenEmpty(t *testing.T) {
+	os.Unsetenv("TEST_BOOL_EMPTY")
+
+	result := getBoolEnv("TEST_BOOL_EMPTY", true)
+
+	assert.True(t, result)
+}
+
+func TestGetBoolEnv_ParsesBoolean(t *testing.T) {
+	os.Setenv("TEST_BOOL_SET", "false")
+	defer os.Unsetenv("TEST_BOOL_SET")
+
+	result := getBoolEnv("TEST_BOOL_SET", true)
+
+	assert.False(t, result)
+}
+
+func TestGetBoolEnv_ReturnsDefaultOnInvalidValue(t *testing.T) {
+	os.Setenv("TEST_BOOL_INVALID", "not-bool")
+	defer os.Unsetenv("TEST_BOOL_INVALID")
+
+	result := getBoolEnv("TEST_BOOL_INVALID", true)
+
+	assert.True(t, result)
 }
 
 func TestE2EConfig_PostgresDSN(t *testing.T) {

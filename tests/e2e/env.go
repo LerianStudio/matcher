@@ -25,11 +25,12 @@ type E2EConfig struct {
 	RedisHost string
 
 	// RabbitMQ
-	RabbitMQHost      string
-	RabbitMQPort      string
-	RabbitMQUser      string
-	RabbitMQPassword  string
-	RabbitMQHealthURL string
+	RabbitMQHost                     string
+	RabbitMQPort                     string
+	RabbitMQUser                     string
+	RabbitMQPassword                 string
+	RabbitMQHealthURL                string
+	RabbitMQAllowInsecureHealthCheck bool
 
 	// Timeouts
 	StackCheckTimeout time.Duration
@@ -59,11 +60,12 @@ func LoadConfig() *E2EConfig {
 		RedisHost: getEnv("REDIS_HOST", "localhost:6379"),
 
 		// RabbitMQ
-		RabbitMQHost:      getEnv("RABBITMQ_HOST", "localhost"),
-		RabbitMQPort:      getEnv("RABBITMQ_PORT", "5672"),
-		RabbitMQUser:      getEnv("RABBITMQ_USER", "matcher_admin"),
-		RabbitMQPassword:  getEnv("RABBITMQ_PASSWORD", "matcher_dev_password"),
-		RabbitMQHealthURL: getEnv("RABBITMQ_HEALTH_URL", "http://localhost:15672"),
+		RabbitMQHost:                     getEnv("RABBITMQ_HOST", "localhost"),
+		RabbitMQPort:                     getEnv("RABBITMQ_PORT", "5672"),
+		RabbitMQUser:                     getEnv("RABBITMQ_USER", "matcher_admin"),
+		RabbitMQPassword:                 getEnv("RABBITMQ_PASSWORD", "matcher_dev_password"),
+		RabbitMQHealthURL:                getEnv("RABBITMQ_HEALTH_URL", "http://localhost:15672"),
+		RabbitMQAllowInsecureHealthCheck: getBoolEnv("RABBITMQ_ALLOW_INSECURE_HEALTH_CHECK", false),
 
 		// Timeouts
 		StackCheckTimeout: getDurationEnv("E2E_STACK_CHECK_TIMEOUT", 10*time.Second),
@@ -105,5 +107,16 @@ func getDurationEnv(key string, defaultVal time.Duration) time.Duration {
 			return d
 		}
 	}
+	return defaultVal
+}
+
+func getBoolEnv(key string, defaultVal bool) bool {
+	if val := os.Getenv(key); val != "" {
+		parsed, err := strconv.ParseBool(val)
+		if err == nil {
+			return parsed
+		}
+	}
+
 	return defaultVal
 }

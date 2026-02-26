@@ -172,13 +172,14 @@ func setSharedEnvFromContainers(t *testing.T, sh *SharedServerHarness) error {
 		"REDIS_TLS":      "false",
 
 		// RabbitMQ
-		"RABBITMQ_HOST":       sh.RabbitMQHost,
-		"RABBITMQ_PORT":       sh.RabbitMQPort,
-		"RABBITMQ_USER":       "guest",
-		"RABBITMQ_PASSWORD":   "guest",
-		"RABBITMQ_VHOST":      "/",
-		"RABBITMQ_URI":        "amqp",
-		"RABBITMQ_HEALTH_URL": sh.RabbitMQHealthURL,
+		"RABBITMQ_HOST":                        sh.RabbitMQHost,
+		"RABBITMQ_PORT":                        sh.RabbitMQPort,
+		"RABBITMQ_USER":                        "guest",
+		"RABBITMQ_PASSWORD":                    "guest",
+		"RABBITMQ_VHOST":                       "/",
+		"RABBITMQ_URI":                         "amqp",
+		"RABBITMQ_HEALTH_URL":                  sh.RabbitMQHealthURL,
+		"RABBITMQ_ALLOW_INSECURE_HEALTH_CHECK": "true",
 
 		// Auth disabled for tests
 		"AUTH_ENABLED": "false",

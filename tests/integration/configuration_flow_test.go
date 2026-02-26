@@ -50,6 +50,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 		t.Setenv("RABBITMQ_HOST", h.RabbitMQHost)
 		t.Setenv("RABBITMQ_PORT", h.RabbitMQPort)
 		t.Setenv("RABBITMQ_HEALTH_URL", h.RabbitMQHealthURL)
+		t.Setenv("RABBITMQ_ALLOW_INSECURE_HEALTH_CHECK", "true")
 		t.Setenv("RABBITMQ_USER", "guest")
 		t.Setenv("RABBITMQ_PASSWORD", "guest")
 		t.Setenv("RABBITMQ_VHOST", "/")
