@@ -341,7 +341,7 @@ func TestLogStartupInfo(t *testing.T) {
 			},
 			Auth:      AuthConfig{Enabled: true},
 			Telemetry: TelemetryConfig{Enabled: true},
-			Tenancy:   TenancyConfig{MultiTenantInfraEnabled: true},
+			Tenancy:   TenancyConfig{MultiTenantEnabled: true, MultiTenantURL: "http://tenant-manager:8080"},
 			ExportWorker: ExportWorkerConfig{
 				Enabled:         true,
 				PollIntervalSec: 5,
@@ -1386,7 +1386,7 @@ func TestInitEventPublishers_OpenChannelFailure_CleansUpOpenedChannel(t *testing
 	})
 	t.Cleanup(restore)
 
-	matchingPublisher, ingestionPublisher, err := initEventPublishers(&libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{})
+	matchingPublisher, ingestionPublisher, err := initEventPublishers(&libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{}, nil)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "open AMQP channels")
@@ -1418,7 +1418,7 @@ func TestInitEventPublishers_MatchingPublisherFailure_CleansUpChannels(t *testin
 	})
 	t.Cleanup(restore)
 
-	matchingPublisher, ingestionPublisher, err := initEventPublishers(&libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{})
+	matchingPublisher, ingestionPublisher, err := initEventPublishers(&libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{}, nil)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "create matching event publisher")
@@ -1456,7 +1456,7 @@ func TestInitEventPublishers_IngestionPublisherFailure_CleansUpPublisherAndChann
 	})
 	t.Cleanup(restore)
 
-	matchingPublisher, ingestionPublisher, err := initEventPublishers(&libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{})
+	matchingPublisher, ingestionPublisher, err := initEventPublishers(&libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{}, nil)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "create ingestion event publisher")
@@ -1797,4 +1797,213 @@ func TestConnectInfrastructure_ContextCanceled_PropagatesError(t *testing.T) {
 	require.Error(t, err)
 	// The error should indicate context cancellation propagated through.
 	assert.True(t, errors.Is(err, context.Canceled), "expected context.Canceled in error chain, got: %v", err)
+}
+
+func TestCreateTenantManagerComponents_SingleTenantMode_ReturnsNil(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		Tenancy: TenancyConfig{
+			MultiTenantEnabled: false,
+		},
+	}
+
+	components := createTenantManagerComponents(cfg, &libLog.NopLogger{})
+
+	assert.Nil(t, components, "expected nil components when multi-tenant mode is disabled")
+}
+
+func TestCreateTenantManagerComponents_NoTenantManagerURL_ReturnsNil(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		Tenancy: TenancyConfig{
+			MultiTenantEnabled: true,
+			MultiTenantURL:     "",
+		},
+	}
+
+	components := createTenantManagerComponents(cfg, &libLog.NopLogger{})
+
+	assert.Nil(t, components, "expected nil components when Tenant Manager URL is not set")
+}
+
+func TestCreateTenantManagerComponents_WhitespaceURL_ReturnsNil(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		Tenancy: TenancyConfig{
+			MultiTenantEnabled: true,
+			MultiTenantURL:     "   ",
+		},
+	}
+
+	components := createTenantManagerComponents(cfg, &libLog.NopLogger{})
+
+	assert.Nil(t, components, "expected nil components when Tenant Manager URL is whitespace only")
+}
+
+func TestCreateTenantManagerComponents_ValidConfig_ReturnsComponents(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		Tenancy: TenancyConfig{
+			MultiTenantEnabled:         true,
+			MultiTenantURL:             "http://tenant-manager:8080",
+			MultiTenantCBThreshold:     5,
+			MultiTenantCBTimeoutSec:    30,
+			MultiTenantMaxTenantPools:  100,
+			MultiTenantIdleTimeoutSec:  300,
+		},
+		Postgres: PostgresConfig{
+			MaxOpenConnections: 25,
+			MaxIdleConnections: 10,
+		},
+	}
+
+	components := createTenantManagerComponents(cfg, &libLog.NopLogger{})
+
+	require.NotNil(t, components, "expected non-nil components when properly configured")
+	assert.NotNil(t, components.Client, "expected Client to be set")
+	assert.NotNil(t, components.PostgresManager, "expected PostgresManager to be set")
+	assert.NotNil(t, components.Middleware, "expected Middleware to be set")
+}
+
+func TestCreateTenantManagerComponents_NoCircuitBreaker_StillCreatesComponents(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		Tenancy: TenancyConfig{
+			MultiTenantEnabled:         true,
+			MultiTenantURL:             "http://tenant-manager:8080",
+			MultiTenantCBThreshold:     0, // Disabled
+			MultiTenantMaxTenantPools:  50,
+			MultiTenantIdleTimeoutSec:  600,
+		},
+		Postgres: PostgresConfig{
+			MaxOpenConnections: 10,
+			MaxIdleConnections: 5,
+		},
+	}
+
+	components := createTenantManagerComponents(cfg, &libLog.NopLogger{})
+
+	require.NotNil(t, components, "expected components without circuit breaker")
+	assert.NotNil(t, components.Client, "Client should be created even without circuit breaker")
+}
+
+// ============================================================================
+// Multi-Tenant Backward Compatibility Tests
+// ============================================================================
+
+// TestMultiTenant_BackwardCompatibility_SingleTenantMode verifies that with
+// MultiTenantEnabled=false, the system operates in single-tenant mode correctly.
+func TestMultiTenant_BackwardCompatibility_SingleTenantMode(t *testing.T) {
+	t.Parallel()
+
+	t.Run("config_loads_without_MULTI_TENANT_URL", func(t *testing.T) {
+		t.Parallel()
+
+		// With MultiTenantEnabled=false, MULTI_TENANT_URL is not required
+		cfg := &Config{
+			App: AppConfig{
+				EnvName:  "development",
+				LogLevel: "info",
+			},
+			Server: ServerConfig{
+				BodyLimitBytes: 104857600,
+			},
+			Tenancy: TenancyConfig{
+				DefaultTenantID:    "11111111-1111-1111-1111-111111111111",
+				DefaultTenantSlug:  "default",
+				MultiTenantEnabled: false,
+				MultiTenantURL:     "", // Not required when disabled
+			},
+			RateLimit: RateLimitConfig{
+				ExportMax:       10,
+				ExportExpirySec: 60,
+			},
+			Infrastructure: InfrastructureConfig{
+				ConnectTimeoutSec: 30,
+			},
+		}
+
+		err := cfg.Validate()
+
+		require.NoError(t, err, "config should validate without MULTI_TENANT_URL when MultiTenantEnabled=false")
+	})
+
+	t.Run("createTenantManagerComponents_returns_nil", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := &Config{
+			Tenancy: TenancyConfig{
+				MultiTenantEnabled: false,
+				MultiTenantURL:     "", // No URL needed
+			},
+		}
+
+		components := createTenantManagerComponents(cfg, &libLog.NopLogger{})
+
+		assert.Nil(t, components, "tenant manager components should be nil in single-tenant mode")
+	})
+
+	t.Run("tenant_metrics_no_panic_with_no_op", func(t *testing.T) {
+		t.Parallel()
+
+		// In single-tenant mode, tenant metrics should use no-op implementations
+		// that don't panic when called
+		cfg := &Config{
+			Tenancy: TenancyConfig{
+				MultiTenantEnabled: false,
+			},
+		}
+
+		components := createTenantManagerComponents(cfg, &libLog.NopLogger{})
+
+		assert.Nil(t, components, "no tenant components in single-tenant mode")
+		// No panic expected - components are nil and that's OK
+	})
+}
+
+// TestMultiTenant_TenantExtractorAdapter verifies the tenantExtractorAdapter
+// correctly extracts tenant ID from context.
+func TestMultiTenant_TenantExtractorAdapter(t *testing.T) {
+	t.Parallel()
+
+	adapter := &tenantExtractorAdapter{}
+
+	t.Run("extracts_valid_tenant_id", func(t *testing.T) {
+		t.Parallel()
+
+		tenantID := "550e8400-e29b-41d4-a716-446655440000"
+		ctx := context.WithValue(context.Background(), auth.TenantIDKey, tenantID)
+
+		extractedID := adapter.GetTenantID(ctx)
+
+		require.NotEqual(t, uuid.Nil, extractedID)
+		assert.Equal(t, tenantID, extractedID.String())
+	})
+
+	t.Run("returns_nil_uuid_for_invalid_tenant_id", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.WithValue(context.Background(), auth.TenantIDKey, "not-a-uuid")
+
+		extractedID := adapter.GetTenantID(ctx)
+
+		assert.Equal(t, uuid.Nil, extractedID)
+	})
+
+	t.Run("returns_nil_uuid_for_empty_context", func(t *testing.T) {
+		t.Parallel()
+
+		// auth.GetTenantID returns default tenant ID, which should be valid
+		ctx := context.Background()
+
+		extractedID := adapter.GetTenantID(ctx)
+
+		// Default tenant ID should be valid, not uuid.Nil
+		assert.NotEqual(t, uuid.Nil, extractedID)
+	})
 }

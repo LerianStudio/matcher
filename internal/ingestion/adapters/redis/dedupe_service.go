@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/LerianStudio/lib-commons/v3/commons/tenant-manager/valkey"
 	"github.com/LerianStudio/lib-uncommons/v2/uncommons/backoff"
 
 	"github.com/LerianStudio/matcher/internal/ingestion/ports"
@@ -47,8 +48,13 @@ func (svc *DedupeService) CalculateHash(sourceID uuid.UUID, externalID string) s
 	return hex.EncodeToString(hash[:])
 }
 
-func (svc *DedupeService) buildKey(contextID uuid.UUID, hash string) string {
-	return fmt.Sprintf("%s:%s:%s", dedupeKeyPrefix, contextID.String(), hash)
+// buildKey creates the full Redis key with tenant scoping using canonical lib-commons v3 key prefixing.
+// In multi-tenant mode: tenant:{tenantID}:matcher:dedupe:{contextID}:{hash}
+// In single-tenant mode: matcher:dedupe:{contextID}:{hash} (no tenant prefix).
+func (svc *DedupeService) buildKey(ctx context.Context, contextID uuid.UUID, hash string) string {
+	key := fmt.Sprintf("%s:%s:%s", dedupeKeyPrefix, contextID.String(), hash)
+
+	return valkey.GetKeyFromContext(ctx, key)
 }
 
 // IsDuplicate checks if transaction hash exists in Redis.
@@ -75,7 +81,7 @@ func (svc *DedupeService) IsDuplicate(
 		return false, fmt.Errorf("get redis client for dedupe check: %w", err)
 	}
 
-	key := svc.buildKey(contextID, hash)
+	key := svc.buildKey(ctx, contextID, hash)
 
 	exists, err := rdb.Exists(ctx, key).Result()
 	if err != nil {
@@ -111,7 +117,7 @@ func (svc *DedupeService) MarkSeen(
 	}
 
 	// TTL=0 means no expiration per interface contract.
-	key := svc.buildKey(contextID, hash)
+	key := svc.buildKey(ctx, contextID, hash)
 
 	if err := rdb.Set(ctx, key, "1", ttl).Err(); err != nil {
 		return fmt.Errorf("failed to mark seen: %w", err)
@@ -150,7 +156,7 @@ func (svc *DedupeService) MarkSeenWithRetry(
 		return fmt.Errorf("get redis client for mark seen with retry: %w", err)
 	}
 
-	key := svc.buildKey(contextID, hash)
+	key := svc.buildKey(ctx, contextID, hash)
 
 	var lastErr error
 
@@ -201,7 +207,7 @@ func (svc *DedupeService) Clear(ctx context.Context, contextID uuid.UUID, hash s
 		return fmt.Errorf("get redis client for dedupe clear: %w", err)
 	}
 
-	key := svc.buildKey(contextID, hash)
+	key := svc.buildKey(ctx, contextID, hash)
 
 	if err := rdb.Del(ctx, key).Err(); err != nil {
 		return fmt.Errorf("failed to clear dedupe key: %w", err)
@@ -240,7 +246,7 @@ func (svc *DedupeService) ClearBatch(
 
 	keys := make([]string, len(hashes))
 	for i, hash := range hashes {
-		keys[i] = svc.buildKey(contextID, hash)
+		keys[i] = svc.buildKey(ctx, contextID, hash)
 	}
 
 	if err := rdb.Del(ctx, keys...).Err(); err != nil {

@@ -18,7 +18,11 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/LerianStudio/lib-auth/v2/auth/middleware"
-	libCommonsZap "github.com/LerianStudio/lib-commons/v2/commons/zap"
+	tmclient "github.com/LerianStudio/lib-commons/v3/commons/tenant-manager/client"
+	tmmiddleware "github.com/LerianStudio/lib-commons/v3/commons/tenant-manager/middleware"
+	tmpostgres "github.com/LerianStudio/lib-commons/v3/commons/tenant-manager/postgres"
+	tmrabbitmq "github.com/LerianStudio/lib-commons/v3/commons/tenant-manager/rabbitmq"
+	libCommonsV3Zap "github.com/LerianStudio/lib-commons/v3/commons/zap"
 	"github.com/LerianStudio/lib-uncommons/v2/uncommons/assert"
 	"github.com/LerianStudio/lib-uncommons/v2/uncommons/errgroup"
 	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
@@ -98,6 +102,7 @@ import (
 	sharedHTTP "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 	sharedRabbitmq "github.com/LerianStudio/matcher/internal/shared/adapters/rabbitmq"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
+	tenantMetrics "github.com/LerianStudio/matcher/internal/shared/infrastructure/metrics"
 	tenantAdapters "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant/adapters"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
@@ -116,6 +121,9 @@ const (
 	// infraConnectTimeoutDivisor splits the total infra connect timeout evenly between
 	// the two parallel infrastructure goroutines (Postgres and RabbitMQ).
 	infraConnectTimeoutDivisor = 2
+
+	// tenantManagerCloseTimeout is the timeout for closing tenant manager connections during shutdown.
+	tenantManagerCloseTimeout = 5 * time.Second
 )
 
 var (
@@ -385,7 +393,7 @@ func buildTenantExtractor(cfg *Config) (*auth.TenantExtractor, error) {
 
 // InitServersWithOptions initializes and returns the complete Matcher service with custom options.
 //
-//nolint:cyclop,gocyclo // Bootstrap wiring exceeds complexity limits; keep explicit for readability.
+//nolint:cyclop,gocyclo,gocognit // Bootstrap wiring exceeds complexity limits; keep explicit for readability.
 func InitServersWithOptions(opts *Options) (*Service, error) {
 	ctx := context.Background()
 	timer := newStartupTimer()
@@ -495,10 +503,9 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 
 	done = timer.track("auth_and_routes")
 
-	// Bridge: lib-auth still depends on lib-commons types.
-	// Create a separate lib-commons logger for the auth boundary until lib-auth migrates.
-	authLogger := libCommonsZap.InitializeLogger()
-	authClient := middleware.NewAuthClient(cfg.Auth.Host, cfg.Auth.Enabled, &authLogger)
+	// Pass nil logger: lib-auth creates its own internal logger via lib-commons v2 zap.
+	// This avoids importing lib-commons/v2 directly in our source code.
+	authClient := middleware.NewAuthClient(cfg.Auth.Host, cfg.Auth.Enabled, nil)
 
 	tenantExtractor, err := buildTenantExtractor(cfg)
 	if err != nil {
@@ -538,7 +545,33 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		connCloser = connectionManager
 	}
 
+	// Initialize Tenant Manager components for external Tenant Manager API integration.
+	// These components are used alongside TenantExtractor for JWT-based tenant resolution
+	// and provide LRU-managed PostgreSQL connection pools per tenant.
+	tenantManagerComponents := createTenantManagerComponents(cfg, logger)
+	if tenantManagerComponents != nil {
+		// Register cleanup for PostgresManager to close all tenant connections on shutdown
+		cleanups = append(cleanups, func() {
+			if tenantManagerComponents.PostgresManager != nil {
+				closeCtx, closeCancel := context.WithTimeout(ctx, tenantManagerCloseTimeout)
+				defer closeCancel()
+
+				if closeErr := tenantManagerComponents.PostgresManager.Close(closeCtx); closeErr != nil {
+					logger.Log(closeCtx, libLog.LevelWarn, fmt.Sprintf("failed to close tenant manager postgres connections: %v", closeErr))
+				}
+			}
+		})
+	}
+
 	idempotencyRepo := createIdempotencyRepository(cfg, infraProvider, logger)
+
+	// Build RegisterRoutes options with tenant middleware if available
+	var routeOpts []RegisterRoutesOptions
+	if tenantManagerComponents != nil && tenantManagerComponents.Middleware != nil {
+		routeOpts = append(routeOpts, RegisterRoutesOptions{
+			TenantMiddleware: tenantManagerComponents.Middleware,
+		})
+	}
 
 	routes, err := RegisterRoutes(
 		app,
@@ -549,6 +582,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		tenantExtractor,
 		rateLimitStorage,
 		idempotencyRepo,
+		routeOpts...,
 	)
 	if err != nil {
 		return nil, err
@@ -565,6 +599,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		rabbitMQConnection,
 		rateLimitStorage,
 		logger,
+		tenantManagerComponents,
 	)
 	if err != nil {
 		return nil, err
@@ -590,6 +625,13 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("Failed to create DB metrics collector: %v", err))
 	}
 
+	// Initialize tenant metrics based on multi-tenant mode.
+	// When MULTI_TENANT_ENABLED=false, no-op metrics are used for zero overhead.
+	tenantMetricsInstance, err := tenantMetrics.NewTenantMetricsFromConfig(cfg.Tenancy.MultiTenantEnabled)
+	if err != nil {
+		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("Failed to create tenant metrics: %v", err))
+	}
+
 	server := NewServer(
 		cfg,
 		app,
@@ -609,20 +651,22 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 	success = true
 
 	return &Service{
-		Server:             server,
-		Logger:             logger,
-		Config:             cfg,
-		Routes:             routes,
-		authClient:         authClient,
-		tenantExtractor:    tenantExtractor,
-		outboxRunner:       modules.outboxDispatcher,
-		dbMetricsCollector: dbMetricsCollector,
-		exportWorker:       modules.exportWorker,
-		cleanupWorker:      modules.cleanupWorker,
-		archivalWorker:     modules.archivalWorker,
-		schedulerWorker:    modules.schedulerWorker,
-		connectionManager:  connCloser,
-		cleanupFuncs:       cleanups,
+		Server:                  server,
+		Logger:                  logger,
+		Config:                  cfg,
+		Routes:                  routes,
+		authClient:              authClient,
+		tenantExtractor:         tenantExtractor,
+		outboxRunner:            modules.outboxDispatcher,
+		dbMetricsCollector:      dbMetricsCollector,
+		tenantMetrics:           tenantMetricsInstance,
+		exportWorker:            modules.exportWorker,
+		cleanupWorker:           modules.cleanupWorker,
+		archivalWorker:          modules.archivalWorker,
+		schedulerWorker:         modules.schedulerWorker,
+		connectionManager:       connCloser,
+		tenantManagerComponents: tenantManagerComponents,
+		cleanupFuncs:            cleanups,
 	}, nil
 }
 
@@ -835,7 +879,7 @@ func createInfraProvider(
 	postgres *libPostgres.Client,
 	redis *libRedis.Client,
 ) (sharedPorts.InfrastructureProvider, *tenantAdapters.TenantConnectionManager, error) {
-	if !cfg.Tenancy.MultiTenantInfraEnabled {
+	if !cfg.Tenancy.MultiTenantEnabled {
 		return tenantAdapters.NewSingleTenantInfrastructureProvider(postgres, redis), nil, nil
 	}
 
@@ -872,6 +916,121 @@ func createInfraProvider(
 	}
 
 	return connectionManager, connectionManager, nil
+}
+
+// TenantManagerComponents holds the lib-commons v3 tenant-manager components
+// for multi-tenant mode integration. These components are created only when
+// MULTI_TENANT_ENABLED=true and MULTI_TENANT_URL is set.
+type TenantManagerComponents struct {
+	// Client is the Tenant Manager HTTP client with circuit breaker.
+	Client *tmclient.Client
+
+	// PostgresManager manages PostgreSQL connections per tenant via Tenant Manager API.
+	PostgresManager *tmpostgres.Manager
+
+	// RabbitMQManager manages RabbitMQ channels per tenant via vhost isolation.
+	// Used by event publishers to route messages to tenant-specific vhosts.
+	RabbitMQManager *tmrabbitmq.Manager
+
+	// Middleware is the Fiber middleware that extracts tenantId from JWT and resolves
+	// the tenant-specific database connection. Nil when running in single-tenant mode.
+	Middleware *tmmiddleware.TenantMiddleware
+}
+
+// createTenantManagerComponents creates the lib-commons v3 tenant-manager components
+// for multi-tenant mode. Returns nil components when multi-tenant mode is disabled
+// or when the Tenant Manager URL is not configured.
+//
+// This function creates:
+// 1. Tenant Manager HTTP client with circuit breaker (using configured threshold and timeout)
+// 2. PostgreSQL Manager that resolves tenant-specific connections via the TM API
+// 3. TenantMiddleware that extracts tenantId from JWT and stores the connection in context
+//
+// The existing InfrastructureProvider and TenantConnectionManager continue to work
+// alongside these components. The TenantMiddleware resolves connections via the
+// external Tenant Manager service, while the existing infrastructure uses static
+// configuration for backward compatibility.
+func createTenantManagerComponents(
+	cfg *Config,
+	logger libLog.Logger,
+) *TenantManagerComponents {
+	ctx := context.Background()
+
+	// Skip creation when multi-tenant mode is disabled
+	if !cfg.Tenancy.MultiTenantEnabled {
+		logger.Log(ctx, libLog.LevelInfo, "Running in SINGLE-TENANT MODE (MULTI_TENANT_ENABLED=false)")
+
+		return nil
+	}
+
+	// Skip creation when Tenant Manager URL is not configured
+	// The existing TenantConnectionManager with static config will be used instead
+	if strings.TrimSpace(cfg.Tenancy.MultiTenantURL) == "" {
+		logger.Log(ctx, libLog.LevelInfo, "Multi-tenant mode enabled but MULTI_TENANT_URL not set - using static configuration")
+
+		return nil
+	}
+
+	// Create lib-commons v3 logger for tenant-manager components.
+	// This is needed because lib-commons v3 uses a different Logger interface than lib-uncommons v2.
+	v3Logger, v3LoggerErr := libCommonsV3Zap.InitializeLoggerWithError()
+	if v3LoggerErr != nil {
+		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to initialize lib-commons v3 logger: %v", v3LoggerErr))
+
+		return nil
+	}
+
+	// 1. Create Tenant Manager HTTP client with circuit breaker
+	var clientOpts []tmclient.ClientOption
+
+	if cfg.Tenancy.MultiTenantCBThreshold > 0 {
+		cbTimeout := time.Duration(cfg.Tenancy.MultiTenantCBTimeoutSec) * time.Second
+		clientOpts = append(clientOpts,
+			tmclient.WithCircuitBreaker(cfg.Tenancy.MultiTenantCBThreshold, cbTimeout),
+		)
+	}
+
+	tmClient := tmclient.NewClient(cfg.Tenancy.MultiTenantURL, v3Logger, clientOpts...)
+
+	// 2. Create PostgreSQL Manager with LRU eviction and idle timeout
+	idleTimeout := time.Duration(cfg.Tenancy.MultiTenantIdleTimeoutSec) * time.Second
+
+	pgManager := tmpostgres.NewManager(tmClient, constants.ApplicationName,
+		tmpostgres.WithLogger(v3Logger),
+		tmpostgres.WithMaxTenantPools(cfg.Tenancy.MultiTenantMaxTenantPools),
+		tmpostgres.WithIdleTimeout(idleTimeout),
+		tmpostgres.WithMaxOpenConns(cfg.Postgres.MaxOpenConnections),
+		tmpostgres.WithMaxIdleConns(cfg.Postgres.MaxIdleConnections),
+	)
+
+	// 3. Create RabbitMQ Manager for per-tenant vhost isolation
+	// This enables Layer 1 of multi-tenant RabbitMQ: each tenant gets their own vhost
+	rabbitmqManager := tmrabbitmq.NewManager(tmClient, constants.ApplicationName,
+		tmrabbitmq.WithLogger(v3Logger),
+		tmrabbitmq.WithMaxTenantPools(cfg.Tenancy.MultiTenantMaxTenantPools),
+		tmrabbitmq.WithIdleTimeout(idleTimeout),
+	)
+
+	// 4. Create TenantMiddleware (PostgreSQL only for matcher service)
+	tenantMid := tmmiddleware.NewTenantMiddleware(
+		tmmiddleware.WithPostgresManager(pgManager),
+	)
+
+	logger.Log(ctx, libLog.LevelInfo, fmt.Sprintf(
+		"Multi-tenant mode enabled via Tenant Manager: url=%s, cbThreshold=%d, cbTimeout=%ds, maxPools=%d, idleTimeout=%ds",
+		cfg.Tenancy.MultiTenantURL,
+		cfg.Tenancy.MultiTenantCBThreshold,
+		cfg.Tenancy.MultiTenantCBTimeoutSec,
+		cfg.Tenancy.MultiTenantMaxTenantPools,
+		cfg.Tenancy.MultiTenantIdleTimeoutSec,
+	))
+
+	return &TenantManagerComponents{
+		Client:          tmClient,
+		PostgresManager: pgManager,
+		RabbitMQManager: rabbitmqManager,
+		Middleware:      tenantMid,
+	}
 }
 
 func buildRedisConfig(cfg *Config, logger libLog.Logger) libRedis.Config {
@@ -1245,6 +1404,7 @@ func initModulesAndMessaging(
 	rabbitMQConnection *libRabbitmq.RabbitMQConnection,
 	rateLimitStorage fiber.Storage,
 	logger libLog.Logger,
+	tenantManagerComponents *TenantManagerComponents,
 ) (*modulesResult, error) {
 	ctx := context.Background()
 
@@ -1259,7 +1419,7 @@ func initModulesAndMessaging(
 		return nil, err
 	}
 
-	matchingPublisher, ingestionPublisher, err := initEventPublishers(rabbitMQConnection, logger)
+	matchingPublisher, ingestionPublisher, err := initEventPublishers(rabbitMQConnection, logger, tenantManagerComponents)
 	if err != nil {
 		return nil, err
 	}
@@ -1422,7 +1582,11 @@ func cleanupPublishersOnFailure(
 // matching and ingestion modules. Channels are opened in parallel since they are
 // independent protocol exchanges on the same connection.
 //
-// Channel isolation: each publisher gets its own dedicated AMQP channel.
+// In multi-tenant mode (when tenantManagerComponents.RabbitMQManager is available),
+// the publishers use per-tenant vhost isolation instead of shared channels. This
+// provides Layer 1 isolation where each tenant's messages go to their own vhost.
+//
+// Channel isolation (single-tenant): each publisher gets its own dedicated AMQP channel.
 // AMQP publisher confirms are channel-scoped -- calling Confirm(false) on a
 // channel resets the delivery tag counter and confirmation state for that channel.
 // If two ConfirmablePublishers shared the same channel, the second Confirm call
@@ -1431,6 +1595,51 @@ func cleanupPublishersOnFailure(
 // We open fresh channels from the underlying *amqp.Connection so each publisher
 // has isolated delivery tags and confirm sequences.
 func initEventPublishers(
+	rabbitMQConnection *libRabbitmq.RabbitMQConnection,
+	logger libLog.Logger,
+	tenantManagerComponents *TenantManagerComponents,
+) (*matchingRabbitmq.EventPublisher, *ingestionRabbitmq.EventPublisher, error) {
+	ctx := context.Background()
+
+	// Multi-tenant mode: use per-tenant vhost isolation
+	if tenantManagerComponents != nil && tenantManagerComponents.RabbitMQManager != nil {
+		logger.Log(ctx, libLog.LevelInfo, "Creating multi-tenant RabbitMQ event publishers with vhost isolation")
+
+		return initEventPublishersMultiTenant(tenantManagerComponents.RabbitMQManager, logger)
+	}
+
+	// Single-tenant mode: use shared channels with publisher confirms
+	return initEventPublishersSingleTenant(rabbitMQConnection, logger)
+}
+
+// initEventPublishersMultiTenant creates event publishers that use the tenant manager's
+// RabbitMQ Manager for per-tenant vhost isolation (Layer 1 multi-tenant).
+func initEventPublishersMultiTenant(
+	rabbitmqManager *tmrabbitmq.Manager,
+	logger libLog.Logger,
+) (*matchingRabbitmq.EventPublisher, *ingestionRabbitmq.EventPublisher, error) {
+	ctx := context.Background()
+
+	// Create multi-tenant matching publisher
+	matchingPublisher, err := matchingRabbitmq.NewEventPublisherMultiTenant(rabbitmqManager)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create multi-tenant matching event publisher: %w", err)
+	}
+
+	// Create multi-tenant ingestion publisher
+	ingestionPublisher, err := ingestionRabbitmq.NewEventPublisherMultiTenant(rabbitmqManager)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create multi-tenant ingestion event publisher: %w", err)
+	}
+
+	logger.Log(ctx, libLog.LevelInfo, "Multi-tenant RabbitMQ event publishers created successfully")
+
+	return matchingPublisher, ingestionPublisher, nil
+}
+
+// initEventPublishersSingleTenant creates event publishers using dedicated AMQP channels
+// with publisher confirms. This is the original single-tenant behavior.
+func initEventPublishersSingleTenant(
 	rabbitMQConnection *libRabbitmq.RabbitMQConnection,
 	logger libLog.Logger,
 ) (*matchingRabbitmq.EventPublisher, *ingestionRabbitmq.EventPublisher, error) {
@@ -2340,7 +2549,7 @@ func logStartupInfo(logger libLog.Logger, cfg *Config, status *InfraStatus) {
 	logger.Log(ctx, libLog.LevelInfo, "  🔧 FEATURES")
 	logger.Log(ctx, libLog.LevelInfo, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	logger.Log(ctx, libLog.LevelInfo, "  Authentication  : "+formatFeatureStatus(cfg.Auth.Enabled))
-	logger.Log(ctx, libLog.LevelInfo, "  Multi-Tenant    : "+formatFeatureStatus(cfg.Tenancy.MultiTenantInfraEnabled))
+	logger.Log(ctx, libLog.LevelInfo, "  Multi-Tenant    : "+formatMultiTenantStatus(cfg))
 	logger.Log(ctx, libLog.LevelInfo, "")
 
 	logger.Log(ctx, libLog.LevelInfo, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
@@ -2373,6 +2582,14 @@ func formatFeatureStatus(enabled bool) string {
 	}
 
 	return statusDisabled
+}
+
+func formatMultiTenantStatus(cfg *Config) string {
+	if cfg.Tenancy.MultiTenantEnabled {
+		return fmt.Sprintf("enabled ✓ (URL: %s)", cfg.Tenancy.MultiTenantURL)
+	}
+
+	return "disabled ✗ (SINGLE-TENANT MODE)"
 }
 
 func formatWorkerStatus(enabled bool, interval time.Duration) string {

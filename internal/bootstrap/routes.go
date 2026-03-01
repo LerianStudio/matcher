@@ -18,14 +18,30 @@ import (
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
 
+// TenantMiddlewareProvider is an interface for tenant middleware that can provide
+// a Fiber handler for tenant database resolution.
+type TenantMiddlewareProvider interface {
+	// WithTenantDB returns a Fiber handler that extracts tenant context and resolves DB connection.
+	WithTenantDB(c *fiber.Ctx) error
+	// Enabled returns whether the middleware is enabled.
+	Enabled() bool
+}
+
 // Routes holds the configured API route groups.
 type Routes struct {
 	API       fiber.Router
 	Protected func(resource, action string) fiber.Router
 }
 
+// RegisterRoutesOptions contains optional configuration for RegisterRoutes.
+type RegisterRoutesOptions struct {
+	// TenantMiddleware is the optional lib-commons v3 tenant middleware for multi-tenant mode.
+	// When set and enabled, it resolves tenant-specific database connections via Tenant Manager API.
+	TenantMiddleware TenantMiddlewareProvider
+}
+
 // RegisterRoutes configures health endpoints and API route groups with authentication.
-// Middleware order: Auth -> TenantExtract -> Idempotency -> RateLimiter -> Handlers
+// Middleware order: Auth -> TenantExtract -> TenantDB (optional) -> Idempotency -> RateLimiter -> Handlers
 // Idempotency middleware is applied before rate limiting to ensure duplicate requests
 // are handled correctly even if rate limiting would otherwise block them.
 // If rateLimitStorage is provided, uses it for distributed rate limiting across multiple instances.
@@ -38,6 +54,7 @@ func RegisterRoutes(
 	tenantExtractor *auth.TenantExtractor,
 	rateLimitStorage fiber.Storage,
 	idempotencyRepo sharedHTTP.IdempotencyRepository,
+	opts ...RegisterRoutesOptions,
 ) (*Routes, error) {
 	asserter := assert.New(
 		context.Background(),
@@ -90,24 +107,33 @@ func RegisterRoutes(
 		},
 	)
 
+	// Extract tenant middleware from options if provided
+	var tenantDBMiddleware fiber.Handler
+	if len(opts) > 0 && opts[0].TenantMiddleware != nil && opts[0].TenantMiddleware.Enabled() {
+		tenantDBMiddleware = opts[0].TenantMiddleware.WithTenantDB
+	}
+
 	var protected func(resource, action string) fiber.Router
 
 	if cfg.RateLimit.Enabled {
 		rateLimiter := NewRateLimiter(cfg, rateLimitStorage)
 		protected = func(resource, action string) fiber.Router {
+			middlewares := buildProtectedMiddlewares(idempotencyMiddleware, rateLimiter, tenantDBMiddleware)
+
 			return auth.ProtectedGroupWithMiddleware(
 				app,
 				authClient,
 				tenantExtractor,
 				resource,
 				action,
-				idempotencyMiddleware,
-				rateLimiter,
+				middlewares...,
 			)
 		}
 	} else {
 		protected = func(resource, action string) fiber.Router {
-			return auth.ProtectedGroupWithMiddleware(app, authClient, tenantExtractor, resource, action, idempotencyMiddleware)
+			middlewares := buildProtectedMiddlewares(idempotencyMiddleware, nil, tenantDBMiddleware)
+
+			return auth.ProtectedGroupWithMiddleware(app, authClient, tenantExtractor, resource, action, middlewares...)
 		}
 	}
 
@@ -115,6 +141,43 @@ func RegisterRoutes(
 		API:       app.Group(""),
 		Protected: protected,
 	}, nil
+}
+
+// buildProtectedMiddlewares constructs the middleware slice for protected routes.
+// Order: TenantDB (optional) -> Idempotency -> RateLimiter (optional)
+// TenantDB middleware is applied first (after auth) to resolve tenant-specific connections
+// before other middleware that may need database access.
+func buildProtectedMiddlewares(
+	idempotency fiber.Handler,
+	rateLimiter fiber.Handler,
+	tenantDB fiber.Handler,
+) []fiber.Handler {
+	// Estimate capacity: idempotency always, rateLimiter optional, tenantDB optional
+	capacity := 1
+	if rateLimiter != nil {
+		capacity++
+	}
+
+	if tenantDB != nil {
+		capacity++
+	}
+
+	middlewares := make([]fiber.Handler, 0, capacity)
+
+	// TenantDB middleware comes first (after auth) to resolve connections
+	if tenantDB != nil {
+		middlewares = append(middlewares, tenantDB)
+	}
+
+	// Idempotency middleware
+	middlewares = append(middlewares, idempotency)
+
+	// Rate limiter last
+	if rateLimiter != nil {
+		middlewares = append(middlewares, rateLimiter)
+	}
+
+	return middlewares
 }
 
 // parseSchemes splits a comma-separated schemes string into a trimmed slice.

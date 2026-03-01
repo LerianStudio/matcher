@@ -258,3 +258,38 @@ func TestEventPublisher_Close_ClosesConfirmablePublisher(t *testing.T) {
 	err = publisher.PublishIngestionCompleted(context.Background(), event)
 	require.ErrorIs(t, err, sharedRabbitmq.ErrPublisherClosed)
 }
+
+// ============================================================================
+// Multi-Tenant RabbitMQ Tests
+// ============================================================================
+
+// tenantIDKey is a local copy for testing - matches auth.TenantIDKey
+type contextKey string
+
+const tenantIDKey contextKey = "tenantId"
+
+// mockRabbitMQMultiTenantManagerWithCapture captures the tenant ID used in GetChannel calls.
+type mockRabbitMQMultiTenantManagerWithCapture struct {
+	mu             sync.Mutex
+	getChannelErr  error
+	capturedTenant string
+}
+
+func (m *mockRabbitMQMultiTenantManagerWithCapture) GetChannel(_ context.Context, tenantID string) (*amqp.Channel, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.capturedTenant = tenantID
+
+	if m.getChannelErr != nil {
+		return nil, m.getChannelErr
+	}
+
+	return nil, nil
+}
+
+// NOTE: Multi-tenant tests are in event_publisher_test.go:
+// - TestNewEventPublisherMultiTenant_ValidManager
+// - TestEventPublisher_Close_MultiTenantMode
+// - TestPublishMultiTenant_RequiresTenantID
+// - TestPublishMultiTenant_GetChannelError

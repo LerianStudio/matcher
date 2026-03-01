@@ -11,6 +11,8 @@ import (
 	"github.com/google/uuid"
 	goredis "github.com/redis/go-redis/v9"
 
+	"github.com/LerianStudio/lib-commons/v3/commons/tenant-manager/valkey"
+
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/ports"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
@@ -55,7 +57,11 @@ func NewCacheService(provider sharedPorts.InfrastructureProvider, ttl time.Durat
 	}
 }
 
+// buildKey creates the full Redis key with tenant scoping using canonical lib-commons v3 key prefixing.
+// In multi-tenant mode: tenant:{tenantID}:matcher:dashboard:{contextID}:{keyType}:...
+// In single-tenant mode: matcher:dashboard:{contextID}:{keyType}:... (no tenant prefix).
 func (svc *CacheService) buildKey(
+	ctx context.Context,
 	contextID uuid.UUID,
 	keyType string,
 	dateFrom, dateTo time.Time,
@@ -66,7 +72,7 @@ func (svc *CacheService) buildKey(
 		sourceKey = sourceID.String()
 	}
 
-	return fmt.Sprintf("%s:%s:%s:%s:%s:%s",
+	key := fmt.Sprintf("%s:%s:%s:%s:%s:%s",
 		dashboardCachePrefix,
 		contextID.String(),
 		keyType,
@@ -74,6 +80,8 @@ func (svc *CacheService) buildKey(
 		dateTo.Format(time.DateOnly),
 		sourceKey,
 	)
+
+	return valkey.GetKeyFromContext(ctx, key)
 }
 
 // GetVolumeStats retrieves cached volume stats.
@@ -100,6 +108,7 @@ func (svc *CacheService) GetVolumeStats(
 	}
 
 	key := svc.buildKey(
+		ctx,
 		filter.ContextID,
 		volumeKeyType,
 		filter.DateFrom,
@@ -149,6 +158,7 @@ func (svc *CacheService) SetVolumeStats(
 	}
 
 	key := svc.buildKey(
+		ctx,
 		filter.ContextID,
 		volumeKeyType,
 		filter.DateFrom,
@@ -192,6 +202,7 @@ func (svc *CacheService) GetSLAStats(
 	}
 
 	key := svc.buildKey(
+		ctx,
 		filter.ContextID,
 		slaKeyType,
 		filter.DateFrom,
@@ -241,6 +252,7 @@ func (svc *CacheService) SetSLAStats(
 	}
 
 	key := svc.buildKey(
+		ctx,
 		filter.ContextID,
 		slaKeyType,
 		filter.DateFrom,
@@ -284,6 +296,7 @@ func (svc *CacheService) GetMatchRateStats(
 	}
 
 	key := svc.buildKey(
+		ctx,
 		filter.ContextID,
 		matchRateKeyType,
 		filter.DateFrom,
@@ -333,6 +346,7 @@ func (svc *CacheService) SetMatchRateStats(
 	}
 
 	key := svc.buildKey(
+		ctx,
 		filter.ContextID,
 		matchRateKeyType,
 		filter.DateFrom,
@@ -376,6 +390,7 @@ func (svc *CacheService) GetDashboardAggregates(
 	}
 
 	key := svc.buildKey(
+		ctx,
 		filter.ContextID,
 		aggregatesKeyType,
 		filter.DateFrom,
@@ -425,6 +440,7 @@ func (svc *CacheService) SetDashboardAggregates(
 	}
 
 	key := svc.buildKey(
+		ctx,
 		filter.ContextID,
 		aggregatesKeyType,
 		filter.DateFrom,
@@ -468,6 +484,7 @@ func (svc *CacheService) GetMatcherDashboardMetrics(
 	}
 
 	key := svc.buildKey(
+		ctx,
 		filter.ContextID,
 		metricsKeyType,
 		filter.DateFrom,
@@ -517,6 +534,7 @@ func (svc *CacheService) SetMatcherDashboardMetrics(
 	}
 
 	key := svc.buildKey(
+		ctx,
 		filter.ContextID,
 		metricsKeyType,
 		filter.DateFrom,
@@ -556,7 +574,9 @@ func (svc *CacheService) InvalidateContext(ctx context.Context, contextID uuid.U
 		return fmt.Errorf("get redis client for cache invalidation: %w", err)
 	}
 
-	pattern := fmt.Sprintf("%s:%s:*", dashboardCachePrefix, contextID.String())
+	// Build pattern with canonical lib-commons v3 tenant-aware prefix for scan
+	basePattern := fmt.Sprintf("%s:%s:*", dashboardCachePrefix, contextID.String())
+	pattern := valkey.GetPatternFromContext(ctx, basePattern)
 
 	const batchSize = 500
 

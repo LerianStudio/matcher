@@ -18,6 +18,7 @@ import (
 	governanceWorker "github.com/LerianStudio/matcher/internal/governance/services/worker"
 	reportingWorker "github.com/LerianStudio/matcher/internal/reporting/services/worker"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
+	"github.com/LerianStudio/matcher/internal/shared/infrastructure/metrics"
 )
 
 // defaultShutdownGracePeriod is the default time to wait for background workers
@@ -40,16 +41,18 @@ type Service struct {
 	Config *Config
 	Routes *Routes
 
-	authClient         *middleware.AuthClient
-	tenantExtractor    *auth.TenantExtractor
-	outboxRunner       libCommons.App
-	dbMetricsCollector *DBMetricsCollector
-	exportWorker       *reportingWorker.ExportWorker
-	cleanupWorker      *reportingWorker.CleanupWorker
-	archivalWorker     *governanceWorker.ArchivalWorker
-	schedulerWorker    *configWorker.SchedulerWorker
-	connectionManager  connectionCloser
-	cleanupFuncs       []func()
+	authClient              *middleware.AuthClient
+	tenantExtractor         *auth.TenantExtractor
+	outboxRunner            libCommons.App
+	dbMetricsCollector      *DBMetricsCollector
+	tenantMetrics           *metrics.TenantMetrics
+	exportWorker            *reportingWorker.ExportWorker
+	cleanupWorker           *reportingWorker.CleanupWorker
+	archivalWorker          *governanceWorker.ArchivalWorker
+	schedulerWorker         *configWorker.SchedulerWorker
+	connectionManager       connectionCloser
+	tenantManagerComponents *TenantManagerComponents
+	cleanupFuncs            []func()
 }
 
 type connectionCloser interface {

@@ -59,11 +59,17 @@ type ServerConfig struct {
 	TLSTerminatedUpstream bool   `env:"TLS_TERMINATED_UPSTREAM" envDefault:"false"`
 }
 
-// TenancyConfig configures tenant defaults and infra mode.
+// TenancyConfig configures tenant defaults and multi-tenant mode.
 type TenancyConfig struct {
-	DefaultTenantID         string `env:"DEFAULT_TENANT_ID"          envDefault:"11111111-1111-1111-1111-111111111111"`
-	DefaultTenantSlug       string `env:"DEFAULT_TENANT_SLUG"        envDefault:"default"`
-	MultiTenantInfraEnabled bool   `env:"MULTI_TENANT_INFRA_ENABLED" envDefault:"false"`
+	DefaultTenantID           string `env:"DEFAULT_TENANT_ID"                        envDefault:"11111111-1111-1111-1111-111111111111"`
+	DefaultTenantSlug         string `env:"DEFAULT_TENANT_SLUG"                      envDefault:"default"`
+	MultiTenantEnabled        bool   `env:"MULTI_TENANT_ENABLED"                     envDefault:"false"`
+	MultiTenantURL            string `env:"MULTI_TENANT_URL"`
+	MultiTenantEnvironment    string `env:"MULTI_TENANT_ENVIRONMENT"                 envDefault:"staging"`
+	MultiTenantMaxTenantPools int    `env:"MULTI_TENANT_MAX_TENANT_POOLS"            envDefault:"100"`
+	MultiTenantIdleTimeoutSec int    `env:"MULTI_TENANT_IDLE_TIMEOUT_SEC"            envDefault:"300"`
+	MultiTenantCBThreshold    int    `env:"MULTI_TENANT_CIRCUIT_BREAKER_THRESHOLD"   envDefault:"5"`
+	MultiTenantCBTimeoutSec   int    `env:"MULTI_TENANT_CIRCUIT_BREAKER_TIMEOUT_SEC" envDefault:"30"`
 }
 
 // PostgresConfig configures primary/replica connections and pooling.
@@ -316,6 +322,26 @@ func (cfg *Config) Validate() error {
 
 	if err := cfg.validateArchivalConfig(asserter); err != nil {
 		return err
+	}
+
+	if err := cfg.validateMultiTenantConfig(asserter); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// validateMultiTenantConfig validates multi-tenant configuration.
+// When multi-tenant mode is enabled, the tenant manager URL is required.
+func (cfg *Config) validateMultiTenantConfig(asserter *assert.Asserter) error {
+	if !cfg.Tenancy.MultiTenantEnabled {
+		return nil
+	}
+
+	ctx := context.Background()
+
+	if err := asserter.NotEmpty(ctx, strings.TrimSpace(cfg.Tenancy.MultiTenantURL), "MULTI_TENANT_URL is required when MULTI_TENANT_ENABLED=true"); err != nil {
+		return fmt.Errorf("config validation: %w", err)
 	}
 
 	return nil

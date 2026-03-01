@@ -78,7 +78,7 @@ type flatConfig struct {
 	ExportWorkerPollIntervalSec int
 	ObjectStorageEndpoint       string
 	ObjectStorageBucket         string
-	MultiTenantInfraEnabled     bool
+	MultiTenantEnabled          bool
 	WebhookTimeoutSec           int
 	ArchivalEnabled             bool
 	ArchivalIntervalHours       int
@@ -99,7 +99,7 @@ func buildConfig(fc flatConfig) Config {
 	cfg.App.LogLevel = fc.LogLevel
 	cfg.Tenancy.DefaultTenantID = fc.DefaultTenantID
 	cfg.Tenancy.DefaultTenantSlug = fc.DefaultTenantSlug
-	cfg.Tenancy.MultiTenantInfraEnabled = fc.MultiTenantInfraEnabled
+	cfg.Tenancy.MultiTenantEnabled = fc.MultiTenantEnabled
 	cfg.Server.BodyLimitBytes = fc.BodyLimitBytes
 	cfg.Server.CORSAllowedOrigins = fc.CORSAllowedOrigins
 	cfg.Server.TLSTerminatedUpstream = fc.TLSTerminatedUpstream
@@ -2921,6 +2921,98 @@ func TestConfig_ValidateArchivalConfig(t *testing.T) {
 			ArchivalEnabled:          false,
 			ArchivalStorageBucket:    "",
 		})
+
+		err := cfg.Validate()
+		require.NoError(t, err)
+	})
+}
+
+func TestConfig_ValidateMultiTenantConfig(t *testing.T) {
+	t.Parallel()
+
+	validTenantID := "11111111-1111-1111-1111-111111111111"
+
+	t.Run("requires MULTI_TENANT_URL when MULTI_TENANT_ENABLED is true", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := buildConfig(flatConfig{
+			EnvName:                  "development",
+			DefaultTenantID:          validTenantID,
+			BodyLimitBytes:           1024,
+			LogLevel:                 "info",
+			RateLimitMax:             100,
+			RateLimitExpirySec:       60,
+			ExportRateLimitMax:       10,
+			ExportRateLimitExpirySec: 60,
+			InfraConnectTimeoutSec:   30,
+			MultiTenantEnabled:       true,
+		})
+		cfg.Tenancy.MultiTenantURL = ""
+
+		err := cfg.Validate()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "MULTI_TENANT_URL is required when MULTI_TENANT_ENABLED=true")
+	})
+
+	t.Run("fails when MULTI_TENANT_URL is whitespace only", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := buildConfig(flatConfig{
+			EnvName:                  "development",
+			DefaultTenantID:          validTenantID,
+			BodyLimitBytes:           1024,
+			LogLevel:                 "info",
+			RateLimitMax:             100,
+			RateLimitExpirySec:       60,
+			ExportRateLimitMax:       10,
+			ExportRateLimitExpirySec: 60,
+			InfraConnectTimeoutSec:   30,
+			MultiTenantEnabled:       true,
+		})
+		cfg.Tenancy.MultiTenantURL = "   "
+
+		err := cfg.Validate()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "MULTI_TENANT_URL is required when MULTI_TENANT_ENABLED=true")
+	})
+
+	t.Run("passes when MULTI_TENANT_URL is provided and MULTI_TENANT_ENABLED is true", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := buildConfig(flatConfig{
+			EnvName:                  "development",
+			DefaultTenantID:          validTenantID,
+			BodyLimitBytes:           1024,
+			LogLevel:                 "info",
+			RateLimitMax:             100,
+			RateLimitExpirySec:       60,
+			ExportRateLimitMax:       10,
+			ExportRateLimitExpirySec: 60,
+			InfraConnectTimeoutSec:   30,
+			MultiTenantEnabled:       true,
+		})
+		cfg.Tenancy.MultiTenantURL = "http://tenant-manager:8080"
+
+		err := cfg.Validate()
+		require.NoError(t, err)
+	})
+
+	t.Run("does not require MULTI_TENANT_URL when MULTI_TENANT_ENABLED is false", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := buildConfig(flatConfig{
+			EnvName:                  "development",
+			DefaultTenantID:          validTenantID,
+			BodyLimitBytes:           1024,
+			LogLevel:                 "info",
+			RateLimitMax:             100,
+			RateLimitExpirySec:       60,
+			ExportRateLimitMax:       10,
+			ExportRateLimitExpirySec: 60,
+			InfraConnectTimeoutSec:   30,
+			MultiTenantEnabled:       false,
+		})
+		cfg.Tenancy.MultiTenantURL = ""
 
 		err := cfg.Validate()
 		require.NoError(t, err)

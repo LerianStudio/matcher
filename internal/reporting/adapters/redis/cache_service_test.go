@@ -17,6 +17,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/LerianStudio/lib-commons/v3/commons/tenant-manager/core"
+
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 )
@@ -54,21 +56,36 @@ func TestCacheService_BuildKey(t *testing.T) {
 	dateFrom := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	dateTo := time.Date(2024, 1, 31, 0, 0, 0, 0, time.UTC)
 
-	t.Run("builds key without source filter", func(t *testing.T) {
+	t.Run("builds key without source filter in single-tenant mode", func(t *testing.T) {
 		t.Parallel()
 
-		key := svc.buildKey(contextID, volumeKeyType, dateFrom, dateTo, nil)
+		// core.GetTenantIDFromContext returns empty when no tenant is set,
+		// so valkey.GetKeyFromContext returns the key without tenant prefix.
+		key := svc.buildKey(context.Background(), contextID, volumeKeyType, dateFrom, dateTo, nil)
 
 		expected := "matcher:dashboard:550e8400-e29b-41d4-a716-446655440000:volume:2024-01-01:2024-01-31:all"
 		assert.Equal(t, expected, key)
 	})
 
-	t.Run("builds key with source filter", func(t *testing.T) {
+	t.Run("builds key with source filter in single-tenant mode", func(t *testing.T) {
 		t.Parallel()
 
-		key := svc.buildKey(contextID, volumeKeyType, dateFrom, dateTo, &sourceID)
+		// core.GetTenantIDFromContext returns empty when no tenant is set,
+		// so valkey.GetKeyFromContext returns the key without tenant prefix.
+		key := svc.buildKey(context.Background(), contextID, volumeKeyType, dateFrom, dateTo, &sourceID)
 
 		expected := "matcher:dashboard:550e8400-e29b-41d4-a716-446655440000:volume:2024-01-01:2024-01-31:660e8400-e29b-41d4-a716-446655440000"
+		assert.Equal(t, expected, key)
+	})
+
+	t.Run("builds key with tenant prefix in multi-tenant mode", func(t *testing.T) {
+		t.Parallel()
+
+		tenantID := "550e8400-e29b-41d4-a716-446655440099"
+		ctx := core.SetTenantIDInContext(context.Background(), tenantID)
+		key := svc.buildKey(ctx, contextID, volumeKeyType, dateFrom, dateTo, nil)
+
+		expected := "tenant:" + tenantID + ":matcher:dashboard:550e8400-e29b-41d4-a716-446655440000:volume:2024-01-01:2024-01-31:all"
 		assert.Equal(t, expected, key)
 	})
 }
@@ -362,6 +379,7 @@ func TestCacheService_SetAndGetVolumeStats(t *testing.T) {
 	require.NoError(t, err)
 
 	key := svc.buildKey(
+		context.Background(),
 		filter.ContextID,
 		volumeKeyType,
 		filter.DateFrom,
@@ -429,6 +447,7 @@ func TestCacheService_GetSLAStats_InvalidJSON(t *testing.T) {
 	}
 
 	key := svc.buildKey(
+		context.Background(),
 		filter.ContextID,
 		slaKeyType,
 		filter.DateFrom,
@@ -502,6 +521,7 @@ func TestCacheService_SetAndGetMatchRateStats(t *testing.T) {
 	require.NoError(t, err)
 
 	key := svc.buildKey(
+		context.Background(),
 		filter.ContextID,
 		matchRateKeyType,
 		filter.DateFrom,
@@ -535,6 +555,7 @@ func TestCacheService_GetMatchRateStats_InvalidJSON(t *testing.T) {
 	}
 
 	key := svc.buildKey(
+		context.Background(),
 		filter.ContextID,
 		matchRateKeyType,
 		filter.DateFrom,
@@ -623,6 +644,7 @@ func TestCacheService_GetDashboardAggregates_InvalidJSON(t *testing.T) {
 	}
 
 	key := svc.buildKey(
+		context.Background(),
 		filter.ContextID,
 		aggregatesKeyType,
 		filter.DateFrom,
@@ -960,6 +982,7 @@ func TestCacheService_SetAndGetMatcherDashboardMetrics(t *testing.T) {
 	require.NoError(t, err)
 
 	key := svc.buildKey(
+		context.Background(),
 		filter.ContextID,
 		metricsKeyType,
 		filter.DateFrom,
@@ -992,6 +1015,7 @@ func TestCacheService_GetMatcherDashboardMetrics_InvalidJSON(t *testing.T) {
 	}
 
 	key := svc.buildKey(
+		context.Background(),
 		filter.ContextID,
 		metricsKeyType,
 		filter.DateFrom,
@@ -1077,6 +1101,7 @@ func TestCacheService_SetAndGetSLAStats(t *testing.T) {
 	require.NoError(t, err)
 
 	key := svc.buildKey(
+		context.Background(),
 		filter.ContextID,
 		slaKeyType,
 		filter.DateFrom,
@@ -1178,6 +1203,7 @@ func TestCacheService_GetVolumeStats_InvalidJSON(t *testing.T) {
 	}
 
 	key := svc.buildKey(
+		context.Background(),
 		filter.ContextID,
 		volumeKeyType,
 		filter.DateFrom,
@@ -1481,6 +1507,8 @@ func TestCacheService_InvalidateContext_WithMultipleBatches(t *testing.T) {
 		)
 	}
 
+	// In single-tenant mode (background context), keys have no tenant prefix
+	// since core.GetTenantIDFromContext returns empty.
 	pattern := "matcher:dashboard:" + contextID.String() + ":*"
 	keys, err := client.Keys(context.Background(), pattern).Result()
 	require.NoError(t, err)
@@ -1511,6 +1539,8 @@ func TestCacheService_InvalidateContext_DeleteError(t *testing.T) {
 		&entities.VolumeStats{TotalTransactions: 100},
 	)
 
+	// In single-tenant mode (background context), keys have no tenant prefix
+	// since core.GetTenantIDFromContext returns empty.
 	pattern := "matcher:dashboard:" + contextID.String() + ":*"
 	keys, err := client.Keys(context.Background(), pattern).Result()
 	require.NoError(t, err)
@@ -1551,4 +1581,209 @@ func TestCacheService_MatcherDashboardMetrics_TTL(t *testing.T) {
 	result, err = svc.GetMatcherDashboardMetrics(context.Background(), filter)
 	assert.Nil(t, result)
 	require.ErrorIs(t, err, ErrCacheMiss)
+}
+
+// =============================================================================
+// Tenant Isolation Tests
+// =============================================================================
+
+func TestCacheService_BuildKey_WithTenantContext(t *testing.T) {
+	t.Parallel()
+
+	svc := &CacheService{}
+	contextID := uuid.New()
+	dateFrom := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	dateTo := time.Date(2024, 1, 31, 0, 0, 0, 0, time.UTC)
+
+	// Create context WITH tenant ID using canonical lib-commons v3 context setter
+	tenantID := "550e8400-e29b-41d4-a716-446655440000"
+	ctx := core.SetTenantIDInContext(context.Background(), tenantID)
+
+	key := svc.buildKey(ctx, contextID, "summary", dateFrom, dateTo, nil)
+
+	require.Contains(t, key, "tenant:"+tenantID+":")
+	require.Contains(t, key, contextID.String())
+}
+
+func TestCacheService_BuildKey_WithoutTenantContext(t *testing.T) {
+	t.Parallel()
+
+	svc := &CacheService{}
+	contextID := uuid.New()
+	dateFrom := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	dateTo := time.Date(2024, 1, 31, 0, 0, 0, 0, time.UTC)
+
+	ctx := context.Background()
+
+	key := svc.buildKey(ctx, contextID, "summary", dateFrom, dateTo, nil)
+
+	// core.GetTenantIDFromContext returns empty when no tenant is set,
+	// so valkey.GetKeyFromContext returns the key without tenant prefix.
+	require.Contains(t, key, contextID.String())
+	require.Contains(t, key, "matcher:dashboard")
+	require.NotContains(t, key, "tenant:")
+}
+
+func TestCacheService_BuildKey_DifferentTenants_ProduceDifferentKeys(t *testing.T) {
+	t.Parallel()
+
+	svc := &CacheService{}
+	contextID := uuid.New()
+	dateFrom := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	dateTo := time.Date(2024, 1, 31, 0, 0, 0, 0, time.UTC)
+
+	ctx1 := core.SetTenantIDInContext(context.Background(), "tenant-aaa")
+	ctx2 := core.SetTenantIDInContext(context.Background(), "tenant-bbb")
+
+	key1 := svc.buildKey(ctx1, contextID, "summary", dateFrom, dateTo, nil)
+	key2 := svc.buildKey(ctx2, contextID, "summary", dateFrom, dateTo, nil)
+
+	require.NotEqual(t, key1, key2)
+	require.Contains(t, key1, "tenant:tenant-aaa:")
+	require.Contains(t, key2, "tenant:tenant-bbb:")
+}
+
+// TestCacheService_BuildKey_EmptyTenantID_NoPrefix verifies that buildKey returns
+// an unprefixed key when the tenant ID is explicitly set to an empty string.
+// This confirms single-tenant fallback behavior for empty JWT tenant claims.
+func TestCacheService_BuildKey_EmptyTenantID_NoPrefix(t *testing.T) {
+	t.Parallel()
+
+	svc := &CacheService{}
+	contextID := uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
+	dateFrom := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	dateTo := time.Date(2024, 1, 31, 0, 0, 0, 0, time.UTC)
+
+	// Set tenant ID to empty string explicitly (simulates JWT with empty/missing tenant claim)
+	ctx := core.SetTenantIDInContext(context.Background(), "")
+
+	key := svc.buildKey(ctx, contextID, volumeKeyType, dateFrom, dateTo, nil)
+
+	// Key should NOT have tenant prefix when tenant ID is empty
+	expected := "matcher:dashboard:" + contextID.String() + ":volume:2024-01-01:2024-01-31:all"
+	assert.Equal(t, expected, key)
+	assert.NotContains(t, key, "tenant:")
+}
+
+// TestCacheService_TenantIsolation_SetAndGet verifies end-to-end tenant isolation:
+// data cached by tenant-A is invisible to tenant-B, and vice versa.
+// Both tenants use the same contextID and filter, proving key-level isolation.
+func TestCacheService_TenantIsolation_SetAndGet(t *testing.T) {
+	t.Parallel()
+
+	_, _, svc := setupRedisCacheService(t)
+
+	contextID := uuid.New()
+	dateFrom := time.Now().UTC().Add(-24 * time.Hour)
+	dateTo := time.Now().UTC()
+
+	tenantA := "550e8400-e29b-41d4-a716-446655440001"
+	tenantB := "550e8400-e29b-41d4-a716-446655440002"
+
+	ctxA := core.SetTenantIDInContext(context.Background(), tenantA)
+	ctxB := core.SetTenantIDInContext(context.Background(), tenantB)
+
+	filter := entities.DashboardFilter{
+		ContextID: contextID,
+		DateFrom:  dateFrom,
+		DateTo:    dateTo,
+	}
+
+	// Cache volume stats for tenant-A
+	statsA := &entities.VolumeStats{
+		TotalTransactions:   100,
+		MatchedTransactions: 80,
+		TotalAmount:         decimal.NewFromInt(10000),
+	}
+	err := svc.SetVolumeStats(ctxA, filter, statsA)
+	require.NoError(t, err)
+
+	// Verify tenant-A can read its own cached data
+	resultA, err := svc.GetVolumeStats(ctxA, filter)
+	require.NoError(t, err)
+	require.NotNil(t, resultA)
+	assert.Equal(t, 100, resultA.TotalTransactions)
+
+	// Verify tenant-B gets cache miss for the same filter (isolation)
+	resultB, err := svc.GetVolumeStats(ctxB, filter)
+	assert.Nil(t, resultB, "ISOLATION VIOLATION: tenant-B can see tenant-A's cached data")
+	require.ErrorIs(t, err, ErrCacheMiss, "tenant-B should get cache miss, not tenant-A's data")
+
+	// Cache different data for tenant-B
+	statsB := &entities.VolumeStats{
+		TotalTransactions:   200,
+		MatchedTransactions: 150,
+		TotalAmount:         decimal.NewFromInt(20000),
+	}
+	err = svc.SetVolumeStats(ctxB, filter, statsB)
+	require.NoError(t, err)
+
+	// Verify tenant-B reads its own data
+	resultB, err = svc.GetVolumeStats(ctxB, filter)
+	require.NoError(t, err)
+	require.NotNil(t, resultB)
+	assert.Equal(t, 200, resultB.TotalTransactions)
+
+	// Verify tenant-A's data is still intact (not overwritten by tenant-B)
+	resultA, err = svc.GetVolumeStats(ctxA, filter)
+	require.NoError(t, err)
+	require.NotNil(t, resultA)
+	assert.Equal(t, 100, resultA.TotalTransactions,
+		"tenant-A data should not be affected by tenant-B's cache write")
+}
+
+// TestCacheService_InvalidateContext_TenantIsolation verifies that invalidating
+// cache for one tenant does not affect another tenant's cached data.
+func TestCacheService_InvalidateContext_TenantIsolation(t *testing.T) {
+	t.Parallel()
+
+	_, _, svc := setupRedisCacheService(t)
+
+	contextID := uuid.New()
+	dateFrom := time.Now().UTC().Add(-24 * time.Hour)
+	dateTo := time.Now().UTC()
+
+	tenantA := "550e8400-e29b-41d4-a716-446655440001"
+	tenantB := "550e8400-e29b-41d4-a716-446655440002"
+
+	ctxA := core.SetTenantIDInContext(context.Background(), tenantA)
+	ctxB := core.SetTenantIDInContext(context.Background(), tenantB)
+
+	filter := entities.DashboardFilter{
+		ContextID: contextID,
+		DateFrom:  dateFrom,
+		DateTo:    dateTo,
+	}
+
+	// Cache data for both tenants
+	statsA := &entities.VolumeStats{TotalTransactions: 100, TotalAmount: decimal.NewFromInt(10000)}
+	statsB := &entities.VolumeStats{TotalTransactions: 200, TotalAmount: decimal.NewFromInt(20000)}
+
+	require.NoError(t, svc.SetVolumeStats(ctxA, filter, statsA))
+	require.NoError(t, svc.SetVolumeStats(ctxB, filter, statsB))
+
+	// Verify both tenants have cached data
+	resultA, err := svc.GetVolumeStats(ctxA, filter)
+	require.NoError(t, err)
+	require.NotNil(t, resultA)
+
+	resultB, err := svc.GetVolumeStats(ctxB, filter)
+	require.NoError(t, err)
+	require.NotNil(t, resultB)
+
+	// Invalidate cache for tenant-A only
+	err = svc.InvalidateContext(ctxA, contextID)
+	require.NoError(t, err)
+
+	// Tenant-A's cache should be invalidated
+	resultA, err = svc.GetVolumeStats(ctxA, filter)
+	assert.Nil(t, resultA, "tenant-A cache should be invalidated")
+	require.ErrorIs(t, err, ErrCacheMiss, "tenant-A should get cache miss after invalidation")
+
+	// Tenant-B's cache should still be intact (isolation)
+	resultB, err = svc.GetVolumeStats(ctxB, filter)
+	require.NoError(t, err, "tenant-B cache should survive tenant-A invalidation")
+	require.NotNil(t, resultB, "ISOLATION VIOLATION: tenant-A invalidation affected tenant-B")
+	assert.Equal(t, 200, resultB.TotalTransactions,
+		"tenant-B data should be unchanged after tenant-A invalidation")
 }

@@ -87,6 +87,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -99,18 +100,21 @@ import (
 	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
 	libRabbitmq "github.com/LerianStudio/lib-uncommons/v2/uncommons/rabbitmq"
 
+	"github.com/LerianStudio/matcher/internal/auth"
 	matchingPorts "github.com/LerianStudio/matcher/internal/matching/ports"
 	sharedRabbitmq "github.com/LerianStudio/matcher/internal/shared/adapters/rabbitmq"
 	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 var (
-	errRabbitMQChannelRequired = errors.New("rabbitmq channel is required")
-	errPublisherNotInit        = errors.New("rabbitmq publisher not initialized")
-	errEventRequired           = errors.New("match confirmed event is required")
-	errUnmatchedEventRequired  = errors.New("match unmatched event is required")
-	errIdempotencyKeyRequired  = errors.New("idempotency key is required")
-	errConfirmableSetupFailed  = errors.New("failed to setup confirmable publisher")
+	errRabbitMQChannelRequired        = errors.New("rabbitmq channel is required")
+	errPublisherNotInit               = errors.New("rabbitmq publisher not initialized")
+	errEventRequired                  = errors.New("match confirmed event is required")
+	errUnmatchedEventRequired         = errors.New("match unmatched event is required")
+	errIdempotencyKeyRequired         = errors.New("idempotency key is required")
+	errConfirmableSetupFailed         = errors.New("failed to setup confirmable publisher")
+	errTenantIDRequiredForMultiTenant = errors.New("tenant ID is required in multi-tenant mode")
+	errRabbitMQManagerRequired        = errors.New("rabbitmq multi-tenant manager is required")
 )
 
 const (
@@ -133,11 +137,18 @@ type amqpChannel interface {
 }
 
 // EventPublisher publishes matching events to RabbitMQ with publisher confirms.
+// It supports both single-tenant mode (using a shared confirmable publisher) and
+// multi-tenant mode (using per-tenant vhost isolation via RabbitMQMultiTenantManager).
 type EventPublisher struct {
 	conn                 *libRabbitmq.RabbitMQConnection
 	ch                   amqpChannel
 	confirmablePublisher *sharedRabbitmq.ConfirmablePublisher
-	propagator           propagation.TextMapPropagator
+
+	// rabbitmqManager provides per-tenant channels in multi-tenant mode.
+	// Nil when operating in single-tenant mode.
+	rabbitmqManager sharedRabbitmq.RabbitMQMultiTenantManager
+
+	propagator propagation.TextMapPropagator
 }
 
 // NewEventPublisherFromChannel creates a matching event publisher using a dedicated AMQP
@@ -147,6 +158,9 @@ type EventPublisher struct {
 //
 // The caller is responsible for opening the channel (e.g., conn.Connection.Channel())
 // and closing it when the publisher is no longer needed.
+//
+// This constructor is used in single-tenant mode. For multi-tenant mode with
+// vhost isolation, use NewEventPublisherMultiTenant instead.
 func NewEventPublisherFromChannel(
 	ch *amqp.Channel,
 	opts ...sharedRabbitmq.ConfirmablePublisherOption,
@@ -161,6 +175,27 @@ func NewEventPublisherFromChannel(
 	}
 
 	return newEventPublisher(nil, ch, otel.GetTextMapPropagator(), confirmablePublisher)
+}
+
+// NewEventPublisherMultiTenant creates an event publisher for multi-tenant mode
+// using per-tenant vhost isolation. Each tenant's messages are published to their
+// own RabbitMQ vhost via the provided manager.
+//
+// In this mode, broker confirms are not used because each publish gets a fresh
+// channel from the tenant pool. The X-Tenant-ID header is always included for
+// audit and tracing purposes.
+//
+// Layer 1 (Vhost Isolation): Provided by RabbitMQMultiTenantManager.GetChannel()
+// Layer 2 (Audit Header): X-Tenant-ID header added to all messages.
+func NewEventPublisherMultiTenant(manager sharedRabbitmq.RabbitMQMultiTenantManager) (*EventPublisher, error) {
+	if manager == nil {
+		return nil, errRabbitMQManagerRequired
+	}
+
+	return &EventPublisher{
+		rabbitmqManager: manager,
+		propagator:      otel.GetTextMapPropagator(),
+	}, nil
 }
 
 func newEventPublisher(
@@ -201,7 +236,12 @@ func (publisher *EventPublisher) PublishMatchConfirmed(
 	ctx context.Context,
 	event *sharedDomain.MatchConfirmedEvent,
 ) error {
-	if publisher == nil || publisher.confirmablePublisher == nil {
+	if publisher == nil {
+		return errPublisherNotInit
+	}
+
+	// Must have either single-tenant publisher or multi-tenant manager
+	if publisher.confirmablePublisher == nil && publisher.rabbitmqManager == nil {
 		return errPublisherNotInit
 	}
 
@@ -232,6 +272,13 @@ func (publisher *EventPublisher) PublishMatchConfirmed(
 		"idempotency_key": idempotencyKey.String(),
 	}
 
+	// Layer 2: Inject X-Tenant-ID header for audit/tracing (always, when available)
+	tenantID := strings.TrimSpace(auth.GetTenantID(ctx))
+	if tenantID != "" {
+		headers["X-Tenant-ID"] = tenantID
+	}
+
+	// Inject trace context
 	carrier := propagation.MapCarrier{}
 	publisher.propagator.Inject(ctx, carrier)
 
@@ -247,6 +294,12 @@ func (publisher *EventPublisher) PublishMatchConfirmed(
 		Headers:      headers,
 	}
 
+	// Layer 1: Choose publish path based on mode
+	if publisher.rabbitmqManager != nil {
+		return publisher.publishMultiTenant(ctx, routingKeyMatchConfirmed, tenantID, msg, span, logger, event.MatchID.String())
+	}
+
+	// Single-tenant mode: use confirmable publisher
 	if err := publisher.confirmablePublisher.Publish(ctx, sharedRabbitmq.ExchangeName, routingKeyMatchConfirmed, false, false, msg); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to publish match event with confirm", err)
 
@@ -265,7 +318,12 @@ func (publisher *EventPublisher) PublishMatchUnmatched(
 	ctx context.Context,
 	event *sharedDomain.MatchUnmatchedEvent,
 ) error {
-	if publisher == nil || publisher.confirmablePublisher == nil {
+	if publisher == nil {
+		return errPublisherNotInit
+	}
+
+	// Must have either single-tenant publisher or multi-tenant manager
+	if publisher.confirmablePublisher == nil && publisher.rabbitmqManager == nil {
 		return errPublisherNotInit
 	}
 
@@ -296,6 +354,13 @@ func (publisher *EventPublisher) PublishMatchUnmatched(
 		"idempotency_key": idempotencyKey.String(),
 	}
 
+	// Layer 2: Inject X-Tenant-ID header for audit/tracing (always, when available)
+	tenantID := strings.TrimSpace(auth.GetTenantID(ctx))
+	if tenantID != "" {
+		headers["X-Tenant-ID"] = tenantID
+	}
+
+	// Inject trace context
 	carrier := propagation.MapCarrier{}
 	publisher.propagator.Inject(ctx, carrier)
 
@@ -311,6 +376,12 @@ func (publisher *EventPublisher) PublishMatchUnmatched(
 		Headers:      headers,
 	}
 
+	// Layer 1: Choose publish path based on mode
+	if publisher.rabbitmqManager != nil {
+		return publisher.publishMultiTenant(ctx, routingKeyMatchUnmatched, tenantID, msg, span, logger, event.MatchID.String())
+	}
+
+	// Single-tenant mode: use confirmable publisher
 	if err := publisher.confirmablePublisher.Publish(ctx, sharedRabbitmq.ExchangeName, routingKeyMatchUnmatched, false, false, msg); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to publish match unmatched event with confirm", err)
 
@@ -324,9 +395,106 @@ func (publisher *EventPublisher) PublishMatchUnmatched(
 	return nil
 }
 
+// publishMultiTenant publishes a message using the multi-tenant manager (vhost isolation).
+func (publisher *EventPublisher) publishMultiTenant(
+	ctx context.Context,
+	routingKey string,
+	tenantID string,
+	msg amqp.Publishing,
+	span trace.Span,
+	logger libLog.Logger,
+	matchID string,
+) error {
+	if tenantID == "" {
+		return errTenantIDRequiredForMultiTenant
+	}
+
+	// Get tenant-specific channel from the manager
+	ch, err := publisher.rabbitmqManager.GetChannel(ctx, tenantID)
+	if err != nil {
+		if span != nil {
+			libOpentelemetry.HandleSpanError(span, "failed to get tenant channel", err)
+		}
+
+		if logger != nil {
+			logger.With(
+				libLog.Any("error", err.Error()),
+				libLog.Any("tenant_id", tenantID),
+			).Log(ctx, libLog.LevelError, "failed to get tenant channel")
+		}
+
+		return fmt.Errorf("get tenant channel: %w", err)
+	}
+
+	// Declare exchange on tenant's vhost (idempotent operation)
+	if err := ch.ExchangeDeclare(
+		sharedRabbitmq.ExchangeName,
+		sharedRabbitmq.ExchangeType,
+		true,  // durable
+		false, // autoDelete
+		false, // internal
+		false, // noWait
+		nil,
+	); err != nil {
+		if span != nil {
+			libOpentelemetry.HandleSpanError(span, "failed to declare exchange on tenant channel", err)
+		}
+
+		return fmt.Errorf("declare exchange on tenant channel: %w", err)
+	}
+
+	// Publish to tenant's vhost
+	if err := ch.PublishWithContext(
+		ctx,
+		sharedRabbitmq.ExchangeName,
+		routingKey,
+		false, // mandatory
+		false, // immediate
+		msg,
+	); err != nil {
+		if span != nil {
+			libOpentelemetry.HandleSpanError(span, "failed to publish to tenant vhost", err)
+		}
+
+		if logger != nil {
+			logger.With(
+				libLog.Any("error", err.Error()),
+				libLog.Any("tenant_id", tenantID),
+				libLog.Any("routing_key", routingKey),
+			).Log(ctx, libLog.LevelError, "failed to publish to tenant vhost")
+		}
+
+		return fmt.Errorf("publish to tenant vhost: %w", err)
+	}
+
+	if logger != nil {
+		logger.With(
+			libLog.Any("exchange", sharedRabbitmq.ExchangeName),
+			libLog.Any("routing_key", routingKey),
+			libLog.Any("message_id", msg.MessageId),
+			libLog.Any("match_id", matchID),
+			libLog.Any("tenant_id", tenantID),
+		).Log(ctx, libLog.LevelDebug, "published match event to tenant vhost")
+	}
+
+	return nil
+}
+
 // Close gracefully stops the internal confirmable publisher.
+// In multi-tenant mode (rabbitmqManager != nil), this is a no-op since
+// channels are managed by the tenant manager pool.
 func (publisher *EventPublisher) Close() error {
-	if publisher == nil || publisher.confirmablePublisher == nil {
+	if publisher == nil {
+		return nil
+	}
+
+	// Multi-tenant mode: channels are managed by the pool, nothing to close
+	if publisher.rabbitmqManager != nil {
+		return nil
+	}
+
+	// Single-tenant mode: close the confirmable publisher
+	if publisher.confirmablePublisher == nil {
 		return nil
 	}
 

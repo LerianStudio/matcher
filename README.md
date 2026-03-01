@@ -129,7 +129,7 @@ Key environment variables (from `config/.env.example`):
 - **Application (required)**: `ENV_NAME`, `LOG_LEVEL`, `SERVER_ADDRESS`, `HTTP_BODY_LIMIT_BYTES`
 - **CORS (optional)**: `CORS_ALLOWED_ORIGINS`, `CORS_ALLOWED_METHODS`, `CORS_ALLOWED_HEADERS`
 - **TLS (optional)**: `SERVER_TLS_CERT_FILE`, `SERVER_TLS_KEY_FILE`, `TLS_TERMINATED_UPSTREAM`
-- **Tenancy (required)**: `DEFAULT_TENANT_ID`, `DEFAULT_TENANT_SLUG`, `MULTI_TENANT_INFRA_ENABLED`
+- **Tenancy (required)**: `DEFAULT_TENANT_ID`, `DEFAULT_TENANT_SLUG`, `MULTI_TENANT_ENABLED`
 - **PostgreSQL (required)**: `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_SSLMODE`, pool config
 - **PostgreSQL Replica (optional)**: `POSTGRES_REPLICA_HOST`, `POSTGRES_REPLICA_PORT`, etc.
 - **Redis (required)**: `REDIS_HOST`, `REDIS_PASSWORD`, `REDIS_DB`, `REDIS_POOL_SIZE`, plus Sentinel/TLS options
