@@ -97,7 +97,7 @@ func newDynamicInfrastructureProvider(
 // GetRedisConnection returns the active Redis connection lease.
 //
 // TODO(multi-tenant): Add per-tenant Redis routing when lib-commons tenant-manager/redis is available.
-// Currently Redis uses a singleton connection with key prefixing via valkey.GetKeyFromContext.
+// Currently Redis uses a singleton connection with key prefixing via valkey.GetKeyContext.
 // Both single-tenant and multi-tenant modes share the same Redis connection; multi-tenant
 // isolation is achieved at the key level, not the connection level.
 func (provider *dynamicInfrastructureProvider) GetRedisConnection(_ context.Context) (*sharedPorts.RedisConnectionLease, error) {
@@ -268,7 +268,7 @@ func (provider *dynamicInfrastructureProvider) resolveMultiTenantResolver(
 		return nil, "", fmt.Errorf("resolve pg manager: %w", err)
 	}
 
-	tenantID := core.GetTenantID(ctx)
+	tenantID := core.GetTenantIDContext(ctx)
 	if tenantID == "" {
 		if explicit, ok := auth.LookupTenantID(ctx); ok {
 			tenantID = explicit

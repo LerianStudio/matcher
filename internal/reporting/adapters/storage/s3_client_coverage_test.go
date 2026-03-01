@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -209,4 +210,164 @@ func TestNewS3ClientCov_WithoutRegion(t *testing.T) {
 	client, err := NewS3Client(context.Background(), cfg)
 	require.NoError(t, err)
 	assert.NotNil(t, client)
+}
+
+// ============================================================================
+// Multi-Tenant S3 Key Prefix Tests
+// ============================================================================
+
+// TestGetTenantPrefixedKey_AddsTenantPrefix verifies that getTenantPrefixedKey
+// adds the tenant ID prefix when tenant context is present.
+func TestGetTenantPrefixedKey_AddsTenantPrefix(t *testing.T) {
+	t.Parallel()
+
+	tenantID := "550e8400-e29b-41d4-a716-446655440000"
+	key := "exports/report.csv"
+
+	// Use canonical lib-commons v4 context setter for tenant ID
+	ctx := core.SetTenantIDInContext(context.Background(), tenantID)
+
+	prefixedKey, err := getTenantPrefixedKey(ctx, key)
+	require.NoError(t, err)
+
+	// Key should be {tenantID}/{key}
+	assert.Equal(t, tenantID+"/"+key, prefixedKey)
+}
+
+// TestGetTenantPrefixedKey_EmptyTenantNoPrefix verifies that getTenantPrefixedKey
+// returns the key unchanged when an empty tenant ID is set in context.
+// core.GetTenantIDFromContext returns the empty string, so no prefix is added.
+func TestGetTenantPrefixedKey_EmptyTenantNoPrefix(t *testing.T) {
+	t.Parallel()
+
+	key := "exports/report.csv"
+
+	// Set empty tenant ID -- core.GetTenantIDFromContext returns empty,
+	// so s3.GetObjectStorageKeyForTenant returns key unchanged.
+	ctx := core.SetTenantIDInContext(context.Background(), "")
+
+	prefixedKey, err := getTenantPrefixedKey(ctx, key)
+	require.NoError(t, err)
+
+	// Key should have no tenant prefix
+	assert.Equal(t, key, prefixedKey)
+}
+
+// TestGetTenantPrefixedKey_StripsLeadingSlashes verifies that leading slashes
+// are stripped from the key before prefixing.
+func TestGetTenantPrefixedKey_StripsLeadingSlashes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		key         string
+		tenantID    string
+		expectedKey string
+	}{
+		{
+			name:        "key_with_leading_slash_and_tenant",
+			key:         "/exports/report.csv",
+			tenantID:    "550e8400-e29b-41d4-a716-446655440000",
+			expectedKey: "550e8400-e29b-41d4-a716-446655440000/exports/report.csv",
+		},
+		{
+			name:        "key_with_multiple_leading_slashes_and_tenant",
+			key:         "///exports/report.csv",
+			tenantID:    "550e8400-e29b-41d4-a716-446655440000",
+			expectedKey: "550e8400-e29b-41d4-a716-446655440000/exports/report.csv",
+		},
+		{
+			name:        "key_without_leading_slash_and_tenant",
+			key:         "exports/report.csv",
+			tenantID:    "550e8400-e29b-41d4-a716-446655440000",
+			expectedKey: "550e8400-e29b-41d4-a716-446655440000/exports/report.csv",
+		},
+		{
+			name:        "key_with_leading_slash_empty_tenant_no_prefix",
+			key:         "/exports/report.csv",
+			tenantID:    "",
+			expectedKey: "exports/report.csv", // Empty tenant: no prefix, just strip leading slashes
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Use canonical lib-commons v4 context setter for tenant ID
+			ctx := core.SetTenantIDInContext(context.Background(), tt.tenantID)
+
+			result, err := getTenantPrefixedKey(ctx, tt.key)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.expectedKey, result)
+		})
+	}
+}
+
+// TestGetTenantPrefixedKey_DifferentTenants_ProduceDifferentPaths verifies that
+// different tenants produce different S3 paths for the same key.
+func TestGetTenantPrefixedKey_DifferentTenants_ProduceDifferentPaths(t *testing.T) {
+	t.Parallel()
+
+	key := "exports/daily-report.csv"
+	tenant1 := "550e8400-e29b-41d4-a716-446655440001"
+	tenant2 := "550e8400-e29b-41d4-a716-446655440002"
+
+	// Use canonical lib-commons v4 context setter for tenant ID
+	ctx1 := core.SetTenantIDInContext(context.Background(), tenant1)
+	ctx2 := core.SetTenantIDInContext(context.Background(), tenant2)
+
+	path1, err := getTenantPrefixedKey(ctx1, key)
+	require.NoError(t, err)
+
+	path2, err := getTenantPrefixedKey(ctx2, key)
+	require.NoError(t, err)
+
+	// Paths should be different for different tenants
+	assert.NotEqual(t, path1, path2)
+
+	// Both should contain their respective tenant IDs
+	assert.Contains(t, path1, tenant1)
+	assert.Contains(t, path2, tenant2)
+
+	// Both should contain the original key
+	assert.Contains(t, path1, key)
+	assert.Contains(t, path2, key)
+}
+
+// TestGetTenantPrefixedKey_NoTenantInContext verifies that when no tenant ID is set
+// in context, the key is returned unchanged (no prefix added).
+func TestGetTenantPrefixedKey_NoTenantInContext(t *testing.T) {
+	t.Parallel()
+
+	key := "exports/report.csv"
+
+	// Background context has no tenant -- core.GetTenantIDFromContext returns empty
+	ctx := context.Background()
+
+	prefixedKey, err := getTenantPrefixedKey(ctx, key)
+	require.NoError(t, err)
+
+	// Key should be unchanged when no tenant is in context
+	assert.Equal(t, key, prefixedKey)
+}
+
+// TestGetTenantPrefixedKey_ExplicitTenantPrefix verifies that when a tenant ID
+// is explicitly set in context, the key gets prefixed.
+func TestGetTenantPrefixedKey_ExplicitTenantPrefix(t *testing.T) {
+	t.Parallel()
+
+	key := "exports/report.csv"
+	tenantID := "550e8400-e29b-41d4-a716-446655440000"
+
+	ctx := core.SetTenantIDInContext(context.Background(), tenantID)
+
+	prefixedKey, err := getTenantPrefixedKey(ctx, key)
+	require.NoError(t, err)
+
+	// Key should be prefixed with the tenant ID
+	assert.Equal(t, tenantID+"/"+key, prefixedKey)
+	assert.Contains(t, prefixedKey, key)
+	assert.NotEqual(t, key, prefixedKey)
 }

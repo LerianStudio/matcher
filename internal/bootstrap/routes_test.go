@@ -701,3 +701,49 @@ func TestParseSchemes(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildProtectedMiddlewares_IdempotencyOnly(t *testing.T) {
+	t.Parallel()
+
+	idempotency := func(c *fiber.Ctx) error { return c.Next() }
+
+	result := buildProtectedMiddlewares(idempotency, nil, nil)
+
+	assert.Len(t, result, 1)
+}
+
+func TestBuildProtectedMiddlewares_WithRateLimiter(t *testing.T) {
+	t.Parallel()
+
+	idempotency := func(c *fiber.Ctx) error { return c.Next() }
+	rateLimiter := func(c *fiber.Ctx) error { return c.Next() }
+
+	result := buildProtectedMiddlewares(idempotency, rateLimiter, nil)
+
+	assert.Len(t, result, 2)
+}
+
+func TestBuildProtectedMiddlewares_WithTenantDB(t *testing.T) {
+	t.Parallel()
+
+	idempotency := func(c *fiber.Ctx) error { return c.Next() }
+	tenantDB := func(c *fiber.Ctx) error { return c.Next() }
+
+	result := buildProtectedMiddlewares(idempotency, nil, tenantDB)
+
+	// Should have tenantDB + idempotency
+	assert.Len(t, result, 2)
+}
+
+func TestBuildProtectedMiddlewares_AllMiddlewares(t *testing.T) {
+	t.Parallel()
+
+	idempotency := func(c *fiber.Ctx) error { return c.Next() }
+	rateLimiter := func(c *fiber.Ctx) error { return c.Next() }
+	tenantDB := func(c *fiber.Ctx) error { return c.Next() }
+
+	result := buildProtectedMiddlewares(idempotency, rateLimiter, tenantDB)
+
+	// Should have tenantDB + idempotency + rateLimiter
+	assert.Len(t, result, 3)
+}

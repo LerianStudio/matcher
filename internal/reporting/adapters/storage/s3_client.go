@@ -20,6 +20,7 @@ import (
 	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	tms3 "github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/s3"
 
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
@@ -52,6 +53,15 @@ func DefaultSeaweedConfig(bucket string) S3Config {
 type S3Client struct {
 	s3     *s3.Client
 	bucket string
+}
+
+// getTenantPrefixedKey returns a tenant-prefixed object key using canonical lib-commons v4
+// s3.GetObjectStorageKeyForTenant.
+// In multi-tenant mode (tenantID in context): "{tenantID}/{key}"
+// In single-tenant mode (no tenant in context): "{key}" unchanged
+// Leading slashes are always stripped from the key for clean path construction.
+func getTenantPrefixedKey(ctx context.Context, key string) (string, error) {
+	return tms3.GetS3KeyStorageContext(ctx, key)
 }
 
 var (
@@ -168,6 +178,7 @@ func validateEndpointSecurity(endpoint string, allowInsecure bool) error {
 }
 
 // Upload stores content from a reader at the given key.
+// In multi-tenant mode, the key is automatically prefixed with the tenant ID.
 func (client *S3Client) Upload(
 	ctx context.Context,
 	key string,
@@ -187,9 +198,15 @@ func (client *S3Client) Upload(
 		return "", err
 	}
 
+	// Apply tenant prefix for multi-tenant isolation
+	prefixedKey, err := getTenantPrefixedKey(ctx, key)
+	if err != nil {
+		return "", fmt.Errorf("build tenant-prefixed key: %w", err)
+	}
+
 	input := &s3.PutObjectInput{
 		Bucket:               aws.String(client.bucket),
-		Key:                  aws.String(key),
+		Key:                  aws.String(prefixedKey),
 		Body:                 reader,
 		ContentType:          aws.String(contentType),
 		ServerSideEncryption: types.ServerSideEncryption(defaultServerSideEncryption),
@@ -209,6 +226,7 @@ func (client *S3Client) Upload(
 }
 
 // UploadWithOptions stores content with configurable storage options.
+// In multi-tenant mode, the key is automatically prefixed with the tenant ID.
 func (client *S3Client) UploadWithOptions(
 	ctx context.Context,
 	key string,
@@ -234,9 +252,15 @@ func (client *S3Client) UploadWithOptions(
 		opt(options)
 	}
 
+	// Apply tenant prefix for multi-tenant isolation
+	prefixedKey, err := getTenantPrefixedKey(ctx, key)
+	if err != nil {
+		return "", fmt.Errorf("build tenant-prefixed key: %w", err)
+	}
+
 	input := &s3.PutObjectInput{
 		Bucket:      aws.String(client.bucket),
-		Key:         aws.String(key),
+		Key:         aws.String(prefixedKey),
 		Body:        reader,
 		ContentType: aws.String(contentType),
 	}
@@ -265,6 +289,7 @@ func (client *S3Client) UploadWithOptions(
 }
 
 // Download retrieves content from the given key.
+// In multi-tenant mode, the key is automatically prefixed with the tenant ID.
 func (client *S3Client) Download(ctx context.Context, key string) (io.ReadCloser, error) {
 	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
 	ctx, span := tracer.Start(ctx, "s3.download")
@@ -279,9 +304,15 @@ func (client *S3Client) Download(ctx context.Context, key string) (io.ReadCloser
 		return nil, err
 	}
 
+	// Apply tenant prefix for multi-tenant isolation
+	prefixedKey, err := getTenantPrefixedKey(ctx, key)
+	if err != nil {
+		return nil, fmt.Errorf("build tenant-prefixed key: %w", err)
+	}
+
 	input := &s3.GetObjectInput{
 		Bucket: aws.String(client.bucket),
-		Key:    aws.String(key),
+		Key:    aws.String(prefixedKey),
 	}
 
 	result, err := client.s3.GetObject(ctx, input)
@@ -302,6 +333,7 @@ func (client *S3Client) Download(ctx context.Context, key string) (io.ReadCloser
 }
 
 // Delete removes an object by key.
+// In multi-tenant mode, the key is automatically prefixed with the tenant ID.
 func (client *S3Client) Delete(ctx context.Context, key string) error {
 	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
 	ctx, span := tracer.Start(ctx, "s3.delete")
@@ -316,9 +348,15 @@ func (client *S3Client) Delete(ctx context.Context, key string) error {
 		return err
 	}
 
+	// Apply tenant prefix for multi-tenant isolation
+	prefixedKey, err := getTenantPrefixedKey(ctx, key)
+	if err != nil {
+		return fmt.Errorf("build tenant-prefixed key: %w", err)
+	}
+
 	input := &s3.DeleteObjectInput{
 		Bucket: aws.String(client.bucket),
-		Key:    aws.String(key),
+		Key:    aws.String(prefixedKey),
 	}
 
 	if _, err := client.s3.DeleteObject(ctx, input); err != nil {
@@ -335,6 +373,7 @@ func (client *S3Client) Delete(ctx context.Context, key string) error {
 }
 
 // GeneratePresignedURL creates a time-limited download URL.
+// In multi-tenant mode, the key is automatically prefixed with the tenant ID.
 func (client *S3Client) GeneratePresignedURL(
 	ctx context.Context,
 	key string,
@@ -353,11 +392,17 @@ func (client *S3Client) GeneratePresignedURL(
 		return "", err
 	}
 
+	// Apply tenant prefix for multi-tenant isolation
+	prefixedKey, err := getTenantPrefixedKey(ctx, key)
+	if err != nil {
+		return "", fmt.Errorf("build tenant-prefixed key: %w", err)
+	}
+
 	presigner := s3.NewPresignClient(client.s3)
 
 	input := &s3.GetObjectInput{
 		Bucket: aws.String(client.bucket),
-		Key:    aws.String(key),
+		Key:    aws.String(prefixedKey),
 	}
 
 	result, err := presigner.PresignGetObject(ctx, input, s3.WithPresignExpires(expiry))
@@ -373,6 +418,7 @@ func (client *S3Client) GeneratePresignedURL(
 }
 
 // Exists checks if an object exists at the given key.
+// In multi-tenant mode, the key is automatically prefixed with the tenant ID.
 func (client *S3Client) Exists(ctx context.Context, key string) (bool, error) {
 	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
 	ctx, span := tracer.Start(ctx, "s3.exists")
@@ -387,9 +433,15 @@ func (client *S3Client) Exists(ctx context.Context, key string) (bool, error) {
 		return false, err
 	}
 
+	// Apply tenant prefix for multi-tenant isolation
+	prefixedKey, err := getTenantPrefixedKey(ctx, key)
+	if err != nil {
+		return false, fmt.Errorf("build tenant-prefixed key: %w", err)
+	}
+
 	input := &s3.HeadObjectInput{
 		Bucket: aws.String(client.bucket),
-		Key:    aws.String(key),
+		Key:    aws.String(prefixedKey),
 	}
 
 	if _, err := client.s3.HeadObject(ctx, input); err != nil {

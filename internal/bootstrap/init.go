@@ -1451,7 +1451,7 @@ func initMultiTenantDBHandler(
 		}
 
 		mid := tmmiddleware.NewTenantMiddleware(
-			tmmiddleware.WithPostgresManager(mgr),
+			tmmiddleware.WithPG(mgr),
 		)
 
 		return mid.WithTenantDB(fiberCtx)
