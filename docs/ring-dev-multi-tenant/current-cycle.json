@@ -1,0 +1,38 @@
+{
+  "cycle": "multi-tenant",
+  "service_type": "product",
+  "stack": {
+    "postgresql": true,
+    "mongodb": false,
+    "redis": true,
+    "rabbitmq": true,
+    "s3": true
+  },
+  "gates": {
+    "0": "PASS",
+    "1": "PASS",
+    "1.5": "PASS",
+    "2": "PASS",
+    "3": "PASS",
+    "4": "PASS",
+    "5": "PASS",
+    "5.5": "SKIP",
+    "6": "PASS",
+    "7": "PASS",
+    "8": "PASS",
+    "9": "PASS",
+    "10": "PASS",
+    "11": "PASS"
+  },
+  "current_gate": "COMPLETE",
+  "compliance_audit": {
+    "config_vars": "COMPLIANT",
+    "middleware": "COMPLIANT",
+    "repositories": "COMPLIANT",
+    "redis_keys": "COMPLIANT",
+    "s3_keys": "COMPLIANT",
+    "rabbitmq": "COMPLIANT",
+    "circuit_breaker": "COMPLIANT",
+    "backward_compat": "COMPLIANT"
+  }
+}
