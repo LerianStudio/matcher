@@ -15,6 +15,29 @@ import (
 )
 
 // NewTenantOwnershipVerifier creates a new verifier using the configuration query use case.
+//
+// SECURITY AUDIT NOTE (Taura Security, 2026-03):
+// This verifier intentionally does NOT check context active status (unlike the matching,
+// ingestion, and reporting verifiers which DO enforce ErrContextNotActive for paused contexts).
+//
+// Rationale: configuration endpoints must remain accessible regardless of context status so
+// that administrators can re-activate PAUSED contexts, read/update configuration on any
+// context, and delete contexts in any non-archived state. If the configuration verifier
+// blocked paused contexts, a PAUSED context would become permanently irrecoverable because
+// the PATCH endpoint (used to set status=ACTIVE) would itself be blocked.
+//
+// The matching, ingestion, and reporting verifiers correctly enforce the active-status
+// gate because those are operational endpoints that should only process data when the
+// context is actively running.
+//
+// Domain state machine (see reconciliation_context.go):
+//
+//	DRAFT   -> ACTIVE                   (Activate)
+//	ACTIVE  -> PAUSED                   (Pause)
+//	ACTIVE  -> ARCHIVED                 (Archive)
+//	PAUSED  -> ACTIVE                   (Activate)  <-- this is the recovery path
+//	PAUSED  -> ARCHIVED                 (Archive)
+//	ARCHIVED -> (terminal, no transitions out)
 func NewTenantOwnershipVerifier(queryUseCase *query.UseCase) sharedhttp.TenantOwnershipVerifier {
 	return func(ctx context.Context, tenantID, contextID uuid.UUID) error {
 		if queryUseCase == nil {
@@ -37,6 +60,10 @@ func NewTenantOwnershipVerifier(queryUseCase *query.UseCase) sharedhttp.TenantOw
 		if reconciliationCtx.TenantID != tenantID {
 			return sharedhttp.ErrContextNotOwned
 		}
+
+		// NOTE: No active-status check here. See the security audit note above.
+		// Configuration endpoints must remain accessible for all non-archived states
+		// to allow recovery from PAUSED status.
 
 		return nil
 	}

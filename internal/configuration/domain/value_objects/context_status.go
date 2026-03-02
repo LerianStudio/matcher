@@ -10,7 +10,23 @@ import (
 var ErrInvalidContextStatus = errors.New("invalid context status")
 
 // ContextStatus defines the lifecycle status of a reconciliation context.
-// The state machine is: DRAFT -> ACTIVE <-> PAUSED -> ARCHIVED.
+//
+// State machine transitions (enforced by domain entity methods):
+//
+//	#  From       Trigger       To
+//	-  ------     ----------    ----------
+//	1  DRAFT      Activate()    ACTIVE
+//	2  ACTIVE     Pause()       PAUSED
+//	3  (same)     Archive()     ARCHIVED
+//	4  PAUSED     Activate()    ACTIVE      (recovery path -- must never be blocked by verifiers)
+//	5  (same)     Archive()     ARCHIVED
+//	6  ARCHIVED   --            --          terminal state, no outbound transitions
+//
+// SECURITY NOTE: The PAUSED->ACTIVE transition is the recovery path that prevents
+// irrecoverable contexts. The configuration verifier intentionally does NOT enforce
+// active-status checks to keep this path open. Only matching/ingestion/reporting
+// verifiers gate on active status.
+//
 // @Description Lifecycle status of a reconciliation context
 // @Enum DRAFT,ACTIVE,PAUSED,ARCHIVED
 // swagger:enum ContextStatus

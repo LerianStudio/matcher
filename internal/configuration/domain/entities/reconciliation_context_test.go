@@ -641,6 +641,207 @@ func TestReconciliationContext_StateTransitionGuards(t *testing.T) {
 	})
 }
 
+// ---------------------------------------------------------------------------
+// Security audit tests (Taura Security, 2026-03)
+//
+// These tests exhaustively verify the PAUSED -> ACTIVE recovery path and
+// prove that paused contexts can be updated (including status change) through
+// the domain entity's Update method, which is the code path used by the
+// configuration UpdateContext handler.
+// ---------------------------------------------------------------------------
+
+// TestPausedContextRecoveryPath_SecurityAudit proves the complete recovery
+// scenario: ACTIVE -> PAUSED -> ACTIVE via Update() with status=ACTIVE.
+// This is the exact code path exercised by PATCH /v1/config/contexts/:contextId
+// with body {"status": "ACTIVE"}.
+func TestPausedContextRecoveryPath_SecurityAudit(t *testing.T) {
+	t.Parallel()
+
+	tenantID := uuid.New()
+	contextEntity := createActiveTestContextEntity(t, tenantID)
+
+	// Step 1: Pause the context (simulates an admin pausing for maintenance).
+	require.NoError(t, contextEntity.Pause(context.Background()))
+	require.Equal(t, value_objects.ContextStatusPaused, contextEntity.Status)
+
+	// Step 2: Re-activate via Update() (simulates the PATCH handler).
+	activeStatus := value_objects.ContextStatusActive
+	err := contextEntity.Update(context.Background(), UpdateReconciliationContextInput{
+		Status: &activeStatus,
+	})
+	require.NoError(t, err, "PAUSED context must be recoverable via Update(status=ACTIVE)")
+	assert.Equal(t, value_objects.ContextStatusActive, contextEntity.Status)
+}
+
+// TestPausedContextCanBeUpdatedWithNonStatusFields proves that non-status
+// fields (name, type, interval, fee settings) can be modified on a paused
+// context. This ensures administrators can fix configuration issues on paused
+// contexts before re-activating them.
+func TestPausedContextCanBeUpdatedWithNonStatusFields(t *testing.T) {
+	t.Parallel()
+
+	tenantID := uuid.New()
+	contextEntity := createActiveTestContextEntity(t, tenantID)
+	require.NoError(t, contextEntity.Pause(context.Background()))
+	require.Equal(t, value_objects.ContextStatusPaused, contextEntity.Status)
+
+	// Update name on a paused context.
+	newName := "Renamed While Paused"
+	err := contextEntity.Update(context.Background(), UpdateReconciliationContextInput{
+		Name: &newName,
+	})
+	require.NoError(t, err, "PAUSED context must accept name updates")
+	assert.Equal(t, "Renamed While Paused", contextEntity.Name)
+	assert.Equal(t, value_objects.ContextStatusPaused, contextEntity.Status, "status must remain PAUSED")
+
+	// Update interval on a paused context.
+	newInterval := "0 */12 * * *"
+	err = contextEntity.Update(context.Background(), UpdateReconciliationContextInput{
+		Interval: &newInterval,
+	})
+	require.NoError(t, err, "PAUSED context must accept interval updates")
+	assert.Equal(t, "0 */12 * * *", contextEntity.Interval)
+}
+
+// TestPausedContextCanBeArchived proves the PAUSED -> ARCHIVED path works,
+// which is the other valid outbound transition from PAUSED.
+func TestPausedContextCanBeArchived(t *testing.T) {
+	t.Parallel()
+
+	tenantID := uuid.New()
+	contextEntity := createActiveTestContextEntity(t, tenantID)
+	require.NoError(t, contextEntity.Pause(context.Background()))
+
+	archivedStatus := value_objects.ContextStatusArchived
+	err := contextEntity.Update(context.Background(), UpdateReconciliationContextInput{
+		Status: &archivedStatus,
+	})
+	require.NoError(t, err, "PAUSED -> ARCHIVED transition must succeed")
+	assert.Equal(t, value_objects.ContextStatusArchived, contextEntity.Status)
+}
+
+// TestContextStateMachine_AllValidTransitions exhaustively tests every valid
+// state transition defined in the domain state machine. This serves as the
+// authoritative test for the state machine documentation in context_status.go.
+func TestContextStateMachine_AllValidTransitions(t *testing.T) {
+	t.Parallel()
+
+	tenantID := uuid.New()
+
+	tests := []struct {
+		name       string
+		fromStatus value_objects.ContextStatus
+		toStatus   value_objects.ContextStatus
+	}{
+		{"DRAFT -> ACTIVE", value_objects.ContextStatusDraft, value_objects.ContextStatusActive},
+		{"ACTIVE -> PAUSED", value_objects.ContextStatusActive, value_objects.ContextStatusPaused},
+		{"ACTIVE -> ARCHIVED", value_objects.ContextStatusActive, value_objects.ContextStatusArchived},
+		{"PAUSED -> ACTIVE (recovery)", value_objects.ContextStatusPaused, value_objects.ContextStatusActive},
+		{"PAUSED -> ARCHIVED", value_objects.ContextStatusPaused, value_objects.ContextStatusArchived},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Build context entity in the desired fromStatus.
+			contextEntity := createTestContextEntity(t, tenantID)
+
+			switch tt.fromStatus {
+			case value_objects.ContextStatusDraft:
+				// Already in DRAFT from constructor.
+			case value_objects.ContextStatusActive:
+				require.NoError(t, contextEntity.Activate(context.Background()))
+			case value_objects.ContextStatusPaused:
+				require.NoError(t, contextEntity.Activate(context.Background()))
+				require.NoError(t, contextEntity.Pause(context.Background()))
+			case value_objects.ContextStatusArchived:
+				require.NoError(t, contextEntity.Activate(context.Background()))
+				require.NoError(t, contextEntity.Archive(context.Background()))
+			}
+
+			require.Equal(t, tt.fromStatus, contextEntity.Status)
+
+			// Apply the transition via Update().
+			err := contextEntity.Update(context.Background(), UpdateReconciliationContextInput{
+				Status: &tt.toStatus,
+			})
+			require.NoError(t, err, "%s -> %s must be a valid transition", tt.fromStatus, tt.toStatus)
+			assert.Equal(t, tt.toStatus, contextEntity.Status)
+		})
+	}
+}
+
+// TestContextStateMachine_AllInvalidTransitions exhaustively tests every
+// invalid state transition to ensure the guards are watertight.
+func TestContextStateMachine_AllInvalidTransitions(t *testing.T) {
+	t.Parallel()
+
+	tenantID := uuid.New()
+
+	tests := []struct {
+		name       string
+		fromStatus value_objects.ContextStatus
+		toStatus   value_objects.ContextStatus
+	}{
+		{"DRAFT -> DRAFT", value_objects.ContextStatusDraft, value_objects.ContextStatusDraft},
+		{"DRAFT -> PAUSED", value_objects.ContextStatusDraft, value_objects.ContextStatusPaused},
+		{"DRAFT -> ARCHIVED", value_objects.ContextStatusDraft, value_objects.ContextStatusArchived},
+		{"ACTIVE -> DRAFT", value_objects.ContextStatusActive, value_objects.ContextStatusDraft},
+		{"ACTIVE -> ACTIVE", value_objects.ContextStatusActive, value_objects.ContextStatusActive},
+		{"PAUSED -> DRAFT", value_objects.ContextStatusPaused, value_objects.ContextStatusDraft},
+		{"PAUSED -> PAUSED", value_objects.ContextStatusPaused, value_objects.ContextStatusPaused},
+		{"ARCHIVED -> DRAFT", value_objects.ContextStatusArchived, value_objects.ContextStatusDraft},
+		{"ARCHIVED -> ACTIVE", value_objects.ContextStatusArchived, value_objects.ContextStatusActive},
+		{"ARCHIVED -> PAUSED", value_objects.ContextStatusArchived, value_objects.ContextStatusPaused},
+		{"ARCHIVED -> ARCHIVED", value_objects.ContextStatusArchived, value_objects.ContextStatusArchived},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Build context entity in the desired fromStatus.
+			contextEntity := createTestContextEntity(t, tenantID)
+
+			switch tt.fromStatus {
+			case value_objects.ContextStatusDraft:
+				// Already in DRAFT from constructor.
+			case value_objects.ContextStatusActive:
+				require.NoError(t, contextEntity.Activate(context.Background()))
+			case value_objects.ContextStatusPaused:
+				require.NoError(t, contextEntity.Activate(context.Background()))
+				require.NoError(t, contextEntity.Pause(context.Background()))
+			case value_objects.ContextStatusArchived:
+				require.NoError(t, contextEntity.Activate(context.Background()))
+				require.NoError(t, contextEntity.Archive(context.Background()))
+			}
+
+			require.Equal(t, tt.fromStatus, contextEntity.Status)
+
+			// Apply the invalid transition.
+			err := contextEntity.Update(context.Background(), UpdateReconciliationContextInput{
+				Status: &tt.toStatus,
+			})
+
+			switch {
+			case tt.fromStatus == value_objects.ContextStatusArchived:
+				// Archived contexts reject ALL updates (not just status changes).
+				require.ErrorIs(t, err, ErrArchivedContextCannotBeModified,
+					"%s -> %s must be rejected for archived contexts", tt.fromStatus, tt.toStatus)
+			case tt.toStatus == value_objects.ContextStatusDraft:
+				// DRAFT is not a valid target in updateStatus()'s switch (no case for it),
+				// so it falls through to the default branch returning ErrContextStatusInvalid.
+				require.ErrorIs(t, err, ErrContextStatusInvalid,
+					"%s -> %s must be rejected as invalid target status", tt.fromStatus, tt.toStatus)
+			default:
+				require.ErrorIs(t, err, ErrInvalidStateTransition,
+					"%s -> %s must be an invalid transition", tt.fromStatus, tt.toStatus)
+			}
+		})
+	}
+}
+
 func TestReconciliationContext_NilReceiverGuards(t *testing.T) {
 	t.Parallel()
 
