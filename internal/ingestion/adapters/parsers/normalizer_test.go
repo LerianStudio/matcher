@@ -3,12 +3,14 @@
 package parsers
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
@@ -718,4 +720,302 @@ func TestNormalizeTransactionMetadataNoExtraFields(t *testing.T) {
 
 	// All fields are mapped, so metadata should be empty
 	require.Empty(t, transaction.Metadata)
+}
+
+func TestSanitizeFormulaInjection(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"equals prefix sanitized", "=HYPERLINK(\"http://evil.com\",\"Click\")", "'=HYPERLINK(\"http://evil.com\",\"Click\")"},
+		{"plus formula sanitized", "+cmd|'/c calc'!A0", "'+cmd|'/c calc'!A0"},
+		{"minus formula sanitized", "-cmd|'/c calc'!A0", "'-cmd|'/c calc'!A0"},
+		{"at symbol sanitized", "@SUM(1+1)", "'@SUM(1+1)"},
+		{"tab prefix sanitized", "\tdata", "'\tdata"},
+		{"carriage return sanitized", "\rdata", "'\rdata"},
+		{"positive numeric preserved", "+100.50", "+100.50"},
+		{"negative numeric preserved", "-200.00", "-200.00"},
+		{"positive integer preserved", "+42", "+42"},
+		{"negative integer preserved", "-42", "-42"},
+		{"scientific notation preserved", "+1.5e3", "+1.5e3"},
+		{"normal text unchanged", "Normal text", "Normal text"},
+		{"empty string unchanged", "", ""},
+		{"plain number unchanged", "12345", "12345"},
+		{"embedded equals unchanged", "a=b", "a=b"},
+		{"embedded plus unchanged", "a+b", "a+b"},
+		{"single plus sanitized", "+", "'+"},
+		{"single minus sanitized", "-", "'-"},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := sanitizeFormulaInjection(testCase.input)
+			assert.Equal(t, testCase.expected, result)
+		})
+	}
+}
+
+func TestGetStringValue_SanitizesFormulas(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		row      map[string]any
+		field    string
+		expected string
+		ok       bool
+	}{
+		{
+			name:     "equals formula sanitized",
+			row:      map[string]any{"desc": "=HYPERLINK(\"http://evil.com\")"},
+			field:    "desc",
+			expected: "'=HYPERLINK(\"http://evil.com\")",
+			ok:       true,
+		},
+		{
+			name:     "at formula sanitized",
+			row:      map[string]any{"note": "@SUM(A1)"},
+			field:    "note",
+			expected: "'@SUM(A1)",
+			ok:       true,
+		},
+		{
+			name:     "plus formula sanitized",
+			row:      map[string]any{"val": "+cmd|calc"},
+			field:    "val",
+			expected: "'+cmd|calc",
+			ok:       true,
+		},
+		{
+			name:     "negative number preserved",
+			row:      map[string]any{"amount": "-100.50"},
+			field:    "amount",
+			expected: "-100.50",
+			ok:       true,
+		},
+		{
+			name:     "positive number preserved",
+			row:      map[string]any{"amount": "+200.00"},
+			field:    "amount",
+			expected: "+200.00",
+			ok:       true,
+		},
+		{
+			name:     "normal text preserved",
+			row:      map[string]any{"name": "Alice"},
+			field:    "name",
+			expected: "Alice",
+			ok:       true,
+		},
+		{
+			name:     "missing field returns false",
+			row:      map[string]any{"name": "Alice"},
+			field:    "missing",
+			expected: "",
+			ok:       false,
+		},
+		{
+			name:     "nil value returns false",
+			row:      map[string]any{"name": nil},
+			field:    "name",
+			expected: "",
+			ok:       false,
+		},
+		{
+			name:     "tab prefix stripped by TrimSpace",
+			row:      map[string]any{"val": "\tmalicious"},
+			field:    "val",
+			expected: "malicious",
+			ok:       true,
+		},
+		{
+			name:     "carriage return prefix stripped by TrimSpace",
+			row:      map[string]any{"val": "\revil"},
+			field:    "val",
+			expected: "evil",
+			ok:       true,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result, ok := getStringValue(testCase.row, testCase.field)
+			assert.Equal(t, testCase.ok, ok)
+			assert.Equal(t, testCase.expected, result)
+		})
+	}
+}
+
+func TestBuildMetadata_SanitizesStringValues(t *testing.T) {
+	t.Parallel()
+
+	t.Run("formula strings in metadata are sanitized", func(t *testing.T) {
+		t.Parallel()
+
+		row := map[string]any{
+			"safe_field":    "normal text",
+			"formula_field": "=HYPERLINK(\"http://evil.com\")",
+			"at_field":      "@SUM(1+1)",
+			"plus_field":    "+cmd|calc",
+			"minus_field":   "-cmd|calc",
+			"tab_field":     "\tdata",
+			"cr_field":      "\rdata",
+			"numeric_field": "-100.50",
+			"int_field":     42,
+		}
+		mappedFields := map[string]bool{}
+
+		metadata := buildMetadata(row, mappedFields)
+
+		assert.Equal(t, "normal text", metadata["safe_field"])
+		assert.Equal(t, "'=HYPERLINK(\"http://evil.com\")", metadata["formula_field"])
+		assert.Equal(t, "'@SUM(1+1)", metadata["at_field"])
+		assert.Equal(t, "'+cmd|calc", metadata["plus_field"])
+		assert.Equal(t, "'-cmd|calc", metadata["minus_field"])
+		// Tab and CR are stripped by TrimSpace, leaving just "data"
+		assert.Equal(t, "data", metadata["tab_field"])
+		assert.Equal(t, "data", metadata["cr_field"])
+		// Numeric strings that are valid numbers should NOT be sanitized
+		assert.Equal(t, "-100.50", metadata["numeric_field"])
+		// Non-string values pass through unchanged
+		assert.Equal(t, 42, metadata["int_field"])
+	})
+
+	t.Run("non-string values not affected by sanitization", func(t *testing.T) {
+		t.Parallel()
+
+		row := map[string]any{
+			"bool_val":  true,
+			"int_val":   123,
+			"float_val": 3.14,
+		}
+		mappedFields := map[string]bool{}
+
+		metadata := buildMetadata(row, mappedFields)
+
+		assert.Equal(t, true, metadata["bool_val"])
+		assert.Equal(t, 123, metadata["int_val"])
+		assert.Equal(t, 3.14, metadata["float_val"])
+	})
+
+	t.Run("leading whitespace before formula chars is trimmed then sanitized", func(t *testing.T) {
+		t.Parallel()
+
+		row := map[string]any{
+			"formula_with_space": " =HYPERLINK(\"http://evil.com\")",
+			"at_with_space":     " @evil",
+			"plus_with_space":   " +cmd",
+			"minus_with_space":  " -cmd",
+		}
+		mappedFields := map[string]bool{}
+
+		metadata := buildMetadata(row, mappedFields)
+
+		// Leading space is trimmed, then the formula char triggers sanitization
+		assert.Equal(t, "'=HYPERLINK(\"http://evil.com\")", metadata["formula_with_space"])
+		assert.Equal(t, "'@evil", metadata["at_with_space"])
+		assert.Equal(t, "'+cmd", metadata["plus_with_space"])
+		assert.Equal(t, "'-cmd", metadata["minus_with_space"])
+	})
+
+	t.Run("json.Number values are sanitized", func(t *testing.T) {
+		t.Parallel()
+
+		row := map[string]any{
+			"json_num_safe":    json.Number("12345"),
+			"json_num_formula": json.Number("=MALICIOUS"),
+		}
+		mappedFields := map[string]bool{}
+
+		metadata := buildMetadata(row, mappedFields)
+
+		// Safe numeric json.Number passes through unchanged
+		assert.Equal(t, "12345", metadata["json_num_safe"])
+		// Formula-prefixed json.Number gets sanitized
+		assert.Equal(t, "'=MALICIOUS", metadata["json_num_formula"])
+	})
+}
+
+func TestJSONParser_FormulaInjectionSanitized(t *testing.T) {
+	t.Parallel()
+
+	parser := NewJSONParser()
+	ctx := t.Context()
+
+	job, err := entities.NewIngestionJob(ctx, uuid.New(), uuid.New(), "file.json", 100)
+	require.NoError(t, err)
+
+	fieldMap := &shared.FieldMap{Mapping: map[string]any{
+		"external_id": "id",
+		"amount":      "amount",
+		"currency":    "currency",
+		"date":        "date",
+		"description": "desc",
+	}}
+
+	jsonData := `[{"id":"=MALICIOUS_ID","amount":"100.00","currency":"USD","date":"2024-01-15","desc":"=HYPERLINK(\"http://evil.com\",\"Click\")","extra":"@SUM(1+1)"}]`
+
+	result, err := parser.Parse(ctx, strings.NewReader(jsonData), job, fieldMap)
+	require.NoError(t, err)
+	require.Len(t, result.Transactions, 1)
+	require.Empty(t, result.Errors)
+
+	tx := result.Transactions[0]
+	// external_id with formula prefix should be sanitized via getStringValue.
+	// This is a behavioral change for JSON/XML (CSV was already sanitized at
+	// parse time). Formula-prefixed external IDs get a ' prefix, which affects
+	// dedup hash calculation — intentional security hardening.
+	assert.Equal(t, "'=MALICIOUS_ID", tx.ExternalID)
+	// Description should be sanitized via getStringValue
+	assert.Equal(t, "'=HYPERLINK(\"http://evil.com\",\"Click\")", tx.Description)
+	// Metadata string values should be sanitized via buildMetadata
+	assert.Equal(t, "'@SUM(1+1)", tx.Metadata["extra"])
+}
+
+func TestXMLParser_FormulaInjectionSanitized(t *testing.T) {
+	t.Parallel()
+
+	parser := NewXMLParser()
+	ctx := t.Context()
+
+	job, err := entities.NewIngestionJob(ctx, uuid.New(), uuid.New(), "file.xml", 100)
+	require.NoError(t, err)
+
+	fieldMap := &shared.FieldMap{Mapping: map[string]any{
+		"external_id": "external_id",
+		"amount":      "amount",
+		"currency":    "currency",
+		"date":        "date",
+		"description": "description",
+	}}
+
+	xmlData := `<transactions><transaction>` +
+		`<external_id>=MALICIOUS_ID</external_id>` +
+		`<amount>100.00</amount>` +
+		`<currency>USD</currency>` +
+		`<date>2024-01-15</date>` +
+		`<description>=HYPERLINK("http://evil.com","Click")</description>` +
+		`<extra>@SUM(1+1)</extra>` +
+		`</transaction></transactions>`
+
+	result, err := parser.Parse(ctx, strings.NewReader(xmlData), job, fieldMap)
+	require.NoError(t, err)
+	require.Len(t, result.Transactions, 1)
+	require.Empty(t, result.Errors)
+
+	tx := result.Transactions[0]
+	// external_id with formula prefix should be sanitized via getStringValue.
+	// Same behavioral change as JSON — see comment in normalizeTransaction().
+	assert.Equal(t, "'=MALICIOUS_ID", tx.ExternalID)
+	// Description should be sanitized via getStringValue
+	assert.Equal(t, "'=HYPERLINK(\"http://evil.com\",\"Click\")", tx.Description)
+	// Metadata string values should be sanitized via buildMetadata
+	assert.Equal(t, "'@SUM(1+1)", tx.Metadata["extra"])
 }

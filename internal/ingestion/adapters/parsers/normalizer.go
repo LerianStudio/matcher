@@ -12,6 +12,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
 	"github.com/LerianStudio/matcher/internal/ingestion/ports"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	"github.com/LerianStudio/matcher/internal/shared/sanitize"
 )
 
 var (
@@ -98,6 +99,11 @@ func normalizeTransaction(
 		}
 	}
 
+	// NOTE: external_id is sanitized against formula injection via getStringValue.
+	// For CSV this is backward-compatible (previously sanitized at parse time).
+	// For JSON/XML this is a behavioral change — external IDs starting with
+	// formula characters (=, @, non-numeric +/-) now get a ' prefix, which
+	// affects dedup hash calculation. This is intentional security hardening.
 	externalID, parseErr := requiredString(row, mapping, "external_id", rowNumber)
 	if parseErr != nil {
 		return nil, parseErr
@@ -221,20 +227,37 @@ func parseCurrency(
 	return currency, nil
 }
 
+// sanitizeFormulaInjection delegates to the shared sanitize package to prevent
+// CSV/spreadsheet formula injection. See sanitize.SanitizeFormulaInjection for
+// full documentation.
+func sanitizeFormulaInjection(value string) string {
+	return sanitize.SanitizeFormulaInjection(value)
+}
+
+// getStringValue extracts a string value from a row map, trims whitespace,
+// and sanitizes against formula injection. Note: sanitization runs before
+// downstream parsing (e.g., decimal.NewFromString for amount fields), so
+// formula-prefixed values like "=100.50" become "'=100.50" and will fail
+// type-specific parsing with a generic error. This is intentional — formula
+// characters in numeric fields indicate malformed or malicious input.
 func getStringValue(row map[string]any, fieldName string) (string, bool) {
 	value, ok := row[fieldName]
 	if !ok || value == nil {
 		return "", false
 	}
 
+	var result string
+
 	switch typed := value.(type) {
 	case string:
-		return strings.TrimSpace(typed), true
+		result = strings.TrimSpace(typed)
 	case json.Number:
-		return strings.TrimSpace(typed.String()), true
+		result = strings.TrimSpace(typed.String())
 	default:
-		return strings.TrimSpace(fmt.Sprintf("%v", typed)), true
+		result = strings.TrimSpace(fmt.Sprintf("%v", typed))
 	}
+
+	return sanitizeFormulaInjection(result), true
 }
 
 // dateLayouts contains supported date formats in order of parsing priority.
@@ -339,6 +362,7 @@ func buildMappedFieldSet(mapping map[string]string) map[string]bool {
 
 // buildMetadata creates a metadata map from the raw row data, excluding fields
 // that are already persisted in dedicated transaction columns.
+// String values are sanitized against formula injection before storage.
 func buildMetadata(row map[string]any, mappedFields map[string]bool) map[string]any {
 	if row == nil {
 		return map[string]any{}
@@ -350,7 +374,14 @@ func buildMetadata(row map[string]any, mappedFields map[string]bool) map[string]
 			continue
 		}
 
-		metadata[key] = value
+		switch v := value.(type) {
+		case string:
+			metadata[key] = sanitizeFormulaInjection(strings.TrimSpace(v))
+		case json.Number:
+			metadata[key] = sanitizeFormulaInjection(strings.TrimSpace(v.String()))
+		default:
+			metadata[key] = value
+		}
 	}
 
 	return metadata
