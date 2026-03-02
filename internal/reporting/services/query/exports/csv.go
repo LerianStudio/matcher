@@ -13,16 +13,13 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
+	"github.com/LerianStudio/matcher/internal/shared/sanitize"
 )
 
 // ErrSummaryRequired is returned when a summary is required but not provided.
 var ErrSummaryRequired = errors.New("summary is required")
 
 const variancePctDecimalPlaces = 2
-
-// minSignedNumericLength is the minimum length for a string to contain
-// a sign character (+/-) followed by at least one digit.
-const minSignedNumericLength = 2
 
 func errWriteCSVHeader(err error) error {
 	return fmt.Errorf("write csv header: %w", err)
@@ -231,33 +228,11 @@ func BuildVarianceCSV(rows []*entities.VarianceReportRow) ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
+// sanitizeCSVValue delegates to the shared sanitize package to prevent
+// CSV/spreadsheet formula injection. See sanitize.SanitizeFormulaInjection for
+// full documentation.
 func sanitizeCSVValue(value string) string {
-	if value == "" {
-		return value
-	}
-
-	switch value[0] {
-	case '=', '@':
-		return "'" + value
-	case '+', '-':
-		if !isNumericAfterSign(value) {
-			return "'" + value
-		}
-
-		return value
-	default:
-		return value
-	}
-}
-
-// isNumericAfterSign checks whether the value after the leading +/- sign
-// starts with a digit, indicating a numeric value rather than a formula.
-func isNumericAfterSign(value string) bool {
-	if len(value) < minSignedNumericLength {
-		return false
-	}
-
-	return value[1] >= '0' && value[1] <= '9'
+	return sanitize.SanitizeFormulaInjection(value)
 }
 
 // StreamMatchedCSV writes matched items as CSV to the writer, streaming row by row.
