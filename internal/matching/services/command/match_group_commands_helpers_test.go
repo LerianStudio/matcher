@@ -1017,25 +1017,24 @@ func TestBuildAdjustmentAuditChanges_WithMatchGroupID(t *testing.T) {
 	t.Parallel()
 
 	matchGroupID := uuid.MustParse("00000000-0000-0000-0000-000000100500")
-	adjustment := &matchingEntities.Adjustment{
-		ID:          uuid.MustParse("00000000-0000-0000-0000-000000100501"),
-		ContextID:   uuid.MustParse("00000000-0000-0000-0000-000000100502"),
-		Type:        matchingEntities.AdjustmentTypeBankFee,
-		Amount:      decimal.NewFromInt(10),
-		Currency:    "USD",
-		Description: "test",
-		Reason:      "reason",
-	}
+	contextID := uuid.MustParse("00000000-0000-0000-0000-000000100502")
+	adjustmentID := uuid.MustParse("00000000-0000-0000-0000-000000100501")
 	input := CreateAdjustmentInput{
 		TenantID:     uuid.MustParse("00000000-0000-0000-0000-000000100503"),
-		ContextID:    adjustment.ContextID,
+		ContextID:    contextID,
 		MatchGroupID: &matchGroupID,
+		Type:         string(matchingEntities.AdjustmentTypeBankFee),
+		Amount:       decimal.NewFromInt(10),
+		Currency:     "USD",
+		Description:  "test",
+		Reason:       "reason",
 		CreatedBy:    "user@test.com",
 	}
 
-	changes, err := buildAdjustmentAuditChanges(adjustment, input)
+	changes, err := buildAdjustmentAuditChanges(adjustmentID, input)
 	require.NoError(t, err)
 	require.NotNil(t, changes)
+	assert.Contains(t, string(changes), "entity_id")
 	assert.Contains(t, string(changes), "match_group_id")
 }
 
@@ -1043,25 +1042,24 @@ func TestBuildAdjustmentAuditChanges_WithTransactionID(t *testing.T) {
 	t.Parallel()
 
 	txID := uuid.MustParse("00000000-0000-0000-0000-000000100510")
-	adjustment := &matchingEntities.Adjustment{
-		ID:          uuid.MustParse("00000000-0000-0000-0000-000000100511"),
-		ContextID:   uuid.MustParse("00000000-0000-0000-0000-000000100512"),
-		Type:        matchingEntities.AdjustmentTypeBankFee,
-		Amount:      decimal.NewFromInt(10),
-		Currency:    "USD",
-		Description: "test",
-		Reason:      "reason",
-	}
+	contextID := uuid.MustParse("00000000-0000-0000-0000-000000100512")
+	adjustmentID := uuid.MustParse("00000000-0000-0000-0000-000000100511")
 	input := CreateAdjustmentInput{
 		TenantID:      uuid.MustParse("00000000-0000-0000-0000-000000100513"),
-		ContextID:     adjustment.ContextID,
+		ContextID:     contextID,
 		TransactionID: &txID,
+		Type:          string(matchingEntities.AdjustmentTypeBankFee),
+		Amount:        decimal.NewFromInt(10),
+		Currency:      "USD",
+		Description:   "test",
+		Reason:        "reason",
 		CreatedBy:     "user@test.com",
 	}
 
-	changes, err := buildAdjustmentAuditChanges(adjustment, input)
+	changes, err := buildAdjustmentAuditChanges(adjustmentID, input)
 	require.NoError(t, err)
 	require.NotNil(t, changes)
+	assert.Contains(t, string(changes), "entity_id")
 	assert.Contains(t, string(changes), "transaction_id")
 	assert.NotContains(t, string(changes), "match_group_id")
 }
@@ -1069,44 +1067,47 @@ func TestBuildAdjustmentAuditChanges_WithTransactionID(t *testing.T) {
 func TestBuildAdjustmentAuditChanges_WithoutOptionalTargets(t *testing.T) {
 	t.Parallel()
 
-	adjustment := &matchingEntities.Adjustment{
-		ID:          uuid.MustParse("00000000-0000-0000-0000-000000100520"),
-		ContextID:   uuid.MustParse("00000000-0000-0000-0000-000000100521"),
-		Type:        matchingEntities.AdjustmentTypeBankFee,
+	contextID := uuid.MustParse("00000000-0000-0000-0000-000000100521")
+	adjustmentID := uuid.MustParse("00000000-0000-0000-0000-000000100520")
+	input := CreateAdjustmentInput{
+		TenantID:    uuid.MustParse("00000000-0000-0000-0000-000000100522"),
+		ContextID:   contextID,
+		Type:        string(matchingEntities.AdjustmentTypeBankFee),
 		Amount:      decimal.NewFromInt(10),
 		Currency:    "USD",
 		Description: "test",
 		Reason:      "reason",
-	}
-	input := CreateAdjustmentInput{
-		TenantID:  uuid.MustParse("00000000-0000-0000-0000-000000100522"),
-		ContextID: adjustment.ContextID,
-		CreatedBy: "user@test.com",
+		CreatedBy:   "user@test.com",
 	}
 
-	changes, err := buildAdjustmentAuditChanges(adjustment, input)
+	changes, err := buildAdjustmentAuditChanges(adjustmentID, input)
 	require.NoError(t, err)
 	require.NotNil(t, changes)
+	assert.Contains(t, string(changes), "entity_id")
 	assert.NotContains(t, string(changes), "match_group_id")
 	assert.NotContains(t, string(changes), "transaction_id")
 }
 
-// --- persistAdjustmentWithAudit - connection error ---
+// --- persistAdjustmentWithAudit - repository error ---
 
-func TestPersistAdjustmentWithAudit_ConnectionError(t *testing.T) {
+func TestPersistAdjustmentWithAudit_RepositoryError(t *testing.T) {
 	t.Parallel()
 
 	uc := &UseCase{
-		infraProvider: &stubInfraProvider{connErr: errAdjTestDatabase},
+		adjustmentRepo: &stubAdjustmentRepoWithError{err: errAdjTestDatabase},
 	}
 
 	adjustment := &matchingEntities.Adjustment{
 		ID: uuid.New(),
 	}
 
-	_, err := uc.persistAdjustmentWithAudit(context.Background(), adjustment, CreateAdjustmentInput{})
+	_, err := uc.persistAdjustmentWithAudit(context.Background(), adjustment, CreateAdjustmentInput{
+		TenantID:  uuid.New(),
+		ContextID: uuid.New(),
+		CreatedBy: "user@test.com",
+	})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to get postgres connection")
+	assert.Contains(t, err.Error(), "persist adjustment transaction")
 }
 
 // --- completeDryRun tests ---
@@ -1423,9 +1424,9 @@ func TestCreateAdjustment_InvalidDirection(t *testing.T) {
 	require.Nil(t, result)
 }
 
-// --- CreateAdjustment - AuditLog error ---
+// --- CreateAdjustment - combined persist error ---
 
-func TestCreateAdjustment_AuditLogError(t *testing.T) {
+func TestCreateAdjustment_CombinedPersistError(t *testing.T) {
 	t.Parallel()
 
 	tenantID := uuid.MustParse("00000000-0000-0000-0000-000000100610")
@@ -1449,9 +1450,8 @@ func TestCreateAdjustment_AuditLogError(t *testing.T) {
 			},
 		},
 		txRepo:         &stubTxRepoForAdjustment{},
-		adjustmentRepo: &stubAdjustmentRepo{},
+		adjustmentRepo: &stubAdjustmentRepoWithError{err: errAdjTestDatabase},
 		infraProvider:  infraProv,
-		auditLogRepo:   &stubAuditLogRepo{createErr: errAdjTestDatabase},
 	}
 
 	input := CreateAdjustmentInput{
@@ -1469,6 +1469,6 @@ func TestCreateAdjustment_AuditLogError(t *testing.T) {
 
 	result, err := uc.CreateAdjustment(context.Background(), input)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "persist audit log")
+	assert.Contains(t, err.Error(), "persist adjustment transaction")
 	require.Nil(t, result)
 }

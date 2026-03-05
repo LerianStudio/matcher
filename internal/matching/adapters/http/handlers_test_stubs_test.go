@@ -577,8 +577,25 @@ func (r *runMatchAdjustmentRepo) Create(
 
 func (r *runMatchAdjustmentRepo) CreateWithTx(
 	ctx context.Context,
-	_ any,
+	_ *sql.Tx,
 	adj *matchingEntities.Adjustment,
+) (*matchingEntities.Adjustment, error) {
+	return r.Create(ctx, adj)
+}
+
+func (r *runMatchAdjustmentRepo) CreateWithAuditLog(
+	ctx context.Context,
+	adj *matchingEntities.Adjustment,
+	_ *shared.AuditLog,
+) (*matchingEntities.Adjustment, error) {
+	return r.Create(ctx, adj)
+}
+
+func (r *runMatchAdjustmentRepo) CreateWithAuditLogWithTx(
+	ctx context.Context,
+	_ *sql.Tx,
+	adj *matchingEntities.Adjustment,
+	_ *shared.AuditLog,
 ) (*matchingEntities.Adjustment, error) {
 	return r.Create(ctx, adj)
 }

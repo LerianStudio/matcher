@@ -4,6 +4,7 @@ package cross
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
 	"time"
@@ -47,8 +48,25 @@ func (stub *stubAdjustmentRepo) Create(
 
 func (stub *stubAdjustmentRepo) CreateWithTx(
 	ctx context.Context,
-	_ any,
+	_ *sql.Tx,
 	adj *matchingEntities.Adjustment,
+) (*matchingEntities.Adjustment, error) {
+	return stub.Create(ctx, adj)
+}
+
+func (stub *stubAdjustmentRepo) CreateWithAuditLog(
+	ctx context.Context,
+	adj *matchingEntities.Adjustment,
+	_ *shared.AuditLog,
+) (*matchingEntities.Adjustment, error) {
+	return stub.Create(ctx, adj)
+}
+
+func (stub *stubAdjustmentRepo) CreateWithAuditLogWithTx(
+	ctx context.Context,
+	_ *sql.Tx,
+	adj *matchingEntities.Adjustment,
+	_ *shared.AuditLog,
 ) (*matchingEntities.Adjustment, error) {
 	return stub.Create(ctx, adj)
 }

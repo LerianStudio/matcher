@@ -28,7 +28,6 @@ import (
 	matching "github.com/LerianStudio/matcher/internal/matching/domain/services"
 	matchingVO "github.com/LerianStudio/matcher/internal/matching/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/matching/ports"
-	outboxEntities "github.com/LerianStudio/matcher/internal/outbox/domain/entities"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
@@ -111,24 +110,22 @@ func (uc *UseCase) RunMatch(
 	}
 
 	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
+
 	ctx, span := tracer.Start(ctx, "command.matching.run_match")
+	defer span.End()
 
-	if span != nil {
-		defer span.End()
-
-		_ = libOpentelemetry.SetSpanAttributesFromValue(
-			span,
-			"matcher",
-			struct {
-				ContextID string `json:"contextId"`
-				Mode      string `json:"mode"`
-			}{
-				ContextID: in.ContextID.String(),
-				Mode:      in.Mode.String(),
-			},
-			nil,
-		)
-	}
+	_ = libOpentelemetry.SetSpanAttributesFromValue(
+		span,
+		"matcher",
+		struct {
+			ContextID string `json:"contextId"`
+			Mode      string `json:"mode"`
+		}{
+			ContextID: in.ContextID.String(),
+			Mode:      in.Mode.String(),
+		},
+		nil,
+	)
 
 	ctx, cancelRun := context.WithCancel(ctx)
 	defer cancelRun()
@@ -297,11 +294,9 @@ func (uc *UseCase) prepareMatchRun(
 	in RunMatchInput,
 ) (*matchRunContext, error) {
 	_, tracer, _, _ := libCommons.NewTrackingFromContext(ctx) //nolint:dogsled
-	ctx, prepSpan := tracer.Start(ctx, "command.matching.prepare_match_run")
 
-	if prepSpan != nil {
-		defer prepSpan.End()
-	}
+	ctx, prepSpan := tracer.Start(ctx, "command.matching.prepare_match_run")
+	defer prepSpan.End()
 
 	ctx, err := uc.validateAndEnrichTenant(ctx, &in)
 	if err != nil {
@@ -417,11 +412,9 @@ func (uc *UseCase) loadContextAndSources(
 	in RunMatchInput,
 ) (*ports.ReconciliationContextInfo, []*ports.SourceInfo, error) {
 	_, tracer, _, _ := libCommons.NewTrackingFromContext(ctx) //nolint:dogsled
-	ctx, loadSpan := tracer.Start(ctx, "command.matching.load_context_and_sources")
 
-	if loadSpan != nil {
-		defer loadSpan.End()
-	}
+	ctx, loadSpan := tracer.Start(ctx, "command.matching.load_context_and_sources")
+	defer loadSpan.End()
 
 	ctxInfo, err := uc.contextProvider.FindByID(ctx, in.TenantID, in.ContextID)
 	if err != nil {
@@ -524,11 +517,9 @@ func (uc *UseCase) loadAndClassifyCandidates(
 	leftSourceIDs, rightSourceIDs map[uuid.UUID]struct{},
 ) ([]*shared.Transaction, []*shared.Transaction, []uuid.UUID, error) {
 	_, tracer, _, _ := libCommons.NewTrackingFromContext(ctx) //nolint:dogsled
-	ctx, loadSpan := tracer.Start(ctx, "command.matching.load_and_classify_candidates")
 
-	if loadSpan != nil {
-		defer loadSpan.End()
-	}
+	ctx, loadSpan := tracer.Start(ctx, "command.matching.load_and_classify_candidates")
+	defer loadSpan.End()
 
 	candidateLimit := maxCandidateSet
 	if uc.maxLockBatchSize > 0 {
@@ -584,11 +575,9 @@ func (uc *UseCase) executeMatchRules(
 	createdRun *matchingEntities.MatchRun,
 ) (*matchExecutionResult, error) {
 	_, tracer, _, _ := libCommons.NewTrackingFromContext(ctx) //nolint:dogsled
-	ctx, execSpan := tracer.Start(ctx, "command.matching.execute_match_rules")
 
-	if execSpan != nil {
-		defer execSpan.End()
-	}
+	ctx, execSpan := tracer.Start(ctx, "command.matching.execute_match_rules")
+	defer execSpan.End()
 
 	executeRulesDetailedFn := uc.executeRulesDetailed
 	if executeRulesDetailedFn == nil {
@@ -947,7 +936,7 @@ func (uc *UseCase) enqueueGroupEvent(
 		return fmt.Errorf("marshal match confirmed event: %w", err)
 	}
 
-	outboxEvent, err := outboxEntities.NewOutboxEvent(ctx, event.EventType, event.ID(), body)
+	outboxEvent, err := shared.NewOutboxEvent(ctx, event.EventType, event.ID(), body)
 	if err != nil {
 		return fmt.Errorf("create outbox event: %w", err)
 	}
@@ -1964,11 +1953,9 @@ func (uc *UseCase) completeEmptyRun(
 	sourceTypeByID map[uuid.UUID]string,
 ) (*matchingEntities.MatchRun, []*matchingEntities.MatchGroup, error) {
 	_, tracer, _, _ := libCommons.NewTrackingFromContext(ctx) //nolint:dogsled
-	ctx, span := tracer.Start(ctx, "command.matching.complete_empty_run")
 
-	if span != nil {
-		defer span.End()
-	}
+	ctx, span := tracer.Start(ctx, "command.matching.complete_empty_run")
+	defer span.End()
 
 	stats["matches"] = 0
 	stats["unmatched_left"] = len(leftCandidates)
@@ -2242,18 +2229,16 @@ func (uc *UseCase) ManualMatch(
 	}
 
 	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
+
 	ctx, span := tracer.Start(ctx, "command.matching.manual_match")
+	defer span.End()
 
-	if span != nil {
-		defer span.End()
-
-		_ = libOpentelemetry.SetSpanAttributesFromValue(
-			span,
-			"matcher",
-			in,
-			nil,
-		)
-	}
+	_ = libOpentelemetry.SetSpanAttributesFromValue(
+		span,
+		"matcher",
+		in,
+		nil,
+	)
 
 	ctxInfo, err := uc.contextProvider.FindByID(ctx, in.TenantID, in.ContextID)
 	if err != nil {
@@ -2697,7 +2682,7 @@ func (uc *UseCase) enqueueUnmatchEvent(
 		return fmt.Errorf("marshal match unmatched event: %w", err)
 	}
 
-	outboxEvent, err := outboxEntities.NewOutboxEvent(ctx, event.EventType, event.ID(), body)
+	outboxEvent, err := shared.NewOutboxEvent(ctx, event.EventType, event.ID(), body)
 	if err != nil {
 		return fmt.Errorf("create outbox event: %w", err)
 	}

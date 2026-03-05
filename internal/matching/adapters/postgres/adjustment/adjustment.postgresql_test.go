@@ -31,7 +31,7 @@ func setupRepository(t *testing.T) (*Repository, sqlmock.Sqlmock, func()) {
 	require.NoError(t, err)
 
 	provider := testutil.NewMockProviderFromDB(t, db)
-	repo := NewRepository(provider)
+	repo := NewRepository(provider, nil)
 
 	finish := func() {
 		mock.ExpectClose()
@@ -46,7 +46,7 @@ func TestNewRepository(t *testing.T) {
 	t.Parallel()
 
 	provider := &testutil.MockInfrastructureProvider{}
-	repo := NewRepository(provider)
+	repo := NewRepository(provider, nil)
 
 	require.NotNil(t, repo)
 	assert.NotNil(t, repo.provider)

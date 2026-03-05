@@ -5,6 +5,7 @@ package http
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -39,8 +40,25 @@ func (r *failingAdjustmentRepo) Create(
 
 func (r *failingAdjustmentRepo) CreateWithTx(
 	_ context.Context,
-	_ any,
+	_ *sql.Tx,
 	_ *matchingEntities.Adjustment,
+) (*matchingEntities.Adjustment, error) {
+	return nil, r.err
+}
+
+func (r *failingAdjustmentRepo) CreateWithAuditLog(
+	_ context.Context,
+	_ *matchingEntities.Adjustment,
+	_ *shared.AuditLog,
+) (*matchingEntities.Adjustment, error) {
+	return nil, r.err
+}
+
+func (r *failingAdjustmentRepo) CreateWithAuditLogWithTx(
+	_ context.Context,
+	_ *sql.Tx,
+	_ *matchingEntities.Adjustment,
+	_ *shared.AuditLog,
 ) (*matchingEntities.Adjustment, error) {
 	return nil, r.err
 }

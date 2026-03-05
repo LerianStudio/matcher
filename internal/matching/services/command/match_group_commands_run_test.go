@@ -2190,7 +2190,7 @@ func (s *stubAdjustmentRepo) Create(
 
 func (s *stubAdjustmentRepo) CreateWithTx(
 	_ context.Context,
-	_ any,
+	_ *sql.Tx,
 	adj *matchingEntities.Adjustment,
 ) (*matchingEntities.Adjustment, error) {
 	return adj, nil
@@ -2209,6 +2209,23 @@ func (s *stubAdjustmentRepo) ListByContextID(
 	_ matchingRepositories.CursorFilter,
 ) ([]*matchingEntities.Adjustment, libHTTP.CursorPagination, error) {
 	return nil, libHTTP.CursorPagination{}, nil
+}
+
+func (s *stubAdjustmentRepo) CreateWithAuditLog(
+	_ context.Context,
+	adj *matchingEntities.Adjustment,
+	_ *shared.AuditLog,
+) (*matchingEntities.Adjustment, error) {
+	return adj, nil
+}
+
+func (s *stubAdjustmentRepo) CreateWithAuditLogWithTx(
+	_ context.Context,
+	_ *sql.Tx,
+	adj *matchingEntities.Adjustment,
+	_ *shared.AuditLog,
+) (*matchingEntities.Adjustment, error) {
+	return adj, nil
 }
 
 func (s *stubAdjustmentRepo) ListByMatchGroupID(

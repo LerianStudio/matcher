@@ -749,8 +749,25 @@ func (s *stubAdjustmentRepoWithError) Create(
 
 func (s *stubAdjustmentRepoWithError) CreateWithTx(
 	_ context.Context,
-	_ any,
+	_ *sql.Tx,
 	_ *matchingEntities.Adjustment,
+) (*matchingEntities.Adjustment, error) {
+	return nil, s.err
+}
+
+func (s *stubAdjustmentRepoWithError) CreateWithAuditLog(
+	_ context.Context,
+	_ *matchingEntities.Adjustment,
+	_ *shared.AuditLog,
+) (*matchingEntities.Adjustment, error) {
+	return nil, s.err
+}
+
+func (s *stubAdjustmentRepoWithError) CreateWithAuditLogWithTx(
+	_ context.Context,
+	_ *sql.Tx,
+	_ *matchingEntities.Adjustment,
+	_ *shared.AuditLog,
 ) (*matchingEntities.Adjustment, error) {
 	return nil, s.err
 }

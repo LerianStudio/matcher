@@ -21,6 +21,7 @@ import (
 	matchingRepos "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
+	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -38,12 +39,13 @@ const (
 
 // Repository persists adjustments in Postgres.
 type Repository struct {
-	provider ports.InfrastructureProvider
+	provider     ports.InfrastructureProvider
+	auditLogRepo ports.AuditLogRepository
 }
 
 // NewRepository creates a new adjustment repository.
-func NewRepository(provider ports.InfrastructureProvider) *Repository {
-	return &Repository{provider: provider}
+func NewRepository(provider ports.InfrastructureProvider, auditLogRepo ports.AuditLogRepository) *Repository {
+	return &Repository{provider: provider, auditLogRepo: auditLogRepo}
 }
 
 // Create inserts a new adjustment.
@@ -68,40 +70,7 @@ func (repo *Repository) Create(
 		ctx,
 		repo.provider,
 		func(tx *sql.Tx) (*matchingEntities.Adjustment, error) {
-			model, err := NewPostgreSQLModel(adjustment)
-			if err != nil {
-				return nil, err
-			}
-
-			_, err = tx.ExecContext(
-				ctx,
-				`INSERT INTO adjustments (id, context_id, match_group_id, transaction_id, type, direction, amount, currency, description, reason, created_by, created_at, updated_at)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-				model.ID,
-				model.ContextID,
-				model.MatchGroupID,
-				model.TransactionID,
-				model.Type,
-				model.Direction,
-				model.Amount,
-				model.Currency,
-				model.Description,
-				model.Reason,
-				model.CreatedBy,
-				model.CreatedAt,
-				model.UpdatedAt,
-			)
-			if err != nil {
-				return nil, fmt.Errorf("insert adjustment: %w", err)
-			}
-
-			row := tx.QueryRowContext(
-				ctx,
-				"SELECT "+columns+" FROM adjustments WHERE id=$1",
-				model.ID,
-			)
-
-			return scan(row)
+			return repo.insertWithTx(ctx, tx, adjustment)
 		},
 	)
 	if err != nil {
@@ -121,7 +90,7 @@ func (repo *Repository) Create(
 // must succeed or fail together (SOX compliance).
 func (repo *Repository) CreateWithTx(
 	ctx context.Context,
-	tx any,
+	tx *sql.Tx,
 	adjustment *matchingEntities.Adjustment,
 ) (*matchingEntities.Adjustment, error) {
 	if repo == nil || repo.provider == nil {
@@ -136,11 +105,6 @@ func (repo *Repository) CreateWithTx(
 		return nil, ErrTransactionRequired
 	}
 
-	sqlTx, ok := tx.(*sql.Tx)
-	if !ok {
-		return nil, ErrInvalidTransactionType
-	}
-
 	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
 	ctx, span := tracer.Start(ctx, "postgres.create_adjustment_with_tx")
 
@@ -149,42 +113,9 @@ func (repo *Repository) CreateWithTx(
 	result, err := pgcommon.WithTenantTxOrExistingProvider(
 		ctx,
 		repo.provider,
-		sqlTx,
+		tx,
 		func(innerTx *sql.Tx) (*matchingEntities.Adjustment, error) {
-			model, err := NewPostgreSQLModel(adjustment)
-			if err != nil {
-				return nil, err
-			}
-
-			_, err = innerTx.ExecContext(
-				ctx,
-				`INSERT INTO adjustments (id, context_id, match_group_id, transaction_id, type, direction, amount, currency, description, reason, created_by, created_at, updated_at)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-				model.ID,
-				model.ContextID,
-				model.MatchGroupID,
-				model.TransactionID,
-				model.Type,
-				model.Direction,
-				model.Amount,
-				model.Currency,
-				model.Description,
-				model.Reason,
-				model.CreatedBy,
-				model.CreatedAt,
-				model.UpdatedAt,
-			)
-			if err != nil {
-				return nil, fmt.Errorf("insert adjustment: %w", err)
-			}
-
-			row := innerTx.QueryRowContext(
-				ctx,
-				"SELECT "+columns+" FROM adjustments WHERE id=$1",
-				model.ID,
-			)
-
-			return scan(row)
+			return repo.insertWithTx(ctx, innerTx, adjustment)
 		},
 	)
 	if err != nil {
@@ -197,6 +128,129 @@ func (repo *Repository) CreateWithTx(
 	}
 
 	return result, nil
+}
+
+// CreateWithAuditLog atomically persists an adjustment and its corresponding audit log
+// in a single transaction. This ensures SOX compliance: both records are committed
+// together or both are rolled back on failure.
+func (repo *Repository) CreateWithAuditLog(
+	ctx context.Context,
+	adjustment *matchingEntities.Adjustment,
+	auditLog *sharedDomain.AuditLog,
+) (*matchingEntities.Adjustment, error) {
+	if repo == nil || repo.provider == nil {
+		return nil, ErrRepoNotInitialized
+	}
+
+	if adjustment == nil {
+		return nil, ErrAdjustmentEntityNeeded
+	}
+
+	if repo.auditLogRepo == nil {
+		return nil, ErrAuditLogRepoRequired
+	}
+
+	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
+	ctx, span := tracer.Start(ctx, "postgres.create_adjustment_with_audit_log")
+
+	defer span.End()
+
+	result, err := pgcommon.WithTenantTxProvider(ctx, repo.provider, func(tx *sql.Tx) (*matchingEntities.Adjustment, error) {
+		return repo.CreateWithAuditLogWithTx(ctx, tx, adjustment, auditLog)
+	})
+	if err != nil {
+		wrappedErr := fmt.Errorf("create adjustment with audit log: %w", err)
+		libOpentelemetry.HandleSpanError(span, "failed to create adjustment with audit log", wrappedErr)
+
+		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to create adjustment with audit log")
+
+		return nil, wrappedErr
+	}
+
+	return result, nil
+}
+
+// CreateWithAuditLogWithTx atomically persists an adjustment and its corresponding audit log
+// using a caller-owned transaction. The caller is responsible for commit/rollback.
+// This enables composing the adjustment+audit operation inside a larger transaction.
+func (repo *Repository) CreateWithAuditLogWithTx(
+	ctx context.Context,
+	tx *sql.Tx,
+	adjustment *matchingEntities.Adjustment,
+	auditLog *sharedDomain.AuditLog,
+) (*matchingEntities.Adjustment, error) {
+	if repo == nil || repo.provider == nil {
+		return nil, ErrRepoNotInitialized
+	}
+
+	if adjustment == nil {
+		return nil, ErrAdjustmentEntityNeeded
+	}
+
+	if repo.auditLogRepo == nil {
+		return nil, ErrAuditLogRepoRequired
+	}
+
+	if tx == nil {
+		return nil, ErrTransactionRequired
+	}
+
+	if auditLog == nil {
+		return nil, fmt.Errorf("audit log is required for SOX compliance: %w", ErrAuditLogRequired)
+	}
+
+	created, createErr := repo.insertWithTx(ctx, tx, adjustment)
+	if createErr != nil {
+		return nil, fmt.Errorf("persist adjustment: %w", createErr)
+	}
+
+	if _, auditErr := repo.auditLogRepo.CreateWithTx(ctx, tx, auditLog); auditErr != nil {
+		return nil, fmt.Errorf("persist audit log: %w", auditErr)
+	}
+
+	return created, nil
+}
+
+// insertWithTx performs the actual insert and SELECT within a transaction.
+func (repo *Repository) insertWithTx(ctx context.Context, tx *sql.Tx, adjustment *matchingEntities.Adjustment) (*matchingEntities.Adjustment, error) {
+	if tx == nil {
+		return nil, ErrTransactionRequired
+	}
+
+	model, err := NewPostgreSQLModel(adjustment)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = tx.ExecContext(
+		ctx,
+		`INSERT INTO adjustments (id, context_id, match_group_id, transaction_id, type, direction, amount, currency, description, reason, created_by, created_at, updated_at)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+		model.ID,
+		model.ContextID,
+		model.MatchGroupID,
+		model.TransactionID,
+		model.Type,
+		model.Direction,
+		model.Amount,
+		model.Currency,
+		model.Description,
+		model.Reason,
+		model.CreatedBy,
+		model.CreatedAt,
+		model.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("insert adjustment: %w", err)
+	}
+
+	row := tx.QueryRowContext(
+		ctx,
+		"SELECT "+columns+" FROM adjustments WHERE id=$1",
+		model.ID,
+	)
+
+	return scan(row)
 }
 
 // FindByID returns an adjustment by ID.

@@ -398,7 +398,7 @@ func (m *mockAdjustmentRepo) Create(
 
 func (m *mockAdjustmentRepo) CreateWithTx(
 	_ context.Context,
-	_ any,
+	_ *sql.Tx,
 	adj *matchingEntities.Adjustment,
 ) (*matchingEntities.Adjustment, error) {
 	return adj, nil
@@ -417,6 +417,23 @@ func (m *mockAdjustmentRepo) ListByContextID(
 	_ matchingRepositories.CursorFilter,
 ) ([]*matchingEntities.Adjustment, libHTTP.CursorPagination, error) {
 	return nil, libHTTP.CursorPagination{}, nil
+}
+
+func (m *mockAdjustmentRepo) CreateWithAuditLog(
+	_ context.Context,
+	adj *matchingEntities.Adjustment,
+	_ *shared.AuditLog,
+) (*matchingEntities.Adjustment, error) {
+	return adj, nil
+}
+
+func (m *mockAdjustmentRepo) CreateWithAuditLogWithTx(
+	_ context.Context,
+	_ *sql.Tx,
+	adj *matchingEntities.Adjustment,
+	_ *shared.AuditLog,
+) (*matchingEntities.Adjustment, error) {
+	return adj, nil
 }
 
 func (m *mockAdjustmentRepo) ListByMatchGroupID(
