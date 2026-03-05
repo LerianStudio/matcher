@@ -910,9 +910,9 @@ func TestBuildMetadata_SanitizesStringValues(t *testing.T) {
 
 		row := map[string]any{
 			"formula_with_space": " =HYPERLINK(\"http://evil.com\")",
-			"at_with_space":     " @evil",
-			"plus_with_space":   " +cmd",
-			"minus_with_space":  " -cmd",
+			"at_with_space":      " @evil",
+			"plus_with_space":    " +cmd",
+			"minus_with_space":   " -cmd",
 		}
 		mappedFields := map[string]bool{}
 

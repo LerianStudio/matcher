@@ -31,7 +31,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
 	ingestionRepos "github.com/LerianStudio/matcher/internal/ingestion/domain/repositories"
-	ingestionRepoMock "github.com/LerianStudio/matcher/internal/ingestion/domain/repositories/mock"
+	ingestionRepoMock "github.com/LerianStudio/matcher/internal/ingestion/domain/repositories/mocks"
 	"github.com/LerianStudio/matcher/internal/ingestion/ports"
 	"github.com/LerianStudio/matcher/internal/ingestion/services/command"
 	"github.com/LerianStudio/matcher/internal/ingestion/services/query"

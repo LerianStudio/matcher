@@ -6,32 +6,27 @@ import (
 	"errors"
 	"time"
 
-	"github.com/google/uuid"
+	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 // Event type constants for ingestion events.
+// Re-exported from the shared kernel so that event routing in the outbox dispatcher
+// can reference them without importing ingestion/domain/entities directly.
 const (
-	EventTypeIngestionCompleted = "ingestion.completed"
-	EventTypeIngestionFailed    = "ingestion.failed"
+	EventTypeIngestionCompleted = sharedDomain.EventTypeIngestionCompleted
+	EventTypeIngestionFailed    = sharedDomain.EventTypeIngestionFailed
 )
 
 // ErrNilJob is returned when a nil job is passed to event constructors.
 var ErrNilJob = errors.New("job is nil")
 
-// IngestionCompletedEvent published when a job finishes successfully.
-type IngestionCompletedEvent struct {
-	EventType        string    `json:"eventType"`
-	JobID            uuid.UUID `json:"jobId"`
-	ContextID        uuid.UUID `json:"contextId"`
-	SourceID         uuid.UUID `json:"sourceId"`
-	TransactionCount int       `json:"transactionCount"`
-	DateRangeStart   time.Time `json:"dateRangeStart"`
-	DateRangeEnd     time.Time `json:"dateRangeEnd"`
-	TotalRows        int       `json:"totalRows"`
-	FailedRows       int       `json:"failedRows"`
-	CompletedAt      time.Time `json:"completedAt"`
-	Timestamp        time.Time `json:"timestamp"`
-}
+// IngestionCompletedEvent is a type alias for the shared kernel IngestionCompletedEvent.
+// The canonical definition lives in internal/shared/domain.
+type IngestionCompletedEvent = sharedDomain.IngestionCompletedEvent
+
+// IngestionFailedEvent is a type alias for the shared kernel IngestionFailedEvent.
+// The canonical definition lives in internal/shared/domain.
+type IngestionFailedEvent = sharedDomain.IngestionFailedEvent
 
 // NewIngestionCompletedEvent creates a new ingestion completed event.
 // Returns ErrNilJob if job is nil.
@@ -67,16 +62,6 @@ func NewIngestionCompletedEvent(
 		CompletedAt:      completedAt,
 		Timestamp:        time.Now().UTC(),
 	}, nil
-}
-
-// IngestionFailedEvent published when a job fails.
-type IngestionFailedEvent struct {
-	EventType string    `json:"eventType"`
-	JobID     uuid.UUID `json:"jobId"`
-	ContextID uuid.UUID `json:"contextId"`
-	SourceID  uuid.UUID `json:"sourceId"`
-	Error     string    `json:"error"`
-	Timestamp time.Time `json:"timestamp"`
 }
 
 // NewIngestionFailedEvent creates a new ingestion failed event.
