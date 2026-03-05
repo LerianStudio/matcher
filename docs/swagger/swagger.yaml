@@ -1394,6 +1394,76 @@ definitions:
     required:
     - comment
     type: object
+  github_com_LerianStudio_matcher_internal_governance_adapters_http_dto.ActorMappingResponse:
+    description: Actor mapping entry linking an opaque actor ID to PII
+    properties:
+      actor_id:
+        description: Opaque actor identifier
+        example: user:550e8400-e29b-41d4-a716-446655440000
+        type: string
+      created_at:
+        description: Timestamp when the mapping was created (RFC3339)
+        example: "2026-01-15T10:30:00Z"
+        type: string
+      display_name:
+        description: Human-readable display name
+        example: John Doe
+        type: string
+      email:
+        description: Email address
+        example: john.doe@example.com
+        type: string
+      updated_at:
+        description: Timestamp when the mapping was last updated (RFC3339)
+        example: "2026-01-15T10:30:00Z"
+        type: string
+    type: object
+  github_com_LerianStudio_matcher_internal_governance_adapters_http_dto.ArchiveMetadataResponse:
+    description: Completed audit log archive metadata
+    properties:
+      archived_at:
+        description: Timestamp when archival completed (RFC3339)
+        example: "2024-04-01T02:30:00Z"
+        type: string
+      compressed_size_bytes:
+        description: Compressed file size in bytes
+        example: 10485760
+        type: integer
+      date_range_end:
+        description: End of the archived date range (RFC3339)
+        example: "2024-03-31T23:59:59Z"
+        type: string
+      date_range_start:
+        description: Start of the archived date range (RFC3339)
+        example: "2024-01-01T00:00:00Z"
+        type: string
+      id:
+        description: Unique identifier for the archive
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+      partition_name:
+        description: Name of the database partition that was archived
+        example: audit_logs_2024_q1
+        type: string
+      row_count:
+        description: Number of rows archived
+        example: 150000
+        type: integer
+      status:
+        description: Archive status
+        enum:
+        - COMPLETE
+        example: COMPLETE
+        type: string
+      storage_class:
+        description: Object storage class
+        enum:
+        - STANDARD
+        - GLACIER
+        - DEEP_ARCHIVE
+        example: GLACIER
+        type: string
+    type: object
   github_com_LerianStudio_matcher_internal_governance_adapters_http_dto.AuditLogResponse:
     description: Immutable audit log entry for governance tracking
     properties:
@@ -1454,6 +1524,18 @@ definitions:
         type: string
       prevCursor:
         example: eyJpZCI6IjEyMiJ9
+        type: string
+    type: object
+  github_com_LerianStudio_matcher_internal_governance_adapters_http_dto.UpsertActorMappingRequest:
+    description: Request body for upserting an actor mapping
+    properties:
+      display_name:
+        description: Human-readable display name for the actor
+        example: John Doe
+        type: string
+      email:
+        description: Email address of the actor
+        example: john.doe@example.com
         type: string
     type: object
   github_com_LerianStudio_matcher_internal_ingestion_adapters_http_dto.FilePreviewResponse:
@@ -1944,6 +2026,395 @@ definitions:
         example: "2025-01-15T10:30:00Z"
         type: string
     type: object
+  github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.AgeBucketDTO:
+    properties:
+      bucket:
+        example: 0-24h
+        type: string
+      value:
+        example: 15
+        type: integer
+    type: object
+  github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.AgeExposureResponse:
+    properties:
+      amount:
+        example: "10000.00"
+        type: string
+      bucket:
+        example: 0-24h
+        type: string
+      transactionCount:
+        example: 120
+        type: integer
+    type: object
+  github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.BreakdownMetricsResponse:
+    properties:
+      byAge:
+        items:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.AgeBucketDTO'
+        maxItems: 20
+        type: array
+      byReason:
+        additionalProperties:
+          type: integer
+        type: object
+      byRule:
+        items:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.RuleMatchCountDTO'
+        maxItems: 100
+        type: array
+      bySeverity:
+        additionalProperties:
+          type: integer
+        type: object
+    type: object
+  github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.CashImpactSummaryResponse:
+    properties:
+      byAge:
+        items:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.AgeExposureResponse'
+        type: array
+      byCurrency:
+        items:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.CurrencyExposureResponse'
+        type: array
+      totalUnmatchedAmount:
+        example: "70000.00"
+        type: string
+    type: object
+  github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.CurrencyExposureResponse:
+    properties:
+      amount:
+        example: "25000.00"
+        type: string
+      currency:
+        example: USD
+        type: string
+      transactionCount:
+        example: 250
+        type: integer
+    type: object
+  github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.DashboardAggregatesResponse:
+    properties:
+      matchRate:
+        $ref: '#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.MatchRateStatsResponse'
+      sla:
+        $ref: '#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.SLAStatsResponse'
+      updatedAt:
+        example: "2025-01-15T10:30:00Z"
+        format: date-time
+        type: string
+      volume:
+        $ref: '#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.VolumeStatsResponse'
+    type: object
+  github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.ExportCountResponse:
+    properties:
+      count:
+        example: 4250
+        type: integer
+    type: object
+  github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.ListMatchedReportResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.MatchedItemResponse'
+        type: array
+      pagination:
+        $ref: '#/definitions/github_com_LerianStudio_lib-uncommons_v2_uncommons_net_http.CursorPagination'
+    type: object
+  github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.ListUnmatchedReportResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.UnmatchedItemResponse'
+        type: array
+      pagination:
+        $ref: '#/definitions/github_com_LerianStudio_lib-uncommons_v2_uncommons_net_http.CursorPagination'
+    type: object
+  github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.ListVarianceReportResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.VarianceReportRowResponse'
+        type: array
+      pagination:
+        $ref: '#/definitions/github_com_LerianStudio_lib-uncommons_v2_uncommons_net_http.CursorPagination'
+    type: object
+  github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.MatchRateStatsResponse:
+    properties:
+      matchRate:
+        example: 94.4
+        type: number
+      matchRateAmount:
+        example: 94.4
+        type: number
+      matchedCount:
+        example: 11800
+        type: integer
+      totalCount:
+        example: 12500
+        type: integer
+      unmatchedCount:
+        example: 700
+        type: integer
+    type: object
+  github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.MatchedItemResponse:
+    properties:
+      amount:
+        example: "1250.50"
+        type: string
+      currency:
+        example: USD
+        type: string
+      date:
+        example: "2025-01-15T10:30:00Z"
+        format: date-time
+        type: string
+      match_group_id:
+        example: 550e8400-e29b-41d4-a716-446655440001
+        type: string
+      source_id:
+        example: 550e8400-e29b-41d4-a716-446655440002
+        type: string
+      transaction_id:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+    type: object
+  github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.MatcherDashboardMetricsResponse:
+    properties:
+      breakdowns:
+        $ref: '#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.BreakdownMetricsResponse'
+      summary:
+        $ref: '#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.SummaryMetricsResponse'
+      trends:
+        $ref: '#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.TrendMetricsResponse'
+      updatedAt:
+        example: "2025-01-15T10:30:00Z"
+        format: date-time
+        type: string
+    type: object
+  github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.RuleMatchCountDTO:
+    properties:
+      count:
+        example: 1250
+        type: integer
+      id:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+      name:
+        example: Exact Amount Match
+        type: string
+    type: object
+  github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.SLAStatsResponse:
+    properties:
+      averageResolutionMs:
+        example: 3600000
+        type: integer
+      pendingOverdue:
+        example: 2
+        type: integer
+      pendingWithinSLA:
+        example: 2
+        type: integer
+      resolvedLate:
+        example: 3
+        type: integer
+      resolvedOnTime:
+        example: 35
+        type: integer
+      slaComplianceRate:
+        example: 83.3
+        type: number
+      totalExceptions:
+        example: 42
+        type: integer
+    type: object
+  github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.SourceBreakdownListResponse:
+    properties:
+      sources:
+        items:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.SourceBreakdownResponse'
+        type: array
+    type: object
+  github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.SourceBreakdownResponse:
+    properties:
+      currency:
+        example: USD
+        type: string
+      matchRate:
+        example: 95
+        type: number
+      matchedTransactions:
+        example: 4750
+        type: integer
+      sourceId:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+      sourceName:
+        example: Primary Bank Account
+        type: string
+      totalAmount:
+        example: "500000.00"
+        type: string
+      totalTransactions:
+        example: 5000
+        type: integer
+      unmatchedAmount:
+        example: "25000.00"
+        type: string
+      unmatchedTransactions:
+        example: 250
+        type: integer
+    type: object
+  github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.SummaryMetricsResponse:
+    properties:
+      criticalExposure:
+        example: "15000.00"
+        type: string
+      matchRate:
+        example: 94.4
+        type: number
+      oldestExceptionAgeHours:
+        example: 72.5
+        type: number
+      pendingExceptions:
+        example: 4
+        type: integer
+      totalMatches:
+        example: 11800
+        type: integer
+      totalTransactions:
+        example: 12500
+        type: integer
+    type: object
+  github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.SummaryReportResponse:
+    properties:
+      matched_amount:
+        example: "1180000.00"
+        type: string
+      matched_count:
+        example: 11800
+        type: integer
+      total_amount:
+        example: "1250000.00"
+        type: string
+      unmatched_amount:
+        example: "70000.00"
+        type: string
+      unmatched_count:
+        example: 700
+        type: integer
+    type: object
+  github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.TrendMetricsResponse:
+    properties:
+      dates:
+        items:
+          type: string
+        maxItems: 366
+        type: array
+      exceptions:
+        items:
+          type: integer
+        maxItems: 366
+        type: array
+      ingestion:
+        items:
+          type: integer
+        maxItems: 366
+        type: array
+      matchRates:
+        items:
+          type: number
+        maxItems: 366
+        type: array
+      matches:
+        items:
+          type: integer
+        maxItems: 366
+        type: array
+    type: object
+  github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.UnmatchedItemResponse:
+    properties:
+      amount:
+        example: "1250.50"
+        type: string
+      currency:
+        example: USD
+        type: string
+      date:
+        example: "2025-01-15T10:30:00Z"
+        format: date-time
+        type: string
+      due_at:
+        example: "2025-02-15T10:30:00Z"
+        format: date-time
+        type: string
+      exception_id:
+        example: 550e8400-e29b-41d4-a716-446655440003
+        type: string
+      source_id:
+        example: 550e8400-e29b-41d4-a716-446655440002
+        type: string
+      status:
+        example: PENDING
+        type: string
+      transaction_id:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+    type: object
+  github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.VarianceReportRowResponse:
+    properties:
+      currency:
+        example: USD
+        type: string
+      fee_type:
+        example: INTERCHANGE
+        type: string
+      net_variance:
+        example: "-200.00"
+        type: string
+      source_id:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+      total_actual:
+        example: "4800.00"
+        type: string
+      total_expected:
+        example: "5000.00"
+        type: string
+      variance_pct:
+        example: "-4.00"
+        type: string
+    type: object
+  github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.VolumeStatsResponse:
+    properties:
+      matchedAmount:
+        example: "1180000.00"
+        type: string
+      matchedTransactions:
+        example: 11800
+        type: integer
+      periodEnd:
+        example: "2025-01-31T23:59:59Z"
+        format: date-time
+        type: string
+      periodStart:
+        example: "2025-01-01T00:00:00Z"
+        format: date-time
+        type: string
+      totalAmount:
+        example: "1250000.00"
+        type: string
+      totalTransactions:
+        example: 12500
+        type: integer
+      unmatchedAmount:
+        example: "70000.00"
+        type: string
+      unmatchedCount:
+        example: 700
+        type: integer
+    type: object
   http.ErrorResponse:
     description: Standard error response returned by all API endpoints
     properties:
@@ -2104,30 +2575,6 @@ definitions:
     required:
     - ruleIds
     type: object
-  internal_governance_adapters_http.ActorMappingResponse:
-    description: Actor mapping entry linking an opaque actor ID to PII
-    properties:
-      actor_id:
-        description: Opaque actor identifier
-        example: user:550e8400-e29b-41d4-a716-446655440000
-        type: string
-      created_at:
-        description: Timestamp when the mapping was created (RFC3339)
-        example: "2026-01-15T10:30:00Z"
-        type: string
-      display_name:
-        description: Human-readable display name
-        example: John Doe
-        type: string
-      email:
-        description: Email address
-        example: john.doe@example.com
-        type: string
-      updated_at:
-        description: Timestamp when the mapping was last updated (RFC3339)
-        example: "2026-01-15T10:30:00Z"
-        type: string
-    type: object
   internal_governance_adapters_http.ArchiveDownloadResponse:
     description: Presigned download URL for an archived audit log
     properties:
@@ -2144,52 +2591,6 @@ definitions:
         example: "2026-02-05T13:00:00Z"
         type: string
     type: object
-  internal_governance_adapters_http.ArchiveMetadataResponse:
-    description: Completed audit log archive metadata
-    properties:
-      archived_at:
-        description: Timestamp when archival completed (RFC3339)
-        example: "2024-04-01T02:30:00Z"
-        type: string
-      compressed_size_bytes:
-        description: Compressed file size in bytes
-        example: 10485760
-        type: integer
-      date_range_end:
-        description: End of the archived date range (RFC3339)
-        example: "2024-03-31T23:59:59Z"
-        type: string
-      date_range_start:
-        description: Start of the archived date range (RFC3339)
-        example: "2024-01-01T00:00:00Z"
-        type: string
-      id:
-        description: Unique identifier for the archive
-        example: 550e8400-e29b-41d4-a716-446655440000
-        type: string
-      partition_name:
-        description: Name of the database partition that was archived
-        example: audit_logs_2024_q1
-        type: string
-      row_count:
-        description: Number of rows archived
-        example: 150000
-        type: integer
-      status:
-        description: Archive status
-        enum:
-        - COMPLETE
-        example: COMPLETE
-        type: string
-      storage_class:
-        description: Object storage class
-        enum:
-        - STANDARD
-        - GLACIER
-        - DEEP_ARCHIVE
-        example: GLACIER
-        type: string
-    type: object
   internal_governance_adapters_http.ListArchivesResponse:
     description: Paginated list of completed audit log archives
     properties:
@@ -2200,7 +2601,7 @@ definitions:
       items:
         description: List of archive metadata entries
         items:
-          $ref: '#/definitions/internal_governance_adapters_http.ArchiveMetadataResponse'
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_governance_adapters_http_dto.ArchiveMetadataResponse'
         maxItems: 200
         type: array
       limit:
@@ -2208,18 +2609,6 @@ definitions:
         maximum: 200
         minimum: 1
         type: integer
-    type: object
-  internal_governance_adapters_http.UpsertActorMappingRequest:
-    description: Request body for upserting an actor mapping
-    properties:
-      display_name:
-        description: Human-readable display name for the actor
-        example: John Doe
-        type: string
-      email:
-        description: Email address of the actor
-        example: john.doe@example.com
-        type: string
     type: object
   internal_matching_adapters_http.AdjustmentResponse:
     properties:
@@ -2382,62 +2771,6 @@ definitions:
     required:
     - reason
     type: object
-  internal_reporting_adapters_http.AgeBucketDTO:
-    properties:
-      bucket:
-        example: 0-24h
-        type: string
-      value:
-        example: 15
-        type: integer
-    type: object
-  internal_reporting_adapters_http.AgeExposureResponse:
-    properties:
-      amount:
-        example: "10000.00"
-        type: string
-      bucket:
-        example: 0-24h
-        type: string
-      transactionCount:
-        example: 120
-        type: integer
-    type: object
-  internal_reporting_adapters_http.BreakdownMetricsResponse:
-    properties:
-      byAge:
-        items:
-          $ref: '#/definitions/internal_reporting_adapters_http.AgeBucketDTO'
-        maxItems: 20
-        type: array
-      byReason:
-        additionalProperties:
-          type: integer
-        type: object
-      byRule:
-        items:
-          $ref: '#/definitions/internal_reporting_adapters_http.RuleMatchCountDTO'
-        maxItems: 100
-        type: array
-      bySeverity:
-        additionalProperties:
-          type: integer
-        type: object
-    type: object
-  internal_reporting_adapters_http.CashImpactSummaryResponse:
-    properties:
-      byAge:
-        items:
-          $ref: '#/definitions/internal_reporting_adapters_http.AgeExposureResponse'
-        type: array
-      byCurrency:
-        items:
-          $ref: '#/definitions/internal_reporting_adapters_http.CurrencyExposureResponse'
-        type: array
-      totalUnmatchedAmount:
-        example: "70000.00"
-        type: string
-    type: object
   internal_reporting_adapters_http.CreateExportJobRequest:
     properties:
       dateFrom:
@@ -2505,31 +2838,6 @@ definitions:
         example: /v1/contexts/550e8400-e29b-41d4-a716-446655440000/export-jobs/550e8400-e29b-41d4-a716-446655440001
         type: string
     type: object
-  internal_reporting_adapters_http.CurrencyExposureResponse:
-    properties:
-      amount:
-        example: "25000.00"
-        type: string
-      currency:
-        example: USD
-        type: string
-      transactionCount:
-        example: 250
-        type: integer
-    type: object
-  internal_reporting_adapters_http.DashboardAggregatesResponse:
-    properties:
-      matchRate:
-        $ref: '#/definitions/internal_reporting_adapters_http.MatchRateStatsResponse'
-      sla:
-        $ref: '#/definitions/internal_reporting_adapters_http.SLAStatsResponse'
-      updatedAt:
-        example: "2025-01-15T10:30:00Z"
-        format: date-time
-        type: string
-      volume:
-        $ref: '#/definitions/internal_reporting_adapters_http.VolumeStatsResponse'
-    type: object
   internal_reporting_adapters_http.DownloadExportJobResponse:
     properties:
       downloadUrl:
@@ -2548,12 +2856,6 @@ definitions:
         description: SHA-256 checksum of the file for integrity verification
         example: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
         type: string
-    type: object
-  internal_reporting_adapters_http.ExportCountResponse:
-    properties:
-      count:
-        example: 4250
-        type: integer
     type: object
   internal_reporting_adapters_http.ExportJobListResponse:
     properties:
@@ -2635,308 +2937,6 @@ definitions:
         - CANCELED
         example: SUCCEEDED
         type: string
-    type: object
-  internal_reporting_adapters_http.ListMatchedReportResponse:
-    properties:
-      items:
-        items:
-          $ref: '#/definitions/internal_reporting_adapters_http.MatchedItemResponse'
-        type: array
-      pagination:
-        $ref: '#/definitions/github_com_LerianStudio_lib-uncommons_v2_uncommons_net_http.CursorPagination'
-    type: object
-  internal_reporting_adapters_http.ListUnmatchedReportResponse:
-    properties:
-      items:
-        items:
-          $ref: '#/definitions/internal_reporting_adapters_http.UnmatchedItemResponse'
-        type: array
-      pagination:
-        $ref: '#/definitions/github_com_LerianStudio_lib-uncommons_v2_uncommons_net_http.CursorPagination'
-    type: object
-  internal_reporting_adapters_http.ListVarianceReportResponse:
-    properties:
-      items:
-        items:
-          $ref: '#/definitions/internal_reporting_adapters_http.VarianceReportRowResponse'
-        type: array
-      pagination:
-        $ref: '#/definitions/github_com_LerianStudio_lib-uncommons_v2_uncommons_net_http.CursorPagination'
-    type: object
-  internal_reporting_adapters_http.MatchRateStatsResponse:
-    properties:
-      matchRate:
-        example: 94.4
-        type: number
-      matchRateAmount:
-        example: 94.4
-        type: number
-      matchedCount:
-        example: 11800
-        type: integer
-      totalCount:
-        example: 12500
-        type: integer
-      unmatchedCount:
-        example: 700
-        type: integer
-    type: object
-  internal_reporting_adapters_http.MatchedItemResponse:
-    properties:
-      amount:
-        example: "1250.50"
-        type: string
-      currency:
-        example: USD
-        type: string
-      date:
-        example: "2025-01-15T10:30:00Z"
-        format: date-time
-        type: string
-      match_group_id:
-        example: 550e8400-e29b-41d4-a716-446655440001
-        type: string
-      source_id:
-        example: 550e8400-e29b-41d4-a716-446655440002
-        type: string
-      transaction_id:
-        example: 550e8400-e29b-41d4-a716-446655440000
-        type: string
-    type: object
-  internal_reporting_adapters_http.MatcherDashboardMetricsResponse:
-    properties:
-      breakdowns:
-        $ref: '#/definitions/internal_reporting_adapters_http.BreakdownMetricsResponse'
-      summary:
-        $ref: '#/definitions/internal_reporting_adapters_http.SummaryMetricsResponse'
-      trends:
-        $ref: '#/definitions/internal_reporting_adapters_http.TrendMetricsResponse'
-      updatedAt:
-        example: "2025-01-15T10:30:00Z"
-        format: date-time
-        type: string
-    type: object
-  internal_reporting_adapters_http.RuleMatchCountDTO:
-    properties:
-      count:
-        example: 1250
-        type: integer
-      id:
-        example: 550e8400-e29b-41d4-a716-446655440000
-        type: string
-      name:
-        example: Exact Amount Match
-        type: string
-    type: object
-  internal_reporting_adapters_http.SLAStatsResponse:
-    properties:
-      averageResolutionMs:
-        example: 3600000
-        type: integer
-      pendingOverdue:
-        example: 2
-        type: integer
-      pendingWithinSLA:
-        example: 2
-        type: integer
-      resolvedLate:
-        example: 3
-        type: integer
-      resolvedOnTime:
-        example: 35
-        type: integer
-      slaComplianceRate:
-        example: 83.3
-        type: number
-      totalExceptions:
-        example: 42
-        type: integer
-    type: object
-  internal_reporting_adapters_http.SourceBreakdownListResponse:
-    properties:
-      sources:
-        items:
-          $ref: '#/definitions/internal_reporting_adapters_http.SourceBreakdownResponse'
-        type: array
-    type: object
-  internal_reporting_adapters_http.SourceBreakdownResponse:
-    properties:
-      currency:
-        example: USD
-        type: string
-      matchRate:
-        example: 95
-        type: number
-      matchedTransactions:
-        example: 4750
-        type: integer
-      sourceId:
-        example: 550e8400-e29b-41d4-a716-446655440000
-        type: string
-      sourceName:
-        example: Primary Bank Account
-        type: string
-      totalAmount:
-        example: "500000.00"
-        type: string
-      totalTransactions:
-        example: 5000
-        type: integer
-      unmatchedAmount:
-        example: "25000.00"
-        type: string
-      unmatchedTransactions:
-        example: 250
-        type: integer
-    type: object
-  internal_reporting_adapters_http.SummaryMetricsResponse:
-    properties:
-      criticalExposure:
-        example: "15000.00"
-        type: string
-      matchRate:
-        example: 94.4
-        type: number
-      oldestExceptionAgeHours:
-        example: 72.5
-        type: number
-      pendingExceptions:
-        example: 4
-        type: integer
-      totalMatches:
-        example: 11800
-        type: integer
-      totalTransactions:
-        example: 12500
-        type: integer
-    type: object
-  internal_reporting_adapters_http.SummaryReportResponse:
-    properties:
-      matched_amount:
-        example: "1180000.00"
-        type: string
-      matched_count:
-        example: 11800
-        type: integer
-      total_amount:
-        example: "1250000.00"
-        type: string
-      unmatched_amount:
-        example: "70000.00"
-        type: string
-      unmatched_count:
-        example: 700
-        type: integer
-    type: object
-  internal_reporting_adapters_http.TrendMetricsResponse:
-    properties:
-      dates:
-        items:
-          type: string
-        maxItems: 366
-        type: array
-      exceptions:
-        items:
-          type: integer
-        maxItems: 366
-        type: array
-      ingestion:
-        items:
-          type: integer
-        maxItems: 366
-        type: array
-      matchRates:
-        items:
-          type: number
-        maxItems: 366
-        type: array
-      matches:
-        items:
-          type: integer
-        maxItems: 366
-        type: array
-    type: object
-  internal_reporting_adapters_http.UnmatchedItemResponse:
-    properties:
-      amount:
-        example: "1250.50"
-        type: string
-      currency:
-        example: USD
-        type: string
-      date:
-        example: "2025-01-15T10:30:00Z"
-        format: date-time
-        type: string
-      due_at:
-        example: "2025-02-15T10:30:00Z"
-        format: date-time
-        type: string
-      exception_id:
-        example: 550e8400-e29b-41d4-a716-446655440003
-        type: string
-      source_id:
-        example: 550e8400-e29b-41d4-a716-446655440002
-        type: string
-      status:
-        example: PENDING
-        type: string
-      transaction_id:
-        example: 550e8400-e29b-41d4-a716-446655440000
-        type: string
-    type: object
-  internal_reporting_adapters_http.VarianceReportRowResponse:
-    properties:
-      currency:
-        example: USD
-        type: string
-      fee_type:
-        example: INTERCHANGE
-        type: string
-      net_variance:
-        example: "-200.00"
-        type: string
-      source_id:
-        example: 550e8400-e29b-41d4-a716-446655440000
-        type: string
-      total_actual:
-        example: "4800.00"
-        type: string
-      total_expected:
-        example: "5000.00"
-        type: string
-      variance_pct:
-        example: "-4.00"
-        type: string
-    type: object
-  internal_reporting_adapters_http.VolumeStatsResponse:
-    properties:
-      matchedAmount:
-        example: "1180000.00"
-        type: string
-      matchedTransactions:
-        example: 11800
-        type: integer
-      periodEnd:
-        example: "2025-01-31T23:59:59Z"
-        format: date-time
-        type: string
-      periodStart:
-        example: "2025-01-01T00:00:00Z"
-        format: date-time
-        type: string
-      totalAmount:
-        example: "1250000.00"
-        type: string
-      totalTransactions:
-        example: 12500
-        type: integer
-      unmatchedAmount:
-        example: "70000.00"
-        type: string
-      unmatchedCount:
-        example: 700
-        type: integer
     type: object
 info:
   contact:
@@ -6214,7 +6214,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_governance_adapters_http.ActorMappingResponse'
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_governance_adapters_http_dto.ActorMappingResponse'
         "400":
           description: Invalid request
           schema:
@@ -6261,14 +6261,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_governance_adapters_http.UpsertActorMappingRequest'
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_governance_adapters_http_dto.UpsertActorMappingRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_governance_adapters_http.ActorMappingResponse'
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_governance_adapters_http_dto.ActorMappingResponse'
         "400":
           description: Invalid request
           schema:
@@ -7633,7 +7633,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_reporting_adapters_http.DashboardAggregatesResponse'
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.DashboardAggregatesResponse'
         "400":
           description: Invalid query parameters
           schema:
@@ -7697,7 +7697,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_reporting_adapters_http.CashImpactSummaryResponse'
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.CashImpactSummaryResponse'
         "400":
           description: Invalid query parameters
           schema:
@@ -7761,7 +7761,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_reporting_adapters_http.MatchRateStatsResponse'
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.MatchRateStatsResponse'
         "400":
           description: Invalid query parameters
           schema:
@@ -7825,7 +7825,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_reporting_adapters_http.MatcherDashboardMetricsResponse'
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.MatcherDashboardMetricsResponse'
         "400":
           description: Invalid query parameters
           schema:
@@ -7889,7 +7889,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_reporting_adapters_http.SLAStatsResponse'
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.SLAStatsResponse'
         "400":
           description: Invalid query parameters
           schema:
@@ -7953,7 +7953,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_reporting_adapters_http.SourceBreakdownListResponse'
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.SourceBreakdownListResponse'
         "400":
           description: Invalid query parameters
           schema:
@@ -8017,7 +8017,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_reporting_adapters_http.VolumeStatsResponse'
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.VolumeStatsResponse'
         "400":
           description: Invalid query parameters
           schema:
@@ -8082,7 +8082,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_reporting_adapters_http.ExportCountResponse'
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.ExportCountResponse'
         "400":
           description: Invalid query parameters
           schema:
@@ -8165,7 +8165,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_reporting_adapters_http.ListMatchedReportResponse'
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.ListMatchedReportResponse'
         "400":
           description: Invalid query parameters
           schema:
@@ -8301,7 +8301,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_reporting_adapters_http.ExportCountResponse'
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.ExportCountResponse'
         "400":
           description: Invalid query parameters
           schema:
@@ -8365,7 +8365,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_reporting_adapters_http.SummaryReportResponse'
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.SummaryReportResponse'
         "400":
           description: Invalid query parameters
           schema:
@@ -8501,7 +8501,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_reporting_adapters_http.ExportCountResponse'
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.ExportCountResponse'
         "400":
           description: Invalid query parameters
           schema:
@@ -8584,7 +8584,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_reporting_adapters_http.ListUnmatchedReportResponse'
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.ListUnmatchedReportResponse'
         "400":
           description: Invalid query parameters
           schema:
@@ -8649,7 +8649,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_reporting_adapters_http.ExportCountResponse'
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.ExportCountResponse'
         "400":
           description: Invalid query parameters
           schema:
@@ -8803,7 +8803,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_reporting_adapters_http.ListVarianceReportResponse'
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.ListVarianceReportResponse'
         "400":
           description: Invalid query parameters
           schema:

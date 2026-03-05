@@ -4846,7 +4846,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_governance_adapters_http.ActorMappingResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_governance_adapters_http_dto.ActorMappingResponse"
                         }
                     },
                     "400": {
@@ -4919,7 +4919,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_governance_adapters_http.UpsertActorMappingRequest"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_governance_adapters_http_dto.UpsertActorMappingRequest"
                         }
                     }
                 ],
@@ -4927,7 +4927,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_governance_adapters_http.ActorMappingResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_governance_adapters_http_dto.ActorMappingResponse"
                         }
                     },
                     "400": {
@@ -6980,7 +6980,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_reporting_adapters_http.DashboardAggregatesResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.DashboardAggregatesResponse"
                         }
                     },
                     "400": {
@@ -7074,7 +7074,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_reporting_adapters_http.CashImpactSummaryResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.CashImpactSummaryResponse"
                         }
                     },
                     "400": {
@@ -7168,7 +7168,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_reporting_adapters_http.MatchRateStatsResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.MatchRateStatsResponse"
                         }
                     },
                     "400": {
@@ -7262,7 +7262,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_reporting_adapters_http.MatcherDashboardMetricsResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.MatcherDashboardMetricsResponse"
                         }
                     },
                     "400": {
@@ -7356,7 +7356,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_reporting_adapters_http.SLAStatsResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.SLAStatsResponse"
                         }
                     },
                     "400": {
@@ -7450,7 +7450,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_reporting_adapters_http.SourceBreakdownListResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.SourceBreakdownListResponse"
                         }
                     },
                     "400": {
@@ -7544,7 +7544,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_reporting_adapters_http.VolumeStatsResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.VolumeStatsResponse"
                         }
                     },
                     "400": {
@@ -7638,7 +7638,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_reporting_adapters_http.ExportCountResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.ExportCountResponse"
                         }
                     },
                     "400": {
@@ -7758,7 +7758,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_reporting_adapters_http.ListMatchedReportResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.ListMatchedReportResponse"
                         }
                     },
                     "400": {
@@ -7955,7 +7955,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_reporting_adapters_http.ExportCountResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.ExportCountResponse"
                         }
                     },
                     "400": {
@@ -8049,7 +8049,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_reporting_adapters_http.SummaryReportResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.SummaryReportResponse"
                         }
                     },
                     "400": {
@@ -8246,7 +8246,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_reporting_adapters_http.ExportCountResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.ExportCountResponse"
                         }
                     },
                     "400": {
@@ -8366,7 +8366,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_reporting_adapters_http.ListUnmatchedReportResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.ListUnmatchedReportResponse"
                         }
                     },
                     "400": {
@@ -8460,7 +8460,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_reporting_adapters_http.ExportCountResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.ExportCountResponse"
                         }
                     },
                     "400": {
@@ -8683,7 +8683,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_reporting_adapters_http.ListVarianceReportResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.ListVarianceReportResponse"
                         }
                     },
                     "400": {
@@ -10612,6 +10612,96 @@ const docTemplate = `{
                 }
             }
         },
+        "github_com_LerianStudio_matcher_internal_governance_adapters_http_dto.ActorMappingResponse": {
+            "description": "Actor mapping entry linking an opaque actor ID to PII",
+            "type": "object",
+            "properties": {
+                "actor_id": {
+                    "description": "Opaque actor identifier",
+                    "type": "string",
+                    "example": "user:550e8400-e29b-41d4-a716-446655440000"
+                },
+                "created_at": {
+                    "description": "Timestamp when the mapping was created (RFC3339)",
+                    "type": "string",
+                    "example": "2026-01-15T10:30:00Z"
+                },
+                "display_name": {
+                    "description": "Human-readable display name",
+                    "type": "string",
+                    "example": "John Doe"
+                },
+                "email": {
+                    "description": "Email address",
+                    "type": "string",
+                    "example": "john.doe@example.com"
+                },
+                "updated_at": {
+                    "description": "Timestamp when the mapping was last updated (RFC3339)",
+                    "type": "string",
+                    "example": "2026-01-15T10:30:00Z"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_governance_adapters_http_dto.ArchiveMetadataResponse": {
+            "description": "Completed audit log archive metadata",
+            "type": "object",
+            "properties": {
+                "archived_at": {
+                    "description": "Timestamp when archival completed (RFC3339)",
+                    "type": "string",
+                    "example": "2024-04-01T02:30:00Z"
+                },
+                "compressed_size_bytes": {
+                    "description": "Compressed file size in bytes",
+                    "type": "integer",
+                    "example": 10485760
+                },
+                "date_range_end": {
+                    "description": "End of the archived date range (RFC3339)",
+                    "type": "string",
+                    "example": "2024-03-31T23:59:59Z"
+                },
+                "date_range_start": {
+                    "description": "Start of the archived date range (RFC3339)",
+                    "type": "string",
+                    "example": "2024-01-01T00:00:00Z"
+                },
+                "id": {
+                    "description": "Unique identifier for the archive",
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                "partition_name": {
+                    "description": "Name of the database partition that was archived",
+                    "type": "string",
+                    "example": "audit_logs_2024_q1"
+                },
+                "row_count": {
+                    "description": "Number of rows archived",
+                    "type": "integer",
+                    "example": 150000
+                },
+                "status": {
+                    "description": "Archive status",
+                    "type": "string",
+                    "enum": [
+                        "COMPLETE"
+                    ],
+                    "example": "COMPLETE"
+                },
+                "storage_class": {
+                    "description": "Object storage class",
+                    "type": "string",
+                    "enum": [
+                        "STANDARD",
+                        "GLACIER",
+                        "DEEP_ARCHIVE"
+                    ],
+                    "example": "GLACIER"
+                }
+            }
+        },
         "github_com_LerianStudio_matcher_internal_governance_adapters_http_dto.AuditLogResponse": {
             "description": "Immutable audit log entry for governance tracking",
             "type": "object",
@@ -10690,6 +10780,22 @@ const docTemplate = `{
                 "prevCursor": {
                     "type": "string",
                     "example": "eyJpZCI6IjEyMiJ9"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_governance_adapters_http_dto.UpsertActorMappingRequest": {
+            "description": "Request body for upserting an actor mapping",
+            "type": "object",
+            "properties": {
+                "display_name": {
+                    "description": "Human-readable display name for the actor",
+                    "type": "string",
+                    "example": "John Doe"
+                },
+                "email": {
+                    "description": "Email address of the actor",
+                    "type": "string",
+                    "example": "john.doe@example.com"
                 }
             }
         },
@@ -11320,6 +11426,556 @@ const docTemplate = `{
                 }
             }
         },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.AgeBucketDTO": {
+            "type": "object",
+            "properties": {
+                "bucket": {
+                    "type": "string",
+                    "example": "0-24h"
+                },
+                "value": {
+                    "type": "integer",
+                    "example": 15
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.AgeExposureResponse": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "string",
+                    "example": "10000.00"
+                },
+                "bucket": {
+                    "type": "string",
+                    "example": "0-24h"
+                },
+                "transactionCount": {
+                    "type": "integer",
+                    "example": 120
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.BreakdownMetricsResponse": {
+            "type": "object",
+            "properties": {
+                "byAge": {
+                    "type": "array",
+                    "maxItems": 20,
+                    "items": {
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.AgeBucketDTO"
+                    }
+                },
+                "byReason": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                },
+                "byRule": {
+                    "type": "array",
+                    "maxItems": 100,
+                    "items": {
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.RuleMatchCountDTO"
+                    }
+                },
+                "bySeverity": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.CashImpactSummaryResponse": {
+            "type": "object",
+            "properties": {
+                "byAge": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.AgeExposureResponse"
+                    }
+                },
+                "byCurrency": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.CurrencyExposureResponse"
+                    }
+                },
+                "totalUnmatchedAmount": {
+                    "type": "string",
+                    "example": "70000.00"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.CurrencyExposureResponse": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "string",
+                    "example": "25000.00"
+                },
+                "currency": {
+                    "type": "string",
+                    "example": "USD"
+                },
+                "transactionCount": {
+                    "type": "integer",
+                    "example": 250
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.DashboardAggregatesResponse": {
+            "type": "object",
+            "properties": {
+                "matchRate": {
+                    "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.MatchRateStatsResponse"
+                },
+                "sla": {
+                    "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.SLAStatsResponse"
+                },
+                "updatedAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "example": "2025-01-15T10:30:00Z"
+                },
+                "volume": {
+                    "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.VolumeStatsResponse"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.ExportCountResponse": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer",
+                    "example": 4250
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.ListMatchedReportResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.MatchedItemResponse"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/github_com_LerianStudio_lib-uncommons_v2_uncommons_net_http.CursorPagination"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.ListUnmatchedReportResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.UnmatchedItemResponse"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/github_com_LerianStudio_lib-uncommons_v2_uncommons_net_http.CursorPagination"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.ListVarianceReportResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.VarianceReportRowResponse"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/github_com_LerianStudio_lib-uncommons_v2_uncommons_net_http.CursorPagination"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.MatchRateStatsResponse": {
+            "type": "object",
+            "properties": {
+                "matchRate": {
+                    "type": "number",
+                    "example": 94.4
+                },
+                "matchRateAmount": {
+                    "type": "number",
+                    "example": 94.4
+                },
+                "matchedCount": {
+                    "type": "integer",
+                    "example": 11800
+                },
+                "totalCount": {
+                    "type": "integer",
+                    "example": 12500
+                },
+                "unmatchedCount": {
+                    "type": "integer",
+                    "example": 700
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.MatchedItemResponse": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "string",
+                    "example": "1250.50"
+                },
+                "currency": {
+                    "type": "string",
+                    "example": "USD"
+                },
+                "date": {
+                    "type": "string",
+                    "format": "date-time",
+                    "example": "2025-01-15T10:30:00Z"
+                },
+                "match_group_id": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440001"
+                },
+                "source_id": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440002"
+                },
+                "transaction_id": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.MatcherDashboardMetricsResponse": {
+            "type": "object",
+            "properties": {
+                "breakdowns": {
+                    "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.BreakdownMetricsResponse"
+                },
+                "summary": {
+                    "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.SummaryMetricsResponse"
+                },
+                "trends": {
+                    "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.TrendMetricsResponse"
+                },
+                "updatedAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "example": "2025-01-15T10:30:00Z"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.RuleMatchCountDTO": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer",
+                    "example": 1250
+                },
+                "id": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "Exact Amount Match"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.SLAStatsResponse": {
+            "type": "object",
+            "properties": {
+                "averageResolutionMs": {
+                    "type": "integer",
+                    "example": 3600000
+                },
+                "pendingOverdue": {
+                    "type": "integer",
+                    "example": 2
+                },
+                "pendingWithinSLA": {
+                    "type": "integer",
+                    "example": 2
+                },
+                "resolvedLate": {
+                    "type": "integer",
+                    "example": 3
+                },
+                "resolvedOnTime": {
+                    "type": "integer",
+                    "example": 35
+                },
+                "slaComplianceRate": {
+                    "type": "number",
+                    "example": 83.3
+                },
+                "totalExceptions": {
+                    "type": "integer",
+                    "example": 42
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.SourceBreakdownListResponse": {
+            "type": "object",
+            "properties": {
+                "sources": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.SourceBreakdownResponse"
+                    }
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.SourceBreakdownResponse": {
+            "type": "object",
+            "properties": {
+                "currency": {
+                    "type": "string",
+                    "example": "USD"
+                },
+                "matchRate": {
+                    "type": "number",
+                    "example": 95
+                },
+                "matchedTransactions": {
+                    "type": "integer",
+                    "example": 4750
+                },
+                "sourceId": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                "sourceName": {
+                    "type": "string",
+                    "example": "Primary Bank Account"
+                },
+                "totalAmount": {
+                    "type": "string",
+                    "example": "500000.00"
+                },
+                "totalTransactions": {
+                    "type": "integer",
+                    "example": 5000
+                },
+                "unmatchedAmount": {
+                    "type": "string",
+                    "example": "25000.00"
+                },
+                "unmatchedTransactions": {
+                    "type": "integer",
+                    "example": 250
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.SummaryMetricsResponse": {
+            "type": "object",
+            "properties": {
+                "criticalExposure": {
+                    "type": "string",
+                    "example": "15000.00"
+                },
+                "matchRate": {
+                    "type": "number",
+                    "example": 94.4
+                },
+                "oldestExceptionAgeHours": {
+                    "type": "number",
+                    "example": 72.5
+                },
+                "pendingExceptions": {
+                    "type": "integer",
+                    "example": 4
+                },
+                "totalMatches": {
+                    "type": "integer",
+                    "example": 11800
+                },
+                "totalTransactions": {
+                    "type": "integer",
+                    "example": 12500
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.SummaryReportResponse": {
+            "type": "object",
+            "properties": {
+                "matched_amount": {
+                    "type": "string",
+                    "example": "1180000.00"
+                },
+                "matched_count": {
+                    "type": "integer",
+                    "example": 11800
+                },
+                "total_amount": {
+                    "type": "string",
+                    "example": "1250000.00"
+                },
+                "unmatched_amount": {
+                    "type": "string",
+                    "example": "70000.00"
+                },
+                "unmatched_count": {
+                    "type": "integer",
+                    "example": 700
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.TrendMetricsResponse": {
+            "type": "object",
+            "properties": {
+                "dates": {
+                    "type": "array",
+                    "maxItems": 366,
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "exceptions": {
+                    "type": "array",
+                    "maxItems": 366,
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "ingestion": {
+                    "type": "array",
+                    "maxItems": 366,
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "matchRates": {
+                    "type": "array",
+                    "maxItems": 366,
+                    "items": {
+                        "type": "number"
+                    }
+                },
+                "matches": {
+                    "type": "array",
+                    "maxItems": 366,
+                    "items": {
+                        "type": "integer"
+                    }
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.UnmatchedItemResponse": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "string",
+                    "example": "1250.50"
+                },
+                "currency": {
+                    "type": "string",
+                    "example": "USD"
+                },
+                "date": {
+                    "type": "string",
+                    "format": "date-time",
+                    "example": "2025-01-15T10:30:00Z"
+                },
+                "due_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "example": "2025-02-15T10:30:00Z"
+                },
+                "exception_id": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440003"
+                },
+                "source_id": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440002"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "PENDING"
+                },
+                "transaction_id": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.VarianceReportRowResponse": {
+            "type": "object",
+            "properties": {
+                "currency": {
+                    "type": "string",
+                    "example": "USD"
+                },
+                "fee_type": {
+                    "type": "string",
+                    "example": "INTERCHANGE"
+                },
+                "net_variance": {
+                    "type": "string",
+                    "example": "-200.00"
+                },
+                "source_id": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                "total_actual": {
+                    "type": "string",
+                    "example": "4800.00"
+                },
+                "total_expected": {
+                    "type": "string",
+                    "example": "5000.00"
+                },
+                "variance_pct": {
+                    "type": "string",
+                    "example": "-4.00"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.VolumeStatsResponse": {
+            "type": "object",
+            "properties": {
+                "matchedAmount": {
+                    "type": "string",
+                    "example": "1180000.00"
+                },
+                "matchedTransactions": {
+                    "type": "integer",
+                    "example": 11800
+                },
+                "periodEnd": {
+                    "type": "string",
+                    "format": "date-time",
+                    "example": "2025-01-31T23:59:59Z"
+                },
+                "periodStart": {
+                    "type": "string",
+                    "format": "date-time",
+                    "example": "2025-01-01T00:00:00Z"
+                },
+                "totalAmount": {
+                    "type": "string",
+                    "example": "1250000.00"
+                },
+                "totalTransactions": {
+                    "type": "integer",
+                    "example": 12500
+                },
+                "unmatchedAmount": {
+                    "type": "string",
+                    "example": "70000.00"
+                },
+                "unmatchedCount": {
+                    "type": "integer",
+                    "example": 700
+                }
+            }
+        },
         "http.ErrorResponse": {
             "description": "Standard error response returned by all API endpoints",
             "type": "object",
@@ -11532,37 +12188,6 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_governance_adapters_http.ActorMappingResponse": {
-            "description": "Actor mapping entry linking an opaque actor ID to PII",
-            "type": "object",
-            "properties": {
-                "actor_id": {
-                    "description": "Opaque actor identifier",
-                    "type": "string",
-                    "example": "user:550e8400-e29b-41d4-a716-446655440000"
-                },
-                "created_at": {
-                    "description": "Timestamp when the mapping was created (RFC3339)",
-                    "type": "string",
-                    "example": "2026-01-15T10:30:00Z"
-                },
-                "display_name": {
-                    "description": "Human-readable display name",
-                    "type": "string",
-                    "example": "John Doe"
-                },
-                "email": {
-                    "description": "Email address",
-                    "type": "string",
-                    "example": "john.doe@example.com"
-                },
-                "updated_at": {
-                    "description": "Timestamp when the mapping was last updated (RFC3339)",
-                    "type": "string",
-                    "example": "2026-01-15T10:30:00Z"
-                }
-            }
-        },
         "internal_governance_adapters_http.ArchiveDownloadResponse": {
             "description": "Presigned download URL for an archived audit log",
             "type": "object",
@@ -11584,65 +12209,6 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_governance_adapters_http.ArchiveMetadataResponse": {
-            "description": "Completed audit log archive metadata",
-            "type": "object",
-            "properties": {
-                "archived_at": {
-                    "description": "Timestamp when archival completed (RFC3339)",
-                    "type": "string",
-                    "example": "2024-04-01T02:30:00Z"
-                },
-                "compressed_size_bytes": {
-                    "description": "Compressed file size in bytes",
-                    "type": "integer",
-                    "example": 10485760
-                },
-                "date_range_end": {
-                    "description": "End of the archived date range (RFC3339)",
-                    "type": "string",
-                    "example": "2024-03-31T23:59:59Z"
-                },
-                "date_range_start": {
-                    "description": "Start of the archived date range (RFC3339)",
-                    "type": "string",
-                    "example": "2024-01-01T00:00:00Z"
-                },
-                "id": {
-                    "description": "Unique identifier for the archive",
-                    "type": "string",
-                    "example": "550e8400-e29b-41d4-a716-446655440000"
-                },
-                "partition_name": {
-                    "description": "Name of the database partition that was archived",
-                    "type": "string",
-                    "example": "audit_logs_2024_q1"
-                },
-                "row_count": {
-                    "description": "Number of rows archived",
-                    "type": "integer",
-                    "example": 150000
-                },
-                "status": {
-                    "description": "Archive status",
-                    "type": "string",
-                    "enum": [
-                        "COMPLETE"
-                    ],
-                    "example": "COMPLETE"
-                },
-                "storage_class": {
-                    "description": "Object storage class",
-                    "type": "string",
-                    "enum": [
-                        "STANDARD",
-                        "GLACIER",
-                        "DEEP_ARCHIVE"
-                    ],
-                    "example": "GLACIER"
-                }
-            }
-        },
         "internal_governance_adapters_http.ListArchivesResponse": {
             "description": "Paginated list of completed audit log archives",
             "type": "object",
@@ -11657,7 +12223,7 @@ const docTemplate = `{
                     "type": "array",
                     "maxItems": 200,
                     "items": {
-                        "$ref": "#/definitions/internal_governance_adapters_http.ArchiveMetadataResponse"
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_governance_adapters_http_dto.ArchiveMetadataResponse"
                     }
                 },
                 "limit": {
@@ -11665,22 +12231,6 @@ const docTemplate = `{
                     "maximum": 200,
                     "minimum": 1,
                     "example": 20
-                }
-            }
-        },
-        "internal_governance_adapters_http.UpsertActorMappingRequest": {
-            "description": "Request body for upserting an actor mapping",
-            "type": "object",
-            "properties": {
-                "display_name": {
-                    "description": "Human-readable display name for the actor",
-                    "type": "string",
-                    "example": "John Doe"
-                },
-                "email": {
-                    "description": "Email address of the actor",
-                    "type": "string",
-                    "example": "john.doe@example.com"
                 }
             }
         },
@@ -11899,88 +12449,6 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_reporting_adapters_http.AgeBucketDTO": {
-            "type": "object",
-            "properties": {
-                "bucket": {
-                    "type": "string",
-                    "example": "0-24h"
-                },
-                "value": {
-                    "type": "integer",
-                    "example": 15
-                }
-            }
-        },
-        "internal_reporting_adapters_http.AgeExposureResponse": {
-            "type": "object",
-            "properties": {
-                "amount": {
-                    "type": "string",
-                    "example": "10000.00"
-                },
-                "bucket": {
-                    "type": "string",
-                    "example": "0-24h"
-                },
-                "transactionCount": {
-                    "type": "integer",
-                    "example": 120
-                }
-            }
-        },
-        "internal_reporting_adapters_http.BreakdownMetricsResponse": {
-            "type": "object",
-            "properties": {
-                "byAge": {
-                    "type": "array",
-                    "maxItems": 20,
-                    "items": {
-                        "$ref": "#/definitions/internal_reporting_adapters_http.AgeBucketDTO"
-                    }
-                },
-                "byReason": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "integer"
-                    }
-                },
-                "byRule": {
-                    "type": "array",
-                    "maxItems": 100,
-                    "items": {
-                        "$ref": "#/definitions/internal_reporting_adapters_http.RuleMatchCountDTO"
-                    }
-                },
-                "bySeverity": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "integer"
-                    }
-                }
-            }
-        },
-        "internal_reporting_adapters_http.CashImpactSummaryResponse": {
-            "type": "object",
-            "properties": {
-                "byAge": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/internal_reporting_adapters_http.AgeExposureResponse"
-                    }
-                },
-                "byCurrency": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/internal_reporting_adapters_http.CurrencyExposureResponse"
-                    }
-                },
-                "totalUnmatchedAmount": {
-                    "type": "string",
-                    "example": "70000.00"
-                }
-            }
-        },
         "internal_reporting_adapters_http.CreateExportJobRequest": {
             "type": "object",
             "required": [
@@ -12061,42 +12529,6 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_reporting_adapters_http.CurrencyExposureResponse": {
-            "type": "object",
-            "properties": {
-                "amount": {
-                    "type": "string",
-                    "example": "25000.00"
-                },
-                "currency": {
-                    "type": "string",
-                    "example": "USD"
-                },
-                "transactionCount": {
-                    "type": "integer",
-                    "example": 250
-                }
-            }
-        },
-        "internal_reporting_adapters_http.DashboardAggregatesResponse": {
-            "type": "object",
-            "properties": {
-                "matchRate": {
-                    "$ref": "#/definitions/internal_reporting_adapters_http.MatchRateStatsResponse"
-                },
-                "sla": {
-                    "$ref": "#/definitions/internal_reporting_adapters_http.SLAStatsResponse"
-                },
-                "updatedAt": {
-                    "type": "string",
-                    "format": "date-time",
-                    "example": "2025-01-15T10:30:00Z"
-                },
-                "volume": {
-                    "$ref": "#/definitions/internal_reporting_adapters_http.VolumeStatsResponse"
-                }
-            }
-        },
         "internal_reporting_adapters_http.DownloadExportJobResponse": {
             "type": "object",
             "properties": {
@@ -12119,15 +12551,6 @@ const docTemplate = `{
                     "description": "SHA-256 checksum of the file for integrity verification",
                     "type": "string",
                     "example": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-                }
-            }
-        },
-        "internal_reporting_adapters_http.ExportCountResponse": {
-            "type": "object",
-            "properties": {
-                "count": {
-                    "type": "integer",
-                    "example": 4250
                 }
             }
         },
@@ -12235,429 +12658,6 @@ const docTemplate = `{
                         "CANCELED"
                     ],
                     "example": "SUCCEEDED"
-                }
-            }
-        },
-        "internal_reporting_adapters_http.ListMatchedReportResponse": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/internal_reporting_adapters_http.MatchedItemResponse"
-                    }
-                },
-                "pagination": {
-                    "$ref": "#/definitions/github_com_LerianStudio_lib-uncommons_v2_uncommons_net_http.CursorPagination"
-                }
-            }
-        },
-        "internal_reporting_adapters_http.ListUnmatchedReportResponse": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/internal_reporting_adapters_http.UnmatchedItemResponse"
-                    }
-                },
-                "pagination": {
-                    "$ref": "#/definitions/github_com_LerianStudio_lib-uncommons_v2_uncommons_net_http.CursorPagination"
-                }
-            }
-        },
-        "internal_reporting_adapters_http.ListVarianceReportResponse": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/internal_reporting_adapters_http.VarianceReportRowResponse"
-                    }
-                },
-                "pagination": {
-                    "$ref": "#/definitions/github_com_LerianStudio_lib-uncommons_v2_uncommons_net_http.CursorPagination"
-                }
-            }
-        },
-        "internal_reporting_adapters_http.MatchRateStatsResponse": {
-            "type": "object",
-            "properties": {
-                "matchRate": {
-                    "type": "number",
-                    "example": 94.4
-                },
-                "matchRateAmount": {
-                    "type": "number",
-                    "example": 94.4
-                },
-                "matchedCount": {
-                    "type": "integer",
-                    "example": 11800
-                },
-                "totalCount": {
-                    "type": "integer",
-                    "example": 12500
-                },
-                "unmatchedCount": {
-                    "type": "integer",
-                    "example": 700
-                }
-            }
-        },
-        "internal_reporting_adapters_http.MatchedItemResponse": {
-            "type": "object",
-            "properties": {
-                "amount": {
-                    "type": "string",
-                    "example": "1250.50"
-                },
-                "currency": {
-                    "type": "string",
-                    "example": "USD"
-                },
-                "date": {
-                    "type": "string",
-                    "format": "date-time",
-                    "example": "2025-01-15T10:30:00Z"
-                },
-                "match_group_id": {
-                    "type": "string",
-                    "example": "550e8400-e29b-41d4-a716-446655440001"
-                },
-                "source_id": {
-                    "type": "string",
-                    "example": "550e8400-e29b-41d4-a716-446655440002"
-                },
-                "transaction_id": {
-                    "type": "string",
-                    "example": "550e8400-e29b-41d4-a716-446655440000"
-                }
-            }
-        },
-        "internal_reporting_adapters_http.MatcherDashboardMetricsResponse": {
-            "type": "object",
-            "properties": {
-                "breakdowns": {
-                    "$ref": "#/definitions/internal_reporting_adapters_http.BreakdownMetricsResponse"
-                },
-                "summary": {
-                    "$ref": "#/definitions/internal_reporting_adapters_http.SummaryMetricsResponse"
-                },
-                "trends": {
-                    "$ref": "#/definitions/internal_reporting_adapters_http.TrendMetricsResponse"
-                },
-                "updatedAt": {
-                    "type": "string",
-                    "format": "date-time",
-                    "example": "2025-01-15T10:30:00Z"
-                }
-            }
-        },
-        "internal_reporting_adapters_http.RuleMatchCountDTO": {
-            "type": "object",
-            "properties": {
-                "count": {
-                    "type": "integer",
-                    "example": 1250
-                },
-                "id": {
-                    "type": "string",
-                    "example": "550e8400-e29b-41d4-a716-446655440000"
-                },
-                "name": {
-                    "type": "string",
-                    "example": "Exact Amount Match"
-                }
-            }
-        },
-        "internal_reporting_adapters_http.SLAStatsResponse": {
-            "type": "object",
-            "properties": {
-                "averageResolutionMs": {
-                    "type": "integer",
-                    "example": 3600000
-                },
-                "pendingOverdue": {
-                    "type": "integer",
-                    "example": 2
-                },
-                "pendingWithinSLA": {
-                    "type": "integer",
-                    "example": 2
-                },
-                "resolvedLate": {
-                    "type": "integer",
-                    "example": 3
-                },
-                "resolvedOnTime": {
-                    "type": "integer",
-                    "example": 35
-                },
-                "slaComplianceRate": {
-                    "type": "number",
-                    "example": 83.3
-                },
-                "totalExceptions": {
-                    "type": "integer",
-                    "example": 42
-                }
-            }
-        },
-        "internal_reporting_adapters_http.SourceBreakdownListResponse": {
-            "type": "object",
-            "properties": {
-                "sources": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/internal_reporting_adapters_http.SourceBreakdownResponse"
-                    }
-                }
-            }
-        },
-        "internal_reporting_adapters_http.SourceBreakdownResponse": {
-            "type": "object",
-            "properties": {
-                "currency": {
-                    "type": "string",
-                    "example": "USD"
-                },
-                "matchRate": {
-                    "type": "number",
-                    "example": 95
-                },
-                "matchedTransactions": {
-                    "type": "integer",
-                    "example": 4750
-                },
-                "sourceId": {
-                    "type": "string",
-                    "example": "550e8400-e29b-41d4-a716-446655440000"
-                },
-                "sourceName": {
-                    "type": "string",
-                    "example": "Primary Bank Account"
-                },
-                "totalAmount": {
-                    "type": "string",
-                    "example": "500000.00"
-                },
-                "totalTransactions": {
-                    "type": "integer",
-                    "example": 5000
-                },
-                "unmatchedAmount": {
-                    "type": "string",
-                    "example": "25000.00"
-                },
-                "unmatchedTransactions": {
-                    "type": "integer",
-                    "example": 250
-                }
-            }
-        },
-        "internal_reporting_adapters_http.SummaryMetricsResponse": {
-            "type": "object",
-            "properties": {
-                "criticalExposure": {
-                    "type": "string",
-                    "example": "15000.00"
-                },
-                "matchRate": {
-                    "type": "number",
-                    "example": 94.4
-                },
-                "oldestExceptionAgeHours": {
-                    "type": "number",
-                    "example": 72.5
-                },
-                "pendingExceptions": {
-                    "type": "integer",
-                    "example": 4
-                },
-                "totalMatches": {
-                    "type": "integer",
-                    "example": 11800
-                },
-                "totalTransactions": {
-                    "type": "integer",
-                    "example": 12500
-                }
-            }
-        },
-        "internal_reporting_adapters_http.SummaryReportResponse": {
-            "type": "object",
-            "properties": {
-                "matched_amount": {
-                    "type": "string",
-                    "example": "1180000.00"
-                },
-                "matched_count": {
-                    "type": "integer",
-                    "example": 11800
-                },
-                "total_amount": {
-                    "type": "string",
-                    "example": "1250000.00"
-                },
-                "unmatched_amount": {
-                    "type": "string",
-                    "example": "70000.00"
-                },
-                "unmatched_count": {
-                    "type": "integer",
-                    "example": 700
-                }
-            }
-        },
-        "internal_reporting_adapters_http.TrendMetricsResponse": {
-            "type": "object",
-            "properties": {
-                "dates": {
-                    "type": "array",
-                    "maxItems": 366,
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "exceptions": {
-                    "type": "array",
-                    "maxItems": 366,
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "ingestion": {
-                    "type": "array",
-                    "maxItems": 366,
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "matchRates": {
-                    "type": "array",
-                    "maxItems": 366,
-                    "items": {
-                        "type": "number"
-                    }
-                },
-                "matches": {
-                    "type": "array",
-                    "maxItems": 366,
-                    "items": {
-                        "type": "integer"
-                    }
-                }
-            }
-        },
-        "internal_reporting_adapters_http.UnmatchedItemResponse": {
-            "type": "object",
-            "properties": {
-                "amount": {
-                    "type": "string",
-                    "example": "1250.50"
-                },
-                "currency": {
-                    "type": "string",
-                    "example": "USD"
-                },
-                "date": {
-                    "type": "string",
-                    "format": "date-time",
-                    "example": "2025-01-15T10:30:00Z"
-                },
-                "due_at": {
-                    "type": "string",
-                    "format": "date-time",
-                    "example": "2025-02-15T10:30:00Z"
-                },
-                "exception_id": {
-                    "type": "string",
-                    "example": "550e8400-e29b-41d4-a716-446655440003"
-                },
-                "source_id": {
-                    "type": "string",
-                    "example": "550e8400-e29b-41d4-a716-446655440002"
-                },
-                "status": {
-                    "type": "string",
-                    "example": "PENDING"
-                },
-                "transaction_id": {
-                    "type": "string",
-                    "example": "550e8400-e29b-41d4-a716-446655440000"
-                }
-            }
-        },
-        "internal_reporting_adapters_http.VarianceReportRowResponse": {
-            "type": "object",
-            "properties": {
-                "currency": {
-                    "type": "string",
-                    "example": "USD"
-                },
-                "fee_type": {
-                    "type": "string",
-                    "example": "INTERCHANGE"
-                },
-                "net_variance": {
-                    "type": "string",
-                    "example": "-200.00"
-                },
-                "source_id": {
-                    "type": "string",
-                    "example": "550e8400-e29b-41d4-a716-446655440000"
-                },
-                "total_actual": {
-                    "type": "string",
-                    "example": "4800.00"
-                },
-                "total_expected": {
-                    "type": "string",
-                    "example": "5000.00"
-                },
-                "variance_pct": {
-                    "type": "string",
-                    "example": "-4.00"
-                }
-            }
-        },
-        "internal_reporting_adapters_http.VolumeStatsResponse": {
-            "type": "object",
-            "properties": {
-                "matchedAmount": {
-                    "type": "string",
-                    "example": "1180000.00"
-                },
-                "matchedTransactions": {
-                    "type": "integer",
-                    "example": 11800
-                },
-                "periodEnd": {
-                    "type": "string",
-                    "format": "date-time",
-                    "example": "2025-01-31T23:59:59Z"
-                },
-                "periodStart": {
-                    "type": "string",
-                    "format": "date-time",
-                    "example": "2025-01-01T00:00:00Z"
-                },
-                "totalAmount": {
-                    "type": "string",
-                    "example": "1250000.00"
-                },
-                "totalTransactions": {
-                    "type": "integer",
-                    "example": 12500
-                },
-                "unmatchedAmount": {
-                    "type": "string",
-                    "example": "70000.00"
-                },
-                "unmatchedCount": {
-                    "type": "integer",
-                    "example": 700
                 }
             }
         }
