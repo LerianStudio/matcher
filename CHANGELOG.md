@@ -1,3 +1,10 @@
+## [1.1.0-beta.9](https://github.com/LerianStudio/matcher/compare/v1.1.0-beta.8...v1.1.0-beta.9) (2026-03-05)
+
+
+### Bug Fixes
+
+* **migration:** add idempotent fee normalization column guard ([4f144db](https://github.com/LerianStudio/matcher/commit/4f144db3582687fe789f8ed61b7065feb10a3e2e))
+
 ## [1.1.0-beta.8](https://github.com/LerianStudio/matcher/compare/v1.1.0-beta.7...v1.1.0-beta.8) (2026-03-03)
 
 ## [1.1.0-beta.7](https://github.com/LerianStudio/matcher/compare/v1.1.0-beta.6...v1.1.0-beta.7) (2026-03-02)
