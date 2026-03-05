@@ -1930,13 +1930,13 @@ func TestDeduplicateEvents(t *testing.T) {
 			expected: 2,
 		},
 		{
-			name: "preserves nil entries",
+			name: "filters nil entries",
 			input: []*outboxEntities.OutboxEvent{
 				{ID: id1, EventType: "a"},
 				nil,
 				{ID: id1, EventType: "dup"},
 			},
-			expected: 2, // id1 + nil
+			expected: 1, // nil filtered out, dup removed
 		},
 		{
 			name: "preserves first occurrence order",

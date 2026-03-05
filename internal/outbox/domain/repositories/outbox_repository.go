@@ -1,48 +1,22 @@
 // Package repositories provides outbox persistence contracts.
+// The canonical interface definition lives in the shared kernel (internal/shared/ports)
+// and is re-exported here as a type alias for backward compatibility.
 package repositories
 
 //go:generate mockgen -destination=mocks/outbox_repository_mock.go -package=mocks . OutboxRepository
 
 import (
-	"context"
-	"time"
-
-	"github.com/google/uuid"
-
-	"github.com/LerianStudio/matcher/internal/outbox/domain/entities"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // OutboxRepository defines persistence operations for outbox events.
-type OutboxRepository interface {
-	Create(ctx context.Context, event *entities.OutboxEvent) (*entities.OutboxEvent, error)
-	CreateWithTx(
-		ctx context.Context,
-		tx Tx,
-		event *entities.OutboxEvent,
-	) (*entities.OutboxEvent, error)
-	ListPending(ctx context.Context, limit int) ([]*entities.OutboxEvent, error)
-	ListPendingByType(ctx context.Context, eventType string, limit int) ([]*entities.OutboxEvent, error)
-	ListTenants(ctx context.Context) ([]string, error)
-	GetByID(ctx context.Context, id uuid.UUID) (*entities.OutboxEvent, error)
-	MarkPublished(ctx context.Context, id uuid.UUID, publishedAt time.Time) error
-	MarkFailed(ctx context.Context, id uuid.UUID, errMsg string, maxAttempts int) error
-	ListFailedForRetry(
-		ctx context.Context,
-		limit int,
-		failedBefore time.Time,
-		maxAttempts int,
-	) ([]*entities.OutboxEvent, error)
-	ResetForRetry(
-		ctx context.Context,
-		limit int,
-		failedBefore time.Time,
-		maxAttempts int,
-	) ([]*entities.OutboxEvent, error)
-	ResetStuckProcessing(
-		ctx context.Context,
-		limit int,
-		processingBefore time.Time,
-		maxAttempts int,
-	) ([]*entities.OutboxEvent, error)
-	MarkInvalid(ctx context.Context, id uuid.UUID, errMsg string) error
-}
+// Re-exported from the shared kernel (internal/shared/ports.OutboxRepository).
+//
+// All bounded contexts that need this interface should use the shared kernel directly:
+//
+//	import sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+//
+// This alias exists for backward compatibility with code that already imports
+// this package. No new code should import outbox/domain/repositories from outside
+// the outbox bounded context.
+type OutboxRepository = sharedPorts.OutboxRepository

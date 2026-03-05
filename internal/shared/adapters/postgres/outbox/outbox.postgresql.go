@@ -16,9 +16,8 @@ import (
 	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/auth"
-	"github.com/LerianStudio/matcher/internal/outbox/domain/entities"
-	"github.com/LerianStudio/matcher/internal/outbox/domain/repositories"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
+	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -45,7 +44,7 @@ type Repository struct {
 }
 
 // GetByID retrieves an outbox event by ID.
-func (repo *Repository) GetByID(ctx context.Context, id uuid.UUID) (*entities.OutboxEvent, error) {
+func (repo *Repository) GetByID(ctx context.Context, id uuid.UUID) (*sharedDomain.OutboxEvent, error) {
 	if repo == nil || repo.provider == nil {
 		return nil, ErrRepositoryNotInitialized
 	}
@@ -62,7 +61,7 @@ func (repo *Repository) GetByID(ctx context.Context, id uuid.UUID) (*entities.Ou
 	result, err := pgcommon.WithTenantTxProvider(
 		ctx,
 		repo.provider,
-		func(tx *sql.Tx) (*entities.OutboxEvent, error) {
+		func(tx *sql.Tx) (*sharedDomain.OutboxEvent, error) {
 			row := tx.QueryRowContext(
 				ctx,
 				"SELECT "+outboxColumns+" FROM outbox_events WHERE id = $1",
@@ -93,31 +92,31 @@ func NewRepository(provider ports.InfrastructureProvider) *Repository {
 // Create stores a new outbox event using a new transaction.
 func (repo *Repository) Create(
 	ctx context.Context,
-	event *entities.OutboxEvent,
-) (*entities.OutboxEvent, error) {
+	event *sharedDomain.OutboxEvent,
+) (*sharedDomain.OutboxEvent, error) {
 	return repo.create(ctx, nil, event)
 }
 
 // CreateWithTx stores a new outbox event using an existing transaction.
 func (repo *Repository) CreateWithTx(
 	ctx context.Context,
-	tx repositories.Tx,
-	event *entities.OutboxEvent,
-) (*entities.OutboxEvent, error) {
+	tx *sql.Tx,
+	event *sharedDomain.OutboxEvent,
+) (*sharedDomain.OutboxEvent, error) {
 	return repo.create(ctx, tx, event)
 }
 
 func (repo *Repository) create(
 	ctx context.Context,
 	tx *sql.Tx,
-	event *entities.OutboxEvent,
-) (*entities.OutboxEvent, error) {
+	event *sharedDomain.OutboxEvent,
+) (*sharedDomain.OutboxEvent, error) {
 	if repo == nil || repo.provider == nil {
 		return nil, ErrRepositoryNotInitialized
 	}
 
 	if event == nil {
-		return nil, entities.ErrOutboxEventRequired
+		return nil, sharedDomain.ErrOutboxEventRequired
 	}
 
 	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
@@ -129,7 +128,7 @@ func (repo *Repository) create(
 		ctx,
 		repo.provider,
 		tx,
-		func(execTx *sql.Tx) (*entities.OutboxEvent, error) {
+		func(execTx *sql.Tx) (*sharedDomain.OutboxEvent, error) {
 			query := `INSERT INTO outbox_events (id, event_type, aggregate_id, payload, status, attempts, published_at, last_error, created_at, updated_at)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 			RETURNING ` + outboxColumns
@@ -165,7 +164,7 @@ func (repo *Repository) create(
 func (repo *Repository) ListPending(
 	ctx context.Context,
 	limit int,
-) ([]*entities.OutboxEvent, error) {
+) ([]*sharedDomain.OutboxEvent, error) {
 	if repo == nil || repo.provider == nil {
 		return nil, ErrRepositoryNotInitialized
 	}
@@ -182,7 +181,7 @@ func (repo *Repository) ListPending(
 	result, err := pgcommon.WithTenantTxProvider(
 		ctx,
 		repo.provider,
-		func(tx *sql.Tx) ([]*entities.OutboxEvent, error) {
+		func(tx *sql.Tx) ([]*sharedDomain.OutboxEvent, error) {
 			events, err := listPendingRows(ctx, tx, limit)
 			if err != nil {
 				return nil, err
@@ -282,21 +281,21 @@ func (repo *Repository) ListTenants(ctx context.Context) ([]string, error) {
 	return result, nil
 }
 
-func listPendingRows(ctx context.Context, tx *sql.Tx, limit int) ([]*entities.OutboxEvent, error) {
+func listPendingRows(ctx context.Context, tx *sql.Tx, limit int) ([]*sharedDomain.OutboxEvent, error) {
 	query := `SELECT ` + outboxColumns + ` FROM outbox_events
 		WHERE status = $1
 		ORDER BY created_at ASC
 		LIMIT $2
 		FOR UPDATE SKIP LOCKED`
 
-	rows, err := tx.QueryContext(ctx, query, entities.OutboxStatusPending, limit)
+	rows, err := tx.QueryContext(ctx, query, sharedDomain.OutboxStatusPending, limit)
 	if err != nil {
 		return nil, fmt.Errorf("querying pending events: %w", err)
 	}
 
 	defer rows.Close()
 
-	events := make([]*entities.OutboxEvent, 0, limit)
+	events := make([]*sharedDomain.OutboxEvent, 0, limit)
 
 	for rows.Next() {
 		event, err := scanOutboxEvent(rows)
@@ -319,7 +318,7 @@ func (repo *Repository) ListPendingByType(
 	ctx context.Context,
 	eventType string,
 	limit int,
-) ([]*entities.OutboxEvent, error) {
+) ([]*sharedDomain.OutboxEvent, error) {
 	if repo == nil || repo.provider == nil {
 		return nil, ErrRepositoryNotInitialized
 	}
@@ -340,7 +339,7 @@ func (repo *Repository) ListPendingByType(
 	result, err := pgcommon.WithTenantTxProvider(
 		ctx,
 		repo.provider,
-		func(tx *sql.Tx) ([]*entities.OutboxEvent, error) {
+		func(tx *sql.Tx) ([]*sharedDomain.OutboxEvent, error) {
 			events, err := listPendingByTypeRows(ctx, tx, eventType, limit)
 			if err != nil {
 				return nil, err
@@ -381,21 +380,21 @@ func listPendingByTypeRows(
 	tx *sql.Tx,
 	eventType string,
 	limit int,
-) ([]*entities.OutboxEvent, error) {
+) ([]*sharedDomain.OutboxEvent, error) {
 	query := `SELECT ` + outboxColumns + ` FROM outbox_events
 		WHERE status = $1 AND event_type = $2
 		ORDER BY created_at ASC
 		LIMIT $3
 		FOR UPDATE SKIP LOCKED`
 
-	rows, err := tx.QueryContext(ctx, query, entities.OutboxStatusPending, eventType, limit)
+	rows, err := tx.QueryContext(ctx, query, sharedDomain.OutboxStatusPending, eventType, limit)
 	if err != nil {
 		return nil, fmt.Errorf("querying pending events by type: %w", err)
 	}
 
 	defer rows.Close()
 
-	events := make([]*entities.OutboxEvent, 0, limit)
+	events := make([]*sharedDomain.OutboxEvent, 0, limit)
 
 	for rows.Next() {
 		event, err := scanOutboxEvent(rows)
@@ -413,7 +412,7 @@ func listPendingByTypeRows(
 	return events, nil
 }
 
-func collectEventIDs(events []*entities.OutboxEvent) []uuid.UUID {
+func collectEventIDs(events []*sharedDomain.OutboxEvent) []uuid.UUID {
 	ids := make([]uuid.UUID, 0, len(events))
 
 	for _, event := range events {
@@ -447,8 +446,19 @@ func (repo *Repository) MarkPublished(
 	defer span.End()
 
 	_, err := pgcommon.WithTenantTxProvider(ctx, repo.provider, func(tx *sql.Tx) (struct{}, error) {
-		query := `UPDATE outbox_events SET status = $1::outbox_event_status, published_at = $2, updated_at = $3 WHERE id = $4`
-		if _, execErr := tx.ExecContext(ctx, query, entities.OutboxStatusPublished, publishedAt, time.Now().UTC(), id); execErr != nil {
+		query := `UPDATE outbox_events
+			SET status = $1::outbox_event_status, published_at = $2, updated_at = $3
+			WHERE id = $4 AND status <> $5::outbox_event_status AND status <> $6::outbox_event_status`
+		if _, execErr := tx.ExecContext(
+			ctx,
+			query,
+			sharedDomain.OutboxStatusPublished,
+			publishedAt,
+			time.Now().UTC(),
+			id,
+			sharedDomain.OutboxStatusPublished,
+			sharedDomain.OutboxStatusInvalid,
+		); execErr != nil {
 			return struct{}{}, fmt.Errorf("executing update: %w", execErr)
 		}
 
@@ -492,15 +502,17 @@ func (repo *Repository) MarkFailed(ctx context.Context, id uuid.UUID, errMsg str
 			attempts = attempts + 1,
 			last_error = CASE WHEN attempts + 1 >= $1 THEN $4 ELSE $5 END,
 			updated_at = $6
-			WHERE id = $7`
+			WHERE id = $7 AND status <> $8::outbox_event_status AND status <> $9::outbox_event_status`
 		if _, execErr := tx.ExecContext(ctx, query,
 			maxAttempts,
-			entities.OutboxStatusInvalid,
-			entities.OutboxStatusFailed,
+			sharedDomain.OutboxStatusInvalid,
+			sharedDomain.OutboxStatusFailed,
 			"max dispatch attempts exceeded",
 			errMsg,
 			time.Now().UTC(),
 			id,
+			sharedDomain.OutboxStatusPublished,
+			sharedDomain.OutboxStatusInvalid,
 		); execErr != nil {
 			return struct{}{}, fmt.Errorf("executing update: %w", execErr)
 		}
@@ -518,8 +530,8 @@ func (repo *Repository) MarkFailed(ctx context.Context, id uuid.UUID, errMsg str
 	return nil
 }
 
-func scanOutboxEvent(scanner interface{ Scan(dest ...any) error }) (*entities.OutboxEvent, error) {
-	var event entities.OutboxEvent
+func scanOutboxEvent(scanner interface{ Scan(dest ...any) error }) (*sharedDomain.OutboxEvent, error) {
+	var event sharedDomain.OutboxEvent
 
 	var lastError sql.NullString
 
@@ -553,7 +565,7 @@ func (repo *Repository) ListFailedForRetry(
 	limit int,
 	failedBefore time.Time,
 	maxAttempts int,
-) ([]*entities.OutboxEvent, error) {
+) ([]*sharedDomain.OutboxEvent, error) {
 	if repo == nil || repo.provider == nil {
 		return nil, ErrRepositoryNotInitialized
 	}
@@ -574,7 +586,7 @@ func (repo *Repository) ListFailedForRetry(
 	result, err := pgcommon.WithTenantTxProvider(
 		ctx,
 		repo.provider,
-		func(tx *sql.Tx) ([]*entities.OutboxEvent, error) {
+		func(tx *sql.Tx) ([]*sharedDomain.OutboxEvent, error) {
 			query := `SELECT ` + outboxColumns + ` FROM outbox_events
 			WHERE status = $1 AND attempts < $2 AND updated_at <= $3
 			ORDER BY updated_at ASC
@@ -583,7 +595,7 @@ func (repo *Repository) ListFailedForRetry(
 			rows, err := tx.QueryContext(
 				ctx,
 				query,
-				entities.OutboxStatusFailed,
+				sharedDomain.OutboxStatusFailed,
 				maxAttempts,
 				failedBefore,
 				limit,
@@ -594,7 +606,7 @@ func (repo *Repository) ListFailedForRetry(
 
 			defer rows.Close()
 
-			events := make([]*entities.OutboxEvent, 0, limit)
+			events := make([]*sharedDomain.OutboxEvent, 0, limit)
 
 			for rows.Next() {
 				event, err := scanOutboxEvent(rows)
@@ -629,7 +641,7 @@ func (repo *Repository) ResetForRetry(
 	limit int,
 	failedBefore time.Time,
 	maxAttempts int,
-) ([]*entities.OutboxEvent, error) {
+) ([]*sharedDomain.OutboxEvent, error) {
 	if repo == nil || repo.provider == nil {
 		return nil, ErrRepositoryNotInitialized
 	}
@@ -650,7 +662,7 @@ func (repo *Repository) ResetForRetry(
 	result, err := pgcommon.WithTenantTxProvider(
 		ctx,
 		repo.provider,
-		func(tx *sql.Tx) ([]*entities.OutboxEvent, error) {
+		func(tx *sql.Tx) ([]*sharedDomain.OutboxEvent, error) {
 			events, err := listFailedForRetryRows(ctx, tx, limit, failedBefore, maxAttempts)
 			if err != nil {
 				return nil, err
@@ -692,7 +704,7 @@ func listFailedForRetryRows(
 	limit int,
 	failedBefore time.Time,
 	maxAttempts int,
-) ([]*entities.OutboxEvent, error) {
+) ([]*sharedDomain.OutboxEvent, error) {
 	query := `SELECT ` + outboxColumns + ` FROM outbox_events
 		WHERE status = $1 AND attempts < $2 AND updated_at <= $3
 		ORDER BY updated_at ASC
@@ -702,7 +714,7 @@ func listFailedForRetryRows(
 	rows, err := tx.QueryContext(
 		ctx,
 		query,
-		entities.OutboxStatusFailed,
+		sharedDomain.OutboxStatusFailed,
 		maxAttempts,
 		failedBefore,
 		limit,
@@ -713,7 +725,7 @@ func listFailedForRetryRows(
 
 	defer rows.Close()
 
-	events := make([]*entities.OutboxEvent, 0, limit)
+	events := make([]*sharedDomain.OutboxEvent, 0, limit)
 
 	for rows.Next() {
 		event, err := scanOutboxEvent(rows)
@@ -732,14 +744,14 @@ func listFailedForRetryRows(
 }
 
 func markEventsProcessing(ctx context.Context, tx *sql.Tx, now time.Time, ids []uuid.UUID) error {
-	return markEventsWithStatus(ctx, tx, now, entities.OutboxStatusProcessing, ids)
+	return markEventsWithStatus(ctx, tx, now, sharedDomain.OutboxStatusProcessing, ids)
 }
 
 func markEventsWithStatus(
 	ctx context.Context,
 	tx *sql.Tx,
 	now time.Time,
-	status string,
+	status sharedDomain.OutboxEventStatus,
 	ids []uuid.UUID,
 ) error {
 	updateQuery := `UPDATE outbox_events SET status = $1::outbox_event_status, updated_at = $2 WHERE id = ANY($3::uuid[])`
@@ -751,11 +763,11 @@ func markEventsWithStatus(
 	return nil
 }
 
-func applyProcessingState(events []*entities.OutboxEvent, now time.Time) {
-	applyStatusState(events, now, entities.OutboxStatusProcessing)
+func applyProcessingState(events []*sharedDomain.OutboxEvent, now time.Time) {
+	applyStatusState(events, now, sharedDomain.OutboxStatusProcessing)
 }
 
-func applyStatusState(events []*entities.OutboxEvent, now time.Time, status string) {
+func applyStatusState(events []*sharedDomain.OutboxEvent, now time.Time, status sharedDomain.OutboxEventStatus) {
 	for _, event := range events {
 		if event == nil {
 			continue
@@ -776,7 +788,7 @@ func (repo *Repository) ResetStuckProcessing(
 	limit int,
 	processingBefore time.Time,
 	maxAttempts int,
-) ([]*entities.OutboxEvent, error) {
+) ([]*sharedDomain.OutboxEvent, error) {
 	if repo == nil || repo.provider == nil {
 		return nil, ErrRepositoryNotInitialized
 	}
@@ -797,7 +809,7 @@ func (repo *Repository) ResetStuckProcessing(
 	result, err := pgcommon.WithTenantTxProvider(
 		ctx,
 		repo.provider,
-		func(tx *sql.Tx) ([]*entities.OutboxEvent, error) {
+		func(tx *sql.Tx) ([]*sharedDomain.OutboxEvent, error) {
 			events, err := listStuckProcessingRows(ctx, tx, limit, processingBefore, maxAttempts)
 			if err != nil {
 				return nil, err
@@ -839,7 +851,7 @@ func listStuckProcessingRows(
 	limit int,
 	processingBefore time.Time,
 	maxAttempts int,
-) ([]*entities.OutboxEvent, error) {
+) ([]*sharedDomain.OutboxEvent, error) {
 	query := `SELECT ` + outboxColumns + ` FROM outbox_events
 		WHERE status = $1 AND updated_at <= $2 AND attempts < $3
 		ORDER BY updated_at ASC
@@ -849,7 +861,7 @@ func listStuckProcessingRows(
 	rows, err := tx.QueryContext(
 		ctx,
 		query,
-		entities.OutboxStatusProcessing,
+		sharedDomain.OutboxStatusProcessing,
 		processingBefore,
 		maxAttempts,
 		limit,
@@ -859,7 +871,7 @@ func listStuckProcessingRows(
 	}
 	defer rows.Close()
 
-	events := make([]*entities.OutboxEvent, 0, limit)
+	events := make([]*sharedDomain.OutboxEvent, 0, limit)
 
 	for rows.Next() {
 		event, err := scanOutboxEvent(rows)
@@ -893,8 +905,19 @@ func (repo *Repository) MarkInvalid(ctx context.Context, id uuid.UUID, errMsg st
 	defer span.End()
 
 	_, err := pgcommon.WithTenantTxProvider(ctx, repo.provider, func(tx *sql.Tx) (struct{}, error) {
-		query := `UPDATE outbox_events SET status = $1::outbox_event_status, last_error = $2, updated_at = $3 WHERE id = $4`
-		if _, execErr := tx.ExecContext(ctx, query, entities.OutboxStatusInvalid, errMsg, time.Now().UTC(), id); execErr != nil {
+		query := `UPDATE outbox_events
+			SET status = $1::outbox_event_status, last_error = $2, updated_at = $3
+			WHERE id = $4 AND status <> $5::outbox_event_status AND status <> $6::outbox_event_status`
+		if _, execErr := tx.ExecContext(
+			ctx,
+			query,
+			sharedDomain.OutboxStatusInvalid,
+			errMsg,
+			time.Now().UTC(),
+			id,
+			sharedDomain.OutboxStatusPublished,
+			sharedDomain.OutboxStatusInvalid,
+		); execErr != nil {
 			return struct{}{}, fmt.Errorf("executing update: %w", execErr)
 		}
 

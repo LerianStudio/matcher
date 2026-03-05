@@ -70,7 +70,14 @@ func TestRepository_MarkInvalid_Success(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE outbox_events SET status").
-		WithArgs(entities.OutboxStatusInvalid, errMsg, sqlmock.AnyArg(), id).
+		WithArgs(
+			entities.OutboxStatusInvalid,
+			errMsg,
+			sqlmock.AnyArg(),
+			id,
+			entities.OutboxStatusPublished,
+			entities.OutboxStatusInvalid,
+		).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 
@@ -90,7 +97,14 @@ func TestRepository_MarkInvalid_Error(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE outbox_events SET status").
-		WithArgs(entities.OutboxStatusInvalid, "bad", sqlmock.AnyArg(), id).
+		WithArgs(
+			entities.OutboxStatusInvalid,
+			"bad",
+			sqlmock.AnyArg(),
+			id,
+			entities.OutboxStatusPublished,
+			entities.OutboxStatusInvalid,
+		).
 		WillReturnError(errTestDatabaseError)
 	mock.ExpectRollback()
 

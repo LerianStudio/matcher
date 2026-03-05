@@ -1,76 +1,50 @@
 // Package entities defines outbox domain types and validation logic.
+// The canonical type definitions live in the shared kernel (internal/shared/domain)
+// and are re-exported here as type aliases for backward compatibility.
 package entities
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 
-	"github.com/LerianStudio/lib-uncommons/v2/uncommons/assert"
-
-	"github.com/LerianStudio/matcher/internal/shared/constants"
+	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 // ErrOutboxEventRequired is returned when an outbox event is nil.
-var ErrOutboxEventRequired = errors.New("outbox event is required")
+// Re-exported from the shared kernel.
+var ErrOutboxEventRequired = sharedDomain.ErrOutboxEventRequired
 
-// Outbox event status constants.
+// OutboxEventStatus is a type alias for the shared kernel typed enum.
+// Re-exported here for backward compatibility with outbox-internal consumers.
+type OutboxEventStatus = sharedDomain.OutboxEventStatus
+
+// Outbox event status constants re-exported from the shared kernel.
 const (
-	OutboxStatusPending    = "PENDING"
-	OutboxStatusProcessing = "PROCESSING"
-	OutboxStatusPublished  = "PUBLISHED"
-	OutboxStatusFailed     = "FAILED"
-	OutboxStatusInvalid    = "INVALID" // Permanent validation failures (non-retryable)
+	OutboxStatusPending    = sharedDomain.OutboxStatusPending
+	OutboxStatusProcessing = sharedDomain.OutboxStatusProcessing
+	OutboxStatusPublished  = sharedDomain.OutboxStatusPublished
+	OutboxStatusFailed     = sharedDomain.OutboxStatusFailed
+	OutboxStatusInvalid    = sharedDomain.OutboxStatusInvalid
 )
 
-// OutboxEvent represents an event stored in the outbox for reliable delivery.
-type OutboxEvent struct {
-	ID          uuid.UUID
-	EventType   string
-	AggregateID uuid.UUID
-	Payload     []byte
-	Status      string
-	Attempts    int
-	PublishedAt *time.Time
-	LastError   string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-}
+// OutboxEvent is a type alias for the shared kernel OutboxEvent.
+// All bounded contexts that need outbox types should use the shared kernel directly:
+//
+//	import sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
+//
+// This alias exists for backward compatibility with code that already imports
+// this package. No new code should import outbox/domain/entities from outside
+// the outbox bounded context.
+type OutboxEvent = sharedDomain.OutboxEvent
 
-// NewOutboxEvent creates a new OutboxEvent with the given parameters.
-func NewOutboxEvent(
-	ctx context.Context,
-	eventType string,
-	aggregateID uuid.UUID,
-	payload []byte,
-) (*OutboxEvent, error) {
-	asserter := assert.New(ctx, nil, constants.ApplicationName, "outbox.outbox_event.new")
-
-	if err := asserter.NotEmpty(ctx, eventType, "event type is required"); err != nil {
-		return nil, fmt.Errorf("outbox event type: %w", err)
+// NewOutboxEvent creates a new OutboxEvent. Delegates to the shared kernel constructor.
+func NewOutboxEvent(ctx context.Context, eventType string, tenantID uuid.UUID, payload []byte) (*OutboxEvent, error) {
+	event, err := sharedDomain.NewOutboxEvent(ctx, eventType, tenantID, payload)
+	if err != nil {
+		return nil, fmt.Errorf("new outbox event: %w", err)
 	}
 
-	if err := asserter.That(ctx, aggregateID != uuid.Nil, "aggregate id is required"); err != nil {
-		return nil, fmt.Errorf("outbox event aggregate id: %w", err)
-	}
-
-	if err := asserter.That(ctx, len(payload) > 0, "payload is required"); err != nil {
-		return nil, fmt.Errorf("outbox event payload: %w", err)
-	}
-
-	now := time.Now().UTC()
-
-	return &OutboxEvent{
-		ID:          uuid.New(),
-		EventType:   eventType,
-		AggregateID: aggregateID,
-		Payload:     payload,
-		Status:      OutboxStatusPending,
-		Attempts:    0,
-		CreatedAt:   now,
-		UpdatedAt:   now,
-	}, nil
+	return event, nil
 }

@@ -12,9 +12,8 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/configuration/ports"
-	outboxEntities "github.com/LerianStudio/matcher/internal/outbox/domain/entities"
-	outboxRepositories "github.com/LerianStudio/matcher/internal/outbox/domain/repositories"
 	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // ErrNilOutboxRepository is returned when the outbox repository is nil.
@@ -22,11 +21,11 @@ var ErrNilOutboxRepository = errors.New("outbox repository is required")
 
 // OutboxPublisher publishes configuration audit events to the outbox for asynchronous processing.
 type OutboxPublisher struct {
-	outboxRepo outboxRepositories.OutboxRepository
+	outboxRepo sharedPorts.OutboxRepository
 }
 
 // NewOutboxPublisher creates a new outbox-based audit publisher.
-func NewOutboxPublisher(repo outboxRepositories.OutboxRepository) (*OutboxPublisher, error) {
+func NewOutboxPublisher(repo sharedPorts.OutboxRepository) (*OutboxPublisher, error) {
 	if repo == nil {
 		return nil, ErrNilOutboxRepository
 	}
@@ -70,7 +69,7 @@ func (pub *OutboxPublisher) Publish(ctx context.Context, event ports.AuditEvent)
 		return fmt.Errorf("marshal audit event: %w", err)
 	}
 
-	outboxEvent, err := outboxEntities.NewOutboxEvent(
+	outboxEvent, err := sharedDomain.NewOutboxEvent(
 		ctx,
 		sharedDomain.EventTypeAuditLogCreated,
 		event.EntityID,

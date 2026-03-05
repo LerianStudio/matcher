@@ -39,7 +39,7 @@ func (stub outboxScannerStub) Scan(dest ...any) error {
 		*ptr = []byte(`{"ok":true}`)
 	}
 
-	if ptr, ok := dest[4].(*string); ok {
+	if ptr, ok := dest[4].(*entities.OutboxEventStatus); ok {
 		*ptr = entities.OutboxStatusPending
 	}
 

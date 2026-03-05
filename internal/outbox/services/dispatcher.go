@@ -24,12 +24,11 @@ import (
 	"github.com/LerianStudio/lib-uncommons/v2/uncommons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/auth"
-	ingestionEntities "github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
-	ingestionPorts "github.com/LerianStudio/matcher/internal/ingestion/ports"
 	outboxEntities "github.com/LerianStudio/matcher/internal/outbox/domain/entities"
 	"github.com/LerianStudio/matcher/internal/outbox/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // Sentinel errors for dispatcher validation.
@@ -84,7 +83,7 @@ const (
 // Dispatcher handles publishing outbox events to message queues.
 type Dispatcher struct {
 	repo                        repositories.OutboxRepository
-	ingestPub                   ingestionPorts.EventPublisher
+	ingestPub                   sharedPorts.IngestionEventPublisher
 	matchPub                    sharedDomain.MatchEventPublisher
 	auditPub                    sharedDomain.AuditEventPublisher
 	logger                      libLog.Logger
@@ -142,7 +141,7 @@ func WithDispatchInterval(interval time.Duration) DispatcherOption {
 // NewDispatcher creates a new Dispatcher with the given dependencies.
 func NewDispatcher(
 	repo repositories.OutboxRepository,
-	ingestPub ingestionPorts.EventPublisher,
+	ingestPub sharedPorts.IngestionEventPublisher,
 	matchPub sharedDomain.MatchEventPublisher,
 	logger libLog.Logger,
 	tracer trace.Tracer,
@@ -566,8 +565,6 @@ func deduplicateEvents(events []*outboxEntities.OutboxEvent) []*outboxEntities.O
 
 	for _, event := range events {
 		if event == nil {
-			result = append(result, event)
-
 			continue
 		}
 
@@ -716,9 +713,9 @@ func (dispatcher *Dispatcher) publishEvent(
 	}
 
 	switch event.EventType {
-	case ingestionEntities.EventTypeIngestionCompleted:
+	case sharedDomain.EventTypeIngestionCompleted:
 		return dispatcher.publishIngestionCompleted(ctx, event.Payload)
-	case ingestionEntities.EventTypeIngestionFailed:
+	case sharedDomain.EventTypeIngestionFailed:
 		return dispatcher.publishIngestionFailed(ctx, event.Payload)
 	case sharedDomain.EventTypeMatchConfirmed:
 		return dispatcher.publishMatchConfirmed(ctx, event.Payload)
@@ -732,7 +729,7 @@ func (dispatcher *Dispatcher) publishEvent(
 }
 
 func (dispatcher *Dispatcher) publishIngestionCompleted(ctx context.Context, payload []byte) error {
-	var event ingestionEntities.IngestionCompletedEvent
+	var event sharedDomain.IngestionCompletedEvent
 
 	if err := json.Unmarshal(payload, &event); err != nil {
 		return fmt.Errorf("ingestion completed %w: %w", ErrInvalidPayload, err)
@@ -750,7 +747,7 @@ func (dispatcher *Dispatcher) publishIngestionCompleted(ctx context.Context, pay
 }
 
 func (dispatcher *Dispatcher) publishIngestionFailed(ctx context.Context, payload []byte) error {
-	var event ingestionEntities.IngestionFailedEvent
+	var event sharedDomain.IngestionFailedEvent
 
 	if err := json.Unmarshal(payload, &event); err != nil {
 		return fmt.Errorf("ingestion failed %w: %w", ErrInvalidPayload, err)
@@ -825,7 +822,7 @@ func (dispatcher *Dispatcher) publishAuditLogCreated(ctx context.Context, payloa
 	return nil
 }
 
-func validateIngestionCompletedPayload(payload ingestionEntities.IngestionCompletedEvent) error {
+func validateIngestionCompletedPayload(payload sharedDomain.IngestionCompletedEvent) error {
 	if payload.JobID == uuid.Nil {
 		return fmt.Errorf("ingestion completed: %w", ErrMissingJobID)
 	}
@@ -841,7 +838,7 @@ func validateIngestionCompletedPayload(payload ingestionEntities.IngestionComple
 	return nil
 }
 
-func validateIngestionFailedPayload(payload ingestionEntities.IngestionFailedEvent) error {
+func validateIngestionFailedPayload(payload sharedDomain.IngestionFailedEvent) error {
 	if payload.JobID == uuid.Nil {
 		return fmt.Errorf("ingestion failed: %w", ErrMissingJobID)
 	}

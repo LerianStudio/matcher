@@ -14,7 +14,7 @@ func TestNewOutboxEvent(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	payload := []byte("payload")
+	payload := []byte(`{"payload":"value"}`)
 	event, err := NewOutboxEvent(ctx, "type", uuid.New(), payload)
 	require.NoError(t, err)
 	require.Equal(t, OutboxStatusPending, event.Status)
@@ -27,9 +27,9 @@ func TestNewOutboxEventValidation(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	_, err := NewOutboxEvent(ctx, "", uuid.New(), []byte("x"))
+	_, err := NewOutboxEvent(ctx, "", uuid.New(), []byte(`{"x":1}`))
 	require.Error(t, err)
-	_, err = NewOutboxEvent(ctx, "type", uuid.Nil, []byte("x"))
+	_, err = NewOutboxEvent(ctx, "type", uuid.Nil, []byte(`{"x":1}`))
 	require.Error(t, err)
 	_, err = NewOutboxEvent(ctx, "type", uuid.New(), nil)
 	require.Error(t, err)
