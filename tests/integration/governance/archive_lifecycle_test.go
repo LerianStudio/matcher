@@ -85,7 +85,7 @@ func TestArchiveMetadata_StatusTransitions(t *testing.T) {
 		require.NoError(t, err)
 
 		// Helper that transitions in-memory, persists via Update, then verifies via GetByID.
-		verifyTransition := func(transitionFn func() error, expectedStatus string) {
+		verifyTransition := func(transitionFn func() error, expectedStatus entities.ArchiveStatus) {
 			t.Helper()
 
 			require.NoError(t, transitionFn())

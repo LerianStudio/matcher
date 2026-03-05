@@ -264,8 +264,8 @@ func wireServices(t *testing.T, h *integration.TestHarness) wiredServices {
 	exceptionCreator := exceptionCreatorRepo.NewRepository(provider)
 	rate := rateRepo.NewRepository(provider)
 	feeVariance := feeVarianceRepo.NewRepository(provider)
-	adjustment := adjustmentRepo.NewRepository(provider)
 	auditLogRepo := governancePostgres.NewRepository(provider)
+	adjustment := adjustmentRepo.NewRepository(provider, auditLogRepo)
 	feeSchedule := feeScheduleRepo.NewRepository(provider)
 
 	matchingUC, err := matchingCommand.New(matchingCommand.UseCaseDeps{

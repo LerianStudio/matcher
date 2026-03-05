@@ -37,7 +37,8 @@ func createTestExportJob(
 	ctx context.Context,
 	repo *exportJobRepo.Repository,
 	tenantID, contextID uuid.UUID,
-	reportType, format string,
+	reportType entities.ExportReportType,
+	format entities.ExportFormat,
 ) *entities.ExportJob {
 	t.Helper()
 

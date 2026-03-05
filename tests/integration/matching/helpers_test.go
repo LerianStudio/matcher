@@ -256,8 +256,8 @@ func wireE4T9UseCases(t *testing.T, h *integration.TestHarness) e4t9Wired {
 	exceptionCreator := exceptionCreatorRepo.NewRepository(provider)
 	rate := rateRepo.NewRepository(provider)
 	feeVariance := feeVarianceRepo.NewRepository(provider)
-	adjustment := adjustmentRepo.NewRepository(provider)
 	auditLogRepo := governancePostgres.NewRepository(provider)
+	adjustment := adjustmentRepo.NewRepository(provider, auditLogRepo)
 	feeSchedule := feeScheduleRepo.NewRepository(provider)
 
 	matchingUC, err := matchingCommand.New(matchingCommand.UseCaseDeps{
