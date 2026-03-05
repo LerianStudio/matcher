@@ -281,7 +281,7 @@ func TestExportJobHandlers_CreateExportJob(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.NotEmpty(t, response.JobID)
-		assert.Equal(t, entities.ExportJobStatusQueued, response.Status)
+		assert.Equal(t, string(entities.ExportJobStatusQueued), response.Status)
 	})
 
 	t.Run("accepts MATCHES alias and normalizes to MATCHED", func(t *testing.T) {
@@ -315,19 +315,14 @@ func TestExportJobHandlers_CreateExportJob(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.NotEmpty(t, response.JobID)
-		assert.Equal(t, entities.ExportJobStatusQueued, response.Status)
+		assert.Equal(t, string(entities.ExportJobStatusQueued), response.Status)
 	})
 
-	t.Run("accepts EXCEPTIONS report type and creates job", func(t *testing.T) {
+	t.Run("rejects EXCEPTIONS report type for async export", func(t *testing.T) {
 		t.Parallel()
 
 		contextID := uuid.New()
 		repo := newExportJobRepoMock(t)
-		repo.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, job *entities.ExportJob) error {
-			assert.Equal(t, entities.ExportReportTypeExceptions, job.ReportType)
-			return nil
-		}).Times(1)
-
 		handlers := setupCreateExportJobHandlers(t, contextID, repo)
 		app := setupExportJobTestAppWithContext(handlers.CreateExportJob, "create", contextID)
 
@@ -341,15 +336,7 @@ func TestExportJobHandlers_CreateExportJob(t *testing.T) {
 		resp := makeCreateExportJobRequest(t, app, contextID, reqBody)
 		defer resp.Body.Close()
 
-		assert.Equal(t, fiber.StatusAccepted, resp.StatusCode)
-
-		var response CreateExportJobResponse
-
-		err := json.NewDecoder(resp.Body).Decode(&response)
-		require.NoError(t, err)
-
-		assert.NotEmpty(t, response.JobID)
-		assert.Equal(t, entities.ExportJobStatusQueued, response.Status)
+		assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 	})
 
 	t.Run("rejects SUMMARY report type for async export", func(t *testing.T) {
@@ -690,7 +677,7 @@ func TestExportJobHandlers_ListExportJobs(t *testing.T) {
 			},
 		}
 
-		statusFilter := entities.ExportJobStatusSucceeded
+		statusFilter := string(entities.ExportJobStatusSucceeded)
 		repo := newExportJobRepoMock(t)
 		repo.EXPECT().
 			List(gomock.Any(), gomock.Eq(&statusFilter), (*libHTTP.TimestampCursor)(nil), constants.DefaultPaginationLimit).

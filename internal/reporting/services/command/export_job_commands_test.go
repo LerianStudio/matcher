@@ -241,7 +241,7 @@ func TestExportJobUseCase_CreateExportJob_RepositoryFailure(t *testing.T) {
 func TestExportJobUseCase_CreateExportJob_AllValidFormats(t *testing.T) {
 	t.Parallel()
 
-	formats := []string{
+	formats := []entities.ExportFormat{
 		entities.ExportFormatCSV,
 		entities.ExportFormatJSON,
 		entities.ExportFormatXML,
@@ -249,7 +249,7 @@ func TestExportJobUseCase_CreateExportJob_AllValidFormats(t *testing.T) {
 	}
 
 	for _, format := range formats {
-		t.Run(format, func(t *testing.T) {
+		t.Run(string(format), func(t *testing.T) {
 			t.Parallel()
 
 			repo := newExportJobRepoMock(t, exportJobRepoMockConfig{})
@@ -276,15 +276,16 @@ func TestExportJobUseCase_CreateExportJob_AllValidFormats(t *testing.T) {
 func TestExportJobUseCase_CreateExportJob_AllValidReportTypes(t *testing.T) {
 	t.Parallel()
 
-	reportTypes := []string{
+	reportTypes := []entities.ExportReportType{
 		entities.ExportReportTypeMatched,
 		entities.ExportReportTypeUnmatched,
 		entities.ExportReportTypeSummary,
 		entities.ExportReportTypeVariance,
+		entities.ExportReportTypeExceptions,
 	}
 
 	for _, reportType := range reportTypes {
-		t.Run(reportType, func(t *testing.T) {
+		t.Run(string(reportType), func(t *testing.T) {
 			t.Parallel()
 
 			repo := newExportJobRepoMock(t, exportJobRepoMockConfig{})
@@ -363,7 +364,7 @@ func TestExportJobUseCase_CancelExportJob(t *testing.T) {
 	t.Run("returns error for terminal states", func(t *testing.T) {
 		t.Parallel()
 
-		terminalStates := []string{
+		terminalStates := []entities.ExportJobStatus{
 			entities.ExportJobStatusSucceeded,
 			entities.ExportJobStatusFailed,
 			entities.ExportJobStatusExpired,
@@ -371,7 +372,7 @@ func TestExportJobUseCase_CancelExportJob(t *testing.T) {
 		}
 
 		for _, status := range terminalStates {
-			t.Run(status, func(t *testing.T) {
+			t.Run(string(status), func(t *testing.T) {
 				t.Parallel()
 
 				jobID := uuid.New()
@@ -468,7 +469,7 @@ func TestExportJobUseCase_WithFilter(t *testing.T) {
 		uc, err := NewExportJobUseCase(repo)
 		require.NoError(t, err)
 
-		status := "PENDING"
+		status := entities.ExportJobStatus("PENDING")
 		ctx := contextWithTracking()
 		input := CreateExportJobInput{
 			TenantID:   uuid.New(),

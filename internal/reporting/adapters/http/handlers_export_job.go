@@ -9,10 +9,8 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
 	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
 	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
 
@@ -45,6 +43,8 @@ var (
 	ErrPDFNotSupportedAsync = errors.New("use synchronous export for PDF")
 	// ErrSummaryNotSupportedAsync indicates SUMMARY report type is not supported for async export.
 	ErrSummaryNotSupportedAsync = errors.New("SUMMARY report type is not supported for async export; use synchronous export")
+	// ErrExceptionsNotSupportedAsync indicates EXCEPTIONS report type is not yet supported for async export.
+	ErrExceptionsNotSupportedAsync = errors.New("EXCEPTIONS report type is not yet supported for async export")
 	// ErrTenantIDNotFound indicates tenant ID is not in context.
 	ErrTenantIDNotFound = errors.New("tenant ID not found in context")
 	// ErrTenantMismatch indicates the job does not belong to the requesting tenant.
@@ -129,8 +129,8 @@ type CreateExportJobResponse struct {
 
 // parsedExportJobRequest holds validated and parsed request data.
 type parsedExportJobRequest struct {
-	reportType string
-	format     string
+	reportType entities.ExportReportType
+	format     entities.ExportFormat
 	dateFrom   time.Time
 	dateTo     time.Time
 	sourceID   *uuid.UUID
@@ -144,19 +144,22 @@ func parseExportJobRequest(req *CreateExportJobRequest) (*parsedExportJobRequest
 		return nil, "invalid report_type: must be MATCHED, UNMATCHED, SUMMARY, VARIANCE, EXCEPTIONS, MATCHES, or UNMATCHED_TRANSACTIONS", entities.ErrInvalidReportType
 	}
 
-	req.ReportType = normalizedReportType
-	req.Format = strings.ToUpper(strings.TrimSpace(req.Format))
+	format := entities.ExportFormat(strings.ToUpper(strings.TrimSpace(req.Format)))
 
-	if !entities.IsValidExportFormat(req.Format) {
+	if !format.IsValid() {
 		return nil, "invalid format: must be CSV, JSON, XML, or PDF", entities.ErrInvalidExportFormat
 	}
 
-	if req.Format == entities.ExportFormatPDF {
+	if format == entities.ExportFormatPDF {
 		return nil, "PDF format not supported for async export", ErrPDFNotSupportedAsync
 	}
 
-	if req.ReportType == entities.ExportReportTypeSummary {
+	if normalizedReportType == entities.ExportReportTypeSummary {
 		return nil, "SUMMARY report type not supported for async export", ErrSummaryNotSupportedAsync
+	}
+
+	if normalizedReportType == entities.ExportReportTypeExceptions {
+		return nil, "EXCEPTIONS report type is not yet supported for async export", ErrExceptionsNotSupportedAsync
 	}
 
 	dateFrom, err := time.Parse(time.DateOnly, req.DateFrom)
@@ -191,25 +194,25 @@ func parseExportJobRequest(req *CreateExportJobRequest) (*parsedExportJobRequest
 	}
 
 	return &parsedExportJobRequest{
-		reportType: req.ReportType,
-		format:     req.Format,
+		reportType: normalizedReportType,
+		format:     format,
 		dateFrom:   dateFrom,
 		dateTo:     dateTo,
 		sourceID:   sourceID,
 	}, "", nil
 }
 
-func normalizeReportTypeAlias(reportType string) (string, bool) {
+func normalizeReportTypeAlias(reportType string) (entities.ExportReportType, bool) {
 	switch strings.ToUpper(strings.TrimSpace(reportType)) {
-	case entities.ExportReportTypeMatched, "MATCHES":
+	case string(entities.ExportReportTypeMatched), "MATCHES":
 		return entities.ExportReportTypeMatched, true
-	case entities.ExportReportTypeUnmatched, "UNMATCHED_TRANSACTIONS":
+	case string(entities.ExportReportTypeUnmatched), "UNMATCHED_TRANSACTIONS":
 		return entities.ExportReportTypeUnmatched, true
-	case entities.ExportReportTypeSummary:
+	case string(entities.ExportReportTypeSummary):
 		return entities.ExportReportTypeSummary, true
-	case entities.ExportReportTypeVariance:
+	case string(entities.ExportReportTypeVariance):
 		return entities.ExportReportTypeVariance, true
-	case entities.ExportReportTypeExceptions:
+	case string(entities.ExportReportTypeExceptions):
 		return entities.ExportReportTypeExceptions, true
 	default:
 		return "", false
@@ -251,17 +254,8 @@ type DownloadExportJobResponse struct {
 	ExpiresIn int `json:"expiresIn"    example:"3600"`
 }
 
-func startExportJobSpan(c *fiber.Ctx, name string) (trace.Span, libLog.Logger) {
-	ctx := c.UserContext()
-	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
-
-	if tracer == nil {
-		tracer = otel.Tracer("commons.default")
-	}
-
-	_, span := tracer.Start(ctx, name)
-
-	return span, logger
+func startExportJobSpan(c *fiber.Ctx, name string) (context.Context, trace.Span, libLog.Logger) {
+	return startHandlerSpan(c, name)
 }
 
 // verifyJobTenantOwnership checks that the export job belongs to the tenant in context.
@@ -300,8 +294,7 @@ func verifyJobTenantOwnership(ctx context.Context, job *entities.ExportJob) erro
 // @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
 // @Router /v1/contexts/{contextId}/export-jobs [post]
 func (handler *ExportJobHandlers) CreateExportJob(fiberCtx *fiber.Ctx) error {
-	ctx := fiberCtx.UserContext()
-	span, logger := startExportJobSpan(fiberCtx, "handler.export_job.create")
+	ctx, span, logger := startExportJobSpan(fiberCtx, "handler.export_job.create")
 
 	defer span.End()
 
@@ -352,7 +345,7 @@ func (handler *ExportJobHandlers) CreateExportJob(fiberCtx *fiber.Ctx) error {
 
 	response := CreateExportJobResponse{
 		JobID:     output.JobID.String(),
-		Status:    output.Status,
+		Status:    string(output.Status),
 		StatusURL: output.StatusURL,
 	}
 
@@ -380,8 +373,7 @@ func (handler *ExportJobHandlers) CreateExportJob(fiberCtx *fiber.Ctx) error {
 // @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
 // @Router /v1/export-jobs/{jobId} [get]
 func (handler *ExportJobHandlers) GetExportJob(fiberCtx *fiber.Ctx) error {
-	ctx := fiberCtx.UserContext()
-	span, logger := startExportJobSpan(fiberCtx, "handler.export_job.get")
+	ctx, span, logger := startExportJobSpan(fiberCtx, "handler.export_job.get")
 
 	defer span.End()
 
@@ -441,8 +433,7 @@ func (handler *ExportJobHandlers) GetExportJob(fiberCtx *fiber.Ctx) error {
 // @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
 // @Router /v1/export-jobs [get]
 func (handler *ExportJobHandlers) ListExportJobs(fiberCtx *fiber.Ctx) error {
-	ctx := fiberCtx.UserContext()
-	span, logger := startExportJobSpan(fiberCtx, "handler.export_job.list")
+	ctx, span, logger := startExportJobSpan(fiberCtx, "handler.export_job.list")
 
 	defer span.End()
 
@@ -517,8 +508,7 @@ func parseTimestampCursorPagination(fiberCtx *fiber.Ctx) (*libHTTP.TimestampCurs
 // @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
 // @Router /v1/export-jobs/{jobId}/cancel [post]
 func (handler *ExportJobHandlers) CancelExportJob(fiberCtx *fiber.Ctx) error {
-	ctx := fiberCtx.UserContext()
-	span, logger := startExportJobSpan(fiberCtx, "handler.export_job.cancel")
+	ctx, span, logger := startExportJobSpan(fiberCtx, "handler.export_job.cancel")
 
 	defer span.End()
 
@@ -609,8 +599,7 @@ func (handler *ExportJobHandlers) CancelExportJob(fiberCtx *fiber.Ctx) error {
 // @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
 // @Router /v1/export-jobs/{jobId}/download [get]
 func (handler *ExportJobHandlers) DownloadExportJob(fiberCtx *fiber.Ctx) error {
-	ctx := fiberCtx.UserContext()
-	span, logger := startExportJobSpan(fiberCtx, "handler.export_job.download")
+	ctx, span, logger := startExportJobSpan(fiberCtx, "handler.export_job.download")
 
 	defer span.End()
 
@@ -696,8 +685,7 @@ func (handler *ExportJobHandlers) DownloadExportJob(fiberCtx *fiber.Ctx) error {
 // @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
 // @Router /v1/contexts/{contextId}/export-jobs [get]
 func (handler *ExportJobHandlers) ListExportJobsByContext(fiberCtx *fiber.Ctx) error {
-	ctx := fiberCtx.UserContext()
-	span, logger := startExportJobSpan(fiberCtx, "handler.export_job.list_by_context")
+	ctx, span, logger := startExportJobSpan(fiberCtx, "handler.export_job.list_by_context")
 
 	defer span.End()
 
@@ -760,14 +748,14 @@ func (handler *ExportJobHandlers) mapJobToResponse(
 	job *entities.ExportJob,
 ) *ExportJobResponse {
 	if job == nil {
-		return nil
+		return &ExportJobResponse{}
 	}
 
 	response := &ExportJobResponse{
 		ID:             job.ID.String(),
-		ReportType:     job.ReportType,
-		Format:         job.Format,
-		Status:         job.Status,
+		ReportType:     string(job.ReportType),
+		Format:         string(job.Format),
+		Status:         string(job.Status),
 		RecordsWritten: job.RecordsWritten,
 		BytesWritten:   job.BytesWritten,
 		CreatedAt:      job.CreatedAt.Format(time.RFC3339),

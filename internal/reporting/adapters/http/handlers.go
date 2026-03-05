@@ -1,3 +1,4 @@
+// Package http provides HTTP handlers for the reporting context.
 package http
 
 import (
@@ -18,6 +19,7 @@ import (
 	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/auth"
+	"github.com/LerianStudio/matcher/internal/reporting/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/services/query"
 )
@@ -284,12 +286,12 @@ func parseSourceIDFilter(fiberCtx *fiber.Ctx) (*uuid.UUID, error) {
 // @Param date_from query string true "Start date (YYYY-MM-DD)" format(date)
 // @Param date_to query string true "End date (YYYY-MM-DD)" format(date)
 // @Param source_id query string false "Source ID filter"
-// @Success 200 {object} VolumeStatsResponse
-// @Failure 400 {object} ErrorResponse "Invalid query parameters"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Context not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Success 200 {object} dto.VolumeStatsResponse
+// @Failure 400 {object} libHTTP.ErrorResponse "Invalid query parameters"
+// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
+// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
+// @Failure 404 {object} libHTTP.ErrorResponse "Context not found"
+// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
 // @Router /v1/reports/contexts/{contextId}/dashboard/volume [get]
 func (handler *Handlers) GetVolumeStats(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.reporting.get_volume_stats")
@@ -323,7 +325,7 @@ func (handler *Handlers) GetVolumeStats(fiberCtx *fiber.Ctx) error {
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, VolumeStatsToResponse(stats))
+	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.VolumeStatsToResponse(stats))
 }
 
 // GetMatchRateStats handles GET /v1/reports/contexts/:contextId/dashboard/match-rate
@@ -338,12 +340,12 @@ func (handler *Handlers) GetVolumeStats(fiberCtx *fiber.Ctx) error {
 // @Param date_from query string true "Start date (YYYY-MM-DD)" format(date)
 // @Param date_to query string true "End date (YYYY-MM-DD)" format(date)
 // @Param source_id query string false "Source ID filter"
-// @Success 200 {object} MatchRateStatsResponse
-// @Failure 400 {object} ErrorResponse "Invalid query parameters"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Context not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Success 200 {object} dto.MatchRateStatsResponse
+// @Failure 400 {object} libHTTP.ErrorResponse "Invalid query parameters"
+// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
+// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
+// @Failure 404 {object} libHTTP.ErrorResponse "Context not found"
+// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
 // @Router /v1/reports/contexts/{contextId}/dashboard/match-rate [get]
 func (handler *Handlers) GetMatchRateStats(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.reporting.get_match_rate_stats")
@@ -377,7 +379,7 @@ func (handler *Handlers) GetMatchRateStats(fiberCtx *fiber.Ctx) error {
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, MatchRateStatsToResponse(stats))
+	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.MatchRateStatsToResponse(stats))
 }
 
 // GetSLAStats handles GET /v1/reports/contexts/:contextId/dashboard/sla
@@ -392,12 +394,12 @@ func (handler *Handlers) GetMatchRateStats(fiberCtx *fiber.Ctx) error {
 // @Param date_from query string true "Start date (YYYY-MM-DD)" format(date)
 // @Param date_to query string true "End date (YYYY-MM-DD)" format(date)
 // @Param source_id query string false "Source ID filter"
-// @Success 200 {object} SLAStatsResponse
-// @Failure 400 {object} ErrorResponse "Invalid query parameters"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Context not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Success 200 {object} dto.SLAStatsResponse
+// @Failure 400 {object} libHTTP.ErrorResponse "Invalid query parameters"
+// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
+// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
+// @Failure 404 {object} libHTTP.ErrorResponse "Context not found"
+// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
 // @Router /v1/reports/contexts/{contextId}/dashboard/sla [get]
 func (handler *Handlers) GetSLAStats(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.reporting.get_sla_stats")
@@ -431,7 +433,7 @@ func (handler *Handlers) GetSLAStats(fiberCtx *fiber.Ctx) error {
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, SLAStatsToResponse(stats))
+	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.SLAStatsToResponse(stats))
 }
 
 // GetDashboardAggregates handles GET /v1/reports/contexts/:contextId/dashboard
@@ -446,12 +448,12 @@ func (handler *Handlers) GetSLAStats(fiberCtx *fiber.Ctx) error {
 // @Param date_from query string true "Start date (YYYY-MM-DD)" format(date)
 // @Param date_to query string true "End date (YYYY-MM-DD)" format(date)
 // @Param source_id query string false "Source ID filter"
-// @Success 200 {object} DashboardAggregatesResponse
-// @Failure 400 {object} ErrorResponse "Invalid query parameters"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Context not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Success 200 {object} dto.DashboardAggregatesResponse
+// @Failure 400 {object} libHTTP.ErrorResponse "Invalid query parameters"
+// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
+// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
+// @Failure 404 {object} libHTTP.ErrorResponse "Context not found"
+// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
 // @Router /v1/reports/contexts/{contextId}/dashboard [get]
 func (handler *Handlers) GetDashboardAggregates(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.reporting.get_dashboard_aggregates")
@@ -485,7 +487,7 @@ func (handler *Handlers) GetDashboardAggregates(fiberCtx *fiber.Ctx) error {
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, DashboardAggregatesToResponse(aggregates))
+	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.DashboardAggregatesToResponse(aggregates))
 }
 
 // GetMatcherDashboardMetrics handles GET /v1/reports/contexts/:contextId/dashboard/metrics
@@ -500,12 +502,12 @@ func (handler *Handlers) GetDashboardAggregates(fiberCtx *fiber.Ctx) error {
 // @Param date_from query string true "Start date (YYYY-MM-DD)" format(date)
 // @Param date_to query string true "End date (YYYY-MM-DD)" format(date)
 // @Param source_id query string false "Source ID filter"
-// @Success 200 {object} MatcherDashboardMetricsResponse
-// @Failure 400 {object} ErrorResponse "Invalid query parameters"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Context not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Success 200 {object} dto.MatcherDashboardMetricsResponse
+// @Failure 400 {object} libHTTP.ErrorResponse "Invalid query parameters"
+// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
+// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
+// @Failure 404 {object} libHTTP.ErrorResponse "Context not found"
+// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
 // @Router /v1/reports/contexts/{contextId}/dashboard/metrics [get]
 func (handler *Handlers) GetMatcherDashboardMetrics(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(
@@ -542,7 +544,7 @@ func (handler *Handlers) GetMatcherDashboardMetrics(fiberCtx *fiber.Ctx) error {
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, MatcherDashboardMetricsToResponse(metrics))
+	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.MatcherDashboardMetricsToResponse(metrics))
 }
 
 // GetSourceBreakdown handles GET /v1/reports/contexts/:contextId/dashboard/source-breakdown
@@ -557,12 +559,12 @@ func (handler *Handlers) GetMatcherDashboardMetrics(fiberCtx *fiber.Ctx) error {
 // @Param date_from query string true "Start date (YYYY-MM-DD)" format(date)
 // @Param date_to query string true "End date (YYYY-MM-DD)" format(date)
 // @Param source_id query string false "Source ID filter"
-// @Success 200 {object} SourceBreakdownListResponse
-// @Failure 400 {object} ErrorResponse "Invalid query parameters"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Context not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Success 200 {object} dto.SourceBreakdownListResponse
+// @Failure 400 {object} libHTTP.ErrorResponse "Invalid query parameters"
+// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
+// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
+// @Failure 404 {object} libHTTP.ErrorResponse "Context not found"
+// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
 // @Router /v1/reports/contexts/{contextId}/dashboard/source-breakdown [get]
 func (handler *Handlers) GetSourceBreakdown(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(
@@ -599,7 +601,7 @@ func (handler *Handlers) GetSourceBreakdown(fiberCtx *fiber.Ctx) error {
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, SourceBreakdownToResponse(breakdowns))
+	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.SourceBreakdownToResponse(breakdowns))
 }
 
 // GetCashImpactSummary handles GET /v1/reports/contexts/:contextId/dashboard/cash-impact
@@ -614,12 +616,12 @@ func (handler *Handlers) GetSourceBreakdown(fiberCtx *fiber.Ctx) error {
 // @Param date_from query string true "Start date (YYYY-MM-DD)" format(date)
 // @Param date_to query string true "End date (YYYY-MM-DD)" format(date)
 // @Param source_id query string false "Source ID filter"
-// @Success 200 {object} CashImpactSummaryResponse
-// @Failure 400 {object} ErrorResponse "Invalid query parameters"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Context not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Success 200 {object} dto.CashImpactSummaryResponse
+// @Failure 400 {object} libHTTP.ErrorResponse "Invalid query parameters"
+// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
+// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
+// @Failure 404 {object} libHTTP.ErrorResponse "Context not found"
+// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
 // @Router /v1/reports/contexts/{contextId}/dashboard/cash-impact [get]
 func (handler *Handlers) GetCashImpactSummary(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(
@@ -656,7 +658,7 @@ func (handler *Handlers) GetCashImpactSummary(fiberCtx *fiber.Ctx) error {
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, CashImpactSummaryToResponse(summary))
+	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.CashImpactSummaryToResponse(summary))
 }
 
 // countFn produces a count for a given report filter.
@@ -698,7 +700,7 @@ func (handler *Handlers) handleCount(
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, ExportCountResponse{Count: count})
+	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ExportCountResponse{Count: count})
 }
 
 // CountMatched handles GET /v1/reports/contexts/:contextId/matches/count
@@ -714,12 +716,12 @@ func (handler *Handlers) handleCount(
 // @Param date_from query string true "Start date (YYYY-MM-DD)" format(date)
 // @Param date_to query string true "End date (YYYY-MM-DD)" format(date)
 // @Param source_id query string false "Source ID filter"
-// @Success 200 {object} ExportCountResponse
-// @Failure 400 {object} ErrorResponse "Invalid query parameters"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Context not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Success 200 {object} dto.ExportCountResponse
+// @Failure 400 {object} libHTTP.ErrorResponse "Invalid query parameters"
+// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
+// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
+// @Failure 404 {object} libHTTP.ErrorResponse "Context not found"
+// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
 // @Router /v1/reports/contexts/{contextId}/matches/count [get]
 func (handler *Handlers) CountMatched(fiberCtx *fiber.Ctx) error {
 	return handler.handleCount(
@@ -742,12 +744,12 @@ func (handler *Handlers) CountMatched(fiberCtx *fiber.Ctx) error {
 // @Param date_from query string true "Start date (YYYY-MM-DD)" format(date)
 // @Param date_to query string true "End date (YYYY-MM-DD)" format(date)
 // @Param source_id query string false "Source ID filter"
-// @Success 200 {object} ExportCountResponse
-// @Failure 400 {object} ErrorResponse "Invalid query parameters"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Context not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Success 200 {object} dto.ExportCountResponse
+// @Failure 400 {object} libHTTP.ErrorResponse "Invalid query parameters"
+// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
+// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
+// @Failure 404 {object} libHTTP.ErrorResponse "Context not found"
+// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
 // @Router /v1/reports/contexts/{contextId}/transactions/count [get]
 func (handler *Handlers) CountTransactions(fiberCtx *fiber.Ctx) error {
 	return handler.handleCount(
@@ -770,12 +772,12 @@ func (handler *Handlers) CountTransactions(fiberCtx *fiber.Ctx) error {
 // @Param date_from query string true "Start date (YYYY-MM-DD)" format(date)
 // @Param date_to query string true "End date (YYYY-MM-DD)" format(date)
 // @Param source_id query string false "Source ID filter"
-// @Success 200 {object} ExportCountResponse
-// @Failure 400 {object} ErrorResponse "Invalid query parameters"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Context not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Success 200 {object} dto.ExportCountResponse
+// @Failure 400 {object} libHTTP.ErrorResponse "Invalid query parameters"
+// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
+// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
+// @Failure 404 {object} libHTTP.ErrorResponse "Context not found"
+// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
 // @Router /v1/reports/contexts/{contextId}/exceptions/count [get]
 func (handler *Handlers) CountExceptions(fiberCtx *fiber.Ctx) error {
 	return handler.handleCount(
@@ -931,11 +933,11 @@ func (handler *Handlers) handleExport(
 // @Param source_id query string false "Source ID filter"
 // @Param format query string false "Export format (csv or pdf)" default(csv)
 // @Success 200 {file} file
-// @Failure 400 {object} ErrorResponse "Invalid query parameters"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Context not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} libHTTP.ErrorResponse "Invalid query parameters"
+// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
+// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
+// @Failure 404 {object} libHTTP.ErrorResponse "Context not found"
+// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
 // @Router /v1/reports/contexts/{contextId}/matched/export [get]
 func (handler *Handlers) ExportMatchedReport(fiberCtx *fiber.Ctx) error {
 	return handler.handleExport(
@@ -978,11 +980,11 @@ func (handler *Handlers) ExportMatchedReport(fiberCtx *fiber.Ctx) error {
 // @Param source_id query string false "Source ID filter"
 // @Param format query string false "Export format (csv or pdf)" default(csv)
 // @Success 200 {file} file
-// @Failure 400 {object} ErrorResponse "Invalid query parameters"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Context not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} libHTTP.ErrorResponse "Invalid query parameters"
+// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
+// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
+// @Failure 404 {object} libHTTP.ErrorResponse "Context not found"
+// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
 // @Router /v1/reports/contexts/{contextId}/unmatched/export [get]
 func (handler *Handlers) ExportUnmatchedReport(fiberCtx *fiber.Ctx) error {
 	return handler.handleExport(
@@ -1025,11 +1027,11 @@ func (handler *Handlers) ExportUnmatchedReport(fiberCtx *fiber.Ctx) error {
 // @Param source_id query string false "Source ID filter"
 // @Param format query string false "Export format (csv or pdf)" default(csv)
 // @Success 200 {file} file
-// @Failure 400 {object} ErrorResponse "Invalid query parameters"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Context not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} libHTTP.ErrorResponse "Invalid query parameters"
+// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
+// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
+// @Failure 404 {object} libHTTP.ErrorResponse "Context not found"
+// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
 // @Router /v1/reports/contexts/{contextId}/summary/export [get]
 func (handler *Handlers) ExportSummaryReport(fiberCtx *fiber.Ctx) error {
 	return handler.handleExport(
@@ -1073,12 +1075,12 @@ func (handler *Handlers) ExportSummaryReport(fiberCtx *fiber.Ctx) error {
 // @Param cursor query string false "Cursor for pagination (opaque)"
 // @Param limit query int false "Maximum number of records to return" default(20) minimum(1) maximum(200)
 // @Param sort_order query string false "Sort order for created_at (asc or desc; defaults to desc)" default(desc) Enums(asc, desc)
-// @Success 200 {object} ListMatchedReportResponse
-// @Failure 400 {object} ErrorResponse "Invalid query parameters"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Context not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Success 200 {object} dto.ListMatchedReportResponse
+// @Failure 400 {object} libHTTP.ErrorResponse "Invalid query parameters"
+// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
+// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
+// @Failure 404 {object} libHTTP.ErrorResponse "Context not found"
+// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
 // @Router /v1/reports/contexts/{contextId}/matched [get]
 func (handler *Handlers) GetMatchedReport(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.reporting.get_matched_report")
@@ -1112,8 +1114,8 @@ func (handler *Handlers) GetMatchedReport(fiberCtx *fiber.Ctx) error {
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, ListMatchedReportResponse{
-		Items:      MatchedItemsToResponse(items),
+	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ListMatchedReportResponse{
+		Items:      dto.MatchedItemsToResponse(items),
 		Pagination: pagination,
 	})
 }
@@ -1133,12 +1135,12 @@ func (handler *Handlers) GetMatchedReport(fiberCtx *fiber.Ctx) error {
 // @Param cursor query string false "Cursor for pagination (opaque)"
 // @Param limit query int false "Maximum number of records to return" default(20) minimum(1) maximum(200)
 // @Param sort_order query string false "Sort order for created_at (asc or desc; defaults to desc)" default(desc) Enums(asc, desc)
-// @Success 200 {object} ListUnmatchedReportResponse
-// @Failure 400 {object} ErrorResponse "Invalid query parameters"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Context not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Success 200 {object} dto.ListUnmatchedReportResponse
+// @Failure 400 {object} libHTTP.ErrorResponse "Invalid query parameters"
+// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
+// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
+// @Failure 404 {object} libHTTP.ErrorResponse "Context not found"
+// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
 // @Router /v1/reports/contexts/{contextId}/unmatched [get]
 func (handler *Handlers) GetUnmatchedReport(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.reporting.get_unmatched_report")
@@ -1172,8 +1174,8 @@ func (handler *Handlers) GetUnmatchedReport(fiberCtx *fiber.Ctx) error {
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, ListUnmatchedReportResponse{
-		Items:      UnmatchedItemsToResponse(items),
+	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ListUnmatchedReportResponse{
+		Items:      dto.UnmatchedItemsToResponse(items),
 		Pagination: pagination,
 	})
 }
@@ -1190,12 +1192,12 @@ func (handler *Handlers) GetUnmatchedReport(fiberCtx *fiber.Ctx) error {
 // @Param date_from query string true "Start date (YYYY-MM-DD)" format(date)
 // @Param date_to query string true "End date (YYYY-MM-DD)" format(date)
 // @Param source_id query string false "Source ID filter"
-// @Success 200 {object} SummaryReportResponse
-// @Failure 400 {object} ErrorResponse "Invalid query parameters"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Context not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Success 200 {object} dto.SummaryReportResponse
+// @Failure 400 {object} libHTTP.ErrorResponse "Invalid query parameters"
+// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
+// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
+// @Failure 404 {object} libHTTP.ErrorResponse "Context not found"
+// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
 // @Router /v1/reports/contexts/{contextId}/summary [get]
 func (handler *Handlers) GetSummaryReport(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.reporting.get_summary_report")
@@ -1229,7 +1231,7 @@ func (handler *Handlers) GetSummaryReport(fiberCtx *fiber.Ctx) error {
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, SummaryReportToResponse(summary))
+	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.SummaryReportToResponse(summary))
 }
 
 // GetVarianceReport handles GET /v1/reports/contexts/:contextId/variance
@@ -1247,12 +1249,12 @@ func (handler *Handlers) GetSummaryReport(fiberCtx *fiber.Ctx) error {
 // @Param cursor query string false "Cursor for pagination (opaque)"
 // @Param limit query int false "Maximum number of records to return" default(20) minimum(1) maximum(200)
 // @Param sort_order query string false "Sort order for created_at (asc or desc; defaults to desc)" default(desc) Enums(asc, desc)
-// @Success 200 {object} ListVarianceReportResponse
-// @Failure 400 {object} ErrorResponse "Invalid query parameters"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Context not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Success 200 {object} dto.ListVarianceReportResponse
+// @Failure 400 {object} libHTTP.ErrorResponse "Invalid query parameters"
+// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
+// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
+// @Failure 404 {object} libHTTP.ErrorResponse "Context not found"
+// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
 // @Router /v1/reports/contexts/{contextId}/variance [get]
 func (handler *Handlers) GetVarianceReport(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.reporting.get_variance_report")
@@ -1286,8 +1288,8 @@ func (handler *Handlers) GetVarianceReport(fiberCtx *fiber.Ctx) error {
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, ListVarianceReportResponse{
-		Items:      VarianceRowsToResponse(rows),
+	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ListVarianceReportResponse{
+		Items:      dto.VarianceRowsToResponse(rows),
 		Pagination: pagination,
 	})
 }
@@ -1305,12 +1307,12 @@ func (handler *Handlers) GetVarianceReport(fiberCtx *fiber.Ctx) error {
 // @Param date_from query string true "Start date (YYYY-MM-DD)" format(date)
 // @Param date_to query string true "End date (YYYY-MM-DD)" format(date)
 // @Param source_id query string false "Source ID filter"
-// @Success 200 {object} ExportCountResponse
-// @Failure 400 {object} ErrorResponse "Invalid query parameters"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Context not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Success 200 {object} dto.ExportCountResponse
+// @Failure 400 {object} libHTTP.ErrorResponse "Invalid query parameters"
+// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
+// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
+// @Failure 404 {object} libHTTP.ErrorResponse "Context not found"
+// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
 // @Router /v1/reports/contexts/{contextId}/unmatched/count [get]
 func (handler *Handlers) CountUnmatched(fiberCtx *fiber.Ctx) error {
 	return handler.handleCount(
@@ -1334,11 +1336,11 @@ func (handler *Handlers) CountUnmatched(fiberCtx *fiber.Ctx) error {
 // @Param source_id query string false "Source ID filter"
 // @Param format query string false "Export format (csv or pdf)" default(csv)
 // @Success 200 {file} file
-// @Failure 400 {object} ErrorResponse "Invalid query parameters"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Context not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} libHTTP.ErrorResponse "Invalid query parameters"
+// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
+// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
+// @Failure 404 {object} libHTTP.ErrorResponse "Context not found"
+// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
 // @Router /v1/reports/contexts/{contextId}/variance/export [get]
 func (handler *Handlers) ExportVarianceReport(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.reporting.export_variance_report")

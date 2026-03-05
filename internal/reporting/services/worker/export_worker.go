@@ -1024,7 +1024,7 @@ func (worker *ExportWorker) generateFileKey(job *entities.ExportJob) string {
 	)
 }
 
-func (worker *ExportWorker) getExtension(format string) string {
+func (worker *ExportWorker) getExtension(format entities.ExportFormat) string {
 	switch format {
 	case entities.ExportFormatCSV:
 		return "csv"
@@ -1037,7 +1037,7 @@ func (worker *ExportWorker) getExtension(format string) string {
 	}
 }
 
-func (worker *ExportWorker) getContentType(format string) string {
+func (worker *ExportWorker) getContentType(format entities.ExportFormat) string {
 	switch format {
 	case entities.ExportFormatCSV:
 		return "text/csv"

@@ -598,7 +598,7 @@ func TestExportWorker_GetExtension(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		format   string
+		format   entities.ExportFormat
 		expected string
 	}{
 		{
@@ -653,7 +653,7 @@ func TestExportWorker_GetContentType(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		format   string
+		format   entities.ExportFormat
 		expected string
 	}{
 		{

@@ -1,5 +1,5 @@
-// Package http provides HTTP handlers for the reporting API.
-package http
+// Package dto provides data transfer objects for the reporting HTTP API.
+package dto
 
 import (
 	"time"

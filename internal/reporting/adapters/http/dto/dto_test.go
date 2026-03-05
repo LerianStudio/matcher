@@ -1,6 +1,6 @@
 //go:build unit
 
-package http
+package dto
 
 import (
 	"testing"

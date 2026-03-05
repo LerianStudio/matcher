@@ -21,6 +21,7 @@ import (
 	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/auth"
+	"github.com/LerianStudio/matcher/internal/reporting/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	repomocks "github.com/LerianStudio/matcher/internal/reporting/domain/repositories/mocks"
 	portsmocks "github.com/LerianStudio/matcher/internal/reporting/ports/mocks"
@@ -301,7 +302,7 @@ func TestHandlers_GetMatcherDashboardMetrics_Success(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var result MatcherDashboardMetricsResponse
+	var result dto.MatcherDashboardMetricsResponse
 
 	err = json.NewDecoder(resp.Body).Decode(&result)
 	require.NoError(t, err)
@@ -459,7 +460,7 @@ func TestHandlers_GetSourceBreakdown_Success(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var result SourceBreakdownListResponse
+	var result dto.SourceBreakdownListResponse
 
 	err = json.NewDecoder(resp.Body).Decode(&result)
 	require.NoError(t, err)
@@ -568,7 +569,7 @@ func TestHandlers_GetCashImpactSummary_Success(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var result CashImpactSummaryResponse
+	var result dto.CashImpactSummaryResponse
 
 	err = json.NewDecoder(resp.Body).Decode(&result)
 	require.NoError(t, err)
@@ -700,7 +701,7 @@ func TestHandlers_CountMatched_Success(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var result ExportCountResponse
+	var result dto.ExportCountResponse
 
 	err = json.NewDecoder(resp.Body).Decode(&result)
 	require.NoError(t, err)
@@ -826,7 +827,7 @@ func TestHandlers_CountTransactions_Success(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var result ExportCountResponse
+	var result dto.ExportCountResponse
 
 	err = json.NewDecoder(resp.Body).Decode(&result)
 	require.NoError(t, err)
@@ -863,7 +864,7 @@ func TestHandlers_CountExceptions_Success(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var result ExportCountResponse
+	var result dto.ExportCountResponse
 
 	err = json.NewDecoder(resp.Body).Decode(&result)
 	require.NoError(t, err)
@@ -1368,7 +1369,7 @@ func TestHandlers_CountUnmatched_Success(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var result ExportCountResponse
+	var result dto.ExportCountResponse
 
 	err = json.NewDecoder(resp.Body).Decode(&result)
 	require.NoError(t, err)
@@ -1437,7 +1438,7 @@ func TestHandlers_GetMatchedReport_Success(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var result ListMatchedReportResponse
+	var result dto.ListMatchedReportResponse
 
 	err = json.NewDecoder(resp.Body).Decode(&result)
 	require.NoError(t, err)
@@ -1500,7 +1501,7 @@ func TestHandlers_GetUnmatchedReport_Success(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var result ListUnmatchedReportResponse
+	var result dto.ListUnmatchedReportResponse
 
 	err = json.NewDecoder(resp.Body).Decode(&result)
 	require.NoError(t, err)
@@ -1536,7 +1537,7 @@ func TestHandlers_GetSummaryReport_Success(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var result SummaryReportResponse
+	var result dto.SummaryReportResponse
 
 	err = json.NewDecoder(resp.Body).Decode(&result)
 	require.NoError(t, err)
@@ -1571,7 +1572,7 @@ func TestHandlers_GetVarianceReport_Success(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var result ListVarianceReportResponse
+	var result dto.ListVarianceReportResponse
 
 	err = json.NewDecoder(resp.Body).Decode(&result)
 	require.NoError(t, err)
@@ -1625,7 +1626,7 @@ func TestSourceBreakdownToResponse_WithData(t *testing.T) {
 		},
 	}
 
-	result := SourceBreakdownToResponse(breakdowns)
+	result := dto.SourceBreakdownToResponse(breakdowns)
 
 	require.NotNil(t, result)
 	require.Len(t, result.Sources, 1)
@@ -1639,7 +1640,7 @@ func TestSourceBreakdownToResponse_WithData(t *testing.T) {
 func TestSourceBreakdownToResponse_NilInput(t *testing.T) {
 	t.Parallel()
 
-	result := SourceBreakdownToResponse(nil)
+	result := dto.SourceBreakdownToResponse(nil)
 
 	require.NotNil(t, result)
 	assert.Empty(t, result.Sources)
@@ -1660,7 +1661,7 @@ func TestCashImpactSummaryToResponse_WithData(t *testing.T) {
 		},
 	}
 
-	result := CashImpactSummaryToResponse(summary)
+	result := dto.CashImpactSummaryToResponse(summary)
 
 	require.NotNil(t, result)
 	assert.Equal(t, "5000", result.TotalUnmatchedAmount)
@@ -1675,7 +1676,7 @@ func TestCashImpactSummaryToResponse_WithData(t *testing.T) {
 func TestCashImpactSummaryToResponse_NilInput(t *testing.T) {
 	t.Parallel()
 
-	result := CashImpactSummaryToResponse(nil)
+	result := dto.CashImpactSummaryToResponse(nil)
 
 	require.NotNil(t, result)
 	assert.Equal(t, "0", result.TotalUnmatchedAmount)
@@ -1834,8 +1835,8 @@ func TestParseExportJobRequest_LowercaseNormalization(t *testing.T) {
 	require.NotNil(t, parsed)
 	assert.Empty(t, msg)
 	assert.NoError(t, err)
-	assert.Equal(t, "MATCHED", parsed.reportType)
-	assert.Equal(t, "CSV", parsed.format)
+	assert.Equal(t, entities.ExportReportTypeMatched, parsed.reportType)
+	assert.Equal(t, entities.ExportFormatCSV, parsed.format)
 }
 
 func TestParseExportJobRequest_LegacyReportTypeAliases(t *testing.T) {
@@ -1844,7 +1845,7 @@ func TestParseExportJobRequest_LegacyReportTypeAliases(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
-		expected string
+		expected entities.ExportReportType
 	}{
 		{name: "MATCHES alias", input: "MATCHES", expected: entities.ExportReportTypeMatched},
 		{name: "unmatched transactions alias", input: "UNMATCHED_TRANSACTIONS", expected: entities.ExportReportTypeUnmatched},
@@ -1871,7 +1872,7 @@ func TestParseExportJobRequest_LegacyReportTypeAliases(t *testing.T) {
 		})
 	}
 
-	t.Run("EXCEPTIONS canonical type accepted", func(t *testing.T) {
+	t.Run("EXCEPTIONS rejected as not yet supported", func(t *testing.T) {
 		t.Parallel()
 
 		req := &CreateExportJobRequest{
@@ -1883,10 +1884,9 @@ func TestParseExportJobRequest_LegacyReportTypeAliases(t *testing.T) {
 
 		parsed, msg, err := parseExportJobRequest(req)
 
-		require.NotNil(t, parsed)
-		assert.Empty(t, msg)
-		assert.NoError(t, err)
-		assert.Equal(t, entities.ExportReportTypeExceptions, parsed.reportType)
+		assert.Nil(t, parsed)
+		assert.Contains(t, msg, "not yet supported")
+		assert.ErrorIs(t, err, ErrExceptionsNotSupportedAsync)
 	})
 }
 
@@ -1976,6 +1976,28 @@ func TestMapJobToResponse_DownloadableWithFutureExpiry(t *testing.T) {
 	assert.NotNil(t, response.DownloadURL)
 	assert.Contains(t, *response.DownloadURL, "/v1/export-jobs/")
 	assert.Contains(t, *response.DownloadURL, "/download")
+}
+
+func TestMapJobToResponse_NilJobReturnsEmptyResponse(t *testing.T) {
+	t.Parallel()
+
+	ctxProvider := &mockContextProvider{info: &ReconciliationContextInfo{ID: uuid.New()}}
+	storage := newStorageClientMock(t, storageClientMockConfig{})
+	repo := newExportJobRepoMock(t)
+
+	uc, err := newExportJobUseCase(t, repo)
+	require.NoError(t, err)
+
+	querySvc, err := query.NewExportJobQueryService(repo)
+	require.NoError(t, err)
+
+	handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour)
+	require.NoError(t, err)
+
+	response := handlers.mapJobToResponse(context.Background(), nil)
+	require.NotNil(t, response)
+	assert.Equal(t, "", response.ID)
+	assert.Nil(t, response.DownloadURL)
 }
 
 func newExportJobUseCase(t *testing.T, repo *repomocks.MockExportJobRepository) (*command.ExportJobUseCase, error) {

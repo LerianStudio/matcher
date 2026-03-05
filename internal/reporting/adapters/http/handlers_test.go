@@ -21,6 +21,7 @@ import (
 	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/auth"
+	"github.com/LerianStudio/matcher/internal/reporting/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/services/query"
 	"github.com/LerianStudio/matcher/internal/shared/testutil"
@@ -403,7 +404,7 @@ func TestHandlers_GetVolumeStats(t *testing.T) {
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-		var result VolumeStatsResponse
+		var result dto.VolumeStatsResponse
 
 		err := json.NewDecoder(resp.Body).Decode(&result)
 		require.NoError(t, err)
@@ -570,7 +571,7 @@ func TestHandlers_GetMatchRateStats_Success(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var result MatchRateStatsResponse
+	var result dto.MatchRateStatsResponse
 
 	err = json.NewDecoder(resp.Body).Decode(&result)
 	require.NoError(t, err)
@@ -695,7 +696,7 @@ func TestHandlers_GetSLAStats_Success(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var result SLAStatsResponse
+	var result dto.SLAStatsResponse
 
 	err = json.NewDecoder(resp.Body).Decode(&result)
 	require.NoError(t, err)
@@ -820,7 +821,7 @@ func TestHandlers_GetDashboardAggregates_Success(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var result DashboardAggregatesResponse
+	var result dto.DashboardAggregatesResponse
 
 	err = json.NewDecoder(resp.Body).Decode(&result)
 	require.NoError(t, err)
