@@ -23,8 +23,8 @@ import (
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
 	"github.com/LerianStudio/matcher/internal/governance/domain/repositories/mocks"
 	"github.com/LerianStudio/matcher/internal/governance/services/command"
-	reportingMocks "github.com/LerianStudio/matcher/internal/reporting/ports/mocks"
 	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
+	sharedPortMocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
 	sharedTestutil "github.com/LerianStudio/matcher/internal/shared/testutil"
 
 	"go.uber.org/mock/gomock"
@@ -45,7 +45,7 @@ func buildTestArchive(t *testing.T, rows ...map[string]any) (io.ReadCloser, stri
 type testDeps struct {
 	ctrl         *gomock.Controller
 	archiveRepo  *mocks.MockArchiveMetadataRepository
-	storage      *reportingMocks.MockObjectStorageClient
+	storage      *sharedPortMocks.MockObjectStorageClient
 	db           *sql.DB
 	sqlMock      sqlmock.Sqlmock
 	miniRedis    *miniredis.Miniredis
@@ -96,7 +96,7 @@ func setupTestDeps(t *testing.T) *testDeps {
 	return &testDeps{
 		ctrl:         ctrl,
 		archiveRepo:  mocks.NewMockArchiveMetadataRepository(ctrl),
-		storage:      reportingMocks.NewMockObjectStorageClient(ctrl),
+		storage:      sharedPortMocks.NewMockObjectStorageClient(ctrl),
 		db:           db,
 		sqlMock:      mock,
 		miniRedis:    srv,

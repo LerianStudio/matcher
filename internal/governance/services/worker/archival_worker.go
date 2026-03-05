@@ -30,7 +30,6 @@ import (
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
 	"github.com/LerianStudio/matcher/internal/governance/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/governance/services/command"
-	"github.com/LerianStudio/matcher/internal/reporting/ports"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 	"github.com/LerianStudio/matcher/pkg/storageopt"
 )
@@ -55,7 +54,7 @@ const (
 type ArchivalWorker struct {
 	archiveRepo   repositories.ArchiveMetadataRepository
 	partitionMgr  *command.PartitionManager
-	storage       ports.ObjectStorageClient
+	storage       sharedPorts.ObjectStorageClient
 	db            *sql.DB
 	infraProvider sharedPorts.InfrastructureProvider
 	cfg           ArchivalWorkerConfig
@@ -73,7 +72,7 @@ type ArchivalWorker struct {
 func NewArchivalWorker(
 	archiveRepo repositories.ArchiveMetadataRepository,
 	partitionMgr *command.PartitionManager,
-	storage ports.ObjectStorageClient,
+	storage sharedPorts.ObjectStorageClient,
 	db *sql.DB,
 	infraProvider sharedPorts.InfrastructureProvider,
 	cfg ArchivalWorkerConfig,
@@ -361,7 +360,7 @@ func (aw *ArchivalWorker) archivePartition(ctx context.Context, metadata *entiti
 
 	span.SetAttributes(
 		attribute.String("partition.name", metadata.PartitionName),
-		attribute.String("partition.status", metadata.Status),
+		attribute.String("partition.status", string(metadata.Status)),
 	)
 
 	// PENDING -> EXPORTING

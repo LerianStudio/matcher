@@ -23,8 +23,8 @@ import (
 	sharedhttp "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/governance/adapters/http/dto"
-	"github.com/LerianStudio/matcher/internal/governance/adapters/postgres"
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
+	governanceErrors "github.com/LerianStudio/matcher/internal/governance/domain/errors"
 	"github.com/LerianStudio/matcher/internal/governance/domain/repositories/mocks"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
@@ -202,7 +202,7 @@ func testGetAuditLogNotFoundError(t *testing.T) {
 	auditLogID := uuid.New()
 
 	repo := mocks.NewMockAuditLogRepository(ctrl)
-	repo.EXPECT().GetByID(gomock.Any(), auditLogID).Return(nil, postgres.ErrAuditLogNotFound)
+	repo.EXPECT().GetByID(gomock.Any(), auditLogID).Return(nil, governanceErrors.ErrAuditLogNotFound)
 
 	handler, err := NewHandler(repo)
 	require.NoError(t, err)

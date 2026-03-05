@@ -377,7 +377,7 @@ func (repo *Repository) GetByPartition(
 // buildListByTenantQuery constructs the query for listing archive metadata with optional filters.
 func buildListByTenantQuery(
 	tenantID uuid.UUID,
-	status string,
+	status entities.ArchiveStatus,
 	from, to *time.Time,
 	limit, offset int,
 ) squirrel.SelectBuilder {
@@ -408,7 +408,7 @@ func buildListByTenantQuery(
 func (repo *Repository) ListByTenant(
 	ctx context.Context,
 	tenantID uuid.UUID,
-	status string,
+	status entities.ArchiveStatus,
 	from, to *time.Time,
 	limit int,
 	offset int,

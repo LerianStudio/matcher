@@ -14,21 +14,37 @@ import (
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
 
+// ArchiveStatus represents the lifecycle state of a partition archival.
+type ArchiveStatus string
+
 // Archive status constants representing the lifecycle of a partition archival.
 const (
-	StatusPending   = "PENDING"
-	StatusExporting = "EXPORTING"
-	StatusExported  = "EXPORTED"
-	StatusUploading = "UPLOADING"
-	StatusUploaded  = "UPLOADED"
-	StatusVerifying = "VERIFYING"
-	StatusVerified  = "VERIFIED"
-	StatusDetaching = "DETACHING"
-	StatusComplete  = "COMPLETE"
+	StatusPending   ArchiveStatus = "PENDING"
+	StatusExporting ArchiveStatus = "EXPORTING"
+	StatusExported  ArchiveStatus = "EXPORTED"
+	StatusUploading ArchiveStatus = "UPLOADING"
+	StatusUploaded  ArchiveStatus = "UPLOADED"
+	StatusVerifying ArchiveStatus = "VERIFYING"
+	StatusVerified  ArchiveStatus = "VERIFIED"
+	StatusDetaching ArchiveStatus = "DETACHING"
+	StatusComplete  ArchiveStatus = "COMPLETE"
 )
+
+// IsValid returns true if the status is one of the defined archive statuses.
+func (s ArchiveStatus) IsValid() bool {
+	switch s {
+	case StatusPending, StatusExporting, StatusExported,
+		StatusUploading, StatusUploaded, StatusVerifying,
+		StatusVerified, StatusDetaching, StatusComplete:
+		return true
+	default:
+		return false
+	}
+}
 
 // Sentinel errors for archive metadata validation.
 var (
+	ErrNilArchiveMetadata        = errors.New("archive metadata is nil")
 	ErrInvalidStateTransition    = errors.New("invalid state transition")
 	ErrArchiveTenantIDRequired   = errors.New("tenant id is required")
 	ErrPartitionNameRequired     = errors.New("partition name is required")
@@ -54,7 +70,7 @@ type ArchiveMetadata struct {
 	Checksum            string
 	CompressedSizeBytes int64
 	StorageClass        string
-	Status              string
+	Status              ArchiveStatus
 	ErrorMessage        string
 	ArchivedAt          *time.Time
 	CreatedAt           time.Time
@@ -106,6 +122,10 @@ func NewArchiveMetadata(
 
 // MarkExporting transitions from PENDING to EXPORTING.
 func (am *ArchiveMetadata) MarkExporting() error {
+	if am == nil {
+		return ErrNilArchiveMetadata
+	}
+
 	if am.Status != StatusPending {
 		return fmt.Errorf("%w: cannot transition from %s to %s", ErrInvalidStateTransition, am.Status, StatusExporting)
 	}
@@ -118,6 +138,10 @@ func (am *ArchiveMetadata) MarkExporting() error {
 
 // MarkExported transitions from EXPORTING to EXPORTED with the exported row count.
 func (am *ArchiveMetadata) MarkExported(rowCount int64) error {
+	if am == nil {
+		return ErrNilArchiveMetadata
+	}
+
 	if am.Status != StatusExporting {
 		return fmt.Errorf("%w: cannot transition from %s to %s", ErrInvalidStateTransition, am.Status, StatusExported)
 	}
@@ -135,6 +159,10 @@ func (am *ArchiveMetadata) MarkExported(rowCount int64) error {
 
 // MarkUploading transitions from EXPORTED to UPLOADING.
 func (am *ArchiveMetadata) MarkUploading() error {
+	if am == nil {
+		return ErrNilArchiveMetadata
+	}
+
 	if am.Status != StatusExported {
 		return fmt.Errorf("%w: cannot transition from %s to %s", ErrInvalidStateTransition, am.Status, StatusUploading)
 	}
@@ -147,6 +175,10 @@ func (am *ArchiveMetadata) MarkUploading() error {
 
 // MarkUploaded transitions from UPLOADING to UPLOADED with archive details.
 func (am *ArchiveMetadata) MarkUploaded(archiveKey, checksum string, compressedSize int64, storageClass string) error {
+	if am == nil {
+		return ErrNilArchiveMetadata
+	}
+
 	if am.Status != StatusUploading {
 		return fmt.Errorf("%w: cannot transition from %s to %s", ErrInvalidStateTransition, am.Status, StatusUploaded)
 	}
@@ -179,6 +211,10 @@ func (am *ArchiveMetadata) MarkUploaded(archiveKey, checksum string, compressedS
 
 // MarkVerifying transitions from UPLOADED to VERIFYING.
 func (am *ArchiveMetadata) MarkVerifying() error {
+	if am == nil {
+		return ErrNilArchiveMetadata
+	}
+
 	if am.Status != StatusUploaded {
 		return fmt.Errorf("%w: cannot transition from %s to %s", ErrInvalidStateTransition, am.Status, StatusVerifying)
 	}
@@ -191,6 +227,10 @@ func (am *ArchiveMetadata) MarkVerifying() error {
 
 // MarkVerified transitions from VERIFYING to VERIFIED.
 func (am *ArchiveMetadata) MarkVerified() error {
+	if am == nil {
+		return ErrNilArchiveMetadata
+	}
+
 	if am.Status != StatusVerifying {
 		return fmt.Errorf("%w: cannot transition from %s to %s", ErrInvalidStateTransition, am.Status, StatusVerified)
 	}
@@ -203,6 +243,10 @@ func (am *ArchiveMetadata) MarkVerified() error {
 
 // MarkDetaching transitions from VERIFIED to DETACHING.
 func (am *ArchiveMetadata) MarkDetaching() error {
+	if am == nil {
+		return ErrNilArchiveMetadata
+	}
+
 	if am.Status != StatusVerified {
 		return fmt.Errorf("%w: cannot transition from %s to %s", ErrInvalidStateTransition, am.Status, StatusDetaching)
 	}
@@ -215,6 +259,10 @@ func (am *ArchiveMetadata) MarkDetaching() error {
 
 // MarkComplete transitions from DETACHING to COMPLETE.
 func (am *ArchiveMetadata) MarkComplete() error {
+	if am == nil {
+		return ErrNilArchiveMetadata
+	}
+
 	if am.Status != StatusDetaching {
 		return fmt.Errorf("%w: cannot transition from %s to %s", ErrInvalidStateTransition, am.Status, StatusComplete)
 	}
@@ -229,6 +277,14 @@ func (am *ArchiveMetadata) MarkComplete() error {
 
 // MarkError records an error message while preserving the current status for retry.
 func (am *ArchiveMetadata) MarkError(msg string) {
+	if am == nil {
+		return
+	}
+
+	if msg == "" {
+		msg = "unknown error"
+	}
+
 	am.ErrorMessage = msg
 	am.UpdatedAt = time.Now().UTC()
 }

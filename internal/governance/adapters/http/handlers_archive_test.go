@@ -20,11 +20,12 @@ import (
 
 	sharedhttp "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
 	"github.com/LerianStudio/matcher/internal/auth"
-	archivePostgres "github.com/LerianStudio/matcher/internal/governance/adapters/postgres/archive_metadata"
+	governanceDTO "github.com/LerianStudio/matcher/internal/governance/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
+	governanceErrors "github.com/LerianStudio/matcher/internal/governance/domain/errors"
 	repoMocks "github.com/LerianStudio/matcher/internal/governance/domain/repositories/mocks"
-	storageMocks "github.com/LerianStudio/matcher/internal/reporting/ports/mocks"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
+	storageMocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
 )
 
 var (
@@ -541,7 +542,7 @@ func TestDownloadArchive(t *testing.T) {
 		archiveID := uuid.New()
 
 		repo := repoMocks.NewMockArchiveMetadataRepository(ctrl)
-		repo.EXPECT().GetByID(gomock.Any(), archiveID).Return(nil, archivePostgres.ErrMetadataNotFound)
+		repo.EXPECT().GetByID(gomock.Any(), archiveID).Return(nil, governanceErrors.ErrMetadataNotFound)
 
 		storage := storageMocks.NewMockObjectStorageClient(ctrl)
 
@@ -665,7 +666,7 @@ func TestArchiveMetadataToResponse(t *testing.T) {
 	t.Run("nil input returns empty response", func(t *testing.T) {
 		t.Parallel()
 
-		resp := archiveMetadataToResponse(nil)
+		resp := governanceDTO.ArchiveMetadataToResponse(nil)
 		assert.Empty(t, resp.ID)
 		assert.Empty(t, resp.PartitionName)
 	})
@@ -687,7 +688,7 @@ func TestArchiveMetadataToResponse(t *testing.T) {
 			ArchivedAt:          &now,
 		}
 
-		resp := archiveMetadataToResponse(archive)
+		resp := governanceDTO.ArchiveMetadataToResponse(archive)
 		assert.Equal(t, "11111111-1111-1111-1111-111111111111", resp.ID)
 		assert.Equal(t, "audit_logs_2024_q1", resp.PartitionName)
 		assert.Equal(t, "2024-01-01T00:00:00Z", resp.DateRangeStart)
@@ -710,7 +711,7 @@ func TestArchiveMetadataToResponse(t *testing.T) {
 			Status:         entities.StatusPending,
 		}
 
-		resp := archiveMetadataToResponse(archive)
+		resp := governanceDTO.ArchiveMetadataToResponse(archive)
 		assert.Nil(t, resp.ArchivedAt)
 	})
 }
@@ -721,7 +722,7 @@ func TestArchiveMetadataToResponses(t *testing.T) {
 	t.Run("nil slice returns empty slice", func(t *testing.T) {
 		t.Parallel()
 
-		result := archiveMetadataToResponses(nil)
+		result := governanceDTO.ArchiveMetadataToResponses(nil)
 		assert.NotNil(t, result)
 		assert.Empty(t, result)
 	})
@@ -740,7 +741,7 @@ func TestArchiveMetadataToResponses(t *testing.T) {
 			nil,
 		}
 
-		result := archiveMetadataToResponses(archives)
+		result := governanceDTO.ArchiveMetadataToResponses(archives)
 		assert.Len(t, result, 1)
 	})
 }

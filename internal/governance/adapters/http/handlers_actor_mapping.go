@@ -8,8 +8,9 @@ import (
 
 	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
 
-	actorMappingPostgres "github.com/LerianStudio/matcher/internal/governance/adapters/postgres/actor_mapping"
+	"github.com/LerianStudio/matcher/internal/governance/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
+	governanceErrors "github.com/LerianStudio/matcher/internal/governance/domain/errors"
 	"github.com/LerianStudio/matcher/internal/governance/services/command"
 	"github.com/LerianStudio/matcher/internal/governance/services/query"
 )
@@ -57,8 +58,8 @@ func NewActorMappingHandler(
 // @Security BearerAuth
 // @Param X-Request-Id header string false "Request ID for tracing"
 // @Param actorId path string true "Actor ID"
-// @Param request body UpsertActorMappingRequest true "Actor mapping data"
-// @Success 200 {object} ActorMappingResponse
+// @Param request body dto.UpsertActorMappingRequest true "Actor mapping data"
+// @Success 200 {object} dto.ActorMappingResponse
 // @Failure 400 {object} libHTTP.ErrorResponse "Invalid request"
 // @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
 // @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
@@ -73,7 +74,7 @@ func (ha *ActorMappingHandler) UpsertActorMapping(fiberCtx *fiber.Ctx) error {
 		return badRequest(ctx, fiberCtx, span, logger, "actor id is required", ErrMissingActorID)
 	}
 
-	var req UpsertActorMappingRequest
+	var req dto.UpsertActorMappingRequest
 	if err := libHTTP.ParseBodyAndValidate(fiberCtx, &req); err != nil {
 		return badRequest(ctx, fiberCtx, span, logger, "invalid request body", err)
 	}
@@ -97,7 +98,7 @@ func (ha *ActorMappingHandler) UpsertActorMapping(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(ctx, fiberCtx, span, logger, "failed to retrieve actor mapping after upsert", err)
 	}
 
-	if writeErr := libHTTP.Respond(fiberCtx, fiber.StatusOK, ActorMappingToResponse(mapping)); writeErr != nil {
+	if writeErr := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ActorMappingToResponse(mapping)); writeErr != nil {
 		return fmt.Errorf("write ok response: %w", writeErr)
 	}
 
@@ -113,7 +114,7 @@ func (ha *ActorMappingHandler) UpsertActorMapping(fiberCtx *fiber.Ctx) error {
 // @Security BearerAuth
 // @Param X-Request-Id header string false "Request ID for tracing"
 // @Param actorId path string true "Actor ID"
-// @Success 200 {object} ActorMappingResponse
+// @Success 200 {object} dto.ActorMappingResponse
 // @Failure 400 {object} libHTTP.ErrorResponse "Invalid request"
 // @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
 // @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
@@ -131,7 +132,7 @@ func (ha *ActorMappingHandler) GetActorMapping(fiberCtx *fiber.Ctx) error {
 
 	mapping, err := ha.queryUC.GetActorMapping(ctx, actorID)
 	if err != nil {
-		if errors.Is(err, actorMappingPostgres.ErrActorMappingNotFound) {
+		if errors.Is(err, governanceErrors.ErrActorMappingNotFound) {
 			return writeNotFound(ctx, fiberCtx, span, logger, "actor mapping not found", err)
 		}
 
@@ -139,10 +140,10 @@ func (ha *ActorMappingHandler) GetActorMapping(fiberCtx *fiber.Ctx) error {
 	}
 
 	if mapping == nil {
-		return writeNotFound(ctx, fiberCtx, span, logger, "actor mapping not found", actorMappingPostgres.ErrActorMappingNotFound)
+		return writeNotFound(ctx, fiberCtx, span, logger, "actor mapping not found", governanceErrors.ErrActorMappingNotFound)
 	}
 
-	if writeErr := libHTTP.Respond(fiberCtx, fiber.StatusOK, ActorMappingToResponse(mapping)); writeErr != nil {
+	if writeErr := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ActorMappingToResponse(mapping)); writeErr != nil {
 		return fmt.Errorf("write ok response: %w", writeErr)
 	}
 
@@ -175,7 +176,7 @@ func (ha *ActorMappingHandler) PseudonymizeActor(fiberCtx *fiber.Ctx) error {
 	}
 
 	if err := ha.commandUC.PseudonymizeActor(ctx, actorID); err != nil {
-		if errors.Is(err, actorMappingPostgres.ErrActorMappingNotFound) {
+		if errors.Is(err, governanceErrors.ErrActorMappingNotFound) {
 			return writeNotFound(ctx, fiberCtx, span, logger, "actor mapping not found", err)
 		}
 
@@ -211,7 +212,7 @@ func (ha *ActorMappingHandler) DeleteActorMapping(fiberCtx *fiber.Ctx) error {
 	}
 
 	if err := ha.commandUC.DeleteActorMapping(ctx, actorID); err != nil {
-		if errors.Is(err, actorMappingPostgres.ErrActorMappingNotFound) {
+		if errors.Is(err, governanceErrors.ErrActorMappingNotFound) {
 			return writeNotFound(ctx, fiberCtx, span, logger, "actor mapping not found", err)
 		}
 

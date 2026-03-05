@@ -19,8 +19,8 @@ import (
 	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/governance/adapters/http/dto"
-	"github.com/LerianStudio/matcher/internal/governance/adapters/postgres"
 	governanceEntities "github.com/LerianStudio/matcher/internal/governance/domain/entities"
+	governanceErrors "github.com/LerianStudio/matcher/internal/governance/domain/errors"
 	"github.com/LerianStudio/matcher/internal/governance/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
@@ -200,7 +200,7 @@ func (handler *Handler) GetAuditLog(
 	handler.queryLatencyHist.Record(ctx, time.Since(queryStart).Seconds())
 
 	if err != nil {
-		if errors.Is(err, postgres.ErrAuditLogNotFound) {
+		if errors.Is(err, governanceErrors.ErrAuditLogNotFound) {
 			return writeNotFound(ctx, fiberCtx, span, logger, "audit log not found", err)
 		}
 
@@ -214,7 +214,7 @@ func (handler *Handler) GetAuditLog(
 			span,
 			logger,
 			"audit log not found",
-			postgres.ErrAuditLogNotFound,
+			governanceErrors.ErrAuditLogNotFound,
 		)
 	}
 

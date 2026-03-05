@@ -16,8 +16,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	actorMappingPostgres "github.com/LerianStudio/matcher/internal/governance/adapters/postgres/actor_mapping"
+	"github.com/LerianStudio/matcher/internal/governance/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
+	governanceErrors "github.com/LerianStudio/matcher/internal/governance/domain/errors"
 	"github.com/LerianStudio/matcher/internal/governance/domain/repositories/mocks"
 	"github.com/LerianStudio/matcher/internal/governance/services/command"
 	"github.com/LerianStudio/matcher/internal/governance/services/query"
@@ -110,7 +111,7 @@ func TestUpsertActorMappingHandler(t *testing.T) {
 
 		handler := newTestActorMappingHandler(t, repo)
 
-		body := UpsertActorMappingRequest{
+		body := dto.UpsertActorMappingRequest{
 			DisplayName: &displayName,
 			Email:       &email,
 		}
@@ -120,7 +121,7 @@ func TestUpsertActorMappingHandler(t *testing.T) {
 
 		require.Equal(t, fiber.StatusOK, resp.StatusCode)
 
-		var response ActorMappingResponse
+		var response dto.ActorMappingResponse
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
 		assert.Equal(t, "actor-123", response.ActorID)
 		require.NotNil(t, response.DisplayName)
@@ -134,7 +135,7 @@ func TestUpsertActorMappingHandler(t *testing.T) {
 		repo := mocks.NewMockActorMappingRepository(ctrl)
 		handler := newTestActorMappingHandler(t, repo)
 
-		resp := testUpsertActorMappingRequest(t, handler, "", UpsertActorMappingRequest{})
+		resp := testUpsertActorMappingRequest(t, handler, "", dto.UpsertActorMappingRequest{})
 		defer resp.Body.Close()
 
 		// Empty path param results in 404 from Fiber
@@ -149,7 +150,7 @@ func TestUpsertActorMappingHandler(t *testing.T) {
 
 		handler := newTestActorMappingHandler(t, repo)
 
-		resp := testUpsertActorMappingRequest(t, handler, "actor-123", UpsertActorMappingRequest{})
+		resp := testUpsertActorMappingRequest(t, handler, "actor-123", dto.UpsertActorMappingRequest{})
 		defer resp.Body.Close()
 
 		require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
@@ -165,7 +166,7 @@ func TestUpsertActorMappingHandler(t *testing.T) {
 		handler := newTestActorMappingHandler(t, repo)
 
 		displayName := "John Doe"
-		body := UpsertActorMappingRequest{DisplayName: &displayName}
+		body := dto.UpsertActorMappingRequest{DisplayName: &displayName}
 
 		resp := testUpsertActorMappingRequest(t, handler, "actor-123", body)
 		defer resp.Body.Close()
@@ -187,7 +188,7 @@ func TestUpsertActorMappingHandler(t *testing.T) {
 		}
 
 		displayName := "Test"
-		body := UpsertActorMappingRequest{DisplayName: &displayName}
+		body := dto.UpsertActorMappingRequest{DisplayName: &displayName}
 
 		resp := testUpsertActorMappingRequest(t, handler, string(longActorID), body)
 		defer resp.Body.Close()
@@ -223,7 +224,7 @@ func TestGetActorMappingHandler(t *testing.T) {
 
 		require.Equal(t, fiber.StatusOK, resp.StatusCode)
 
-		var response ActorMappingResponse
+		var response dto.ActorMappingResponse
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
 		assert.Equal(t, "actor-456", response.ActorID)
 		require.NotNil(t, response.DisplayName)
@@ -235,7 +236,7 @@ func TestGetActorMappingHandler(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		repo := mocks.NewMockActorMappingRepository(ctrl)
-		repo.EXPECT().GetByActorID(gomock.Any(), "nonexistent").Return(nil, actorMappingPostgres.ErrActorMappingNotFound)
+		repo.EXPECT().GetByActorID(gomock.Any(), "nonexistent").Return(nil, governanceErrors.ErrActorMappingNotFound)
 
 		handler := newTestActorMappingHandler(t, repo)
 
@@ -299,7 +300,7 @@ func TestPseudonymizeActorHandler(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		repo := mocks.NewMockActorMappingRepository(ctrl)
-		repo.EXPECT().Pseudonymize(gomock.Any(), "nonexistent").Return(actorMappingPostgres.ErrActorMappingNotFound)
+		repo.EXPECT().Pseudonymize(gomock.Any(), "nonexistent").Return(governanceErrors.ErrActorMappingNotFound)
 
 		handler := newTestActorMappingHandler(t, repo)
 
@@ -348,7 +349,7 @@ func TestDeleteActorMappingHandler(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		repo := mocks.NewMockActorMappingRepository(ctrl)
-		repo.EXPECT().Delete(gomock.Any(), "nonexistent").Return(actorMappingPostgres.ErrActorMappingNotFound)
+		repo.EXPECT().Delete(gomock.Any(), "nonexistent").Return(governanceErrors.ErrActorMappingNotFound)
 
 		handler := newTestActorMappingHandler(t, repo)
 
@@ -447,7 +448,7 @@ func testUpsertActorMappingRequest(
 	t *testing.T,
 	handler *ActorMappingHandler,
 	actorID string,
-	body UpsertActorMappingRequest,
+	body dto.UpsertActorMappingRequest,
 ) *http.Response {
 	t.Helper()
 

@@ -24,6 +24,7 @@ import (
 // Sentinel errors for partition manager operations.
 var (
 	ErrNilDB                 = errors.New("database connection is required")
+	ErrNowFuncRequired       = errors.New("clock function is required")
 	ErrPartitionNotFound     = errors.New("partition not found")
 	ErrInvalidLookahead      = errors.New("lookahead months must be positive")
 	ErrInvalidPartitionName  = errors.New("invalid partition name format")
@@ -51,18 +52,37 @@ type PartitionManager struct {
 	db     *sql.DB
 	logger libLog.Logger
 	tracer trace.Tracer
+	nowFn  func() time.Time
 }
 
 // NewPartitionManager creates a new PartitionManager with the given dependencies.
 func NewPartitionManager(db *sql.DB, logger libLog.Logger, tracer trace.Tracer) (*PartitionManager, error) {
+	return NewPartitionManagerWithClock(db, logger, tracer, func() time.Time {
+		return time.Now().UTC()
+	})
+}
+
+// NewPartitionManagerWithClock creates a new PartitionManager with a custom clock.
+// Use this constructor in tests for deterministic time-dependent behavior.
+func NewPartitionManagerWithClock(
+	db *sql.DB,
+	logger libLog.Logger,
+	tracer trace.Tracer,
+	nowFn func() time.Time,
+) (*PartitionManager, error) {
 	if db == nil {
 		return nil, ErrNilDB
+	}
+
+	if nowFn == nil {
+		return nil, ErrNowFuncRequired
 	}
 
 	return &PartitionManager{
 		db:     db,
 		logger: logger,
 		tracer: tracer,
+		nowFn:  nowFn,
 	}, nil
 }
 
@@ -96,7 +116,7 @@ func (pm *PartitionManager) EnsurePartitionsExist(ctx context.Context, lookahead
 		return fmt.Errorf("apply tenant schema: %w", err)
 	}
 
-	now := time.Now().UTC()
+	now := pm.nowFn()
 
 	for i := range lookaheadMonths + 1 {
 		start := monthStart(now, i)
@@ -167,7 +187,7 @@ func (pm *PartitionManager) ListPartitions(ctx context.Context) ([]PartitionInfo
 
 	defer rows.Close()
 
-	var partitions []PartitionInfo
+	partitions := make([]PartitionInfo, 0)
 
 	for rows.Next() {
 		var (
@@ -232,19 +252,10 @@ func (pm *PartitionManager) DetachPartition(ctx context.Context, partitionName s
 
 	span.SetAttributes(attribute.String("partition.name", partitionName))
 
-	_, endDate, err := parsePartitionBoundFromName(partitionName)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "parse partition bound from name", err)
-		return fmt.Errorf("parse partition bound: %w", err)
-	}
+	if err := pm.validateRetentionPeriod(partitionName); err != nil {
+		libOpentelemetry.HandleSpanError(span, "retention period active", err)
 
-	retentionDuration := time.Duration(minRetentionYears) * daysPerYear * hoursPerDay * time.Hour
-	if time.Since(endDate) < retentionDuration {
-		retentionErr := fmt.Errorf("partition %s data is within %d-year retention period: %w",
-			partitionName, minRetentionYears, ErrRetentionPeriodActive)
-		libOpentelemetry.HandleSpanError(span, "retention period active", retentionErr)
-
-		return retentionErr
+		return err
 	}
 
 	tx, err := pm.db.BeginTx(ctx, nil)
@@ -289,6 +300,12 @@ func (pm *PartitionManager) DropPartition(ctx context.Context, partitionName str
 
 	if err := validatePartitionName(partitionName); err != nil {
 		libOpentelemetry.HandleSpanError(span, "invalid partition name", err)
+		return err
+	}
+
+	if err := pm.validateRetentionPeriod(partitionName); err != nil {
+		libOpentelemetry.HandleSpanError(span, "retention period active", err)
+
 		return err
 	}
 
@@ -433,6 +450,21 @@ func tryParseTime(s string, formats []string) time.Time {
 	}
 
 	return time.Time{}
+}
+
+func (pm *PartitionManager) validateRetentionPeriod(partitionName string) error {
+	_, endDate, err := parsePartitionBoundFromName(partitionName)
+	if err != nil {
+		return fmt.Errorf("parse partition bound: %w", err)
+	}
+
+	retentionDuration := time.Duration(minRetentionYears) * daysPerYear * hoursPerDay * time.Hour
+	if pm.nowFn().Sub(endDate) < retentionDuration {
+		return fmt.Errorf("partition %s data is within %d-year retention period: %w",
+			partitionName, minRetentionYears, ErrRetentionPeriodActive)
+	}
+
+	return nil
 }
 
 // tracking extracts observability primitives from context, falling back to instance-level values.

@@ -531,6 +531,24 @@ func TestArchiveMetadata_MarkError(t *testing.T) {
 		assert.Equal(t, "checksum mismatch", am.ErrorMessage)
 	})
 
+	t.Run("empty string defaults to unknown error", func(t *testing.T) {
+		t.Parallel()
+
+		am, err := NewArchiveMetadata(
+			ctx,
+			uuid.New(),
+			"audit_logs_2026_01",
+			time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+			time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC),
+		)
+		require.NoError(t, err)
+
+		am.MarkError("")
+
+		assert.Equal(t, "unknown error", am.ErrorMessage)
+		assert.Equal(t, StatusPending, am.Status)
+	})
+
 	t.Run("can overwrite previous error", func(t *testing.T) {
 		t.Parallel()
 
@@ -554,7 +572,7 @@ func TestArchiveMetadata_MarkError(t *testing.T) {
 func TestArchiveMetadata_StatusConstants(t *testing.T) {
 	t.Parallel()
 
-	statuses := []string{
+	statuses := []ArchiveStatus{
 		StatusPending,
 		StatusExporting,
 		StatusExported,
@@ -566,7 +584,7 @@ func TestArchiveMetadata_StatusConstants(t *testing.T) {
 		StatusComplete,
 	}
 
-	seen := make(map[string]bool)
+	seen := make(map[ArchiveStatus]bool)
 
 	for _, s := range statuses {
 		assert.NotEmpty(t, s)
@@ -576,10 +594,72 @@ func TestArchiveMetadata_StatusConstants(t *testing.T) {
 	}
 }
 
+func TestArchiveMetadata_NilReceiverGuards(t *testing.T) {
+	t.Parallel()
+
+	var am *ArchiveMetadata
+
+	tests := []struct {
+		name string
+		call func() error
+	}{
+		{name: "MarkExporting", call: am.MarkExporting},
+		{name: "MarkExported", call: func() error { return am.MarkExported(1) }},
+		{name: "MarkUploading", call: am.MarkUploading},
+		{name: "MarkUploaded", call: func() error { return am.MarkUploaded("k", "c", 1, "GLACIER") }},
+		{name: "MarkVerifying", call: am.MarkVerifying},
+		{name: "MarkVerified", call: am.MarkVerified},
+		{name: "MarkDetaching", call: am.MarkDetaching},
+		{name: "MarkComplete", call: am.MarkComplete},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.ErrorIs(t, tt.call(), ErrNilArchiveMetadata)
+		})
+	}
+
+	require.NotPanics(t, func() { am.MarkError("ignored") })
+}
+
+func TestArchiveStatus_IsValid(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		status ArchiveStatus
+		want   bool
+	}{
+		{name: "PENDING is valid", status: StatusPending, want: true},
+		{name: "EXPORTING is valid", status: StatusExporting, want: true},
+		{name: "EXPORTED is valid", status: StatusExported, want: true},
+		{name: "UPLOADING is valid", status: StatusUploading, want: true},
+		{name: "UPLOADED is valid", status: StatusUploaded, want: true},
+		{name: "VERIFYING is valid", status: StatusVerifying, want: true},
+		{name: "VERIFIED is valid", status: StatusVerified, want: true},
+		{name: "DETACHING is valid", status: StatusDetaching, want: true},
+		{name: "COMPLETE is valid", status: StatusComplete, want: true},
+		{name: "empty string is invalid", status: ArchiveStatus(""), want: false},
+		{name: "lowercase pending is invalid", status: ArchiveStatus("pending"), want: false},
+		{name: "arbitrary string is invalid", status: ArchiveStatus("UNKNOWN"), want: false},
+		{name: "partial match is invalid", status: ArchiveStatus("PEND"), want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tt.want, tt.status.IsValid())
+		})
+	}
+}
+
 func TestArchiveMetadata_SentinelErrors(t *testing.T) {
 	t.Parallel()
 
 	errs := []error{
+		ErrNilArchiveMetadata,
 		ErrInvalidStateTransition,
 		ErrArchiveTenantIDRequired,
 		ErrPartitionNameRequired,

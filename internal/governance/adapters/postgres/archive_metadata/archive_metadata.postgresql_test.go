@@ -673,7 +673,7 @@ func TestScanArchiveMetadata_NullableFields(t *testing.T) {
 		*dest[7].(*sql.NullString) = sql.NullString{Valid: false}
 		*dest[8].(*sql.NullInt64) = sql.NullInt64{Valid: false}
 		*dest[9].(*sql.NullString) = sql.NullString{Valid: false}
-		*dest[10].(*string) = entities.StatusPending
+		*dest[10].(*entities.ArchiveStatus) = entities.StatusPending
 		*dest[11].(*sql.NullString) = sql.NullString{Valid: false}
 		*dest[12].(*sql.NullTime) = sql.NullTime{Valid: false}
 		*dest[13].(*time.Time) = createdAt
@@ -714,7 +714,7 @@ func TestScanArchiveMetadata_AllFieldsPopulated(t *testing.T) {
 		*dest[7].(*sql.NullString) = sql.NullString{String: "sha256:abc", Valid: true}
 		*dest[8].(*sql.NullInt64) = sql.NullInt64{Int64: 2048, Valid: true}
 		*dest[9].(*sql.NullString) = sql.NullString{String: "GLACIER", Valid: true}
-		*dest[10].(*string) = entities.StatusComplete
+		*dest[10].(*entities.ArchiveStatus) = entities.StatusComplete
 		*dest[11].(*sql.NullString) = sql.NullString{String: "previous error", Valid: true}
 		*dest[12].(*sql.NullTime) = sql.NullTime{Time: archivedAt, Valid: true}
 		*dest[13].(*time.Time) = createdAt
