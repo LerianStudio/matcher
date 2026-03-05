@@ -1344,16 +1344,18 @@ func initSharedRepositories(provider sharedPorts.InfrastructureProvider) (*share
 		return nil, fmt.Errorf("create shared source repository: %w", err)
 	}
 
+	auditLogRepo := governancePostgres.NewRepository(provider)
+
 	return &sharedRepositories{
 		configContext:      configContextRepo.NewRepository(provider),
 		configSource:       configSourceRepository,
 		configFieldMap:     configFieldMapRepo.NewRepository(provider),
 		configMatchRule:    configMatchRuleRepo.NewRepository(provider),
-		governanceAuditLog: governancePostgres.NewRepository(provider),
+		governanceAuditLog: auditLogRepo,
 		ingestionTx:        ingestionTransactionRepo.NewRepository(provider),
 		ingestionJob:       ingestionJobRepo.NewRepository(provider),
 		feeSchedule:        matchFeeScheduleRepo.NewRepository(provider),
-		adjustment:         matchAdjustmentRepo.NewRepository(provider),
+		adjustment:         matchAdjustmentRepo.NewRepository(provider, auditLogRepo),
 	}, nil
 }
 
