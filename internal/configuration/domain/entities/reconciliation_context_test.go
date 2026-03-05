@@ -733,9 +733,12 @@ func TestContextStateMachine_AllValidTransitions(t *testing.T) {
 		fromStatus value_objects.ContextStatus
 		toStatus   value_objects.ContextStatus
 	}{
+		{"DRAFT -> DRAFT (no-op)", value_objects.ContextStatusDraft, value_objects.ContextStatusDraft},
 		{"DRAFT -> ACTIVE", value_objects.ContextStatusDraft, value_objects.ContextStatusActive},
+		{"ACTIVE -> ACTIVE (no-op)", value_objects.ContextStatusActive, value_objects.ContextStatusActive},
 		{"ACTIVE -> PAUSED", value_objects.ContextStatusActive, value_objects.ContextStatusPaused},
 		{"ACTIVE -> ARCHIVED", value_objects.ContextStatusActive, value_objects.ContextStatusArchived},
+		{"PAUSED -> PAUSED (no-op)", value_objects.ContextStatusPaused, value_objects.ContextStatusPaused},
 		{"PAUSED -> ACTIVE (recovery)", value_objects.ContextStatusPaused, value_objects.ContextStatusActive},
 		{"PAUSED -> ARCHIVED", value_objects.ContextStatusPaused, value_objects.ContextStatusArchived},
 	}
@@ -784,13 +787,10 @@ func TestContextStateMachine_AllInvalidTransitions(t *testing.T) {
 		fromStatus value_objects.ContextStatus
 		toStatus   value_objects.ContextStatus
 	}{
-		{"DRAFT -> DRAFT", value_objects.ContextStatusDraft, value_objects.ContextStatusDraft},
 		{"DRAFT -> PAUSED", value_objects.ContextStatusDraft, value_objects.ContextStatusPaused},
 		{"DRAFT -> ARCHIVED", value_objects.ContextStatusDraft, value_objects.ContextStatusArchived},
 		{"ACTIVE -> DRAFT", value_objects.ContextStatusActive, value_objects.ContextStatusDraft},
-		{"ACTIVE -> ACTIVE", value_objects.ContextStatusActive, value_objects.ContextStatusActive},
 		{"PAUSED -> DRAFT", value_objects.ContextStatusPaused, value_objects.ContextStatusDraft},
-		{"PAUSED -> PAUSED", value_objects.ContextStatusPaused, value_objects.ContextStatusPaused},
 		{"ARCHIVED -> DRAFT", value_objects.ContextStatusArchived, value_objects.ContextStatusDraft},
 		{"ARCHIVED -> ACTIVE", value_objects.ContextStatusArchived, value_objects.ContextStatusActive},
 		{"ARCHIVED -> PAUSED", value_objects.ContextStatusArchived, value_objects.ContextStatusPaused},

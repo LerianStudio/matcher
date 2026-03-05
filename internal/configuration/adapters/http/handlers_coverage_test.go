@@ -1659,6 +1659,99 @@ func TestUpdateContext_InvalidPayload(t *testing.T) {
 	requireSpanName(t, recorder, "handler.context.update")
 }
 
+func TestUpdateContext_InvalidStateTransition_Returns409(t *testing.T) {
+	t.Parallel()
+
+	tracer, recorder := newTestTracer(t)
+	tenantID := uuid.New()
+	ctx := newRequestContext(tracer, tenantID)
+	app := newTestApp(ctx)
+	fixture := newHandlerFixture(t)
+
+	// Seed a DRAFT context; PAUSED is only reachable from ACTIVE, so
+	// requesting status=PAUSED on a DRAFT triggers ErrInvalidStateTransition.
+	contextEntity := fixture.seedContext(t, tenantID)
+
+	app.Patch("/v1/config/contexts/:contextId", fixture.handler.UpdateContext)
+
+	requestPath := replacePathParams(
+		"/v1/config/contexts/:contextId",
+		contextEntity.ID.String(),
+	)
+
+	paused := value_objects.ContextStatusPaused
+	payload := entities.UpdateReconciliationContextInput{Status: &paused}
+
+	resp := performRequest(t, app, http.MethodPatch, requestPath, mustJSON(t, payload))
+	defer resp.Body.Close()
+
+	require.Equal(t, fiber.StatusConflict, resp.StatusCode)
+	requireSpanName(t, recorder, "handler.context.update")
+}
+
+func TestUpdateContext_ArchivedContextCannotBeModified_Returns409(t *testing.T) {
+	t.Parallel()
+
+	tracer, recorder := newTestTracer(t)
+	tenantID := uuid.New()
+	ctx := newRequestContext(tracer, tenantID)
+	app := newTestApp(ctx)
+	fixture := newHandlerFixture(t)
+
+	// Seed a context and force its status to ARCHIVED directly in the repo
+	// so we can test the guard without running through the archival transition.
+	contextEntity := fixture.seedContext(t, tenantID)
+	contextEntity.Status = value_objects.ContextStatusArchived
+	fixture.contextRepo.items[contextEntity.ID] = contextEntity
+
+	app.Patch("/v1/config/contexts/:contextId", fixture.handler.UpdateContext)
+
+	requestPath := replacePathParams(
+		"/v1/config/contexts/:contextId",
+		contextEntity.ID.String(),
+	)
+
+	newName := "Updated Name"
+	payload := entities.UpdateReconciliationContextInput{Name: &newName}
+
+	resp := performRequest(t, app, http.MethodPatch, requestPath, mustJSON(t, payload))
+	defer resp.Body.Close()
+
+	require.Equal(t, fiber.StatusConflict, resp.StatusCode)
+	requireSpanName(t, recorder, "handler.context.update")
+}
+
+func TestUpdateContext_SameStatus_IsNoOp_Returns200(t *testing.T) {
+	t.Parallel()
+
+	tracer, recorder := newTestTracer(t)
+	tenantID := uuid.New()
+	ctx := newRequestContext(tracer, tenantID)
+	app := newTestApp(ctx)
+	fixture := newHandlerFixture(t)
+
+	// Seed a context and force ACTIVE status to exercise a valid same-status no-op.
+	contextEntity := fixture.seedContext(t, tenantID)
+	contextEntity.Status = value_objects.ContextStatusActive
+	fixture.contextRepo.items[contextEntity.ID] = contextEntity
+
+	app.Patch("/v1/config/contexts/:contextId", fixture.handler.UpdateContext)
+
+	requestPath := replacePathParams(
+		"/v1/config/contexts/:contextId",
+		contextEntity.ID.String(),
+	)
+
+	activeStatus := "ACTIVE"
+	payload := dto.UpdateContextRequest{Status: &activeStatus}
+
+	resp := performRequest(t, app, http.MethodPatch, requestPath, mustJSON(t, payload))
+	defer resp.Body.Close()
+
+	require.Equal(t, fiber.StatusOK, resp.StatusCode)
+	requireSpanName(t, recorder, "handler.context.update")
+}
+
 // ─── UpdateSource error path tests ────────────────────────────
 
 func TestUpdateSource_InvalidUUID(t *testing.T) {

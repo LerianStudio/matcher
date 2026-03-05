@@ -16,7 +16,6 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/ports"
-	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 )
 
 const postgresUniqueViolationCode = "23505"
@@ -233,7 +232,7 @@ func (uc *UseCase) createContextTransactional(
 		return nil, err
 	}
 
-	tx, cancel, txErr := pgcommon.BeginTenantTx(ctx, uc.infraProvider)
+	tx, cancel, txErr := beginTenantTx(ctx, uc.infraProvider)
 	if txErr != nil {
 		return nil, fmt.Errorf("begin create transaction: %w", txErr)
 	}

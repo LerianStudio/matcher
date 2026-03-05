@@ -136,7 +136,7 @@ type UpdateContextRequest struct {
 	Name              *string `json:"name,omitempty"              validate:"omitempty,max=100" example:"Bank Reconciliation Q2"               maxLength:"100"`
 	Type              *string `json:"type,omitempty"              validate:"omitempty,oneof=1:1 1:N N:M"              example:"1:N"                                   enums:"1:1,1:N,N:M"`
 	Interval          *string `json:"interval,omitempty"          validate:"omitempty,max=100"                          example:"weekly"                                 maxLength:"100"`
-	Status            *string `json:"status,omitempty"            validate:"omitempty,oneof=ACTIVE PAUSED ARCHIVED"     example:"ACTIVE"                                 enums:"ACTIVE,PAUSED,ARCHIVED"`
+	Status            *string `json:"status,omitempty"            validate:"omitempty,oneof=ACTIVE PAUSED ARCHIVED" example:"ACTIVE"                                 enums:"ACTIVE,PAUSED,ARCHIVED"`
 	RateID            *string `json:"rateId,omitempty"             validate:"omitempty,uuid"   example:"550e8400-e29b-41d4-a716-446655440000" format:"uuid"`
 	FeeToleranceAbs   *string `json:"feeToleranceAbs,omitempty"                                example:"0.01"`
 	FeeTolerancePct   *string `json:"feeTolerancePct,omitempty"                                example:"0.5"`

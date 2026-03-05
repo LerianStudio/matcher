@@ -17,7 +17,6 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
-	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
@@ -64,14 +63,9 @@ type CloneContextInput struct {
 	AutoMatchOnUpload   *bool
 }
 
-// CloneResult holds the outcome of a context clone operation.
-type CloneResult struct {
-	Context            *entities.ReconciliationContext
-	SourcesCloned      int
-	RulesCloned        int
-	FieldMapsCloned    int
-	FeeSchedulesCloned int
-}
+// CloneResult is an alias for entities.CloneResult for backward compatibility.
+// Use entities.CloneResult directly in new code.
+type CloneResult = entities.CloneResult
 
 // CloneContext creates a deep copy of a reconciliation context with its associated resources.
 func (uc *UseCase) CloneContext(ctx context.Context, input CloneContextInput) (*CloneResult, error) {
@@ -132,7 +126,7 @@ func (uc *UseCase) CloneContext(ctx context.Context, input CloneContextInput) (*
 }
 
 func (uc *UseCase) cloneContextTransactional(ctx context.Context, input CloneContextInput, sourceContext *entities.ReconciliationContext, autoMatchOnUpload bool) (*CloneResult, error) {
-	tx, cancel, err := pgcommon.BeginTenantTx(ctx, uc.infraProvider)
+	tx, cancel, err := beginTenantTx(ctx, uc.infraProvider)
 	if err != nil {
 		return nil, fmt.Errorf("begin clone transaction: %w", err)
 	}
@@ -145,7 +139,10 @@ func (uc *UseCase) cloneContextTransactional(ctx context.Context, input CloneCon
 		return nil, err
 	}
 
-	result := &CloneResult{Context: created}
+	result, err := entities.NewCloneResult(ctx, created)
+	if err != nil {
+		return nil, fmt.Errorf("initialize clone result: %w", err)
+	}
 
 	if input.IncludeSources {
 		if cloneErr := uc.cloneSourcesIntoResultWithTx(ctx, tx, input, created.ID, sourceContext.TenantID, result); cloneErr != nil {
@@ -175,7 +172,10 @@ func (uc *UseCase) cloneContextNonTransactional(ctx context.Context, input Clone
 		return nil, err
 	}
 
-	result := &CloneResult{Context: created}
+	result, err := entities.NewCloneResult(ctx, created)
+	if err != nil {
+		return nil, fmt.Errorf("initialize clone result: %w", err)
+	}
 
 	if input.IncludeSources {
 		if cloneErr := uc.cloneSourcesIntoResult(ctx, input, created.ID, sourceContext.TenantID, result); cloneErr != nil {

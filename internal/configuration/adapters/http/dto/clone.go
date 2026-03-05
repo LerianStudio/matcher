@@ -1,7 +1,7 @@
 package dto
 
 import (
-	"github.com/LerianStudio/matcher/internal/configuration/services/command"
+	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 )
 
 // CloneContextRequest is the request body for cloning a reconciliation context.
@@ -32,8 +32,8 @@ type CloneContextResponse struct {
 	FeeSchedulesCloned int `json:"feeSchedulesCloned" example:"2"`
 }
 
-// CloneResultToResponse converts a command.CloneResult to a CloneContextResponse.
-func CloneResultToResponse(result *command.CloneResult) CloneContextResponse {
+// CloneResultToResponse converts an entities.CloneResult to a CloneContextResponse.
+func CloneResultToResponse(result *entities.CloneResult) CloneContextResponse {
 	if result == nil {
 		return CloneContextResponse{
 			Context: ReconciliationContextResponse{},

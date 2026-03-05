@@ -12,7 +12,6 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
-	"github.com/LerianStudio/matcher/internal/configuration/services/command"
 )
 
 func TestCloneResultToResponse_Nil(t *testing.T) {
@@ -29,7 +28,7 @@ func TestCloneResultToResponse_WithData(t *testing.T) {
 
 	now := time.Now().UTC()
 
-	result := &command.CloneResult{
+	result := &entities.CloneResult{
 		Context: &entities.ReconciliationContext{
 			ID:              uuid.New(),
 			TenantID:        uuid.New(),

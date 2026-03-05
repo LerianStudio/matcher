@@ -410,6 +410,19 @@ func TestUpdateContextRequest_ToDomainInput(t *testing.T) {
 	})
 }
 
+func TestUpdateContextRequest_StatusValidation_RejectsDraft(t *testing.T) {
+	t.Parallel()
+
+	v := validator.New()
+	status := "DRAFT"
+	req := UpdateContextRequest{Status: &status}
+
+	err := v.Struct(req)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Status")
+	assert.Contains(t, err.Error(), "oneof")
+}
+
 func TestCreateSourceRequest_ToDomainInput(t *testing.T) {
 	t.Parallel()
 

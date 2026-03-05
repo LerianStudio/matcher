@@ -433,15 +433,7 @@ func (handler *Handler) UpdateContext(fiberCtx *fiber.Ctx) error {
 	if err != nil {
 		logSpanError(ctx, span, logger, "failed to update context", err)
 
-		if errors.Is(err, sql.ErrNoRows) {
-			return writeNotFound(fiberCtx, "context not found")
-		}
-
-		if errors.Is(err, command.ErrContextNameAlreadyExists) {
-			return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "duplicate_name", err.Error())
-		}
-
-		return writeServiceError(fiberCtx, err)
+		return mapUpdateContextError(fiberCtx, err)
 	}
 
 	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ReconciliationContextToResponse(result))
@@ -1574,6 +1566,21 @@ func (handler *Handler) ReorderMatchRules(fiberCtx *fiber.Ctx) error {
 	}
 
 	return libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent)
+}
+
+func mapUpdateContextError(fiberCtx *fiber.Ctx, err error) error {
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return writeNotFound(fiberCtx, "context not found")
+	case errors.Is(err, command.ErrContextNameAlreadyExists):
+		return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "duplicate_name", err.Error())
+	case errors.Is(err, entities.ErrInvalidStateTransition):
+		return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "invalid_state_transition", err.Error())
+	case errors.Is(err, entities.ErrArchivedContextCannotBeModified):
+		return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "archived_context", err.Error())
+	default:
+		return writeServiceError(fiberCtx, err)
+	}
 }
 
 func writeServiceError(fiberCtx *fiber.Ctx, err error) error {

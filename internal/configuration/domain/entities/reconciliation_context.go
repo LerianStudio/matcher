@@ -260,6 +260,10 @@ func (rc *ReconciliationContext) updateStatus(
 		return nil
 	}
 
+	if *status == rc.Status {
+		return nil
+	}
+
 	switch *status {
 	case value_objects.ContextStatusActive:
 		return rc.Activate(ctx)

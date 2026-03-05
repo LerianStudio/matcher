@@ -431,7 +431,6 @@ func TestConfigurationVerifierNeverReturnsErrContextNotActive(t *testing.T) {
 
 			v := createVerifierWithMocks(t, ctxRepo, srcRepo, fmRepo, mrRepo)
 			err := v(context.Background(), validTenantID, validContextID)
-
 			if err != nil {
 				assert.False(t,
 					errors.Is(err, libHTTP.ErrContextNotActive),
