@@ -1,0 +1,5 @@
+-- No-op rollback by design.
+--
+-- This migration is a repair/idempotency guard for legacy databases.
+-- Dropping the column here could remove valid production data in environments
+-- where the column already existed before this migration version.
