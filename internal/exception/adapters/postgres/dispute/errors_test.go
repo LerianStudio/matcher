@@ -1,6 +1,6 @@
 //go:build unit
 
-package adjustment
+package dispute
 
 import (
 	"errors"
@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSentinelErrors(t *testing.T) {
+func TestDisputeSentinelErrors(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -19,9 +19,10 @@ func TestSentinelErrors(t *testing.T) {
 		err     error
 		message string
 	}{
-		{"ErrRepoNotInitialized", ErrRepoNotInitialized, "adjustment repository not initialized"},
-		{"ErrAdjustmentEntityNeeded", ErrAdjustmentEntityNeeded, "adjustment entity is required"},
-		{"ErrAdjustmentModelNeeded", ErrAdjustmentModelNeeded, "adjustment model is required"},
+		{"ErrRepoNotInitialized", ErrRepoNotInitialized, "dispute repository not initialized"},
+		{"ErrDisputeNotFound", ErrDisputeNotFound, "dispute not found"},
+		{"ErrDisputeNil", ErrDisputeNil, "dispute is nil"},
+		{"ErrTransactionRequired", ErrTransactionRequired, "transaction is required"},
 	}
 
 	for _, tt := range tests {
@@ -33,12 +34,11 @@ func TestSentinelErrors(t *testing.T) {
 	}
 }
 
-func TestErrorsAreDifferent(t *testing.T) {
+func TestDisputeErrorsAreDifferent(t *testing.T) {
 	t.Parallel()
 
-	require.NotErrorIs(t, ErrRepoNotInitialized, ErrAdjustmentEntityNeeded)
-	require.NotErrorIs(t, ErrAdjustmentEntityNeeded, ErrAdjustmentModelNeeded)
-	require.NotErrorIs(t, ErrAdjustmentModelNeeded, ErrTransactionRequired)
+	require.NotErrorIs(t, ErrRepoNotInitialized, ErrDisputeNil)
+	require.NotErrorIs(t, ErrDisputeNil, ErrTransactionRequired)
 }
 
 func TestErrTransactionRequired_CanonicalIdentity(t *testing.T) {

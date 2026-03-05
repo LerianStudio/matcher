@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -83,4 +84,10 @@ func TestScheduleErrors_HaveDescriptiveMessages(t *testing.T) {
 				"error message should contain descriptive text")
 		})
 	}
+}
+
+func TestErrTransactionRequired_CanonicalIdentity(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, errors.Is(ErrTransactionRequired, pgcommon.ErrTransactionRequired))
 }

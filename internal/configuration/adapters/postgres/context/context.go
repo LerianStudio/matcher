@@ -2,7 +2,6 @@
 package context
 
 import (
-	"errors"
 	"fmt"
 	"time"
 
@@ -11,15 +10,6 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
-)
-
-// Sentinel errors for context model operations.
-var (
-	ErrContextEntityRequired = errors.New("context entity is required")
-	ErrContextModelRequired  = errors.New("context model is required")
-	ErrTenantIDRequired      = errors.New("tenant ID is required")
-	ErrRepoNotInitialized    = errors.New("context repository not initialized")
-	ErrTransactionRequired   = errors.New("transaction is required")
 )
 
 // ContextPostgreSQLModel represents the database model for reconciliation contexts.

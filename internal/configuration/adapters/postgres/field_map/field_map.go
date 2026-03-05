@@ -3,22 +3,12 @@ package field_map
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
-)
-
-// Sentinel errors for field map model operations.
-var (
-	ErrFieldMapEntityRequired   = errors.New("field map entity is required")
-	ErrFieldMapEntityIDRequired = errors.New("field map entity ID is nil: entities must be created via NewFieldMap constructor")
-	ErrFieldMapModelRequired    = errors.New("field map model is required")
-	ErrRepoNotInitialized       = errors.New("field map repository not initialized")
-	ErrTransactionRequired      = errors.New("transaction is required")
 )
 
 // FieldMapPostgreSQLModel represents the database model for field maps.

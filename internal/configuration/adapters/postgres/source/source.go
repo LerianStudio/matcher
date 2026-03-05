@@ -3,7 +3,6 @@ package source
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
@@ -11,16 +10,6 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
-)
-
-// Sentinel errors for source model operations.
-var (
-	ErrSourceEntityRequired   = errors.New("source entity is required")
-	ErrSourceEntityIDRequired = errors.New("source entity ID is required")
-	ErrSourceModelRequired    = errors.New("source model is required")
-	ErrRepoNotInitialized     = errors.New("source repository not initialized")
-	ErrConnectionRequired     = errors.New("postgres connection is required")
-	ErrTransactionRequired    = errors.New("transaction is required")
 )
 
 // SourcePostgreSQLModel represents the database model for reconciliation sources.

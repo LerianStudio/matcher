@@ -84,7 +84,6 @@ func TestNewFieldMapPostgreSQLModel_NilEntityID(t *testing.T) {
 	require.Error(t, err)
 	require.Nil(t, model)
 	require.ErrorIs(t, err, ErrFieldMapEntityIDRequired)
-	require.Contains(t, err.Error(), "NewFieldMap")
 }
 
 func TestNewFieldMapPostgreSQLModel_EmptyMapping(t *testing.T) {

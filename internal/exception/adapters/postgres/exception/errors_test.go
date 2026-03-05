@@ -1,6 +1,6 @@
 //go:build unit
 
-package adjustment
+package exception
 
 import (
 	"errors"
@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSentinelErrors(t *testing.T) {
+func TestExceptionSentinelErrors(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -19,9 +19,9 @@ func TestSentinelErrors(t *testing.T) {
 		err     error
 		message string
 	}{
-		{"ErrRepoNotInitialized", ErrRepoNotInitialized, "adjustment repository not initialized"},
-		{"ErrAdjustmentEntityNeeded", ErrAdjustmentEntityNeeded, "adjustment entity is required"},
-		{"ErrAdjustmentModelNeeded", ErrAdjustmentModelNeeded, "adjustment model is required"},
+		{"ErrRepoNotInitialized", ErrRepoNotInitialized, "exception repository not initialized"},
+		{"ErrConcurrentModification", ErrConcurrentModification, "exception was modified by another process"},
+		{"ErrTransactionRequired", ErrTransactionRequired, "transaction is required"},
 	}
 
 	for _, tt := range tests {
@@ -33,12 +33,11 @@ func TestSentinelErrors(t *testing.T) {
 	}
 }
 
-func TestErrorsAreDifferent(t *testing.T) {
+func TestExceptionErrorsAreDifferent(t *testing.T) {
 	t.Parallel()
 
-	require.NotErrorIs(t, ErrRepoNotInitialized, ErrAdjustmentEntityNeeded)
-	require.NotErrorIs(t, ErrAdjustmentEntityNeeded, ErrAdjustmentModelNeeded)
-	require.NotErrorIs(t, ErrAdjustmentModelNeeded, ErrTransactionRequired)
+	require.NotErrorIs(t, ErrRepoNotInitialized, ErrConcurrentModification)
+	require.NotErrorIs(t, ErrConcurrentModification, ErrTransactionRequired)
 }
 
 func TestErrTransactionRequired_CanonicalIdentity(t *testing.T) {

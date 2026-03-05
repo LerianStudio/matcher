@@ -4,7 +4,6 @@ package dispute
 import (
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
@@ -12,14 +11,6 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/dispute"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
-)
-
-// Repository errors.
-var (
-	ErrRepoNotInitialized  = errors.New("dispute repository not initialized")
-	ErrDisputeNotFound     = dispute.ErrNotFound
-	ErrDisputeNil          = errors.New("dispute is nil")
-	ErrTransactionRequired = errors.New("transaction is required")
 )
 
 type scanner interface {
