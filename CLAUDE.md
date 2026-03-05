@@ -74,8 +74,42 @@ internal/
 ├── governance/       # Immutable audit logs
 ├── reporting/        # Dashboard analytics, export jobs, variance reports, archival
 ├── outbox/           # Reliable event publication
-└── shared/           # Cross-context utilities and adapters
+└── shared/           # Shared kernel: cross-context domain types + port abstractions
 ```
+
+### Shared Kernel (`internal/shared/`)
+
+The `shared/` module is the **designated bridge** between bounded contexts. It contains types that multiple contexts legitimately need to share, preventing import cycles between context packages.
+
+```
+internal/shared/
+├── domain/
+│   ├── audit_log.go          # AuditLog entity (used by governance + matching)
+│   ├── events.go             # Domain event base types
+│   ├── field_map.go          # FieldMap for normalization (used by ingestion + matching)
+│   ├── ingestion_events.go   # Ingestion event payloads
+│   ├── match_rule.go         # MatchRule (used by matching + configuration)
+│   ├── outbox_event.go       # OutboxEvent envelope (used by outbox + all publishers)
+│   ├── transaction.go        # Transaction entity (used by ingestion + matching + exception)
+│   ├── exception/            # Exception severity value objects (type-aliased for backward compat)
+│   └── fee/                  # Fee schedule domain (moved from matching; used by config + matching)
+└── ports/
+    ├── audit.go              # AuditRepository interface (cross-context)
+    ├── infrastructure.go     # InfrastructureProvider (DB resolver)
+    ├── match_trigger.go      # MatchTrigger port for auto-match on upload
+    ├── object_storage.go     # ObjectStorage port
+    ├── outbox.go             # OutboxRepository interface (cross-context)
+    └── tx.go                 # TxRunner port
+```
+
+**Type-alias pattern**: When a type migrates to `shared/domain/`, the original package re-exports it via a type alias for backward compatibility:
+```go
+// exception/domain/value_objects/severity.go
+import sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
+type Severity = sharedexception.Severity  // type alias, not redefinition
+```
+
+**Cross-context import rule**: Bounded contexts **must not** import each other directly. Use `internal/shared/` as the bridge. This is enforced by depguard rules in `.golangci.yml`.
 
 ### Hexagonal Structure (per context)
 
@@ -83,18 +117,33 @@ internal/
 internal/{context}/
 ├── adapters/
 │   ├── http/             # Fiber handlers + DTOs
+│   │   └── dto/          # Request/response data-transfer objects
 │   ├── postgres/         # Repository implementations
 │   │   └── {aggregate}/  # One dir per aggregate root
 │   └── rabbitmq/         # Message publishers/consumers
-├── ports/                # Repository/service interfaces (required)
-├── services/
-│   ├── command/          # Write operations (*_commands.go)
-│   └── query/            # Read operations (*_queries.go)
-└── domain/
-    ├── entities/         # Aggregate roots with business logic
-    ├── enums/            # Type-safe enumerations
-    └── errors/           # Domain-specific sentinel errors
+├── ports/                # External dependency abstractions (EventPublisher, ObjectStorage, etc.)
+├── domain/
+│   ├── entities/         # Aggregate roots with business logic
+│   ├── value_objects/    # Value types (primary convention; most contexts use this)
+│   ├── enums/            # Type-safe enumerations (matching also has this alongside value_objects)
+│   ├── repositories/     # Repository interfaces for the context's own aggregates
+│   └── errors/           # Domain-scoped sentinel errors (preferred location; governance has this;
+│                         #   adapter-level sentinels live in adapters/postgres/{name}/errors.go)
+└── services/
+    ├── command/          # Write operations (*_commands.go)
+    ├── query/            # Read operations (*_queries.go)
+    └── worker/           # Background workers (configuration, governance use this)
 ```
+
+**Interface location convention**:
+- `domain/repositories/` — repository interfaces for the context's own aggregate stores
+- `ports/` — external dependency abstractions (EventPublisher, ObjectStorage, CacheProvider, etc.)
+- `internal/shared/ports/` — cross-context abstractions (OutboxRepository, AuditRepository, etc.)
+
+**Notes on domain subdirectory usage across contexts**:
+- `domain/value_objects/` — used by configuration, exception, ingestion, matching
+- `domain/enums/` — used by matching (alongside value_objects for exception reasons)
+- `domain/errors/` — used by governance; other contexts keep sentinels in `services/command/commands.go` or `adapters/postgres/{name}/errors.go`
 
 ## Code Patterns
 
@@ -291,7 +340,11 @@ if err := asserter.NotNil(ctx, txID, "transaction id required"); err != nil {
 //go:build integration
 
 //go:build e2e
+
+//go:build chaos
 ```
+
+> `chaos` is used by 9 files in `tests/chaos/` for fault-injection tests (Toxiproxy, container chaos). These tests require the full docker-compose stack plus Toxiproxy.
 
 **Test structure**:
 - Co-locate tests with source (`*_test.go`)
@@ -406,6 +459,10 @@ Split into `handlers_{feature}.go` when a context has 3+ distinct feature areas:
 - Uses `$(DOCKER_CMD)` variable
 - No need to specify which version you have
 
+### 11. Services Layout: Workers vs Dispatcher
+- Background workers live in `services/worker/` (e.g., `configuration/services/worker/scheduler_worker.go`, `governance/services/worker/archival_worker.go`)
+- The outbox **dispatcher** is a known exception: it lives at `outbox/services/dispatcher.go` (services root, not in command/, query/, or worker/) because it is pure infrastructure — not a use case and not a scheduled job
+
 ## Configuration
 
 ### Environment Variables
@@ -503,6 +560,20 @@ The following patterns are **blocked** by linter:
 # Error wrapping - ALWAYS preserve error chain
 - fmt.Errorf.*%v.*err   # Use %w not %v
 ```
+
+### Architectural Boundary Rules (depguard)
+
+In addition to the standard linters, `depguard` enforces hexagonal architecture boundaries:
+
+| Rule | What it enforces |
+|------|-----------------|
+| `http-handlers-boundary` | HTTP handlers cannot import postgres adapters directly (all 8 contexts) |
+| `cross-context-{name}` | Full cross-context isolation for all 8 bounded contexts; direct imports between contexts are blocked |
+| `service-no-adapters` | `services/command/` and `services/query/` cannot import adapter packages; depend on port interfaces only |
+| `dto-no-services` | `adapters/http/dto/` cannot import service packages; DTOs are pure data structures |
+| `worker-no-adapters` | `services/worker/` cannot import postgres adapter packages directly |
+
+**Shared kernel** (`internal/shared/`) is the designated bridge: when two contexts need to share a type, it moves to `shared/domain/`. When they need a shared interface, it goes in `shared/ports/`. This is the only sanctioned path for cross-context dependencies.
 
 ### Custom Linters (tools/linters/)
 
