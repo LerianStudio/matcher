@@ -8,7 +8,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 )
 
-//go:generate mockgen -source=field_map_repository.go -destination=mocks/mock_field_map_repository.go -package=mocks
+//go:generate mockgen -source=field_map_repository.go -destination=mocks/field_map_repository_mock.go -package=mocks
 
 // FieldMapRepository defines persistence operations for field maps.
 type FieldMapRepository interface {

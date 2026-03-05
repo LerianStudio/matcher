@@ -19,7 +19,7 @@ type CursorFilter struct {
 	SortOrder string
 }
 
-//go:generate mockgen -source=job_repository.go -destination=mock/job_repository_mock.go -package=mock
+//go:generate mockgen -source=job_repository.go -destination=mocks/job_repository_mock.go -package=mocks
 
 // JobRepository defines the interface for ingestion job persistence.
 type JobRepository interface {

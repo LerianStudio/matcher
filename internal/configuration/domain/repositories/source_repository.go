@@ -11,7 +11,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 )
 
-//go:generate mockgen -source=source_repository.go -destination=mocks/mock_source_repository.go -package=mocks
+//go:generate mockgen -source=source_repository.go -destination=mocks/source_repository_mock.go -package=mocks
 
 // SourceRepository defines persistence operations for reconciliation sources.
 type SourceRepository interface {

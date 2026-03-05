@@ -12,7 +12,7 @@ import (
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
-//go:generate mockgen -source=transaction_repository.go -destination=mock/transaction_repository_mock.go -package=mock
+//go:generate mockgen -source=transaction_repository.go -destination=mocks/transaction_repository_mock.go -package=mocks
 
 // ExternalIDKey represents a unique key for external ID lookup.
 type ExternalIDKey struct {

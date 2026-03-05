@@ -11,7 +11,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 )
 
-//go:generate mockgen -source=match_rule_repository.go -destination=mocks/mock_match_rule_repository.go -package=mocks
+//go:generate mockgen -source=match_rule_repository.go -destination=mocks/match_rule_repository_mock.go -package=mocks
 
 // MatchRuleRepository defines persistence operations for match rules.
 type MatchRuleRepository interface {

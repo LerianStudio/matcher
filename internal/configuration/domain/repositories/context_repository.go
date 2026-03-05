@@ -11,7 +11,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 )
 
-//go:generate mockgen -source=context_repository.go -destination=mocks/mock_context_repository.go -package=mocks
+//go:generate mockgen -source=context_repository.go -destination=mocks/context_repository_mock.go -package=mocks
 
 // ContextRepository defines persistence operations for reconciliation contexts.
 type ContextRepository interface {
