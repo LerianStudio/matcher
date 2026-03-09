@@ -283,7 +283,7 @@ func TestExecuteCreate_NoTenantInContext(t *testing.T) {
 	auditLogID := uuid.New()
 	presetTenantID := uuid.New()
 	entityID := uuid.New()
-	createdAt := time.Now().UTC()
+	createdAt := time.Now().UTC().Truncate(time.Microsecond)
 	changes := []byte(`{"field":"value"}`)
 
 	auditLog := &entities.AuditLog{
@@ -348,7 +348,7 @@ func TestCreate_SuccessViaMock(t *testing.T) {
 	tenantID := defaultTenantUUID()
 	entityID := uuid.New()
 	actorID := "user@test.com"
-	createdAt := time.Now().UTC()
+	createdAt := time.Now().UTC().Truncate(time.Microsecond)
 	changes := []byte(`{"field":"value"}`)
 
 	tenantSeq := int64(1)
@@ -658,7 +658,7 @@ func TestScanAuditLog_NullableHashFields(t *testing.T) {
 	id := uuid.New()
 	tenantID := uuid.New()
 	entityID := uuid.New()
-	createdAt := time.Now().UTC()
+	createdAt := time.Now().UTC().Truncate(time.Microsecond)
 	changes := []byte(`{}`)
 
 	log, err := scanAuditLog(fakeScanner{scan: func(dest ...any) error {
@@ -891,7 +891,7 @@ func TestCreateWithTx_SuccessViaMock(t *testing.T) {
 	auditLogID := uuid.New()
 	tenantID := defaultTenantUUID()
 	entityID := uuid.New()
-	createdAt := time.Now().UTC()
+	createdAt := time.Now().UTC().Truncate(time.Microsecond)
 	changes := []byte(`{"field":"value"}`)
 
 	tenantSeq := int64(1)
