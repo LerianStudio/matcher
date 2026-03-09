@@ -37,8 +37,9 @@ var (
 type Service struct {
 	*Server
 	libLog.Logger
-	Config *Config
-	Routes *Routes
+	Config        *Config
+	Routes        *Routes
+	ConfigManager *ConfigManager
 
 	authClient         *middleware.AuthClient
 	tenantExtractor    *auth.TenantExtractor
@@ -48,6 +49,7 @@ type Service struct {
 	cleanupWorker      *reportingWorker.CleanupWorker
 	archivalWorker     *governanceWorker.ArchivalWorker
 	schedulerWorker    *configWorker.SchedulerWorker
+	workerManager      *WorkerManager //nolint:unused // wired by init.go, used by Stop()
 	connectionManager  connectionCloser
 	cleanupFuncs       []func()
 }

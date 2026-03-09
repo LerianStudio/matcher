@@ -22,6 +22,9 @@ const (
 
 	// ResourceException is the RBAC resource for exception management.
 	ResourceException = "exception"
+
+	// ResourceSystem is the RBAC resource for system-level operations.
+	ResourceSystem = "system"
 )
 
 // Standard RBAC actions.
@@ -104,6 +107,12 @@ const (
 	ActionExportRead     = "export:read"
 	ActionExportJobWrite = "export-job:write"
 	ActionExportJobRead  = "export-job:read"
+)
+
+// System module actions.
+const (
+	ActionConfigRead  = "config:read"
+	ActionConfigWrite = "config:write"
 )
 
 // Exception module actions.
