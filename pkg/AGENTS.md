@@ -1,21 +1,21 @@
 # Package Directory (`pkg/`)
 
-Most reusable packages have been migrated to `lib-uncommons` (`github.com/LerianStudio/lib-uncommons/uncommons/`).
+Most reusable packages have been migrated to `lib-commons` (`github.com/LerianStudio/lib-commons/commons/`).
 
-## Migrated Packages (now in lib-uncommons)
+## Migrated Packages (now in lib-commons)
 
 | Former Location      | New Location                 | Import Path                                                            |
 | -------------------- | ---------------------------- | ---------------------------------------------------------------------- |
-| `pkg/assert`         | `uncommons/assert`             | `github.com/LerianStudio/lib-uncommons/uncommons/assert`             |
-| `pkg/runtime`        | `uncommons/runtime`            | `github.com/LerianStudio/lib-uncommons/uncommons/runtime`            |
-| `pkg/safe`           | `uncommons/safe`               | `github.com/LerianStudio/lib-uncommons/uncommons/safe`               |
-| `pkg/jwt`            | `uncommons/jwt`                | `github.com/LerianStudio/lib-uncommons/uncommons/jwt`                |
-| `pkg/backoff`        | `uncommons/backoff`            | `github.com/LerianStudio/lib-uncommons/uncommons/backoff`            |
-| `pkg/cron`           | `uncommons/cron`               | `github.com/LerianStudio/lib-uncommons/uncommons/cron`               |
-| `pkg/errgroup`       | `uncommons/errgroup`           | `github.com/LerianStudio/lib-uncommons/uncommons/errgroup`           |
-| `pkg/logging`        | `uncommons/logging`            | `github.com/LerianStudio/lib-uncommons/uncommons/logging`            |
-| `pkg/http`           | `uncommons/net/http`           | `github.com/LerianStudio/lib-uncommons/uncommons/net/http`           |
-| `pkg/http/ratelimit` | `uncommons/net/http/ratelimit` | `github.com/LerianStudio/lib-uncommons/uncommons/net/http/ratelimit` |
+| `pkg/assert`         | `commons/assert`             | `github.com/LerianStudio/lib-commons/commons/assert`             |
+| `pkg/runtime`        | `commons/runtime`            | `github.com/LerianStudio/lib-commons/commons/runtime`            |
+| `pkg/safe`           | `commons/safe`               | `github.com/LerianStudio/lib-commons/commons/safe`               |
+| `pkg/jwt`            | `commons/jwt`                | `github.com/LerianStudio/lib-commons/commons/jwt`                |
+| `pkg/backoff`        | `commons/backoff`            | `github.com/LerianStudio/lib-commons/commons/backoff`            |
+| `pkg/cron`           | `commons/cron`               | `github.com/LerianStudio/lib-commons/commons/cron`               |
+| `pkg/errgroup`       | `commons/errgroup`           | `github.com/LerianStudio/lib-commons/commons/errgroup`           |
+| `pkg/logging`        | `commons/logging`            | `github.com/LerianStudio/lib-commons/commons/logging`            |
+| `pkg/http`           | `commons/net/http`           | `github.com/LerianStudio/lib-commons/commons/net/http`           |
+| `pkg/http/ratelimit` | `commons/net/http/ratelimit` | `github.com/LerianStudio/lib-commons/commons/net/http/ratelimit` |
 
 ## Remaining Packages
 

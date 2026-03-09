@@ -172,7 +172,7 @@ func TestCreatePostgresConnection(t *testing.T) {
 func TestCreateRedisConnection(t *testing.T) {
 	t.Parallel()
 
-	// In lib-uncommons v2, New() eagerly connects to Redis.
+	// In lib-commons v4, New() eagerly connects to Redis.
 	// Without a running Redis server, connection attempts will fail.
 	t.Run("returns error when redis unreachable", func(t *testing.T) {
 		t.Parallel()

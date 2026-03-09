@@ -124,7 +124,7 @@ func deriveTelemetryTimeout(ctx context.Context) time.Duration {
 }
 
 // InitTelemetryWithTimeout wraps InitTelemetry with a deadline.
-// lib-uncommons' NewTelemetry internally uses context.Background() for gRPC dials,
+// lib-commons' NewTelemetry internally uses context.Background() for gRPC dials,
 // so we can't propagate a deadline through the library. Instead, we run it in a
 // goroutine and abandon the attempt if the deadline expires.
 //

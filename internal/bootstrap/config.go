@@ -878,7 +878,7 @@ func (cfg *Config) SchedulerInterval() time.Duration {
 
 // validateArchivalConfig validates archival worker configuration.
 // Retention and batch validations only run when archival is enabled because
-// lib-uncommons.SetConfigFromEnvVars does not apply envDefault tags -- fields
+// lib-commons.SetConfigFromEnvVars does not apply envDefault tags -- fields
 // default to Go zero values when env vars are absent.
 func (cfg *Config) validateArchivalConfig(asserter *assert.Asserter) error {
 	if !cfg.Archival.Enabled {

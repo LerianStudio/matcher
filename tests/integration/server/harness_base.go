@@ -359,7 +359,7 @@ func (sh *serverHarnessBase) setupRabbitSpy(t *testing.T) error {
 	return nil
 }
 
-// RabbitMQConnection returns a lib-uncommons compatible RabbitMQ connection.
+// RabbitMQConnection returns a lib-commons compatible RabbitMQ connection.
 func (sh *serverHarnessBase) RabbitMQConnection() *libRabbitmq.RabbitMQConnection {
 	return &libRabbitmq.RabbitMQConnection{
 		ConnectionStringSource: fmt.Sprintf(

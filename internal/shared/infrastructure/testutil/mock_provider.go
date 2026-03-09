@@ -180,7 +180,7 @@ func NewClientWithResolver(resolver dbresolver.DB) *libPostgres.Client {
 
 	rf := rv.FieldByName("resolver")
 	if !rf.IsValid() {
-		panic("lib-uncommons postgres.Client no longer has field 'resolver'") //nolint:forbidigo // test infrastructure: panic detects upstream library breaking changes
+		panic("lib-commons postgres.Client no longer has field 'resolver'") //nolint:forbidigo // test infrastructure: panic detects upstream library breaking changes
 	}
 
 	// Use unsafe to bypass unexported field restrictions.
@@ -189,7 +189,7 @@ func NewClientWithResolver(resolver dbresolver.DB) *libPostgres.Client {
 
 	primaryField := rv.FieldByName("primary")
 	if !primaryField.IsValid() {
-		panic("lib-uncommons postgres.Client no longer has field 'primary'") //nolint:forbidigo // test infrastructure: panic detects upstream library breaking changes
+		panic("lib-commons postgres.Client no longer has field 'primary'") //nolint:forbidigo // test infrastructure: panic detects upstream library breaking changes
 	}
 
 	primaryDBs := resolver.PrimaryDBs()
@@ -200,7 +200,7 @@ func NewClientWithResolver(resolver dbresolver.DB) *libPostgres.Client {
 
 	replicaField := rv.FieldByName("replica")
 	if !replicaField.IsValid() {
-		panic("lib-uncommons postgres.Client no longer has field 'replica'") //nolint:forbidigo // test infrastructure: panic detects upstream library breaking changes
+		panic("lib-commons postgres.Client no longer has field 'replica'") //nolint:forbidigo // test infrastructure: panic detects upstream library breaking changes
 	}
 
 	replicaDBs := resolver.ReplicaDBs()
@@ -213,7 +213,7 @@ func NewClientWithResolver(resolver dbresolver.DB) *libPostgres.Client {
 }
 
 // NewRedisClientWithMock creates a *libRedis.Client with a pre-injected
-// redis.UniversalClient for test purposes. Since v2 redis.Client has all unexported
+// redis.UniversalClient for test purposes. Since v4 redis.Client has all unexported
 // fields, this uses reflect+unsafe to set the 'client' and 'connected' fields directly.
 // This is intentionally test-only. Pass nil to create a client that deterministically
 // returns an error from GetClient (simulating a broken/unavailable redis client).
@@ -225,7 +225,7 @@ func NewRedisClientWithMock(mock redis.UniversalClient) *libRedis.Client {
 
 		cfgField := rv.FieldByName("cfg")
 		if !cfgField.IsValid() {
-			panic("lib-uncommons redis.Client no longer has field 'cfg'") //nolint:forbidigo // test infrastructure: panic detects upstream library breaking changes
+			panic("lib-commons redis.Client no longer has field 'cfg'") //nolint:forbidigo // test infrastructure: panic detects upstream library breaking changes
 		}
 
 		cfgPtr := unsafe.Pointer(cfgField.UnsafeAddr()) //#nosec G103 -- test-only: bypassing unexported field for mock injection
@@ -244,7 +244,7 @@ func NewRedisClientWithMock(mock redis.UniversalClient) *libRedis.Client {
 	// Set the 'client' field (redis.UniversalClient).
 	rf := rv.FieldByName("client")
 	if !rf.IsValid() {
-		panic("lib-uncommons redis.Client no longer has field 'client'") //nolint:forbidigo // test infrastructure: panic detects upstream library breaking changes
+		panic("lib-commons redis.Client no longer has field 'client'") //nolint:forbidigo // test infrastructure: panic detects upstream library breaking changes
 	}
 
 	rPtr := unsafe.Pointer(rf.UnsafeAddr()) //#nosec G103 -- test-only: bypassing unexported field for mock injection
@@ -253,7 +253,7 @@ func NewRedisClientWithMock(mock redis.UniversalClient) *libRedis.Client {
 	// Set the 'connected' field to true.
 	cf := rv.FieldByName("connected")
 	if !cf.IsValid() {
-		panic("lib-uncommons redis.Client no longer has field 'connected'") //nolint:forbidigo // test infrastructure: panic detects upstream library breaking changes
+		panic("lib-commons redis.Client no longer has field 'connected'") //nolint:forbidigo // test infrastructure: panic detects upstream library breaking changes
 	}
 
 	cPtr := unsafe.Pointer(cf.UnsafeAddr()) //#nosec G103 -- test-only: bypassing unexported field for mock injection
@@ -272,7 +272,7 @@ func NewRedisClientConnected() *libRedis.Client {
 
 	cf := rv.FieldByName("connected")
 	if !cf.IsValid() {
-		panic("lib-uncommons redis.Client no longer has field 'connected'") //nolint:forbidigo // test infrastructure: panic detects upstream library breaking changes
+		panic("lib-commons redis.Client no longer has field 'connected'") //nolint:forbidigo // test infrastructure: panic detects upstream library breaking changes
 	}
 
 	cPtr := unsafe.Pointer(cf.UnsafeAddr()) //#nosec G103 -- test-only: bypassing unexported field for mock injection

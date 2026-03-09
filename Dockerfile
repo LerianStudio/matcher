@@ -45,7 +45,7 @@ COPY --from=builder /app /app
 COPY --from=builder /health-probe /health-probe
 # Copy migrations to both paths:
 # - /migrations for the app's RunMigrationsWithLogger call
-# - /components/matcher/migrations for lib-uncommons PostgresConnection
+# - /components/matcher/migrations for lib-commons PostgresConnection
 COPY --from=builder /matcher-app/migrations /migrations
 COPY --from=builder /matcher-app/migrations /components/matcher/migrations
 
