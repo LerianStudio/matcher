@@ -102,8 +102,8 @@ func TestStartupTimer_Total(t *testing.T) {
 	timer := newStartupTimer()
 	time.Sleep(5 * time.Millisecond)
 
-	total := timer.total()
-	assert.GreaterOrEqual(t, total, 4*time.Millisecond)
+	elapsed := timer.elapsed()
+	assert.GreaterOrEqual(t, elapsed, 4*time.Millisecond)
 }
 
 func TestStartupTimer_TrackNilReceiver(t *testing.T) {
