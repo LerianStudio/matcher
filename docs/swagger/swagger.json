@@ -1583,7 +1583,8 @@
                             "LEDGER",
                             "BANK",
                             "GATEWAY",
-                            "CUSTOM"
+                            "CUSTOM",
+                            "FETCHER"
                         ],
                         "type": "string",
                         "description": "Filter by source type",
@@ -8874,7 +8875,7 @@
         }
     },
     "definitions": {
-        "github_com_LerianStudio_lib-uncommons_v2_uncommons_net_http.CursorPagination": {
+        "github_com_LerianStudio_lib-commons_v4_commons_net_http.CursorPagination": {
             "type": "object",
             "properties": {
                 "next": {
@@ -11613,7 +11614,7 @@
                     }
                 },
                 "pagination": {
-                    "$ref": "#/definitions/github_com_LerianStudio_lib-uncommons_v2_uncommons_net_http.CursorPagination"
+                    "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.CursorPagination"
                 }
             }
         },
@@ -11627,7 +11628,7 @@
                     }
                 },
                 "pagination": {
-                    "$ref": "#/definitions/github_com_LerianStudio_lib-uncommons_v2_uncommons_net_http.CursorPagination"
+                    "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.CursorPagination"
                 }
             }
         },
@@ -11641,7 +11642,7 @@
                     }
                 },
                 "pagination": {
-                    "$ref": "#/definitions/github_com_LerianStudio_lib-uncommons_v2_uncommons_net_http.CursorPagination"
+                    "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.CursorPagination"
                 }
             }
         },

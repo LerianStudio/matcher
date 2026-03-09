@@ -27,7 +27,7 @@ tags:
   - description: Service health and readiness endpoints for Kubernetes probes
     name: Health
 definitions:
-  github_com_LerianStudio_lib-uncommons_v2_uncommons_net_http.CursorPagination:
+  github_com_LerianStudio_lib-commons_v4_commons_net_http.CursorPagination:
     properties:
       next:
         type: string
@@ -2120,7 +2120,7 @@ definitions:
           $ref: '#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.MatchedItemResponse'
         type: array
       pagination:
-        $ref: '#/definitions/github_com_LerianStudio_lib-uncommons_v2_uncommons_net_http.CursorPagination'
+        $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.CursorPagination'
     type: object
   github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.ListUnmatchedReportResponse:
     properties:
@@ -2129,7 +2129,7 @@ definitions:
           $ref: '#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.UnmatchedItemResponse'
         type: array
       pagination:
-        $ref: '#/definitions/github_com_LerianStudio_lib-uncommons_v2_uncommons_net_http.CursorPagination'
+        $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.CursorPagination'
     type: object
   github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.ListVarianceReportResponse:
     properties:
@@ -2138,7 +2138,7 @@ definitions:
           $ref: '#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.VarianceReportRowResponse'
         type: array
       pagination:
-        $ref: '#/definitions/github_com_LerianStudio_lib-uncommons_v2_uncommons_net_http.CursorPagination'
+        $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.CursorPagination'
     type: object
   github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.MatchRateStatsResponse:
     properties:
@@ -3960,6 +3960,7 @@ paths:
         - BANK
         - GATEWAY
         - CUSTOM
+        - FETCHER
         in: query
         name: type
         type: string

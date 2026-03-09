@@ -48,7 +48,7 @@ type ReconciliationSource struct {
 // CreateReconciliationSourceInput defines the input required to create a source.
 type CreateReconciliationSourceInput struct {
 	Name          string                   `json:"name"                    validate:"required,max=50" example:"Primary Bank Account"               minLength:"1" maxLength:"50"`
-	Type          value_objects.SourceType `json:"type"                    validate:"required"        example:"BANK"                                                              enums:"LEDGER,BANK,GATEWAY,CUSTOM"`
+	Type          value_objects.SourceType `json:"type"                    validate:"required"        example:"BANK"                                                              enums:"LEDGER,BANK,GATEWAY,CUSTOM,FETCHER"`
 	Config        map[string]any           `json:"config"`
 	FeeScheduleID *uuid.UUID               `json:"feeScheduleId,omitempty"                            example:"550e8400-e29b-41d4-a716-446655440000"`
 }
@@ -56,7 +56,7 @@ type CreateReconciliationSourceInput struct {
 // CreateContextSourceInput defines the input required to create a source inline with a context.
 type CreateContextSourceInput struct {
 	Name          string                   `json:"name"                    validate:"required,max=50" example:"Primary Bank Account"               minLength:"1" maxLength:"50"`
-	Type          value_objects.SourceType `json:"type"                    validate:"required"        example:"BANK"                                                              enums:"LEDGER,BANK,GATEWAY,CUSTOM"`
+	Type          value_objects.SourceType `json:"type"                    validate:"required"        example:"BANK"                                                              enums:"LEDGER,BANK,GATEWAY,CUSTOM,FETCHER"`
 	Config        map[string]any           `json:"config"`
 	FeeScheduleID *uuid.UUID               `json:"feeScheduleId,omitempty"                            example:"550e8400-e29b-41d4-a716-446655440000"`
 	Mapping       map[string]any           `json:"mapping,omitempty"`
@@ -65,7 +65,7 @@ type CreateContextSourceInput struct {
 // UpdateReconciliationSourceInput defines the fields that can be updated on a source.
 type UpdateReconciliationSourceInput struct {
 	Name          *string                   `json:"name,omitempty"            validate:"omitempty,max=50" example:"Secondary Bank Account" maxLength:"50"`
-	Type          *value_objects.SourceType `json:"type,omitempty"                                        example:"LEDGER"                                enums:"LEDGER,BANK,GATEWAY,CUSTOM"`
+	Type          *value_objects.SourceType `json:"type,omitempty"                                        example:"LEDGER"                                enums:"LEDGER,BANK,GATEWAY,CUSTOM,FETCHER"`
 	Config        map[string]any            `json:"config,omitempty"`
 	FeeScheduleID *uuid.UUID                `json:"feeScheduleId,omitempty"                               example:"550e8400-e29b-41d4-a716-446655440000"`
 }
