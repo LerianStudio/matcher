@@ -419,7 +419,6 @@ func mapRunMatchErrorToResponse(
 	case errors.Is(err, command.ErrContextNotFound):
 		return writeNotFound(fiberCtx, "context not found")
 	case errors.Is(err, command.ErrContextNotActive):
-		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return libHTTP.RespondError(fiberCtx, fiber.StatusForbidden, "context_not_active", "context is not active")
 	case errors.Is(err, command.ErrNoSourcesConfigured):
 		return badRequest(ctx, fiberCtx, span, logger, "no sources configured for context", err)
@@ -430,7 +429,6 @@ func mapRunMatchErrorToResponse(
 	case errors.Is(err, command.ErrMatchRunModeRequired):
 		return badRequest(ctx, fiberCtx, span, logger, "match run mode is required", err)
 	case errors.Is(err, command.ErrMatchRunLocked):
-		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return libHTTP.RespondError(
 			fiberCtx,
 			fiber.StatusConflict,
@@ -453,7 +451,7 @@ func handleRunMatchError(
 		libOpentelemetry.HandleSpanError(span, "failed to run match", err)
 	}
 
-	libLog.SafeError(logger, ctx, "failed to run match", err, false)
+	libLog.SafeError(logger, ctx, "failed to run match", err, productionMode)
 
 	return mapRunMatchErrorToResponse(ctx, fiberCtx, span, logger, err)
 }

@@ -38,6 +38,11 @@ var (
 	ErrInvalidDateFormat  = errors.New("invalid date format")
 )
 
+// productionMode indicates whether the application is running in production.
+// Set once during handler construction via NewHandler; governs SafeError behavior
+// (suppresses internal error details in client responses when true).
+var productionMode bool
+
 // Handler handles HTTP requests for governance audit logs.
 // It instruments each operation with OpenTelemetry metrics for observability:
 // audit_log_created_total, audit_log_queries_total, and audit_log_query_latency_seconds.
@@ -51,10 +56,12 @@ type Handler struct {
 }
 
 // NewHandler creates a new governance HTTP handler.
-func NewHandler(repo repositories.AuditLogRepository) (*Handler, error) {
+func NewHandler(repo repositories.AuditLogRepository, production bool) (*Handler, error) {
 	if repo == nil {
 		return nil, ErrRepoRequired
 	}
+
+	productionMode = production
 
 	handler := &Handler{repo: repo}
 
@@ -110,7 +117,7 @@ func startHandlerSpan(c *fiber.Ctx, name string) (context.Context, trace.Span, l
 
 func logSpanError(ctx context.Context, span trace.Span, logger libLog.Logger, message string, err error) {
 	libOpentelemetry.HandleSpanError(span, message, err)
-	libLog.SafeError(logger, ctx, message, err, false)
+	libLog.SafeError(logger, ctx, message, err, productionMode)
 }
 
 func badRequest(
@@ -123,7 +130,6 @@ func badRequest(
 ) error {
 	logSpanError(ctx, span, logger, message, err)
 
-	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", message)
 }
 
@@ -137,7 +143,6 @@ func writeServiceError(
 ) error {
 	logSpanError(ctx, span, logger, message, err)
 
-	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 }
 
@@ -151,7 +156,6 @@ func writeNotFound(
 ) error {
 	logSpanError(ctx, span, logger, message, err)
 
-	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.RespondError(fiberCtx, fiber.StatusNotFound, "not_found", message)
 }
 

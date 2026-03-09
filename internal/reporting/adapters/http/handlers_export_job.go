@@ -340,7 +340,6 @@ func (handler *ExportJobHandlers) CreateExportJob(fiberCtx *fiber.Ctx) error {
 	if err != nil {
 		logSpanError(ctx, span, logger, "failed to create export job", err)
 
-		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
@@ -393,14 +392,12 @@ func (handler *ExportJobHandlers) GetExportJob(fiberCtx *fiber.Ctx) error {
 
 		logSpanError(ctx, span, logger, "failed to get export job", err)
 
-		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
 	if job == nil {
 		logSpanError(ctx, span, logger, "export job unexpectedly nil", nil)
 
-		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
@@ -458,7 +455,6 @@ func (handler *ExportJobHandlers) ListExportJobs(fiberCtx *fiber.Ctx) error {
 	if err != nil {
 		logSpanError(ctx, span, logger, "failed to list export jobs", err)
 
-		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
@@ -531,7 +527,6 @@ func (handler *ExportJobHandlers) CancelExportJob(fiberCtx *fiber.Ctx) error {
 
 		logSpanError(ctx, span, logger, "failed to get export job for cancel", err)
 
-		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
@@ -551,7 +546,6 @@ func (handler *ExportJobHandlers) CancelExportJob(fiberCtx *fiber.Ctx) error {
 		if errors.Is(err, command.ErrJobInTerminalState) {
 			logSpanError(ctx, span, logger, "job already in terminal state", err)
 
-			//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 			return libHTTP.RespondError(
 				fiberCtx,
 				fiber.StatusConflict,
@@ -562,7 +556,6 @@ func (handler *ExportJobHandlers) CancelExportJob(fiberCtx *fiber.Ctx) error {
 
 		logSpanError(ctx, span, logger, "failed to cancel export job", err)
 
-		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
@@ -570,14 +563,12 @@ func (handler *ExportJobHandlers) CancelExportJob(fiberCtx *fiber.Ctx) error {
 	if err != nil {
 		logSpanError(ctx, span, logger, "failed to get cancelled job", err)
 
-		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
 	if job == nil {
 		logSpanError(ctx, span, logger, "cancelled job unexpectedly nil", nil)
 
-		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
@@ -627,14 +618,12 @@ func (handler *ExportJobHandlers) DownloadExportJob(fiberCtx *fiber.Ctx) error {
 
 		logSpanError(ctx, span, logger, "failed to get export job", err)
 
-		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
 	if job == nil {
 		logSpanError(ctx, span, logger, "export job unexpectedly nil", nil)
 
-		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
@@ -645,7 +634,6 @@ func (handler *ExportJobHandlers) DownloadExportJob(fiberCtx *fiber.Ctx) error {
 	if !job.IsDownloadable() {
 		logSpanError(ctx, span, logger, "job not downloadable", ErrJobNotDownloadable)
 
-		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return libHTTP.RespondError(
 			fiberCtx,
 			fiber.StatusConflict,
@@ -655,7 +643,6 @@ func (handler *ExportJobHandlers) DownloadExportJob(fiberCtx *fiber.Ctx) error {
 	}
 
 	if time.Now().After(job.ExpiresAt) {
-		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return libHTTP.RespondError(
 			fiberCtx,
 			fiber.StatusGone,
@@ -668,11 +655,9 @@ func (handler *ExportJobHandlers) DownloadExportJob(fiberCtx *fiber.Ctx) error {
 	if err != nil {
 		logSpanError(ctx, span, logger, "failed to generate download URL", err)
 
-		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.Respond(fiberCtx, fiber.StatusOK, DownloadExportJobResponse{
 		DownloadURL: downloadURL,
 		FileName:    job.FileName,
@@ -730,7 +715,6 @@ func (handler *ExportJobHandlers) ListExportJobsByContext(fiberCtx *fiber.Ctx) e
 	if err != nil {
 		logSpanError(ctx, span, logger, "failed to list export jobs by context", err)
 
-		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 

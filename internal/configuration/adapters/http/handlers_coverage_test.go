@@ -633,7 +633,7 @@ func TestNewHandler_NilCommandUseCase(t *testing.T) {
 	queryUseCase, err := newQueryUseCaseForTest(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
 	require.NoError(t, err)
 
-	_, err = NewHandler(nil, queryUseCase)
+	_, err = NewHandler(nil, queryUseCase, false)
 	require.ErrorIs(t, err, ErrNilCommandUseCase)
 }
 
@@ -648,7 +648,7 @@ func TestNewHandler_NilQueryUseCase(t *testing.T) {
 	commandUseCase, err := command.NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
 	require.NoError(t, err)
 
-	_, err = NewHandler(commandUseCase, nil)
+	_, err = NewHandler(commandUseCase, nil, false)
 	require.ErrorIs(t, err, ErrNilQueryUseCase)
 }
 
@@ -941,7 +941,7 @@ func newScheduleFixture(t *testing.T) *handlerFixtureWithSchedule {
 	)
 	require.NoError(t, err)
 
-	handler, err := NewHandler(commandUseCase, queryUseCase)
+	handler, err := NewHandler(commandUseCase, queryUseCase, false)
 	require.NoError(t, err)
 
 	return &handlerFixtureWithSchedule{
@@ -2059,7 +2059,7 @@ func newFeeScheduleHandlerFixture(t *testing.T) *feeScheduleHandlerFixture {
 	)
 	require.NoError(t, err)
 
-	handler, err := NewHandler(commandUseCase, queryUseCase)
+	handler, err := NewHandler(commandUseCase, queryUseCase, false)
 	require.NoError(t, err)
 
 	return &feeScheduleHandlerFixture{

@@ -36,6 +36,11 @@ import (
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
 
+// productionMode indicates whether the application is running in production.
+// Set once during handler construction via NewHandlers; governs SafeError behavior
+// (suppresses internal error details in client responses when true).
+var productionMode bool
+
 // Handlers provides HTTP handlers for exception operations.
 type Handlers struct {
 	exceptionUC       *command.UseCase
@@ -60,6 +65,7 @@ func NewHandlers(
 	callbackUC *command.CallbackUseCase,
 	exceptionProvider exceptionProvider,
 	disputeProvider disputeProvider,
+	production bool,
 ) (*Handlers, error) {
 	if exceptionUC == nil {
 		return nil, ErrNilExceptionUseCase
@@ -97,6 +103,8 @@ func NewHandlers(
 		return nil, ErrNilDisputeProvider
 	}
 
+	productionMode = production
+
 	return &Handlers{
 		exceptionUC:       exceptionUC,
 		disputeUC:         disputeUC,
@@ -125,7 +133,7 @@ func startHandlerSpan(c *fiber.Ctx, name string) (context.Context, trace.Span, l
 
 func logSpanError(ctx context.Context, span trace.Span, logger libLog.Logger, message string, err error) {
 	libOpentelemetry.HandleSpanError(span, message, err)
-	libLog.SafeError(logger, ctx, message, err, false)
+	libLog.SafeError(logger, ctx, message, err, productionMode)
 }
 
 func badRequest(
@@ -138,7 +146,6 @@ func badRequest(
 ) error {
 	logSpanError(ctx, span, logger, message, err)
 
-	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", message)
 }
 
@@ -152,7 +159,6 @@ func notFound(
 ) error {
 	logSpanError(ctx, span, logger, message, err)
 
-	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.RespondError(fiberCtx, fiber.StatusNotFound, "not_found", message)
 }
 
@@ -166,7 +172,6 @@ func unprocessable(
 ) error {
 	logSpanError(ctx, span, logger, message, err)
 
-	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.RespondError(fiberCtx, fiber.StatusUnprocessableEntity, "unprocessable_entity", message)
 }
 
@@ -180,7 +185,6 @@ func internalError(
 ) error {
 	logSpanError(ctx, span, logger, message, err)
 
-	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 }
 
@@ -195,7 +199,6 @@ func forbidden(ctx context.Context, fiberCtx *fiber.Ctx, span trace.Span, logger
 
 	logger.Log(ctx, libLog.LevelWarn, "access denied: "+message)
 
-	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.RespondError(fiberCtx, fiber.StatusForbidden, "forbidden", message)
 }
 
@@ -218,7 +221,6 @@ func handleExceptionVerificationError(
 		errors.Is(err, libHTTP.ErrInvalidTenantID) {
 		logSpanError(ctx, span, logger, "invalid tenant id", err)
 
-		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return libHTTP.RespondError(fiberCtx, fiber.StatusUnauthorized, "unauthorized", "unauthorized")
 	}
 
@@ -255,7 +257,6 @@ func handleDisputeVerificationError(
 		errors.Is(err, libHTTP.ErrInvalidTenantID) {
 		logSpanError(ctx, span, logger, "invalid tenant id", err)
 
-		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return libHTTP.RespondError(fiberCtx, fiber.StatusUnauthorized, "unauthorized", "unauthorized")
 	}
 
@@ -426,7 +427,6 @@ func (handler *Handlers) ForceMatch(fiberCtx *fiber.Ctx) error {
 		return handleExceptionError(ctx, fiberCtx, span, logger, err)
 	}
 
-	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ExceptionToResponse(result))
 }
 
@@ -489,7 +489,6 @@ func (handler *Handlers) AdjustEntry(fiberCtx *fiber.Ctx) error {
 		return handleExceptionError(ctx, fiberCtx, span, logger, err)
 	}
 
-	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ExceptionToResponse(result))
 }
 
@@ -548,7 +547,6 @@ func (handler *Handlers) OpenDispute(fiberCtx *fiber.Ctx) error {
 		return handleDisputeError(ctx, fiberCtx, span, logger, err)
 	}
 
-	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.DisputeToResponse(result))
 }
 
@@ -608,7 +606,6 @@ func (handler *Handlers) CloseDispute(fiberCtx *fiber.Ctx) error {
 		return handleDisputeError(ctx, fiberCtx, span, logger, err)
 	}
 
-	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.DisputeToResponse(result))
 }
 
@@ -668,7 +665,6 @@ func (handler *Handlers) SubmitEvidence(fiberCtx *fiber.Ctx) error {
 		return handleDisputeError(ctx, fiberCtx, span, logger, err)
 	}
 
-	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.DisputeToResponse(result))
 }
 
@@ -729,7 +725,6 @@ func (handler *Handlers) ListExceptions(fiberCtx *fiber.Ctx) error {
 		},
 	}
 
-	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.Respond(fiberCtx, fiber.StatusOK, response)
 }
 
@@ -788,7 +783,6 @@ func (handler *Handlers) ListDisputes(fiberCtx *fiber.Ctx) error {
 		},
 	}
 
-	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.Respond(fiberCtx, fiber.StatusOK, response)
 }
 
@@ -838,7 +832,6 @@ func (handler *Handlers) GetDispute(fiberCtx *fiber.Ctx) error {
 		return internalError(ctx, fiberCtx, span, logger, "failed to get dispute", err)
 	}
 
-	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.DisputeToResponse(result))
 }
 
@@ -1050,7 +1043,6 @@ func (handler *Handlers) GetException(fiberCtx *fiber.Ctx) error {
 		return internalError(ctx, fiberCtx, span, logger, "failed to get exception", err)
 	}
 
-	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ExceptionToResponse(exception))
 }
 
@@ -1110,7 +1102,6 @@ func (handler *Handlers) DispatchToExternal(fiberCtx *fiber.Ctx) error {
 		return handleDispatchError(ctx, fiberCtx, span, logger, err)
 	}
 
-	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.DispatchResponse{
 		ExceptionID:       result.ExceptionID.String(),
 		Target:            result.Target,
@@ -1234,7 +1225,6 @@ func (handler *Handlers) GetHistory(fiberCtx *fiber.Ctx) error {
 		}
 	}
 
-	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.HistoryResponse{
 		Items: items,
 		CursorResponse: dto.CursorResponse{

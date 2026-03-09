@@ -106,7 +106,6 @@ func mapManualMatchErrorToResponse(
 	case errors.Is(err, command.ErrContextNotActive):
 		logSpanError(ctx, span, logger, "context not active", err)
 
-		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return libHTTP.RespondError(fiberCtx, fiber.StatusForbidden, "context_not_active", "context is not active")
 	case errors.Is(err, command.ErrTransactionNotFound):
 		logSpanError(ctx, span, logger, "transaction not found", err)

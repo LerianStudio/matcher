@@ -242,7 +242,7 @@ func setupDashboardHandlers(
 
 	require.NoError(t, err)
 
-	handlers, err := NewHandlers(uc, provider, exportUC)
+	handlers, err := NewHandlers(uc, provider, exportUC, false)
 	require.NoError(t, err)
 
 	return handlers
@@ -652,7 +652,7 @@ func setupCountHandlers(
 	exportUC, err := query.NewUseCase(reportRepo)
 	require.NoError(t, err)
 
-	handlers, err := NewHandlers(uc, provider, exportUC)
+	handlers, err := NewHandlers(uc, provider, exportUC, false)
 	require.NoError(t, err)
 
 	return handlers

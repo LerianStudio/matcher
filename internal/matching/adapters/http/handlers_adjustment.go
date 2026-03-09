@@ -166,7 +166,6 @@ func handleAdjustmentError(
 
 	// Check forbidden error
 	if errors.Is(err, command.ErrAdjustmentContextNotActive) {
-		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return libHTTP.RespondError(fiberCtx, fiber.StatusForbidden, "context_not_active", "context is not active")
 	}
 

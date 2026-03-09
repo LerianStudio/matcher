@@ -52,7 +52,7 @@ func TestConfigRoutes_AuthEnforced(t *testing.T) {
 	)
 	defer authServer.Close()
 
-	// Bridge: lib-auth requires lib-commons log types until it migrates to lib-uncommons.
+	// Bridge: lib-auth requires lib-commons log types.
 	logger := &libCommonsLog.NoneLogger{}
 
 	var loggerInterface libCommonsLog.Logger = logger
@@ -87,7 +87,7 @@ func TestConfigRoutes_AuthEnforced(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	handler, err := NewHandler(commandUseCase, queryUseCase)
+	handler, err := NewHandler(commandUseCase, queryUseCase, false)
 	require.NoError(t, err)
 	err = RegisterRoutes(protected, handler)
 	require.NoError(t, err)
@@ -123,7 +123,7 @@ func TestParsePagination_LimitClampsToDefault(t *testing.T) {
 		})
 	})
 
-	// In lib-uncommons v2, ParseOpaqueCursorPagination silently clamps
+	// In lib-commons v4, ParseOpaqueCursorPagination silently clamps
 	// limit <= 0 to DefaultLimit instead of returning an error.
 	tests := []struct {
 		name          string

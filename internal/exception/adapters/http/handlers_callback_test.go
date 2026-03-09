@@ -292,6 +292,7 @@ func TestNewHandlers_NilCallbackUseCase(t *testing.T) {
 		nil,
 		exceptionProvider,
 		disputeProvider,
+		false,
 	)
 
 	assert.Nil(t, handlers)
@@ -344,6 +345,7 @@ func newCallbackTestHandlers(t *testing.T) *Handlers {
 		&command.CallbackUseCase{},
 		exceptionProvider,
 		disputeProvider,
+		false,
 	)
 	require.NoError(t, err)
 

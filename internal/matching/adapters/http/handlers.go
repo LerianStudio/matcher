@@ -33,6 +33,11 @@ const (
 // CursorResponse is an alias for the shared cursor pagination type.
 type CursorResponse = sharedpagination.CursorResponse
 
+// productionMode indicates whether the application is running in production.
+// Set once during handler construction via NewHandler; governs SafeError behavior
+// (suppresses internal error details in client responses when true).
+var productionMode bool
+
 // Handler handles HTTP requests for matching operations.
 type Handler struct {
 	command                 *command.UseCase
@@ -125,6 +130,7 @@ func NewHandler(
 	commandUseCase *command.UseCase,
 	queryUseCase *matchingQuery.UseCase,
 	ctxProvider contextProvider,
+	production bool,
 ) (*Handler, error) {
 	if commandUseCase == nil {
 		return nil, ErrNilCommandUseCase
@@ -137,6 +143,8 @@ func NewHandler(
 	if ctxProvider == nil {
 		return nil, ErrNilContextProvider
 	}
+
+	productionMode = production
 
 	verifier := NewTenantOwnershipVerifier(ctxProvider)
 	resourceVerifier := NewResourceContextVerifier(ctxProvider, auth.GetTenantID)
@@ -165,7 +173,7 @@ func startHandlerSpan(c *fiber.Ctx, name string) (context.Context, trace.Span, l
 
 func logSpanError(ctx context.Context, span trace.Span, logger libLog.Logger, message string, err error) {
 	libOpentelemetry.HandleSpanError(span, message, err)
-	libLog.SafeError(logger, ctx, message, err, false)
+	libLog.SafeError(logger, ctx, message, err, productionMode)
 }
 
 func badRequest(
@@ -178,7 +186,6 @@ func badRequest(
 ) error {
 	logSpanError(ctx, span, logger, message, err)
 
-	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", message)
 }
 
@@ -192,12 +199,10 @@ func writeServiceError(
 ) error {
 	logSpanError(ctx, span, logger, message, err)
 
-	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 }
 
 func writeNotFound(fiberCtx *fiber.Ctx, message string) error {
-	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.RespondError(fiberCtx, fiber.StatusNotFound, "not_found", message)
 }
 
@@ -212,7 +217,6 @@ func forbidden(ctx context.Context, fiberCtx *fiber.Ctx, span trace.Span, logger
 
 	logger.Log(ctx, libLog.LevelWarn, "access denied: "+message)
 
-	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.RespondError(fiberCtx, fiber.StatusForbidden, "forbidden", message)
 }
 
@@ -236,7 +240,6 @@ func handleContextVerificationError(
 
 	case errors.Is(err, libHTTP.ErrTenantIDNotFound),
 		errors.Is(err, libHTTP.ErrInvalidTenantID):
-		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return true, libHTTP.RespondError(fiberCtx, fiber.StatusUnauthorized, "unauthorized", "unauthorized")
 
 	case errors.Is(err, libHTTP.ErrContextNotFound):
@@ -247,7 +250,6 @@ func handleContextVerificationError(
 
 		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("context not active: %v", err))
 
-		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return true, libHTTP.RespondError(
 			fiberCtx,
 			fiber.StatusForbidden,
@@ -291,7 +293,6 @@ func handleContextQueryVerificationError(
 
 		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("context not active: %v", err))
 
-		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return true, libHTTP.RespondError(
 			fiberCtx,
 			fiber.StatusForbidden,
@@ -301,7 +302,6 @@ func handleContextQueryVerificationError(
 
 	case errors.Is(err, libHTTP.ErrTenantIDNotFound),
 		errors.Is(err, libHTTP.ErrInvalidTenantID):
-		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return true, libHTTP.RespondError(fiberCtx, fiber.StatusUnauthorized, "unauthorized", "unauthorized")
 
 	case errors.Is(err, libHTTP.ErrContextNotFound):

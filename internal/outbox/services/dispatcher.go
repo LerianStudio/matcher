@@ -103,6 +103,10 @@ type Dispatcher struct {
 	cancelFunc                  context.CancelFunc
 	dispatchWg                  sync.WaitGroup
 
+	// production indicates whether the application is running in production.
+	// Governs SafeError behavior (suppresses internal error details when true).
+	production bool
+
 	// OTel metrics
 	eventsDispatched metric.Int64Counter
 	eventsFailed     metric.Int64Counter
@@ -126,6 +130,14 @@ func WithBatchSize(size int) DispatcherOption {
 		if size > 0 {
 			d.batchSize = size
 		}
+	}
+}
+
+// WithProduction sets whether the dispatcher runs in production mode.
+// When true, SafeError suppresses internal error details from logs.
+func WithProduction(production bool) DispatcherOption {
+	return func(d *Dispatcher) {
+		d.production = production
 	}
 }
 
@@ -412,7 +424,7 @@ func (dispatcher *Dispatcher) DispatchOnce(ctx context.Context) int {
 		}
 
 		if err := dispatcher.repo.MarkPublished(ctx, event.ID, time.Now().UTC()); err != nil {
-			libLog.SafeError(logger, ctx, "failed to mark outbox published", err, false)
+			libLog.SafeError(logger, ctx, "failed to mark outbox published", err, dispatcher.production)
 		}
 
 		succeeded++
@@ -460,7 +472,7 @@ func (dispatcher *Dispatcher) dispatchAcrossTenants(ctx context.Context) {
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to list tenants", err)
 
-		libLog.SafeError(logger, ctx, "failed to list tenants", err, false)
+		libLog.SafeError(logger, ctx, "failed to list tenants", err, dispatcher.production)
 
 		return
 	}
@@ -505,7 +517,7 @@ func (dispatcher *Dispatcher) collectEvents(
 	)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to reset stuck events", err)
-		libLog.SafeError(logger, ctx, "failed to reset stuck events", err, false)
+		libLog.SafeError(logger, ctx, "failed to reset stuck events", err, dispatcher.production)
 	}
 
 	collected += len(stuckEvents)
@@ -524,7 +536,7 @@ func (dispatcher *Dispatcher) collectEvents(
 	)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to reset failed events for retry", err)
-		libLog.SafeError(logger, ctx, "failed to reset failed events for retry", err, false)
+		libLog.SafeError(logger, ctx, "failed to reset failed events for retry", err, dispatcher.production)
 	}
 
 	collected += len(failedEvents)
@@ -609,7 +621,7 @@ func (dispatcher *Dispatcher) collectPriorityEvents(
 		events, err := dispatcher.repo.ListPendingByType(ctx, eventType, remaining)
 		if err != nil {
 			libOpentelemetry.HandleSpanError(span, "failed to list priority events", err)
-			libLog.SafeError(dispatcher.logger, ctx, "failed to list priority events", err, false)
+			libLog.SafeError(dispatcher.logger, ctx, "failed to list priority events", err, dispatcher.production)
 
 			continue
 		}
@@ -633,7 +645,7 @@ func (dispatcher *Dispatcher) handleListPendingError(ctx context.Context, span t
 	logger := dispatcher.logger
 
 	libOpentelemetry.HandleSpanError(span, "failed to list outbox events", err)
-	libLog.SafeError(logger, ctx, "failed to list outbox events", err, false)
+	libLog.SafeError(logger, ctx, "failed to list outbox events", err, dispatcher.production)
 
 	dispatcher.failureCountsMu.Lock()
 	dispatcher.listPendingFailureCounts[tenantKey]++

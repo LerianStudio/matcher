@@ -157,7 +157,7 @@ func TestCreateAdjustmentHandlerRouting(t *testing.T) {
 	}
 	uc := newRunMatchUseCase(t, ctxProv, []*shared.Transaction{}, nil)
 
-	handler, err := NewHandler(uc, newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}), ctxProv)
+	handler, err := NewHandler(uc, newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}), ctxProv, false)
 	require.NoError(t, err)
 
 	app.Post("/v1/matching/adjustments", handler.CreateAdjustment)
@@ -208,7 +208,7 @@ func TestCreateAdjustmentMissingTargets(t *testing.T) {
 	}
 	uc := newRunMatchUseCase(t, ctxProv, []*shared.Transaction{}, nil)
 
-	handler, err := NewHandler(uc, newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}), ctxProv)
+	handler, err := NewHandler(uc, newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}), ctxProv, false)
 	require.NoError(t, err)
 
 	app.Post("/v1/matching/adjustments", handler.CreateAdjustment)
@@ -335,7 +335,7 @@ func TestCreateAdjustmentMissingRequiredFields(t *testing.T) {
 			}
 			uc := newRunMatchUseCase(t, ctxProv, []*shared.Transaction{}, nil)
 
-			handler, err := NewHandler(uc, newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}), ctxProv)
+			handler, err := NewHandler(uc, newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}), ctxProv, false)
 			require.NoError(t, err)
 
 			app.Post("/v1/matching/adjustments", handler.CreateAdjustment)
@@ -382,7 +382,7 @@ func TestCreateAdjustmentInvalidAmountFormat(t *testing.T) {
 	}
 	uc := newRunMatchUseCase(t, ctxProv, []*shared.Transaction{}, nil)
 
-	handler, err := NewHandler(uc, newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}), ctxProv)
+	handler, err := NewHandler(uc, newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}), ctxProv, false)
 	require.NoError(t, err)
 
 	app.Post("/v1/matching/adjustments", handler.CreateAdjustment)
@@ -438,6 +438,7 @@ func TestCreateAdjustmentContextNotFound(t *testing.T) {
 		&command.UseCase{},
 		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
 		ctxProv,
+		false,
 	)
 	require.NoError(t, err)
 
@@ -493,7 +494,7 @@ func TestCreateAdjustmentContextNotActive(t *testing.T) {
 	}
 	uc := newRunMatchUseCase(t, ctxProv, []*shared.Transaction{}, nil)
 
-	handler, err := NewHandler(uc, newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}), ctxProv)
+	handler, err := NewHandler(uc, newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}), ctxProv, false)
 	require.NoError(t, err)
 
 	app.Post("/v1/matching/adjustments", handler.CreateAdjustment)
@@ -547,7 +548,7 @@ func TestCreateAdjustmentInvalidPayload(t *testing.T) {
 	}
 	uc := newRunMatchUseCase(t, ctxProv, []*shared.Transaction{}, nil)
 
-	handler, err := NewHandler(uc, newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}), ctxProv)
+	handler, err := NewHandler(uc, newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}), ctxProv, false)
 	require.NoError(t, err)
 
 	app.Post("/v1/matching/adjustments", handler.CreateAdjustment)
@@ -589,7 +590,7 @@ func TestCreateAdjustmentInvalidMatchGroupID(t *testing.T) {
 	}
 	uc := newRunMatchUseCase(t, ctxProv, []*shared.Transaction{}, nil)
 
-	handler, err := NewHandler(uc, newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}), ctxProv)
+	handler, err := NewHandler(uc, newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}), ctxProv, false)
 	require.NoError(t, err)
 
 	app.Post("/v1/matching/adjustments", handler.CreateAdjustment)
@@ -643,7 +644,7 @@ func TestCreateAdjustmentInvalidTransactionID(t *testing.T) {
 	}
 	uc := newRunMatchUseCase(t, ctxProv, []*shared.Transaction{}, nil)
 
-	handler, err := NewHandler(uc, newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}), ctxProv)
+	handler, err := NewHandler(uc, newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}), ctxProv, false)
 	require.NoError(t, err)
 
 	app.Post("/v1/matching/adjustments", handler.CreateAdjustment)
@@ -696,6 +697,7 @@ func TestCreateAdjustmentMissingContextID(t *testing.T) {
 		&command.UseCase{},
 		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
 		ctxProv,
+		false,
 	)
 	require.NoError(t, err)
 
@@ -750,7 +752,7 @@ func TestCreateAdjustmentServiceError(t *testing.T) {
 	matchGroup := &matchingEntities.MatchGroup{ID: matchGroupID, ContextID: contextID}
 	uc := newAdjustmentUseCase(t, ctxProv, matchGroup, errTestDatabaseError)
 
-	handler, err := NewHandler(uc, newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}), ctxProv)
+	handler, err := NewHandler(uc, newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}), ctxProv, false)
 	require.NoError(t, err)
 
 	app.Post("/v1/matching/adjustments", handler.CreateAdjustment)

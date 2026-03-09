@@ -56,7 +56,7 @@ func newHandlerFixture(t *testing.T) *handlerFixture {
 	queryUseCase, err := query.NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
 	require.NoError(t, err)
 
-	handler, err := NewHandler(commandUseCase, queryUseCase)
+	handler, err := NewHandler(commandUseCase, queryUseCase, false)
 	require.NoError(t, err)
 
 	return &handlerFixture{

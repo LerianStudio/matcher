@@ -71,7 +71,6 @@ func (handler *Handlers) AddComment(fiberCtx *fiber.Ctx) error {
 		return handleCommentError(ctx, fiberCtx, span, logger, err)
 	}
 
-	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.CommentToResponse(result))
 }
 
@@ -117,7 +116,6 @@ func (handler *Handlers) ListComments(fiberCtx *fiber.Ctx) error {
 		return handleCommentError(ctx, fiberCtx, span, logger, err)
 	}
 
-	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ListCommentsResponse{
 		Items: dto.CommentsToResponse(comments),
 	})
@@ -176,7 +174,6 @@ func (handler *Handlers) DeleteComment(fiberCtx *fiber.Ctx) error {
 		return handleCommentError(ctx, fiberCtx, span, logger, err)
 	}
 
-	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent)
 }
 

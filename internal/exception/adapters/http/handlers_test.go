@@ -263,6 +263,7 @@ func newExceptionHandlers(t *testing.T, exceptionRepo *stubExceptionRepo) *Handl
 		&command.CallbackUseCase{},
 		exceptionProvider,
 		disputeProvider,
+		false,
 	)
 	require.NoError(t, err)
 
@@ -285,6 +286,7 @@ func TestNewHandlers_NilExceptionUseCase(t *testing.T) {
 		&command.CallbackUseCase{},
 		exceptionProvider,
 		disputeProvider,
+		false,
 	)
 
 	assert.Nil(t, handlers)
@@ -308,6 +310,7 @@ func TestNewHandlers_NilDisputeUseCase(t *testing.T) {
 		&command.CallbackUseCase{},
 		exceptionProvider,
 		disputeProvider,
+		false,
 	)
 
 	assert.Nil(t, handlers)
@@ -331,6 +334,7 @@ func TestNewHandlers_NilQueryUseCase(t *testing.T) {
 		&command.CallbackUseCase{},
 		exceptionProvider,
 		disputeProvider,
+		false,
 	)
 
 	assert.Nil(t, handlers)
@@ -354,6 +358,7 @@ func TestNewHandlers_NilDispatchUseCase(t *testing.T) {
 		&command.CallbackUseCase{},
 		exceptionProvider,
 		disputeProvider,
+		false,
 	)
 
 	assert.Nil(t, handlers)
@@ -377,6 +382,7 @@ func TestNewHandlers_NilCommentQueryUseCase(t *testing.T) {
 		&command.CallbackUseCase{},
 		exceptionProvider,
 		disputeProvider,
+		false,
 	)
 
 	assert.Nil(t, handlers)
@@ -399,6 +405,7 @@ func TestNewHandlers_NilExceptionProvider(t *testing.T) {
 		&command.CallbackUseCase{},
 		nil,
 		disputeProvider,
+		false,
 	)
 
 	assert.Nil(t, handlers)
@@ -421,6 +428,7 @@ func TestNewHandlers_NilDisputeProvider(t *testing.T) {
 		&command.CallbackUseCase{},
 		exceptionProvider,
 		nil,
+		false,
 	)
 
 	assert.Nil(t, handlers)
@@ -444,6 +452,7 @@ func TestNewHandlers_Success(t *testing.T) {
 		&command.CallbackUseCase{},
 		exceptionProvider,
 		disputeProvider,
+		false,
 	)
 
 	require.NoError(t, err)
@@ -682,6 +691,7 @@ func TestHandlersStruct_Fields(t *testing.T) {
 		callbackUC,
 		exceptionProvider,
 		disputeProvider,
+		false,
 	)
 
 	require.NoError(t, err)
@@ -821,6 +831,7 @@ func TestValidationOrder(t *testing.T) {
 				tt.callbackUC,
 				tt.exceptionProvider,
 				tt.disputeProvider,
+				false,
 			)
 
 			require.Error(t, err)
@@ -1296,7 +1307,7 @@ func TestParseCursorFilter_AllParameters(t *testing.T) {
 			expectError:   false,
 		},
 		{
-			// In lib-uncommons v2, ParseOpaqueCursorPagination silently clamps
+			// In lib-commons v4, ParseOpaqueCursorPagination silently clamps
 			// limit <= 0 to DefaultLimit instead of returning an error.
 			name:          "zero limit clamped to default",
 			queryString:   "limit=0",
@@ -1304,7 +1315,7 @@ func TestParseCursorFilter_AllParameters(t *testing.T) {
 			expectError:   false,
 		},
 		{
-			// In lib-uncommons v2, ParseOpaqueCursorPagination silently clamps
+			// In lib-commons v4, ParseOpaqueCursorPagination silently clamps
 			// limit <= 0 to DefaultLimit instead of returning an error.
 			name:          "negative limit clamped to default",
 			queryString:   "limit=-5",
@@ -2009,6 +2020,7 @@ func TestValidationOrder_ProviderChecks(t *testing.T) {
 			&command.CallbackUseCase{},
 			nilExceptionProvider,
 			disputeProvider,
+			false,
 		)
 
 		require.Error(t, err)
@@ -2032,6 +2044,7 @@ func TestValidationOrder_ProviderChecks(t *testing.T) {
 			&command.CallbackUseCase{},
 			exceptionProvider,
 			nilDisputeProvider,
+			false,
 		)
 
 		require.Error(t, err)

@@ -95,6 +95,7 @@ func run() int {
 	initLocalEnvConfig()
 
 	ctx := context.Background()
+	isProduction := bootstrap.IsProductionEnvironment(os.Getenv("ENV_NAME"))
 
 	logger, err := newLogger(libZap.Config{
 		Environment:     bootstrap.ResolveLoggerEnvironment(os.Getenv("ENV_NAME")),
@@ -102,7 +103,7 @@ func run() int {
 		OTelLibraryName: "github.com/LerianStudio/matcher",
 	})
 	if err != nil {
-		libLog.SafeError(nil, ctx, "Failed to initialize logger", err, false)
+		libLog.SafeError(nil, ctx, "Failed to initialize logger", err, isProduction)
 
 		return 1
 	}
@@ -111,7 +112,7 @@ func run() int {
 		Logger: logger,
 	})
 	if err != nil {
-		libLog.SafeError(logger, ctx, "Failed to initialize matcher service", err, false)
+		libLog.SafeError(logger, ctx, "Failed to initialize matcher service", err, isProduction)
 
 		syncCtx, syncCancel := context.WithTimeout(context.Background(), loggerSyncTimeout)
 		defer syncCancel()
@@ -143,7 +144,7 @@ func run() int {
 		logger.Log(ctx, libLog.LevelInfo, "Received shutdown signal, initiating graceful shutdown...")
 	case err := <-errChan:
 		if err != nil {
-			libLog.SafeError(logger, ctx, "Server error", err, false)
+			libLog.SafeError(logger, ctx, "Server error", err, isProduction)
 		}
 	}
 
@@ -156,7 +157,7 @@ func run() int {
 	defer shutdownCancel()
 
 	if err := service.Shutdown(shutdownCtx); err != nil {
-		libLog.SafeError(logger, shutdownCtx, "Graceful shutdown failed", err, false)
+		libLog.SafeError(logger, shutdownCtx, "Graceful shutdown failed", err, isProduction)
 
 		exitCode = 1
 	} else {

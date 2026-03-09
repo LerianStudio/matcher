@@ -56,7 +56,6 @@ func (handler *Handlers) BulkAssign(fiberCtx *fiber.Ctx) error {
 		return handleBulkError(ctx, fiberCtx, span, logger, "bulk assign failed", err)
 	}
 
-	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.Respond(fiberCtx, fiber.StatusOK, toBulkActionResponse(result))
 }
 
@@ -100,7 +99,6 @@ func (handler *Handlers) BulkResolve(fiberCtx *fiber.Ctx) error {
 		return handleBulkError(ctx, fiberCtx, span, logger, "bulk resolve failed", err)
 	}
 
-	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.Respond(fiberCtx, fiber.StatusOK, toBulkActionResponse(result))
 }
 
@@ -144,7 +142,6 @@ func (handler *Handlers) BulkDispatch(fiberCtx *fiber.Ctx) error {
 		return handleBulkError(ctx, fiberCtx, span, logger, "bulk dispatch failed", err)
 	}
 
-	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.Respond(fiberCtx, fiber.StatusOK, toBulkActionResponse(result))
 }
 
@@ -165,11 +162,9 @@ func handleBulkError(
 		errors.Is(err, command.ErrBulkResolutionEmpty) ||
 		errors.Is(err, command.ErrBulkTargetSystemEmpty) ||
 		errors.Is(err, command.ErrActorRequired) {
-		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", err.Error())
 	}
 
-	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 }
 

@@ -158,6 +158,7 @@ func newHandlersWithQueryOptions(
 		&command.CallbackUseCase{},
 		exceptionProvider,
 		disputeProvider,
+		false,
 	)
 	require.NoError(t, err)
 
@@ -184,6 +185,7 @@ func TestNewHandlers_NilCommentUseCase(t *testing.T) {
 		&command.CallbackUseCase{},
 		exceptionProvider,
 		disputeProvider,
+		false,
 	)
 
 	assert.Nil(t, handlers)
