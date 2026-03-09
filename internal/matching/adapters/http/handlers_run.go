@@ -451,7 +451,7 @@ func handleRunMatchError(
 		libOpentelemetry.HandleSpanError(span, "failed to run match", err)
 	}
 
-	libLog.SafeError(logger, ctx, "failed to run match", err, productionMode)
+	libLog.SafeError(logger, ctx, "failed to run match", err, productionMode.Load())
 
 	return mapRunMatchErrorToResponse(ctx, fiberCtx, span, logger, err)
 }

@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -37,9 +38,10 @@ import (
 )
 
 // productionMode indicates whether the application is running in production.
-// Set once during handler construction via NewHandlers; governs SafeError behavior
+// Set once during handler construction via NewHandler; governs SafeError behavior
 // (suppresses internal error details in client responses when true).
-var productionMode bool
+// Uses atomic.Bool because parallel tests construct handlers concurrently.
+var productionMode atomic.Bool
 
 // Handlers provides HTTP handlers for exception operations.
 type Handlers struct {
@@ -103,7 +105,7 @@ func NewHandlers(
 		return nil, ErrNilDisputeProvider
 	}
 
-	productionMode = production
+	productionMode.Store(production)
 
 	return &Handlers{
 		exceptionUC:       exceptionUC,
@@ -133,7 +135,7 @@ func startHandlerSpan(c *fiber.Ctx, name string) (context.Context, trace.Span, l
 
 func logSpanError(ctx context.Context, span trace.Span, logger libLog.Logger, message string, err error) {
 	libOpentelemetry.HandleSpanError(span, message, err)
-	libLog.SafeError(logger, ctx, message, err, productionMode)
+	libLog.SafeError(logger, ctx, message, err, productionMode.Load())
 }
 
 func badRequest(

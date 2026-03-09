@@ -151,7 +151,6 @@ func (worker *ExportWorker) Start(ctx context.Context) error {
 		return ErrWorkerAlreadyRunning
 	}
 
-	//nolint:gosec // G118: cancel is stored in worker.cancelFunc and called by Stop(); must outlive Start()
 	ctx, cancel := context.WithCancel(ctx)
 	worker.cancelFunc = cancel
 

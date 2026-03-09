@@ -691,7 +691,6 @@ func newConnectionSetupContext(parent context.Context) (context.Context, context
 		parent = context.Background()
 	}
 
-	//nolint:gosec // G118: cancel is returned to caller who is responsible for calling it (see GetPostgresConnection, GetRedisConnection)
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), defaultConnectionSetupTimeout)
 
 	return ctx, cancel

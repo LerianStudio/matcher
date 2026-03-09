@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -102,9 +103,10 @@ type contextProvider interface {
 }
 
 // productionMode indicates whether the application is running in production.
-// Set once during handler construction via NewHandlers; governs SafeError behavior
+// Set once during handler construction via NewHandler; governs SafeError behavior
 // (suppresses internal error details in client responses when true).
-var productionMode bool
+// Uses atomic.Bool because parallel tests construct handlers concurrently.
+var productionMode atomic.Bool
 
 // Handlers provides HTTP handlers for ingestion operations.
 type Handlers struct {
@@ -133,7 +135,7 @@ func NewHandlers(
 		return nil, ErrNilContextProvider
 	}
 
-	productionMode = production
+	productionMode.Store(production)
 
 	verifier := NewTenantOwnershipVerifier(ctxProvider)
 
@@ -160,7 +162,7 @@ func startHandlerSpan(c *fiber.Ctx, name string) (context.Context, trace.Span, l
 
 func logSpanError(ctx context.Context, span trace.Span, logger libLog.Logger, message string, err error) {
 	libOpentelemetry.HandleSpanError(span, message, err)
-	libLog.SafeError(logger, ctx, message, err, productionMode)
+	libLog.SafeError(logger, ctx, message, err, productionMode.Load())
 }
 
 // validateFileContentType checks if the file's content type is valid for the declared format.
