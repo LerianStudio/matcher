@@ -144,5 +144,16 @@ func defaultConfig() *Config {
 		CallbackRateLimit: CallbackRateLimitConfig{
 			PerMinute: 60,
 		},
+		Fetcher: FetcherConfig{
+			Enabled:              false,
+			URL:                  "http://localhost:4006",
+			AllowPrivateIPs:      false,
+			HealthTimeoutSec:     5,
+			RequestTimeoutSec:    30,
+			DiscoveryIntervalSec: 60,
+			SchemaCacheTTLSec:    300,
+			ExtractionPollSec:    5,
+			ExtractionTimeoutSec: 600,
+		},
 	}
 }

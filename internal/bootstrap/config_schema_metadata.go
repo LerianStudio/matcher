@@ -114,6 +114,17 @@ var fieldDescriptions = map[string]string{ // #nosec G101 -- UI description labe
 	// callback_rate_limit
 	"callback_rate_limit.per_minute": "Max callbacks per external system per minute",
 
+	// fetcher
+	"fetcher.enabled":                "Enable the Fetcher-backed discovery module",
+	"fetcher.url":                    "Base URL for the Fetcher service",
+	"fetcher.allow_private_ips":      "Allow Fetcher requests to private IP ranges",
+	"fetcher.health_timeout_sec":     "Fetcher health-check timeout in seconds",
+	"fetcher.request_timeout_sec":    "Fetcher request timeout in seconds",
+	"fetcher.discovery_interval_sec": "Discovery worker interval in seconds",
+	"fetcher.schema_cache_ttl_sec":   "Schema cache TTL in seconds",
+	"fetcher.extraction_poll_sec":    "Extraction status poll interval in seconds",
+	"fetcher.extraction_timeout_sec": "Extraction job timeout in seconds",
+
 	// deduplication
 	"deduplication.ttl_sec": "Deduplication key TTL in seconds",
 
@@ -269,6 +280,15 @@ var fieldLabels = map[string]string{
 	"archival.partition_lookahead":            "Partition Lookahead",
 	"archival.presign_expiry_sec":             "Presign Expiry (sec)",
 	"webhook.timeout_sec":                     "Webhook Timeout (sec)",
+	"fetcher.enabled":                         "Fetcher Enabled",
+	"fetcher.url":                             "Fetcher URL",
+	"fetcher.allow_private_ips":               "Allow Private IPs",
+	"fetcher.health_timeout_sec":              "Health Timeout (sec)",
+	"fetcher.request_timeout_sec":             "Request Timeout (sec)",
+	"fetcher.discovery_interval_sec":          "Discovery Interval (sec)",
+	"fetcher.schema_cache_ttl_sec":            "Schema Cache TTL (sec)",
+	"fetcher.extraction_poll_sec":             "Extraction Poll (sec)",
+	"fetcher.extraction_timeout_sec":          "Extraction Timeout (sec)",
 }
 
 // fieldConstraints maps mapstructure keys to validation constraints.
@@ -299,6 +319,12 @@ var fieldConstraints = map[string][]string{
 	"scheduler.interval_sec":           {"min:1"},
 	"webhook.timeout_sec":              {"min:0", "max:300"},
 	"callback_rate_limit.per_minute":   {"min:1"},
+	"fetcher.health_timeout_sec":       {"min:0"},
+	"fetcher.request_timeout_sec":      {"min:0"},
+	"fetcher.discovery_interval_sec":   {"min:0"},
+	"fetcher.schema_cache_ttl_sec":     {"min:0"},
+	"fetcher.extraction_poll_sec":      {"min:0"},
+	"fetcher.extraction_timeout_sec":   {"min:0"},
 	"deduplication.ttl_sec":            {"min:1"},
 	"idempotency.retry_window_sec":     {"min:1"},
 	"idempotency.success_ttl_hours":    {"min:1"},

@@ -270,6 +270,17 @@ func bindDefaults(viperCfg *viper.Viper) {
 
 	// --- CallbackRateLimit ---
 	viperCfg.SetDefault("callback_rate_limit.per_minute", 60) //nolint:mnd // callbacks per minute
+
+	// --- Fetcher ---
+	viperCfg.SetDefault("fetcher.enabled", false)
+	viperCfg.SetDefault("fetcher.url", "http://localhost:4006")
+	viperCfg.SetDefault("fetcher.allow_private_ips", false)
+	viperCfg.SetDefault("fetcher.health_timeout_sec", 5)       //nolint:mnd // 5 seconds
+	viperCfg.SetDefault("fetcher.request_timeout_sec", 30)     //nolint:mnd // 30 seconds
+	viperCfg.SetDefault("fetcher.discovery_interval_sec", 60)  //nolint:mnd // 1 minute
+	viperCfg.SetDefault("fetcher.schema_cache_ttl_sec", 300)   //nolint:mnd // 5 minutes
+	viperCfg.SetDefault("fetcher.extraction_poll_sec", 5)      //nolint:mnd // 5 seconds
+	viperCfg.SetDefault("fetcher.extraction_timeout_sec", 600) //nolint:mnd // 10 minutes
 }
 
 // loadConfigFromYAML reads a YAML config file and unmarshals it into the given Config struct.

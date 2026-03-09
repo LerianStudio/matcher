@@ -28,8 +28,10 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/LerianStudio/lib-auth/v2/auth/middleware"
-	libCommonsLog "github.com/LerianStudio/lib-commons/v2/commons/log"
-	libCommonsZap "github.com/LerianStudio/lib-commons/v2/commons/zap"
+	// Bridge: lib-auth/v2 still depends on lib-commons/v2 log types.
+	// Keep v2 imports for the auth boundary until lib-auth migrates to v4.
+	authLog "github.com/LerianStudio/lib-commons/v2/commons/log"
+	authZap "github.com/LerianStudio/lib-commons/v2/commons/zap"
 	"github.com/LerianStudio/lib-commons/v4/commons/assert"
 	"github.com/LerianStudio/lib-commons/v4/commons/errgroup"
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
@@ -52,6 +54,15 @@ import (
 	configCommand "github.com/LerianStudio/matcher/internal/configuration/services/command"
 	configQuery "github.com/LerianStudio/matcher/internal/configuration/services/query"
 	configWorker "github.com/LerianStudio/matcher/internal/configuration/services/worker"
+	discoveryFetcher "github.com/LerianStudio/matcher/internal/discovery/adapters/fetcher"
+	discoveryHTTP "github.com/LerianStudio/matcher/internal/discovery/adapters/http"
+	discoveryConnRepo "github.com/LerianStudio/matcher/internal/discovery/adapters/postgres/connection"
+	discoveryExtractionRepo "github.com/LerianStudio/matcher/internal/discovery/adapters/postgres/extraction"
+	discoverySchemaRepo "github.com/LerianStudio/matcher/internal/discovery/adapters/postgres/schema"
+	discoveryRedis "github.com/LerianStudio/matcher/internal/discovery/adapters/redis"
+	discoveryCommand "github.com/LerianStudio/matcher/internal/discovery/services/command"
+	discoveryQuery "github.com/LerianStudio/matcher/internal/discovery/services/query"
+	discoveryWorker "github.com/LerianStudio/matcher/internal/discovery/services/worker"
 	exceptionAdapters "github.com/LerianStudio/matcher/internal/exception/adapters"
 	exceptionAudit "github.com/LerianStudio/matcher/internal/exception/adapters/audit"
 	exceptionHTTP "github.com/LerianStudio/matcher/internal/exception/adapters/http"
@@ -195,7 +206,9 @@ var (
 		return publisher.Close()
 	}
 
-	initializeAuthBoundaryLoggerFn = libCommonsZap.InitializeLoggerWithError
+	initializeAuthBoundaryLoggerFn = func() (authLog.Logger, error) {
+		return authZap.InitializeLogger(), nil //nolint:staticcheck // InitializeLoggerWithError not available in lib-auth/v2
+	}
 
 	newS3ClientFn = reportingStorage.NewS3Client
 )
@@ -445,24 +458,24 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		runtime.SetProductionMode(true)
 	}
 
+	// Create ConfigManager for runtime hot-reload support. The manager wraps
+	// the static snapshot and enables dynamic config access via Get(). The file
+	// watcher is started AFTER all infrastructure connections are established
+	// (see below) so a bad YAML edit during init cannot crash the startup.
+	configManager, configMgrErr := NewConfigManager(cfg, resolveConfigFilePath(), logger)
+	if configMgrErr != nil {
+		// Non-fatal: the service can operate with the static snapshot alone.
+		// Log the error and continue — runtime reload will be unavailable.
+		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("config manager initialization failed (continuing with static config): %v", configMgrErr))
+	}
+
 	done()
 
 	done = timer.track("telemetry")
 
 	asserter := assert.New(ctx, logger, constants.ApplicationName, "bootstrap")
 
-	// Use timeout-protected telemetry init to prevent hanging when the
-	// OTEL collector is unreachable. Falls back to no-op providers on timeout.
-	telemetryCtx, telemetryCancel := context.WithTimeout(ctx, cfg.InfraConnectTimeout())
-
-	telemetry := InitTelemetryWithTimeout(telemetryCtx, cfg, logger)
-
-	telemetryCancel()
-
-	if telemetry != nil {
-		assert.InitAssertionMetrics(telemetry.MetricsFactory)
-		runtime.InitPanicMetrics(telemetry.MetricsFactory)
-	}
+	telemetry := initTelemetryAndMetrics(ctx, cfg, logger)
 
 	done()
 
@@ -529,20 +542,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 
 	done = timer.track("auth_and_routes")
 
-	// Bridge: lib-auth still depends on lib-commons types.
-	// Create a separate lib-commons logger for the auth boundary until lib-auth migrates.
-	authLogger, authLoggerErr := initializeAuthBoundaryLogger()
-	if authLoggerErr != nil {
-		logger.Log(
-			ctx,
-			libLog.LevelWarn,
-			fmt.Sprintf("failed to initialize auth boundary logger, using no-op logger: %v", authLoggerErr),
-		)
-
-		authLogger = &libCommonsLog.NoneLogger{}
-	}
-
-	authClient := middleware.NewAuthClient(cfg.Auth.Host, cfg.Auth.Enabled, &authLogger)
+	authClient := createAuthClient(ctx, cfg, logger)
 
 	tenantExtractor, err := buildTenantExtractor(cfg)
 	if err != nil {
@@ -585,10 +585,14 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 
 	idempotencyRepo := createIdempotencyRepository(cfg, infraProvider, logger)
 
+	// Pass configManager.Get as the dynamic config getter when available.
+	// This enables hot-reload of rate limits without service restart.
+	routeConfigGetter := configGetterFuncFromManager(configManager)
+
 	routes, err := RegisterRoutes(
 		app,
 		cfg,
-		configManager.Get,
+		routeConfigGetter,
 		readiness,
 		healthDeps,
 		logger,
@@ -605,10 +609,13 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 
 	done = timer.track("modules")
 
+	// Build a configGetter for dynamic rate limiters if ConfigManager is available.
+	moduleConfigGetter := configGetterFuncFromManager(configManager)
+
 	modules, err := initModulesAndMessaging(
 		routes,
 		cfg,
-		configManager.Get,
+		moduleConfigGetter,
 		infraProvider,
 		rabbitMQConnection,
 		rateLimitStorage,
@@ -678,16 +685,23 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 			"system config API routes are disabled because AUTH_ENABLED=false")
 	}
 
-	workerMgr := NewWorkerManager(logger, configManager)
-	registerWorkerManagerSlots(workerMgr, modules)
-
-	configManager.StartWatcher()
-
 	done()
 
 	infraStatus := buildInfraStatus(cfg, postgresConnection, redisConnection, rabbitMQConnection, modules, healthDeps, telemetry)
 	logStartupInfo(logger, cfg, infraStatus)
 	logStartupTiming(logger, timer)
+
+	// Start the ConfigManager file watcher AFTER all infrastructure connections
+	// are established and modules are initialized. This ordering guarantees that
+	// a bad YAML edit mid-init cannot trigger a reload before the service is ready.
+	// Register Stop() in cleanups so the watcher goroutine is torn down on shutdown.
+	if configManager != nil {
+		configManager.StartWatcher()
+
+		cleanups = append(cleanups, configManager.Stop)
+	}
+
+	wm := buildWorkerManager(modules, configManager, logger)
 
 	success = true
 
@@ -699,7 +713,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		ConfigManager:      configManager,
 		outboxRunner:       modules.outboxDispatcher,
 		dbMetricsCollector: dbMetricsCollector,
-		workerManager:      workerMgr,
+		workerManager:      wm,
 		connectionManager:  connCloser,
 		cleanupFuncs:       cleanups,
 		readinessState:     readiness,
@@ -805,6 +819,174 @@ func registerSchedulerWorkerSlot(workerMgr *WorkerManager, modules *modulesResul
 	)
 }
 
+// registerConfigManagerRoutes creates and registers the config API handler with audit
+// publishing. All operations are best-effort: failures are logged but do not block startup.
+func registerConfigManagerRoutes(
+	ctx context.Context,
+	configManager *ConfigManager,
+	outboxRepo sharedPorts.OutboxRepository,
+	routes *Routes,
+	logger libLog.Logger,
+) {
+	if configManager == nil {
+		return
+	}
+
+	production := false
+	if cfg := configManager.Get(); cfg != nil {
+		production = IsProductionEnvironment(cfg.App.EnvName)
+	}
+
+	configAPIHandler, configAPIErr := NewConfigAPIHandler(configManager, logger, production)
+	if configAPIErr != nil {
+		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("config API handler creation failed (continuing without config API): %v", configAPIErr))
+		return
+	}
+
+	// Wire audit publisher for config change tracking.
+	// The outbox repository was created during module init (sharedOutboxRepository).
+	// This is best-effort: if audit publisher creation fails, the config API still works.
+	configAuditPublisher, auditPubErr := NewConfigAuditPublisher(outboxRepo, logger)
+	if auditPubErr != nil {
+		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("config audit publisher creation failed (config changes will not be audited): %v", auditPubErr))
+	} else {
+		configAPIHandler.SetAuditPublisher(configAuditPublisher)
+
+		// Register file-watcher audit callback so automatic reloads
+		// produce audit events with actor="system".
+		SetAuditCallback(configManager, configAuditPublisher, nil, logger) //nolint:contextcheck // subscriber callback uses background context by design
+	}
+
+	if regErr := RegisterConfigAPIRoutes(routes.Protected, configAPIHandler); regErr != nil {
+		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("config API route registration failed (continuing without config API): %v", regErr))
+	}
+}
+
+// registerCriticalWorkers registers workers that are critical when explicitly enabled
+// via config (export, cleanup, archival).
+func registerCriticalWorkers(wm *WorkerManager, modules *modulesResult) {
+	if modules.exportWorker != nil {
+		w := modules.exportWorker
+
+		wm.Register("export",
+			func(_ *Config) (WorkerLifecycle, error) { return w, nil },
+			func(cfg *Config) bool { return cfg != nil && cfg.ExportWorker.Enabled },
+			func(cfg *Config) bool { return cfg != nil && cfg.ExportWorker.Enabled },
+		)
+	}
+
+	if modules.cleanupWorker != nil {
+		w := modules.cleanupWorker
+
+		wm.Register("cleanup",
+			func(_ *Config) (WorkerLifecycle, error) { return w, nil },
+			func(cfg *Config) bool { return cfg != nil && cfg.CleanupWorker.Enabled },
+			func(cfg *Config) bool { return cfg != nil && cfg.CleanupWorker.Enabled },
+		)
+	}
+
+	if modules.archivalWorker != nil {
+		w := modules.archivalWorker
+
+		wm.Register("archival",
+			func(_ *Config) (WorkerLifecycle, error) { return w, nil },
+			func(cfg *Config) bool { return cfg != nil && cfg.Archival.Enabled },
+			func(cfg *Config) bool { return cfg != nil && cfg.Archival.Enabled },
+		)
+	}
+}
+
+// buildWorkerManager creates a WorkerManager and registers all workers from the
+// init-time module results. Each worker is wrapped in a factory closure that
+// returns the pre-built instance. The factory's cfg parameter is available for
+// future hot-reload support where workers can be reconstructed from new config.
+func buildWorkerManager(modules *modulesResult, configManager *ConfigManager, logger libLog.Logger) *WorkerManager {
+	if modules == nil {
+		return nil
+	}
+
+	wm := NewWorkerManager(logger, configManager)
+
+	registerCriticalWorkers(wm, modules)
+
+	// Scheduler worker — always non-critical.
+	if modules.schedulerWorker != nil {
+		w := modules.schedulerWorker
+
+		wm.Register("scheduler",
+			func(_ *Config) (WorkerLifecycle, error) { return w, nil },
+			func(_ *Config) bool { return true }, // always enabled when present
+			nil,                                  // never critical
+		)
+	}
+
+	// Discovery worker — always non-critical.
+	if modules.discoveryWorker != nil {
+		w := modules.discoveryWorker
+
+		wm.Register("discovery",
+			func(_ *Config) (WorkerLifecycle, error) { return w, nil },
+			func(cfg *Config) bool { return cfg != nil && cfg.Fetcher.Enabled },
+			nil, // never critical
+		)
+	}
+
+	return wm
+}
+
+// initTelemetryAndMetrics initializes OpenTelemetry with timeout protection and
+// registers assertion/panic metrics if telemetry is available.
+func initTelemetryAndMetrics(ctx context.Context, cfg *Config, logger libLog.Logger) *libOpentelemetry.Telemetry {
+	telemetryCtx, telemetryCancel := context.WithTimeout(ctx, cfg.InfraConnectTimeout()) //nolint:contextcheck // InfraConnectTimeout is a pure config accessor
+	defer telemetryCancel()
+
+	telemetry := InitTelemetryWithTimeout(telemetryCtx, cfg, logger)
+
+	if telemetry != nil {
+		assert.InitAssertionMetrics(telemetry.MetricsFactory)
+		runtime.InitPanicMetrics(telemetry.MetricsFactory)
+	}
+
+	return telemetry
+}
+
+// createAuthClient builds the authentication middleware client with a bridge logger
+// for the auth boundary that still depends on lib-commons v2 types.
+func createAuthClient(ctx context.Context, cfg *Config, logger libLog.Logger) *middleware.AuthClient {
+	authLogger, authLoggerErr := initializeAuthBoundaryLogger()
+	if authLoggerErr != nil {
+		logger.Log(
+			ctx,
+			libLog.LevelWarn,
+			fmt.Sprintf("failed to initialize auth boundary logger, using no-op logger: %v", authLoggerErr),
+		)
+
+		authLogger = &authLog.NoneLogger{}
+	}
+
+	return middleware.NewAuthClient(cfg.Auth.Host, cfg.Auth.Enabled, &authLogger)
+}
+
+// configGetterFromManager returns a slice with the ConfigManager's Get function
+// for use as variadic options, or nil if the manager is unavailable.
+func configGetterFromManager(configManager *ConfigManager) []func() *Config {
+	if configManager == nil {
+		return nil
+	}
+
+	return []func() *Config{configManager.Get}
+}
+
+// configGetterFuncFromManager returns the ConfigManager's Get function for use as
+// a dynamic config getter, or nil if the manager is unavailable.
+func configGetterFuncFromManager(configManager *ConfigManager) func() *Config {
+	if configManager == nil {
+		return nil
+	}
+
+	return configManager.Get
+}
+
 func initLogger(opts *Options) (libLog.Logger, error) {
 	if opts != nil && opts.Logger != nil {
 		return opts.Logger, nil
@@ -833,17 +1015,19 @@ func checkClientConnected[T interface{ IsConnected() (bool, error) }](client T) 
 	return connected
 }
 
-func buildWorkerStatus(cfg *Config, modules *modulesResult) (export, cleanup, archival, scheduler bool) {
+func buildWorkerStatus(cfg *Config, modules *modulesResult) (export, cleanup, archival, scheduler, discovery bool) {
 	if modules == nil {
-		return false, false, false, false
+		return false, false, false, false, false
 	}
 
 	return modules.exportWorker != nil && cfg.ExportWorker.Enabled,
 		modules.cleanupWorker != nil && cfg.CleanupWorker.Enabled,
 		modules.archivalWorker != nil && cfg.Archival.Enabled,
-		modules.schedulerWorker != nil
+		modules.schedulerWorker != nil,
+		modules.discoveryWorker != nil && cfg.Fetcher.Enabled
 }
 
+//nolint:cyclop // composition root status builder — complexity inherent from checking all infrastructure components.
 func buildInfraStatus(
 	cfg *Config,
 	postgres *libPostgres.Client,
@@ -855,7 +1039,7 @@ func buildInfraStatus(
 ) *InfraStatus {
 	pgConnected := postgres != nil && checkClientConnected(postgres)
 	redisConnected := redis != nil && checkClientConnected(redis)
-	exportEnabled, cleanupEnabled, archivalEnabled, schedulerEnabled := buildWorkerStatus(cfg, modules)
+	exportEnabled, cleanupEnabled, archivalEnabled, schedulerEnabled, discoveryEnabled := buildWorkerStatus(cfg, modules)
 
 	status := &InfraStatus{
 		PostgresConnected:      pgConnected,
@@ -867,6 +1051,7 @@ func buildInfraStatus(
 		CleanupWorkerEnabled:   cleanupEnabled,
 		ArchivalWorkerEnabled:  archivalEnabled,
 		SchedulerWorkerEnabled: schedulerEnabled,
+		DiscoveryWorkerEnabled: discoveryEnabled,
 		TelemetryConfigured:    cfg.Telemetry.Enabled,
 		TelemetryActive:        telemetry != nil && telemetry.EnableTelemetry,
 	}
@@ -1183,7 +1368,7 @@ func createRabbitMQConnection(cfg *Config, logger libLog.Logger) *libRabbitmq.Ra
 	}
 }
 
-func initializeAuthBoundaryLogger() (libCommonsLog.Logger, error) {
+func initializeAuthBoundaryLogger() (authLog.Logger, error) {
 	authLogger, authLoggerErr := initializeAuthBoundaryLoggerFn()
 	if authLoggerErr != nil {
 		return nil, fmt.Errorf("initialize auth boundary logger: %w", authLoggerErr)
@@ -1471,10 +1656,12 @@ func applySQLPoolSettings(dbs []*sql.DB, maxLifetime, maxIdle time.Duration) {
 
 type modulesResult struct {
 	outboxDispatcher *outboxServices.Dispatcher
+	outboxRepo       sharedPorts.OutboxRepository
 	exportWorker     *reportingWorker.ExportWorker
 	cleanupWorker    *reportingWorker.CleanupWorker
 	archivalWorker   *governanceWorker.ArchivalWorker
 	schedulerWorker  *configWorker.SchedulerWorker
+	discoveryWorker  *discoveryWorker.DiscoveryWorker
 }
 
 // errRabbitMQConnectionNil is returned when attempting to open a channel on a nil connection.
@@ -1534,7 +1721,7 @@ func initSharedRepositories(provider sharedPorts.InfrastructureProvider) (*share
 	}, nil
 }
 
-//nolint:cyclop,gocyclo // module initialization requires sequential dependency setup
+//nolint:cyclop,gocyclo // module initialization requires sequential dependency setup for all bounded contexts.
 func initModulesAndMessaging(
 	routes *Routes,
 	cfg *Config,
@@ -1601,13 +1788,29 @@ func initModulesAndMessaging(
 		return nil, err
 	}
 
-	dispatchLimiter := NewDispatchRateLimiter(cfg, rateLimitStorage)
+	var dispatchLimiter fiber.Handler
 	if configGetter != nil {
 		dispatchLimiter = NewDynamicDispatchRateLimiter(configGetter, rateLimitStorage)
+	} else {
+		dispatchLimiter = NewDispatchRateLimiter(cfg, rateLimitStorage)
 	}
 
 	if err := initExceptionModule(cfg, routes, provider, sharedOutboxRepository, dispatchLimiter, sharedRepos, isProduction); err != nil {
 		return nil, err
+	}
+
+	// Discovery module (optional — non-critical, gated by FETCHER_ENABLED).
+	var discWorker *discoveryWorker.DiscoveryWorker
+
+	if cfg.Fetcher.Enabled {
+		var discErr error
+
+		discWorker, discErr = initDiscoveryModule(routes, cfg, provider, sharedOutboxRepository, logger)
+		if discErr != nil {
+			logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("discovery module failed to initialize (continuing without it): %v", discErr))
+		}
+	} else {
+		logger.Log(ctx, libLog.LevelInfo, "discovery module disabled (FETCHER_ENABLED=false)")
 	}
 
 	// Create governance audit consumer for processing audit events from the outbox.
@@ -1651,9 +1854,11 @@ func initModulesAndMessaging(
 
 	return &modulesResult{
 		outboxDispatcher: outboxDispatcher,
+		outboxRepo:       sharedOutboxRepository,
 		exportWorker:     exportWorker,
 		cleanupWorker:    cleanupWorker,
 		schedulerWorker:  schedulerWorker,
+		discoveryWorker:  discWorker,
 	}, nil
 }
 
@@ -2184,9 +2389,11 @@ func initReportingModule(
 		return nil, nil, fmt.Errorf("create reporting handler: %w", err)
 	}
 
-	exportLimiter := NewExportRateLimiter(cfg, rateLimitStorage)
+	var exportLimiter fiber.Handler
 	if configGetter != nil {
 		exportLimiter = NewDynamicExportRateLimiter(configGetter, rateLimitStorage)
+	} else {
+		exportLimiter = NewExportRateLimiter(cfg, rateLimitStorage)
 	}
 
 	if err := reportingHTTP.RegisterRoutes(routes.Protected, reportingHandler, exportLimiter); err != nil {
@@ -2604,6 +2811,153 @@ func initExceptionCallbackUseCase(
 	return callbackUseCase, nil
 }
 
+// initDiscoveryModule initializes the Fetcher discovery module including HTTP handlers,
+// PG repositories, the Fetcher HTTP client, command/query use cases, and the background
+// discovery worker. This module is non-critical: failures are logged but do not prevent startup.
+func initDiscoveryModule(
+	routes *Routes,
+	cfg *Config,
+	provider sharedPorts.InfrastructureProvider,
+	tenantLister sharedPorts.TenantLister,
+	logger libLog.Logger,
+) (*discoveryWorker.DiscoveryWorker, error) {
+	// Create Fetcher HTTP client.
+	fetcherClient, err := discoveryFetcher.NewHTTPFetcherClient(discoveryFetcher.HTTPClientConfig{
+		BaseURL:         cfg.Fetcher.URL,
+		AllowPrivateIPs: cfg.Fetcher.AllowPrivateIPs,
+		HealthTimeout:   cfg.FetcherHealthTimeout(),
+		RequestTimeout:  cfg.FetcherRequestTimeout(),
+		MaxRetries:      3,                      //nolint:mnd // sensible default for transient failures
+		RetryBaseDelay:  500 * time.Millisecond, //nolint:mnd // exponential backoff base
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create fetcher client: %w", err)
+	}
+
+	// Create PG repositories.
+	connRepo := discoveryConnRepo.NewRepository(provider)
+	schemaRepo := discoverySchemaRepo.NewRepository(provider)
+	extractionRepo := discoveryExtractionRepo.NewRepository(provider)
+	// Create command use case.
+	cmdUseCase, err := discoveryCommand.NewUseCase(
+		fetcherClient,
+		connRepo,
+		schemaRepo,
+		extractionRepo,
+		logger,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create discovery command use case: %w", err)
+	}
+
+	// Create query use case.
+	queryUseCase, err := discoveryQuery.NewUseCase(
+		fetcherClient,
+		connRepo,
+		schemaRepo,
+		logger,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create discovery query use case: %w", err)
+	}
+
+	// Create HTTP handler and register routes.
+	handler, err := discoveryHTTP.NewHandler(cmdUseCase, queryUseCase)
+	if err != nil {
+		return nil, fmt.Errorf("create discovery handler: %w", err)
+	}
+
+	if err := discoveryHTTP.RegisterRoutes(routes.Protected, handler); err != nil {
+		return nil, fmt.Errorf("register discovery routes: %w", err)
+	}
+
+	// Create Redis schema cache (non-critical: log warning and continue if unavailable).
+	wireDiscoverySchemaCacheFromRedis(provider, queryUseCase, cfg, logger)
+
+	// Create extraction poller for async extraction job monitoring (non-critical).
+	extractionPoller, pollerErr := discoveryWorker.NewExtractionPoller(
+		fetcherClient,
+		extractionRepo,
+		discoveryWorker.ExtractionPollerConfig{
+			PollInterval: cfg.FetcherExtractionPollInterval(),
+			Timeout:      cfg.FetcherExtractionTimeout(),
+		},
+		logger,
+	)
+	if pollerErr != nil {
+		logger.Log(context.Background(), libLog.LevelWarn,
+			fmt.Sprintf("discovery: failed to create extraction poller: %v", pollerErr))
+	} else {
+		// Wire extraction poller into command use case.
+		cmdUseCase.WithExtractionPoller(extractionPoller)
+		logger.Log(context.Background(), libLog.LevelInfo,
+			fmt.Sprintf("discovery: extraction poller wired into command use case (poll: %s, timeout: %s)",
+				cfg.FetcherExtractionPollInterval(), cfg.FetcherExtractionTimeout()))
+	}
+
+	// Create discovery worker for background sync.
+	worker, err := discoveryWorker.NewDiscoveryWorker(
+		fetcherClient,
+		connRepo,
+		schemaRepo,
+		tenantLister,
+		provider,
+		discoveryWorker.DiscoveryWorkerConfig{
+			Interval: cfg.FetcherDiscoveryInterval(),
+		},
+		logger,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create discovery worker: %w", err)
+	}
+
+	return worker, nil
+}
+
+// wireDiscoverySchemaCacheFromRedis attempts to create a Redis-backed schema cache and
+// wire it into the query use case. This is non-critical: failures are logged as warnings.
+func wireDiscoverySchemaCacheFromRedis(
+	provider sharedPorts.InfrastructureProvider,
+	queryUseCase *discoveryQuery.UseCase,
+	cfg *Config,
+	logger libLog.Logger,
+) {
+	ctx := context.Background()
+
+	redisConn, redisErr := provider.GetRedisConnection(ctx)
+	if redisErr != nil {
+		logger.Log(ctx, libLog.LevelWarn,
+			fmt.Sprintf("discovery: failed to get redis connection for schema cache: %v", redisErr))
+
+		return
+	}
+
+	if redisConn == nil {
+		return
+	}
+
+	redisClient, clientErr := redisConn.GetClient(ctx)
+	if clientErr != nil {
+		logger.Log(ctx, libLog.LevelWarn,
+			fmt.Sprintf("discovery: failed to get redis client for schema cache: %v", clientErr))
+
+		return
+	}
+
+	schemaCache, cacheErr := discoveryRedis.NewSchemaCache(redisClient)
+	if cacheErr != nil {
+		logger.Log(ctx, libLog.LevelWarn,
+			fmt.Sprintf("discovery: failed to create schema cache: %v", cacheErr))
+
+		return
+	}
+
+	queryUseCase.WithSchemaCache(schemaCache, cfg.FetcherSchemaCacheTTL())
+
+	logger.Log(ctx, libLog.LevelInfo,
+		"discovery: schema cache wired into query use case (TTL: "+cfg.FetcherSchemaCacheTTL().String()+")")
+}
+
 // InfraStatus tracks the status of infrastructure components for consolidated logging.
 type InfraStatus struct {
 	PostgresConnected      bool
@@ -2616,6 +2970,7 @@ type InfraStatus struct {
 	CleanupWorkerEnabled   bool
 	ArchivalWorkerEnabled  bool
 	SchedulerWorkerEnabled bool
+	DiscoveryWorkerEnabled bool
 	TelemetryConfigured    bool
 	TelemetryActive        bool
 	TelemetryDegraded      bool
@@ -2704,6 +3059,7 @@ func logStartupInfo(logger libLog.Logger, cfg *Config, status *InfraStatus) {
 	logger.Log(ctx, libLog.LevelInfo, "  Cleanup Worker  : "+formatWorkerStatus(status.CleanupWorkerEnabled, time.Hour))
 	logger.Log(ctx, libLog.LevelInfo, "  Archival Worker : "+formatWorkerStatus(status.ArchivalWorkerEnabled, cfg.ArchivalInterval()))
 	logger.Log(ctx, libLog.LevelInfo, "  Scheduler Worker: "+formatWorkerStatus(status.SchedulerWorkerEnabled, time.Minute))
+	logger.Log(ctx, libLog.LevelInfo, "  Discovery Worker: "+formatWorkerStatus(status.DiscoveryWorkerEnabled, cfg.FetcherDiscoveryInterval()))
 	logger.Log(ctx, libLog.LevelInfo, "")
 
 	logger.Log(ctx, libLog.LevelInfo, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")

@@ -353,6 +353,7 @@ func TestBindDefaults_ValuesMatchDefaultConfig(t *testing.T) {
 	assert.Equal(t, defaults.RateLimit.Max, v.GetInt("rate_limit.max"))
 	assert.Equal(t, defaults.Infrastructure.ConnectTimeoutSec, v.GetInt("infrastructure.connect_timeout_sec"))
 	assert.Equal(t, defaults.Webhook.TimeoutSec, v.GetInt("webhook.timeout_sec"))
+	assert.Equal(t, defaults.Fetcher.ExtractionTimeoutSec, v.GetInt("fetcher.extraction_timeout_sec"))
 }
 
 func TestLoadConfigFromYAML_BooleanFields(t *testing.T) {

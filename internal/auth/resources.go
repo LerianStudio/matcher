@@ -23,6 +23,9 @@ const (
 	// ResourceException is the RBAC resource for exception management.
 	ResourceException = "exception"
 
+	// ResourceDiscovery is the RBAC resource for schema discovery operations.
+	ResourceDiscovery = "discovery"
+
 	// ResourceSystem is the RBAC resource for system-level operations.
 	// TODO(config-api): The external auth service (lib-auth RBAC) must be configured
 	// to recognize the "system" resource with "config:read" and "config:write" actions
@@ -110,6 +113,12 @@ const (
 	ActionExportRead     = "export:read"
 	ActionExportJobWrite = "export-job:write"
 	ActionExportJobRead  = "export-job:read"
+)
+
+// Discovery module actions.
+const (
+	ActionDiscoveryRead  = "discovery:read"
+	ActionDiscoveryWrite = "discovery:write"
 )
 
 // System module actions.

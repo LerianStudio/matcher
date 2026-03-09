@@ -194,6 +194,19 @@ type CallbackRateLimitConfig struct {
 	PerMinute int `env:"CALLBACK_RATE_LIMIT_PER_MIN" envDefault:"60" mapstructure:"per_minute"`
 }
 
+// FetcherConfig configures the optional Fetcher-backed discovery module.
+type FetcherConfig struct {
+	Enabled              bool   `env:"FETCHER_ENABLED"                envDefault:"false"                 mapstructure:"enabled"`
+	URL                  string `env:"FETCHER_URL"                    envDefault:"http://localhost:4006" mapstructure:"url"`
+	AllowPrivateIPs      bool   `env:"FETCHER_ALLOW_PRIVATE_IPS"      envDefault:"false"                 mapstructure:"allow_private_ips"`
+	HealthTimeoutSec     int    `env:"FETCHER_HEALTH_TIMEOUT_SEC"     envDefault:"5"                     mapstructure:"health_timeout_sec"`
+	RequestTimeoutSec    int    `env:"FETCHER_REQUEST_TIMEOUT_SEC"    envDefault:"30"                    mapstructure:"request_timeout_sec"`
+	DiscoveryIntervalSec int    `env:"FETCHER_DISCOVERY_INTERVAL_SEC" envDefault:"60"                    mapstructure:"discovery_interval_sec"`
+	SchemaCacheTTLSec    int    `env:"FETCHER_SCHEMA_CACHE_TTL_SEC"   envDefault:"300"                   mapstructure:"schema_cache_ttl_sec"`
+	ExtractionPollSec    int    `env:"FETCHER_EXTRACTION_POLL_SEC"    envDefault:"5"                     mapstructure:"extraction_poll_sec"`
+	ExtractionTimeoutSec int    `env:"FETCHER_EXTRACTION_TIMEOUT_SEC" envDefault:"600"                   mapstructure:"extraction_timeout_sec"`
+}
+
 // DedupeConfig configures deduplication behavior.
 type DedupeConfig struct {
 	// TTLSec configures the TTL for deduplication keys in Redis. Default: 3600 seconds.
@@ -277,6 +290,7 @@ type Config struct {
 	Archival          ArchivalConfig          `mapstructure:"archival"`
 	Webhook           WebhookConfig           `mapstructure:"webhook"`
 	CallbackRateLimit CallbackRateLimitConfig `mapstructure:"callback_rate_limit"`
+	Fetcher           FetcherConfig           `mapstructure:"fetcher"`
 
 	// ShutdownGracePeriod is the time to wait for background workers to finish
 	// after requesting stop, before closing infrastructure connections.

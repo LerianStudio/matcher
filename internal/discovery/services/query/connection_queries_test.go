@@ -1,0 +1,378 @@
+//go:build unit
+
+package query
+
+import (
+	"context"
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+
+	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
+
+	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
+	vo "github.com/LerianStudio/matcher/internal/discovery/domain/value_objects"
+	"github.com/LerianStudio/matcher/internal/discovery/ports"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+)
+
+type mockSchemaCache struct {
+	getSchemaFn func(ctx context.Context, connectionID string) (*sharedPorts.FetcherSchema, error)
+	setSchemaFn func(ctx context.Context, connectionID string, schema *sharedPorts.FetcherSchema, ttl time.Duration) error
+}
+
+var _ ports.SchemaCache = (*mockSchemaCache)(nil)
+
+func (m *mockSchemaCache) GetSchema(ctx context.Context, connectionID string) (*sharedPorts.FetcherSchema, error) {
+	if m.getSchemaFn != nil {
+		return m.getSchemaFn(ctx, connectionID)
+	}
+
+	return nil, nil
+}
+
+func (m *mockSchemaCache) SetSchema(ctx context.Context, connectionID string, schema *sharedPorts.FetcherSchema, ttl time.Duration) error {
+	if m.setSchemaFn != nil {
+		return m.setSchemaFn(ctx, connectionID, schema, ttl)
+	}
+
+	return nil
+}
+
+func (m *mockSchemaCache) InvalidateSchema(_ context.Context, _ string) error {
+	return nil
+}
+
+func TestGetDiscoveryStatus_FetcherHealthy(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	earlier := now.Add(-1 * time.Hour)
+
+	connRepo := &mockConnectionRepo{
+		findAllConns: []*entities.FetcherConnection{
+			{
+				ID:         uuid.New(),
+				LastSeenAt: earlier,
+			},
+			{
+				ID:         uuid.New(),
+				LastSeenAt: now,
+			},
+		},
+	}
+
+	uc, err := NewUseCase(
+		&mockFetcherClient{healthy: true},
+		connRepo,
+		&mockSchemaRepo{},
+		&libLog.NopLogger{},
+	)
+	require.NoError(t, err)
+
+	status, err := uc.GetDiscoveryStatus(context.Background())
+
+	require.NoError(t, err)
+	require.NotNil(t, status)
+	assert.True(t, status.FetcherHealthy)
+	assert.Equal(t, 2, status.ConnectionCount)
+	assert.Equal(t, now, status.LastSyncAt)
+}
+
+func TestGetDiscoveryStatus_FetcherUnhealthy(t *testing.T) {
+	t.Parallel()
+
+	uc, err := NewUseCase(
+		&mockFetcherClient{healthy: false},
+		&mockConnectionRepo{findAllConns: []*entities.FetcherConnection{}},
+		&mockSchemaRepo{},
+		&libLog.NopLogger{},
+	)
+	require.NoError(t, err)
+
+	status, err := uc.GetDiscoveryStatus(context.Background())
+
+	require.NoError(t, err)
+	require.NotNil(t, status)
+	assert.False(t, status.FetcherHealthy)
+	assert.Equal(t, 0, status.ConnectionCount)
+}
+
+func TestGetDiscoveryStatus_FindAllError(t *testing.T) {
+	t.Parallel()
+
+	uc, err := NewUseCase(
+		&mockFetcherClient{healthy: true},
+		&mockConnectionRepo{findAllErr: errors.New("db error")},
+		&mockSchemaRepo{},
+		&libLog.NopLogger{},
+	)
+	require.NoError(t, err)
+
+	status, err := uc.GetDiscoveryStatus(context.Background())
+
+	assert.Nil(t, status)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "list connections")
+}
+
+func TestGetDiscoveryStatus_IgnoresNilConnectionEntries(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+
+	uc, err := NewUseCase(
+		&mockFetcherClient{healthy: true},
+		&mockConnectionRepo{findAllConns: []*entities.FetcherConnection{
+			nil,
+			&entities.FetcherConnection{ID: uuid.New(), LastSeenAt: now},
+		}},
+		&mockSchemaRepo{},
+		&libLog.NopLogger{},
+	)
+	require.NoError(t, err)
+
+	status, err := uc.GetDiscoveryStatus(context.Background())
+
+	require.NoError(t, err)
+	require.NotNil(t, status)
+	assert.Equal(t, 2, status.ConnectionCount)
+	assert.Equal(t, now, status.LastSyncAt)
+}
+
+func TestListConnections_Success(t *testing.T) {
+	t.Parallel()
+
+	expected := []*entities.FetcherConnection{
+		{
+			ID:            uuid.New(),
+			FetcherConnID: "conn-1",
+			ConfigName:    "pg-primary",
+			Status:        vo.ConnectionStatusAvailable,
+		},
+		{
+			ID:            uuid.New(),
+			FetcherConnID: "conn-2",
+			ConfigName:    "mysql-read",
+			Status:        vo.ConnectionStatusUnreachable,
+		},
+	}
+
+	uc, err := NewUseCase(
+		&mockFetcherClient{healthy: true},
+		&mockConnectionRepo{findAllConns: expected},
+		&mockSchemaRepo{},
+		&libLog.NopLogger{},
+	)
+	require.NoError(t, err)
+
+	conns, err := uc.ListConnections(context.Background())
+
+	require.NoError(t, err)
+	assert.Len(t, conns, 2)
+	assert.Equal(t, expected, conns)
+}
+
+func TestListConnections_Error(t *testing.T) {
+	t.Parallel()
+
+	uc, err := NewUseCase(
+		&mockFetcherClient{healthy: true},
+		&mockConnectionRepo{findAllErr: errors.New("connection error")},
+		&mockSchemaRepo{},
+		&libLog.NopLogger{},
+	)
+	require.NoError(t, err)
+
+	conns, err := uc.ListConnections(context.Background())
+
+	assert.Nil(t, conns)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "list connections")
+}
+
+func TestGetConnection_Success(t *testing.T) {
+	t.Parallel()
+
+	connID := uuid.New()
+	expected := &entities.FetcherConnection{
+		ID:            connID,
+		FetcherConnID: "conn-abc",
+		ConfigName:    "test-pg",
+		DatabaseType:  "POSTGRES",
+		Status:        vo.ConnectionStatusAvailable,
+	}
+
+	uc, err := NewUseCase(
+		&mockFetcherClient{healthy: true},
+		&mockConnectionRepo{findByIDConn: expected},
+		&mockSchemaRepo{},
+		&libLog.NopLogger{},
+	)
+	require.NoError(t, err)
+
+	conn, err := uc.GetConnection(context.Background(), connID)
+
+	require.NoError(t, err)
+	require.NotNil(t, conn)
+	assert.Equal(t, expected, conn)
+}
+
+func TestGetConnection_Error(t *testing.T) {
+	t.Parallel()
+
+	uc, err := NewUseCase(
+		&mockFetcherClient{healthy: true},
+		&mockConnectionRepo{findByIDErr: repositories.ErrConnectionNotFound},
+		&mockSchemaRepo{},
+		&libLog.NopLogger{},
+	)
+	require.NoError(t, err)
+
+	conn, err := uc.GetConnection(context.Background(), uuid.New())
+
+	assert.Nil(t, conn)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrConnectionNotFound)
+}
+
+func TestGetConnectionSchema_Success(t *testing.T) {
+	t.Parallel()
+
+	connID := uuid.New()
+	expected := []*entities.DiscoveredSchema{
+		{
+			ID:           uuid.New(),
+			ConnectionID: connID,
+			TableName:    "transactions",
+			Columns: []entities.ColumnInfo{
+				{Name: "id", Type: "uuid", Nullable: false},
+				{Name: "amount", Type: "numeric", Nullable: false},
+			},
+		},
+		{
+			ID:           uuid.New(),
+			ConnectionID: connID,
+			TableName:    "accounts",
+			Columns: []entities.ColumnInfo{
+				{Name: "id", Type: "uuid", Nullable: false},
+				{Name: "name", Type: "varchar", Nullable: true},
+			},
+		},
+	}
+
+	uc, err := NewUseCase(
+		&mockFetcherClient{healthy: true},
+		&mockConnectionRepo{},
+		&mockSchemaRepo{findByConnID: expected},
+		&libLog.NopLogger{},
+	)
+	require.NoError(t, err)
+
+	schemas, err := uc.GetConnectionSchema(context.Background(), connID)
+
+	require.NoError(t, err)
+	assert.Len(t, schemas, 2)
+	assert.Equal(t, expected, schemas)
+}
+
+func TestGetConnectionSchema_Error(t *testing.T) {
+	t.Parallel()
+
+	uc, err := NewUseCase(
+		&mockFetcherClient{healthy: true},
+		&mockConnectionRepo{},
+		&mockSchemaRepo{findByConnErr: errors.New("schema query failed")},
+		&libLog.NopLogger{},
+	)
+	require.NoError(t, err)
+
+	schemas, err := uc.GetConnectionSchema(context.Background(), uuid.New())
+
+	assert.Nil(t, schemas)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "get connection schema")
+}
+
+func TestGetConnectionSchema_EmptyResult(t *testing.T) {
+	t.Parallel()
+
+	uc, err := NewUseCase(
+		&mockFetcherClient{healthy: true},
+		&mockConnectionRepo{},
+		&mockSchemaRepo{findByConnID: []*entities.DiscoveredSchema{}},
+		&libLog.NopLogger{},
+	)
+	require.NoError(t, err)
+
+	schemas, err := uc.GetConnectionSchema(context.Background(), uuid.New())
+
+	require.NoError(t, err)
+	assert.Empty(t, schemas)
+}
+
+func TestGetConnectionSchema_UsesCacheWhenAvailable(t *testing.T) {
+	t.Parallel()
+
+	connID := uuid.New()
+	uc, err := NewUseCase(
+		&mockFetcherClient{healthy: true},
+		&mockConnectionRepo{},
+		&mockSchemaRepo{findByConnErr: errors.New("db should not be called")},
+		&libLog.NopLogger{},
+	)
+	require.NoError(t, err)
+
+	uc.WithSchemaCache(&mockSchemaCache{
+		getSchemaFn: func(_ context.Context, connectionID string) (*sharedPorts.FetcherSchema, error) {
+			assert.Equal(t, connID.String(), connectionID)
+
+			return &sharedPorts.FetcherSchema{Tables: []sharedPorts.FetcherTableSchema{{
+				TableName: "transactions",
+				Columns:   []sharedPorts.FetcherColumnInfo{{Name: "id", Type: "uuid", Nullable: false}},
+			}}}, nil
+		},
+	}, time.Minute)
+
+	schemas, err := uc.GetConnectionSchema(context.Background(), connID)
+
+	require.NoError(t, err)
+	require.Len(t, schemas, 1)
+	assert.Equal(t, "transactions", schemas[0].TableName)
+}
+
+func TestGetConnectionSchema_FallsBackToRepositoryOnCacheError(t *testing.T) {
+	t.Parallel()
+
+	connID := uuid.New()
+	expected := []*entities.DiscoveredSchema{{
+		ID:           uuid.New(),
+		ConnectionID: connID,
+		TableName:    "accounts",
+	}}
+
+	uc, err := NewUseCase(
+		&mockFetcherClient{healthy: true},
+		&mockConnectionRepo{},
+		&mockSchemaRepo{findByConnID: expected},
+		&libLog.NopLogger{},
+	)
+	require.NoError(t, err)
+
+	uc.WithSchemaCache(&mockSchemaCache{
+		getSchemaFn: func(_ context.Context, _ string) (*sharedPorts.FetcherSchema, error) {
+			return nil, errors.New("cache unavailable")
+		},
+	}, time.Minute)
+
+	schemas, err := uc.GetConnectionSchema(context.Background(), connID)
+
+	require.NoError(t, err)
+	assert.Equal(t, expected, schemas)
+}

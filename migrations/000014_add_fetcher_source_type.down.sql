@@ -1,0 +1,4 @@
+-- PostgreSQL does not support removing enum values directly.
+-- The FETCHER value will remain in the enum type but can be ignored.
+-- To fully remove it, a migration that recreates the type would be needed.
+-- This is intentionally a no-op for safety.

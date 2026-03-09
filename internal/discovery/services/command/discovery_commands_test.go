@@ -1,0 +1,358 @@
+//go:build unit
+
+package command
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+
+	"github.com/LerianStudio/matcher/internal/auth"
+	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
+	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
+	vo "github.com/LerianStudio/matcher/internal/discovery/domain/value_objects"
+	"github.com/LerianStudio/matcher/internal/discovery/services/syncer"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+)
+
+func TestRefreshDiscovery_FetcherUnhealthy(t *testing.T) {
+	t.Parallel()
+
+	uc, err := NewUseCase(
+		&mockFetcherClient{healthy: false},
+		&mockConnectionRepo{},
+		&mockSchemaRepo{},
+		&mockExtractionRepo{},
+		&libLog.NopLogger{},
+	)
+	require.NoError(t, err)
+
+	synced, err := uc.RefreshDiscovery(context.Background())
+
+	assert.Equal(t, 0, synced)
+	require.ErrorIs(t, err, ErrFetcherUnavailable)
+}
+
+func TestRefreshDiscovery_ListConnectionsError(t *testing.T) {
+	t.Parallel()
+
+	listErr := errors.New("fetcher list error")
+	uc, err := NewUseCase(
+		&mockFetcherClient{healthy: true, listErr: listErr},
+		&mockConnectionRepo{},
+		&mockSchemaRepo{},
+		&mockExtractionRepo{},
+		&libLog.NopLogger{},
+	)
+	require.NoError(t, err)
+
+	synced, err := uc.RefreshDiscovery(context.Background())
+
+	assert.Equal(t, 0, synced)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "list fetcher connections")
+}
+
+func TestRefreshDiscovery_UsesTenantIDAsFetcherScope(t *testing.T) {
+	t.Parallel()
+
+	fetcherClient := &mockFetcherClient{healthy: true, connections: []*sharedPorts.FetcherConnection{}}
+	uc, err := NewUseCase(
+		fetcherClient,
+		&mockConnectionRepo{},
+		&mockSchemaRepo{},
+		&mockExtractionRepo{},
+		&libLog.NopLogger{},
+	)
+	require.NoError(t, err)
+
+	ctx := context.WithValue(context.Background(), auth.TenantIDKey, "22222222-2222-2222-2222-222222222222")
+
+	_, err = uc.RefreshDiscovery(ctx)
+
+	require.NoError(t, err)
+	assert.Equal(t, "22222222-2222-2222-2222-222222222222", fetcherClient.lastListOrgID)
+}
+
+func TestRefreshDiscovery_NoConnections(t *testing.T) {
+	t.Parallel()
+
+	uc, err := NewUseCase(
+		&mockFetcherClient{
+			healthy:     true,
+			connections: []*sharedPorts.FetcherConnection{},
+		},
+		&mockConnectionRepo{},
+		&mockSchemaRepo{},
+		&mockExtractionRepo{},
+		&libLog.NopLogger{},
+	)
+	require.NoError(t, err)
+
+	synced, err := uc.RefreshDiscovery(context.Background())
+
+	require.NoError(t, err)
+	assert.Equal(t, 0, synced)
+}
+
+func TestRefreshDiscovery_SuccessWithConnections(t *testing.T) {
+	t.Parallel()
+
+	connRepo := &mockConnectionRepo{}
+	schemaRepo := &mockSchemaRepo{}
+
+	uc, err := NewUseCase(
+		&mockFetcherClient{
+			healthy: true,
+			connections: []*sharedPorts.FetcherConnection{
+				{
+					ID:           "conn-1",
+					ConfigName:   "pg-primary",
+					DatabaseType: "POSTGRES",
+					Host:         "localhost",
+					Port:         5432,
+					DatabaseName: "mydb",
+				},
+				{
+					ID:           "conn-2",
+					ConfigName:   "mysql-primary",
+					DatabaseType: "MYSQL",
+					Host:         "localhost",
+					Port:         3306,
+					DatabaseName: "orders",
+				},
+			},
+			schema: &sharedPorts.FetcherSchema{
+				Tables: []sharedPorts.FetcherTableSchema{
+					{
+						TableName: "transactions",
+						Columns: []sharedPorts.FetcherColumnInfo{
+							{Name: "id", Type: "uuid", Nullable: false},
+							{Name: "amount", Type: "numeric", Nullable: false},
+						},
+					},
+				},
+			},
+		},
+		connRepo,
+		schemaRepo,
+		&mockExtractionRepo{},
+		&libLog.NopLogger{},
+	)
+	require.NoError(t, err)
+
+	synced, err := uc.RefreshDiscovery(context.Background())
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, synced)
+	// Each connection is upserted once for initial save, then once more after schema discovery.
+	assert.Equal(t, 4, connRepo.upsertCount)
+	assert.Equal(t, 2, schemaRepo.upsertCount)
+}
+
+func TestRefreshDiscovery_PreservesFetcherReportedStatus(t *testing.T) {
+	t.Parallel()
+
+	var capturedStatus vo.ConnectionStatus
+
+	connRepo := &mockConnectionRepo{
+		findByFetcherErr: repositories.ErrConnectionNotFound,
+		upsertFn: func(_ context.Context, conn *entities.FetcherConnection) error {
+			capturedStatus = conn.Status
+
+			return nil
+		},
+	}
+
+	uc, err := NewUseCase(
+		&mockFetcherClient{
+			healthy: true,
+			connections: []*sharedPorts.FetcherConnection{{
+				ID:           "conn-1",
+				ConfigName:   "pg-primary",
+				DatabaseType: "POSTGRES",
+				Status:       "UNREACHABLE",
+			}},
+			schemaErr: errors.New("schema fetch failed"),
+		},
+		connRepo,
+		&mockSchemaRepo{},
+		&mockExtractionRepo{},
+		&libLog.NopLogger{},
+	)
+	require.NoError(t, err)
+
+	_, err = uc.RefreshDiscovery(context.Background())
+
+	require.NoError(t, err)
+	assert.Equal(t, vo.ConnectionStatusUnreachable, capturedStatus)
+}
+
+func TestRefreshDiscovery_ConnectionUpsertError_ContinuesToNext(t *testing.T) {
+	t.Parallel()
+
+	connRepo := &mockConnectionRepo{upsertErr: errors.New("upsert failed")}
+
+	uc, err := NewUseCase(
+		&mockFetcherClient{
+			healthy: true,
+			connections: []*sharedPorts.FetcherConnection{
+				{
+					ID:           "conn-1",
+					ConfigName:   "pg-primary",
+					DatabaseType: "POSTGRES",
+				},
+				{
+					ID:           "conn-2",
+					ConfigName:   "mysql-primary",
+					DatabaseType: "MYSQL",
+				},
+			},
+		},
+		connRepo,
+		&mockSchemaRepo{},
+		&mockExtractionRepo{},
+		&libLog.NopLogger{},
+	)
+	require.NoError(t, err)
+
+	synced, err := uc.RefreshDiscovery(context.Background())
+
+	require.NoError(t, err)
+	// Both should fail to upsert, but no fatal error; synced should be 0.
+	assert.Equal(t, 0, synced)
+}
+
+func TestRefreshDiscovery_SchemaDiscoveryError_NonFatal(t *testing.T) {
+	t.Parallel()
+
+	connRepo := &mockConnectionRepo{}
+	schemaRepo := &mockSchemaRepo{}
+
+	uc, err := NewUseCase(
+		&mockFetcherClient{
+			healthy: true,
+			connections: []*sharedPorts.FetcherConnection{
+				{
+					ID:           "conn-1",
+					ConfigName:   "pg-primary",
+					DatabaseType: "POSTGRES",
+				},
+			},
+			schemaErr: errors.New("schema fetch failed"),
+		},
+		connRepo,
+		schemaRepo,
+		&mockExtractionRepo{},
+		&libLog.NopLogger{},
+	)
+	require.NoError(t, err)
+
+	synced, err := uc.RefreshDiscovery(context.Background())
+
+	require.NoError(t, err)
+	// Connection is saved successfully even though schema failed.
+	assert.Equal(t, 1, synced)
+	assert.Equal(t, 1, connRepo.upsertCount)
+	assert.Equal(t, 0, schemaRepo.upsertCount)
+}
+
+func TestRefreshDiscovery_EmptySchemaTables_Skipped(t *testing.T) {
+	t.Parallel()
+
+	connRepo := &mockConnectionRepo{}
+	schemaRepo := &mockSchemaRepo{}
+
+	uc, err := NewUseCase(
+		&mockFetcherClient{
+			healthy: true,
+			connections: []*sharedPorts.FetcherConnection{
+				{
+					ID:           "conn-1",
+					ConfigName:   "pg-primary",
+					DatabaseType: "POSTGRES",
+				},
+			},
+			schema: &sharedPorts.FetcherSchema{
+				Tables: []sharedPorts.FetcherTableSchema{},
+			},
+		},
+		connRepo,
+		schemaRepo,
+		&mockExtractionRepo{},
+		&libLog.NopLogger{},
+	)
+	require.NoError(t, err)
+
+	synced, err := uc.RefreshDiscovery(context.Background())
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, synced)
+	// Connection saved once (no schema update since tables are empty).
+	assert.Equal(t, 1, connRepo.upsertCount)
+	assert.Equal(t, 0, schemaRepo.upsertCount)
+}
+
+func TestRefreshDiscovery_SchemaUpsertBatchError(t *testing.T) {
+	t.Parallel()
+
+	connRepo := &mockConnectionRepo{}
+	schemaRepo := &mockSchemaRepo{upsertBatchErr: errors.New("batch insert failed")}
+
+	uc, err := NewUseCase(
+		&mockFetcherClient{
+			healthy: true,
+			connections: []*sharedPorts.FetcherConnection{
+				{
+					ID:           "conn-1",
+					ConfigName:   "pg-primary",
+					DatabaseType: "POSTGRES",
+				},
+			},
+			schema: &sharedPorts.FetcherSchema{
+				Tables: []sharedPorts.FetcherTableSchema{
+					{
+						TableName: "users",
+						Columns: []sharedPorts.FetcherColumnInfo{
+							{Name: "id", Type: "int", Nullable: false},
+						},
+					},
+				},
+			},
+		},
+		connRepo,
+		schemaRepo,
+		&mockExtractionRepo{},
+		&libLog.NopLogger{},
+	)
+	require.NoError(t, err)
+
+	synced, err := uc.RefreshDiscovery(context.Background())
+
+	require.NoError(t, err)
+	// Connection sync succeeds even though schema upsert batch failed (non-fatal).
+	assert.Equal(t, 1, synced)
+}
+
+func TestSyncSchema_NilSchema(t *testing.T) {
+	t.Parallel()
+
+	cs, _ := syncer.NewConnectionSyncer(&mockConnectionRepo{}, &mockSchemaRepo{})
+	conn, _ := newTestConnection(t)
+
+	err := cs.SyncSchema(context.Background(), conn, nil)
+
+	require.NoError(t, err)
+}
+
+// newTestConnection is a test helper that creates a valid FetcherConnection entity.
+func newTestConnection(t *testing.T) (*entities.FetcherConnection, error) {
+	t.Helper()
+
+	return entities.NewFetcherConnection(context.Background(), "test-conn-id", "test-config", "POSTGRES")
+}
