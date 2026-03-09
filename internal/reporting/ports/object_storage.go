@@ -3,7 +3,7 @@
 // and is re-exported here as a type alias for backward compatibility.
 package ports
 
-//go:generate mockgen -source=object_storage.go -destination=mocks/object_storage_client_mock.go -package=mocks
+//go:generate mockgen -destination=mocks/object_storage_client_mock.go -package=mocks github.com/LerianStudio/matcher/internal/shared/ports ObjectStorageClient
 
 import (
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
