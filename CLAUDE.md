@@ -275,7 +275,7 @@ func (h *MatchHandler) RunMatch(c *fiber.Ctx) error {
 - Error wrapping with `fmt.Errorf("context: %w", err)`
 - Check with `errors.Is(err, ErrNotFound)`
 - Custom error types when extra context needed
-- Trace errors via `libOpentelemetry.HandleSpanError(&span, "msg", err)`
+- Trace errors via `libOpentelemetry.HandleSpanError(span, "msg", err)`
 
 **Example**:
 ```go
