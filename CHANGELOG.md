@@ -1,3 +1,20 @@
+## [1.1.0-beta.10](https://github.com/LerianStudio/matcher/compare/v1.1.0-beta.9...v1.1.0-beta.10) (2026-03-09)
+
+
+### Features
+
+* **configuration:** add FETCHER source type and regenerate OpenAPI specs ([a96dae8](https://github.com/LerianStudio/matcher/commit/a96dae83133847ca69b1f05e3645949c80d3a7f4))
+* **ci:** changelog ([8ef8d41](https://github.com/LerianStudio/matcher/commit/8ef8d41af905c2789211dbb20c5ffd28b82ecc5a))
+
+
+### Bug Fixes
+
+* **lint:** exclude gosec G118 false-positives for cross-function cancel propagation ([3e714ba](https://github.com/LerianStudio/matcher/commit/3e714ba76b6fbdfc2223d73bd5029758dbb5cb88))
+* regenerate broken mocks for type-aliased interfaces and correct nosec directive ([e261521](https://github.com/LerianStudio/matcher/commit/e2615212eb1c8322ead879a364e0ebc9395ddcd3))
+* resolve data race on productionMode and remove stale nolint:gosec directives ([6045dd1](https://github.com/LerianStudio/matcher/commit/6045dd16d36aeec5e664ee13bf60ac53c388debd))
+* **lint:** revert nosec G107 to G704 and scope G118 exclusions to specific files ([b79833d](https://github.com/LerianStudio/matcher/commit/b79833dc8c236c1efb8b9bfb6951ec2843136012))
+* **governance:** truncate test timestamps to microsecond precision for sqlmock ([14b8cd1](https://github.com/LerianStudio/matcher/commit/14b8cd19e6db45a6b0504ceb81f13d9a7621a4f7))
+
 ## [1.1.0-beta.9](https://github.com/LerianStudio/matcher/compare/v1.1.0-beta.8...v1.1.0-beta.9) (2026-03-05)
 
 
