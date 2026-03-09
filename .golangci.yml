@@ -1011,10 +1011,20 @@ linters:
           - gosec
         text: 'G306: Expect WriteFile permissions to be 0600 or less'
       # G118 false-positives: cancel funcs returned to callers or stored in structs
-      # are invisible to gosec's intra-procedural analysis.
+      # are invisible to gosec's intra-procedural analysis. Scoped to the three
+      # files where this pattern is legitimate.
       - linters:
           - gosec
         text: G118
+        path: internal/matching/services/command/match_group_commands\.go
+      - linters:
+          - gosec
+        text: G118
+        path: internal/reporting/services/worker/export_worker\.go
+      - linters:
+          - gosec
+        text: G118
+        path: internal/shared/infrastructure/tenant/adapters/connection_manager\.go
       - linters:
           - errcheck
           - gosec
