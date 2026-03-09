@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
 
-	libPostgres "github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres"
+	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
 
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 )

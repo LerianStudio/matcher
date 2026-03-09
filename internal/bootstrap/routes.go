@@ -9,8 +9,8 @@ import (
 	fiberSwagger "github.com/swaggo/fiber-swagger"
 
 	authMiddleware "github.com/LerianStudio/lib-auth/v2/auth/middleware"
-	"github.com/LerianStudio/lib-uncommons/v2/uncommons/assert"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
+	"github.com/LerianStudio/lib-commons/v4/commons/assert"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 
 	swagger "github.com/LerianStudio/matcher/docs/swagger"
 	"github.com/LerianStudio/matcher/internal/auth"

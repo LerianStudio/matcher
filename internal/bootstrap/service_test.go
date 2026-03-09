@@ -17,8 +17,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 )

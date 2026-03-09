@@ -12,10 +12,10 @@ import (
 	"strings"
 	"time"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	"github.com/LerianStudio/lib-uncommons/v2/uncommons/assert"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libZap "github.com/LerianStudio/lib-uncommons/v2/uncommons/zap"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	"github.com/LerianStudio/lib-commons/v4/commons/assert"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libZap "github.com/LerianStudio/lib-commons/v4/commons/zap"
 
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
@@ -878,7 +878,7 @@ func (cfg *Config) SchedulerInterval() time.Duration {
 
 // validateArchivalConfig validates archival worker configuration.
 // Retention and batch validations only run when archival is enabled because
-// lib-uncommons.SetConfigFromEnvVars does not apply envDefault tags -- fields
+// lib-commons.SetConfigFromEnvVars does not apply envDefault tags -- fields
 // default to Go zero values when env vars are absent.
 func (cfg *Config) validateArchivalConfig(asserter *assert.Asserter) error {
 	if !cfg.Archival.Enabled {

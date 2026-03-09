@@ -619,17 +619,17 @@ linters:
               desc: "Domain purity violation: avoid logging in domain layer."
             - pkg: "go.opentelemetry.io/otel"
               desc: "Domain purity violation: avoid tracing in domain layer."
-            - pkg: "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
+            - pkg: "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
               desc: "Domain purity violation: avoid tracing in domain layer."
-            - pkg: "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
+            - pkg: "github.com/LerianStudio/lib-commons/v4/commons/log"
               desc: "Domain purity violation: avoid logging in domain layer."
-            - pkg: "github.com/LerianStudio/lib-uncommons/v2/uncommons/zap"
+            - pkg: "github.com/LerianStudio/lib-commons/v4/commons/zap"
               desc: "Domain purity violation: avoid logging in domain layer."
-            - pkg: "github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres"
+            - pkg: "github.com/LerianStudio/lib-commons/v4/commons/postgres"
               desc: "Domain purity violation: avoid infrastructure dependencies in domain layer."
-            - pkg: "github.com/LerianStudio/lib-uncommons/v2/uncommons/redis"
+            - pkg: "github.com/LerianStudio/lib-commons/v4/commons/redis"
               desc: "Domain purity violation: avoid infrastructure dependencies in domain layer."
-            - pkg: "github.com/LerianStudio/lib-uncommons/v2/uncommons/rabbitmq"
+            - pkg: "github.com/LerianStudio/lib-commons/v4/commons/rabbitmq"
               desc: "Domain purity violation: avoid infrastructure dependencies in domain layer."
         # ===========================================
         # Shared Kernel Boundaries
@@ -779,11 +779,11 @@ linters:
         - "func (*github.com/gofiber/fiber/v2.Ctx).JSON(data interface{}, ctype ...string) error"
         - "func (*github.com/gofiber/fiber/v2.Ctx).SendString(body string) error"
         - "func (*github.com/gofiber/fiber/v2.App).Listen(addr string) error"
-        # lib-uncommons HTTP response helpers - terminal operations in handlers
-        - "func github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http.Respond(c *github.com/gofiber/fiber/v2.Ctx, status int, payload any) error"
-        - "func github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http.RespondStatus(c *github.com/gofiber/fiber/v2.Ctx, status int) error"
-        - "func github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http.RespondError(c *github.com/gofiber/fiber/v2.Ctx, status int, title string, message string) error"
-        - "func github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http.RenderError(ctx *github.com/gofiber/fiber/v2.Ctx, err error) error"
+        # lib-commons HTTP response helpers - terminal operations in handlers
+        - "func github.com/LerianStudio/lib-commons/v4/commons/net/http.Respond(c *github.com/gofiber/fiber/v2.Ctx, status int, payload any) error"
+        - "func github.com/LerianStudio/lib-commons/v4/commons/net/http.RespondStatus(c *github.com/gofiber/fiber/v2.Ctx, status int) error"
+        - "func github.com/LerianStudio/lib-commons/v4/commons/net/http.RespondError(c *github.com/gofiber/fiber/v2.Ctx, status int, title string, message string) error"
+        - "func github.com/LerianStudio/lib-commons/v4/commons/net/http.RenderError(ctx *github.com/gofiber/fiber/v2.Ctx, err error) error"
         # pkg/http error response helpers - terminal HTTP operations
         - "func github.com/LerianStudio/matcher/pkg/http.WriteError(c *github.com/gofiber/fiber/v2.Ctx, status int, title string, message string) error"
         - "func github.com/LerianStudio/matcher/pkg/http.BadRequestError(c *github.com/gofiber/fiber/v2.Ctx, title string, message string) error"
@@ -808,13 +808,13 @@ linters:
         - "func (*database/sql.Rows).Err() error"
         - "func (database/sql.Result).RowsAffected() (int64, error)"
         # Internal WithTenantTx helper - already handles tenant context and error wrapping
-        - "func github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/common.WithTenantTx[T any](ctx context.Context, conn *github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres.PostgresConnection, fn func(*database/sql.Tx) (T, error)) (T, error)"
+        - "func github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/common.WithTenantTx[T any](ctx context.Context, conn *github.com/LerianStudio/lib-commons/v4/commons/postgres.Client, fn func(*database/sql.Tx) (T, error)) (T, error)"
         # InfrastructureProvider interface methods - thin wrapper for tenant-aware connection resolution
-        - "func (github.com/LerianStudio/matcher/internal/shared/ports.InfrastructureProvider).GetPostgresConnection(ctx context.Context) (*github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres.PostgresConnection, error)"
-        - "func (github.com/LerianStudio/matcher/internal/shared/ports.InfrastructureProvider).GetRedisConnection(ctx context.Context) (*github.com/LerianStudio/lib-uncommons/v2/uncommons/redis.RedisConnection, error)"
+        - "func (github.com/LerianStudio/matcher/internal/shared/ports.InfrastructureProvider).GetPostgresConnection(ctx context.Context) (*github.com/LerianStudio/lib-commons/v4/commons/postgres.Client, error)"
+        - "func (github.com/LerianStudio/matcher/internal/shared/ports.InfrastructureProvider).GetRedisConnection(ctx context.Context) (*github.com/LerianStudio/lib-commons/v4/commons/redis.Client, error)"
         # Interface Scan method
         - "func (interface).Scan(dest ...any) error"
-        # Additional lib-uncommons HTTP helpers
+        # Additional lib-commons HTTP helpers
         # JSON marshal operations - typically handled locally
         - "func encoding/json.Marshal(v any) ([]byte, error)"
         - "func encoding/json.Unmarshal(data []byte, v any) error"
@@ -1010,6 +1010,21 @@ linters:
       - linters:
           - gosec
         text: 'G306: Expect WriteFile permissions to be 0600 or less'
+      # G118 false-positives: cancel funcs returned to callers or stored in structs
+      # are invisible to gosec's intra-procedural analysis. Scoped to the three
+      # files where this pattern is legitimate.
+      - linters:
+          - gosec
+        text: G118
+        path: internal/matching/services/command/match_group_commands\.go
+      - linters:
+          - gosec
+        text: G118
+        path: internal/reporting/services/worker/export_worker\.go
+      - linters:
+          - gosec
+        text: G118
+        path: internal/shared/infrastructure/tenant/adapters/connection_manager\.go
       - linters:
           - errcheck
           - gosec

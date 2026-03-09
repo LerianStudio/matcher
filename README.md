@@ -70,7 +70,7 @@ Matcher is built as a modular monolith with DDD, hexagonal architecture, and CQR
 - **CQRS-Light**: Separate command and query use cases for clarity and performance
 - **Schema-Per-Tenant**: PostgreSQL search_path isolation per tenant
 - **Outbox Pattern**: Reliable event publication for ingestion workflows
-- **OpenTelemetry**: Standard tracing and metrics via lib-uncommons
+- **OpenTelemetry**: Standard tracing and metrics via lib-commons
 - **Runtime Safety**: `pkg/assert` and `pkg/runtime` for invariant enforcement
 - **Fee Schedule Engine**: Net-to-gross normalization with parallel and cascading fee application
 - **Export Pipeline**: Async export jobs with S3-compatible object storage and presigned URLs

@@ -314,9 +314,13 @@ check-coverage: test
 # Test Commands
 #-------------------------------------------------------
 
-.PHONY: test test-unit test-int test-e2e test-e2e-dashboard test-chaos test-all cover
+.PHONY: test test-unit coverage-unit test-int test-e2e test-e2e-dashboard test-chaos test-all cover
 
 test: test-unit
+
+## CI-facing target: runs unit tests and produces coverage.txt for shared workflow artifact collection.
+coverage-unit: test-unit
+	@cp $(COVER_PROFILE_UNIT) coverage.txt
 
 test-unit:
 	$(call print_title,Running unit tests)

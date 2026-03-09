@@ -1,10 +1,10 @@
 package ports
 
-import "github.com/LerianStudio/lib-uncommons/v2/uncommons"
+import libCommons "github.com/LerianStudio/lib-commons/v4/commons"
 
 // Dispatcher runs background tasks (e.g., outbox processing).
 // Implementations should block until stopped.
 type Dispatcher interface {
-	Run(launcher *uncommons.Launcher) error
+	Run(launcher *libCommons.Launcher) error
 	Stop()
 }

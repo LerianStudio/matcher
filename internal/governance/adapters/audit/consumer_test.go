@@ -15,9 +15,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	sharedhttp "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	sharedhttp "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
 	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/testutil"

@@ -13,10 +13,10 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	pkghttp "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	pkghttp "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 )

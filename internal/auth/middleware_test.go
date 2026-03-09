@@ -21,7 +21,7 @@ import (
 
 	authMiddleware "github.com/LerianStudio/lib-auth/v2/auth/middleware"
 
-	"github.com/LerianStudio/lib-uncommons/v2/uncommons/jwt"
+	"github.com/LerianStudio/lib-commons/v4/commons/jwt"
 )
 
 const testTokenSecret = "secret"

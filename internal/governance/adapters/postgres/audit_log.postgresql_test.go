@@ -18,10 +18,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libPostgres "github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres"
-	libRedis "github.com/LerianStudio/lib-uncommons/v2/uncommons/redis"
+	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
+	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
 
-	sharedhttp "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	sharedhttp "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"

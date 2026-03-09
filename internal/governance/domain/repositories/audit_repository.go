@@ -3,7 +3,7 @@
 // and is re-exported here as a type alias for backward compatibility.
 package repositories
 
-//go:generate mockgen -source=audit_repository.go -destination=mocks/audit_repository_mock.go -package=mocks
+//go:generate mockgen -destination=mocks/audit_repository_mock.go -package=mocks github.com/LerianStudio/matcher/internal/shared/ports AuditLogRepository
 
 import (
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"

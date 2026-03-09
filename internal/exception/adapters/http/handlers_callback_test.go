@@ -19,7 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace/noop"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
 
 	"github.com/LerianStudio/matcher/internal/exception/services/command"
 	"github.com/LerianStudio/matcher/internal/exception/services/query"
@@ -292,6 +292,7 @@ func TestNewHandlers_NilCallbackUseCase(t *testing.T) {
 		nil,
 		exceptionProvider,
 		disputeProvider,
+		false,
 	)
 
 	assert.Nil(t, handlers)
@@ -344,6 +345,7 @@ func newCallbackTestHandlers(t *testing.T) *Handlers {
 		&command.CallbackUseCase{},
 		exceptionProvider,
 		disputeProvider,
+		false,
 	)
 	require.NoError(t, err)
 

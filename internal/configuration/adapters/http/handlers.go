@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"strings"
+	"sync/atomic"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -13,10 +14,10 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/http/dto"
@@ -36,6 +37,12 @@ var (
 	// ErrRuleIDsRequired is returned when rule IDs are not provided.
 	ErrRuleIDsRequired = errors.New("rule IDs are required")
 )
+
+// productionMode indicates whether the application is running in production.
+// Set once during handler construction via NewHandler; governs SafeError behavior
+// (suppresses internal error details in client responses when true).
+// Uses atomic.Bool because parallel tests construct handlers concurrently.
+var productionMode atomic.Bool
 
 // Handler handles HTTP requests for configuration operations.
 type Handler struct {
@@ -59,7 +66,7 @@ func startHandlerSpan(c *fiber.Ctx, name string) (context.Context, trace.Span, l
 
 func logSpanError(ctx context.Context, span trace.Span, logger libLog.Logger, message string, err error) {
 	libOpentelemetry.HandleSpanError(span, message, err)
-	libLog.SafeError(logger, ctx, message, err, false)
+	libLog.SafeError(logger, ctx, message, err, productionMode.Load())
 }
 
 func badRequest(
@@ -170,7 +177,7 @@ func handleOwnershipVerificationError(
 }
 
 // NewHandler creates a new configuration handler.
-func NewHandler(commandUseCase *command.UseCase, queryUseCase *query.UseCase) (*Handler, error) {
+func NewHandler(commandUseCase *command.UseCase, queryUseCase *query.UseCase, production bool) (*Handler, error) {
 	if commandUseCase == nil {
 		return nil, ErrNilCommandUseCase
 	}
@@ -178,6 +185,8 @@ func NewHandler(commandUseCase *command.UseCase, queryUseCase *query.UseCase) (*
 	if queryUseCase == nil {
 		return nil, ErrNilQueryUseCase
 	}
+
+	productionMode.Store(production)
 
 	return &Handler{
 		command:         commandUseCase,
@@ -648,7 +657,7 @@ func (handler *Handler) CreateSource(fiberCtx *fiber.Ctx) error {
 // @Param contextId path string true "Context ID" format(uuid)
 // @Param limit query int false "Maximum number of records to return" default(20) minimum(1) maximum(200)
 // @Param cursor query string false "Cursor for pagination (opaque)"
-// @Param type query string false "Filter by source type" Enums(LEDGER,BANK,GATEWAY,CUSTOM)
+// @Param type query string false "Filter by source type" Enums(LEDGER,BANK,GATEWAY,CUSTOM,FETCHER)
 // @Success 200 {object} ListSourcesResponse "List of sources with cursor pagination"
 // @Failure 400 {object} ErrorResponse "Invalid query parameters"
 // @Failure 401 {object} ErrorResponse "Unauthorized"

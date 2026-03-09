@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
 	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/repositories/mocks"

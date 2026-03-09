@@ -16,11 +16,11 @@ import (
 	"go.opentelemetry.io/otel/codes"
 
 	"github.com/LerianStudio/lib-auth/v2/auth/middleware"
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	"github.com/LerianStudio/lib-uncommons/v2/uncommons/assert"
-	"github.com/LerianStudio/lib-uncommons/v2/uncommons/jwt"
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	"github.com/LerianStudio/lib-commons/v4/commons/assert"
+	"github.com/LerianStudio/lib-commons/v4/commons/jwt"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )

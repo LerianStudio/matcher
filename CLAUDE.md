@@ -275,7 +275,7 @@ func (h *MatchHandler) RunMatch(c *fiber.Ctx) error {
 - Error wrapping with `fmt.Errorf("context: %w", err)`
 - Check with `errors.Is(err, ErrNotFound)`
 - Custom error types when extra context needed
-- Trace errors via `libOpentelemetry.HandleSpanError(&span, "msg", err)`
+- Trace errors via `libOpentelemetry.HandleSpanError(span, "msg", err)`
 
 **Example**:
 ```go
@@ -485,13 +485,13 @@ All env vars are documented in `config/.env.example` and loaded via `internal/bo
 
 **Primary/Replica Setup**:
 - Write operations use primary connection
-- Read operations can use replica (via lib-uncommons)
+- Read operations can use replica (via lib-commons)
 - Connection pooling configured via `POSTGRES_MAX_OPEN_CONNS`, `POSTGRES_MAX_IDLE_CONNS`
 
 **Redis Modes**:
 - Standalone: Set `REDIS_HOST`
 - Sentinel: Set `REDIS_MASTER_NAME` + `REDIS_HOST` (comma-separated sentinels)
-- Cluster: Handled by lib-uncommons based on `REDIS_PROTOCOL`
+- Cluster: Handled by lib-commons based on `REDIS_PROTOCOL`
 
 ## Required Libraries
 
@@ -502,12 +502,12 @@ All env vars are documented in `config/.env.example` and loaded via `internal/bo
   - Authorization: `auth.Authorize(serviceName, "resource", "action")`
   - Apply tenant schema: `auth.ApplyTenantSchema(ctx, tx)`
 
-- **lib-uncommons**: Common utilities, telemetry, infrastructure
+- **lib-commons/v4**: Common utilities, telemetry, infrastructure
   - Tracking: `libCommons.NewTrackingFromContext(ctx)` → logger, tracer, headerID
-  - OpenTelemetry: `libOpentelemetry.HandleSpanError(&span, "msg", err)`
-  - Database: `database.NewPostgreSQLConnection()`, `database.NewPrimaryReplicaConnection()`
-  - Redis: `redis.NewRedisClient()`
-  - Messaging: `messaging.NewRabbitMQ()`
+  - OpenTelemetry: `libOpentelemetry.HandleSpanError(span, "msg", err)`
+  - Database: `libPostgres.New()` / `libPostgres.NewPrimaryReplica()`
+  - Redis: `libRedis.New()`
+  - Messaging: `libRabbitmq.New()`
 
 ### Internal Packages
 
@@ -691,7 +691,7 @@ go tool trace trace.out
 ## Reference Codebases
 
 Located in `.references/` (if available):
-- **lib-uncommons**: DB connections, Redis, RabbitMQ, telemetry, graceful shutdown
+- **lib-commons**: DB connections, Redis, RabbitMQ, telemetry, graceful shutdown
 - **lib-auth**: JWT extraction, authorization middleware patterns
 - **midaz**: Hexagonal structure reference, CQRS separation, migration naming
 

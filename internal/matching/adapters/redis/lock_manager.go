@@ -12,7 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
-	libRedis "github.com/LerianStudio/lib-uncommons/v2/uncommons/redis"
+	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/matching/ports"

@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	libPostgres "github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres"
+	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
 	toxiproxy "github.com/Shopify/toxiproxy/v2/client"
 	"github.com/bxcodec/dbresolver/v2"
 	"github.com/golang-migrate/migrate/v4"

@@ -6,8 +6,8 @@ import (
 	"database/sql"
 	"time"
 
-	libPostgres "github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres"
-	libRedis "github.com/LerianStudio/lib-uncommons/v2/uncommons/redis"
+	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
+	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
 )
 
 // TenantConfig holds infrastructure configuration for a specific tenant.

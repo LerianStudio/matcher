@@ -11,9 +11,9 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"go.opentelemetry.io/otel/trace"
 
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/matching/adapters/http/dto"
@@ -451,7 +451,7 @@ func handleRunMatchError(
 		libOpentelemetry.HandleSpanError(span, "failed to run match", err)
 	}
 
-	libLog.SafeError(logger, ctx, "failed to run match", err, false)
+	libLog.SafeError(logger, ctx, "failed to run match", err, productionMode.Load())
 
 	return mapRunMatchErrorToResponse(ctx, fiberCtx, span, logger, err)
 }

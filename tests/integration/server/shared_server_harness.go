@@ -13,7 +13,7 @@ import (
 	"sync"
 	"testing"
 
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/LerianStudio/matcher/internal/bootstrap"

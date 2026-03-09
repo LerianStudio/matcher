@@ -12,9 +12,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libPostgres "github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres"
-	libRedis "github.com/LerianStudio/lib-uncommons/v2/uncommons/redis"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
+	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	configPorts "github.com/LerianStudio/matcher/internal/configuration/ports"

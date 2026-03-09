@@ -8,8 +8,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/LerianStudio/lib-uncommons/v2/uncommons/assert"
-	"github.com/LerianStudio/lib-uncommons/v2/uncommons/cron"
+	"github.com/LerianStudio/lib-commons/v4/commons/assert"
+	"github.com/LerianStudio/lib-commons/v4/commons/cron"
 
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )

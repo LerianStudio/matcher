@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	authMiddleware "github.com/LerianStudio/lib-auth/v2/auth/middleware"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 
 	swagger "github.com/LerianStudio/matcher/docs/swagger"
 	"github.com/LerianStudio/matcher/internal/auth"

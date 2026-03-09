@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 )
 
 // startupTimer tracks the duration of each bootstrap phase.
@@ -58,8 +58,8 @@ func (st *startupTimer) track(name string) func() {
 	}
 }
 
-// total returns the wall-clock time since the timer was created.
-func (st *startupTimer) total() time.Duration {
+// elapsed returns the wall-clock time since the timer was created.
+func (st *startupTimer) elapsed() time.Duration {
 	return time.Since(st.start)
 }
 
@@ -88,7 +88,7 @@ func logStartupTiming(logger libLog.Logger, timer *startupTimer) {
 	}
 
 	logger.Log(ctx, level, "--------------------------------------------------------------")
-	logger.Log(ctx, level, fmt.Sprintf("  %-22s: %s", "TOTAL", formatDuration(timer.total())))
+	logger.Log(ctx, level, fmt.Sprintf("  %-22s: %s", "TOTAL", formatDuration(timer.elapsed())))
 	logger.Log(ctx, level, "--------------------------------------------------------------")
 }
 

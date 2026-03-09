@@ -17,9 +17,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
-	libPostgres "github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres"
-	libRedis "github.com/LerianStudio/lib-uncommons/v2/uncommons/redis"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
+	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	governanceEntities "github.com/LerianStudio/matcher/internal/governance/domain/entities"

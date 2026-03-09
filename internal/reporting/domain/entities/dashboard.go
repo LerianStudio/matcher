@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 
-	"github.com/LerianStudio/lib-uncommons/v2/uncommons/safe"
+	"github.com/LerianStudio/lib-commons/v4/commons/safe"
 )
 
 const (

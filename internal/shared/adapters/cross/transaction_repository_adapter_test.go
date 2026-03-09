@@ -13,8 +13,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libPostgres "github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres"
-	libRedis "github.com/LerianStudio/lib-uncommons/v2/uncommons/redis"
+	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
+	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
 
 	ingestionTxRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/transaction"
 	matchingRepos "github.com/LerianStudio/matcher/internal/matching/domain/repositories"

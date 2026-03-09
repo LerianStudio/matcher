@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -13,10 +14,10 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/reporting/adapters/http/dto"
@@ -70,6 +71,12 @@ type contextProvider interface {
 	FindByID(ctx context.Context, tenantID, contextID uuid.UUID) (*ReconciliationContextInfo, error)
 }
 
+// productionMode indicates whether the application is running in production.
+// Set once during handler construction via NewHandler; governs SafeError behavior
+// (suppresses internal error details in client responses when true).
+// Uses atomic.Bool because parallel tests construct handlers concurrently.
+var productionMode atomic.Bool
+
 // Handlers provides HTTP handlers for reporting operations.
 type Handlers struct {
 	dashboardUC     *query.DashboardUseCase
@@ -83,6 +90,7 @@ func NewHandlers(
 	dashboardUC *query.DashboardUseCase,
 	ctxProvider contextProvider,
 	exportUC *query.UseCase,
+	production bool,
 ) (*Handlers, error) {
 	if dashboardUC == nil {
 		return nil, ErrNilDashboardUseCase
@@ -95,6 +103,8 @@ func NewHandlers(
 	if exportUC == nil {
 		return nil, ErrNilExportUseCase
 	}
+
+	productionMode.Store(production)
 
 	verifier := NewTenantOwnershipVerifier(ctxProvider)
 
@@ -121,7 +131,7 @@ func startHandlerSpan(c *fiber.Ctx, name string) (context.Context, trace.Span, l
 
 func logSpanError(ctx context.Context, span trace.Span, logger libLog.Logger, message string, err error) {
 	libOpentelemetry.HandleSpanError(span, message, err)
-	libLog.SafeError(logger, ctx, message, err, false)
+	libLog.SafeError(logger, ctx, message, err, productionMode.Load())
 }
 
 func badRequest(

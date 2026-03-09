@@ -11,7 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/LerianStudio/lib-uncommons/v2/uncommons/backoff"
+	"github.com/LerianStudio/lib-commons/v4/commons/backoff"
 
 	"github.com/LerianStudio/matcher/internal/ingestion/ports"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"

@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace/noop"
 
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/reporting/adapters/http/dto"
@@ -270,7 +270,7 @@ func setupStatsHandlers(
 	uc, ucErr := query.NewDashboardUseCase(repo, nil)
 	require.NoError(t, ucErr)
 
-	handlers, err := NewHandlers(uc, provider, newTestExportUseCase(t))
+	handlers, err := NewHandlers(uc, provider, newTestExportUseCase(t), false)
 	require.NoError(t, err)
 
 	return handlers
@@ -316,7 +316,7 @@ func TestNewHandlers(t *testing.T) {
 	t.Run("returns error when dashboard use case is nil", func(t *testing.T) {
 		t.Parallel()
 
-		h, err := NewHandlers(nil, &mockContextProvider{}, newTestExportUseCase(t))
+		h, err := NewHandlers(nil, &mockContextProvider{}, newTestExportUseCase(t), false)
 
 		assert.Nil(t, h)
 		assert.Equal(t, ErrNilDashboardUseCase, err)
@@ -329,7 +329,7 @@ func TestNewHandlers(t *testing.T) {
 		uc, ucErr := query.NewDashboardUseCase(repo, nil)
 		require.NoError(t, ucErr)
 
-		h, err := NewHandlers(uc, nil, newTestExportUseCase(t))
+		h, err := NewHandlers(uc, nil, newTestExportUseCase(t), false)
 
 		assert.Nil(t, h)
 		assert.Equal(t, ErrNilContextProvider, err)
@@ -346,7 +346,7 @@ func TestNewHandlers(t *testing.T) {
 			info: &ReconciliationContextInfo{ID: uuid.New(), Active: true},
 		}
 
-		h, err := NewHandlers(uc, provider, nil)
+		h, err := NewHandlers(uc, provider, nil, false)
 
 		assert.Nil(t, h)
 		assert.Equal(t, ErrNilExportUseCase, err)
@@ -363,7 +363,7 @@ func TestNewHandlers(t *testing.T) {
 			info: &ReconciliationContextInfo{ID: uuid.New(), Active: true},
 		}
 
-		h, err := NewHandlers(uc, provider, newTestExportUseCase(t))
+		h, err := NewHandlers(uc, provider, newTestExportUseCase(t), false)
 
 		require.NoError(t, err)
 		assert.NotNil(t, h)
@@ -554,7 +554,7 @@ func TestHandlers_GetMatchRateStats_Success(t *testing.T) {
 	require.NoError(t, ucErr)
 
 	provider := &mockContextProvider{info: &ReconciliationContextInfo{ID: contextID, Active: true}}
-	handlers, err := NewHandlers(uc, provider, newTestExportUseCase(t))
+	handlers, err := NewHandlers(uc, provider, newTestExportUseCase(t), false)
 	require.NoError(t, err)
 
 	app := setupTestApp(handlers.GetMatchRateStats)
@@ -679,7 +679,7 @@ func TestHandlers_GetSLAStats_Success(t *testing.T) {
 	require.NoError(t, ucErr)
 
 	provider := &mockContextProvider{info: &ReconciliationContextInfo{ID: contextID, Active: true}}
-	handlers, err := NewHandlers(uc, provider, newTestExportUseCase(t))
+	handlers, err := NewHandlers(uc, provider, newTestExportUseCase(t), false)
 	require.NoError(t, err)
 
 	app := setupTestApp(handlers.GetSLAStats)
@@ -804,7 +804,7 @@ func TestHandlers_GetDashboardAggregates_Success(t *testing.T) {
 	require.NoError(t, ucErr)
 
 	provider := &mockContextProvider{info: &ReconciliationContextInfo{ID: contextID, Active: true}}
-	handlers, err := NewHandlers(uc, provider, newTestExportUseCase(t))
+	handlers, err := NewHandlers(uc, provider, newTestExportUseCase(t), false)
 	require.NoError(t, err)
 
 	app := setupTestApp(handlers.GetDashboardAggregates)
@@ -842,7 +842,7 @@ func TestHandlers_GetDashboardAggregates_InactiveContext(t *testing.T) {
 	require.NoError(t, ucErr)
 
 	provider := &mockContextProvider{info: &ReconciliationContextInfo{ID: contextID, Active: false}}
-	handlers, err := NewHandlers(uc, provider, newTestExportUseCase(t))
+	handlers, err := NewHandlers(uc, provider, newTestExportUseCase(t), false)
 	require.NoError(t, err)
 
 	app := setupTestApp(handlers.GetDashboardAggregates)
@@ -878,7 +878,7 @@ func TestHandlers_GetDashboardAggregates_ContextNotFound(t *testing.T) {
 	require.NoError(t, ucErr)
 
 	provider := &mockContextProvider{info: nil, err: nil}
-	handlers, err := NewHandlers(uc, provider, newTestExportUseCase(t))
+	handlers, err := NewHandlers(uc, provider, newTestExportUseCase(t), false)
 	require.NoError(t, err)
 
 	app := setupTestApp(handlers.GetDashboardAggregates)

@@ -14,11 +14,11 @@ import (
 
 	"golang.org/x/sync/singleflight"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	"github.com/LerianStudio/lib-uncommons/v2/uncommons/assert"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libPostgres "github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres"
-	libRedis "github.com/LerianStudio/lib-uncommons/v2/uncommons/redis"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	"github.com/LerianStudio/lib-commons/v4/commons/assert"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
+	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
@@ -691,5 +691,7 @@ func newConnectionSetupContext(parent context.Context) (context.Context, context
 		parent = context.Background()
 	}
 
-	return context.WithTimeout(context.WithoutCancel(parent), defaultConnectionSetupTimeout)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), defaultConnectionSetupTimeout)
+
+	return ctx, cancel
 }

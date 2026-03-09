@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/reporting/adapters/http/dto"
@@ -242,7 +242,7 @@ func setupDashboardHandlers(
 
 	require.NoError(t, err)
 
-	handlers, err := NewHandlers(uc, provider, exportUC)
+	handlers, err := NewHandlers(uc, provider, exportUC, false)
 	require.NoError(t, err)
 
 	return handlers
@@ -652,7 +652,7 @@ func setupCountHandlers(
 	exportUC, err := query.NewUseCase(reportRepo)
 	require.NoError(t, err)
 
-	handlers, err := NewHandlers(uc, provider, exportUC)
+	handlers, err := NewHandlers(uc, provider, exportUC, false)
 	require.NoError(t, err)
 
 	return handlers

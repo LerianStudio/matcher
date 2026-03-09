@@ -16,7 +16,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/mock/gomock"
 
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	ingestionEntities "github.com/LerianStudio/matcher/internal/ingestion/domain/entities"

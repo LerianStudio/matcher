@@ -67,7 +67,7 @@ Background worker that periodically removes old export files from object storage
 Export endpoints are rate-limited to prevent abuse and protect infrastructure from expensive report generation requests.
 
 ### Cursor Pagination
-Uses the standard `lib-uncommons` cursor pagination for efficient traversal of large result sets.
+Uses the standard `lib-commons` cursor pagination for efficient traversal of large result sets.
 
 ## API Endpoints
 

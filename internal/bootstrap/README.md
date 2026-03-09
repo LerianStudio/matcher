@@ -1,6 +1,6 @@
 # Bootstrap Package
 
-The `internal/bootstrap` package initializes the Matcher service. It loads configuration, creates infrastructure connections, wires application modules, configures HTTP routes/middleware, and starts the service lifecycle via the lib-uncommons launcher.
+The `internal/bootstrap` package initializes the Matcher service. It loads configuration, creates infrastructure connections, wires application modules, configures HTTP routes/middleware, and starts the service lifecycle via the lib-commons launcher.
 
 ## Overview
 
@@ -11,7 +11,7 @@ This package handles:
 3. **Observability**: OpenTelemetry initialization plus request-scoped tracking helpers.
 4. **Server Setup**: Fiber server with standardized middleware and error handling.
 5. **Routing & Auth**: `/health`, `/ready`, and protected `/api` routes.
-6. **Lifecycle**: service startup/shutdown via `lib-uncommons` launcher.
+6. **Lifecycle**: service startup/shutdown via `lib-commons` launcher.
 
 ## Components
 
@@ -67,7 +67,7 @@ If you add a module with cross-context dependencies, update this list to keep th
 
 ### Observability Helpers
 
-`TrackingContext` wraps `lib-uncommons` tracking components (logger, tracer, header ID). `InitTelemetry` configures OpenTelemetry exporters with `lib-uncommons`.
+`TrackingContext` wraps `lib-commons` tracking components (logger, tracer, header ID). `InitTelemetry` configures OpenTelemetry exporters with `lib-commons`.
 
 ### Database Metrics (`db_metrics.go`)
 

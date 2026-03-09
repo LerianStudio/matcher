@@ -11,8 +11,8 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 
-	libPostgres "github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres"
-	"github.com/LerianStudio/lib-uncommons/v2/uncommons/runtime"
+	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
+	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
 )
 
 // ErrNilResolverWithoutError is returned when Resolver returns nil without an error.

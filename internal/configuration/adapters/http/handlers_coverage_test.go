@@ -16,13 +16,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/shopspring/decimal"
 
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
@@ -633,7 +633,7 @@ func TestNewHandler_NilCommandUseCase(t *testing.T) {
 	queryUseCase, err := newQueryUseCaseForTest(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
 	require.NoError(t, err)
 
-	_, err = NewHandler(nil, queryUseCase)
+	_, err = NewHandler(nil, queryUseCase, false)
 	require.ErrorIs(t, err, ErrNilCommandUseCase)
 }
 
@@ -648,7 +648,7 @@ func TestNewHandler_NilQueryUseCase(t *testing.T) {
 	commandUseCase, err := command.NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
 	require.NoError(t, err)
 
-	_, err = NewHandler(commandUseCase, nil)
+	_, err = NewHandler(commandUseCase, nil, false)
 	require.ErrorIs(t, err, ErrNilQueryUseCase)
 }
 
@@ -941,7 +941,7 @@ func newScheduleFixture(t *testing.T) *handlerFixtureWithSchedule {
 	)
 	require.NoError(t, err)
 
-	handler, err := NewHandler(commandUseCase, queryUseCase)
+	handler, err := NewHandler(commandUseCase, queryUseCase, false)
 	require.NoError(t, err)
 
 	return &handlerFixtureWithSchedule{
@@ -2059,7 +2059,7 @@ func newFeeScheduleHandlerFixture(t *testing.T) *feeScheduleHandlerFixture {
 	)
 	require.NoError(t, err)
 
-	handler, err := NewHandler(commandUseCase, queryUseCase)
+	handler, err := NewHandler(commandUseCase, queryUseCase, false)
 	require.NoError(t, err)
 
 	return &feeScheduleHandlerFixture{

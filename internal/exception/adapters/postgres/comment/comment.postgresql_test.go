@@ -9,8 +9,8 @@ import (
 
 	"github.com/google/uuid"
 
-	libPostgres "github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres"
-	libRedis "github.com/LerianStudio/lib-uncommons/v2/uncommons/redis"
+	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
+	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/repositories"

@@ -1533,7 +1533,8 @@ const docTemplate = `{
                             "LEDGER",
                             "BANK",
                             "GATEWAY",
-                            "CUSTOM"
+                            "CUSTOM",
+                            "FETCHER"
                         ],
                         "type": "string",
                         "description": "Filter by source type",
@@ -8824,7 +8825,7 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "github_com_LerianStudio_lib-uncommons_v2_uncommons_net_http.CursorPagination": {
+        "github_com_LerianStudio_lib-commons_v4_commons_net_http.CursorPagination": {
             "type": "object",
             "properties": {
                 "next": {
@@ -11563,7 +11564,7 @@ const docTemplate = `{
                     }
                 },
                 "pagination": {
-                    "$ref": "#/definitions/github_com_LerianStudio_lib-uncommons_v2_uncommons_net_http.CursorPagination"
+                    "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.CursorPagination"
                 }
             }
         },
@@ -11577,7 +11578,7 @@ const docTemplate = `{
                     }
                 },
                 "pagination": {
-                    "$ref": "#/definitions/github_com_LerianStudio_lib-uncommons_v2_uncommons_net_http.CursorPagination"
+                    "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.CursorPagination"
                 }
             }
         },
@@ -11591,7 +11592,7 @@ const docTemplate = `{
                     }
                 },
                 "pagination": {
-                    "$ref": "#/definitions/github_com_LerianStudio_lib-uncommons_v2_uncommons_net_http.CursorPagination"
+                    "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.CursorPagination"
                 }
             }
         },

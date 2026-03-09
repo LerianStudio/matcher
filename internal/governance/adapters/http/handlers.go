@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -13,10 +14,10 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/governance/adapters/http/dto"
 	governanceEntities "github.com/LerianStudio/matcher/internal/governance/domain/entities"
@@ -38,6 +39,12 @@ var (
 	ErrInvalidDateFormat  = errors.New("invalid date format")
 )
 
+// productionMode indicates whether the application is running in production.
+// Set once during handler construction via NewHandler; governs SafeError behavior
+// (suppresses internal error details in client responses when true).
+// Uses atomic.Bool because parallel tests construct handlers concurrently.
+var productionMode atomic.Bool
+
 // Handler handles HTTP requests for governance audit logs.
 // It instruments each operation with OpenTelemetry metrics for observability:
 // audit_log_created_total, audit_log_queries_total, and audit_log_query_latency_seconds.
@@ -51,10 +58,12 @@ type Handler struct {
 }
 
 // NewHandler creates a new governance HTTP handler.
-func NewHandler(repo repositories.AuditLogRepository) (*Handler, error) {
+func NewHandler(repo repositories.AuditLogRepository, production bool) (*Handler, error) {
 	if repo == nil {
 		return nil, ErrRepoRequired
 	}
+
+	productionMode.Store(production)
 
 	handler := &Handler{repo: repo}
 
@@ -110,7 +119,7 @@ func startHandlerSpan(c *fiber.Ctx, name string) (context.Context, trace.Span, l
 
 func logSpanError(ctx context.Context, span trace.Span, logger libLog.Logger, message string, err error) {
 	libOpentelemetry.HandleSpanError(span, message, err)
-	libLog.SafeError(logger, ctx, message, err, false)
+	libLog.SafeError(logger, ctx, message, err, productionMode.Load())
 }
 
 func badRequest(

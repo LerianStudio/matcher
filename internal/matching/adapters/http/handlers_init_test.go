@@ -70,6 +70,7 @@ func TestNewHandler(t *testing.T) {
 				tt.commandUseCase,
 				tt.queryUseCase,
 				tt.ctxProvider,
+				false,
 			)
 
 			if tt.expectedErr != nil {
@@ -92,7 +93,7 @@ func TestNewHandler_Success_InitializesVerifier(t *testing.T) {
 	}
 	queryUC := newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{})
 
-	handler, err := NewHandler(&command.UseCase{}, queryUC, ctxProv)
+	handler, err := NewHandler(&command.UseCase{}, queryUC, ctxProv, false)
 
 	require.NoError(t, err)
 	require.NotNil(t, handler)

@@ -4,7 +4,7 @@ package dto
 import (
 	"time"
 
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 )

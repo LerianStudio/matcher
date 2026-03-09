@@ -22,16 +22,16 @@ import (
 	"github.com/LerianStudio/lib-auth/v2/auth/middleware"
 	libCommonsLog "github.com/LerianStudio/lib-commons/v2/commons/log"
 	libCommonsZap "github.com/LerianStudio/lib-commons/v2/commons/zap"
-	"github.com/LerianStudio/lib-uncommons/v2/uncommons/assert"
-	"github.com/LerianStudio/lib-uncommons/v2/uncommons/errgroup"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	"github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http/ratelimit"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
-	libPostgres "github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres"
-	libRabbitmq "github.com/LerianStudio/lib-uncommons/v2/uncommons/rabbitmq"
-	libRedis "github.com/LerianStudio/lib-uncommons/v2/uncommons/redis"
-	"github.com/LerianStudio/lib-uncommons/v2/uncommons/runtime"
-	libZap "github.com/LerianStudio/lib-uncommons/v2/uncommons/zap"
+	"github.com/LerianStudio/lib-commons/v4/commons/assert"
+	"github.com/LerianStudio/lib-commons/v4/commons/errgroup"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	"github.com/LerianStudio/lib-commons/v4/commons/net/http/ratelimit"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
+	libRabbitmq "github.com/LerianStudio/lib-commons/v4/commons/rabbitmq"
+	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
+	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
+	libZap "github.com/LerianStudio/lib-commons/v4/commons/zap"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	configAudit "github.com/LerianStudio/matcher/internal/configuration/adapters/audit"
@@ -1377,7 +1377,9 @@ func initModulesAndMessaging(
 		return nil, fmt.Errorf("init shared repositories: %w", err)
 	}
 
-	if err := initConfigurationModule(routes, provider, sharedOutboxRepository, sharedRepos); err != nil {
+	isProduction := IsProductionEnvironment(cfg.App.EnvName)
+
+	if err := initConfigurationModule(routes, provider, sharedOutboxRepository, sharedRepos, isProduction); err != nil {
 		return nil, err
 	}
 
@@ -1386,12 +1388,12 @@ func initModulesAndMessaging(
 		return nil, err
 	}
 
-	matchingUseCase, err := initMatchingModule(routes, provider, sharedOutboxRepository, sharedRepos)
+	matchingUseCase, err := initMatchingModule(routes, provider, sharedOutboxRepository, sharedRepos, isProduction)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := initIngestionModule(routes, provider, sharedOutboxRepository, ingestionPublisher, matchingUseCase, sharedRepos); err != nil {
+	if err := initIngestionModule(routes, provider, sharedOutboxRepository, ingestionPublisher, matchingUseCase, sharedRepos, isProduction); err != nil {
 		return nil, err
 	}
 
@@ -1412,18 +1414,19 @@ func initModulesAndMessaging(
 		rateLimitStorage,
 		logger,
 		sharedRepos,
+		isProduction,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := initGovernanceModule(routes, sharedRepos, provider); err != nil {
+	if err := initGovernanceModule(routes, sharedRepos, provider, isProduction); err != nil {
 		return nil, err
 	}
 
 	dispatchLimiter := NewDispatchRateLimiter(cfg, rateLimitStorage)
 
-	if err := initExceptionModule(cfg, routes, provider, sharedOutboxRepository, dispatchLimiter, sharedRepos); err != nil {
+	if err := initExceptionModule(cfg, routes, provider, sharedOutboxRepository, dispatchLimiter, sharedRepos, isProduction); err != nil {
 		return nil, err
 	}
 
@@ -1452,6 +1455,7 @@ func initModulesAndMessaging(
 		logger,
 		otel.Tracer(constants.ApplicationName),
 		outboxServices.WithAuditPublisher(auditConsumer),
+		outboxServices.WithProduction(isProduction),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create outbox dispatcher: %w", err)
@@ -1733,6 +1737,7 @@ func initConfigurationModule(
 	provider sharedPorts.InfrastructureProvider,
 	outboxRepository outboxRepositories.OutboxRepository,
 	repos *sharedRepositories,
+	production bool,
 ) error {
 	// Create outbox-based audit publisher for configuration module
 	// This decouples configuration from governance via the outbox pattern
@@ -1769,7 +1774,7 @@ func initConfigurationModule(
 		return fmt.Errorf("create config query use case: %w", err)
 	}
 
-	configHandler, err := configHTTP.NewHandler(configCommandUseCase, configQueryUseCase)
+	configHandler, err := configHTTP.NewHandler(configCommandUseCase, configQueryUseCase, production)
 	if err != nil {
 		return fmt.Errorf("create config handler: %w", err)
 	}
@@ -1788,6 +1793,7 @@ func initIngestionModule(
 	publisher *ingestionRabbitmq.EventPublisher,
 	matchingUseCase *matchingCommand.UseCase,
 	repos *sharedRepositories,
+	production bool,
 ) error {
 	ingestionRegistry := ingestionParser.NewParserRegistry()
 	ingestionRegistry.Register(ingestionParser.NewCSVParser())
@@ -1853,6 +1859,7 @@ func initIngestionModule(
 		ingestionCommandUseCase,
 		ingestionQueryUseCase,
 		contextAdapter,
+		production,
 	)
 	if err != nil {
 		return fmt.Errorf("create ingestion handler: %w", err)
@@ -1870,6 +1877,7 @@ func initMatchingModule(
 	provider sharedPorts.InfrastructureProvider,
 	outboxRepo outboxRepositories.OutboxRepository,
 	repos *sharedRepositories,
+	production bool,
 ) (*matchingCommand.UseCase, error) {
 	contextAdapter, err := crossAdapters.NewContextProviderAdapter(repos.configContext)
 	if err != nil {
@@ -1933,6 +1941,7 @@ func initMatchingModule(
 		useCase,
 		matchingQueryUseCase,
 		contextAdapter,
+		production,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create matching handler: %w", err)
@@ -1953,6 +1962,7 @@ func initReportingModule(
 	rateLimitStorage fiber.Storage,
 	logger libLog.Logger,
 	repos *sharedRepositories,
+	production bool,
 ) (*reportingWorker.ExportWorker, *reportingWorker.CleanupWorker, error) {
 	contextAdapter := crossAdapters.NewReportingContextProviderAdapter(repos.configContext)
 
@@ -1975,6 +1985,7 @@ func initReportingModule(
 		dashboardUseCase,
 		contextAdapter,
 		exportUseCase,
+		production,
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("create reporting handler: %w", err)
@@ -2072,8 +2083,8 @@ func initExportWorkers(
 	return exportWorker, cleanupWorker, nil
 }
 
-func initGovernanceModule(routes *Routes, repos *sharedRepositories, provider sharedPorts.InfrastructureProvider) error {
-	governanceHandler, err := governanceHTTP.NewHandler(repos.governanceAuditLog)
+func initGovernanceModule(routes *Routes, repos *sharedRepositories, provider sharedPorts.InfrastructureProvider, production bool) error {
+	governanceHandler, err := governanceHTTP.NewHandler(repos.governanceAuditLog, production)
 	if err != nil {
 		return fmt.Errorf("create governance handler: %w", err)
 	}
@@ -2114,6 +2125,7 @@ func initExceptionModule(
 	outboxRepository outboxRepositories.OutboxRepository,
 	dispatchLimiter fiber.Handler,
 	repos *sharedRepositories,
+	production bool,
 ) error {
 	// Exception-specific repositories (not shared across modules)
 	exceptionRepository := exceptionExceptionRepo.NewRepository(provider)
@@ -2154,6 +2166,7 @@ func initExceptionModule(
 		callbackUseCase,
 		exceptionRepository,
 		disputeRepository,
+		production,
 	)
 	if err != nil {
 		return fmt.Errorf("create exception handlers: %w", err)
@@ -2510,7 +2523,7 @@ func formatWorkerStatus(enabled bool, interval time.Duration) string {
 // allowing users to query existing archives. The worker is only constructed when cfg.Archival.Enabled is true.
 //
 // A dedicated *sql.DB connection pool is created for archival operations because:
-// 1. lib-uncommons postgres.Client.Resolver() returns dbresolver.DB (not *sql.DB)
+// 1. lib-commons postgres.Client.Resolver() returns dbresolver.DB (not *sql.DB)
 // 2. Archival needs raw *sql.DB for DDL operations (CREATE/ALTER/DROP TABLE)
 // 3. Isolating archival's long-running operations from the main pool prevents interference.
 func initArchivalComponents(

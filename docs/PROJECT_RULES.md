@@ -34,15 +34,15 @@ This project follows Lerian Studio Ring standards for Go services.
 ## Required Libraries
 
 - AuthN/AuthZ: `github.com/LerianStudio/lib-auth/v2` only.
-- Commons/Telemetry: `github.com/LerianStudio/lib-uncommons`.
+- Commons/Telemetry: `github.com/LerianStudio/lib-commons`.
 - Assertions: `github.com/LerianStudio/matcher/pkg/assert` (no panics).
-- Use lib-uncommons submodules for:
+- Use lib-commons submodules for:
   - Tracking/logging (`libCommons.NewTrackingFromContext`).
-  - OpenTelemetry (`uncommons/opentelemetry`).
+  - OpenTelemetry (`commons/opentelemetry`).
   - Database connections (`database`).
   - Redis clients (`redis`).
   - Messaging (RabbitMQ) (`messaging`).
-- Do not introduce custom DB/Redis/MQ clients outside lib-uncommons wrappers.
+- Do not introduce custom DB/Redis/MQ clients outside lib-commons wrappers.
 
 ## Context + Observability
 
@@ -71,7 +71,7 @@ This project follows Lerian Studio Ring standards for Go services.
 - Keep migrations additive; avoid destructive changes in production.
 - Enforce referential integrity with foreign keys where applicable.
 - Avoid long-running transactions; keep write paths short and deterministic.
-- Prefer read replicas for query services when supported by lib-uncommons.
+- Prefer read replicas for query services when supported by lib-commons.
 
 ## Testing
 

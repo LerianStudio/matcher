@@ -19,10 +19,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	libCommonsLog "github.com/LerianStudio/lib-commons/v2/commons/log"
-	libAssert "github.com/LerianStudio/lib-uncommons/v2/uncommons/assert"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libPostgres "github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres"
-	libRabbitmq "github.com/LerianStudio/lib-uncommons/v2/uncommons/rabbitmq"
+	libAssert "github.com/LerianStudio/lib-commons/v4/commons/assert"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
+	libRabbitmq "github.com/LerianStudio/lib-commons/v4/commons/rabbitmq"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	ingestionRabbitmq "github.com/LerianStudio/matcher/internal/ingestion/adapters/rabbitmq"
@@ -172,7 +172,7 @@ func TestCreatePostgresConnection(t *testing.T) {
 func TestCreateRedisConnection(t *testing.T) {
 	t.Parallel()
 
-	// In lib-uncommons v2, New() eagerly connects to Redis.
+	// In lib-commons v4, New() eagerly connects to Redis.
 	// Without a running Redis server, connection attempts will fail.
 	t.Run("returns error when redis unreachable", func(t *testing.T) {
 		t.Parallel()

@@ -3,12 +3,12 @@ package bootstrap
 import (
 	"strings"
 
-	libZap "github.com/LerianStudio/lib-uncommons/v2/uncommons/zap"
+	libZap "github.com/LerianStudio/lib-commons/v4/commons/zap"
 )
 
 const defaultLoggerLevel = "info"
 
-// ResolveLoggerEnvironment maps app environment names to lib-uncommons zap environments.
+// ResolveLoggerEnvironment maps app environment names to lib-commons zap environments.
 func ResolveLoggerEnvironment(envName string) libZap.Environment {
 	switch strings.ToLower(strings.TrimSpace(envName)) {
 	case envProduction:
