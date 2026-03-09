@@ -54,6 +54,7 @@ func TestNoUnwrappedGoroutines(t *testing.T) {
 				"migrations",
 				"config",
 				".references",
+				"references",
 				"testdata":
 				return filepath.SkipDir
 			}

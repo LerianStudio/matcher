@@ -19,10 +19,10 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/ingestion/adapters/http/dto"
@@ -193,6 +193,7 @@ func badRequest(
 ) error {
 	logSpanError(ctx, span, logger, message, err)
 
+	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", message)
 }
 
@@ -206,6 +207,7 @@ func notFound(
 ) error {
 	logSpanError(ctx, span, logger, message, err)
 
+	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.RespondError(fiberCtx, fiber.StatusNotFound, "not_found", message)
 }
 
@@ -220,6 +222,7 @@ func forbidden(ctx context.Context, fiberCtx *fiber.Ctx, span trace.Span, logger
 
 	logger.Log(ctx, libLog.LevelWarn, "access denied: "+message)
 
+	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.RespondError(fiberCtx, fiber.StatusForbidden, "forbidden", message)
 }
 
@@ -241,6 +244,7 @@ func handleContextVerificationError(
 	if errors.Is(err, libHTTP.ErrTenantIDNotFound) ||
 		errors.Is(err, libHTTP.ErrInvalidTenantID) {
 		logSpanError(ctx, span, logger, "invalid tenant id", err)
+		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return libHTTP.RespondError(fiberCtx, fiber.StatusUnauthorized, "unauthorized", "unauthorized")
 	}
 
@@ -253,6 +257,7 @@ func handleContextVerificationError(
 	if errors.Is(err, libHTTP.ErrContextNotActive) {
 		logSpanError(ctx, span, logger, "context not active", err)
 
+		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return libHTTP.RespondError(fiberCtx, fiber.StatusForbidden, "context_not_active", "context is not active")
 	}
 
@@ -260,6 +265,7 @@ func handleContextVerificationError(
 	if errors.Is(err, libHTTP.ErrContextLookupFailed) {
 		logSpanError(ctx, span, logger, "context lookup failed", err)
 
+		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
@@ -305,6 +311,7 @@ func handleIngestionError(
 	// Generic server error
 	logSpanError(ctx, span, logger, "failed to start ingestion", err)
 
+	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 }
 
@@ -366,6 +373,7 @@ func (handler *Handlers) UploadFile(fiberCtx *fiber.Ctx) error {
 	}
 
 	if file.Size > maxUploadSize {
+		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return libHTTP.RespondError(
 			fiberCtx,
 			fiber.StatusRequestEntityTooLarge,
@@ -400,6 +408,7 @@ func (handler *Handlers) UploadFile(fiberCtx *fiber.Ctx) error {
 	if err != nil {
 		logSpanError(ctx, span, logger, "failed to open file", err)
 
+		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 	defer fileReader.Close()
@@ -474,9 +483,11 @@ func (handler *Handlers) GetJob(fiberCtx *fiber.Ctx) error {
 
 		logSpanError(ctx, span, logger, "failed to get job", err)
 
+		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
+	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.JobToResponse(job))
 }
 
@@ -572,11 +583,13 @@ func (handler *Handlers) ListJobsByContext(fiberCtx *fiber.Ctx) error {
 
 		logSpanError(ctx, span, logger, "failed to list jobs", err)
 
+		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
 	items := dto.JobsToResponse(jobs)
 
+	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ListJobsResponse{
 		Items: items,
 		CursorResponse: sharedpagination.CursorResponse{
@@ -666,6 +679,7 @@ func (handler *Handlers) ListTransactionsByJob(fiberCtx *fiber.Ctx) error {
 
 		logSpanError(ctx, span, logger, "failed to get job", err)
 
+		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
@@ -687,11 +701,13 @@ func (handler *Handlers) ListTransactionsByJob(fiberCtx *fiber.Ctx) error {
 
 		logSpanError(ctx, span, logger, "failed to list transactions", err)
 
+		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
 	items := dto.TransactionsToResponse(transactions, jobID, contextID)
 
+	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ListTransactionsResponse{
 		Items: items,
 		CursorResponse: sharedpagination.CursorResponse{
@@ -762,6 +778,7 @@ func (handler *Handlers) IgnoreTransaction(fiberCtx *fiber.Ctx) error {
 		return handleIgnoreTransactionError(ctx, fiberCtx, span, logger, err)
 	}
 
+	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.IgnoreTransactionResponse{
 		TransactionResponse: dto.TransactionToResponse(tx, tx.IngestionJobID, contextID),
 	})
@@ -827,11 +844,13 @@ func (handler *Handlers) SearchTransactions(fiberCtx *fiber.Ctx) error {
 	if err != nil {
 		logSpanError(ctx, span, logger, "failed to search transactions", err)
 
+		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
 	items := dto.SearchTransactionsToResponse(transactions, contextID)
 
+	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.SearchTransactionsResponse{
 		Items:  items,
 		Total:  total,
@@ -1005,6 +1024,7 @@ func (handler *Handlers) PreviewFile(fiberCtx *fiber.Ctx) error {
 	if err != nil {
 		logSpanError(ctx, span, logger, "failed to open file", err)
 
+		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
@@ -1019,6 +1039,7 @@ func (handler *Handlers) PreviewFile(fiberCtx *fiber.Ctx) error {
 		return handlePreviewError(ctx, fiberCtx, span, logger, err)
 	}
 
+	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FilePreviewResponse{
 		Columns:    preview.Columns,
 		SampleRows: preview.SampleRows,
@@ -1101,6 +1122,7 @@ func handlePreviewError(
 
 	logSpanError(ctx, span, logger, "failed to preview file", err)
 
+	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 }
 
@@ -1118,6 +1140,7 @@ func handleIgnoreTransactionError(
 	if errors.Is(err, command.ErrTransactionNotIgnorable) {
 		logSpanError(ctx, span, logger, "transaction cannot be ignored", err)
 
+		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return libHTTP.RespondError(
 			fiberCtx,
 			fiber.StatusConflict,
@@ -1132,5 +1155,6 @@ func handleIgnoreTransactionError(
 
 	logSpanError(ctx, span, logger, "failed to ignore transaction", err)
 
+	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 }

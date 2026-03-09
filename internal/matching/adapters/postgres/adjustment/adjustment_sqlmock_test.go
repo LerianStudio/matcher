@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	sharedHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	sharedHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	matchingRepositories "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
 	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"

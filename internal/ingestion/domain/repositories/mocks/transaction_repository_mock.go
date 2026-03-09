@@ -13,7 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	http "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	http "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 	repositories "github.com/LerianStudio/matcher/internal/ingestion/domain/repositories"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	uuid "github.com/google/uuid"

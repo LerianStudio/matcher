@@ -11,9 +11,9 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"go.opentelemetry.io/otel/trace"
 
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/matching/adapters/http/dto"
@@ -419,6 +419,7 @@ func mapRunMatchErrorToResponse(
 	case errors.Is(err, command.ErrContextNotFound):
 		return writeNotFound(fiberCtx, "context not found")
 	case errors.Is(err, command.ErrContextNotActive):
+		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return libHTTP.RespondError(fiberCtx, fiber.StatusForbidden, "context_not_active", "context is not active")
 	case errors.Is(err, command.ErrNoSourcesConfigured):
 		return badRequest(ctx, fiberCtx, span, logger, "no sources configured for context", err)
@@ -429,6 +430,7 @@ func mapRunMatchErrorToResponse(
 	case errors.Is(err, command.ErrMatchRunModeRequired):
 		return badRequest(ctx, fiberCtx, span, logger, "match run mode is required", err)
 	case errors.Is(err, command.ErrMatchRunLocked):
+		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return libHTTP.RespondError(
 			fiberCtx,
 			fiber.StatusConflict,

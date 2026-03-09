@@ -13,7 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	http "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	http "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 	entities "github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	uuid "github.com/google/uuid"
 	gomock "go.uber.org/mock/gomock"

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"sync"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 
 	vo "github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
 )

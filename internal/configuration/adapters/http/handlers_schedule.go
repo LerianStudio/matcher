@@ -6,7 +6,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/http/dto"
@@ -65,7 +65,7 @@ func (handler *Handler) CreateSchedule(fiberCtx *fiber.Ctx) error {
 		logSpanError(ctx, span, logger, "failed to create schedule", err)
 
 		if isScheduleClientError(err) {
-			return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", err.Error())
+			return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", err.Error()) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		}
 
 		if errors.Is(err, sql.ErrNoRows) {
@@ -75,7 +75,7 @@ func (handler *Handler) CreateSchedule(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.ScheduleToResponse(result))
+	return libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.ScheduleToResponse(result)) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 }
 
 // ListSchedules lists reconciliation schedules for a context.
@@ -121,7 +121,7 @@ func (handler *Handler) ListSchedules(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.SchedulesToResponse(result))
+	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.SchedulesToResponse(result)) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 }
 
 // GetSchedule retrieves a reconciliation schedule.
@@ -183,7 +183,7 @@ func (handler *Handler) GetSchedule(fiberCtx *fiber.Ctx) error {
 		return writeNotFound(fiberCtx, "schedule not found")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ScheduleToResponse(result))
+	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ScheduleToResponse(result)) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 }
 
 // UpdateSchedule updates a reconciliation schedule.
@@ -242,7 +242,7 @@ func (handler *Handler) UpdateSchedule(fiberCtx *fiber.Ctx) error {
 		logSpanError(ctx, span, logger, "failed to update schedule", err)
 
 		if isScheduleClientError(err) {
-			return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", err.Error())
+			return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", err.Error()) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		}
 
 		if errors.Is(err, command.ErrScheduleNotFound) ||
@@ -254,7 +254,7 @@ func (handler *Handler) UpdateSchedule(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ScheduleToResponse(result))
+	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ScheduleToResponse(result)) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 }
 
 // DeleteSchedule deletes a reconciliation schedule.
@@ -311,7 +311,7 @@ func (handler *Handler) DeleteSchedule(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent)
+	return libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 }
 
 // isScheduleClientError returns true for schedule-related client errors.

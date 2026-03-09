@@ -3,8 +3,8 @@
 package bootstrap
 
 import (
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 )
 
 func setInitTelemetryFnForTest(fn func(*Config, libLog.Logger) *libOpentelemetry.Telemetry) func() {

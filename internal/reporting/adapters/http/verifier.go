@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	sharedhttp "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	sharedhttp "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 )
 
 // NewTenantOwnershipVerifier creates a new verifier with the given context provider.

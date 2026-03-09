@@ -12,7 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	pkghttp "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	pkghttp "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 	"github.com/LerianStudio/matcher/internal/auth"
 	auditRepo "github.com/LerianStudio/matcher/internal/governance/adapters/postgres"
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"

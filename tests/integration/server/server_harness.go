@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"testing"
 
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 
 	"github.com/LerianStudio/matcher/internal/bootstrap"
 	outboxServices "github.com/LerianStudio/matcher/internal/outbox/services"

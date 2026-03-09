@@ -13,10 +13,10 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	pkghttp "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	pkghttp "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 )
@@ -184,6 +184,7 @@ func handleKeyValidationError(
 
 		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("idempotency middleware: %v", validationErr))
 
+		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return pkghttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "idempotency_configuration_error", "an unexpected error occurred")
 	}
 
@@ -191,6 +192,7 @@ func handleKeyValidationError(
 
 	logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("idempotency middleware: invalid key format: %v", validationErr))
 
+	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return pkghttp.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_idempotency_key", validationErr.Error())
 }
 
@@ -219,6 +221,7 @@ func executeIdempotencyLogic(
 
 		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("idempotency middleware: failed to acquire lock: %v", err))
 
+		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return pkghttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "idempotency_error", "an unexpected error occurred")
 	}
 
@@ -380,12 +383,14 @@ func handleDuplicateRequest(
 
 		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("idempotency: failed to get cached result: %v", err))
 
+		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return pkghttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "idempotency_error", "an unexpected error occurred")
 	}
 
 	if result == nil {
 		logger.Log(ctx, libLog.LevelError, "idempotency: cached result is nil")
 
+		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return pkghttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "idempotency_error", "an unexpected error occurred")
 	}
 
@@ -393,6 +398,7 @@ func handleDuplicateRequest(
 	case IdempotencyStatusPending:
 		logger.Log(ctx, libLog.LevelInfo, fmt.Sprintf("idempotency: request in progress (key_hash=%s)", idempotencyKeyFingerprint(key)))
 
+		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return pkghttp.RespondError(
 			fiberCtx,
 			fiber.StatusConflict,
@@ -421,12 +427,14 @@ func handleDuplicateRequest(
 
 			logger.Log(ctx, libLog.LevelError, fmt.Sprintf("idempotency: failed to reacquire failed key: %v", reacquireErr))
 
+			//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 			return pkghttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "idempotency_error", "an unexpected error occurred")
 		}
 
 		if !reacquired {
 			logger.Log(ctx, libLog.LevelInfo, fmt.Sprintf("idempotency: failed-key retry already in progress (key_hash=%s)", idempotencyKeyFingerprint(key)))
 
+			//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 			return pkghttp.RespondError(
 				fiberCtx,
 				fiber.StatusConflict,

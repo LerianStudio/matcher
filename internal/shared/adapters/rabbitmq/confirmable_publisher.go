@@ -11,10 +11,10 @@ import (
 
 	amqp "github.com/rabbitmq/amqp091-go"
 
-	"github.com/LerianStudio/lib-uncommons/v2/uncommons/backoff"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libRabbitmq "github.com/LerianStudio/lib-uncommons/v2/uncommons/rabbitmq"
-	"github.com/LerianStudio/lib-uncommons/v2/uncommons/runtime"
+	"github.com/LerianStudio/lib-commons/v4/commons/backoff"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libRabbitmq "github.com/LerianStudio/lib-commons/v4/commons/rabbitmq"
+	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
 )
 
 // recoveryAttemptResult indicates the outcome of a single recovery attempt.

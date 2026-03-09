@@ -8,7 +8,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/shopspring/decimal"
 
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/configuration/services/command"
@@ -72,13 +72,13 @@ func (handler *Handler) CreateFeeSchedule(fiberCtx *fiber.Ctx) error {
 		logSpanError(ctx, span, logger, "failed to create fee schedule", err)
 
 		if isFeeScheduleClientError(err) {
-			return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", err.Error())
+			return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", err.Error()) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		}
 
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.FeeScheduleToResponse(result))
+	return libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.FeeScheduleToResponse(result)) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 }
 
 // ListFeeSchedules lists fee schedules.
@@ -126,7 +126,7 @@ func (handler *Handler) ListFeeSchedules(fiberCtx *fiber.Ctx) error {
 		result = []*fee.FeeSchedule{}
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FeeSchedulesToResponse(result))
+	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FeeSchedulesToResponse(result)) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 }
 
 // GetFeeSchedule retrieves a fee schedule.
@@ -173,7 +173,7 @@ func (handler *Handler) GetFeeSchedule(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FeeScheduleToResponse(result))
+	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FeeScheduleToResponse(result)) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 }
 
 // UpdateFeeSchedule updates a fee schedule.
@@ -234,13 +234,13 @@ func (handler *Handler) UpdateFeeSchedule(fiberCtx *fiber.Ctx) error {
 		}
 
 		if isFeeScheduleClientError(err) {
-			return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", err.Error())
+			return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", err.Error()) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		}
 
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FeeScheduleToResponse(result))
+	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FeeScheduleToResponse(result)) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 }
 
 // DeleteFeeSchedule deletes a fee schedule.
@@ -285,7 +285,7 @@ func (handler *Handler) DeleteFeeSchedule(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent)
+	return libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 }
 
 // SimulateFeeSchedule simulates fee calculation for a schedule.
@@ -351,13 +351,13 @@ func (handler *Handler) SimulateFeeSchedule(fiberCtx *fiber.Ctx) error {
 		logSpanError(ctx, span, logger, "failed to simulate fee schedule", err)
 
 		if isFeeScheduleClientError(err) {
-			return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", err.Error())
+			return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", err.Error()) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		}
 
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FeeBreakdownToSimulateResponse(grossAmount, payload.Currency, breakdown))
+	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FeeBreakdownToSimulateResponse(grossAmount, payload.Currency, breakdown)) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 }
 
 func parseFeeScheduleItems(items []dto.CreateFeeScheduleItemRequest) ([]fee.FeeScheduleItemInput, error) {

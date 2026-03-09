@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 
-	"github.com/LerianStudio/lib-uncommons/v2/uncommons/assert"
+	"github.com/LerianStudio/lib-commons/v4/commons/assert"
 
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )

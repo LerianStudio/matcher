@@ -8,8 +8,8 @@ import (
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/exception/adapters/http/dto"
@@ -71,6 +71,7 @@ func (handler *Handlers) AddComment(fiberCtx *fiber.Ctx) error {
 		return handleCommentError(ctx, fiberCtx, span, logger, err)
 	}
 
+	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.CommentToResponse(result))
 }
 
@@ -116,6 +117,7 @@ func (handler *Handlers) ListComments(fiberCtx *fiber.Ctx) error {
 		return handleCommentError(ctx, fiberCtx, span, logger, err)
 	}
 
+	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ListCommentsResponse{
 		Items: dto.CommentsToResponse(comments),
 	})
@@ -174,6 +176,7 @@ func (handler *Handlers) DeleteComment(fiberCtx *fiber.Ctx) error {
 		return handleCommentError(ctx, fiberCtx, span, logger, err)
 	}
 
+	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent)
 }
 

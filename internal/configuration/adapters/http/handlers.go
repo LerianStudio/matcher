@@ -13,10 +13,10 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/http/dto"
@@ -72,16 +72,16 @@ func badRequest(
 ) error {
 	logSpanError(ctx, span, logger, message, err)
 
-	return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", safeClientMessage(message, err))
+	return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", safeClientMessage(message, err)) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 }
 
 func unauthorized(ctx context.Context, c *fiber.Ctx, span trace.Span, logger libLog.Logger, err error) error {
 	logSpanError(ctx, span, logger, "invalid tenant id", err)
-	return libHTTP.RespondError(c, fiber.StatusUnauthorized, "unauthorized", "unauthorized")
+	return libHTTP.RespondError(c, fiber.StatusUnauthorized, "unauthorized", "unauthorized") //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 }
 
 func writeNotFound(c *fiber.Ctx, message string) error {
-	return libHTTP.RespondError(c, fiber.StatusNotFound, "not_found", message)
+	return libHTTP.RespondError(c, fiber.StatusNotFound, "not_found", message) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 }
 
 func safeClientMessage(defaultMsg string, err error) string {
@@ -128,12 +128,12 @@ func handleContextVerificationError(
 
 	if errors.Is(err, libHTTP.ErrMissingContextID) ||
 		errors.Is(err, libHTTP.ErrInvalidContextID) {
-		return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", "invalid context id")
+		return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", "invalid context id") //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	}
 
 	if errors.Is(err, libHTTP.ErrTenantIDNotFound) ||
 		errors.Is(err, libHTTP.ErrInvalidTenantID) {
-		return libHTTP.RespondError(fiberCtx, fiber.StatusUnauthorized, "unauthorized", "unauthorized")
+		return libHTTP.RespondError(fiberCtx, fiber.StatusUnauthorized, "unauthorized", "unauthorized") //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	}
 
 	if errors.Is(err, libHTTP.ErrContextNotFound) {
@@ -141,15 +141,15 @@ func handleContextVerificationError(
 	}
 
 	if errors.Is(err, libHTTP.ErrContextNotActive) {
-		return libHTTP.RespondError(fiberCtx, fiber.StatusForbidden, "context_not_active", "context is not active")
+		return libHTTP.RespondError(fiberCtx, fiber.StatusForbidden, "context_not_active", "context is not active") //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	}
 
 	if errors.Is(err, libHTTP.ErrContextNotOwned) ||
 		errors.Is(err, libHTTP.ErrContextAccessDenied) {
-		return libHTTP.RespondError(fiberCtx, fiber.StatusForbidden, "forbidden", "access denied")
+		return libHTTP.RespondError(fiberCtx, fiber.StatusForbidden, "forbidden", "access denied") //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	}
 
-	return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
+	return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred") //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 }
 
 func handleOwnershipVerificationError(
@@ -230,17 +230,17 @@ func (handler *Handler) CreateContext(fiberCtx *fiber.Ctx) error {
 		logSpanError(ctx, span, logger, "failed to create context", err)
 
 		if errors.Is(err, command.ErrContextNameAlreadyExists) {
-			return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "duplicate_name", err.Error())
+			return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "duplicate_name", err.Error()) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		}
 
 		if errors.Is(err, entities.ErrRulePriorityConflict) {
-			return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "priority_conflict", err.Error())
+			return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "priority_conflict", err.Error()) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		}
 
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.ReconciliationContextToResponse(result))
+	return libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.ReconciliationContextToResponse(result)) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 }
 
 // ListContexts lists reconciliation contexts.
@@ -325,7 +325,7 @@ func (handler *Handler) ListContexts(fiberCtx *fiber.Ctx) error {
 		},
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, response)
+	return libHTTP.Respond(fiberCtx, fiber.StatusOK, response) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 }
 
 // GetContext retrieves a reconciliation context.
@@ -376,7 +376,7 @@ func (handler *Handler) GetContext(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ReconciliationContextToResponse(result))
+	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ReconciliationContextToResponse(result)) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 }
 
 // UpdateContext updates a reconciliation context.
@@ -436,7 +436,7 @@ func (handler *Handler) UpdateContext(fiberCtx *fiber.Ctx) error {
 		return mapUpdateContextError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ReconciliationContextToResponse(result))
+	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ReconciliationContextToResponse(result)) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 }
 
 // DeleteContext deletes a reconciliation context.
@@ -483,13 +483,13 @@ func (handler *Handler) DeleteContext(fiberCtx *fiber.Ctx) error {
 		}
 
 		if errors.Is(err, command.ErrContextHasChildEntities) {
-			return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "has_children", err.Error())
+			return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "has_children", err.Error()) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		}
 
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent)
+	return libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 }
 
 // CloneContext creates a deep copy of a reconciliation context with all its configuration.
@@ -550,7 +550,7 @@ func (handler *Handler) CloneContext(fiberCtx *fiber.Ctx) error {
 		logSpanError(ctx, span, logger, "failed to clone context", err)
 
 		if errors.Is(err, command.ErrCloneNameRequired) {
-			return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", err.Error())
+			return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", err.Error()) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		}
 
 		if errors.Is(err, sql.ErrNoRows) {
@@ -559,13 +559,13 @@ func (handler *Handler) CloneContext(fiberCtx *fiber.Ctx) error {
 
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "duplicate_name", "a context with this name already exists")
+			return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "duplicate_name", "a context with this name already exists") //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		}
 
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.CloneResultToResponse(result))
+	return libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.CloneResultToResponse(result)) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 }
 
 // boolDefault returns the value of b if non-nil, or the default value otherwise.
@@ -633,7 +633,7 @@ func (handler *Handler) CreateSource(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.ReconciliationSourceToResponse(result))
+	return libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.ReconciliationSourceToResponse(result)) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 }
 
 // ListSources lists reconciliation sources.
@@ -648,7 +648,7 @@ func (handler *Handler) CreateSource(fiberCtx *fiber.Ctx) error {
 // @Param contextId path string true "Context ID" format(uuid)
 // @Param limit query int false "Maximum number of records to return" default(20) minimum(1) maximum(200)
 // @Param cursor query string false "Cursor for pagination (opaque)"
-// @Param type query string false "Filter by source type" Enums(LEDGER,BANK,GATEWAY,CUSTOM)
+// @Param type query string false "Filter by source type" Enums(LEDGER,BANK,GATEWAY,CUSTOM,FETCHER)
 // @Success 200 {object} ListSourcesResponse "List of sources with cursor pagination"
 // @Failure 400 {object} ErrorResponse "Invalid query parameters"
 // @Failure 401 {object} ErrorResponse "Unauthorized"
@@ -729,7 +729,7 @@ func (handler *Handler) ListSources(fiberCtx *fiber.Ctx) error {
 		},
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, response)
+	return libHTTP.Respond(fiberCtx, fiber.StatusOK, response) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 }
 
 // GetSource retrieves a reconciliation source.
@@ -786,7 +786,7 @@ func (handler *Handler) GetSource(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ReconciliationSourceToResponse(result))
+	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ReconciliationSourceToResponse(result)) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 }
 
 // UpdateSource updates a reconciliation source.
@@ -856,7 +856,7 @@ func (handler *Handler) UpdateSource(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ReconciliationSourceToResponse(result))
+	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ReconciliationSourceToResponse(result)) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 }
 
 // DeleteSource deletes a reconciliation source.
@@ -909,13 +909,13 @@ func (handler *Handler) DeleteSource(fiberCtx *fiber.Ctx) error {
 		}
 
 		if errors.Is(err, command.ErrSourceHasFieldMap) {
-			return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "has_field_map", err.Error())
+			return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "has_field_map", err.Error()) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		}
 
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent)
+	return libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 }
 
 // CreateFieldMap creates a field map.
@@ -979,7 +979,7 @@ func (handler *Handler) CreateFieldMap(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.FieldMapToResponse(result))
+	return libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.FieldMapToResponse(result)) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 }
 
 // GetFieldMapBySource retrieves a field map by source.
@@ -1040,7 +1040,7 @@ func (handler *Handler) GetFieldMapBySource(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FieldMapToResponse(result))
+	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FieldMapToResponse(result)) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 }
 
 // UpdateFieldMap updates a field map.
@@ -1110,7 +1110,7 @@ func (handler *Handler) UpdateFieldMap(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FieldMapToResponse(result))
+	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FieldMapToResponse(result)) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 }
 
 // DeleteFieldMap deletes a field map.
@@ -1170,7 +1170,7 @@ func (handler *Handler) DeleteFieldMap(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent)
+	return libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 }
 
 // CreateMatchRule creates a match rule.
@@ -1228,13 +1228,13 @@ func (handler *Handler) CreateMatchRule(fiberCtx *fiber.Ctx) error {
 		logSpanError(ctx, span, logger, "failed to create match rule", err)
 
 		if errors.Is(err, entities.ErrRulePriorityConflict) {
-			return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "priority_conflict", err.Error())
+			return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "priority_conflict", err.Error()) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		}
 
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.MatchRuleToResponse(result))
+	return libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.MatchRuleToResponse(result)) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 }
 
 // ListMatchRules lists match rules.
@@ -1318,7 +1318,7 @@ func (handler *Handler) ListMatchRules(fiberCtx *fiber.Ctx) error {
 		},
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, response)
+	return libHTTP.Respond(fiberCtx, fiber.StatusOK, response) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 }
 
 // GetMatchRule retrieves a match rule.
@@ -1375,7 +1375,7 @@ func (handler *Handler) GetMatchRule(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.MatchRuleToResponse(result))
+	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.MatchRuleToResponse(result)) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 }
 
 // UpdateMatchRule updates a match rule.
@@ -1434,7 +1434,7 @@ func (handler *Handler) UpdateMatchRule(fiberCtx *fiber.Ctx) error {
 		logSpanError(ctx, span, logger, "failed to update match rule", err)
 
 		if errors.Is(err, entities.ErrRulePriorityConflict) {
-			return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "priority_conflict", err.Error())
+			return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "priority_conflict", err.Error()) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		}
 
 		if errors.Is(err, sql.ErrNoRows) {
@@ -1444,7 +1444,7 @@ func (handler *Handler) UpdateMatchRule(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.MatchRuleToResponse(result))
+	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.MatchRuleToResponse(result)) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 }
 
 // DeleteMatchRule deletes a match rule.
@@ -1499,7 +1499,7 @@ func (handler *Handler) DeleteMatchRule(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent)
+	return libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 }
 
 // ReorderRequest defines the rule ID ordering payload.
@@ -1565,7 +1565,7 @@ func (handler *Handler) ReorderMatchRules(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent)
+	return libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 }
 
 func mapUpdateContextError(fiberCtx *fiber.Ctx, err error) error {
@@ -1573,11 +1573,11 @@ func mapUpdateContextError(fiberCtx *fiber.Ctx, err error) error {
 	case errors.Is(err, sql.ErrNoRows):
 		return writeNotFound(fiberCtx, "context not found")
 	case errors.Is(err, command.ErrContextNameAlreadyExists):
-		return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "duplicate_name", err.Error())
+		return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "duplicate_name", err.Error()) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	case errors.Is(err, entities.ErrInvalidStateTransition):
-		return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "invalid_state_transition", err.Error())
+		return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "invalid_state_transition", err.Error()) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	case errors.Is(err, entities.ErrArchivedContextCannotBeModified):
-		return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "archived_context", err.Error())
+		return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "archived_context", err.Error()) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	default:
 		return writeServiceError(fiberCtx, err)
 	}
@@ -1586,10 +1586,10 @@ func mapUpdateContextError(fiberCtx *fiber.Ctx, err error) error {
 func writeServiceError(fiberCtx *fiber.Ctx, err error) error {
 	message := clientErrorMessage(err)
 	if isClientSafeError(err) {
-		return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", message)
+		return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", message) //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	}
 
-	return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
+	return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred") //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 }
 
 func clientErrorMessage(err error) string {

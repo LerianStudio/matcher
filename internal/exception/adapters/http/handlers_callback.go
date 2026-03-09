@@ -10,8 +10,8 @@ import (
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/exception/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
@@ -114,6 +114,7 @@ func (handler *Handlers) ProcessCallback(fiberCtx *fiber.Ctx) error {
 		return handleCallbackError(ctx, fiberCtx, span, logger, err)
 	}
 
+	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ProcessCallbackResponse{Status: "accepted"})
 }
 
@@ -154,18 +155,21 @@ func handleCallbackError(
 	if errors.Is(err, command.ErrCallbackRateLimitExceeded) {
 		logSpanError(ctx, span, logger, "callback rate limit exceeded", err)
 
+		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return libHTTP.RespondError(fiberCtx, fiber.StatusTooManyRequests, "rate_limit_exceeded", "callback rate limit exceeded")
 	}
 
 	if errors.Is(err, command.ErrCallbackInProgress) {
 		logSpanError(ctx, span, logger, "callback already in progress", err)
 
+		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "callback_in_progress", "callback is already being processed")
 	}
 
 	if errors.Is(err, command.ErrCallbackRetryable) {
 		logSpanError(ctx, span, logger, "callback retry required", err)
 
+		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "callback_retryable", "callback can be retried")
 	}
 

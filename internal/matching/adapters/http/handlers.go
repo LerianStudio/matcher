@@ -11,10 +11,10 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/matching/adapters/http/dto"
@@ -178,6 +178,7 @@ func badRequest(
 ) error {
 	logSpanError(ctx, span, logger, message, err)
 
+	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", message)
 }
 
@@ -191,10 +192,12 @@ func writeServiceError(
 ) error {
 	logSpanError(ctx, span, logger, message, err)
 
+	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 }
 
 func writeNotFound(fiberCtx *fiber.Ctx, message string) error {
+	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.RespondError(fiberCtx, fiber.StatusNotFound, "not_found", message)
 }
 
@@ -209,6 +212,7 @@ func forbidden(ctx context.Context, fiberCtx *fiber.Ctx, span trace.Span, logger
 
 	logger.Log(ctx, libLog.LevelWarn, "access denied: "+message)
 
+	//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 	return libHTTP.RespondError(fiberCtx, fiber.StatusForbidden, "forbidden", message)
 }
 
@@ -232,6 +236,7 @@ func handleContextVerificationError(
 
 	case errors.Is(err, libHTTP.ErrTenantIDNotFound),
 		errors.Is(err, libHTTP.ErrInvalidTenantID):
+		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return true, libHTTP.RespondError(fiberCtx, fiber.StatusUnauthorized, "unauthorized", "unauthorized")
 
 	case errors.Is(err, libHTTP.ErrContextNotFound):
@@ -242,6 +247,7 @@ func handleContextVerificationError(
 
 		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("context not active: %v", err))
 
+		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return true, libHTTP.RespondError(
 			fiberCtx,
 			fiber.StatusForbidden,
@@ -285,6 +291,7 @@ func handleContextQueryVerificationError(
 
 		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("context not active: %v", err))
 
+		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return true, libHTTP.RespondError(
 			fiberCtx,
 			fiber.StatusForbidden,
@@ -294,6 +301,7 @@ func handleContextQueryVerificationError(
 
 	case errors.Is(err, libHTTP.ErrTenantIDNotFound),
 		errors.Is(err, libHTTP.ErrInvalidTenantID):
+		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return true, libHTTP.RespondError(fiberCtx, fiber.StatusUnauthorized, "unauthorized", "unauthorized")
 
 	case errors.Is(err, libHTTP.ErrContextNotFound):
