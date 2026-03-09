@@ -1010,6 +1010,11 @@ linters:
       - linters:
           - gosec
         text: 'G306: Expect WriteFile permissions to be 0600 or less'
+      # G118 false-positives: cancel funcs returned to callers or stored in structs
+      # are invisible to gosec's intra-procedural analysis.
+      - linters:
+          - gosec
+        text: G118
       - linters:
           - errcheck
           - gosec
