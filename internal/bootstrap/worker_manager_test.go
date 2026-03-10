@@ -692,7 +692,7 @@ func TestWorkerManager_ConcurrentAccess(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestWorkerManager_RestartSkippedWhenFactoryReturnsSameInstance(t *testing.T) {
+func TestWorkerManager_RestartWhenFactoryReturnsSameInstance(t *testing.T) {
 	t.Parallel()
 
 	logger := &libLog.NopLogger{}
@@ -712,8 +712,8 @@ func TestWorkerManager_RestartSkippedWhenFactoryReturnsSameInstance(t *testing.T
 
 	wm.onConfigChange(updatedCfg)
 
-	assert.Equal(t, 1, worker.startCount(), "worker must not be started again with same instance")
-	assert.Equal(t, 0, worker.stopCount(), "worker must remain running when restart is skipped")
+	assert.Equal(t, 2, worker.startCount(), "worker should be restarted even when factory returns same instance")
+	assert.Equal(t, 1, worker.stopCount(), "worker should be stopped before restart")
 
 	err = wm.Stop()
 	require.NoError(t, err)

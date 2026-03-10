@@ -1,0 +1,32 @@
+//go:build unit
+
+package bootstrap
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
+
+func TestShouldEnableConfigAPIRoutes(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil config", func(t *testing.T) {
+		t.Parallel()
+		assert.False(t, shouldEnableConfigAPIRoutes(nil))
+	})
+
+	t.Run("auth disabled", func(t *testing.T) {
+		t.Parallel()
+		cfg := defaultConfig()
+		cfg.Auth.Enabled = false
+		assert.False(t, shouldEnableConfigAPIRoutes(cfg))
+	})
+
+	t.Run("auth enabled", func(t *testing.T) {
+		t.Parallel()
+		cfg := defaultConfig()
+		cfg.Auth.Enabled = true
+		assert.True(t, shouldEnableConfigAPIRoutes(cfg))
+	})
+}

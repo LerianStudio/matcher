@@ -5,10 +5,14 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
+	"time"
 
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
 
+	configWorker "github.com/LerianStudio/matcher/internal/configuration/services/worker"
+	governanceWorker "github.com/LerianStudio/matcher/internal/governance/services/worker"
+	reportingWorker "github.com/LerianStudio/matcher/internal/reporting/services/worker"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
 
@@ -291,13 +295,12 @@ func (wm *WorkerManager) restartSlotLocked(ctx context.Context, slot *workerSlot
 	}
 
 	if sameWorkerInstance(slot.instance, candidate) {
-		wm.logger.Log(ctx, libLog.LevelWarn,
-			fmt.Sprintf("worker %q restart skipped: factory returned same instance", slot.name))
+		wm.stopSlotLocked(ctx, slot)
 
-		return nil
+		applyWorkerRuntimeConfig(ctx, slot.name, candidate, cfg)
+	} else {
+		wm.stopSlotLocked(ctx, slot)
 	}
-
-	wm.stopSlotLocked(ctx, slot)
 
 	if err := candidate.Start(ctx); err != nil {
 		return fmt.Errorf("start worker %q after restart: %w", slot.name, err)
@@ -309,6 +312,91 @@ func (wm *WorkerManager) restartSlotLocked(ctx context.Context, slot *workerSlot
 		fmt.Sprintf("worker %q restarted", slot.name))
 
 	return nil
+}
+
+func applyWorkerRuntimeConfig(ctx context.Context, name string, worker WorkerLifecycle, cfg *Config) {
+	_ = ctx
+
+	if cfg == nil || worker == nil {
+		return
+	}
+
+	switch name {
+	case "export":
+		exportWorker, ok := worker.(*reportingWorker.ExportWorker)
+		if !ok {
+			return
+		}
+
+		exportWorker.UpdateRuntimeConfig(reportingWorker.ExportWorkerConfig{
+			PollInterval: cfg.ExportWorkerPollInterval(),
+			PageSize:     cfg.ExportWorker.PageSize,
+		})
+	case "cleanup":
+		cleanupWorker, ok := worker.(*reportingWorker.CleanupWorker)
+		if !ok {
+			return
+		}
+
+		cleanupWorker.UpdateRuntimeConfig(reportingWorker.CleanupWorkerConfig{
+			Interval:              cfg.CleanupWorkerInterval(),
+			BatchSize:             cfg.CleanupWorkerBatchSize(),
+			FileDeleteGracePeriod: cfg.CleanupWorkerGracePeriod(),
+		})
+	case "archival":
+		archivalWorker, ok := worker.(*governanceWorker.ArchivalWorker)
+		if !ok {
+			return
+		}
+
+		archivalWorker.UpdateRuntimeConfig(governanceWorker.ArchivalWorkerConfig{
+			Interval:            cfg.ArchivalInterval(),
+			HotRetentionDays:    cfg.Archival.HotRetentionDays,
+			WarmRetentionMonths: cfg.Archival.WarmRetentionMonths,
+			ColdRetentionMonths: cfg.Archival.ColdRetentionMonths,
+			BatchSize:           cfg.Archival.BatchSize,
+			StorageBucket:       cfg.Archival.StorageBucket,
+			StoragePrefix:       cfg.Archival.StoragePrefix,
+			StorageClass:        cfg.Archival.StorageClass,
+			PartitionLookahead:  cfg.Archival.PartitionLookahead,
+			PresignExpiry:       archivalPresignExpiryWithContext(ctx, cfg),
+		})
+	case "scheduler":
+		schedulerWorker, ok := worker.(*configWorker.SchedulerWorker)
+		if !ok {
+			return
+		}
+
+		schedulerWorker.UpdateRuntimeConfig(configWorker.SchedulerWorkerConfig{
+			Interval: cfg.SchedulerInterval(),
+		})
+	}
+}
+
+func archivalPresignExpiryWithContext(ctx context.Context, cfg *Config) time.Duration {
+	if cfg == nil {
+		return time.Hour
+	}
+
+	const (
+		maxPresignExpirySeconds     = 604800
+		defaultPresignExpirySeconds = 3600
+	)
+
+	if cfg.Archival.PresignExpirySec <= 0 {
+		return time.Duration(defaultPresignExpirySeconds) * time.Second
+	}
+
+	if cfg.Archival.PresignExpirySec > maxPresignExpirySeconds {
+		if cfg.Logger != nil {
+			cfg.Logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("ARCHIVAL_PRESIGN_EXPIRY_SEC=%d exceeds S3 maximum of %d seconds, capping to maximum",
+				cfg.Archival.PresignExpirySec, maxPresignExpirySeconds))
+		}
+
+		return time.Duration(maxPresignExpirySeconds) * time.Second
+	}
+
+	return time.Duration(cfg.Archival.PresignExpirySec) * time.Second
 }
 
 // startSlotLocked creates a new worker via the factory and starts it.

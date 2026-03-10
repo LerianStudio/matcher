@@ -485,6 +485,72 @@ func TestRoutesStruct(t *testing.T) {
 	})
 }
 
+func TestRegisterRoutes_DynamicRateLimitToggle(t *testing.T) {
+	t.Parallel()
+
+	app := fiber.New()
+	cfg := &Config{
+		App: AppConfig{EnvName: "test"},
+		RateLimit: RateLimitConfig{
+			Enabled:   false,
+			Max:       1,
+			ExpirySec: 60,
+		},
+	}
+
+	currentCfg := cfg
+	configGetter := func() *Config {
+		return currentCfg
+	}
+
+	client := authMiddleware.NewAuthClient("", false, nil)
+	extractor, err := auth.NewTenantExtractor(
+		false,
+		"11111111-1111-1111-1111-111111111111",
+		"default",
+		"",
+		"test",
+	)
+	require.NoError(t, err)
+
+	routes, err := RegisterRoutes(app, cfg, configGetter, nil, &libLog.NopLogger{}, client, extractor, nil, nil)
+	require.NoError(t, err)
+
+	router := routes.Protected("configuration", "read")
+	router.Get("/dynamic-rate-limit", func(c *fiber.Ctx) error {
+		return c.SendStatus(http.StatusOK)
+	})
+
+	// Initially disabled: request should pass.
+	firstReq := httptest.NewRequest(http.MethodGet, "/dynamic-rate-limit", http.NoBody)
+	firstResp, firstErr := app.Test(firstReq)
+	require.NoError(t, firstErr)
+	defer firstResp.Body.Close()
+	assert.Equal(t, http.StatusOK, firstResp.StatusCode)
+
+	// Toggle on at runtime using config getter.
+	currentCfg = &Config{
+		App: AppConfig{EnvName: "test"},
+		RateLimit: RateLimitConfig{
+			Enabled:   true,
+			Max:       1,
+			ExpirySec: 60,
+		},
+	}
+
+	secondReq := httptest.NewRequest(http.MethodGet, "/dynamic-rate-limit", http.NoBody)
+	secondResp, secondErr := app.Test(secondReq)
+	require.NoError(t, secondErr)
+	defer secondResp.Body.Close()
+	assert.Equal(t, http.StatusOK, secondResp.StatusCode)
+
+	thirdReq := httptest.NewRequest(http.MethodGet, "/dynamic-rate-limit", http.NoBody)
+	thirdResp, thirdErr := app.Test(thirdReq)
+	require.NoError(t, thirdErr)
+	defer thirdResp.Body.Close()
+	assert.Equal(t, http.StatusTooManyRequests, thirdResp.StatusCode)
+}
+
 func TestParseSchemes(t *testing.T) {
 	t.Parallel()
 

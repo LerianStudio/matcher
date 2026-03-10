@@ -39,6 +39,8 @@ type dynamicLimiterConfig struct {
 	maxFunc func() int
 	// expiration is the fixed window duration (static — Fiber v2 limitation).
 	expiration time.Duration
+	// expirationFunc returns the current window duration (optional, per-request).
+	expirationFunc func() time.Duration
 	// keyGenerator produces a per-client key from the request context.
 	keyGenerator func(*fiber.Ctx) string
 	// limitReached is invoked when a request exceeds the limit.
@@ -75,13 +77,6 @@ func newDynamicLimiter(cfg dynamicLimiterConfig) fiber.Handler {
 		lastGC  int64
 	)
 
-	expirationSec := int64(cfg.expiration.Seconds())
-	if expirationSec < 1 {
-		expirationSec = 1
-	}
-
-	gcInterval := expirationSec * 2 //nolint:mnd // sweep every 2x the window duration
-
 	return func(fiberCtx *fiber.Ctx) error {
 		currentMax := cfg.maxFunc()
 
@@ -92,6 +87,18 @@ func newDynamicLimiter(cfg dynamicLimiterConfig) fiber.Handler {
 		if currentMax <= 0 {
 			return fiberCtx.Next()
 		}
+
+		expirationDuration := cfg.expiration
+		if cfg.expirationFunc != nil {
+			expirationDuration = cfg.expirationFunc()
+		}
+
+		expirationSec := int64(expirationDuration.Seconds())
+		if expirationSec < 1 {
+			expirationSec = 1
+		}
+
+		gcInterval := expirationSec * 2 //nolint:mnd // sweep every 2x the window duration
 
 		key := cfg.keyGenerator(fiberCtx)
 		now := time.Now().Unix()
@@ -235,7 +242,14 @@ func buildInMemoryDynamicHandler(dlCtx *dynamicLimiterContext) fiber.Handler {
 
 			return dlCtx.opts.getMax(dlCtx.initialCfg)
 		},
-		expiration:   time.Duration(dlCtx.safeExpiry(dlCtx.initialCfg)) * time.Second,
+		expiration: time.Duration(dlCtx.safeExpiry(dlCtx.initialCfg)) * time.Second,
+		expirationFunc: func() time.Duration {
+			if cfg := dlCtx.configGetter(); cfg != nil {
+				return time.Duration(dlCtx.safeExpiry(cfg)) * time.Second
+			}
+
+			return time.Duration(dlCtx.safeExpiry(dlCtx.initialCfg)) * time.Second
+		},
 		keyGenerator: dlCtx.keyGen,
 		limitReached: dlCtx.limitReached,
 	})

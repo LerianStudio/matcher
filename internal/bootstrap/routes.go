@@ -93,27 +93,21 @@ func RegisterRoutes(
 
 	var protected func(resource, action string) fiber.Router
 
-	if cfg.RateLimit.Enabled {
-		rateLimiter := NewRateLimiter(cfg, rateLimitStorage)
-		if configGetter != nil {
-			rateLimiter = NewDynamicRateLimiter(configGetter, rateLimitStorage)
-		}
+	rateLimiter := NewRateLimiter(cfg, rateLimitStorage)
+	if configGetter != nil {
+		rateLimiter = NewDynamicRateLimiter(configGetter, rateLimitStorage)
+	}
 
-		protected = func(resource, action string) fiber.Router {
-			return auth.ProtectedGroupWithMiddleware(
-				app,
-				authClient,
-				tenantExtractor,
-				resource,
-				action,
-				idempotencyMiddleware,
-				rateLimiter,
-			)
-		}
-	} else {
-		protected = func(resource, action string) fiber.Router {
-			return auth.ProtectedGroupWithMiddleware(app, authClient, tenantExtractor, resource, action, idempotencyMiddleware)
-		}
+	protected = func(resource, action string) fiber.Router {
+		return auth.ProtectedGroupWithMiddleware(
+			app,
+			authClient,
+			tenantExtractor,
+			resource,
+			action,
+			idempotencyMiddleware,
+			rateLimiter,
+		)
 	}
 
 	return &Routes{

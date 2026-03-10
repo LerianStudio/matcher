@@ -647,8 +647,13 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 	configAPIHandler.SetAuditRepository(governancePostgres.NewRepository(infraProvider))
 	SetAuditCallback(configManager, configAuditPublisher, logger)
 
-	if err := RegisterConfigAPIRoutes(routes.Protected, configAPIHandler); err != nil {
-		return nil, fmt.Errorf("register config API routes: %w", err)
+	if shouldEnableConfigAPIRoutes(cfg) {
+		if err := RegisterConfigAPIRoutes(routes.Protected, configAPIHandler); err != nil {
+			return nil, fmt.Errorf("register config API routes: %w", err)
+		}
+	} else {
+		logger.Log(context.Background(), libLog.LevelWarn,
+			"system config API routes are disabled because AUTH_ENABLED=false")
 	}
 
 	workerMgr := NewWorkerManager(logger, configManager)
@@ -684,36 +689,105 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 	}, nil
 }
 
+func shouldEnableConfigAPIRoutes(cfg *Config) bool {
+	return cfg != nil && cfg.Auth.Enabled
+}
+
 func registerWorkerManagerSlots(workerMgr *WorkerManager, modules *modulesResult) {
 	if workerMgr == nil || modules == nil {
 		return
 	}
 
+	registerExportWorkerSlot(workerMgr, modules)
+	registerCleanupWorkerSlot(workerMgr, modules)
+	registerArchivalWorkerSlot(workerMgr, modules)
+	registerSchedulerWorkerSlot(workerMgr, modules)
+}
+
+func registerExportWorkerSlot(workerMgr *WorkerManager, modules *modulesResult) {
 	workerMgr.Register(
 		"export",
-		func(_ *Config) (WorkerLifecycle, error) { return modules.exportWorker, nil },
-		func(cfg *Config) bool { return cfg != nil && cfg.ExportWorker.Enabled },
-		func(cfg *Config) bool { return cfg != nil && cfg.ExportWorker.Enabled },
-	)
+		func(cfg *Config) (WorkerLifecycle, error) {
+			if modules.exportWorker == nil || cfg == nil {
+				return modules.exportWorker, nil
+			}
 
+			modules.exportWorker.UpdateRuntimeConfig(reportingWorker.ExportWorkerConfig{
+				PollInterval: cfg.ExportWorkerPollInterval(),
+				PageSize:     cfg.ExportWorker.PageSize,
+			})
+
+			return modules.exportWorker, nil
+		},
+		func(cfg *Config) bool { return cfg != nil && cfg.ExportWorker.Enabled && modules.exportWorker != nil },
+		func(cfg *Config) bool { return cfg != nil && cfg.ExportWorker.Enabled && modules.exportWorker != nil },
+	)
+}
+
+func registerCleanupWorkerSlot(workerMgr *WorkerManager, modules *modulesResult) {
 	workerMgr.Register(
 		"cleanup",
-		func(_ *Config) (WorkerLifecycle, error) { return modules.cleanupWorker, nil },
-		func(cfg *Config) bool { return cfg != nil && cfg.CleanupWorker.Enabled },
-		func(cfg *Config) bool { return cfg != nil && cfg.CleanupWorker.Enabled },
-	)
+		func(cfg *Config) (WorkerLifecycle, error) {
+			if modules.cleanupWorker == nil || cfg == nil {
+				return modules.cleanupWorker, nil
+			}
 
+			modules.cleanupWorker.UpdateRuntimeConfig(reportingWorker.CleanupWorkerConfig{
+				Interval:              cfg.CleanupWorkerInterval(),
+				BatchSize:             cfg.CleanupWorkerBatchSize(),
+				FileDeleteGracePeriod: cfg.CleanupWorkerGracePeriod(),
+			})
+
+			return modules.cleanupWorker, nil
+		},
+		func(cfg *Config) bool { return cfg != nil && cfg.CleanupWorker.Enabled && modules.cleanupWorker != nil },
+		func(cfg *Config) bool { return cfg != nil && cfg.CleanupWorker.Enabled && modules.cleanupWorker != nil },
+	)
+}
+
+func registerArchivalWorkerSlot(workerMgr *WorkerManager, modules *modulesResult) {
 	workerMgr.Register(
 		"archival",
-		func(_ *Config) (WorkerLifecycle, error) { return modules.archivalWorker, nil },
-		func(cfg *Config) bool { return cfg != nil && cfg.Archival.Enabled },
-		func(cfg *Config) bool { return cfg != nil && cfg.Archival.Enabled },
-	)
+		func(cfg *Config) (WorkerLifecycle, error) {
+			if modules.archivalWorker == nil || cfg == nil {
+				return modules.archivalWorker, nil
+			}
 
+			modules.archivalWorker.UpdateRuntimeConfig(governanceWorker.ArchivalWorkerConfig{
+				Interval:            cfg.ArchivalInterval(),
+				HotRetentionDays:    cfg.Archival.HotRetentionDays,
+				WarmRetentionMonths: cfg.Archival.WarmRetentionMonths,
+				ColdRetentionMonths: cfg.Archival.ColdRetentionMonths,
+				BatchSize:           cfg.Archival.BatchSize,
+				StorageBucket:       cfg.Archival.StorageBucket,
+				StoragePrefix:       cfg.Archival.StoragePrefix,
+				StorageClass:        cfg.Archival.StorageClass,
+				PartitionLookahead:  cfg.Archival.PartitionLookahead,
+				PresignExpiry:       cfg.ArchivalPresignExpiry(),
+			})
+
+			return modules.archivalWorker, nil
+		},
+		func(cfg *Config) bool { return cfg != nil && cfg.Archival.Enabled && modules.archivalWorker != nil },
+		func(cfg *Config) bool { return cfg != nil && cfg.Archival.Enabled && modules.archivalWorker != nil },
+	)
+}
+
+func registerSchedulerWorkerSlot(workerMgr *WorkerManager, modules *modulesResult) {
 	workerMgr.Register(
 		"scheduler",
-		func(_ *Config) (WorkerLifecycle, error) { return modules.schedulerWorker, nil },
-		func(cfg *Config) bool { return cfg != nil },
+		func(cfg *Config) (WorkerLifecycle, error) {
+			if modules.schedulerWorker == nil || cfg == nil {
+				return modules.schedulerWorker, nil
+			}
+
+			modules.schedulerWorker.UpdateRuntimeConfig(configWorker.SchedulerWorkerConfig{
+				Interval: cfg.SchedulerInterval(),
+			})
+
+			return modules.schedulerWorker, nil
+		},
+		func(cfg *Config) bool { return cfg != nil && modules.schedulerWorker != nil },
 		func(_ *Config) bool { return false },
 	)
 }
@@ -1790,11 +1864,11 @@ func createObjectStorage(
 	cfg *Config,
 	_ libLog.Logger,
 ) (reportingPorts.ObjectStorageClient, error) {
-	if !cfg.ExportWorker.Enabled {
-		return nil, nil
-	}
-
 	if cfg.ObjectStorage.Bucket == "" {
+		if !cfg.ExportWorker.Enabled {
+			return nil, nil
+		}
+
 		return nil, ErrObjectStorageBucketRequired
 	}
 
@@ -2086,7 +2160,7 @@ func initReportingModule(
 		return nil, nil, fmt.Errorf("register reporting routes: %w", err)
 	}
 
-	if !cfg.ExportWorker.Enabled || storage == nil {
+	if storage == nil {
 		return nil, nil, nil
 	}
 
