@@ -2,6 +2,8 @@ package bootstrap
 
 import (
 	"os"
+	"reflect"
+	"strings"
 )
 
 // configFieldDef is the static definition of a config field.
@@ -239,11 +241,8 @@ func resolveCurrentValue(cm *ConfigManager, def configFieldDef) any {
 		return redactedValue
 	}
 
-	if cm != nil && cm.viper != nil {
-		val := cm.viper.Get(def.Key)
-		if val != nil {
-			return val
-		}
+	if val, ok := resolveCurrentConfigValue(cm, def.Key); ok {
+		return val
 	}
 
 	return def.DefaultValue
@@ -262,13 +261,10 @@ func buildRedactedConfig(cm *ConfigManager) map[string]any {
 			continue
 		}
 
-		if cm != nil && cm.viper != nil {
-			val := cm.viper.Get(def.Key)
-			if val != nil {
-				result[def.Key] = val
+		if val, ok := resolveCurrentConfigValue(cm, def.Key); ok {
+			result[def.Key] = val
 
-				continue
-			}
+			continue
 		}
 
 		result[def.Key] = def.DefaultValue
@@ -289,4 +285,93 @@ func buildEnvOverridesList() []string {
 	}
 
 	return overrides
+}
+
+func resolveConfigValue(cfg *Config, key string) (any, bool) {
+	if cfg == nil || strings.TrimSpace(key) == "" {
+		return nil, false
+	}
+
+	parts := strings.Split(key, ".")
+	current, ok := derefPointerValue(reflect.ValueOf(cfg))
+
+	if !ok {
+		return nil, false
+	}
+
+	for idx, part := range parts {
+		if current.Kind() != reflect.Struct {
+			return nil, false
+		}
+
+		next, found := findMapstructureField(current, part)
+		if !found {
+			return nil, false
+		}
+
+		if idx == len(parts)-1 {
+			return next.Interface(), true
+		}
+
+		current, ok = derefPointerValue(next)
+		if !ok {
+			return nil, false
+		}
+	}
+
+	return nil, false
+}
+
+func resolveCurrentConfigValue(cm *ConfigManager, key string) (any, bool) {
+	if cm == nil {
+		return nil, false
+	}
+
+	if cfg := cm.Get(); cfg != nil {
+		if val, ok := resolveConfigValue(cfg, key); ok {
+			return val, true
+		}
+	}
+
+	if cm.viper == nil {
+		return nil, false
+	}
+
+	val := cm.viper.Get(key)
+	if val == nil {
+		return nil, false
+	}
+
+	return val, true
+}
+
+func derefPointerValue(value reflect.Value) (reflect.Value, bool) {
+	if value.Kind() != reflect.Pointer {
+		return value, true
+	}
+
+	if value.IsNil() {
+		return reflect.Value{}, false
+	}
+
+	return value.Elem(), true
+}
+
+func findMapstructureField(current reflect.Value, part string) (reflect.Value, bool) {
+	currentType := current.Type()
+
+	for i := range currentType.NumField() {
+		field := currentType.Field(i)
+		if !field.IsExported() {
+			continue
+		}
+
+		if field.Tag.Get("mapstructure") != part {
+			continue
+		}
+
+		return current.Field(i), true
+	}
+
+	return reflect.Value{}, false
 }
