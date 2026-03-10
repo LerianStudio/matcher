@@ -618,6 +618,21 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 
 	done()
 
+	done = timer.track("config_manager")
+
+	configFilePath := resolveConfigFilePath()
+
+	configManager, err := NewConfigManager(cfg, configFilePath, logger)
+	if err != nil {
+		return nil, fmt.Errorf("initialize config manager: %w", err)
+	}
+
+	configManager.StartWatcher()
+
+	workerMgr := NewWorkerManager(logger, configManager)
+
+	done()
+
 	infraStatus := buildInfraStatus(cfg, postgresConnection, redisConnection, rabbitMQConnection, modules, healthDeps, telemetry)
 	logStartupInfo(logger, cfg, infraStatus)
 	logStartupTiming(logger, timer)
@@ -629,6 +644,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		Logger:             logger,
 		Config:             cfg,
 		Routes:             routes,
+		ConfigManager:      configManager,
 		authClient:         authClient,
 		tenantExtractor:    tenantExtractor,
 		outboxRunner:       modules.outboxDispatcher,
@@ -637,6 +653,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		cleanupWorker:      modules.cleanupWorker,
 		archivalWorker:     modules.archivalWorker,
 		schedulerWorker:    modules.schedulerWorker,
+		workerManager:      workerMgr,
 		connectionManager:  connCloser,
 		cleanupFuncs:       cleanups,
 	}, nil

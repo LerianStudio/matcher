@@ -24,10 +24,6 @@ import (
 // to finish after requesting stop, before closing infrastructure connections.
 const defaultShutdownGracePeriod = 5 * time.Second
 
-
-var (
-)
-
 // Service is the main application container that orchestrates all components.
 type Service struct {
 	*Server
@@ -44,7 +40,7 @@ type Service struct {
 	cleanupWorker      *reportingWorker.CleanupWorker
 	archivalWorker     *governanceWorker.ArchivalWorker
 	schedulerWorker    *configWorker.SchedulerWorker
-	workerManager      *WorkerManager //nolint:unused // wired by init.go, used by Stop()
+	workerManager      *WorkerManager
 	connectionManager  connectionCloser
 	cleanupFuncs       []func()
 }
@@ -52,6 +48,7 @@ type Service struct {
 type connectionCloser interface {
 	Close() error
 }
+
 // GetOutboxRunner returns the outbox dispatcher as a libCommons.App.
 // This allows integration tests to extract the dispatcher for controlled event dispatch.
 func (svc *Service) GetOutboxRunner() libCommons.App {
@@ -221,6 +218,7 @@ func (svc *Service) processWorkerStartResults(
 
 	return nil
 }
+
 func (svc *Service) stopStartedWorkers(
 	entries []workerStartEntry,
 	startedWorkers map[string]struct{},
@@ -249,6 +247,7 @@ func (svc *Service) stopStartedWorkers(
 
 	return nil
 }
+
 // Shutdown gracefully shuts down the service, including the HTTP server and telemetry.
 func (svc *Service) Shutdown(ctx context.Context) error {
 	if svc == nil {
@@ -289,6 +288,12 @@ func (svc *Service) Shutdown(ctx context.Context) error {
 
 // stopBackgroundWorkers stops all background workers and the outbox runner.
 func (svc *Service) stopBackgroundWorkers(ctx context.Context, logger libLog.Logger) {
+	// Stop config file watcher first so hot-reload doesn't restart workers
+	// while we're shutting them down.
+	if svc.ConfigManager != nil {
+		svc.ConfigManager.Stop()
+	}
+
 	if svc.exportWorker != nil {
 		if err := svc.exportWorker.Stop(); err != nil { //nolint:contextcheck // Stop() is defined without ctx in worker package
 			logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("failed to stop export worker: %v", err))

@@ -38,7 +38,6 @@ func RegisterRoutes(
 	tenantExtractor *auth.TenantExtractor,
 	rateLimitStorage fiber.Storage,
 	idempotencyRepo sharedHTTP.IdempotencyRepository,
-	configGetters ...func() *Config,
 ) (*Routes, error) {
 	asserter := assert.New(
 		context.Background(),
