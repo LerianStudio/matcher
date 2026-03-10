@@ -11,32 +11,56 @@ import (
 )
 
 // configFilePathEnv is the environment variable to override the YAML config file path.
-const configFilePathEnv = "CONFIG_FILE_PATH" //nolint:unused // used by config_manager.go
+const configFilePathEnv = "CONFIG_FILE_PATH"
 
 // defaultConfigFilePath is the fallback YAML config file location.
-const defaultConfigFilePath = "config/matcher.yaml" //nolint:unused // used by config_manager.go
+const defaultConfigFilePath = "config/matcher.yaml"
 
 // resolveConfigFilePath returns the YAML config file path.
 //
 // It reads CONFIG_FILE_PATH from the environment; if unset or empty,
 // it returns the default "config/matcher.yaml".
-//
-//nolint:unused // used by config_manager.go
 func resolveConfigFilePath() string {
-	if path := strings.TrimSpace(os.Getenv(configFilePathEnv)); path != "" {
-		if strings.ContainsRune(path, '\x00') {
-			return defaultConfigFilePath
-		}
-
-		cleaned := filepath.Clean(path)
-		if cleaned == "." {
-			return defaultConfigFilePath
-		}
-
-		return cleaned
+	path := strings.TrimSpace(os.Getenv(configFilePathEnv))
+	if path == "" {
+		return defaultConfigFilePath
 	}
 
-	return defaultConfigFilePath
+	if strings.ContainsRune(path, '\x00') {
+		return defaultConfigFilePath
+	}
+
+	cleaned := filepath.Clean(path)
+	if cleaned == "." {
+		return defaultConfigFilePath
+	}
+
+	if !isPathContained(cleaned) {
+		return defaultConfigFilePath
+	}
+
+	// Verify the file has a YAML extension to prevent writing to arbitrary file types.
+	ext := strings.ToLower(filepath.Ext(cleaned))
+	if ext != ".yaml" && ext != ".yml" {
+		return defaultConfigFilePath
+	}
+
+	return cleaned
+}
+
+// isPathContained returns true if the given path is safe to use as a config file.
+// Absolute paths must reside within the working directory to prevent traversal.
+func isPathContained(cleaned string) bool {
+	if !filepath.IsAbs(cleaned) {
+		return true // relative paths are allowed
+	}
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		return false
+	}
+
+	return strings.HasPrefix(cleaned, cwd+string(filepath.Separator))
 }
 
 // bindDefaults registers all default values from defaultConfig() into the viper
