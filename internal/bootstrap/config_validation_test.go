@@ -228,3 +228,61 @@ func TestValidateProductionConfig_MissingPostgresPassword(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "POSTGRES_PASSWORD")
 }
+
+func TestValidateRateLimitConfig_RejectsExcessiveMax(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cfg.RateLimit.Max = maxRateLimitRequestsPerWindow + 1
+
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "RATE_LIMIT_MAX")
+}
+
+func TestValidateRateLimitConfig_RejectsExcessiveExpiry(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cfg.RateLimit.ExpirySec = maxRateLimitWindowSeconds + 1
+
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "RATE_LIMIT_EXPIRY_SEC")
+}
+
+func TestValidateRateLimitConfig_RejectsExcessiveExportLimits(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cfg.RateLimit.ExportMax = maxRateLimitRequestsPerWindow + 1
+
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "EXPORT_RATE_LIMIT_MAX")
+
+	cfg = defaultConfig()
+	cfg.RateLimit.ExportExpirySec = maxRateLimitWindowSeconds + 1
+
+	err = cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "EXPORT_RATE_LIMIT_EXPIRY_SEC")
+}
+
+func TestValidateRateLimitConfig_RejectsExcessiveDispatchLimits(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cfg.RateLimit.DispatchMax = maxRateLimitRequestsPerWindow + 1
+
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "DISPATCH_RATE_LIMIT_MAX")
+
+	cfg = defaultConfig()
+	cfg.RateLimit.DispatchExpirySec = maxRateLimitWindowSeconds + 1
+
+	err = cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "DISPATCH_RATE_LIMIT_EXPIRY_SEC")
+}

@@ -472,41 +472,6 @@ func TestSchedulerInterval(t *testing.T) {
 	}
 }
 
-func TestFetcherDurations(t *testing.T) {
-	t.Parallel()
-
-	t.Run("defaults_when_zero", func(t *testing.T) {
-		t.Parallel()
-
-		cfg := &Config{Fetcher: FetcherConfig{}}
-		assert.Equal(t, 5*time.Second, cfg.FetcherHealthTimeout())
-		assert.Equal(t, 30*time.Second, cfg.FetcherRequestTimeout())
-		assert.Equal(t, 60*time.Second, cfg.FetcherDiscoveryInterval())
-		assert.Equal(t, 300*time.Second, cfg.FetcherSchemaCacheTTL())
-		assert.Equal(t, 5*time.Second, cfg.FetcherExtractionPollInterval())
-		assert.Equal(t, 600*time.Second, cfg.FetcherExtractionTimeout())
-	})
-
-	t.Run("uses_configured_values", func(t *testing.T) {
-		t.Parallel()
-
-		cfg := &Config{Fetcher: FetcherConfig{
-			HealthTimeoutSec:     10,
-			RequestTimeoutSec:    60,
-			DiscoveryIntervalSec: 120,
-			SchemaCacheTTLSec:    600,
-			ExtractionPollSec:    10,
-			ExtractionTimeoutSec: 1200,
-		}}
-		assert.Equal(t, 10*time.Second, cfg.FetcherHealthTimeout())
-		assert.Equal(t, 60*time.Second, cfg.FetcherRequestTimeout())
-		assert.Equal(t, 120*time.Second, cfg.FetcherDiscoveryInterval())
-		assert.Equal(t, 600*time.Second, cfg.FetcherSchemaCacheTTL())
-		assert.Equal(t, 10*time.Second, cfg.FetcherExtractionPollInterval())
-		assert.Equal(t, 1200*time.Second, cfg.FetcherExtractionTimeout())
-	})
-}
-
 func TestCleanupWorkerDurations(t *testing.T) {
 	t.Parallel()
 

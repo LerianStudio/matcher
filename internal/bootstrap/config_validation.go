@@ -16,6 +16,11 @@ import (
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
 
+const (
+	maxRateLimitRequestsPerWindow = 1_000_000
+	maxRateLimitWindowSeconds     = 86_400
+)
+
 // Validate checks the configuration for required fields and production constraints.
 func (cfg *Config) Validate() error {
 	ctx := context.Background()
@@ -144,7 +149,19 @@ func (cfg *Config) validateRateLimitConfig(asserter *assert.Asserter) error {
 		return fmt.Errorf("config validation: %w", err)
 	}
 
+	if err := asserter.That(ctx, cfg.RateLimit.ExportMax <= maxRateLimitRequestsPerWindow,
+		"EXPORT_RATE_LIMIT_MAX must not exceed 1000000",
+		"export_rate_limit_max", cfg.RateLimit.ExportMax); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+
 	if err := asserter.That(ctx, cfg.RateLimit.ExportExpirySec > 0, "EXPORT_RATE_LIMIT_EXPIRY_SEC must be positive", "export_rate_limit_expiry", cfg.RateLimit.ExportExpirySec); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+
+	if err := asserter.That(ctx, cfg.RateLimit.ExportExpirySec <= maxRateLimitWindowSeconds,
+		"EXPORT_RATE_LIMIT_EXPIRY_SEC must not exceed 86400",
+		"export_rate_limit_expiry", cfg.RateLimit.ExportExpirySec); err != nil {
 		return fmt.Errorf("config validation: %w", err)
 	}
 
@@ -157,7 +174,19 @@ func (cfg *Config) validateRateLimitConfig(asserter *assert.Asserter) error {
 		return fmt.Errorf("config validation: %w", err)
 	}
 
+	if err := asserter.That(ctx, cfg.RateLimit.Max <= maxRateLimitRequestsPerWindow,
+		"RATE_LIMIT_MAX must not exceed 1000000",
+		"rate_limit_max", cfg.RateLimit.Max); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+
 	if err := asserter.That(ctx, cfg.RateLimit.ExpirySec > 0, "RATE_LIMIT_EXPIRY_SEC must be positive", "rate_limit_expiry", cfg.RateLimit.ExpirySec); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+
+	if err := asserter.That(ctx, cfg.RateLimit.ExpirySec <= maxRateLimitWindowSeconds,
+		"RATE_LIMIT_EXPIRY_SEC must not exceed 86400",
+		"rate_limit_expiry", cfg.RateLimit.ExpirySec); err != nil {
 		return fmt.Errorf("config validation: %w", err)
 	}
 
@@ -165,7 +194,19 @@ func (cfg *Config) validateRateLimitConfig(asserter *assert.Asserter) error {
 		return fmt.Errorf("config validation: %w", err)
 	}
 
+	if err := asserter.That(ctx, cfg.RateLimit.DispatchMax <= maxRateLimitRequestsPerWindow,
+		"DISPATCH_RATE_LIMIT_MAX must not exceed 1000000",
+		"dispatch_rate_limit_max", cfg.RateLimit.DispatchMax); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+
 	if err := asserter.That(ctx, cfg.RateLimit.DispatchExpirySec > 0, "DISPATCH_RATE_LIMIT_EXPIRY_SEC must be positive", "dispatch_rate_limit_expiry", cfg.RateLimit.DispatchExpirySec); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+
+	if err := asserter.That(ctx, cfg.RateLimit.DispatchExpirySec <= maxRateLimitWindowSeconds,
+		"DISPATCH_RATE_LIMIT_EXPIRY_SEC must not exceed 86400",
+		"dispatch_rate_limit_expiry", cfg.RateLimit.DispatchExpirySec); err != nil {
 		return fmt.Errorf("config validation: %w", err)
 	}
 
