@@ -573,11 +573,10 @@ func TestConfigManager_Stop_StopsDebounceTimer(t *testing.T) {
 	// Stop should clean up the timer.
 	cm.Stop()
 
-	// Give the debounce timer enough time to fire (if it wasn't stopped).
-	time.Sleep(debounceDuration + 100*time.Millisecond)
-
-	// Version should be 0 — the debounced reload was cancelled by Stop().
-	assert.Equal(t, uint64(0), cm.Version())
+	assert.Never(t, func() bool {
+		return cm.Version() > 0
+	}, debounceDuration+300*time.Millisecond, 20*time.Millisecond,
+		"debounced reload should not run after Stop")
 }
 
 func TestConfigManager_Debounce_CoalescesEvents(t *testing.T) {
@@ -600,11 +599,78 @@ func TestConfigManager_Debounce_CoalescesEvents(t *testing.T) {
 		time.Sleep(50 * time.Millisecond) // Well within the 500ms debounce window.
 	}
 
-	// Wait for the debounce to fire.
-	time.Sleep(debounceDuration + 200*time.Millisecond)
+	require.Eventually(t, func() bool {
+		return cm.Version() == 1
+	}, debounceDuration+400*time.Millisecond, 20*time.Millisecond,
+		"debounce should coalesce 10 events into 1 reload")
+}
 
-	// Should have resulted in exactly 1 reload, not 10.
-	assert.Equal(t, uint64(1), cm.Version(), "debounce should coalesce 10 events into 1 reload")
+func TestConfigManager_StartWatcher_Idempotent(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
+
+	cfg := defaultConfig()
+	cm, err := NewConfigManager(cfg, yamlPath, &testLogger{})
+	require.NoError(t, err)
+	t.Cleanup(cm.Stop)
+
+	cm.StartWatcher()
+	cm.StartWatcher()
+
+	updatedYAML := `
+app:
+  env_name: "development"
+  log_level: "debug"
+server:
+  address: ":4018"
+  body_limit_bytes: 104857600
+tenancy:
+  default_tenant_id: "11111111-1111-1111-1111-111111111111"
+  default_tenant_slug: "default"
+infrastructure:
+  connect_timeout_sec: 30
+rate_limit:
+  enabled: true
+  max: 100
+  expiry_sec: 60
+  export_max: 10
+  export_expiry_sec: 60
+  dispatch_max: 50
+  dispatch_expiry_sec: 60
+`
+	require.NoError(t, os.WriteFile(yamlPath, []byte(updatedYAML), 0o600))
+
+	require.Eventually(t, func() bool {
+		return cm.Version() == 1
+	}, 2*time.Second, 20*time.Millisecond)
+
+	assert.Equal(t, uint64(1), cm.Version(), "single file change should produce one reload even if StartWatcher is called twice")
+}
+
+func TestConfigManager_Update_RejectsEnvOverriddenRuntimeChange(t *testing.T) {
+	// Not parallel: t.Setenv mutates process environment.
+	t.Setenv("LOG_LEVEL", "warn")
+
+	tmpDir := t.TempDir()
+	yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
+
+	cfg := defaultConfig()
+	cm := newTestConfigManager(t, cfg, yamlPath, &testLogger{})
+
+	_, err := cm.Reload()
+	require.NoError(t, err)
+	assert.Equal(t, "warn", cm.Get().App.LogLevel)
+
+	result, err := cm.Update(map[string]any{"app.log_level": "debug"})
+	require.NoError(t, err)
+
+	assert.Empty(t, result.Applied)
+	require.Len(t, result.Rejected, 1)
+	assert.Equal(t, "app.log_level", result.Rejected[0].Key)
+	assert.Contains(t, result.Rejected[0].Reason, "overridden by environment variable")
+	assert.Equal(t, "warn", cm.Get().App.LogLevel)
 }
 
 func TestConfigManager_Update_MutableKeys(t *testing.T) {
@@ -784,6 +850,7 @@ func TestConfigManager_Reload_ConcurrentSafety(t *testing.T) {
 	const goroutines = 20
 
 	var wg sync.WaitGroup
+	reloadErrs := make(chan error, goroutines/2)
 
 	// Half goroutines reading, half reloading — should not race.
 	wg.Add(goroutines)
@@ -800,15 +867,18 @@ func TestConfigManager_Reload_ConcurrentSafety(t *testing.T) {
 			go func() {
 				defer wg.Done()
 
-				// Reload may fail under concurrent access — errors are expected
-				// and intentionally discarded. This test verifies absence of
-				// panics and data races, not error-free operation.
-				_, _ = cm.Reload()
+				_, reloadErr := cm.Reload()
+				reloadErrs <- reloadErr
 			}()
 		}
 	}
 
 	wg.Wait()
+	close(reloadErrs)
+
+	for reloadErr := range reloadErrs {
+		require.NoError(t, reloadErr)
+	}
 
 	// Post-condition: config should still be non-nil and structurally valid
 	// after concurrent access. This catches subtle corruption that doesn't panic.

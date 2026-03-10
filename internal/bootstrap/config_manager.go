@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -69,6 +71,7 @@ type ConfigManager struct {
 	nextSubID   atomic.Uint64
 	lastReload  atomic.Value // stores time.Time
 	stopOnce    sync.Once
+	watcherOnce sync.Once
 	stopCh      chan struct{}
 
 	// lastUpdateSource stores the origin of the most recent config change
@@ -248,7 +251,7 @@ func (cm *ConfigManager) StartWatcher() {
 	default:
 	}
 
-	cm.startWatcher()
+	cm.watcherOnce.Do(cm.startWatcher)
 }
 
 // Get returns the current configuration. This is the hot path — it uses an
@@ -515,12 +518,26 @@ func (cm *ConfigManager) Update(changes map[string]any) (*UpdateResult, error) {
 	// infrastructure-bound keys (server address, DB host, etc.) are excluded
 	// from mutableConfigKeys, so they never reach this point.
 	for _, key := range sortedChangeKeys(applicableChanges) {
-		value := applicableChanges[key]
+		requested := applicableChanges[key]
+		effectiveOld, _ := resolveConfigValue(oldCfg, key)
+		effectiveNew, _ := resolveConfigValue(candidateCfg, key)
+		hotReloaded := !valuesEquivalent(effectiveOld, effectiveNew)
+
+		if !hotReloaded && !valuesEquivalent(requested, effectiveNew) {
+			result.Rejected = append(result.Rejected, ConfigChangeRejection{
+				Key:    key,
+				Value:  redactIfSensitive(key, requested),
+				Reason: "overridden by environment variable; value persisted but not effective at runtime",
+			})
+
+			continue
+		}
+
 		result.Applied = append(result.Applied, ConfigChangeResult{
 			Key:         key,
-			OldValue:    redactIfSensitive(key, oldValues[key]),
-			NewValue:    redactIfSensitive(key, value),
-			HotReloaded: true,
+			OldValue:    redactIfSensitive(key, effectiveOld),
+			NewValue:    redactIfSensitive(key, effectiveNew),
+			HotReloaded: hotReloaded,
 		})
 	}
 
@@ -533,12 +550,12 @@ func (cm *ConfigManager) Update(changes map[string]any) (*UpdateResult, error) {
 	// this ensures any future non-API callers of Update() have changes available).
 	var configChanges []ConfigChange
 
-	for _, key := range sortedChangeKeys(applicableChanges) {
-		value := applicableChanges[key]
+	for _, appliedChange := range result.Applied {
+		key := appliedChange.Key
 		configChanges = append(configChanges, ConfigChange{
 			Key:      key,
-			OldValue: redactIfSensitive(key, oldValues[key]),
-			NewValue: redactIfSensitive(key, value),
+			OldValue: appliedChange.OldValue,
+			NewValue: appliedChange.NewValue,
 		})
 	}
 
@@ -911,6 +928,47 @@ func isValueTypeCompatible(value any, expectedType string) bool {
 		return ok
 	default:
 		return true // unknown type — let viper handle it
+	}
+}
+
+func valuesEquivalent(left, right any) bool {
+	leftNumber, leftIsNumber := toFloat64(left)
+	rightNumber, rightIsNumber := toFloat64(right)
+	if leftIsNumber && rightIsNumber {
+		return math.Abs(leftNumber-rightNumber) < 1e-9
+	}
+
+	return reflect.DeepEqual(left, right)
+}
+
+func toFloat64(value any) (float64, bool) {
+	switch typed := value.(type) {
+	case int:
+		return float64(typed), true
+	case int8:
+		return float64(typed), true
+	case int16:
+		return float64(typed), true
+	case int32:
+		return float64(typed), true
+	case int64:
+		return float64(typed), true
+	case uint:
+		return float64(typed), true
+	case uint8:
+		return float64(typed), true
+	case uint16:
+		return float64(typed), true
+	case uint32:
+		return float64(typed), true
+	case uint64:
+		return float64(typed), true
+	case float32:
+		return float64(typed), true
+	case float64:
+		return typed, true
+	default:
+		return 0, false
 	}
 }
 
