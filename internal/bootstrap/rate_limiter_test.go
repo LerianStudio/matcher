@@ -7,7 +7,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/stretchr/testify/assert"
@@ -15,6 +17,67 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/auth"
 )
+
+type testFiberStorage struct {
+	mu   sync.Mutex
+	data map[string][]byte
+}
+
+func (storage *testFiberStorage) Get(key string) ([]byte, error) {
+	storage.mu.Lock()
+	defer storage.mu.Unlock()
+
+	if storage.data == nil {
+		return nil, nil
+	}
+
+	value, ok := storage.data[key]
+	if !ok {
+		return nil, nil
+	}
+
+	cloned := make([]byte, len(value))
+	copy(cloned, value)
+
+	return cloned, nil
+}
+
+func (storage *testFiberStorage) Set(key string, val []byte, _ time.Duration) error {
+	storage.mu.Lock()
+	defer storage.mu.Unlock()
+
+	if storage.data == nil {
+		storage.data = make(map[string][]byte)
+	}
+
+	cloned := make([]byte, len(val))
+	copy(cloned, val)
+	storage.data[key] = cloned
+
+	return nil
+}
+
+func (storage *testFiberStorage) Delete(key string) error {
+	storage.mu.Lock()
+	defer storage.mu.Unlock()
+
+	delete(storage.data, key)
+
+	return nil
+}
+
+func (storage *testFiberStorage) Reset() error {
+	storage.mu.Lock()
+	defer storage.mu.Unlock()
+
+	storage.data = make(map[string][]byte)
+
+	return nil
+}
+
+func (storage *testFiberStorage) Close() error {
+	return nil
+}
 
 func TestNewDispatchRateLimiter_DisabledMode(t *testing.T) {
 	t.Parallel()
@@ -380,4 +443,137 @@ func TestNewDispatchRateLimiter_UserIDTakesPrecedenceOverTenantID(t *testing.T) 
 	defer resp2.Body.Close()
 
 	assert.Equal(t, http.StatusTooManyRequests, resp2.StatusCode)
+}
+
+func TestNewDynamicDispatchRateLimiter_RuntimeMaxUpdate_InMemory(t *testing.T) {
+	t.Parallel()
+
+	activeCfg := &Config{RateLimit: RateLimitConfig{Enabled: true, DispatchMax: 1, DispatchExpirySec: 60}}
+
+	app := fiber.New()
+	app.Use(NewDynamicDispatchRateLimiter(func() *Config { return activeCfg }, nil))
+	app.Post("/dispatch", func(c *fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusOK)
+	})
+
+	req1 := httptest.NewRequest(http.MethodPost, "/dispatch", http.NoBody)
+	resp1, err := app.Test(req1)
+	require.NoError(t, err)
+	defer resp1.Body.Close()
+	assert.Equal(t, http.StatusOK, resp1.StatusCode)
+
+	req2 := httptest.NewRequest(http.MethodPost, "/dispatch", http.NoBody)
+	resp2, err := app.Test(req2)
+	require.NoError(t, err)
+	defer resp2.Body.Close()
+	assert.Equal(t, http.StatusTooManyRequests, resp2.StatusCode)
+
+	activeCfg = &Config{RateLimit: RateLimitConfig{Enabled: true, DispatchMax: 3, DispatchExpirySec: 60}}
+
+	req3 := httptest.NewRequest(http.MethodPost, "/dispatch", http.NoBody)
+	resp3, err := app.Test(req3)
+	require.NoError(t, err)
+	defer resp3.Body.Close()
+	assert.Equal(t, http.StatusOK, resp3.StatusCode)
+	assert.Equal(t, "3", resp3.Header.Get("X-RateLimit-Limit"))
+}
+
+func TestNewDynamicDispatchRateLimiter_DistributedHandlerRebuildsOnConfigChange(t *testing.T) {
+	t.Parallel()
+
+	activeCfg := &Config{RateLimit: RateLimitConfig{Enabled: true, DispatchMax: 1, DispatchExpirySec: 60}}
+	storage := &testFiberStorage{}
+
+	app := fiber.New()
+	app.Use(NewDynamicDispatchRateLimiter(func() *Config { return activeCfg }, storage))
+	app.Post("/dispatch", func(c *fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusOK)
+	})
+
+	req1 := httptest.NewRequest(http.MethodPost, "/dispatch", http.NoBody)
+	resp1, err := app.Test(req1)
+	require.NoError(t, err)
+	defer resp1.Body.Close()
+	assert.Equal(t, http.StatusOK, resp1.StatusCode)
+	assert.Equal(t, "1", resp1.Header.Get("X-RateLimit-Limit"))
+
+	activeCfg = &Config{RateLimit: RateLimitConfig{Enabled: true, DispatchMax: 2, DispatchExpirySec: 60}}
+
+	req2 := httptest.NewRequest(http.MethodPost, "/dispatch", http.NoBody)
+	resp2, err := app.Test(req2)
+	require.NoError(t, err)
+	defer resp2.Body.Close()
+	assert.Equal(t, http.StatusOK, resp2.StatusCode)
+	assert.Equal(t, "2", resp2.Header.Get("X-RateLimit-Limit"))
+}
+
+func TestNewDynamicExportRateLimiter_RuntimeMaxUpdate(t *testing.T) {
+	t.Parallel()
+
+	activeCfg := &Config{RateLimit: RateLimitConfig{Enabled: true, ExportMax: 1, ExportExpirySec: 60}}
+
+	app := fiber.New()
+	app.Use(NewDynamicExportRateLimiter(func() *Config { return activeCfg }, nil))
+	app.Get("/export", func(c *fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusOK)
+	})
+
+	req1 := httptest.NewRequest(http.MethodGet, "/export", http.NoBody)
+	resp1, err := app.Test(req1)
+	require.NoError(t, err)
+	defer resp1.Body.Close()
+	assert.Equal(t, http.StatusOK, resp1.StatusCode)
+
+	req2 := httptest.NewRequest(http.MethodGet, "/export", http.NoBody)
+	resp2, err := app.Test(req2)
+	require.NoError(t, err)
+	defer resp2.Body.Close()
+	assert.Equal(t, http.StatusTooManyRequests, resp2.StatusCode)
+
+	activeCfg = &Config{RateLimit: RateLimitConfig{Enabled: true, ExportMax: 3, ExportExpirySec: 60}}
+
+	req3 := httptest.NewRequest(http.MethodGet, "/export", http.NoBody)
+	resp3, err := app.Test(req3)
+	require.NoError(t, err)
+	defer resp3.Body.Close()
+	assert.Equal(t, http.StatusOK, resp3.StatusCode)
+	assert.Equal(t, "3", resp3.Header.Get("X-RateLimit-Limit"))
+}
+
+func TestNewDynamicRateLimiter_RuntimeToggleEnabled(t *testing.T) {
+	t.Parallel()
+
+	activeCfg := &Config{RateLimit: RateLimitConfig{Enabled: false, Max: 1, ExpirySec: 60}}
+
+	app := fiber.New()
+	app.Use(NewDynamicRateLimiter(func() *Config { return activeCfg }, nil))
+	app.Get("/api/test", func(c *fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusOK)
+	})
+
+	req1 := httptest.NewRequest(http.MethodGet, "/api/test", http.NoBody)
+	resp1, err := app.Test(req1)
+	require.NoError(t, err)
+	defer resp1.Body.Close()
+	assert.Equal(t, http.StatusOK, resp1.StatusCode)
+
+	req2 := httptest.NewRequest(http.MethodGet, "/api/test", http.NoBody)
+	resp2, err := app.Test(req2)
+	require.NoError(t, err)
+	defer resp2.Body.Close()
+	assert.Equal(t, http.StatusOK, resp2.StatusCode)
+
+	activeCfg = &Config{RateLimit: RateLimitConfig{Enabled: true, Max: 1, ExpirySec: 60}}
+
+	req3 := httptest.NewRequest(http.MethodGet, "/api/test", http.NoBody)
+	resp3, err := app.Test(req3)
+	require.NoError(t, err)
+	defer resp3.Body.Close()
+	assert.Equal(t, http.StatusOK, resp3.StatusCode)
+
+	req4 := httptest.NewRequest(http.MethodGet, "/api/test", http.NoBody)
+	resp4, err := app.Test(req4)
+	require.NoError(t, err)
+	defer resp4.Body.Close()
+	assert.Equal(t, http.StatusTooManyRequests, resp4.StatusCode)
 }

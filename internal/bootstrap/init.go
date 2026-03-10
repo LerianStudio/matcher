@@ -651,6 +651,9 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		if err := RegisterConfigAPIRoutes(routes.Protected, configAPIHandler); err != nil {
 			return nil, fmt.Errorf("register config API routes: %w", err)
 		}
+
+		logger.Log(context.Background(), libLog.LevelWarn,
+			"system config API routes enabled; ensure auth policies grant system/config:read and system/config:write where appropriate")
 	} else {
 		logger.Log(context.Background(), libLog.LevelWarn,
 			"system config API routes are disabled because AUTH_ENABLED=false")
@@ -712,15 +715,10 @@ func registerExportWorkerSlot(workerMgr *WorkerManager, modules *modulesResult) 
 				return modules.exportWorker, nil
 			}
 
-			modules.exportWorker.UpdateRuntimeConfig(reportingWorker.ExportWorkerConfig{
-				PollInterval: cfg.ExportWorkerPollInterval(),
-				PageSize:     cfg.ExportWorker.PageSize,
-			})
-
 			return modules.exportWorker, nil
 		},
-		func(cfg *Config) bool { return cfg != nil && cfg.ExportWorker.Enabled && modules.exportWorker != nil },
-		func(cfg *Config) bool { return cfg != nil && cfg.ExportWorker.Enabled && modules.exportWorker != nil },
+		func(cfg *Config) bool { return cfg != nil && cfg.ExportWorker.Enabled },
+		func(cfg *Config) bool { return cfg != nil && cfg.ExportWorker.Enabled },
 	)
 }
 
@@ -732,16 +730,10 @@ func registerCleanupWorkerSlot(workerMgr *WorkerManager, modules *modulesResult)
 				return modules.cleanupWorker, nil
 			}
 
-			modules.cleanupWorker.UpdateRuntimeConfig(reportingWorker.CleanupWorkerConfig{
-				Interval:              cfg.CleanupWorkerInterval(),
-				BatchSize:             cfg.CleanupWorkerBatchSize(),
-				FileDeleteGracePeriod: cfg.CleanupWorkerGracePeriod(),
-			})
-
 			return modules.cleanupWorker, nil
 		},
-		func(cfg *Config) bool { return cfg != nil && cfg.CleanupWorker.Enabled && modules.cleanupWorker != nil },
-		func(cfg *Config) bool { return cfg != nil && cfg.CleanupWorker.Enabled && modules.cleanupWorker != nil },
+		func(cfg *Config) bool { return cfg != nil && cfg.CleanupWorker.Enabled },
+		func(cfg *Config) bool { return cfg != nil && cfg.CleanupWorker.Enabled },
 	)
 }
 
@@ -753,23 +745,10 @@ func registerArchivalWorkerSlot(workerMgr *WorkerManager, modules *modulesResult
 				return modules.archivalWorker, nil
 			}
 
-			modules.archivalWorker.UpdateRuntimeConfig(governanceWorker.ArchivalWorkerConfig{
-				Interval:            cfg.ArchivalInterval(),
-				HotRetentionDays:    cfg.Archival.HotRetentionDays,
-				WarmRetentionMonths: cfg.Archival.WarmRetentionMonths,
-				ColdRetentionMonths: cfg.Archival.ColdRetentionMonths,
-				BatchSize:           cfg.Archival.BatchSize,
-				StorageBucket:       cfg.Archival.StorageBucket,
-				StoragePrefix:       cfg.Archival.StoragePrefix,
-				StorageClass:        cfg.Archival.StorageClass,
-				PartitionLookahead:  cfg.Archival.PartitionLookahead,
-				PresignExpiry:       cfg.ArchivalPresignExpiry(),
-			})
-
 			return modules.archivalWorker, nil
 		},
-		func(cfg *Config) bool { return cfg != nil && cfg.Archival.Enabled && modules.archivalWorker != nil },
-		func(cfg *Config) bool { return cfg != nil && cfg.Archival.Enabled && modules.archivalWorker != nil },
+		func(cfg *Config) bool { return cfg != nil && cfg.Archival.Enabled },
+		func(cfg *Config) bool { return cfg != nil && cfg.Archival.Enabled },
 	)
 }
 
@@ -781,13 +760,9 @@ func registerSchedulerWorkerSlot(workerMgr *WorkerManager, modules *modulesResul
 				return modules.schedulerWorker, nil
 			}
 
-			modules.schedulerWorker.UpdateRuntimeConfig(configWorker.SchedulerWorkerConfig{
-				Interval: cfg.SchedulerInterval(),
-			})
-
 			return modules.schedulerWorker, nil
 		},
-		func(cfg *Config) bool { return cfg != nil && modules.schedulerWorker != nil },
+		func(cfg *Config) bool { return cfg != nil },
 		func(_ *Config) bool { return false },
 	)
 }
@@ -1521,11 +1496,6 @@ func initModulesAndMessaging(
 ) (*modulesResult, error) {
 	ctx := context.Background()
 
-	limiterConfigGetter := configGetter
-	if limiterConfigGetter == nil {
-		limiterConfigGetter = func() *Config { return cfg }
-	}
-
 	sharedOutboxRepository := outboxPgRepo.NewRepository(provider)
 
 	sharedRepos, err := initSharedRepositories(provider)
@@ -1565,7 +1535,7 @@ func initModulesAndMessaging(
 	exportWorker, cleanupWorker, err := initReportingModule(
 		routes,
 		cfg,
-		limiterConfigGetter,
+		configGetter,
 		provider,
 		storage,
 		rateLimitStorage,
@@ -1581,7 +1551,10 @@ func initModulesAndMessaging(
 		return nil, err
 	}
 
-	dispatchLimiter := NewDynamicDispatchRateLimiter(limiterConfigGetter, rateLimitStorage)
+	dispatchLimiter := NewDispatchRateLimiter(cfg, rateLimitStorage)
+	if configGetter != nil {
+		dispatchLimiter = NewDynamicDispatchRateLimiter(configGetter, rateLimitStorage)
+	}
 
 	if err := initExceptionModule(cfg, routes, provider, sharedOutboxRepository, dispatchLimiter, sharedRepos, isProduction); err != nil {
 		return nil, err
@@ -2149,12 +2122,10 @@ func initReportingModule(
 		return nil, nil, fmt.Errorf("create reporting handler: %w", err)
 	}
 
-	limiterConfigGetter := configGetter
-	if limiterConfigGetter == nil {
-		limiterConfigGetter = func() *Config { return cfg }
+	exportLimiter := NewExportRateLimiter(cfg, rateLimitStorage)
+	if configGetter != nil {
+		exportLimiter = NewDynamicExportRateLimiter(configGetter, rateLimitStorage)
 	}
-
-	exportLimiter := NewDynamicExportRateLimiter(limiterConfigGetter, rateLimitStorage)
 
 	if err := reportingHTTP.RegisterRoutes(routes.Protected, reportingHandler, exportLimiter); err != nil {
 		return nil, nil, fmt.Errorf("register reporting routes: %w", err)

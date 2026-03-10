@@ -5,6 +5,7 @@ package bootstrap
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -14,6 +15,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	reportingWorker "github.com/LerianStudio/matcher/internal/reporting/services/worker"
 )
 
 // mockWorker is a test double satisfying WorkerLifecycle.
@@ -23,6 +26,64 @@ type mockWorker struct {
 	stopped  atomic.Int32
 	startErr error
 	stopErr  error
+}
+
+type runtimeAwareExportWorker struct {
+	mockWorker
+
+	mu            sync.Mutex
+	sequence      []string
+	updates       []reportingWorker.ExportWorkerConfig
+	failNextStart atomic.Bool
+}
+
+func (worker *runtimeAwareExportWorker) UpdateRuntimeConfig(cfg reportingWorker.ExportWorkerConfig) {
+	worker.mu.Lock()
+	defer worker.mu.Unlock()
+
+	worker.sequence = append(worker.sequence, "update")
+	worker.updates = append(worker.updates, cfg)
+}
+
+func (worker *runtimeAwareExportWorker) Start(ctx context.Context) error {
+	worker.mu.Lock()
+	worker.sequence = append(worker.sequence, "start")
+	fail := worker.failNextStart.Swap(false)
+	worker.mu.Unlock()
+
+	if fail {
+		return errors.New("start failed")
+	}
+
+	return worker.mockWorker.Start(ctx)
+}
+
+func (worker *runtimeAwareExportWorker) Stop() error {
+	worker.mu.Lock()
+	worker.sequence = append(worker.sequence, "stop")
+	worker.mu.Unlock()
+
+	return worker.mockWorker.Stop()
+}
+
+func (worker *runtimeAwareExportWorker) events() []string {
+	worker.mu.Lock()
+	defer worker.mu.Unlock()
+
+	cloned := make([]string, len(worker.sequence))
+	copy(cloned, worker.sequence)
+
+	return cloned
+}
+
+func (worker *runtimeAwareExportWorker) lastUpdates() []reportingWorker.ExportWorkerConfig {
+	worker.mu.Lock()
+	defer worker.mu.Unlock()
+
+	cloned := make([]reportingWorker.ExportWorkerConfig, len(worker.updates))
+	copy(cloned, worker.updates)
+
+	return cloned
 }
 
 func (w *mockWorker) Start(_ context.Context) error {
@@ -189,12 +250,23 @@ func TestWorkerManager_StartStop(t *testing.T) {
 
 		assert.Equal(t, int32(1), callCount.Load())
 
-		_ = wm.Stop()
+		require.NoError(t, wm.Stop())
 	})
 }
 
 func TestWorkerManager_CriticalWorkerFailure(t *testing.T) {
 	t.Parallel()
+
+	t.Run("returns error when critical worker has nil factory", func(t *testing.T) {
+		t.Parallel()
+
+		wm := NewWorkerManager(&libLog.NopLogger{}, nil)
+		wm.Register("critical-nil-factory", nil, alwaysEnabled, alwaysCritical)
+
+		err := wm.Start(context.Background(), newTestConfig())
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "worker factory is required")
+	})
 
 	t.Run("returns error when critical worker fails to start", func(t *testing.T) {
 		t.Parallel()
@@ -235,7 +307,7 @@ func TestWorkerManager_CriticalWorkerFailure(t *testing.T) {
 
 		assert.Equal(t, 1, goodWorker.startCount())
 
-		_ = wm.Stop()
+		require.NoError(t, wm.Stop())
 	})
 }
 
@@ -282,7 +354,7 @@ func TestWorkerManager_ConfigChange(t *testing.T) {
 		assert.Equal(t, 1, workers[1].startCount(), "second worker should be started")
 		workerMu.Unlock()
 
-		_ = wm.Stop()
+		require.NoError(t, wm.Stop())
 	})
 
 	t.Run("does not restart worker when config is unchanged", func(t *testing.T) {
@@ -309,7 +381,7 @@ func TestWorkerManager_ConfigChange(t *testing.T) {
 
 		assert.Equal(t, int32(1), createCount.Load())
 
-		_ = wm.Stop()
+		require.NoError(t, wm.Stop())
 	})
 
 	t.Run("starts worker when enabled by config change", func(t *testing.T) {
@@ -343,7 +415,7 @@ func TestWorkerManager_ConfigChange(t *testing.T) {
 
 		assert.Equal(t, 1, worker1.startCount())
 
-		_ = wm.Stop()
+		require.NoError(t, wm.Stop())
 	})
 
 	t.Run("stops worker when disabled by config change", func(t *testing.T) {
@@ -376,7 +448,7 @@ func TestWorkerManager_ConfigChange(t *testing.T) {
 
 		assert.Equal(t, 1, worker1.stopCount())
 
-		_ = wm.Stop()
+		require.NoError(t, wm.Stop())
 	})
 
 	t.Run("config change while not running is a no-op", func(t *testing.T) {
@@ -406,7 +478,37 @@ func TestWorkerManager_ConfigChange(t *testing.T) {
 		// nil config should be a no-op.
 		wm.onConfigChange(nil)
 
-		_ = wm.Stop()
+		require.NoError(t, wm.Stop())
+	})
+
+	t.Run("logs explicit error when enabled worker dependency is unavailable", func(t *testing.T) {
+		t.Parallel()
+
+		logger := &testLogger{}
+
+		cfg := newTestConfig()
+		cfg.ExportWorker.Enabled = false
+
+		wm := NewWorkerManager(logger, nil)
+		wm.Register("export", func(_ *Config) (WorkerLifecycle, error) {
+			return nil, nil
+		}, func(currentCfg *Config) bool {
+			return currentCfg != nil && currentCfg.ExportWorker.Enabled
+		}, alwaysCritical)
+
+		require.NoError(t, wm.Start(context.Background(), cfg))
+
+		updatedCfg := newTestConfig()
+		updatedCfg.ExportWorker.Enabled = true
+		wm.onConfigChange(updatedCfg)
+
+		assert.Empty(t, wm.RunningWorkers())
+
+		messages := logger.getMessages()
+		require.NotEmpty(t, messages)
+		assert.Contains(t, strings.Join(messages, "\n"), "failed to start after enable")
+
+		require.NoError(t, wm.Stop())
 	})
 
 	t.Run("restart failure does not crash manager", func(t *testing.T) {
@@ -440,7 +542,7 @@ func TestWorkerManager_ConfigChange(t *testing.T) {
 		assert.True(t, wm.running)
 		assert.Equal(t, []string{"export"}, wm.RunningWorkers())
 
-		_ = wm.Stop()
+		require.NoError(t, wm.Stop())
 	})
 }
 
@@ -468,7 +570,7 @@ func TestWorkerManager_FactoryReturnsNil(t *testing.T) {
 
 	assert.Empty(t, wm.RunningWorkers())
 
-	_ = wm.Stop()
+	require.NoError(t, wm.Stop())
 }
 
 func TestWorkerConfigChanged(t *testing.T) {
@@ -632,10 +734,7 @@ func TestWorkerManager_StopErrorHandledGracefully(t *testing.T) {
 	// Stop should not panic even though one worker's Stop() returns an error.
 	// The manager should log the error and continue stopping other workers.
 	err = wm.Stop()
-
-	// The stop error is logged but not propagated — verify the good worker was still stopped.
-	// (Stop returns nil or an error depending on implementation; the key invariant is no panic.)
-	_ = err
+	require.NoError(t, err)
 
 	assert.Equal(t, 1, goodWorker.stopCount(), "good worker should be stopped despite sibling failure")
 }
@@ -658,6 +757,7 @@ func TestWorkerManager_ConcurrentAccess(t *testing.T) {
 	const goroutines = 20
 
 	var wg sync.WaitGroup
+	startErrs := make(chan error, goroutines/4)
 
 	wg.Add(goroutines)
 
@@ -668,7 +768,7 @@ func TestWorkerManager_ConcurrentAccess(t *testing.T) {
 			switch n % 4 {
 			case 0:
 				// Attempt Start (should be idempotent/no-op while running).
-				_ = wm.Start(context.Background(), cfg)
+				startErrs <- wm.Start(context.Background(), cfg)
 			case 1:
 				// Read running workers.
 				_ = wm.RunningWorkers()
@@ -685,6 +785,11 @@ func TestWorkerManager_ConcurrentAccess(t *testing.T) {
 	}
 
 	wg.Wait()
+	close(startErrs)
+
+	for startErr := range startErrs {
+		require.NoError(t, startErr)
+	}
 
 	// The test passes if no panics occurred during concurrent access.
 	// Stop to clean up.
@@ -719,6 +824,69 @@ func TestWorkerManager_RestartWhenFactoryReturnsSameInstance(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestWorkerManager_RestartSameInstance_AppliesRuntimeConfigAfterStop(t *testing.T) {
+	t.Parallel()
+
+	cfg := newTestConfig()
+	worker := &runtimeAwareExportWorker{}
+
+	wm := NewWorkerManager(&libLog.NopLogger{}, nil)
+	wm.Register("export", func(_ *Config) (WorkerLifecycle, error) {
+		return worker, nil
+	}, alwaysEnabled, alwaysCritical)
+
+	require.NoError(t, wm.Start(context.Background(), cfg))
+
+	updatedCfg := newTestConfig()
+	updatedCfg.ExportWorker.PollIntervalSec = cfg.ExportWorker.PollIntervalSec + 3
+	updatedCfg.ExportWorker.PageSize = cfg.ExportWorker.PageSize + 200
+
+	wm.onConfigChange(updatedCfg)
+
+	events := worker.events()
+	require.GreaterOrEqual(t, len(events), 4)
+	assert.Equal(t, []string{"stop", "update", "start"}, events[len(events)-3:])
+
+	updates := worker.lastUpdates()
+	require.Len(t, updates, 1)
+	assert.Equal(t, updatedCfg.ExportWorkerPollInterval(), updates[0].PollInterval)
+	assert.Equal(t, updatedCfg.ExportWorker.PageSize, updates[0].PageSize)
+
+	require.NoError(t, wm.Stop())
+}
+
+func TestWorkerManager_RestartRollback_ReappliesPreviousRuntimeConfig(t *testing.T) {
+	t.Parallel()
+
+	cfg := newTestConfig()
+	worker := &runtimeAwareExportWorker{}
+
+	wm := NewWorkerManager(&libLog.NopLogger{}, nil)
+	wm.Register("export", func(_ *Config) (WorkerLifecycle, error) {
+		return worker, nil
+	}, alwaysEnabled, alwaysCritical)
+
+	require.NoError(t, wm.Start(context.Background(), cfg))
+
+	worker.failNextStart.Store(true)
+
+	updatedCfg := newTestConfig()
+	updatedCfg.ExportWorker.PollIntervalSec = cfg.ExportWorker.PollIntervalSec + 5
+	updatedCfg.ExportWorker.PageSize = cfg.ExportWorker.PageSize + 100
+
+	wm.onConfigChange(updatedCfg)
+
+	updates := worker.lastUpdates()
+	require.Len(t, updates, 2)
+	assert.Equal(t, updatedCfg.ExportWorkerPollInterval(), updates[0].PollInterval)
+	assert.Equal(t, updatedCfg.ExportWorker.PageSize, updates[0].PageSize)
+	assert.Equal(t, cfg.ExportWorkerPollInterval(), updates[1].PollInterval)
+	assert.Equal(t, cfg.ExportWorker.PageSize, updates[1].PageSize)
+
+	assert.Equal(t, []string{"export"}, wm.RunningWorkers())
+	require.NoError(t, wm.Stop())
+}
+
 func TestWorkerManager_RegisterNilEnabledPredicate_DoesNotPanicOnNilConfig(t *testing.T) {
 	t.Parallel()
 
@@ -730,7 +898,8 @@ func TestWorkerManager_RegisterNilEnabledPredicate_DoesNotPanicOnNilConfig(t *te
 	}, nil, nil)
 
 	assert.NotPanics(t, func() {
-		_ = wm.Start(context.Background(), nil)
+		require.NoError(t, wm.Start(context.Background(), nil))
+		require.NoError(t, wm.Stop())
 	})
 }
 

@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"sync"
@@ -28,6 +29,9 @@ type WorkerLifecycle interface {
 // The factory captures heavy dependencies (repos, services) in its closure so that
 // only the config needs to change on restart.
 type WorkerFactory func(cfg *Config) (WorkerLifecycle, error)
+
+var errWorkerFactoryRequired = errors.New("worker factory is required")
+var errWorkerDependencyUnavailable = errors.New("worker dependency unavailable")
 
 // workerSlot tracks a single managed worker: its current instance, its factory,
 // the config sub-section relevant to it, and whether it should be considered
@@ -81,6 +85,12 @@ func (wm *WorkerManager) Register(
 	enabled func(cfg *Config) bool,
 	critical func(cfg *Config) bool,
 ) {
+	if factory == nil {
+		factory = func(_ *Config) (WorkerLifecycle, error) {
+			return nil, errWorkerFactoryRequired
+		}
+	}
+
 	if enabled == nil {
 		enabled = func(_ *Config) bool { return true }
 	}
@@ -231,7 +241,7 @@ func (wm *WorkerManager) reconcileSlotLocked(ctx context.Context, slot *workerSl
 			wm.logger.Log(ctx, libLog.LevelInfo,
 				fmt.Sprintf("worker %q config changed, restarting", slot.name))
 
-			if err := wm.restartSlotLocked(ctx, slot, newCfg); err != nil {
+			if err := wm.restartSlotLocked(ctx, slot, oldCfg, newCfg); err != nil {
 				wm.logger.Log(ctx, libLog.LevelWarn,
 					fmt.Sprintf("worker %q failed to restart after config change: %v", slot.name, err))
 			}
@@ -269,47 +279,92 @@ func (wm *WorkerManager) startEnabledWorkersLocked(ctx context.Context, cfg *Con
 // restartSlotLocked restarts a running worker with a newly built instance.
 // If the factory returns the same instance, restart is skipped to avoid
 // stopping a worker that cannot be safely re-started with the same object.
-func (wm *WorkerManager) restartSlotLocked(ctx context.Context, slot *workerSlot, cfg *Config) error {
+func (wm *WorkerManager) restartSlotLocked(ctx context.Context, slot *workerSlot, oldCfg, newCfg *Config) error {
 	if slot == nil {
 		return nil
 	}
 
 	if slot.instance == nil {
-		return wm.startSlotLocked(ctx, slot, cfg)
+		return wm.startSlotLocked(ctx, slot, newCfg)
 	}
 
 	if slot.factory == nil {
-		return nil
+		return errWorkerFactoryRequired
 	}
 
-	candidate, err := slot.factory(cfg)
+	candidate, err := slot.factory(newCfg)
 	if err != nil {
 		return fmt.Errorf("create worker %q for restart: %w", slot.name, err)
 	}
 
 	if candidate == nil {
-		wm.logger.Log(ctx, libLog.LevelDebug,
-			fmt.Sprintf("worker %q restart skipped: factory returned nil", slot.name))
-
-		return nil
+		return fmt.Errorf("worker %q: %w", slot.name, errWorkerDependencyUnavailable)
 	}
 
-	if sameWorkerInstance(slot.instance, candidate) {
-		wm.stopSlotLocked(ctx, slot)
+	previous := slot.instance
+	sameInstance := sameWorkerInstance(previous, candidate)
 
-		applyWorkerRuntimeConfig(ctx, slot.name, candidate, cfg)
-	} else {
-		wm.stopSlotLocked(ctx, slot)
+	wm.stopSlotLocked(ctx, slot)
+
+	if sameInstance {
+		applyWorkerRuntimeConfig(ctx, slot.name, candidate, newCfg)
 	}
 
 	if err := candidate.Start(ctx); err != nil {
-		return fmt.Errorf("start worker %q after restart: %w", slot.name, err)
+		if rollbackErr := wm.rollbackAfterRestartFailureLocked(ctx, slot, previous, oldCfg, sameInstance); rollbackErr != nil {
+			return fmt.Errorf("start worker %q after restart: %w (rollback failed: %v)", slot.name, err, rollbackErr)
+		}
+
+		return fmt.Errorf("start worker %q after restart: %w (rolled back to previous config)", slot.name, err)
 	}
 
 	slot.instance = candidate
 
 	wm.logger.Log(ctx, libLog.LevelInfo,
 		fmt.Sprintf("worker %q restarted", slot.name))
+
+	return nil
+}
+
+func (wm *WorkerManager) rollbackAfterRestartFailureLocked(
+	ctx context.Context,
+	slot *workerSlot,
+	previous WorkerLifecycle,
+	oldCfg *Config,
+	sameInstance bool,
+) error {
+	if slot == nil || previous == nil {
+		return errors.New("no previous worker instance available for rollback")
+	}
+
+	rollbackCandidate := previous
+
+	if oldCfg != nil {
+		if sameInstance {
+			applyWorkerRuntimeConfig(ctx, slot.name, rollbackCandidate, oldCfg)
+		} else if slot.factory != nil {
+			rebuiltCandidate, err := slot.factory(oldCfg)
+			if err != nil {
+				return fmt.Errorf("rebuild rollback worker %q: %w", slot.name, err)
+			}
+
+			if rebuiltCandidate != nil {
+				rollbackCandidate = rebuiltCandidate
+				if sameWorkerInstance(rollbackCandidate, previous) {
+					applyWorkerRuntimeConfig(ctx, slot.name, rollbackCandidate, oldCfg)
+				}
+			}
+		}
+	}
+
+	if err := rollbackCandidate.Start(ctx); err != nil {
+		return fmt.Errorf("restart previous worker %q: %w", slot.name, err)
+	}
+
+	slot.instance = rollbackCandidate
+
+	wm.logger.Log(ctx, libLog.LevelWarn,
+		fmt.Sprintf("worker %q rollback succeeded after restart failure", slot.name))
 
 	return nil
 }
@@ -323,7 +378,9 @@ func applyWorkerRuntimeConfig(ctx context.Context, name string, worker WorkerLif
 
 	switch name {
 	case "export":
-		exportWorker, ok := worker.(*reportingWorker.ExportWorker)
+		exportWorker, ok := worker.(interface {
+			UpdateRuntimeConfig(reportingWorker.ExportWorkerConfig)
+		})
 		if !ok {
 			return
 		}
@@ -333,7 +390,9 @@ func applyWorkerRuntimeConfig(ctx context.Context, name string, worker WorkerLif
 			PageSize:     cfg.ExportWorker.PageSize,
 		})
 	case "cleanup":
-		cleanupWorker, ok := worker.(*reportingWorker.CleanupWorker)
+		cleanupWorker, ok := worker.(interface {
+			UpdateRuntimeConfig(reportingWorker.CleanupWorkerConfig)
+		})
 		if !ok {
 			return
 		}
@@ -344,7 +403,9 @@ func applyWorkerRuntimeConfig(ctx context.Context, name string, worker WorkerLif
 			FileDeleteGracePeriod: cfg.CleanupWorkerGracePeriod(),
 		})
 	case "archival":
-		archivalWorker, ok := worker.(*governanceWorker.ArchivalWorker)
+		archivalWorker, ok := worker.(interface {
+			UpdateRuntimeConfig(governanceWorker.ArchivalWorkerConfig)
+		})
 		if !ok {
 			return
 		}
@@ -362,7 +423,9 @@ func applyWorkerRuntimeConfig(ctx context.Context, name string, worker WorkerLif
 			PresignExpiry:       archivalPresignExpiryWithContext(ctx, cfg),
 		})
 	case "scheduler":
-		schedulerWorker, ok := worker.(*configWorker.SchedulerWorker)
+		schedulerWorker, ok := worker.(interface {
+			UpdateRuntimeConfig(configWorker.SchedulerWorkerConfig)
+		})
 		if !ok {
 			return
 		}
@@ -403,10 +466,7 @@ func archivalPresignExpiryWithContext(ctx context.Context, cfg *Config) time.Dur
 // Caller must hold wm.mu.
 func (wm *WorkerManager) startSlotLocked(ctx context.Context, slot *workerSlot, cfg *Config) error {
 	if slot.factory == nil {
-		wm.logger.Log(ctx, libLog.LevelWarn,
-			fmt.Sprintf("worker %q has no factory, skipping", slot.name))
-
-		return nil
+		return errWorkerFactoryRequired
 	}
 
 	worker, err := slot.factory(cfg)
@@ -415,10 +475,7 @@ func (wm *WorkerManager) startSlotLocked(ctx context.Context, slot *workerSlot, 
 	}
 
 	if worker == nil {
-		wm.logger.Log(ctx, libLog.LevelDebug,
-			fmt.Sprintf("worker %q factory returned nil (dependency unavailable), skipping", slot.name))
-
-		return nil
+		return fmt.Errorf("worker %q: %w", slot.name, errWorkerDependencyUnavailable)
 	}
 
 	if err := worker.Start(ctx); err != nil {
