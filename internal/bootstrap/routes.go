@@ -32,6 +32,7 @@ type Routes struct {
 func RegisterRoutes(
 	app *fiber.App,
 	cfg *Config,
+	configGetter func() *Config,
 	deps *HealthDependencies,
 	logger libLog.Logger,
 	authClient *authMiddleware.AuthClient,
@@ -94,6 +95,10 @@ func RegisterRoutes(
 
 	if cfg.RateLimit.Enabled {
 		rateLimiter := NewRateLimiter(cfg, rateLimitStorage)
+		if configGetter != nil {
+			rateLimiter = NewDynamicRateLimiter(configGetter, rateLimitStorage)
+		}
+
 		protected = func(resource, action string) fiber.Router {
 			return auth.ProtectedGroupWithMiddleware(
 				app,

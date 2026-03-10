@@ -91,8 +91,16 @@ func (svc *Service) Run() error {
 		svc.dbMetricsCollector.Start(ctx)
 	}
 
-	if err := svc.startWorkers(ctx); err != nil {
-		return err
+	activeCfg := svc.resolveActiveConfig()
+
+	if svc.workerManager != nil {
+		if err := svc.workerManager.Start(ctx, activeCfg); err != nil {
+			return err
+		}
+	} else {
+		if err := svc.startWorkers(ctx); err != nil {
+			return err
+		}
 	}
 
 	opts := []libCommons.LauncherOption{
@@ -106,6 +114,22 @@ func (svc *Service) Run() error {
 	libCommons.NewLauncher(opts...).Run()
 
 	return nil
+}
+
+func (svc *Service) resolveActiveConfig() *Config {
+	activeCfg := svc.Config
+	if svc.ConfigManager == nil {
+		return activeCfg
+	}
+
+	managedCfg := svc.ConfigManager.Get()
+	if managedCfg == nil {
+		return activeCfg
+	}
+
+	svc.Config = managedCfg
+
+	return managedCfg
 }
 
 // startWorkers starts all background workers in parallel.
@@ -294,39 +318,70 @@ func (svc *Service) stopBackgroundWorkers(ctx context.Context, logger libLog.Log
 		svc.ConfigManager.Stop()
 	}
 
-	if svc.exportWorker != nil {
-		if err := svc.exportWorker.Stop(); err != nil { //nolint:contextcheck // Stop() is defined without ctx in worker package
-			logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("failed to stop export worker: %v", err))
-		}
-	}
-
-	if svc.cleanupWorker != nil {
-		if err := svc.cleanupWorker.Stop(); err != nil { //nolint:contextcheck // Stop() is defined without ctx in worker package
-			logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("failed to stop cleanup worker: %v", err))
-		}
-	}
-
-	if svc.archivalWorker != nil {
-		if err := svc.archivalWorker.Stop(); err != nil { //nolint:contextcheck // Stop() is defined without ctx in worker package
-			logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("failed to stop archival worker: %v", err))
-		}
-	}
-
-	if svc.schedulerWorker != nil {
-		if err := svc.schedulerWorker.Stop(); err != nil { //nolint:contextcheck // Stop() is defined without ctx in worker package
-			logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("failed to stop scheduler worker: %v", err))
-		}
+	if !svc.stopWorkerManager(ctx, logger) {
+		svc.stopStandaloneWorkers(ctx, logger)
 	}
 
 	if svc.dbMetricsCollector != nil {
 		svc.dbMetricsCollector.Stop()
 	}
 
-	if svc.outboxRunner != nil {
-		if stoppable, ok := svc.outboxRunner.(interface{ Stop() }); ok {
-			stoppable.Stop()
-		}
+	if stoppable := svc.outboxStoppable(); stoppable != nil {
+		stoppable.Stop()
 	}
+}
+
+func (svc *Service) stopWorkerManager(ctx context.Context, logger libLog.Logger) bool {
+	if svc.workerManager == nil {
+		return false
+	}
+
+	if err := svc.workerManager.Stop(); err != nil { //nolint:contextcheck // Stop() is defined without ctx in worker package
+		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("failed to stop worker manager: %v", err))
+	}
+
+	return true
+}
+
+func (svc *Service) stopStandaloneWorkers(ctx context.Context, logger libLog.Logger) {
+	if svc.exportWorker != nil {
+		svc.stopWorkerWithoutContext(ctx, logger, "export", svc.exportWorker.Stop)
+	}
+
+	if svc.cleanupWorker != nil {
+		svc.stopWorkerWithoutContext(ctx, logger, "cleanup", svc.cleanupWorker.Stop)
+	}
+
+	if svc.archivalWorker != nil {
+		svc.stopWorkerWithoutContext(ctx, logger, "archival", svc.archivalWorker.Stop)
+	}
+
+	if svc.schedulerWorker != nil {
+		svc.stopWorkerWithoutContext(ctx, logger, "scheduler", svc.schedulerWorker.Stop)
+	}
+}
+
+func (svc *Service) stopWorkerWithoutContext(ctx context.Context, logger libLog.Logger, name string, stopFn func() error) {
+	if stopFn == nil {
+		return
+	}
+
+	if err := stopFn(); err != nil {
+		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("failed to stop %s worker: %v", name, err))
+	}
+}
+
+func (svc *Service) outboxStoppable() interface{ Stop() } {
+	if svc.outboxRunner == nil {
+		return nil
+	}
+
+	stoppable, ok := svc.outboxRunner.(interface{ Stop() })
+	if !ok {
+		return nil
+	}
+
+	return stoppable
 }
 
 // shutdownServerAndConnections shuts down the HTTP server and closes all connections.

@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -15,6 +16,7 @@ import (
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/auth"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // Sentinel errors for config API handler.
@@ -23,12 +25,15 @@ var (
 	ErrEmptyChanges          = errors.New("changes map must not be empty")
 )
 
+const configHistoryLimit = 50
+
 // ConfigAPIHandler handles HTTP requests for runtime configuration management.
 // It exposes read/write endpoints for the system config under /v1/system/config.
 type ConfigAPIHandler struct {
-	configManager  *ConfigManager
-	auditPublisher *ConfigAuditPublisher
-	logger         libLog.Logger
+	configManager   *ConfigManager
+	auditPublisher  *ConfigAuditPublisher
+	auditRepository sharedPorts.AuditLogRepository
+	logger          libLog.Logger
 }
 
 // NewConfigAPIHandler creates a new ConfigAPIHandler.
@@ -53,6 +58,13 @@ func NewConfigAPIHandler(configManager *ConfigManager, logger libLog.Logger) (*C
 func (handler *ConfigAPIHandler) SetAuditPublisher(publisher *ConfigAuditPublisher) {
 	if handler != nil {
 		handler.auditPublisher = publisher
+	}
+}
+
+// SetAuditRepository attaches an audit repository for config history reads.
+func (handler *ConfigAPIHandler) SetAuditRepository(repository sharedPorts.AuditLogRepository) {
+	if handler != nil {
+		handler.auditRepository = repository
 	}
 }
 
@@ -91,6 +103,10 @@ func logConfigSpanError(ctx context.Context, span trace.Span, logger libLog.Logg
 // @Failure      500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router       /v1/system/config [get]
 func (handler *ConfigAPIHandler) GetConfig(fiberCtx *fiber.Ctx) error {
+	if handler == nil || handler.configManager == nil {
+		return sharedhttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "handler_unavailable", "configuration handler is not initialized")
+	}
+
 	ctx, span, logger := startConfigSpan(fiberCtx, "handler.system.get_config")
 	defer span.End()
 
@@ -126,6 +142,10 @@ func (handler *ConfigAPIHandler) GetConfig(fiberCtx *fiber.Ctx) error {
 // @Failure      500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router       /v1/system/config/schema [get]
 func (handler *ConfigAPIHandler) GetSchema(fiberCtx *fiber.Ctx) error {
+	if handler == nil || handler.configManager == nil {
+		return sharedhttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "handler_unavailable", "configuration handler is not initialized")
+	}
+
 	ctx, span, logger := startConfigSpan(fiberCtx, "handler.system.get_config_schema")
 	defer span.End()
 
@@ -159,6 +179,10 @@ func (handler *ConfigAPIHandler) GetSchema(fiberCtx *fiber.Ctx) error {
 // @Failure      500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router       /v1/system/config [patch]
 func (handler *ConfigAPIHandler) UpdateConfig(fiberCtx *fiber.Ctx) error {
+	if handler == nil || handler.configManager == nil {
+		return sharedhttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "handler_unavailable", "configuration handler is not initialized")
+	}
+
 	ctx, span, logger := startConfigSpan(fiberCtx, "handler.system.update_config")
 	defer span.End()
 
@@ -228,6 +252,10 @@ func (handler *ConfigAPIHandler) UpdateConfig(fiberCtx *fiber.Ctx) error {
 // @Failure      500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router       /v1/system/config/reload [post]
 func (handler *ConfigAPIHandler) ReloadConfig(fiberCtx *fiber.Ctx) error {
+	if handler == nil || handler.configManager == nil {
+		return sharedhttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "handler_unavailable", "configuration handler is not initialized")
+	}
+
 	ctx, span, logger := startConfigSpan(fiberCtx, "handler.system.reload_config")
 	defer span.End()
 
@@ -281,13 +309,40 @@ func (handler *ConfigAPIHandler) ReloadConfig(fiberCtx *fiber.Ctx) error {
 // @Failure      500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router       /v1/system/config/history [get]
 func (handler *ConfigAPIHandler) GetConfigHistory(fiberCtx *fiber.Ctx) error {
+	if handler == nil || handler.configManager == nil {
+		return sharedhttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "handler_unavailable", "configuration handler is not initialized")
+	}
+
 	ctx, span, logger := startConfigSpan(fiberCtx, "handler.system.get_config_history")
 	defer span.End()
 
-	// TODO(T10): Query audit_log table for entity_type="system_config" to return
-	// real history entries. For now, return an empty list as a placeholder.
+	items := make([]ConfigHistoryEntry, 0)
+
+	if handler.auditRepository != nil {
+		logs, _, err := handler.auditRepository.ListByEntity(ctx, systemConfigEntityType, systemConfigEntityID, nil, configHistoryLimit)
+		if err != nil {
+			logConfigSpanError(ctx, span, logger, "failed to load config history", err)
+
+			return sharedhttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "history_load_failed", "failed to load configuration history")
+		}
+
+		items = make([]ConfigHistoryEntry, 0, len(logs))
+		for _, auditLog := range logs {
+			if auditLog == nil {
+				continue
+			}
+
+			items = append(items, ConfigHistoryEntry{
+				Timestamp:  auditLog.CreatedAt,
+				Actor:      auditActor(auditLog.ActorID),
+				ChangeType: auditLog.Action,
+				Changes:    extractAuditConfigChanges(auditLog.Changes),
+			})
+		}
+	}
+
 	response := ConfigHistoryResponse{
-		Items: []ConfigHistoryEntry{},
+		Items: items,
 	}
 
 	if writeErr := sharedhttp.Respond(fiberCtx, fiber.StatusOK, response); writeErr != nil {
@@ -297,6 +352,43 @@ func (handler *ConfigAPIHandler) GetConfigHistory(fiberCtx *fiber.Ctx) error {
 	}
 
 	return nil
+}
+
+func auditActor(actor *string) string {
+	if actor == nil || *actor == "" {
+		return "system"
+	}
+
+	return *actor
+}
+
+func extractAuditConfigChanges(payload []byte) []ConfigChange {
+	if len(payload) == 0 {
+		return nil
+	}
+
+	var raw struct {
+		ConfigChanges []struct {
+			Key      string `json:"key"`
+			OldValue any    `json:"old_value"`
+			NewValue any    `json:"new_value"`
+		} `json:"config_changes"`
+	}
+
+	if err := json.Unmarshal(payload, &raw); err != nil {
+		return nil
+	}
+
+	changes := make([]ConfigChange, 0, len(raw.ConfigChanges))
+	for _, item := range raw.ConfigChanges {
+		changes = append(changes, ConfigChange{
+			Key:      item.Key,
+			OldValue: item.OldValue,
+			NewValue: item.NewValue,
+		})
+	}
+
+	return changes
 }
 
 // appliedToConfigChanges converts applied change results back to ConfigChange

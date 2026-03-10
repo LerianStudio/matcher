@@ -286,13 +286,22 @@ func (cfg *Config) validateFetcherConfig(asserter *assert.Asserter) error {
 // LoadConfigWithLogger loads configuration from environment variables with an optional logger.
 // If logger is nil, a default logger will be created for warning messages.
 func LoadConfigWithLogger(logger libLog.Logger) (*Config, error) {
-	cfg := &Config{}
+	cfg := defaultConfig()
 	ctx := context.Background()
 	asserter := newConfigAsserter(ctx, "config.load")
+
+	configFilePath := resolveConfigFilePath()
+	if err := asserter.NoError(ctx, loadConfigFromYAML(cfg, configFilePath), "failed to load config from YAML file"); err != nil {
+		return nil, fmt.Errorf("load config: %w", err)
+	}
+
+	yamlSnapshot := *cfg
 
 	if err := asserter.NoError(ctx, loadConfigFromEnv(cfg), "failed to load config from environment variables"); err != nil {
 		return nil, fmt.Errorf("load config: %w", err)
 	}
+
+	restoreZeroedFields(cfg, &yamlSnapshot)
 
 	if cfg.Server.BodyLimitBytes <= 0 {
 		cfg.Server.BodyLimitBytes = defaultHTTPBodyLimitBytes

@@ -391,7 +391,7 @@ func buildTenantExtractor(cfg *Config) (*auth.TenantExtractor, error) {
 
 // InitServersWithOptions initializes and returns the complete Matcher service with custom options.
 //
-//nolint:cyclop,gocyclo // Bootstrap wiring exceeds complexity limits; keep explicit for readability.
+//nolint:cyclop,gocyclo,gocognit // Bootstrap wiring exceeds complexity limits; keep explicit for readability.
 func InitServersWithOptions(opts *Options) (*Service, error) {
 	ctx := context.Background()
 	timer := newStartupTimer()
@@ -410,6 +410,17 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 	cfg, err := LoadConfigWithLogger(logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load configuration: %w", err)
+	}
+
+	configFilePath := resolveConfigFilePath()
+
+	configManager, err := NewConfigManager(cfg, configFilePath, logger)
+	if err != nil {
+		return nil, fmt.Errorf("initialize config manager: %w", err)
+	}
+
+	if managedCfg := configManager.Get(); managedCfg != nil {
+		cfg = managedCfg
 	}
 
 	// Configure runtime for production mode (redacts sensitive data in error reports)
@@ -559,6 +570,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 	routes, err := RegisterRoutes(
 		app,
 		cfg,
+		configManager.Get,
 		healthDeps,
 		logger,
 		authClient,
@@ -577,6 +589,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 	modules, err := initModulesAndMessaging(
 		routes,
 		cfg,
+		configManager.Get,
 		infraProvider,
 		rabbitMQConnection,
 		rateLimitStorage,
@@ -618,18 +631,30 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 
 	done()
 
-	done = timer.track("config_manager")
+	done = timer.track("runtime_config_wiring")
 
-	configFilePath := resolveConfigFilePath()
-
-	configManager, err := NewConfigManager(cfg, configFilePath, logger)
+	configAPIHandler, err := NewConfigAPIHandler(configManager, logger)
 	if err != nil {
-		return nil, fmt.Errorf("initialize config manager: %w", err)
+		return nil, fmt.Errorf("initialize config API handler: %w", err)
 	}
 
-	configManager.StartWatcher()
+	configAuditPublisher, err := NewConfigAuditPublisher(outboxPgRepo.NewRepository(infraProvider), logger)
+	if err != nil {
+		return nil, fmt.Errorf("initialize config audit publisher: %w", err)
+	}
+
+	configAPIHandler.SetAuditPublisher(configAuditPublisher)
+	configAPIHandler.SetAuditRepository(governancePostgres.NewRepository(infraProvider))
+	SetAuditCallback(configManager, configAuditPublisher, logger)
+
+	if err := RegisterConfigAPIRoutes(routes.Protected, configAPIHandler); err != nil {
+		return nil, fmt.Errorf("register config API routes: %w", err)
+	}
 
 	workerMgr := NewWorkerManager(logger, configManager)
+	registerWorkerManagerSlots(workerMgr, modules)
+
+	configManager.StartWatcher()
 
 	done()
 
@@ -657,6 +682,40 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		connectionManager:  connCloser,
 		cleanupFuncs:       cleanups,
 	}, nil
+}
+
+func registerWorkerManagerSlots(workerMgr *WorkerManager, modules *modulesResult) {
+	if workerMgr == nil || modules == nil {
+		return
+	}
+
+	workerMgr.Register(
+		"export",
+		func(_ *Config) (WorkerLifecycle, error) { return modules.exportWorker, nil },
+		func(cfg *Config) bool { return cfg != nil && cfg.ExportWorker.Enabled },
+		func(cfg *Config) bool { return cfg != nil && cfg.ExportWorker.Enabled },
+	)
+
+	workerMgr.Register(
+		"cleanup",
+		func(_ *Config) (WorkerLifecycle, error) { return modules.cleanupWorker, nil },
+		func(cfg *Config) bool { return cfg != nil && cfg.CleanupWorker.Enabled },
+		func(cfg *Config) bool { return cfg != nil && cfg.CleanupWorker.Enabled },
+	)
+
+	workerMgr.Register(
+		"archival",
+		func(_ *Config) (WorkerLifecycle, error) { return modules.archivalWorker, nil },
+		func(cfg *Config) bool { return cfg != nil && cfg.Archival.Enabled },
+		func(cfg *Config) bool { return cfg != nil && cfg.Archival.Enabled },
+	)
+
+	workerMgr.Register(
+		"scheduler",
+		func(_ *Config) (WorkerLifecycle, error) { return modules.schedulerWorker, nil },
+		func(cfg *Config) bool { return cfg != nil },
+		func(_ *Config) bool { return false },
+	)
 }
 
 func initLogger(opts *Options) (libLog.Logger, error) {
@@ -1376,16 +1435,22 @@ func initSharedRepositories(provider sharedPorts.InfrastructureProvider) (*share
 	}, nil
 }
 
-//nolint:cyclop // module initialization requires sequential dependency setup
+//nolint:cyclop,gocyclo // module initialization requires sequential dependency setup
 func initModulesAndMessaging(
 	routes *Routes,
 	cfg *Config,
+	configGetter func() *Config,
 	provider sharedPorts.InfrastructureProvider,
 	rabbitMQConnection *libRabbitmq.RabbitMQConnection,
 	rateLimitStorage fiber.Storage,
 	logger libLog.Logger,
 ) (*modulesResult, error) {
 	ctx := context.Background()
+
+	limiterConfigGetter := configGetter
+	if limiterConfigGetter == nil {
+		limiterConfigGetter = func() *Config { return cfg }
+	}
 
 	sharedOutboxRepository := outboxPgRepo.NewRepository(provider)
 
@@ -1426,6 +1491,7 @@ func initModulesAndMessaging(
 	exportWorker, cleanupWorker, err := initReportingModule(
 		routes,
 		cfg,
+		limiterConfigGetter,
 		provider,
 		storage,
 		rateLimitStorage,
@@ -1441,7 +1507,7 @@ func initModulesAndMessaging(
 		return nil, err
 	}
 
-	dispatchLimiter := NewDispatchRateLimiter(cfg, rateLimitStorage)
+	dispatchLimiter := NewDynamicDispatchRateLimiter(limiterConfigGetter, rateLimitStorage)
 
 	if err := initExceptionModule(cfg, routes, provider, sharedOutboxRepository, dispatchLimiter, sharedRepos, isProduction); err != nil {
 		return nil, err
@@ -1974,6 +2040,7 @@ func initMatchingModule(
 func initReportingModule(
 	routes *Routes,
 	cfg *Config,
+	configGetter func() *Config,
 	provider sharedPorts.InfrastructureProvider,
 	storage reportingPorts.ObjectStorageClient,
 	rateLimitStorage fiber.Storage,
@@ -2008,7 +2075,12 @@ func initReportingModule(
 		return nil, nil, fmt.Errorf("create reporting handler: %w", err)
 	}
 
-	exportLimiter := NewExportRateLimiter(cfg, rateLimitStorage)
+	limiterConfigGetter := configGetter
+	if limiterConfigGetter == nil {
+		limiterConfigGetter = func() *Config { return cfg }
+	}
+
+	exportLimiter := NewDynamicExportRateLimiter(limiterConfigGetter, rateLimitStorage)
 
 	if err := reportingHTTP.RegisterRoutes(routes.Protected, reportingHandler, exportLimiter); err != nil {
 		return nil, nil, fmt.Errorf("register reporting routes: %w", err)

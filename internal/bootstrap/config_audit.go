@@ -224,7 +224,12 @@ func SetAuditCallback(
 		// Use a background context because subscriber callbacks run outside
 		// any HTTP request context. The tenant ID comes from the config's
 		// default tenant (system-level operations have no JWT).
+		if newCfg == nil {
+			return
+		}
+
 		ctx := context.Background()
+
 		ctx = context.WithValue(ctx, auth.TenantIDKey, newCfg.Tenancy.DefaultTenantID)
 
 		if err := publisher.PublishConfigChange(ctx, "system", "reloaded", changes); err != nil {

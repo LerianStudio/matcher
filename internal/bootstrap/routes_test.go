@@ -25,7 +25,7 @@ func TestRegisterRoutes_NilTenantExtractor_ReturnsError(t *testing.T) {
 	cfg := &Config{App: AppConfig{EnvName: "test"}}
 	client := authMiddleware.NewAuthClient("", false, nil)
 
-	routes, err := RegisterRoutes(app, cfg, nil, &libLog.NopLogger{}, client, nil, nil, nil)
+	routes, err := RegisterRoutes(app, cfg, nil, nil, &libLog.NopLogger{}, client, nil, nil, nil)
 	require.Error(t, err)
 	require.Nil(t, routes)
 	require.ErrorContains(t, err, "tenant extractor is required")
@@ -45,7 +45,7 @@ func TestRegisterRoutes_NilApp_ReturnsError(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	routes, err := RegisterRoutes(nil, cfg, nil, &libLog.NopLogger{}, client, extractor, nil, nil)
+	routes, err := RegisterRoutes(nil, cfg, nil, nil, &libLog.NopLogger{}, client, extractor, nil, nil)
 	require.Error(t, err)
 	require.Nil(t, routes)
 	require.ErrorContains(t, err, "fiber app is required")
@@ -65,7 +65,7 @@ func TestRegisterRoutes_NilConfig_ReturnsError(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	routes, err := RegisterRoutes(app, nil, nil, &libLog.NopLogger{}, client, extractor, nil, nil)
+	routes, err := RegisterRoutes(app, nil, nil, nil, &libLog.NopLogger{}, client, extractor, nil, nil)
 	require.Error(t, err)
 	require.Nil(t, routes)
 	require.ErrorContains(t, err, "config is required")
@@ -99,6 +99,7 @@ func TestRegisterRoutes_Success(t *testing.T) {
 		routes, err := RegisterRoutes(
 			app,
 			cfg,
+			nil,
 			nil,
 			&libLog.NopLogger{},
 			client,
@@ -135,6 +136,7 @@ func TestRegisterRoutes_Success(t *testing.T) {
 			app,
 			cfg,
 			nil,
+			nil,
 			&libLog.NopLogger{},
 			client,
 			extractor,
@@ -169,6 +171,7 @@ func TestRegisterRoutes_Success(t *testing.T) {
 		routes, err := RegisterRoutes(
 			app,
 			cfg,
+			nil,
 			nil,
 			&libLog.NopLogger{},
 			client,
@@ -210,6 +213,7 @@ func TestRegisterRoutes_Success(t *testing.T) {
 				app,
 				cfg,
 				nil,
+				nil,
 				&libLog.NopLogger{},
 				client,
 				extractor,
@@ -242,6 +246,7 @@ func TestRegisterRoutes_Success(t *testing.T) {
 			_, err = RegisterRoutes(
 				app,
 				cfg,
+				nil,
 				nil,
 				&libLog.NopLogger{},
 				client,
@@ -284,6 +289,7 @@ func TestRegisterRoutes_Success(t *testing.T) {
 				app,
 				cfg,
 				nil,
+				nil,
 				&libLog.NopLogger{},
 				client,
 				extractor,
@@ -316,6 +322,7 @@ func TestRegisterRoutes_Success(t *testing.T) {
 			_, err = RegisterRoutes(
 				app,
 				cfg,
+				nil,
 				nil,
 				&libLog.NopLogger{},
 				client,
@@ -350,6 +357,7 @@ func TestRegisterRoutes_Success(t *testing.T) {
 				app,
 				cfg,
 				nil,
+				nil,
 				&libLog.NopLogger{},
 				client,
 				extractor,
@@ -380,7 +388,7 @@ func TestRegisterRoutes_Success(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		_, err = RegisterRoutes(app, cfg, nil, &libLog.NopLogger{}, client, extractor, nil, nil)
+		_, err = RegisterRoutes(app, cfg, nil, nil, &libLog.NopLogger{}, client, extractor, nil, nil)
 		require.NoError(t, err)
 
 		req := httptest.NewRequest(http.MethodGet, "/swagger/index.html", http.NoBody)
@@ -407,7 +415,7 @@ func TestRegisterRoutes_HealthEndpoints(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	_, err = RegisterRoutes(app, cfg, nil, &libLog.NopLogger{}, client, extractor, nil, nil)
+	_, err = RegisterRoutes(app, cfg, nil, nil, &libLog.NopLogger{}, client, extractor, nil, nil)
 	require.NoError(t, err)
 
 	t.Run("health endpoint is accessible", func(t *testing.T) {
@@ -450,6 +458,7 @@ func TestRoutesStruct(t *testing.T) {
 		routes, err := RegisterRoutes(
 			app,
 			cfg,
+			nil,
 			nil,
 			&libLog.NopLogger{},
 			client,
