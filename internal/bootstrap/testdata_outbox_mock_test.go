@@ -5,6 +5,7 @@ package bootstrap
 import (
 	"context"
 	"database/sql"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,12 +20,16 @@ import (
 // Only Create is exercised by ConfigAuditPublisher; remaining methods are stubs
 // returning zero values.
 type testOutboxMock struct {
+	mu            sync.Mutex
 	createCalled  bool
 	createdEvents []*sharedDomain.OutboxEvent
 	createErr     error
 }
 
 func (m *testOutboxMock) Create(_ context.Context, event *sharedDomain.OutboxEvent) (*sharedDomain.OutboxEvent, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	m.createCalled = true
 
 	if m.createErr != nil {

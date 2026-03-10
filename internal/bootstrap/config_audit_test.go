@@ -342,7 +342,8 @@ func TestSetAuditCallback_SkipsAPISourceUpdates(t *testing.T) {
 }
 
 func TestSetAuditCallback_FileWatcherReloadPublishesAuditEvent(t *testing.T) {
-	t.Parallel()
+	// Not parallel: clearConfigEnvVars uses t.Setenv.
+	clearConfigEnvVars(t)
 
 	// Create a YAML file with initial config.
 	tmpDir := t.TempDir()

@@ -126,7 +126,7 @@ func TestGetConfig_RedactsSecrets(t *testing.T) {
 	err = json.Unmarshal(body, &response)
 	require.NoError(t, err)
 
-	// Secrets should be redacted.
+	// Secrets should be redacted (present but masked, not removed).
 	for _, secretKey := range []string{
 		"postgres.primary_password",
 		"redis.password",
@@ -134,9 +134,8 @@ func TestGetConfig_RedactsSecrets(t *testing.T) {
 		"auth.token_secret",
 	} {
 		val, exists := response.Config[secretKey]
-		if exists {
-			assert.Equal(t, redactedValue, val, "secret key %q should be redacted", secretKey)
-		}
+		require.True(t, exists, "secret key %q should exist in response (redacted, not removed)", secretKey)
+		assert.Equal(t, redactedValue, val, "secret key %q should be redacted", secretKey)
 	}
 }
 
@@ -213,7 +212,8 @@ func TestGetSchema_RedactsSecretValues(t *testing.T) {
 }
 
 func TestUpdateConfig_ValidChange(t *testing.T) {
-	t.Parallel()
+	// Not parallel: clearConfigEnvVars uses t.Setenv.
+	clearConfigEnvVars(t)
 
 	cm := newAPITestConfigManager(t)
 
@@ -464,11 +464,14 @@ func TestBuildRedactedConfig_AllSecretKeysRedacted(t *testing.T) {
 	cm := newAPITestConfigManager(t)
 	redacted := buildRedactedConfig(cm)
 
+	// Verify every secret field that IS in the schema output is correctly redacted.
 	for key := range secretFields {
 		val, exists := redacted[key]
-		if exists {
-			assert.Equal(t, redactedValue, val, "key %q should be redacted", key)
+		if !exists {
+			continue // key not in schema — coverage tracked by config_schema_test.go
 		}
+
+		assert.Equal(t, redactedValue, val, "key %q should be redacted", key)
 	}
 }
 
@@ -546,7 +549,8 @@ func TestUpdateConfig_AuditPublisherCalledOnSuccess(t *testing.T) {
 }
 
 func TestUpdateConfig_AuditFailureDoesNotFailRequest(t *testing.T) {
-	t.Parallel()
+	// Not parallel: clearConfigEnvVars uses t.Setenv.
+	clearConfigEnvVars(t)
 
 	cm := newAPITestConfigManager(t)
 

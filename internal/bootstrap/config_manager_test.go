@@ -207,7 +207,8 @@ func TestConfigManager_Get_Concurrent(t *testing.T) {
 }
 
 func TestConfigManager_Reload_ValidYAML(t *testing.T) {
-	t.Parallel()
+	// Not parallel: clearConfigEnvVars uses t.Setenv.
+	clearConfigEnvVars(t)
 
 	tmpDir := t.TempDir()
 	yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
@@ -278,7 +279,8 @@ func TestConfigManager_Reload_InvalidYAML(t *testing.T) {
 }
 
 func TestConfigManager_Reload_ValidationFailure(t *testing.T) {
-	t.Parallel()
+	// Not parallel: clearConfigEnvVars uses t.Setenv.
+	clearConfigEnvVars(t)
 
 	tmpDir := t.TempDir()
 	yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
@@ -575,6 +577,11 @@ func TestConfigManager_Debounce_CoalescesEvents(t *testing.T) {
 	cfg := defaultConfig()
 	cm := newTestConfigManager(t, cfg, yamlPath, &testLogger{})
 
+	// NOTE: This test depends on real-time timing. The 50ms sleep is well within
+	// the 500ms debounce window (10x margin). On heavily loaded CI machines,
+	// individual iterations could occasionally exceed 50ms, but all 10 iterations
+	// (500ms total) should still fall within a single debounce window.
+
 	// Simulate rapid file events — each resets the debounce timer.
 	for range 10 {
 		cm.reloadDebounced()
@@ -589,7 +596,8 @@ func TestConfigManager_Debounce_CoalescesEvents(t *testing.T) {
 }
 
 func TestConfigManager_Update_MutableKeys(t *testing.T) {
-	t.Parallel()
+	// Not parallel: clearConfigEnvVars uses t.Setenv.
+	clearConfigEnvVars(t)
 
 	tmpDir := t.TempDir()
 	yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
@@ -667,7 +675,8 @@ func TestConfigManager_Update_EmptyChanges(t *testing.T) {
 }
 
 func TestConfigManager_Update_ValidationFailureRollsBack(t *testing.T) {
-	t.Parallel()
+	// Not parallel: clearConfigEnvVars uses t.Setenv.
+	clearConfigEnvVars(t)
 
 	tmpDir := t.TempDir()
 	yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
@@ -748,6 +757,7 @@ func TestConfigManager_Update_WritesYAMLFile(t *testing.T) {
 	content, readErr := os.ReadFile(yamlPath)
 	require.NoError(t, readErr)
 	assert.NotEmpty(t, content)
+	assert.Contains(t, string(content), "rate_limit", "written YAML should contain rate_limit section")
 }
 
 func TestConfigManager_Reload_ConcurrentSafety(t *testing.T) {
@@ -787,6 +797,12 @@ func TestConfigManager_Reload_ConcurrentSafety(t *testing.T) {
 	}
 
 	wg.Wait()
+
+	// Post-condition: config should still be non-nil and structurally valid
+	// after concurrent access. This catches subtle corruption that doesn't panic.
+	finalCfg := cm.Get()
+	assert.NotNil(t, finalCfg, "config should not be nil after concurrent reloads")
+	assert.NotEmpty(t, finalCfg.App.EnvName, "config should not be corrupted by concurrent access")
 }
 
 func TestDiffConfigs_DetectsChanges(t *testing.T) {
@@ -824,9 +840,9 @@ func TestDiffConfigs_NoChanges(t *testing.T) {
 func TestDiffConfigs_NilInputs(t *testing.T) {
 	t.Parallel()
 
-	assert.Nil(t, diffConfigs(nil, defaultConfig()))
-	assert.Nil(t, diffConfigs(defaultConfig(), nil))
-	assert.Nil(t, diffConfigs(nil, nil))
+	assert.Empty(t, diffConfigs(nil, defaultConfig()))
+	assert.Empty(t, diffConfigs(defaultConfig(), nil))
+	assert.Empty(t, diffConfigs(nil, nil))
 }
 
 func TestConfigManager_Reload_NoFile(t *testing.T) {

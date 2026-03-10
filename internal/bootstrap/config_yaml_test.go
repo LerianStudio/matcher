@@ -199,11 +199,32 @@ func TestResolveConfigFilePath_Default(t *testing.T) {
 
 func TestResolveConfigFilePath_EnvOverride(t *testing.T) {
 	// Cannot be parallel — modifies environment.
-	customPath := "/etc/matcher/custom.yaml"
+	// Use a relative path with .yaml extension — absolute paths outside cwd
+	// are rejected by the path containment check (security hardening).
+	customPath := "custom/matcher.yaml"
 	t.Setenv(configFilePathEnv, customPath)
 
 	path := resolveConfigFilePath()
 	assert.Equal(t, customPath, path)
+}
+
+func TestResolveConfigFilePath_RejectsAbsoluteOutsideCwd(t *testing.T) {
+	// Absolute paths outside the working directory are rejected as a path
+	// traversal mitigation. This prevents CONFIG_FILE_PATH from writing to
+	// arbitrary system locations.
+	t.Setenv(configFilePathEnv, "/etc/matcher/custom.yaml")
+
+	path := resolveConfigFilePath()
+	assert.Equal(t, defaultConfigFilePath, path, "absolute path outside cwd should fall back to default")
+}
+
+func TestResolveConfigFilePath_RejectsNonYAMLExtension(t *testing.T) {
+	// Non-YAML file extensions are rejected to prevent writing to arbitrary
+	// file types (e.g., /etc/cron.d/malicious).
+	t.Setenv(configFilePathEnv, "config/matcher.json")
+
+	path := resolveConfigFilePath()
+	assert.Equal(t, defaultConfigFilePath, path, "non-YAML extension should fall back to default")
 }
 
 func TestResolveConfigFilePath_WhitespaceOnly(t *testing.T) {
