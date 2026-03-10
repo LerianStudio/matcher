@@ -185,32 +185,24 @@ func SetAuditCallback(
 	// but we CAN use the Subscribe mechanism: subscribers fire after every
 	// successful reload (both manual and file-watcher triggered).
 	//
-	// Track the version to detect duplicate notifications and skip the initial
-	// subscription callback. The sentinel value 0 means "never seen a reload yet" —
-	// the first notification is always skipped because it represents the initial
-	// config load, not a change that needs auditing.
-	var lastVersion uint64
+	// Seed baseline from current version at registration time. Subscribers are
+	// not invoked immediately on registration, so this avoids dropping the first
+	// real change notification after callback wiring.
+	lastVersion := cm.Version()
 
 	cm.Subscribe(func(newCfg *Config) {
 		currentVersion := cm.Version()
 
-		// Skip the initial subscription callback (first reload after subscribe).
-		// This is NOT a change — it's the subscriber catching up to current state.
-		if lastVersion == 0 {
-			lastVersion = currentVersion
-			return
-		}
-
-		// Version unchanged means this is a duplicate notification — skip.
-		if currentVersion == lastVersion {
+		// Version unchanged means duplicate notification — skip.
+		if currentVersion <= lastVersion {
 			return
 		}
 
 		lastVersion = currentVersion
 
-		// Skip API-driven updates — the API handler in config_api.go already
-		// publishes its own audit event with the real actor and changes.
-		if source, ok := cm.lastUpdateSource.Load().(string); ok && source == "api" {
+		// Skip API-driven updates/reloads — the API handler in config_api.go
+		// already publishes its own audit event with actor and changes.
+		if source, ok := cm.lastUpdateSource.Load().(string); ok && (source == configUpdateSourceAPI || source == configUpdateSourceReloadAPI) {
 			return
 		}
 

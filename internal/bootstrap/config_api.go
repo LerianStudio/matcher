@@ -259,7 +259,7 @@ func (handler *ConfigAPIHandler) ReloadConfig(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startConfigSpan(fiberCtx, "handler.system.reload_config")
 	defer span.End()
 
-	result, err := handler.configManager.Reload()
+	result, err := handler.configManager.ReloadFromAPI()
 	if err != nil {
 		logConfigSpanError(ctx, span, logger, "config reload failed", err)
 

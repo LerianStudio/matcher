@@ -2,21 +2,44 @@
 
 package bootstrap
 
-import "testing"
+import (
+	"os"
+	"testing"
+)
 
-// clearConfigEnvVars neutralises every environment variable that loadConfigFromEnv
-// reads via libCommons.SetConfigFromEnvVars. Setting each to "" causes the env
-// parser to produce zero-values, which restoreZeroedFields then replaces with the
-// YAML (or default) values — effectively making the env layer invisible.
+// clearConfigEnvVars removes every environment variable that loadConfigFromEnv
+// reads via libCommons.SetConfigFromEnvVars.
 //
-// t.Setenv automatically restores the original value when the test completes, so
-// neighbouring tests are unaffected. Because t.Setenv is used, the calling test
-// MUST NOT call t.Parallel().
+// We must unset (not set to empty string): restoreZeroedFields treats presence
+// of an env var as an explicit override, including empty-string values.
+// Setting to "" would therefore blank fields like DEFAULT_TENANT_ID and break
+// validation paths that depend on defaults/YAML values.
+//
+// Original values are restored via t.Cleanup so neighbouring tests are unaffected.
+// Because process env is global mutable state, the calling test MUST NOT call
+// t.Parallel().
 func clearConfigEnvVars(t *testing.T) {
 	t.Helper()
 
 	for _, key := range configEnvVarKeys {
-		t.Setenv(key, "")
+		value, exists := os.LookupEnv(key)
+		requireNoError(t, os.Unsetenv(key))
+
+		t.Cleanup(func() {
+			if exists {
+				requireNoError(t, os.Setenv(key, value))
+				return
+			}
+
+			requireNoError(t, os.Unsetenv(key))
+		})
+	}
+}
+
+func requireNoError(t *testing.T, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("unexpected env operation error: %v", err)
 	}
 }
 

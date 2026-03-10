@@ -290,7 +290,11 @@ func LoadConfigWithLogger(logger libLog.Logger) (*Config, error) {
 	ctx := context.Background()
 	asserter := newConfigAsserter(ctx, "config.load")
 
-	configFilePath := resolveConfigFilePath()
+	configFilePath, pathErr := resolveConfigFilePathStrict()
+	if err := asserter.NoError(ctx, pathErr, "invalid config file path override"); err != nil {
+		return nil, fmt.Errorf("load config: %w", err)
+	}
+
 	if err := asserter.NoError(ctx, loadConfigFromYAML(cfg, configFilePath), "failed to load config from YAML file"); err != nil {
 		return nil, fmt.Errorf("load config: %w", err)
 	}

@@ -342,7 +342,7 @@ func TestSetAuditCallback_SkipsAPISourceUpdates(t *testing.T) {
 }
 
 func TestSetAuditCallback_FileWatcherReloadPublishesAuditEvent(t *testing.T) {
-	// Not parallel: clearConfigEnvVars uses t.Setenv.
+	// Not parallel: manipulates process env.
 	clearConfigEnvVars(t)
 
 	// Create a YAML file with initial config.
@@ -383,12 +383,10 @@ rate_limit:
 
 	SetAuditCallback(cm, pub, &libLog.NopLogger{})
 
-	// First reload — the subscriber's lastVersion is 0, so it treats this as the
-	// initial load and skips audit publishing. This matches the "skip initial
-	// subscription callback" logic in SetAuditCallback.
+	// First reload has no effective changes (YAML matches active config), so no event.
 	_, err = cm.Reload()
 	require.NoError(t, err)
-	assert.Empty(t, repo.createdEvents, "initial reload should be skipped (version 0 → 1)")
+	assert.Empty(t, repo.createdEvents, "reloads with no diff should not publish audit events")
 
 	// Now modify the YAML to trigger actual changes on the second reload.
 	updatedYAML := `
@@ -414,13 +412,13 @@ rate_limit:
 `
 	require.NoError(t, os.WriteFile(yamlPath, []byte(updatedYAML), 0o600))
 
-	// Second reload — should detect changes and publish audit event.
+	// Second reload should detect changes and publish one audit event.
 	result, err := cm.Reload()
 	require.NoError(t, err)
 	assert.Greater(t, result.ChangesDetected, 0, "should detect config changes")
 
 	// The subscriber should have published one audit event.
-	require.Len(t, repo.createdEvents, 1, "subscriber should have published one audit event for file-watcher reload")
+	require.Len(t, repo.createdEvents, 1, "subscriber should publish one event for successful non-API reload with changes")
 
 	// Verify the outbox event structure.
 	outboxEvent := repo.createdEvents[0]
@@ -438,4 +436,50 @@ rate_limit:
 
 	_, hasConfigChanges := auditEvent.Changes["config_changes"]
 	assert.True(t, hasConfigChanges, "audit event should contain config_changes key")
+}
+
+func TestSetAuditCallback_SkipsAPIReloadSource(t *testing.T) {
+	// Not parallel: manipulates process env.
+
+	tmpDir := t.TempDir()
+	yamlPath := filepath.Join(tmpDir, "matcher.yaml")
+	require.NoError(t, os.WriteFile(yamlPath, []byte(`
+app:
+  env_name: "development"
+  log_level: "info"
+server:
+  address: ":4018"
+  body_limit_bytes: 104857600
+tenancy:
+  default_tenant_id: "11111111-1111-1111-1111-111111111111"
+  default_tenant_slug: "default"
+`), 0o600))
+
+	cm, err := NewConfigManager(defaultConfig(), yamlPath, &libLog.NopLogger{})
+	require.NoError(t, err)
+	t.Cleanup(cm.Stop)
+
+	repo := &testOutboxMock{}
+	pub, err := NewConfigAuditPublisher(repo, &libLog.NopLogger{})
+	require.NoError(t, err)
+
+	SetAuditCallback(cm, pub, &libLog.NopLogger{})
+
+	require.NoError(t, os.WriteFile(yamlPath, []byte(`
+app:
+  env_name: "development"
+  log_level: "debug"
+server:
+  address: ":4018"
+  body_limit_bytes: 104857600
+tenancy:
+  default_tenant_id: "11111111-1111-1111-1111-111111111111"
+  default_tenant_slug: "default"
+`), 0o600))
+
+	result, err := cm.ReloadFromAPI()
+	require.NoError(t, err)
+	assert.Greater(t, result.ChangesDetected, 0)
+
+	assert.Empty(t, repo.createdEvents, "API-triggered reload should be audited by API handler only")
 }

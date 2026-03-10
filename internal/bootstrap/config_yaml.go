@@ -16,34 +16,45 @@ const configFilePathEnv = "CONFIG_FILE_PATH"
 // defaultConfigFilePath is the fallback YAML config file location.
 const defaultConfigFilePath = "config/matcher.yaml"
 
+var errInvalidConfigFilePathOverride = errors.New("invalid CONFIG_FILE_PATH override")
+
 // resolveConfigFilePath returns the YAML config file path.
 //
 // It reads CONFIG_FILE_PATH from the environment; if unset or empty,
 // it returns the default "config/matcher.yaml".
 func resolveConfigFilePath() string {
-	path := strings.TrimSpace(os.Getenv(configFilePathEnv))
-	if path == "" {
+	path, err := resolveConfigFilePathStrict()
+	if err != nil {
 		return defaultConfigFilePath
 	}
 
+	return path
+}
+
+func resolveConfigFilePathStrict() (string, error) {
+	path := strings.TrimSpace(os.Getenv(configFilePathEnv))
+	if path == "" {
+		return defaultConfigFilePath, nil
+	}
+
 	if strings.ContainsRune(path, '\x00') {
-		return defaultConfigFilePath
+		return "", fmt.Errorf("%w: contains null byte", errInvalidConfigFilePathOverride)
 	}
 
 	cleaned := filepath.Clean(path)
 	if cleaned == "." {
-		return defaultConfigFilePath
+		return "", fmt.Errorf("%w: path resolves to current directory", errInvalidConfigFilePathOverride)
 	}
 
 	if !isPathContained(cleaned) {
-		return defaultConfigFilePath
+		return "", fmt.Errorf("%w: path must be within working directory", errInvalidConfigFilePathOverride)
 	}
 
 	if !hasYAMLExtension(cleaned) {
-		return defaultConfigFilePath
+		return "", fmt.Errorf("%w: file extension must be .yaml or .yml", errInvalidConfigFilePathOverride)
 	}
 
-	return cleaned
+	return cleaned, nil
 }
 
 // isPathContained returns true if the given path is safe to use as a config file.
@@ -65,20 +76,22 @@ func isPathContained(cleaned string) bool {
 		baseResolved = baseAbs
 	}
 
-	if !filepath.IsAbs(cleaned) {
-		rel := filepath.Clean(cleaned)
-		if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			return false
-		}
-
-		return true
+	candidateAbs := filepath.Clean(cleaned)
+	if !filepath.IsAbs(candidateAbs) {
+		candidateAbs = filepath.Join(baseResolved, candidateAbs)
 	}
 
-	candidateAbs := filepath.Clean(cleaned)
 	candidateResolved := candidateAbs
+	if fileResolved, resolveErr := filepath.EvalSymlinks(candidateAbs); resolveErr == nil {
+		candidateResolved = fileResolved
+	} else if !os.IsNotExist(resolveErr) {
+		return false
+	}
 
 	if dirResolved, resolveErr := filepath.EvalSymlinks(filepath.Dir(candidateAbs)); resolveErr == nil {
 		candidateResolved = filepath.Join(dirResolved, filepath.Base(candidateAbs))
+	} else if !os.IsNotExist(resolveErr) {
+		return false
 	}
 
 	rel, err := filepath.Rel(baseResolved, candidateResolved)

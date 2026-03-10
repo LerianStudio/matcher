@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -31,6 +32,13 @@ var (
 	errConfigManagerPathOutsideWorkdir = errors.New("config manager: config path must be contained within working directory")
 	errUnsafeConfigFilePath            = errors.New("unsafe config file path")
 	errUnsafeConfigFileExtension       = errors.New("unsafe config file extension")
+)
+
+const (
+	configUpdateSourceAPI           = "api"
+	configUpdateSourceReload        = "reload"
+	configUpdateSourceReloadAPI     = "reload_api"
+	configUpdateSourceReloadWatcher = "reload_watcher"
 )
 
 // debounceDuration is the time window used to coalesce rapid file change events
@@ -64,9 +72,9 @@ type ConfigManager struct {
 	stopCh      chan struct{}
 
 	// lastUpdateSource stores the origin of the most recent config change
-	// ("api", "reload", "watcher") so subscribers can discriminate. The API
+	// ("api", "reload", "reload_api", "reload_watcher") so subscribers can discriminate. The API
 	// handler publishes its own audit events, so the audit subscriber skips
-	// when source == "api" to prevent duplicates.
+	// when source == "api" or "reload_api" to prevent duplicates.
 	lastUpdateSource atomic.Value // stores string
 
 	// lastChanges stores the []ConfigChange from the most recent reload so
@@ -121,6 +129,7 @@ type ConfigChangeRejection struct {
 // changing database hosts or auth secrets through the config API.
 var mutableConfigKeys = map[string]bool{
 	"app.log_level":                    true,
+	"rate_limit.enabled":               true,
 	"rate_limit.max":                   true,
 	"rate_limit.expiry_sec":            true,
 	"rate_limit.export_max":            true,
@@ -292,15 +301,49 @@ func (cm *ConfigManager) SubscribeWithUnsubscribe(fn func(*Config)) func() {
 // On success, the atomic pointer is swapped, version is incremented, and all
 // subscribers are notified with the new config.
 func (cm *ConfigManager) Reload() (*ReloadResult, error) {
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
+	return cm.reload(configUpdateSourceReload)
+}
 
-	return cm.reloadLocked()
+// ReloadFromAPI force-reloads the configuration from disk, marking the source
+// as an API-triggered reload so subscriber-based audit publishers can avoid
+// duplicate event emission when handlers publish explicit audit entries.
+func (cm *ConfigManager) ReloadFromAPI() (*ReloadResult, error) {
+	return cm.reload(configUpdateSourceReloadAPI)
+}
+
+func (cm *ConfigManager) reload(source string) (*ReloadResult, error) {
+	var (
+		notifyCfg *Config
+		callbacks []func(*Config)
+	)
+
+	cm.mu.Lock()
+	defer func() {
+		cm.mu.Unlock()
+
+		if notifyCfg != nil {
+			cm.notifySubscribers(notifyCfg, callbacks)
+		}
+	}()
+
+	result, err := cm.reloadLocked(source)
+	if err != nil {
+		return nil, err
+	}
+
+	notifyCfg = cm.config.Load()
+	callbacks = cm.snapshotSubscribersLocked()
+
+	return result, nil
 }
 
 // reloadLocked performs the actual reload. Caller MUST hold cm.mu.
-func (cm *ConfigManager) reloadLocked() (*ReloadResult, error) {
+func (cm *ConfigManager) reloadLocked(source string) (*ReloadResult, error) {
 	ctx := context.Background()
+
+	if source == "" {
+		source = configUpdateSourceReload
+	}
 
 	// Re-read the file into viper's store.
 	if cm.filePath != "" {
@@ -381,10 +424,7 @@ func (cm *ConfigManager) reloadLocked() (*ReloadResult, error) {
 
 	// Store changes and source BEFORE notifying so subscribers can access them.
 	cm.lastChanges.Store(changes)
-	cm.lastUpdateSource.Store("reload")
-
-	// Notify subscribers AFTER the swap so Get() returns the new config.
-	cm.notifySubscribers(newCfg)
+	cm.lastUpdateSource.Store(source)
 
 	return result, nil
 }
@@ -396,8 +436,19 @@ func (cm *ConfigManager) reloadLocked() (*ReloadResult, error) {
 // Changes are written to the YAML file via atomic rename, then Reload() is
 // triggered to pick them up through the normal pipeline.
 func (cm *ConfigManager) Update(changes map[string]any) (*UpdateResult, error) {
+	var (
+		notifyCfg *Config
+		callbacks []func(*Config)
+	)
+
 	cm.mu.Lock()
-	defer cm.mu.Unlock()
+	defer func() {
+		cm.mu.Unlock()
+
+		if notifyCfg != nil {
+			cm.notifySubscribers(notifyCfg, callbacks)
+		}
+	}()
 
 	ctx := context.Background()
 	result := &UpdateResult{}
@@ -407,21 +458,7 @@ func (cm *ConfigManager) Update(changes map[string]any) (*UpdateResult, error) {
 	}
 
 	// Phase 1: classify changes as applicable or rejected.
-	applicableChanges := make(map[string]any, len(changes))
-
-	for key, value := range changes {
-		if !mutableConfigKeys[key] {
-			result.Rejected = append(result.Rejected, ConfigChangeRejection{
-				Key:    key,
-				Value:  value,
-				Reason: "key is not mutable via API (env-only or infrastructure-bound)",
-			})
-
-			continue
-		}
-
-		applicableChanges[key] = value
-	}
+	applicableChanges := classifyApplicableChanges(changes, result)
 
 	if len(applicableChanges) == 0 {
 		return result, nil
@@ -442,7 +479,8 @@ func (cm *ConfigManager) Update(changes map[string]any) (*UpdateResult, error) {
 
 	oldValues := make(map[string]any, len(applicableChanges))
 
-	for key, value := range applicableChanges {
+	for _, key := range sortedChangeKeys(applicableChanges) {
+		value := applicableChanges[key]
 		oldValues[key] = cm.viper.Get(key)
 		cm.viper.Set(key, value)
 	}
@@ -476,7 +514,8 @@ func (cm *ConfigManager) Update(changes map[string]any) (*UpdateResult, error) {
 	// Build applied results. All mutable keys are hot-reloaded by design —
 	// infrastructure-bound keys (server address, DB host, etc.) are excluded
 	// from mutableConfigKeys, so they never reach this point.
-	for key, value := range applicableChanges {
+	for _, key := range sortedChangeKeys(applicableChanges) {
+		value := applicableChanges[key]
 		result.Applied = append(result.Applied, ConfigChangeResult{
 			Key:         key,
 			OldValue:    redactIfSensitive(key, oldValues[key]),
@@ -493,7 +532,9 @@ func (cm *ConfigManager) Update(changes map[string]any) (*UpdateResult, error) {
 	// Store changes for subscriber parity (even though API handler publishes its own audit,
 	// this ensures any future non-API callers of Update() have changes available).
 	var configChanges []ConfigChange
-	for key, value := range applicableChanges {
+
+	for _, key := range sortedChangeKeys(applicableChanges) {
+		value := applicableChanges[key]
 		configChanges = append(configChanges, ConfigChange{
 			Key:      key,
 			OldValue: redactIfSensitive(key, oldValues[key]),
@@ -504,9 +545,10 @@ func (cm *ConfigManager) Update(changes map[string]any) (*UpdateResult, error) {
 	cm.lastChanges.Store(configChanges)
 
 	// Mark source as API so the audit subscriber skips (API handler publishes its own event).
-	cm.lastUpdateSource.Store("api")
+	cm.lastUpdateSource.Store(configUpdateSourceAPI)
 
-	cm.notifySubscribers(candidateCfg)
+	notifyCfg = candidateCfg
+	callbacks = cm.snapshotSubscribersLocked()
 
 	return result, nil
 }
@@ -627,7 +669,7 @@ func (cm *ConfigManager) reloadDebounced() {
 		default:
 		}
 
-		if _, err := cm.Reload(); err != nil {
+		if _, err := cm.reload(configUpdateSourceReloadWatcher); err != nil {
 			cm.logger.Log(context.Background(), libLog.LevelError,
 				"automatic config reload failed (file watcher)",
 				libLog.Err(err))
@@ -646,7 +688,9 @@ func rejectTypeErrors(applicableChanges map[string]any, result *UpdateResult) {
 		schemaByKey[def.Key] = def
 	}
 
-	for key, value := range applicableChanges {
+	for _, key := range sortedChangeKeys(applicableChanges) {
+		value := applicableChanges[key]
+
 		def, ok := schemaByKey[key]
 		if !ok {
 			continue // key not in schema — let viper handle it
@@ -662,6 +706,38 @@ func rejectTypeErrors(applicableChanges map[string]any, result *UpdateResult) {
 			delete(applicableChanges, key)
 		}
 	}
+}
+
+func classifyApplicableChanges(changes map[string]any, result *UpdateResult) map[string]any {
+	applicableChanges := make(map[string]any, len(changes))
+
+	for _, key := range sortedChangeKeys(changes) {
+		value := changes[key]
+		if !mutableConfigKeys[key] {
+			result.Rejected = append(result.Rejected, ConfigChangeRejection{
+				Key:    key,
+				Value:  value,
+				Reason: "key is not mutable via API (env-only or infrastructure-bound)",
+			})
+
+			continue
+		}
+
+		applicableChanges[key] = value
+	}
+
+	return applicableChanges
+}
+
+func sortedChangeKeys(values map[string]any) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+
+	sort.Strings(keys)
+
+	return keys
 }
 
 // buildCandidateConfig unmarshals the current viper state into a new Config,
@@ -698,14 +774,22 @@ func (cm *ConfigManager) buildCandidateConfig(oldCfg *Config) (*Config, error) {
 	return candidateCfg, nil
 }
 
-// notifySubscribers calls each registered subscriber with the new config.
-// Panics in subscribers are recovered and logged.
-func (cm *ConfigManager) notifySubscribers(cfg *Config) {
-	ctx := context.Background()
-
+func (cm *ConfigManager) snapshotSubscribersLocked() []func(*Config) {
 	callbacks := make([]func(*Config), 0, len(cm.subscribers))
 	for _, fn := range cm.subscribers {
 		callbacks = append(callbacks, fn)
+	}
+
+	return callbacks
+}
+
+// notifySubscribers calls each registered subscriber with the new config.
+// Panics in subscribers are recovered and logged.
+func (cm *ConfigManager) notifySubscribers(cfg *Config, callbacks []func(*Config)) {
+	ctx := context.Background()
+
+	if len(callbacks) == 0 {
+		return
 	}
 
 	for i, fn := range callbacks {

@@ -146,12 +146,24 @@ func TestNewConfigManager_MissingFile(t *testing.T) {
 	t.Parallel()
 
 	cfg := defaultConfig()
-	cm, err := NewConfigManager(cfg, "/nonexistent/matcher.yaml", &testLogger{})
+	cm, err := NewConfigManager(cfg, "config/does-not-exist.yaml", &testLogger{})
 	require.NoError(t, err)
 
 	t.Cleanup(cm.Stop)
 
 	// File-not-found is graceful — manager works with defaults.
+	assert.NotNil(t, cm)
+}
+
+func TestNewConfigManager_AbsoluteMissingFile_GracefulFallback(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cm, err := NewConfigManager(cfg, "/nonexistent/matcher.yaml", &testLogger{})
+	require.NoError(t, err)
+
+	t.Cleanup(cm.Stop)
+
 	assert.NotNil(t, cm)
 }
 
@@ -1052,7 +1064,8 @@ func TestSafeUint64ToInt_JustAboveBoundary(t *testing.T) {
 }
 
 func TestRestoreZeroedFields_RestoresBlankString(t *testing.T) {
-	t.Parallel()
+	// Not parallel: clearConfigEnvVars manipulates process env.
+	clearConfigEnvVars(t)
 
 	dst := defaultConfig()
 	snapshot := defaultConfig()
@@ -1083,7 +1096,8 @@ func TestRestoreZeroedFields_PreservesNonZero(t *testing.T) {
 }
 
 func TestRestoreZeroedFields_RestoresZeroedInt(t *testing.T) {
-	t.Parallel()
+	// Not parallel: clearConfigEnvVars manipulates process env.
+	clearConfigEnvVars(t)
 
 	dst := defaultConfig()
 	snapshot := defaultConfig()
@@ -1113,7 +1127,8 @@ func TestRestoreZeroedFields_BothZero(t *testing.T) {
 }
 
 func TestRestoreZeroedFields_RestoresBool(t *testing.T) {
-	t.Parallel()
+	// Not parallel: clearConfigEnvVars manipulates process env.
+	clearConfigEnvVars(t)
 
 	dst := defaultConfig()
 	snapshot := defaultConfig()

@@ -255,6 +255,32 @@ func TestResolveConfigFilePath_DotPathFallsBackToDefault(t *testing.T) {
 	assert.Equal(t, defaultConfigFilePath, path)
 }
 
+func TestResolveConfigFilePathStrict_ValidOverride(t *testing.T) {
+	t.Setenv(configFilePathEnv, "config/matcher.yaml")
+
+	path, err := resolveConfigFilePathStrict()
+	require.NoError(t, err)
+	assert.Equal(t, "config/matcher.yaml", path)
+}
+
+func TestResolveConfigFilePathStrict_InvalidOverride(t *testing.T) {
+	t.Setenv(configFilePathEnv, "../../outside/matcher.yaml")
+
+	path, err := resolveConfigFilePathStrict()
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errInvalidConfigFilePathOverride)
+	assert.Empty(t, path)
+}
+
+func TestResolveConfigFilePathStrict_NonYAML(t *testing.T) {
+	t.Setenv(configFilePathEnv, "config/matcher.txt")
+
+	path, err := resolveConfigFilePathStrict()
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errInvalidConfigFilePathOverride)
+	assert.Empty(t, path)
+}
+
 func TestBindDefaults_AllKeysRegistered(t *testing.T) {
 	t.Parallel()
 

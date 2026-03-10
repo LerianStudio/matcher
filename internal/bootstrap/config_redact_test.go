@@ -163,7 +163,8 @@ func TestRestoreZeroedFieldsRedact_NilInputs(t *testing.T) {
 }
 
 func TestRestoreZeroedFieldsRedact_RestoresZeroed(t *testing.T) {
-	t.Parallel()
+	// Not parallel: clearConfigEnvVars manipulates process env.
+	clearConfigEnvVars(t)
 
 	snapshot := defaultConfig()
 	snapshot.App.LogLevel = "warn"
