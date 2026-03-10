@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,6 +19,11 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
+
+// errConfigNilAtomicLoad is returned when the atomic config pointer unexpectedly
+// holds nil. This should never happen in practice (the constructor validates
+// non-nil, and both reload and update only store validated configs).
+var errConfigNilAtomicLoad = errors.New("current config is unexpectedly nil")
 
 // debounceDuration is the time window used to coalesce rapid file change events
 // into a single reload. File editors often write multiple events (write → chmod →
@@ -106,7 +112,6 @@ type ConfigChangeRejection struct {
 // changing database hosts or auth secrets through the config API.
 var mutableConfigKeys = map[string]bool{
 	"app.log_level":                    true,
-	"rate_limit.enabled":               true,
 	"rate_limit.max":                   true,
 	"rate_limit.expiry_sec":            true,
 	"rate_limit.export_max":            true,
@@ -285,6 +290,10 @@ func (cm *ConfigManager) reloadLocked() (*ReloadResult, error) {
 
 	// Carry forward the logger from the current config (it's not YAML-managed).
 	oldCfg := cm.config.Load()
+	if oldCfg == nil {
+		return nil, fmt.Errorf("config reload: %w", errConfigNilAtomicLoad)
+	}
+
 	newCfg.Logger = oldCfg.Logger
 	newCfg.ShutdownGracePeriod = oldCfg.ShutdownGracePeriod
 
@@ -372,8 +381,19 @@ func (cm *ConfigManager) Update(changes map[string]any) (*UpdateResult, error) {
 		return result, nil
 	}
 
+	// Phase 1.5: validate value types against schema expectations.
+	rejectTypeErrors(applicableChanges, result)
+
+	if len(applicableChanges) == 0 {
+		return result, nil
+	}
+
 	// Phase 2: apply to viper and compute old values.
 	oldCfg := cm.config.Load()
+	if oldCfg == nil {
+		return nil, fmt.Errorf("config update: %w", errConfigNilAtomicLoad)
+	}
+
 	oldValues := make(map[string]any, len(applicableChanges))
 
 	for key, value := range applicableChanges {
@@ -381,38 +401,12 @@ func (cm *ConfigManager) Update(changes map[string]any) (*UpdateResult, error) {
 		cm.viper.Set(key, value)
 	}
 
-	// Phase 3: validate the would-be config. If invalid, roll back viper changes.
-	candidateCfg := defaultConfig()
-	if err := cm.viper.Unmarshal(candidateCfg); err != nil {
+	// Phase 3: build, overlay, and validate the candidate config.
+	candidateCfg, err := cm.buildCandidateConfig(oldCfg)
+	if err != nil {
 		cm.rollbackViperKeys(applicableChanges, oldValues)
 
-		return nil, fmt.Errorf("config update: unmarshal: %w", err)
-	}
-
-	candidateCfg.Logger = oldCfg.Logger
-	candidateCfg.ShutdownGracePeriod = oldCfg.ShutdownGracePeriod
-
-	if candidateCfg.Server.BodyLimitBytes <= 0 {
-		candidateCfg.Server.BodyLimitBytes = defaultHTTPBodyLimitBytes
-	}
-
-	// Apply env overlay for backward compatibility. See reloadLocked comment
-	// for why we snapshot and restore.
-	candidateSnapshot := *candidateCfg
-	if err := loadConfigFromEnv(candidateCfg); err != nil {
-		cm.rollbackViperKeys(applicableChanges, oldValues)
-
-		return nil, fmt.Errorf("config update: env overlay: %w", err)
-	}
-
-	restoreZeroedFields(candidateCfg, &candidateSnapshot)
-
-	candidateCfg.enforceProductionSecurityDefaults(cm.logger)
-
-	if err := candidateCfg.Validate(); err != nil {
-		cm.rollbackViperKeys(applicableChanges, oldValues)
-
-		return nil, fmt.Errorf("config update: validation failed: %w", err)
+		return nil, fmt.Errorf("config update: %w", err)
 	}
 
 	// Phase 4: write YAML via atomic rename (temp file + rename).
@@ -447,6 +441,19 @@ func (cm *ConfigManager) Update(changes map[string]any) (*UpdateResult, error) {
 		libLog.Int("version", safeUint64ToInt(newVersion)),
 		libLog.Int("applied", len(result.Applied)),
 		libLog.Int("rejected", len(result.Rejected)))
+
+	// Store changes for subscriber parity (even though API handler publishes its own audit,
+	// this ensures any future non-API callers of Update() have changes available).
+	var configChanges []ConfigChange
+	for key, value := range applicableChanges {
+		configChanges = append(configChanges, ConfigChange{
+			Key:      key,
+			OldValue: redactIfSensitive(key, oldValues[key]),
+			NewValue: redactIfSensitive(key, value),
+		})
+	}
+
+	cm.lastChanges.Store(configChanges)
 
 	// Mark source as API so the audit subscriber skips (API handler publishes its own event).
 	cm.lastUpdateSource.Store("api")
@@ -580,6 +587,69 @@ func (cm *ConfigManager) reloadDebounced() {
 	})
 }
 
+// rejectTypeErrors validates value types against the config schema and rejects
+// mismatched entries. Mutates applicableChanges (deletes rejected keys) and
+// appends rejections to result.
+func rejectTypeErrors(applicableChanges map[string]any, result *UpdateResult) {
+	schema := buildConfigSchema()
+	schemaByKey := make(map[string]configFieldDef, len(schema))
+
+	for _, def := range schema {
+		schemaByKey[def.Key] = def
+	}
+
+	for key, value := range applicableChanges {
+		def, ok := schemaByKey[key]
+		if !ok {
+			continue // key not in schema — let viper handle it
+		}
+
+		if !isValueTypeCompatible(value, def.Type) {
+			result.Rejected = append(result.Rejected, ConfigChangeRejection{
+				Key:    key,
+				Value:  value,
+				Reason: "type mismatch: expected " + def.Type,
+			})
+
+			delete(applicableChanges, key)
+		}
+	}
+}
+
+// buildCandidateConfig unmarshals the current viper state into a new Config,
+// applies env overlay + production security defaults, and validates. Returns
+// the validated config or an error (caller should roll back viper keys on error).
+func (cm *ConfigManager) buildCandidateConfig(oldCfg *Config) (*Config, error) {
+	candidateCfg := defaultConfig()
+	if err := cm.viper.Unmarshal(candidateCfg); err != nil {
+		return nil, fmt.Errorf("unmarshal: %w", err)
+	}
+
+	candidateCfg.Logger = oldCfg.Logger
+	candidateCfg.ShutdownGracePeriod = oldCfg.ShutdownGracePeriod
+
+	if candidateCfg.Server.BodyLimitBytes <= 0 {
+		candidateCfg.Server.BodyLimitBytes = defaultHTTPBodyLimitBytes
+	}
+
+	// Apply env overlay for backward compatibility. See reloadLocked comment
+	// for why we snapshot and restore.
+	candidateSnapshot := *candidateCfg
+	if err := loadConfigFromEnv(candidateCfg); err != nil {
+		return nil, fmt.Errorf("env overlay: %w", err)
+	}
+
+	restoreZeroedFields(candidateCfg, &candidateSnapshot)
+
+	candidateCfg.enforceProductionSecurityDefaults(cm.logger)
+
+	if err := candidateCfg.Validate(); err != nil {
+		return nil, fmt.Errorf("validation failed: %w", err)
+	}
+
+	return candidateCfg, nil
+}
+
 // notifySubscribers calls each registered subscriber with the new config.
 // Panics in subscribers are recovered and logged.
 func (cm *ConfigManager) notifySubscribers(cfg *Config) {
@@ -647,6 +717,10 @@ func (cm *ConfigManager) writeConfigAtomically() error {
 		_ = os.Chmod(tmpPath, origPerm)
 	}
 
+	// When origPerm == 0 (original file doesn't exist or Stat failed), the temp
+	// file retains the default 0600 permissions from os.CreateTemp. This is
+	// intentionally more restrictive than typical config file permissions.
+
 	if err := os.Rename(tmpPath, cm.filePath); err != nil {
 		return fmt.Errorf("atomic rename config file: %w", err)
 	}
@@ -661,5 +735,32 @@ func (cm *ConfigManager) writeConfigAtomically() error {
 func (cm *ConfigManager) rollbackViperKeys(keys, oldValues map[string]any) {
 	for key := range keys {
 		cm.viper.Set(key, oldValues[key])
+	}
+}
+
+// isValueTypeCompatible checks if a JSON-deserialized value is compatible with
+// the expected schema type. JSON numbers can be float64 or json.Number; both
+// are accepted for int fields since viper handles the conversion.
+func isValueTypeCompatible(value any, expectedType string) bool {
+	if value == nil {
+		return false
+	}
+
+	switch expectedType {
+	case "string":
+		_, ok := value.(string)
+		return ok
+	case "int":
+		switch value.(type) {
+		case int, int64, float64: // JSON numbers deserialize as float64
+			return true
+		default:
+			return false
+		}
+	case "bool":
+		_, ok := value.(bool)
+		return ok
+	default:
+		return true // unknown type — let viper handle it
 	}
 }

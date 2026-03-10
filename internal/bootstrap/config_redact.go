@@ -10,7 +10,7 @@ import (
 // fields containing secrets. Used by diffConfigs to redact secret values
 // from config change diffs, preventing credential leakage in API responses
 // and audit logs.
-var sensitiveKeyFragments = []string{"password", "secret", "token"}
+var sensitiveKeyFragments = []string{"password", "secret", "token", "key", "cert"}
 
 // diffConfigs computes the list of top-level field changes between two configs.
 // Uses reflection on the exported struct fields of Config. Fields tagged with
@@ -20,7 +20,7 @@ var sensitiveKeyFragments = []string{"password", "secret", "token"}
 // to prevent credential leakage in API responses and audit logs.
 func diffConfigs(oldCfg, newCfg *Config) []ConfigChange {
 	if oldCfg == nil || newCfg == nil {
-		return nil
+		return []ConfigChange{}
 	}
 
 	var changes []ConfigChange
@@ -71,10 +71,17 @@ func diffConfigs(oldCfg, newCfg *Config) []ConfigChange {
 // have it override a YAML value. This is an acceptable trade-off because:
 //   - Secret fields (passwords) default to "" and are set via env vars — they stay ""
 //   - Non-secret string fields with YAML values shouldn't be blanked via env vars
+//
+// NOTE: This means operators cannot override YAML numeric values to 0 via
+// environment variables. For boolean fields, this is a non-issue (false is
+// the zero value). See config/matcher.yaml.example for documentation.
 func restoreZeroedFields(dst, snapshot *Config) {
+	if dst == nil || snapshot == nil {
+		return
+	}
+
 	restoreZeroedFieldsRecursive(reflect.ValueOf(dst).Elem(), reflect.ValueOf(snapshot).Elem())
 }
-
 
 func restoreZeroedFieldsRecursive(dst, snapshot reflect.Value) {
 	dstType := dst.Type()
@@ -160,8 +167,10 @@ func redactIfSensitive(key string, value any) any {
 }
 
 // safeUint64ToInt converts a uint64 to int, capping at math.MaxInt to prevent
-// integer overflow on 32-bit architectures. Config version counters will never
-// reach this limit in practice, but gosec requires the bounds check.
+// integer overflow on 32-bit architectures. Used by config_manager.go to safely
+// pass atomic version counters to structured logger fields that expect int.
+// Config version counters will never reach this limit in practice, but gosec
+// requires the bounds check.
 func safeUint64ToInt(version uint64) int {
 	if version > uint64(math.MaxInt) {
 		return math.MaxInt

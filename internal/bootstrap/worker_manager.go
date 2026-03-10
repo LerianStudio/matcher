@@ -180,6 +180,9 @@ func (wm *WorkerManager) onConfigChange(newCfg *Config) {
 
 	// Use parentCtx for worker lifecycle operations (Start needs a cancellable ctx).
 	ctx := wm.parentCtx
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	oldCfg := wm.lastCfg
 	wm.lastCfg = newCfg
@@ -363,11 +366,12 @@ func (wm *WorkerManager) stopAllWorkersLocked(ctx context.Context) {
 // sub-struct for simplicity — this runs at most once per config reload per worker,
 // so the reflection cost is negligible.
 func workerConfigChanged(name string, oldCfg, newCfg *Config) bool {
-	if oldCfg == nil || newCfg == nil {
-		return true
-	}
+	old := extractWorkerConfig(name, oldCfg)
+	new_ := extractWorkerConfig(name, newCfg)
 
-	old, new_ := extractWorkerConfig(name, oldCfg), extractWorkerConfig(name, newCfg)
+	// If either config extraction returned nil (unknown worker name or nil config),
+	// assume changed to trigger a reconciliation. This is safe — reconciliation
+	// handles nil gracefully — but log-worthy if it happens repeatedly.
 	if old == nil || new_ == nil {
 		return true
 	}
@@ -376,7 +380,12 @@ func workerConfigChanged(name string, oldCfg, newCfg *Config) bool {
 }
 
 // extractWorkerConfig returns the config sub-struct relevant to a named worker.
+// Returns nil if cfg is nil or the worker name is unrecognized.
 func extractWorkerConfig(name string, cfg *Config) any {
+	if cfg == nil {
+		return nil
+	}
+
 	switch name {
 	case "export":
 		return cfg.ExportWorker
