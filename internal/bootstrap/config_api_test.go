@@ -4,8 +4,6 @@ package bootstrap
 
 import (
 	"bytes"
-	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"io"
@@ -13,16 +11,12 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-
-	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 // newAPITestConfigManager creates a ConfigManager for config API testing with a default config.
@@ -35,6 +29,7 @@ func newAPITestConfigManager(t *testing.T) *ConfigManager {
 
 	cm, err := NewConfigManager(cfg, "", &libLog.NopLogger{})
 	require.NoError(t, err)
+	t.Cleanup(cm.Stop)
 
 	return cm
 }
@@ -503,66 +498,6 @@ func TestIsEnvOverridden_EmptyString(t *testing.T) {
 	assert.False(t, isEnvOverridden(""))
 }
 
-// mockOutboxRepository is a minimal test double for sharedPorts.OutboxRepository.
-// Only Create is used by ConfigAuditPublisher; remaining methods are stubs.
-type mockOutboxRepository struct {
-	createCalled bool
-	createErr    error
-}
-
-func (m *mockOutboxRepository) Create(_ context.Context, _ *sharedDomain.OutboxEvent) (*sharedDomain.OutboxEvent, error) {
-	m.createCalled = true
-	if m.createErr != nil {
-		return nil, m.createErr
-	}
-
-	return &sharedDomain.OutboxEvent{}, nil
-}
-
-func (m *mockOutboxRepository) CreateWithTx(_ context.Context, _ *sql.Tx, _ *sharedDomain.OutboxEvent) (*sharedDomain.OutboxEvent, error) {
-	return nil, nil
-}
-
-func (m *mockOutboxRepository) ListPending(_ context.Context, _ int) ([]*sharedDomain.OutboxEvent, error) {
-	return nil, nil
-}
-
-func (m *mockOutboxRepository) ListPendingByType(_ context.Context, _ string, _ int) ([]*sharedDomain.OutboxEvent, error) {
-	return nil, nil
-}
-
-func (m *mockOutboxRepository) ListTenants(_ context.Context) ([]string, error) {
-	return nil, nil
-}
-
-func (m *mockOutboxRepository) GetByID(_ context.Context, _ uuid.UUID) (*sharedDomain.OutboxEvent, error) {
-	return nil, nil
-}
-
-func (m *mockOutboxRepository) MarkPublished(_ context.Context, _ uuid.UUID, _ time.Time) error {
-	return nil
-}
-
-func (m *mockOutboxRepository) MarkFailed(_ context.Context, _ uuid.UUID, _ string, _ int) error {
-	return nil
-}
-
-func (m *mockOutboxRepository) ListFailedForRetry(_ context.Context, _ int, _ time.Time, _ int) ([]*sharedDomain.OutboxEvent, error) {
-	return nil, nil
-}
-
-func (m *mockOutboxRepository) ResetForRetry(_ context.Context, _ int, _ time.Time, _ int) ([]*sharedDomain.OutboxEvent, error) {
-	return nil, nil
-}
-
-func (m *mockOutboxRepository) ResetStuckProcessing(_ context.Context, _ int, _ time.Time, _ int) ([]*sharedDomain.OutboxEvent, error) {
-	return nil, nil
-}
-
-func (m *mockOutboxRepository) MarkInvalid(_ context.Context, _ uuid.UUID, _ string) error {
-	return nil
-}
-
 func TestUpdateConfig_AuditPublisherCalledOnSuccess(t *testing.T) {
 	t.Parallel()
 
@@ -572,7 +507,7 @@ func TestUpdateConfig_AuditPublisherCalledOnSuccess(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create a working audit publisher with a mock outbox repo.
-	mockRepo := &mockOutboxRepository{}
+	mockRepo := &testOutboxMock{}
 	publisher, err := NewConfigAuditPublisher(mockRepo, &libLog.NopLogger{})
 	require.NoError(t, err)
 
@@ -619,7 +554,7 @@ func TestUpdateConfig_AuditFailureDoesNotFailRequest(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create an audit publisher with a failing outbox repo.
-	mockRepo := &mockOutboxRepository{createErr: errors.New("outbox write failed")}
+	mockRepo := &testOutboxMock{createErr: errors.New("outbox write failed")}
 	publisher, err := NewConfigAuditPublisher(mockRepo, &libLog.NopLogger{})
 	require.NoError(t, err)
 

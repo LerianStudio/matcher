@@ -4,10 +4,10 @@ package bootstrap
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -18,64 +18,6 @@ import (
 	"github.com/LerianStudio/matcher/internal/auth"
 	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
 )
-
-// --- Mock OutboxRepository ---
-
-// mockOutboxRepo is a minimal mock for sharedPorts.OutboxRepository that
-// captures Create calls. Only Create is used by ConfigAuditPublisher; all
-// other methods return zero values.
-type mockOutboxRepo struct {
-	createdEvents []*sharedDomain.OutboxEvent
-	createErr     error
-}
-
-func (m *mockOutboxRepo) Create(_ context.Context, event *sharedDomain.OutboxEvent) (*sharedDomain.OutboxEvent, error) {
-	if m.createErr != nil {
-		return nil, m.createErr
-	}
-
-	m.createdEvents = append(m.createdEvents, event)
-
-	return event, nil
-}
-
-func (m *mockOutboxRepo) CreateWithTx(_ context.Context, _ *sql.Tx, _ *sharedDomain.OutboxEvent) (*sharedDomain.OutboxEvent, error) {
-	return nil, nil
-}
-
-func (m *mockOutboxRepo) ListPending(context.Context, int) ([]*sharedDomain.OutboxEvent, error) {
-	return nil, nil
-}
-
-func (m *mockOutboxRepo) ListPendingByType(context.Context, string, int) ([]*sharedDomain.OutboxEvent, error) {
-	return nil, nil
-}
-
-func (m *mockOutboxRepo) ListTenants(context.Context) ([]string, error) { return nil, nil }
-
-func (m *mockOutboxRepo) GetByID(context.Context, uuid.UUID) (*sharedDomain.OutboxEvent, error) {
-	return nil, nil
-}
-
-func (m *mockOutboxRepo) MarkPublished(_ context.Context, _ uuid.UUID, _ time.Time) error {
-	return nil
-}
-
-func (m *mockOutboxRepo) MarkFailed(context.Context, uuid.UUID, string, int) error { return nil }
-
-func (m *mockOutboxRepo) ListFailedForRetry(_ context.Context, _ int, _ time.Time, _ int) ([]*sharedDomain.OutboxEvent, error) {
-	return nil, nil
-}
-
-func (m *mockOutboxRepo) ResetForRetry(_ context.Context, _ int, _ time.Time, _ int) ([]*sharedDomain.OutboxEvent, error) {
-	return nil, nil
-}
-
-func (m *mockOutboxRepo) ResetStuckProcessing(_ context.Context, _ int, _ time.Time, _ int) ([]*sharedDomain.OutboxEvent, error) {
-	return nil, nil
-}
-
-func (m *mockOutboxRepo) MarkInvalid(_ context.Context, _ uuid.UUID, _ string) error { return nil }
 
 // --- Tests ---
 
@@ -91,7 +33,7 @@ func TestNewConfigAuditPublisher_NilOutboxRepo(t *testing.T) {
 func TestNewConfigAuditPublisher_NilLogger(t *testing.T) {
 	t.Parallel()
 
-	pub, err := NewConfigAuditPublisher(&mockOutboxRepo{}, nil)
+	pub, err := NewConfigAuditPublisher(&testOutboxMock{}, nil)
 
 	require.NoError(t, err)
 	assert.NotNil(t, pub)
@@ -100,7 +42,7 @@ func TestNewConfigAuditPublisher_NilLogger(t *testing.T) {
 func TestNewConfigAuditPublisher_Success(t *testing.T) {
 	t.Parallel()
 
-	pub, err := NewConfigAuditPublisher(&mockOutboxRepo{}, &libLog.NopLogger{})
+	pub, err := NewConfigAuditPublisher(&testOutboxMock{}, &libLog.NopLogger{})
 
 	require.NoError(t, err)
 	assert.NotNil(t, pub)
@@ -109,7 +51,7 @@ func TestNewConfigAuditPublisher_Success(t *testing.T) {
 func TestPublishConfigChange_CreatesCorrectAuditEvent(t *testing.T) {
 	t.Parallel()
 
-	repo := &mockOutboxRepo{}
+	repo := &testOutboxMock{}
 	pub, err := NewConfigAuditPublisher(repo, &libLog.NopLogger{})
 	require.NoError(t, err)
 
@@ -154,7 +96,7 @@ func TestPublishConfigChange_CreatesCorrectAuditEvent(t *testing.T) {
 func TestPublishConfigChange_SystemActor(t *testing.T) {
 	t.Parallel()
 
-	repo := &mockOutboxRepo{}
+	repo := &testOutboxMock{}
 	pub, err := NewConfigAuditPublisher(repo, &libLog.NopLogger{})
 	require.NoError(t, err)
 
@@ -180,7 +122,7 @@ func TestPublishConfigChange_SystemActor(t *testing.T) {
 func TestPublishConfigChange_EmptyActor(t *testing.T) {
 	t.Parallel()
 
-	repo := &mockOutboxRepo{}
+	repo := &testOutboxMock{}
 	pub, err := NewConfigAuditPublisher(repo, &libLog.NopLogger{})
 	require.NoError(t, err)
 
@@ -202,7 +144,7 @@ func TestPublishConfigChange_EmptyActor(t *testing.T) {
 func TestPublishConfigChange_InvalidTenantID(t *testing.T) {
 	t.Parallel()
 
-	repo := &mockOutboxRepo{}
+	repo := &testOutboxMock{}
 	pub, err := NewConfigAuditPublisher(repo, &libLog.NopLogger{})
 	require.NoError(t, err)
 
@@ -220,7 +162,7 @@ func TestPublishConfigChange_InvalidTenantID(t *testing.T) {
 func TestPublishConfigChange_OutboxCreateFails(t *testing.T) {
 	t.Parallel()
 
-	repo := &mockOutboxRepo{createErr: assert.AnError}
+	repo := &testOutboxMock{createErr: assert.AnError}
 	pub, err := NewConfigAuditPublisher(repo, &libLog.NopLogger{})
 	require.NoError(t, err)
 
@@ -248,10 +190,10 @@ func TestBuildConfigChangesMap_EmptyChanges(t *testing.T) {
 	t.Parallel()
 
 	result := buildConfigChangesMap(nil)
-	assert.Nil(t, result)
+	assert.Empty(t, result)
 
 	result = buildConfigChangesMap([]ConfigChange{})
-	assert.Nil(t, result)
+	assert.Empty(t, result)
 }
 
 func TestBuildConfigChangesMap_WithChanges(t *testing.T) {
@@ -332,7 +274,7 @@ func TestSetAuditCallback_SubscriberRegistered(t *testing.T) {
 	cm, err := NewConfigManager(cfg, "", &libLog.NopLogger{})
 	require.NoError(t, err)
 
-	repo := &mockOutboxRepo{}
+	repo := &testOutboxMock{}
 	pub, err := NewConfigAuditPublisher(repo, &libLog.NopLogger{})
 	require.NoError(t, err)
 
@@ -361,7 +303,7 @@ func TestConfigAPIHandler_SetAuditPublisher(t *testing.T) {
 
 	assert.Nil(t, handler.auditPublisher)
 
-	repo := &mockOutboxRepo{}
+	repo := &testOutboxMock{}
 	pub, pubErr := NewConfigAuditPublisher(repo, &libLog.NopLogger{})
 	require.NoError(t, pubErr)
 
@@ -384,7 +326,7 @@ func TestSetAuditCallback_SkipsAPISourceUpdates(t *testing.T) {
 	cm, err := NewConfigManager(defaultConfig(), "", &libLog.NopLogger{})
 	require.NoError(t, err)
 
-	repo := &mockOutboxRepo{}
+	repo := &testOutboxMock{}
 	pub, err := NewConfigAuditPublisher(repo, &libLog.NopLogger{})
 	require.NoError(t, err)
 
@@ -397,4 +339,102 @@ func TestSetAuditCallback_SkipsAPISourceUpdates(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Empty(t, repo.createdEvents, "API updates should not be double-audited by subscriber callback")
+}
+
+func TestSetAuditCallback_FileWatcherReloadPublishesAuditEvent(t *testing.T) {
+	t.Parallel()
+
+	// Create a YAML file with initial config.
+	tmpDir := t.TempDir()
+	initialYAML := `
+app:
+  env_name: "development"
+  log_level: "info"
+server:
+  address: ":4018"
+  body_limit_bytes: 104857600
+tenancy:
+  default_tenant_id: "11111111-1111-1111-1111-111111111111"
+  default_tenant_slug: "default"
+infrastructure:
+  connect_timeout_sec: 30
+rate_limit:
+  enabled: true
+  max: 100
+  expiry_sec: 60
+  export_max: 10
+  export_expiry_sec: 60
+  dispatch_max: 50
+  dispatch_expiry_sec: 60
+`
+	yamlPath := filepath.Join(tmpDir, "matcher.yaml")
+	require.NoError(t, os.WriteFile(yamlPath, []byte(initialYAML), 0o600))
+
+	cfg := defaultConfig()
+	cm, err := NewConfigManager(cfg, yamlPath, &libLog.NopLogger{})
+	require.NoError(t, err)
+
+	t.Cleanup(cm.Stop)
+
+	repo := &testOutboxMock{}
+	pub, err := NewConfigAuditPublisher(repo, &libLog.NopLogger{})
+	require.NoError(t, err)
+
+	SetAuditCallback(cm, pub, &libLog.NopLogger{})
+
+	// First reload — the subscriber's lastVersion is 0, so it treats this as the
+	// initial load and skips audit publishing. This matches the "skip initial
+	// subscription callback" logic in SetAuditCallback.
+	_, err = cm.Reload()
+	require.NoError(t, err)
+	assert.Empty(t, repo.createdEvents, "initial reload should be skipped (version 0 → 1)")
+
+	// Now modify the YAML to trigger actual changes on the second reload.
+	updatedYAML := `
+app:
+  env_name: "development"
+  log_level: "debug"
+server:
+  address: ":4018"
+  body_limit_bytes: 104857600
+tenancy:
+  default_tenant_id: "11111111-1111-1111-1111-111111111111"
+  default_tenant_slug: "default"
+infrastructure:
+  connect_timeout_sec: 30
+rate_limit:
+  enabled: true
+  max: 200
+  expiry_sec: 60
+  export_max: 10
+  export_expiry_sec: 60
+  dispatch_max: 50
+  dispatch_expiry_sec: 60
+`
+	require.NoError(t, os.WriteFile(yamlPath, []byte(updatedYAML), 0o600))
+
+	// Second reload — should detect changes and publish audit event.
+	result, err := cm.Reload()
+	require.NoError(t, err)
+	assert.Greater(t, result.ChangesDetected, 0, "should detect config changes")
+
+	// The subscriber should have published one audit event.
+	require.Len(t, repo.createdEvents, 1, "subscriber should have published one audit event for file-watcher reload")
+
+	// Verify the outbox event structure.
+	outboxEvent := repo.createdEvents[0]
+	assert.Equal(t, sharedDomain.EventTypeAuditLogCreated, outboxEvent.EventType)
+	assert.Equal(t, sharedDomain.OutboxStatusPending, outboxEvent.Status)
+
+	// Verify the audit payload contains the expected actor and action.
+	var auditEvent sharedDomain.AuditLogCreatedEvent
+	require.NoError(t, json.Unmarshal(outboxEvent.Payload, &auditEvent))
+
+	assert.Equal(t, "reloaded", auditEvent.Action)
+	require.NotNil(t, auditEvent.Actor)
+	assert.Equal(t, "system", *auditEvent.Actor)
+	assert.NotNil(t, auditEvent.Changes)
+
+	_, hasConfigChanges := auditEvent.Changes["config_changes"]
+	assert.True(t, hasConfigChanges, "audit event should contain config_changes key")
 }

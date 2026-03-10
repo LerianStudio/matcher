@@ -4,6 +4,7 @@ package bootstrap
 
 import (
 	"context"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -777,7 +778,9 @@ func TestConfigManager_Reload_ConcurrentSafety(t *testing.T) {
 			go func() {
 				defer wg.Done()
 
-				// Reload may fail (concurrent viper reads) — that's OK.
+				// Reload may fail under concurrent access — errors are expected
+				// and intentionally discarded. This test verifies absence of
+				// panics and data races, not error-free operation.
 				_, _ = cm.Reload()
 			}()
 		}
@@ -937,4 +940,173 @@ func TestConfigManager_BootstrapWiring(t *testing.T) {
 		assert.NotNil(t, cm.Get())
 		assert.Same(t, cfg, cm.Get())
 	})
+}
+
+// --- Helper function tests (H8) ---
+
+func TestRedactIfSensitive_PasswordKey(t *testing.T) {
+	t.Parallel()
+
+	result := redactIfSensitive("postgres.primary_password", "s3cret")
+	assert.Equal(t, "***REDACTED***", result)
+}
+
+func TestRedactIfSensitive_NormalKey(t *testing.T) {
+	t.Parallel()
+
+	result := redactIfSensitive("rate_limit.max", 100)
+	assert.Equal(t, 100, result)
+}
+
+func TestRedactIfSensitive_TokenKey(t *testing.T) {
+	t.Parallel()
+
+	result := redactIfSensitive("auth.token_secret", "jwt-tok")
+	assert.Equal(t, "***REDACTED***", result)
+}
+
+func TestRedactIfSensitive_SecretKey(t *testing.T) {
+	t.Parallel()
+
+	result := redactIfSensitive("idempotency.hmac_secret", "hmac-val")
+	assert.Equal(t, "***REDACTED***", result)
+}
+
+func TestIsSensitiveKey_MatchesExpectedPatterns(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		key      string
+		expected bool
+	}{
+		{name: "lowercase password", key: "password", expected: true},
+		{name: "uppercase PASSWORD", key: "PASSWORD", expected: true},
+		{name: "mixed case Password", key: "Password", expected: true},
+		{name: "contains password", key: "primary_password", expected: true},
+		{name: "token", key: "token", expected: true},
+		{name: "contains token", key: "token_secret", expected: true},
+		{name: "TOKEN uppercase", key: "TOKEN", expected: true},
+		{name: "secret", key: "secret", expected: true},
+		{name: "contains secret", key: "hmac_secret", expected: true},
+		{name: "SECRET uppercase", key: "SECRET", expected: true},
+		{name: "normal key", key: "rate_limit.max", expected: false},
+		{name: "host key", key: "postgres.primary_host", expected: false},
+		{name: "enabled key", key: "auth.enabled", expected: false},
+		{name: "empty string", key: "", expected: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.expected, isSensitiveKey(tt.key))
+		})
+	}
+}
+
+func TestSafeUint64ToInt_NormalValue(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, 42, safeUint64ToInt(42))
+	assert.Equal(t, 0, safeUint64ToInt(0))
+	assert.Equal(t, 1000, safeUint64ToInt(1000))
+}
+
+func TestSafeUint64ToInt_Overflow(t *testing.T) {
+	t.Parallel()
+
+	result := safeUint64ToInt(math.MaxUint64)
+	assert.Equal(t, math.MaxInt, result)
+}
+
+func TestSafeUint64ToInt_BoundaryValue(t *testing.T) {
+	t.Parallel()
+
+	// math.MaxInt as uint64 should convert exactly.
+	result := safeUint64ToInt(uint64(math.MaxInt))
+	assert.Equal(t, math.MaxInt, result)
+}
+
+func TestSafeUint64ToInt_JustAboveBoundary(t *testing.T) {
+	t.Parallel()
+
+	// One above math.MaxInt should cap at math.MaxInt.
+	result := safeUint64ToInt(uint64(math.MaxInt) + 1)
+	assert.Equal(t, math.MaxInt, result)
+}
+
+func TestRestoreZeroedFields_RestoresBlankString(t *testing.T) {
+	t.Parallel()
+
+	dst := defaultConfig()
+	snapshot := defaultConfig()
+
+	// Simulate what loadConfigFromEnv does: blanks out a field whose env var is absent.
+	snapshot.Postgres.PrimaryHost = "db.example.com"
+	dst.Postgres.PrimaryHost = "" // zeroed by env overlay
+
+	restoreZeroedFields(dst, snapshot)
+
+	assert.Equal(t, "db.example.com", dst.Postgres.PrimaryHost,
+		"zeroed string should be restored from snapshot")
+}
+
+func TestRestoreZeroedFields_PreservesNonZero(t *testing.T) {
+	t.Parallel()
+
+	dst := defaultConfig()
+	snapshot := defaultConfig()
+
+	dst.Postgres.PrimaryHost = "actual-host"
+	snapshot.Postgres.PrimaryHost = "snapshot-host"
+
+	restoreZeroedFields(dst, snapshot)
+
+	assert.Equal(t, "actual-host", dst.Postgres.PrimaryHost,
+		"non-zero dst field should NOT be overwritten by snapshot")
+}
+
+func TestRestoreZeroedFields_RestoresZeroedInt(t *testing.T) {
+	t.Parallel()
+
+	dst := defaultConfig()
+	snapshot := defaultConfig()
+
+	snapshot.RateLimit.Max = 200
+	dst.RateLimit.Max = 0 // zeroed by env overlay
+
+	restoreZeroedFields(dst, snapshot)
+
+	assert.Equal(t, 200, dst.RateLimit.Max,
+		"zeroed int should be restored from snapshot")
+}
+
+func TestRestoreZeroedFields_BothZero(t *testing.T) {
+	t.Parallel()
+
+	dst := defaultConfig()
+	snapshot := defaultConfig()
+
+	dst.Postgres.PrimaryPassword = ""
+	snapshot.Postgres.PrimaryPassword = ""
+
+	restoreZeroedFields(dst, snapshot)
+
+	assert.Empty(t, dst.Postgres.PrimaryPassword,
+		"both-zero field should remain zero")
+}
+
+func TestRestoreZeroedFields_RestoresBool(t *testing.T) {
+	t.Parallel()
+
+	dst := defaultConfig()
+	snapshot := defaultConfig()
+
+	snapshot.Auth.Enabled = true
+	dst.Auth.Enabled = false // zeroed
+
+	restoreZeroedFields(dst, snapshot)
+
+	assert.True(t, dst.Auth.Enabled,
+		"zeroed bool should be restored from snapshot")
 }
