@@ -25,6 +25,14 @@ import (
 // non-nil, and both reload and update only store validated configs).
 var errConfigNilAtomicLoad = errors.New("current config is unexpectedly nil")
 
+var (
+	errConfigManagerInvalidPath        = errors.New("config manager: invalid config path")
+	errConfigManagerInvalidExtension   = errors.New("config manager: config file must use .yaml or .yml extension")
+	errConfigManagerPathOutsideWorkdir = errors.New("config manager: config path must be contained within working directory")
+	errUnsafeConfigFilePath            = errors.New("unsafe config file path")
+	errUnsafeConfigFileExtension       = errors.New("unsafe config file extension")
+)
+
 // debounceDuration is the time window used to coalesce rapid file change events
 // into a single reload. File editors often write multiple events (write → chmod →
 // rename) for a single save — without debounce, each event would trigger a full
@@ -47,9 +55,10 @@ type ConfigManager struct {
 	mu          sync.Mutex // serializes writes (reload, update)
 	viper       *viper.Viper
 	filePath    string
-	subscribers []func(*Config)
+	subscribers map[uint64]func(*Config)
 	logger      libLog.Logger
 	version     atomic.Uint64
+	nextSubID   atomic.Uint64
 	lastReload  atomic.Value // stores time.Time
 	stopOnce    sync.Once
 	stopCh      chan struct{}
@@ -165,10 +174,22 @@ func NewConfigManager(cfg *Config, filePath string, logger libLog.Logger) (*Conf
 		logger = &libLog.NopLogger{}
 	}
 
+	filePath = filepath.Clean(strings.TrimSpace(filePath))
+	if filePath == "." {
+		filePath = ""
+	}
+
+	if filePath != "" {
+		if err := validateManagerConfigPath(filePath); err != nil {
+			return nil, err
+		}
+	}
+
 	cm := &ConfigManager{
-		filePath: filePath,
-		logger:   logger,
-		stopCh:   make(chan struct{}),
+		filePath:    filePath,
+		logger:      logger,
+		stopCh:      make(chan struct{}),
+		subscribers: make(map[uint64]func(*Config)),
 	}
 
 	cm.config.Store(cfg)
@@ -232,10 +253,35 @@ func (cm *ConfigManager) Get() *Config {
 // the reload goroutine — keep them fast. Panics in callbacks are recovered
 // and logged.
 func (cm *ConfigManager) Subscribe(fn func(*Config)) {
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
+	_ = cm.SubscribeWithUnsubscribe(fn)
+}
 
-	cm.subscribers = append(cm.subscribers, fn)
+// SubscribeWithUnsubscribe registers a callback and returns a function that
+// removes the subscription. The returned function is idempotent and safe for
+// repeated calls.
+func (cm *ConfigManager) SubscribeWithUnsubscribe(fn func(*Config)) func() {
+	if fn == nil {
+		return func() {}
+	}
+
+	cm.mu.Lock()
+	if cm.subscribers == nil {
+		cm.subscribers = make(map[uint64]func(*Config))
+	}
+
+	id := cm.nextSubID.Add(1)
+	cm.subscribers[id] = fn
+	cm.mu.Unlock()
+
+	var once sync.Once
+
+	return func() {
+		once.Do(func() {
+			cm.mu.Lock()
+			delete(cm.subscribers, id)
+			cm.mu.Unlock()
+		})
+	}
 }
 
 // Reload force-reloads the configuration from disk. It re-reads the YAML file,
@@ -412,9 +458,11 @@ func (cm *ConfigManager) Update(changes map[string]any) (*UpdateResult, error) {
 	// Phase 4: write YAML via atomic rename (temp file + rename).
 	if cm.filePath != "" {
 		if err := cm.writeConfigAtomically(); err != nil {
+			cm.rollbackViperKeys(applicableChanges, oldValues)
+
 			cm.logger.Log(ctx, libLog.LevelError, "config update: YAML write failed", libLog.Err(err))
-			// Don't roll back viper — the in-memory state is valid.
-			// The file will be updated on next successful write.
+
+			return nil, fmt.Errorf("config update: write YAML: %w", err)
 		}
 	}
 
@@ -655,7 +703,12 @@ func (cm *ConfigManager) buildCandidateConfig(oldCfg *Config) (*Config, error) {
 func (cm *ConfigManager) notifySubscribers(cfg *Config) {
 	ctx := context.Background()
 
-	for i, fn := range cm.subscribers {
+	callbacks := make([]func(*Config), 0, len(cm.subscribers))
+	for _, fn := range cm.subscribers {
+		callbacks = append(callbacks, fn)
+	}
+
+	for i, fn := range callbacks {
 		func(idx int, callback func(*Config)) {
 			defer func() {
 				if r := recover(); r != nil {
@@ -674,17 +727,29 @@ func (cm *ConfigManager) notifySubscribers(cfg *Config) {
 // This prevents partial-write corruption. The original file's permissions are
 // preserved on the new file to avoid accidental permission changes.
 func (cm *ConfigManager) writeConfigAtomically() error {
-	dir := filepath.Dir(cm.filePath)
-	base := filepath.Base(cm.filePath)
+	path := filepath.Clean(strings.TrimSpace(cm.filePath))
+	if err := validateAtomicWritePath(path); err != nil {
+		return err
+	}
+
+	dir := filepath.Dir(path)
+	base := filepath.Base(path)
+	ext := filepath.Ext(base)
+	stem := strings.TrimSuffix(base, ext)
+	tmpPattern := base + ".tmp.*"
+
+	if ext != "" && stem != "" {
+		tmpPattern = stem + ".tmp.*" + ext
+	}
 
 	// Snapshot original file permissions before writing (best-effort).
 	var origPerm os.FileMode
 
-	if info, err := os.Stat(cm.filePath); err == nil {
+	if info, err := os.Stat(path); err == nil {
 		origPerm = info.Mode().Perm()
 	}
 
-	tmpFile, err := os.CreateTemp(dir, base+".tmp.*")
+	tmpFile, err := os.CreateTemp(dir, tmpPattern)
 	if err != nil {
 		return fmt.Errorf("create temp config file: %w", err)
 	}
@@ -721,7 +786,7 @@ func (cm *ConfigManager) writeConfigAtomically() error {
 	// file retains the default 0600 permissions from os.CreateTemp. This is
 	// intentionally more restrictive than typical config file permissions.
 
-	if err := os.Rename(tmpPath, cm.filePath); err != nil {
+	if err := os.Rename(tmpPath, path); err != nil {
 		return fmt.Errorf("atomic rename config file: %w", err)
 	}
 
@@ -763,4 +828,36 @@ func isValueTypeCompatible(value any, expectedType string) bool {
 	default:
 		return true // unknown type — let viper handle it
 	}
+}
+
+func validateManagerConfigPath(filePath string) error {
+	if strings.ContainsRune(filePath, '\x00') {
+		return errConfigManagerInvalidPath
+	}
+
+	if !hasYAMLExtension(filePath) {
+		return errConfigManagerInvalidExtension
+	}
+
+	if !filepath.IsAbs(filePath) && !isPathContained(filePath) {
+		return errConfigManagerPathOutsideWorkdir
+	}
+
+	return nil
+}
+
+func validateAtomicWritePath(path string) error {
+	if path == "" || strings.ContainsRune(path, '\x00') {
+		return errUnsafeConfigFilePath
+	}
+
+	if !hasYAMLExtension(path) {
+		return errUnsafeConfigFileExtension
+	}
+
+	if !filepath.IsAbs(path) && !isPathContained(path) {
+		return errUnsafeConfigFilePath
+	}
+
+	return nil
 }

@@ -241,6 +241,13 @@ func TestResolveConfigFilePath_CleansRelativeSegments(t *testing.T) {
 	assert.Equal(t, "config/matcher.yaml", path)
 }
 
+func TestResolveConfigFilePath_RejectsRelativeTraversalOutsideCwd(t *testing.T) {
+	t.Setenv(configFilePathEnv, "../../outside/matcher.yaml")
+
+	path := resolveConfigFilePath()
+	assert.Equal(t, defaultConfigFilePath, path)
+}
+
 func TestResolveConfigFilePath_DotPathFallsBackToDefault(t *testing.T) {
 	t.Setenv(configFilePathEnv, ".")
 

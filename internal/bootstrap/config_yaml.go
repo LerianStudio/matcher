@@ -39,9 +39,7 @@ func resolveConfigFilePath() string {
 		return defaultConfigFilePath
 	}
 
-	// Verify the file has a YAML extension to prevent writing to arbitrary file types.
-	ext := strings.ToLower(filepath.Ext(cleaned))
-	if ext != ".yaml" && ext != ".yml" {
+	if !hasYAMLExtension(cleaned) {
 		return defaultConfigFilePath
 	}
 
@@ -49,18 +47,56 @@ func resolveConfigFilePath() string {
 }
 
 // isPathContained returns true if the given path is safe to use as a config file.
-// Absolute paths must reside within the working directory to prevent traversal.
+// Both relative and absolute paths must resolve within the current working directory
+// (after cleaning and symlink evaluation) to prevent traversal.
 func isPathContained(cleaned string) bool {
-	if !filepath.IsAbs(cleaned) {
-		return true // relative paths are allowed
-	}
-
 	cwd, err := os.Getwd()
 	if err != nil {
 		return false
 	}
 
-	return strings.HasPrefix(cleaned, cwd+string(filepath.Separator))
+	baseAbs, err := filepath.Abs(cwd)
+	if err != nil {
+		return false
+	}
+
+	baseResolved, err := filepath.EvalSymlinks(baseAbs)
+	if err != nil {
+		baseResolved = baseAbs
+	}
+
+	if !filepath.IsAbs(cleaned) {
+		rel := filepath.Clean(cleaned)
+		if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return false
+		}
+
+		return true
+	}
+
+	candidateAbs := filepath.Clean(cleaned)
+	candidateResolved := candidateAbs
+
+	if dirResolved, resolveErr := filepath.EvalSymlinks(filepath.Dir(candidateAbs)); resolveErr == nil {
+		candidateResolved = filepath.Join(dirResolved, filepath.Base(candidateAbs))
+	}
+
+	rel, err := filepath.Rel(baseResolved, candidateResolved)
+	if err != nil {
+		return false
+	}
+
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return false
+	}
+
+	return true
+}
+
+func hasYAMLExtension(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+
+	return ext == ".yaml" || ext == ".yml"
 }
 
 // bindDefaults registers all default values from defaultConfig() into the viper
@@ -237,8 +273,6 @@ func bindDefaults(viperCfg *viper.Viper) {
 // This function is called BEFORE the application logger is available. It returns errors
 // for actionable failures (malformed YAML, permission denied) and returns nil for
 // expected conditions (file not found). The caller logs the error if needed.
-//
-//nolint:unused // called from config_yaml_test.go — linter cannot see test callers
 func loadConfigFromYAML(cfg *Config, filePath string) error {
 	if cfg == nil {
 		return ErrConfigNil

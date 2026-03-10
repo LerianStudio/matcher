@@ -51,6 +51,7 @@ type WorkerManager struct {
 	parentCtx     context.Context
 	cancel        context.CancelFunc
 	running       bool
+	unsubscribe   func()
 }
 
 // NewWorkerManager creates a WorkerManager. If configManager is non-nil,
@@ -117,7 +118,7 @@ func (wm *WorkerManager) Start(ctx context.Context, cfg *Config) error {
 
 	// Subscribe to config changes for hot-reload.
 	if wm.configManager != nil {
-		wm.configManager.Subscribe(wm.onConfigChange)
+		wm.unsubscribe = wm.configManager.SubscribeWithUnsubscribe(wm.onConfigChange)
 	}
 
 	return nil
@@ -136,6 +137,11 @@ func (wm *WorkerManager) Stop() error {
 
 	if wm.cancel != nil {
 		wm.cancel()
+	}
+
+	if wm.unsubscribe != nil {
+		wm.unsubscribe()
+		wm.unsubscribe = nil
 	}
 
 	wm.running = false
