@@ -70,13 +70,13 @@ const (
 	defaultIdempotencyRetryWindow = 300
 	defaultIdempotencySuccessTTL  = 168
 
-	// fetcher defaults.
-	defaultFetcherHealthTimeout    = 5
-	defaultFetcherRequestTimeout   = 30
-	defaultFetcherDiscoveryInt     = 60
-	defaultFetcherSchemaCacheTTL   = 300
-	defaultFetcherExtractionPoll   = 5
-	defaultFetcherExtractionTimout = 600
+	// fetcher defaults — use canonical constants from config_env.go.
+	defaultFetcherHealthTimeout    = defaultFetcherHealthTimeoutSec
+	defaultFetcherRequestTimeout   = defaultFetcherRequestTimeoutSec
+	defaultFetcherDiscoveryInt     = defaultFetcherDiscoveryIntervalSec
+	defaultFetcherSchemaCacheTTL   = defaultFetcherSchemaCacheTTLSec
+	defaultFetcherExtractionPoll   = defaultFetcherExtractionPollSec
+	defaultFetcherExtractionTimout = defaultFetcherExtractionTimeoutSec
 
 	// archival defaults.
 	defaultArchivalIntervalHours = 24

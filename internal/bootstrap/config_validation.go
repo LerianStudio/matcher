@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"reflect"
 	"strings"
 
 	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
@@ -39,6 +41,12 @@ func (cfg *Config) Validate() error {
 
 	if err := cfg.validateArchivalConfig(asserter); err != nil {
 		return err
+	}
+
+	if cfg.Fetcher.Enabled {
+		if err := cfg.validateFetcherConfig(asserter); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -181,7 +189,6 @@ func (cfg *Config) validateProductionConfig(asserter *assert.Asserter) error {
 	return nil
 }
 
-
 func (cfg *Config) validateProductionCoreConfig(asserter *assert.Asserter) error {
 	ctx := context.Background()
 
@@ -196,7 +203,6 @@ func (cfg *Config) validateProductionCoreConfig(asserter *assert.Asserter) error
 	return nil
 }
 
-
 func (cfg *Config) validateProductionSecurityConfig(asserter *assert.Asserter) error {
 	ctx := context.Background()
 
@@ -210,7 +216,6 @@ func (cfg *Config) validateProductionSecurityConfig(asserter *assert.Asserter) e
 
 	return nil
 }
-
 
 func (cfg *Config) validateProductionOptionalConfig(asserter *assert.Asserter) error {
 	ctx := context.Background()
@@ -264,15 +269,12 @@ func (cfg *Config) validateArchivalConfig(asserter *assert.Asserter) error {
 
 // validateFetcherConfig validates fetcher-related configuration.
 // Validation is skipped when the fetcher is disabled.
-//
-//nolint:unused // called from config_defaults_test.go — linter cannot see test callers
-func (cfg *Config) validateFetcherConfig() error {
+func (cfg *Config) validateFetcherConfig(asserter *assert.Asserter) error {
 	if !cfg.Fetcher.Enabled {
 		return nil
 	}
 
 	ctx := context.Background()
-	asserter := newConfigAsserter(ctx, "config.validate_fetcher")
 
 	if err := asserter.NotEmpty(ctx, strings.TrimSpace(cfg.Fetcher.URL), "FETCHER_URL is required when FETCHER_ENABLED=true"); err != nil {
 		return fmt.Errorf("config validation: %w", err)
@@ -369,11 +371,63 @@ func (cfg *Config) enforceProductionSecurityDefaults(logger libLog.Logger) {
 	}
 }
 
+// sanitizeEnvVarsForConfig trims trailing whitespace from all environment variables
+// referenced by Config struct tags. This is defense-in-depth against .env files with
+// inline comments (e.g., "RATE_LIMIT_MAX=100  # comment") that Make's -include
+// directive loads verbatim, causing strconv.Atoi to fail on "100  # comment" or "100  ".
+func sanitizeEnvVarsForConfig() {
+	sanitizeEnvVarsForStruct(reflect.TypeOf(Config{}))
+}
+
+// sanitizeEnvVarsForStruct recursively walks a struct type and trims whitespace from
+// all environment variables identified by `env:` struct tags.
+func sanitizeEnvVarsForStruct(structType reflect.Type) {
+	for structType.Kind() == reflect.Ptr {
+		structType = structType.Elem()
+	}
+
+	if structType.Kind() != reflect.Struct {
+		return
+	}
+
+	for i := range structType.NumField() {
+		field := structType.Field(i)
+
+		// Recurse into embedded struct fields (e.g., AppConfig, ServerConfig).
+		if field.Type.Kind() == reflect.Struct && field.Type != reflect.TypeOf((*error)(nil)).Elem() {
+			sanitizeEnvVarsForStruct(field.Type)
+
+			continue
+		}
+
+		envTag := field.Tag.Get("env")
+		if envTag == "" {
+			continue
+		}
+
+		// Extract the env var name (first comma-separated token, matching lib-commons behavior).
+		envName := strings.SplitN(envTag, ",", 2)[0] //nolint:mnd // split tag into name,options
+		if envName == "" {
+			continue
+		}
+
+		if val, ok := os.LookupEnv(envName); ok {
+			trimmed := strings.TrimSpace(val)
+			if trimmed != val {
+				_ = os.Setenv(envName, trimmed)
+			}
+		}
+	}
+}
 
 func loadConfigFromEnv(cfg *Config) error {
 	if cfg == nil {
 		return ErrConfigNil
 	}
+
+	// Trim trailing whitespace from all config-related env vars before parsing.
+	// Prevents strconv.Atoi failures from inline .env comments loaded by Make.
+	sanitizeEnvVarsForConfig()
 
 	var loadErr error
 
@@ -401,7 +455,6 @@ func loadConfigFromEnv(cfg *Config) error {
 
 	return loadErr
 }
-
 
 func newConfigAsserter(ctx context.Context, operation string) *assert.Asserter {
 	return assert.New(ctx, nil, constants.ApplicationName, operation)
