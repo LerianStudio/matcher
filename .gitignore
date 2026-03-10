@@ -31,6 +31,10 @@ boilerplate/
 .env.*
 !.env.example
 
+# Config files (only examples should be tracked)
+config/matcher.yaml
+!config/matcher.yaml.example
+
 # Local tooling and runtime
 .ring/
 console/
