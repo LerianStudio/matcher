@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"go.opentelemetry.io/otel"
@@ -66,6 +67,24 @@ func (handler *ConfigAPIHandler) SetAuditRepository(repository sharedPorts.Audit
 	if handler != nil {
 		handler.auditRepository = repository
 	}
+}
+
+func (handler *ConfigAPIHandler) systemTenantContext(ctx context.Context) context.Context {
+	if handler == nil || handler.configManager == nil {
+		return ctx
+	}
+
+	cfg := handler.configManager.Get()
+	if cfg == nil {
+		return ctx
+	}
+
+	tenantID := strings.TrimSpace(cfg.Tenancy.DefaultTenantID)
+	if tenantID == "" {
+		return ctx
+	}
+
+	return context.WithValue(ctx, auth.TenantIDKey, tenantID)
 }
 
 // startConfigSpan starts an OpenTelemetry span for a config API operation.
@@ -214,8 +233,9 @@ func (handler *ConfigAPIHandler) UpdateConfig(fiberCtx *fiber.Ctx) error {
 		}
 
 		changes := appliedToConfigChanges(result.Applied)
+		auditCtx := handler.systemTenantContext(ctx)
 
-		if auditErr := handler.auditPublisher.PublishConfigChange(ctx, actor, "updated", changes); auditErr != nil {
+		if auditErr := handler.auditPublisher.PublishConfigChange(auditCtx, actor, "updated", changes); auditErr != nil {
 			// Log but don't fail the request — the config update itself succeeded.
 			logConfigSpanError(ctx, span, logger, "failed to publish config update audit event", auditErr)
 		}
@@ -273,7 +293,9 @@ func (handler *ConfigAPIHandler) ReloadConfig(fiberCtx *fiber.Ctx) error {
 			actor = "manual_reload"
 		}
 
-		if auditErr := handler.auditPublisher.PublishConfigChange(ctx, actor, "reloaded", result.Changes); auditErr != nil {
+		auditCtx := handler.systemTenantContext(ctx)
+
+		if auditErr := handler.auditPublisher.PublishConfigChange(auditCtx, actor, "reloaded", result.Changes); auditErr != nil {
 			logConfigSpanError(ctx, span, logger, "failed to publish config reload audit event", auditErr)
 		}
 	}
@@ -297,7 +319,6 @@ func (handler *ConfigAPIHandler) ReloadConfig(fiberCtx *fiber.Ctx) error {
 // GetConfigHistory returns recent configuration change history.
 // @Summary      Get configuration change history
 // @Description  Returns recent configuration changes with timestamps, actors, and diffs.
-// @Description  Currently returns an empty list — full audit integration is planned for T10.
 // @ID           getSystemConfigHistory
 // @Tags         System
 // @Produce      json
@@ -319,7 +340,9 @@ func (handler *ConfigAPIHandler) GetConfigHistory(fiberCtx *fiber.Ctx) error {
 	items := make([]ConfigHistoryEntry, 0)
 
 	if handler.auditRepository != nil {
-		logs, _, err := handler.auditRepository.ListByEntity(ctx, systemConfigEntityType, systemConfigEntityID, nil, configHistoryLimit)
+		historyCtx := handler.systemTenantContext(ctx)
+
+		logs, _, err := handler.auditRepository.ListByEntity(historyCtx, systemConfigEntityType, systemConfigEntityID, nil, configHistoryLimit)
 		if err != nil {
 			logConfigSpanError(ctx, span, logger, "failed to load config history", err)
 
@@ -381,10 +404,13 @@ func extractAuditConfigChanges(payload []byte) []ConfigChange {
 
 	changes := make([]ConfigChange, 0, len(raw.ConfigChanges))
 	for _, item := range raw.ConfigChanges {
+		oldValue := redactIfSensitive(item.Key, item.OldValue)
+		newValue := redactIfSensitive(item.Key, item.NewValue)
+
 		changes = append(changes, ConfigChange{
 			Key:      item.Key,
-			OldValue: item.OldValue,
-			NewValue: item.NewValue,
+			OldValue: oldValue,
+			NewValue: newValue,
 		})
 	}
 

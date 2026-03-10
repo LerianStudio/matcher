@@ -10,7 +10,14 @@ import (
 	"github.com/stretchr/testify/require"
 
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+
+	"github.com/LerianStudio/matcher/internal/auth"
 )
+
+type protectedCall struct {
+	resource string
+	action   string
+}
 
 func TestRegisterConfigAPIRoutes_Success(t *testing.T) {
 	t.Parallel()
@@ -21,14 +28,24 @@ func TestRegisterConfigAPIRoutes_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	app := fiber.New()
+	protectedCalls := make([]protectedCall, 0)
 
 	protected := func(resource, action string) fiber.Router {
+		protectedCalls = append(protectedCalls, protectedCall{resource: resource, action: action})
+
 		// Return a group that mimics auth middleware without enforcing it.
 		return app.Group("")
 	}
 
 	err = RegisterConfigAPIRoutes(protected, handler)
 	assert.NoError(t, err)
+
+	require.Len(t, protectedCalls, 5)
+	assert.Equal(t, protectedCall{resource: auth.ResourceSystem, action: auth.ActionConfigRead}, protectedCalls[0])
+	assert.Equal(t, protectedCall{resource: auth.ResourceSystem, action: auth.ActionConfigRead}, protectedCalls[1])
+	assert.Equal(t, protectedCall{resource: auth.ResourceSystem, action: auth.ActionConfigRead}, protectedCalls[2])
+	assert.Equal(t, protectedCall{resource: auth.ResourceSystem, action: auth.ActionConfigWrite}, protectedCalls[3])
+	assert.Equal(t, protectedCall{resource: auth.ResourceSystem, action: auth.ActionConfigWrite}, protectedCalls[4])
 }
 
 func TestRegisterConfigAPIRoutes_NilProtected_ReturnsError(t *testing.T) {

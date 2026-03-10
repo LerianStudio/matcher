@@ -4,6 +4,8 @@ package bootstrap
 
 import (
 	"bytes"
+	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"io"
@@ -13,10 +15,15 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	sharedhttp "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+
+	"github.com/LerianStudio/matcher/internal/auth"
+	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 // newAPITestConfigManager creates a ConfigManager for config API testing with a default config.
@@ -48,6 +55,47 @@ func newTestApp(t *testing.T, handler *ConfigAPIHandler) *fiber.App {
 	app.Get("/v1/system/config/history", handler.GetConfigHistory)
 
 	return app
+}
+
+type historyAuditRepoMock struct {
+	lastTenantID string
+}
+
+func (mock *historyAuditRepoMock) Create(_ context.Context, _ *sharedDomain.AuditLog) (*sharedDomain.AuditLog, error) {
+	return nil, assert.AnError
+}
+
+func (mock *historyAuditRepoMock) CreateWithTx(
+	_ context.Context,
+	_ *sql.Tx,
+	_ *sharedDomain.AuditLog,
+) (*sharedDomain.AuditLog, error) {
+	return nil, assert.AnError
+}
+
+func (mock *historyAuditRepoMock) GetByID(_ context.Context, _ uuid.UUID) (*sharedDomain.AuditLog, error) {
+	return nil, assert.AnError
+}
+
+func (mock *historyAuditRepoMock) ListByEntity(
+	ctx context.Context,
+	_ string,
+	_ uuid.UUID,
+	_ *sharedhttp.TimestampCursor,
+	_ int,
+) ([]*sharedDomain.AuditLog, string, error) {
+	mock.lastTenantID = auth.GetTenantID(ctx)
+
+	return nil, "", nil
+}
+
+func (mock *historyAuditRepoMock) List(
+	_ context.Context,
+	_ sharedDomain.AuditLogFilter,
+	_ *sharedhttp.TimestampCursor,
+	_ int,
+) ([]*sharedDomain.AuditLog, string, error) {
+	return nil, "", assert.AnError
 }
 
 func TestNewConfigAPIHandler_NilConfigManager(t *testing.T) {
@@ -320,6 +368,15 @@ func TestUpdateConfig_EmptyChanges(t *testing.T) {
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	var response map[string]any
+	require.NoError(t, json.Unmarshal(body, &response))
+	assert.Equal(t, float64(http.StatusBadRequest), response["code"])
+	assert.Equal(t, "invalid_request", response["title"])
+	assert.Equal(t, "changes map must not be empty", response["message"])
 }
 
 func TestUpdateConfig_InvalidJSON(t *testing.T) {
@@ -340,6 +397,15 @@ func TestUpdateConfig_InvalidJSON(t *testing.T) {
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	var response map[string]any
+	require.NoError(t, json.Unmarshal(body, &response))
+	assert.Equal(t, float64(http.StatusBadRequest), response["code"])
+	assert.Equal(t, "invalid_request", response["title"])
+	assert.Equal(t, "invalid JSON body", response["message"])
 }
 
 func TestReloadConfig_Success(t *testing.T) {
@@ -458,6 +524,119 @@ func TestGetConfig_EnvOverridesDetection(t *testing.T) {
 		"LOG_LEVEL env var should cause app.log_level to appear in env overrides")
 }
 
+func TestGetConfig_EnvOverridesDetection_WithMatcherPrefix(t *testing.T) {
+	// Cannot use t.Parallel() because t.Setenv modifies process environment.
+	cm := newAPITestConfigManager(t)
+
+	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{})
+	require.NoError(t, err)
+
+	app := newTestApp(t, handler)
+
+	t.Setenv("MATCHER_APP_LOG_LEVEL", "debug")
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/system/config", http.NoBody)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	var response GetConfigResponse
+	require.NoError(t, json.Unmarshal(body, &response))
+	assert.Contains(t, response.EnvOverrides, "app.log_level")
+}
+
+func TestUpdateConfig_AuditUsesSystemTenantContext(t *testing.T) {
+	t.Parallel()
+
+	cm := newAPITestConfigManager(t)
+	defaultTenantID := cm.Get().Tenancy.DefaultTenantID
+
+	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{})
+	require.NoError(t, err)
+
+	createdEvents := &testOutboxMock{}
+	publisher, err := NewConfigAuditPublisher(createdEvents, &libLog.NopLogger{})
+	require.NoError(t, err)
+	handler.SetAuditPublisher(publisher)
+
+	app := fiber.New()
+	app.Use(func(c *fiber.Ctx) error {
+		ctx := context.WithValue(c.UserContext(), auth.TenantIDKey, uuid.NewString())
+		ctx = context.WithValue(ctx, auth.UserIDKey, "user-42")
+		c.SetUserContext(ctx)
+
+		return c.Next()
+	})
+	app.Patch("/v1/system/config", handler.UpdateConfig)
+
+	bodyBytes, err := json.Marshal(UpdateConfigRequest{
+		Changes: map[string]any{"rate_limit.max": 321},
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPatch, "/v1/system/config", bytes.NewReader(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Len(t, createdEvents.createdEvents, 1)
+
+	var auditEvent sharedDomain.AuditLogCreatedEvent
+	require.NoError(t, json.Unmarshal(createdEvents.createdEvents[0].Payload, &auditEvent))
+	assert.Equal(t, defaultTenantID, auditEvent.TenantID.String())
+}
+
+func TestGetConfigHistory_UsesSystemTenantContext(t *testing.T) {
+	t.Parallel()
+
+	cm := newAPITestConfigManager(t)
+	defaultTenantID := cm.Get().Tenancy.DefaultTenantID
+
+	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{})
+	require.NoError(t, err)
+
+	auditRepo := &historyAuditRepoMock{}
+	handler.SetAuditRepository(auditRepo)
+
+	app := fiber.New()
+	app.Use(func(c *fiber.Ctx) error {
+		ctx := context.WithValue(c.UserContext(), auth.TenantIDKey, uuid.NewString())
+		c.SetUserContext(ctx)
+
+		return c.Next()
+	})
+	app.Get("/v1/system/config/history", handler.GetConfigHistory)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/system/config/history", http.NoBody)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, defaultTenantID, auditRepo.lastTenantID)
+}
+
+func TestExtractAuditConfigChanges_RedactsSensitiveValues(t *testing.T) {
+	t.Parallel()
+
+	payload := []byte(`{"config_changes":[{"key":"auth.token_secret","old_value":"old-secret","new_value":"new-secret"},{"key":"rate_limit.max","old_value":100,"new_value":200}]}`)
+	changes := extractAuditConfigChanges(payload)
+
+	require.Len(t, changes, 2)
+	assert.Equal(t, "***REDACTED***", changes[0].OldValue)
+	assert.Equal(t, "***REDACTED***", changes[0].NewValue)
+	assert.Equal(t, 100.0, changes[1].OldValue)
+	assert.Equal(t, 200.0, changes[1].NewValue)
+}
+
 func TestBuildRedactedConfig_AllSecretKeysRedacted(t *testing.T) {
 	t.Parallel()
 
@@ -480,7 +659,7 @@ func TestIsEnvOverridden_SetVar(t *testing.T) {
 	envVar := "TEST_CONFIG_API_OVERRIDE_CHECK"
 	t.Setenv(envVar, "yes")
 
-	assert.True(t, isEnvOverridden(envVar))
+	assert.True(t, isEnvOverridden(envVar, "app.log_level"))
 }
 
 func TestIsEnvOverridden_UnsetVar(t *testing.T) {
@@ -492,13 +671,13 @@ func TestIsEnvOverridden_UnsetVar(t *testing.T) {
 	// Explicitly unset to be sure.
 	os.Unsetenv(envVar) //nolint:errcheck // test helper
 
-	assert.False(t, isEnvOverridden(envVar))
+	assert.False(t, isEnvOverridden(envVar, "app.log_level"))
 }
 
 func TestIsEnvOverridden_EmptyString(t *testing.T) {
 	t.Parallel()
 
-	assert.False(t, isEnvOverridden(""))
+	assert.False(t, isEnvOverridden("", ""))
 }
 
 func TestUpdateConfig_AuditPublisherCalledOnSuccess(t *testing.T) {

@@ -192,12 +192,25 @@ func buildConfigSchema() []configFieldDef {
 }
 
 // isEnvOverridden returns true if the given env var is set in the process environment.
-func isEnvOverridden(envVar string) bool {
-	if envVar == "" {
+// It checks both legacy keys (e.g. LOG_LEVEL) and MATCHER-prefixed keys
+// (e.g. MATCHER_APP_LOG_LEVEL) used by Viper.
+func isEnvOverridden(envVar, key string) bool {
+	if envVar == "" && key == "" {
 		return false
 	}
 
-	_, exists := os.LookupEnv(envVar)
+	if envVar != "" {
+		if _, exists := os.LookupEnv(envVar); exists {
+			return true
+		}
+	}
+
+	if key == "" {
+		return false
+	}
+
+	prefixedKey := "MATCHER_" + strings.ToUpper(strings.ReplaceAll(key, ".", "_"))
+	_, exists := os.LookupEnv(prefixedKey)
 
 	return exists
 }
@@ -218,7 +231,7 @@ func buildSchemaResponse(cm *ConfigManager) ConfigSchemaResponse {
 			DefaultValue:  def.DefaultValue,
 			CurrentValue:  currentVal,
 			HotReloadable: def.HotReloadable,
-			EnvOverride:   isEnvOverridden(def.EnvVar),
+			EnvOverride:   isEnvOverridden(def.EnvVar, def.Key),
 			EnvVar:        def.EnvVar,
 			Constraints:   def.Constraints,
 			Description:   def.Description,
@@ -279,7 +292,7 @@ func buildEnvOverridesList() []string {
 	overrides := make([]string, 0)
 
 	for _, def := range defs {
-		if isEnvOverridden(def.EnvVar) {
+		if isEnvOverridden(def.EnvVar, def.Key) {
 			overrides = append(overrides, def.Key)
 		}
 	}
