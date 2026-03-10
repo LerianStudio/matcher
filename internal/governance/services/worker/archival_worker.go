@@ -52,6 +52,7 @@ const (
 // It provisions future partitions, identifies eligible partitions, exports data,
 // uploads to object storage, verifies integrity, and detaches/drops source partitions.
 type ArchivalWorker struct {
+	mu            sync.Mutex
 	archiveRepo   repositories.ArchiveMetadataRepository
 	partitionMgr  *command.PartitionManager
 	storage       sharedPorts.ObjectStorageClient
@@ -65,6 +66,42 @@ type ArchivalWorker struct {
 	stopOnce sync.Once
 	stopCh   chan struct{}
 	doneCh   chan struct{}
+}
+
+// UpdateRuntimeConfig updates the worker runtime configuration used on the next start/restart.
+func (aw *ArchivalWorker) UpdateRuntimeConfig(cfg ArchivalWorkerConfig) {
+	aw.mu.Lock()
+	defer aw.mu.Unlock()
+
+	aw.cfg = cfg
+}
+
+func (aw *ArchivalWorker) prepareRunState() {
+	aw.mu.Lock()
+	defer aw.mu.Unlock()
+
+	aw.stopOnce = sync.Once{}
+
+	if archivalChannelClosed(aw.stopCh) {
+		aw.stopCh = make(chan struct{})
+	}
+
+	if archivalChannelClosed(aw.doneCh) {
+		aw.doneCh = make(chan struct{})
+	}
+}
+
+func archivalChannelClosed(ch <-chan struct{}) bool {
+	if ch == nil {
+		return true
+	}
+
+	select {
+	case <-ch:
+		return true
+	default:
+		return false
+	}
 }
 
 // NewArchivalWorker creates a new ArchivalWorker with the given dependencies.
@@ -121,6 +158,8 @@ func (aw *ArchivalWorker) Start(ctx context.Context) error {
 	if !aw.running.CompareAndSwap(false, true) {
 		return ErrWorkerAlreadyRunning
 	}
+
+	aw.prepareRunState()
 
 	runtime.SafeGoWithContextAndComponent(
 		ctx,

@@ -71,6 +71,7 @@ type ExportWorkerConfig struct {
 
 // ExportWorker processes queued export jobs in the background.
 type ExportWorker struct {
+	mu         sync.Mutex
 	jobRepo    repositories.ExportJobRepository
 	reportRepo repositories.ReportRepository
 	storage    ports.ObjectStorageClient
@@ -85,26 +86,7 @@ type ExportWorker struct {
 	cancelFunc context.CancelFunc
 }
 
-// NewExportWorker creates a new export worker.
-func NewExportWorker(
-	jobRepo repositories.ExportJobRepository,
-	reportRepo repositories.ReportRepository,
-	storage ports.ObjectStorageClient,
-	cfg ExportWorkerConfig,
-	logger libLog.Logger,
-) (*ExportWorker, error) {
-	if jobRepo == nil {
-		return nil, ErrNilJobRepository
-	}
-
-	if reportRepo == nil {
-		return nil, ErrNilReportRepository
-	}
-
-	if storage == nil {
-		return nil, ErrNilStorageClient
-	}
-
+func normalizeExportWorkerConfig(cfg ExportWorkerConfig) ExportWorkerConfig {
 	if cfg.PollInterval <= 0 {
 		cfg.PollInterval = defaultPollInterval
 	}
@@ -133,6 +115,31 @@ func NewExportWorker(
 		cfg.BackoffMultiplier = defaultBackoffMultiplier
 	}
 
+	return cfg
+}
+
+// NewExportWorker creates a new export worker.
+func NewExportWorker(
+	jobRepo repositories.ExportJobRepository,
+	reportRepo repositories.ReportRepository,
+	storage ports.ObjectStorageClient,
+	cfg ExportWorkerConfig,
+	logger libLog.Logger,
+) (*ExportWorker, error) {
+	if jobRepo == nil {
+		return nil, ErrNilJobRepository
+	}
+
+	if reportRepo == nil {
+		return nil, ErrNilReportRepository
+	}
+
+	if storage == nil {
+		return nil, ErrNilStorageClient
+	}
+
+	cfg = normalizeExportWorkerConfig(cfg)
+
 	return &ExportWorker{
 		jobRepo:    jobRepo,
 		reportRepo: reportRepo,
@@ -145,17 +152,44 @@ func NewExportWorker(
 	}, nil
 }
 
+func (worker *ExportWorker) prepareRunState(ctx context.Context) context.Context {
+	worker.mu.Lock()
+	defer worker.mu.Unlock()
+
+	worker.stopOnce = sync.Once{}
+
+	if channelClosed(worker.stopCh) {
+		worker.stopCh = make(chan struct{})
+	}
+
+	if channelClosed(worker.doneCh) {
+		worker.doneCh = make(chan struct{})
+	}
+
+	runCtx, cancel := context.WithCancel(ctx)
+	worker.cancelFunc = cancel
+
+	return runCtx
+}
+
+// UpdateRuntimeConfig updates the worker runtime configuration used on the next start/restart.
+func (worker *ExportWorker) UpdateRuntimeConfig(cfg ExportWorkerConfig) {
+	worker.mu.Lock()
+	defer worker.mu.Unlock()
+
+	worker.cfg = normalizeExportWorkerConfig(cfg)
+}
+
 // Start begins processing export jobs.
 func (worker *ExportWorker) Start(ctx context.Context) error {
 	if !worker.running.CompareAndSwap(false, true) {
 		return ErrWorkerAlreadyRunning
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
-	worker.cancelFunc = cancel
+	runCtx := worker.prepareRunState(ctx)
 
 	runtime.SafeGoWithContextAndComponent(
-		ctx,
+		runCtx,
 		worker.logger,
 		"reporting",
 		"export_worker",

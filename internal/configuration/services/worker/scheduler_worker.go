@@ -54,6 +54,7 @@ type SchedulerWorkerConfig struct {
 
 // SchedulerWorker polls for due schedules and triggers match runs.
 type SchedulerWorker struct {
+	mu            sync.Mutex
 	scheduleRepo  ports.ScheduleRepository
 	matchTrigger  sharedPorts.MatchTrigger
 	infraProvider sharedPorts.InfrastructureProvider
@@ -65,6 +66,14 @@ type SchedulerWorker struct {
 	stopOnce sync.Once
 	stopCh   chan struct{}
 	doneCh   chan struct{}
+}
+
+func normalizeSchedulerWorkerConfig(cfg SchedulerWorkerConfig) SchedulerWorkerConfig {
+	if cfg.Interval <= 0 {
+		cfg.Interval = time.Minute
+	}
+
+	return cfg
 }
 
 // NewSchedulerWorker creates a new scheduler worker.
@@ -87,9 +96,7 @@ func NewSchedulerWorker(
 		return nil, ErrNilInfraProvider
 	}
 
-	if cfg.Interval <= 0 {
-		cfg.Interval = time.Minute
-	}
+	cfg = normalizeSchedulerWorkerConfig(cfg)
 
 	if logger == nil {
 		logger = &libLog.NopLogger{}
@@ -107,11 +114,49 @@ func NewSchedulerWorker(
 	}, nil
 }
 
+func (worker *SchedulerWorker) prepareRunState() {
+	worker.mu.Lock()
+	defer worker.mu.Unlock()
+
+	worker.stopOnce = sync.Once{}
+
+	if schedulerChannelClosed(worker.stopCh) {
+		worker.stopCh = make(chan struct{})
+	}
+
+	if schedulerChannelClosed(worker.doneCh) {
+		worker.doneCh = make(chan struct{})
+	}
+}
+
+func schedulerChannelClosed(ch <-chan struct{}) bool {
+	if ch == nil {
+		return true
+	}
+
+	select {
+	case <-ch:
+		return true
+	default:
+		return false
+	}
+}
+
+// UpdateRuntimeConfig updates the worker runtime configuration used on the next start/restart.
+func (worker *SchedulerWorker) UpdateRuntimeConfig(cfg SchedulerWorkerConfig) {
+	worker.mu.Lock()
+	defer worker.mu.Unlock()
+
+	worker.cfg = normalizeSchedulerWorkerConfig(cfg)
+}
+
 // Start begins the scheduler worker.
 func (worker *SchedulerWorker) Start(ctx context.Context) error {
 	if !worker.running.CompareAndSwap(false, true) {
 		return ErrWorkerAlreadyRunning
 	}
+
+	worker.prepareRunState()
 
 	runtime.SafeGoWithContextAndComponent(
 		ctx,

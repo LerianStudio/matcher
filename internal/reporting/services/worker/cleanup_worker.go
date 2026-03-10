@@ -36,6 +36,7 @@ type CleanupWorkerConfig struct {
 
 // CleanupWorker removes expired export files and updates job status.
 type CleanupWorker struct {
+	mu      sync.Mutex
 	jobRepo repositories.ExportJobRepository
 	storage ports.ObjectStorageClient
 	cfg     CleanupWorkerConfig
@@ -46,6 +47,22 @@ type CleanupWorker struct {
 	stopOnce sync.Once
 	stopCh   chan struct{}
 	doneCh   chan struct{}
+}
+
+func normalizeCleanupWorkerConfig(cfg CleanupWorkerConfig) CleanupWorkerConfig {
+	if cfg.Interval <= 0 {
+		cfg.Interval = defaultCleanupInterval
+	}
+
+	if cfg.BatchSize <= 0 {
+		cfg.BatchSize = defaultCleanupBatch
+	}
+
+	if cfg.FileDeleteGracePeriod <= 0 {
+		cfg.FileDeleteGracePeriod = defaultFileDeleteGrace
+	}
+
+	return cfg
 }
 
 // NewCleanupWorker creates a new cleanup worker.
@@ -63,17 +80,7 @@ func NewCleanupWorker(
 		return nil, ErrNilStorageClient
 	}
 
-	if cfg.Interval <= 0 {
-		cfg.Interval = defaultCleanupInterval
-	}
-
-	if cfg.BatchSize <= 0 {
-		cfg.BatchSize = defaultCleanupBatch
-	}
-
-	if cfg.FileDeleteGracePeriod <= 0 {
-		cfg.FileDeleteGracePeriod = defaultFileDeleteGrace
-	}
+	cfg = normalizeCleanupWorkerConfig(cfg)
 
 	return &CleanupWorker{
 		jobRepo: jobRepo,
@@ -86,11 +93,49 @@ func NewCleanupWorker(
 	}, nil
 }
 
+func (worker *CleanupWorker) prepareRunState() {
+	worker.mu.Lock()
+	defer worker.mu.Unlock()
+
+	worker.stopOnce = sync.Once{}
+
+	if channelClosed(worker.stopCh) {
+		worker.stopCh = make(chan struct{})
+	}
+
+	if channelClosed(worker.doneCh) {
+		worker.doneCh = make(chan struct{})
+	}
+}
+
+func channelClosed(ch <-chan struct{}) bool {
+	if ch == nil {
+		return true
+	}
+
+	select {
+	case <-ch:
+		return true
+	default:
+		return false
+	}
+}
+
+// UpdateRuntimeConfig updates the worker runtime configuration used on the next start/restart.
+func (worker *CleanupWorker) UpdateRuntimeConfig(cfg CleanupWorkerConfig) {
+	worker.mu.Lock()
+	defer worker.mu.Unlock()
+
+	worker.cfg = normalizeCleanupWorkerConfig(cfg)
+}
+
 // Start begins the cleanup worker.
 func (worker *CleanupWorker) Start(ctx context.Context) error {
 	if !worker.running.CompareAndSwap(false, true) {
 		return ErrWorkerAlreadyRunning
 	}
+
+	worker.prepareRunState()
 
 	runtime.SafeGoWithContextAndComponent(
 		ctx,
