@@ -2,6 +2,8 @@ package bootstrap
 
 import (
 	"math"
+	"net/url"
+	"os"
 	"reflect"
 	"strings"
 )
@@ -65,16 +67,9 @@ func diffConfigs(oldCfg, newCfg *Config) []ConfigChange {
 // obliterates values from YAML/defaults. This function walks the nested structs
 // and restores any field that was non-zero in snapshot but became zero in dst.
 //
-// Fields that are legitimately set to zero via env var are indistinguishable from
-// "not set" — this is a known limitation of SetConfigFromEnvVars. In practice, the
-// only impact is that an operator cannot set a string field to "" via env var and
-// have it override a YAML value. This is an acceptable trade-off because:
-//   - Secret fields (passwords) default to "" and are set via env vars — they stay ""
-//   - Non-secret string fields with YAML values shouldn't be blanked via env vars
-//
-// NOTE: This means operators cannot override YAML numeric values to 0 via
-// environment variables. For boolean fields, this is a non-issue (false is
-// the zero value). See config/matcher.yaml.example for documentation.
+// When an env var is explicitly present (even as an empty string), restore is
+// skipped for that field so operators can intentionally override YAML/default
+// values to zero values ("", 0, false).
 func restoreZeroedFields(dst, snapshot *Config) {
 	if dst == nil || snapshot == nil {
 		return
@@ -108,11 +103,29 @@ func restoreZeroedFieldsRecursive(dst, snapshot reflect.Value) {
 			continue
 		}
 
-		// Restore if dst is zero but snapshot is not.
-		if dstField.IsZero() && !snapField.IsZero() {
+		// Restore only when env var was not explicitly set for this field.
+		if dstField.IsZero() && !snapField.IsZero() && !hasExplicitEnvOverride(field) {
 			dstField.Set(snapField)
 		}
 	}
+}
+
+func hasExplicitEnvOverride(field reflect.StructField) bool {
+	const envTagSplitParts = 2
+
+	envTag := strings.TrimSpace(field.Tag.Get("env"))
+	if envTag == "" {
+		return false
+	}
+
+	envName := strings.TrimSpace(strings.SplitN(envTag, ",", envTagSplitParts)[0])
+	if envName == "" {
+		return false
+	}
+
+	_, exists := os.LookupEnv(envName)
+
+	return exists
 }
 
 // redactStructSecrets returns a copy of a config sub-struct with sensitive
@@ -149,7 +162,7 @@ func redactStructSecrets(val reflect.Value) any {
 		if isSensitiveKey(tag) {
 			redacted[tag] = "***REDACTED***"
 		} else {
-			redacted[tag] = fieldVal.Interface()
+			redacted[tag] = redactCredentialURI(fieldVal.Interface())
 		}
 	}
 
@@ -163,7 +176,7 @@ func redactIfSensitive(key string, value any) any {
 		return "***REDACTED***"
 	}
 
-	return value
+	return redactCredentialURI(value)
 }
 
 // safeUint64ToInt converts a uint64 to int, capping at math.MaxInt to prevent
@@ -190,4 +203,24 @@ func isSensitiveKey(key string) bool {
 	}
 
 	return false
+}
+
+func redactCredentialURI(value any) any {
+	str, ok := value.(string)
+	if !ok || str == "" {
+		return value
+	}
+
+	parsed, err := url.Parse(str)
+	if err != nil || parsed.User == nil {
+		return value
+	}
+
+	if _, hasPassword := parsed.User.Password(); hasPassword {
+		parsed.User = url.UserPassword("***REDACTED***", "***REDACTED***")
+	} else {
+		parsed.User = url.User("***REDACTED***")
+	}
+
+	return parsed.String()
 }

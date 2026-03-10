@@ -192,3 +192,25 @@ func TestRestoreZeroedFieldsRedact_PreservesExisting(t *testing.T) {
 
 	assert.Equal(t, "debug", dst.App.LogLevel)
 }
+
+func TestRestoreZeroedFieldsRedact_PreservesExplicitEnvZeroValues(t *testing.T) {
+	snapshot := defaultConfig()
+	snapshot.ObjectStorage.Endpoint = "http://storage.internal"
+	snapshot.RateLimit.Max = 500
+	snapshot.Auth.Enabled = true
+
+	dst := defaultConfig()
+	dst.ObjectStorage.Endpoint = ""
+	dst.RateLimit.Max = 0
+	dst.Auth.Enabled = false
+
+	t.Setenv("OBJECT_STORAGE_ENDPOINT", "")
+	t.Setenv("RATE_LIMIT_MAX", "0")
+	t.Setenv("AUTH_ENABLED", "false")
+
+	restoreZeroedFields(dst, snapshot)
+
+	assert.Empty(t, dst.ObjectStorage.Endpoint)
+	assert.Zero(t, dst.RateLimit.Max)
+	assert.False(t, dst.Auth.Enabled)
+}
