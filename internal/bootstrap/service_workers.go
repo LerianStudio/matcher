@@ -21,7 +21,6 @@ var (
 	errWorkerStartTimeout         = errors.New("worker start timed out")
 )
 
-
 type workerStartEntry struct {
 	name          string
 	start         func(context.Context) error
@@ -30,13 +29,11 @@ type workerStartEntry struct {
 	onSoftFailure func()
 }
 
-
 type workerStartResult struct {
 	name     string
 	err      error
 	critical bool
 }
-
 
 func startWorkerEntries(
 	ctx context.Context,
@@ -105,7 +102,6 @@ func startWorkerEntries(
 	return collected
 }
 
-
 func resolveWorkerStartWaitTimeout(ctx context.Context) time.Duration {
 	timeout := defaultWorkerStartWaitTimeout
 
@@ -122,7 +118,6 @@ func resolveWorkerStartWaitTimeout(ctx context.Context) time.Duration {
 
 	return timeout
 }
-
 
 func appendMissingWorkerResults(
 	entries []workerStartEntry,
@@ -153,7 +148,6 @@ func appendMissingWorkerResults(
 	return collected
 }
 
-
 func collectStartedWorkers(collected []workerStartResult) map[string]struct{} {
 	startedWorkers := make(map[string]struct{}, len(collected))
 	for _, result := range collected {
@@ -164,7 +158,6 @@ func collectStartedWorkers(collected []workerStartResult) map[string]struct{} {
 
 	return startedWorkers
 }
-
 
 func collectCriticalWorkerFailures(collected []workerStartResult) []workerStartResult {
 	failures := make([]workerStartResult, 0)

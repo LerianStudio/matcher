@@ -155,7 +155,6 @@ func readinessHandler(cfg *Config, deps *HealthDependencies, logger libLog.Logge
 	}
 }
 
-
 func checksToString(checks fiber.Map, key string, logger libLog.Logger) string {
 	if checks == nil {
 		return statusUnknown
@@ -177,7 +176,6 @@ func checksToString(checks fiber.Map, key string, logger libLog.Logger) string {
 
 	return stringVal
 }
-
 
 func evaluateReadinessChecks(
 	ctx context.Context,
@@ -263,7 +261,6 @@ func evaluateReadinessChecks(
 	return status, readyStatus, checks
 }
 
-
 func resolvePostgresCheck(deps *HealthDependencies) (HealthCheckFunc, bool) {
 	if deps == nil {
 		return nil, false
@@ -294,7 +291,6 @@ func resolvePostgresCheck(deps *HealthDependencies) (HealthCheckFunc, bool) {
 		return nil
 	}, true
 }
-
 
 func resolvePostgresReplicaCheck(deps *HealthDependencies) (HealthCheckFunc, bool) {
 	if deps == nil {
@@ -346,7 +342,6 @@ func resolvePostgresReplicaCheck(deps *HealthDependencies) (HealthCheckFunc, boo
 	}, true
 }
 
-
 func resolveRedisCheck(deps *HealthDependencies) (HealthCheckFunc, bool) {
 	if deps == nil {
 		return nil, false
@@ -378,7 +373,6 @@ func resolveRedisCheck(deps *HealthDependencies) (HealthCheckFunc, bool) {
 	}, true
 }
 
-
 func resolveRabbitMQCheck(deps *HealthDependencies) (HealthCheckFunc, bool) {
 	if deps == nil {
 		return nil, false
@@ -402,7 +396,6 @@ func resolveRabbitMQCheck(deps *HealthDependencies) (HealthCheckFunc, bool) {
 		return deps.RabbitMQ.EnsureChannel()
 	}, true
 }
-
 
 func resolveObjectStorageCheck(deps *HealthDependencies) (HealthCheckFunc, bool) {
 	if deps == nil {
@@ -430,18 +423,12 @@ func resolveObjectStorageCheck(deps *HealthDependencies) (HealthCheckFunc, bool)
 	}, true
 }
 
-
 const rabbitMQHealthCheckTimeout = 5 * time.Second
 
 // rabbitMQHTTPClient is a reusable HTTP client for RabbitMQ health checks.
 // http.Client is safe for concurrent use, so a single package-level instance
 // avoids per-call allocations and connection pool churn.
 var rabbitMQHTTPClient = &http.Client{Timeout: rabbitMQHealthCheckTimeout}
-
-// rabbitMQHTTPClient is a reusable HTTP client for RabbitMQ health checks.
-// http.Client is safe for concurrent use, so a single package-level instance
-// avoids per-call allocations and connection pool churn.
-
 
 func checkRabbitMQHTTPHealth(ctx context.Context, healthURL string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, http.NoBody)
@@ -498,7 +485,6 @@ func applyReadinessCheck(
 
 	return true
 }
-
 
 func shouldIncludeReadinessDetails(cfg *Config) bool {
 	if cfg == nil {

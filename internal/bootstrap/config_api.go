@@ -166,14 +166,12 @@ func (handler *ConfigAPIHandler) UpdateConfig(fiberCtx *fiber.Ctx) error {
 	if err := fiberCtx.BodyParser(&req); err != nil {
 		logConfigSpanError(ctx, span, logger, "invalid request body", err)
 
-		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return sharedhttp.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", "invalid JSON body")
 	}
 
 	if len(req.Changes) == 0 {
 		logConfigSpanError(ctx, span, logger, "empty changes", ErrEmptyChanges)
 
-		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return sharedhttp.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", "changes map must not be empty")
 	}
 
@@ -181,7 +179,6 @@ func (handler *ConfigAPIHandler) UpdateConfig(fiberCtx *fiber.Ctx) error {
 	if err != nil {
 		logConfigSpanError(ctx, span, logger, "config update failed", err)
 
-		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return sharedhttp.RespondError(fiberCtx, fiber.StatusUnprocessableEntity, "validation_failed", "configuration validation failed")
 	}
 
@@ -238,7 +235,6 @@ func (handler *ConfigAPIHandler) ReloadConfig(fiberCtx *fiber.Ctx) error {
 	if err != nil {
 		logConfigSpanError(ctx, span, logger, "config reload failed", err)
 
-		//nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
 		return sharedhttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "reload_failed", "configuration reload failed")
 	}
 

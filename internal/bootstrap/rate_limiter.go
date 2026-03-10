@@ -175,7 +175,6 @@ func NewRateLimiter(cfg *Config, storage fiber.Storage) fiber.Handler {
 	return limiter.New(limiterCfg)
 }
 
-
 type dynamicLimiterOptions struct {
 	prefix      string
 	errorCode   string
