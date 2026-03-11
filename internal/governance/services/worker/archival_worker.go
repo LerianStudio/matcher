@@ -31,6 +31,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/governance/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/governance/services/command"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+	"github.com/LerianStudio/matcher/pkg/chanutil"
 	"github.com/LerianStudio/matcher/pkg/storageopt"
 )
 
@@ -89,25 +90,12 @@ func (aw *ArchivalWorker) prepareRunState() {
 
 	aw.stopOnce = sync.Once{}
 
-	if archivalChannelClosed(aw.stopCh) {
+	if chanutil.Closed(aw.stopCh) {
 		aw.stopCh = make(chan struct{})
 	}
 
-	if archivalChannelClosed(aw.doneCh) {
+	if chanutil.Closed(aw.doneCh) {
 		aw.doneCh = make(chan struct{})
-	}
-}
-
-func archivalChannelClosed(ch <-chan struct{}) bool {
-	if ch == nil {
-		return true
-	}
-
-	select {
-	case <-ch:
-		return true
-	default:
-		return false
 	}
 }
 

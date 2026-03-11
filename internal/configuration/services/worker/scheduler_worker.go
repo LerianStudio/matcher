@@ -23,6 +23,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/ports"
 	configCommand "github.com/LerianStudio/matcher/internal/configuration/services/command"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+	"github.com/LerianStudio/matcher/pkg/chanutil"
 )
 
 const (
@@ -124,25 +125,12 @@ func (worker *SchedulerWorker) prepareRunState() {
 
 	worker.stopOnce = sync.Once{}
 
-	if schedulerChannelClosed(worker.stopCh) {
+	if chanutil.Closed(worker.stopCh) {
 		worker.stopCh = make(chan struct{})
 	}
 
-	if schedulerChannelClosed(worker.doneCh) {
+	if chanutil.Closed(worker.doneCh) {
 		worker.doneCh = make(chan struct{})
-	}
-}
-
-func schedulerChannelClosed(ch <-chan struct{}) bool {
-	if ch == nil {
-		return true
-	}
-
-	select {
-	case <-ch:
-		return true
-	default:
-		return false
 	}
 }
 

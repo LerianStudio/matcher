@@ -19,6 +19,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/reporting/ports"
+	"github.com/LerianStudio/matcher/pkg/chanutil"
 )
 
 const (
@@ -103,25 +104,12 @@ func (worker *CleanupWorker) prepareRunState() {
 
 	worker.stopOnce = sync.Once{}
 
-	if channelClosed(worker.stopCh) {
+	if chanutil.Closed(worker.stopCh) {
 		worker.stopCh = make(chan struct{})
 	}
 
-	if channelClosed(worker.doneCh) {
+	if chanutil.Closed(worker.doneCh) {
 		worker.doneCh = make(chan struct{})
-	}
-}
-
-func channelClosed(ch <-chan struct{}) bool {
-	if ch == nil {
-		return true
-	}
-
-	select {
-	case <-ch:
-		return true
-	default:
-		return false
 	}
 }
 

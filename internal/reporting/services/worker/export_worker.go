@@ -28,6 +28,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/reporting/ports"
 	"github.com/LerianStudio/matcher/internal/reporting/services/query/exports"
+	"github.com/LerianStudio/matcher/pkg/chanutil"
 )
 
 const (
@@ -162,12 +163,18 @@ func (worker *ExportWorker) prepareRunState(ctx context.Context) context.Context
 
 	worker.stopOnce = sync.Once{}
 
-	if channelClosed(worker.stopCh) {
+	if chanutil.Closed(worker.stopCh) {
 		worker.stopCh = make(chan struct{})
 	}
 
-	if channelClosed(worker.doneCh) {
+	if chanutil.Closed(worker.doneCh) {
 		worker.doneCh = make(chan struct{})
+	}
+
+	// Cancel any previous context before creating a new one to prevent
+	// leaked goroutines from a prior Start→Stop→Start cycle.
+	if worker.cancelFunc != nil {
+		worker.cancelFunc()
 	}
 
 	runCtx, cancel := context.WithCancel(ctx)
