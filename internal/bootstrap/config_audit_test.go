@@ -302,7 +302,7 @@ func TestConfigAPIHandler_SetAuditPublisher(t *testing.T) {
 	cm, err := NewConfigManager(defaultConfig(), "", &libLog.NopLogger{})
 	require.NoError(t, err)
 
-	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{})
+	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
 	require.NoError(t, err)
 
 	assert.Nil(t, handler.auditPublisher)

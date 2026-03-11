@@ -28,7 +28,7 @@ func TestRegisterConfigAPIRoutes_Success(t *testing.T) {
 
 	cm := newAPITestConfigManager(t)
 
-	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{})
+	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
 	require.NoError(t, err)
 
 	app := fiber.New()
@@ -57,7 +57,7 @@ func TestRegisterConfigAPIRoutes_NilProtected_ReturnsError(t *testing.T) {
 
 	cm := newAPITestConfigManager(t)
 
-	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{})
+	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
 	require.NoError(t, err)
 
 	err = RegisterConfigAPIRoutes(nil, handler)

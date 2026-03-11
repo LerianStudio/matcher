@@ -105,7 +105,7 @@ func (mock *historyAuditRepoMock) List(
 func TestNewConfigAPIHandler_NilConfigManager(t *testing.T) {
 	t.Parallel()
 
-	handler, err := NewConfigAPIHandler(nil, &libLog.NopLogger{})
+	handler, err := NewConfigAPIHandler(nil, &libLog.NopLogger{}, false)
 
 	assert.Nil(t, handler)
 	assert.ErrorIs(t, err, ErrConfigManagerRequired)
@@ -115,7 +115,7 @@ func TestNewConfigAPIHandler_NilLogger(t *testing.T) {
 	t.Parallel()
 
 	cm := newAPITestConfigManager(t)
-	handler, err := NewConfigAPIHandler(cm, nil)
+	handler, err := NewConfigAPIHandler(cm, nil, false)
 
 	assert.NotNil(t, handler)
 	assert.NoError(t, err)
@@ -126,7 +126,7 @@ func TestGetConfig_ReturnsCurrentConfig(t *testing.T) {
 
 	cm := newAPITestConfigManager(t)
 
-	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{})
+	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
 	require.NoError(t, err)
 
 	app := newTestApp(t, handler)
@@ -157,7 +157,7 @@ func TestGetConfig_RedactsSecrets(t *testing.T) {
 
 	cm := newAPITestConfigManager(t)
 
-	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{})
+	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
 	require.NoError(t, err)
 
 	app := newTestApp(t, handler)
@@ -196,7 +196,7 @@ func TestGetSchema_ReturnsGroupedFields(t *testing.T) {
 
 	cm := newAPITestConfigManager(t)
 
-	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{})
+	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
 	require.NoError(t, err)
 
 	app := newTestApp(t, handler)
@@ -233,7 +233,7 @@ func TestGetSchema_RedactsSecretValues(t *testing.T) {
 
 	cm := newAPITestConfigManager(t)
 
-	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{})
+	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
 	require.NoError(t, err)
 
 	app := newTestApp(t, handler)
@@ -269,7 +269,7 @@ func TestUpdateConfig_ValidChange(t *testing.T) {
 
 	cm := newAPITestConfigManager(t)
 
-	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{})
+	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
 	require.NoError(t, err)
 
 	app := newTestApp(t, handler)
@@ -320,7 +320,7 @@ func TestUpdateConfig_RejectsImmutableKey(t *testing.T) {
 
 	cm := newAPITestConfigManager(t)
 
-	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{})
+	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
 	require.NoError(t, err)
 
 	app := newTestApp(t, handler)
@@ -360,7 +360,7 @@ func TestUpdateConfig_EmptyChanges(t *testing.T) {
 
 	cm := newAPITestConfigManager(t)
 
-	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{})
+	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
 	require.NoError(t, err)
 
 	app := newTestApp(t, handler)
@@ -396,7 +396,7 @@ func TestUpdateConfig_InvalidJSON(t *testing.T) {
 
 	cm := newAPITestConfigManager(t)
 
-	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{})
+	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
 	require.NoError(t, err)
 
 	app := newTestApp(t, handler)
@@ -425,7 +425,7 @@ func TestReloadConfig_Success(t *testing.T) {
 
 	cm := newAPITestConfigManager(t)
 
-	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{})
+	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
 	require.NoError(t, err)
 
 	app := newTestApp(t, handler)
@@ -455,7 +455,7 @@ func TestGetConfigHistory_ReturnsEmptyList(t *testing.T) {
 
 	cm := newAPITestConfigManager(t)
 
-	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{})
+	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
 	require.NoError(t, err)
 
 	app := newTestApp(t, handler)
@@ -485,7 +485,7 @@ func TestRegisterConfigAPIRoutes_NilProtected(t *testing.T) {
 
 	cm := newAPITestConfigManager(t)
 
-	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{})
+	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
 	require.NoError(t, err)
 
 	err = RegisterConfigAPIRoutes(nil, handler)
@@ -507,7 +507,7 @@ func TestGetConfig_EnvOverridesDetection(t *testing.T) {
 	// Cannot use t.Parallel() because t.Setenv modifies process environment.
 	cm := newAPITestConfigManager(t)
 
-	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{})
+	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
 	require.NoError(t, err)
 
 	app := newTestApp(t, handler)
@@ -540,7 +540,7 @@ func TestGetConfig_EnvOverridesDetection_WithMatcherPrefix(t *testing.T) {
 	// Cannot use t.Parallel() because t.Setenv modifies process environment.
 	cm := newAPITestConfigManager(t)
 
-	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{})
+	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
 	require.NoError(t, err)
 
 	app := newTestApp(t, handler)
@@ -568,7 +568,7 @@ func TestUpdateConfig_AuditUsesSystemTenantContext(t *testing.T) {
 	cm := newAPITestConfigManager(t)
 	defaultTenantID := cm.Get().Tenancy.DefaultTenantID
 
-	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{})
+	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
 	require.NoError(t, err)
 
 	createdEvents := &testOutboxMock{}
@@ -612,7 +612,7 @@ func TestGetConfigHistory_UsesSystemTenantContext(t *testing.T) {
 	cm := newAPITestConfigManager(t)
 	defaultTenantID := cm.Get().Tenancy.DefaultTenantID
 
-	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{})
+	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
 	require.NoError(t, err)
 
 	auditRepo := &historyAuditRepoMock{}
@@ -697,7 +697,7 @@ func TestUpdateConfig_AuditPublisherCalledOnSuccess(t *testing.T) {
 
 	cm := newAPITestConfigManager(t)
 
-	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{})
+	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
 	require.NoError(t, err)
 
 	// Create a working audit publisher with a mock outbox repo.
@@ -745,7 +745,7 @@ func TestUpdateConfig_AuditFailureDoesNotFailRequest(t *testing.T) {
 
 	cm := newAPITestConfigManager(t)
 
-	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{})
+	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
 	require.NoError(t, err)
 
 	// Create an audit publisher with a failing outbox repo.

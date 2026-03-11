@@ -43,10 +43,11 @@ type ConfigAPIHandler struct {
 	auditRepository sharedPorts.AuditLogRepository
 	logger          libLog.Logger
 	authEnabled     bool
+	production      bool
 }
 
 // NewConfigAPIHandler creates a new ConfigAPIHandler.
-func NewConfigAPIHandler(configManager *ConfigManager, logger libLog.Logger) (*ConfigAPIHandler, error) {
+func NewConfigAPIHandler(configManager *ConfigManager, logger libLog.Logger, production bool) (*ConfigAPIHandler, error) {
 	if configManager == nil {
 		return nil, ErrConfigManagerRequired
 	}
@@ -66,6 +67,7 @@ func NewConfigAPIHandler(configManager *ConfigManager, logger libLog.Logger) (*C
 		configManager: configManager,
 		logger:        logger,
 		authEnabled:   authEnabled,
+		production:    production,
 	}, nil
 }
 
@@ -140,9 +142,9 @@ func startConfigSpan(c *fiber.Ctx, name string) (context.Context, trace.Span, li
 }
 
 // logConfigSpanError records an error on the span and logs it.
-func logConfigSpanError(ctx context.Context, span trace.Span, logger libLog.Logger, message string, err error) {
+func logConfigSpanError(ctx context.Context, span trace.Span, logger libLog.Logger, message string, err error, production bool) {
 	libOpentelemetry.HandleSpanError(span, message, err)
-	libLog.SafeError(logger, ctx, message, err, false)
+	libLog.SafeError(logger, ctx, message, err, production)
 }
 
 // GetConfig returns the current effective configuration with secrets redacted.
@@ -179,7 +181,7 @@ func (handler *ConfigAPIHandler) GetConfig(fiberCtx *fiber.Ctx) error {
 	}
 
 	if writeErr := sharedhttp.Respond(fiberCtx, fiber.StatusOK, response); writeErr != nil {
-		logConfigSpanError(ctx, span, logger, "failed to write get config response", writeErr)
+		logConfigSpanError(ctx, span, logger, "failed to write get config response", writeErr, handler.production)
 
 		return fmt.Errorf("write get config response: %w", writeErr)
 	}
@@ -217,7 +219,7 @@ func (handler *ConfigAPIHandler) GetSchema(fiberCtx *fiber.Ctx) error {
 	response := buildSchemaResponse(handler.configManager)
 
 	if writeErr := sharedhttp.Respond(fiberCtx, fiber.StatusOK, response); writeErr != nil {
-		logConfigSpanError(ctx, span, logger, "failed to write get schema response", writeErr)
+		logConfigSpanError(ctx, span, logger, "failed to write get schema response", writeErr, handler.production)
 
 		return fmt.Errorf("write get schema response: %w", writeErr)
 	}
@@ -257,22 +259,22 @@ func (handler *ConfigAPIHandler) UpdateConfig(fiberCtx *fiber.Ctx) error {
 
 	var req UpdateConfigRequest
 	if err := fiberCtx.BodyParser(&req); err != nil {
-		logConfigSpanError(ctx, span, logger, "invalid request body", err)
+		logConfigSpanError(ctx, span, logger, "invalid request body", err, handler.production)
 
 		return sharedhttp.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", "invalid JSON body")
 	}
 
 	if len(req.Changes) == 0 {
-		logConfigSpanError(ctx, span, logger, "empty changes", ErrEmptyChanges)
+		logConfigSpanError(ctx, span, logger, "empty changes", ErrEmptyChanges, handler.production)
 
 		return sharedhttp.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", "changes map must not be empty")
 	}
 
 	result, err := handler.configManager.Update(req.Changes)
 	if err != nil {
-		logConfigSpanError(ctx, span, logger, "config update failed", err)
+		logConfigSpanError(ctx, span, logger, "config update failed", err, handler.production)
 
-		return sharedhttp.RespondError(fiberCtx, fiber.StatusUnprocessableEntity, "validation_failed", "configuration validation failed")
+		return sharedhttp.RespondError(fiberCtx, fiber.StatusUnprocessableEntity, "validation_failed", err.Error())
 	}
 
 	// Publish audit event for the config update (best-effort — don't fail the request).
@@ -287,7 +289,7 @@ func (handler *ConfigAPIHandler) UpdateConfig(fiberCtx *fiber.Ctx) error {
 
 		if auditErr := handler.auditPublisher.PublishConfigChange(auditCtx, actor, "updated", changes); auditErr != nil {
 			// Log but don't fail the request — the config update itself succeeded.
-			logConfigSpanError(ctx, span, logger, "failed to publish config update audit event", auditErr)
+			logConfigSpanError(ctx, span, logger, "failed to publish config update audit event", auditErr, handler.production)
 		}
 	}
 
@@ -298,7 +300,7 @@ func (handler *ConfigAPIHandler) UpdateConfig(fiberCtx *fiber.Ctx) error {
 	}
 
 	if writeErr := sharedhttp.Respond(fiberCtx, fiber.StatusOK, response); writeErr != nil {
-		logConfigSpanError(ctx, span, logger, "failed to write update config response", writeErr)
+		logConfigSpanError(ctx, span, logger, "failed to write update config response", writeErr, handler.production)
 
 		return fmt.Errorf("write update config response: %w", writeErr)
 	}
@@ -335,7 +337,7 @@ func (handler *ConfigAPIHandler) ReloadConfig(fiberCtx *fiber.Ctx) error {
 
 	result, err := handler.configManager.ReloadFromAPI()
 	if err != nil {
-		logConfigSpanError(ctx, span, logger, "config reload failed", err)
+		logConfigSpanError(ctx, span, logger, "config reload failed", err, handler.production)
 
 		return sharedhttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "reload_failed", "configuration reload failed")
 	}
@@ -350,7 +352,7 @@ func (handler *ConfigAPIHandler) ReloadConfig(fiberCtx *fiber.Ctx) error {
 		auditCtx := handler.systemTenantContext(ctx)
 
 		if auditErr := handler.auditPublisher.PublishConfigChange(auditCtx, actor, "reloaded", result.Changes); auditErr != nil {
-			logConfigSpanError(ctx, span, logger, "failed to publish config reload audit event", auditErr)
+			logConfigSpanError(ctx, span, logger, "failed to publish config reload audit event", auditErr, handler.production)
 		}
 	}
 
@@ -362,7 +364,7 @@ func (handler *ConfigAPIHandler) ReloadConfig(fiberCtx *fiber.Ctx) error {
 	}
 
 	if writeErr := sharedhttp.Respond(fiberCtx, fiber.StatusOK, response); writeErr != nil {
-		logConfigSpanError(ctx, span, logger, "failed to write reload config response", writeErr)
+		logConfigSpanError(ctx, span, logger, "failed to write reload config response", writeErr, handler.production)
 
 		return fmt.Errorf("write reload config response: %w", writeErr)
 	}
@@ -402,7 +404,7 @@ func (handler *ConfigAPIHandler) GetConfigHistory(fiberCtx *fiber.Ctx) error {
 
 		logs, _, err := handler.auditRepository.ListByEntity(historyCtx, systemConfigEntityType, systemConfigEntityID, nil, configHistoryLimit)
 		if err != nil {
-			logConfigSpanError(ctx, span, logger, "failed to load config history", err)
+			logConfigSpanError(ctx, span, logger, "failed to load config history", err, handler.production)
 
 			return sharedhttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "history_load_failed", "failed to load configuration history")
 		}
@@ -427,7 +429,7 @@ func (handler *ConfigAPIHandler) GetConfigHistory(fiberCtx *fiber.Ctx) error {
 	}
 
 	if writeErr := sharedhttp.Respond(fiberCtx, fiber.StatusOK, response); writeErr != nil {
-		logConfigSpanError(ctx, span, logger, "failed to write config history response", writeErr)
+		logConfigSpanError(ctx, span, logger, "failed to write config history response", writeErr, handler.production)
 
 		return fmt.Errorf("write config history response: %w", writeErr)
 	}

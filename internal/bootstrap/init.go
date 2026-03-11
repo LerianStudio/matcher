@@ -641,7 +641,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 
 	done = timer.track("runtime_config_wiring")
 
-	configAPIHandler, err := NewConfigAPIHandler(configManager, logger)
+	configAPIHandler, err := NewConfigAPIHandler(configManager, logger, IsProductionEnvironment(cfg.App.EnvName))
 	if err != nil {
 		return nil, fmt.Errorf("initialize config API handler: %w", err)
 	}
