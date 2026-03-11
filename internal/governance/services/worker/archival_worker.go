@@ -47,6 +47,18 @@ const (
 
 	// lockTTLMultiplier is the multiplier applied to the archival interval to compute the lock TTL.
 	lockTTLMultiplier = 2
+
+	// defaultArchivalInterval is the default archival cycle interval (1 hour).
+	defaultArchivalInterval = 1 * time.Hour
+
+	// defaultArchivalBatchSize is the default number of rows per SELECT batch during export.
+	defaultArchivalBatchSize = 1000
+
+	// defaultPartitionLookahead is the default number of future monthly partitions to create.
+	defaultPartitionLookahead = 3
+
+	// defaultPresignExpiry is the default presigned URL expiry for archived downloads (1 hour).
+	defaultPresignExpiry = 1 * time.Hour
 )
 
 // ArchivalWorker orchestrates the full partition lifecycle for audit log archival.
@@ -77,7 +89,7 @@ func (aw *ArchivalWorker) UpdateRuntimeConfig(cfg ArchivalWorkerConfig) {
 	aw.mu.Lock()
 	defer aw.mu.Unlock()
 
-	aw.cfg = cfg
+	aw.cfg = normalizeArchivalWorkerConfig(cfg)
 }
 
 // prepareRunState reinitialises the worker's stop/done channels and sync.Once for
@@ -97,6 +109,26 @@ func (aw *ArchivalWorker) prepareRunState() {
 	if chanutil.Closed(aw.doneCh) {
 		aw.doneCh = make(chan struct{})
 	}
+}
+
+func normalizeArchivalWorkerConfig(cfg ArchivalWorkerConfig) ArchivalWorkerConfig {
+	if cfg.Interval <= 0 {
+		cfg.Interval = defaultArchivalInterval
+	}
+
+	if cfg.BatchSize <= 0 {
+		cfg.BatchSize = defaultArchivalBatchSize
+	}
+
+	if cfg.PartitionLookahead <= 0 {
+		cfg.PartitionLookahead = defaultPartitionLookahead
+	}
+
+	if cfg.PresignExpiry <= 0 {
+		cfg.PresignExpiry = defaultPresignExpiry
+	}
+
+	return cfg
 }
 
 // NewArchivalWorker creates a new ArchivalWorker with the given dependencies.
@@ -133,6 +165,8 @@ func NewArchivalWorker(
 	if logger == nil {
 		logger = &libLog.NopLogger{}
 	}
+
+	cfg = normalizeArchivalWorkerConfig(cfg)
 
 	return &ArchivalWorker{
 		archiveRepo:   archiveRepo,
