@@ -1,3 +1,10 @@
+## [1.1.0-beta.11](https://github.com/LerianStudio/matcher/compare/v1.1.0-beta.10...v1.1.0-beta.11) (2026-03-11)
+
+
+### Bug Fixes
+
+* **ci:** update gitops workflow parameters to match shared workflow v1.15.0 ([66ed158](https://github.com/LerianStudio/matcher/commit/66ed1584b52d5a4e98395f3a0af1328bf632d861))
+
 ## [1.1.0-beta.10](https://github.com/LerianStudio/matcher/compare/v1.1.0-beta.9...v1.1.0-beta.10) (2026-03-09)
 
 
