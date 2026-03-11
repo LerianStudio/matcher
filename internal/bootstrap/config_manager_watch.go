@@ -55,7 +55,10 @@ func (cm *ConfigManager) startWatcher() {
 		cm.logger.Log(context.Background(), libLog.LevelError,
 			"config file watcher: failed to watch directory", libLog.Err(err))
 
-		_ = watcher.Close()
+		if closeErr := watcher.Close(); closeErr != nil {
+			cm.logger.Log(context.Background(), libLog.LevelWarn,
+				"config file watcher: failed to close watcher after watch error", libLog.Err(closeErr))
+		}
 
 		return
 	}

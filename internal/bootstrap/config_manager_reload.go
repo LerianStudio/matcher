@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -36,6 +37,12 @@ func (cm *ConfigManager) reload(source string) (*ReloadResult, error) {
 
 // reloadLocked performs the actual reload. Caller MUST hold cm.mu.
 func (cm *ConfigManager) reloadLocked(source string) (*ReloadResult, error) {
+	select {
+	case <-cm.stopCh:
+		return nil, errors.New("config manager stopped")
+	default:
+	}
+
 	ctx := context.Background()
 
 	if source == "" {
@@ -130,6 +137,10 @@ func (cm *ConfigManager) reloadLocked(source string) (*ReloadResult, error) {
 // applies env overlay + production security defaults, and validates. Returns
 // the validated config or an error (caller should roll back viper keys on error).
 func (cm *ConfigManager) buildCandidateConfig(oldCfg *Config) (*Config, error) {
+	if oldCfg == nil {
+		return nil, fmt.Errorf("buildCandidateConfig: %w", errConfigNilAtomicLoad)
+	}
+
 	candidateCfg := defaultConfig()
 	if err := cm.viper.Unmarshal(candidateCfg); err != nil {
 		return nil, fmt.Errorf("unmarshal: %w", err)
