@@ -536,6 +536,46 @@ func TestDiscoveryWorker_Done_ClosedAfterStop(t *testing.T) {
 	}
 }
 
+func TestDiscoveryWorker_StartStopStartStop_SameInstanceSuccess(t *testing.T) {
+	t.Parallel()
+
+	w, err := NewDiscoveryWorker(
+		&stubFetcherClient{},
+		&stubConnectionRepo{},
+		&stubSchemaRepo{},
+		&stubTenantLister{},
+		&stubInfraProvider{},
+		DiscoveryWorkerConfig{Interval: time.Hour},
+		&stubLogger{},
+	)
+	require.NoError(t, err)
+
+	require.NoError(t, w.Start(context.Background()))
+	require.NoError(t, w.Stop())
+	require.NoError(t, w.Start(context.Background()))
+	require.NoError(t, w.Stop())
+}
+
+func TestDiscoveryWorker_UpdateRuntimeConfig_UpdatesInterval(t *testing.T) {
+	t.Parallel()
+
+	w, err := NewDiscoveryWorker(
+		&stubFetcherClient{},
+		&stubConnectionRepo{},
+		&stubSchemaRepo{},
+		&stubTenantLister{},
+		&stubInfraProvider{},
+		DiscoveryWorkerConfig{Interval: time.Minute},
+		&stubLogger{},
+	)
+	require.NoError(t, err)
+
+	w.UpdateRuntimeConfig(DiscoveryWorkerConfig{Interval: 45 * time.Second})
+
+	_, _, _, interval := w.runtimeState()
+	assert.Equal(t, 45*time.Second, interval)
+}
+
 // --- Sentinel errors ---
 
 func TestDiscoveryWorkerErrors_AreDistinct(t *testing.T) {
@@ -825,7 +865,7 @@ func TestDiscoveryWorker_SyncTenantConnections_IgnoresNilFetcherConnectionEntrie
 
 	w.syncConnectionsAndSchemas(context.Background())
 
-	assert.Equal(t, 1, upsertCalls, "nil fetcher entries must be skipped")
+	assert.Equal(t, 2, upsertCalls, "nil fetcher entries must be skipped while valid entries still complete full sync")
 }
 
 func TestDiscoveryWorker_MarkStaleConnections_IgnoresNilRepositoryEntries(t *testing.T) {

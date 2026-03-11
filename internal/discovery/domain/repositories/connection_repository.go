@@ -24,13 +24,13 @@ package repositories
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // Domain-level sentinel errors for connection repository operations.
@@ -49,7 +49,7 @@ type ConnectionRepository interface {
 	// Upsert creates or updates a FetcherConnection based on FetcherConnID.
 	Upsert(ctx context.Context, conn *entities.FetcherConnection) error
 	// UpsertWithTx creates or updates a FetcherConnection within an existing transaction.
-	UpsertWithTx(ctx context.Context, tx *sql.Tx, conn *entities.FetcherConnection) error
+	UpsertWithTx(ctx context.Context, tx sharedPorts.Tx, conn *entities.FetcherConnection) error
 	// FindAll returns all known FetcherConnections.
 	FindAll(ctx context.Context) ([]*entities.FetcherConnection, error)
 	// FindByID retrieves a FetcherConnection by its internal ID.
@@ -59,5 +59,5 @@ type ConnectionRepository interface {
 	// DeleteStale removes connections not seen since the given duration.
 	DeleteStale(ctx context.Context, notSeenSince time.Duration) (int64, error)
 	// DeleteStaleWithTx removes stale connections within an existing transaction.
-	DeleteStaleWithTx(ctx context.Context, tx *sql.Tx, notSeenSince time.Duration) (int64, error)
+	DeleteStaleWithTx(ctx context.Context, tx sharedPorts.Tx, notSeenSince time.Duration) (int64, error)
 }

@@ -21,8 +21,8 @@ func validExtractionModel() *ExtractionModel {
 
 	return &ExtractionModel{
 		ID:             uuid.MustParse("11111111-2222-3333-4444-555555555555"),
+		ConnectionID:   uuid.MustParse("99999999-8888-7777-6666-555555555555"),
 		IngestionJobID: uuid.NullUUID{UUID: uuid.MustParse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"), Valid: true},
-		FetcherConnID:  "fetcher-conn-001",
 		FetcherJobID:   sql.NullString{String: "fetcher-job-abc", Valid: true},
 		Tables:         []byte(`{"transactions":{"columns":["id","amount"]}}`),
 		Filters:        []byte(`{"date_from":"2026-01-01"}`),
@@ -40,8 +40,8 @@ func validExtractionEntity() *entities.ExtractionRequest {
 
 	return &entities.ExtractionRequest{
 		ID:             uuid.MustParse("11111111-2222-3333-4444-555555555555"),
+		ConnectionID:   uuid.MustParse("99999999-8888-7777-6666-555555555555"),
 		IngestionJobID: uuid.MustParse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"),
-		FetcherConnID:  "fetcher-conn-001",
 		FetcherJobID:   "fetcher-job-abc",
 		Tables:         map[string]any{"transactions": map[string]any{"columns": []any{"id", "amount"}}},
 		Filters:        map[string]any{"date_from": "2026-01-01"},
@@ -62,8 +62,8 @@ func TestExtractionModel_ToDomain_ValidModel(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, entity)
 	assert.Equal(t, model.ID, entity.ID)
+	assert.Equal(t, model.ConnectionID, entity.ConnectionID)
 	assert.Equal(t, model.IngestionJobID.UUID, entity.IngestionJobID)
-	assert.Equal(t, model.FetcherConnID, entity.FetcherConnID)
 	assert.Equal(t, "fetcher-job-abc", entity.FetcherJobID)
 	assert.Equal(t, vo.ExtractionStatusPending, entity.Status)
 	assert.Equal(t, "/data/result.csv", entity.ResultPath)
@@ -177,9 +177,9 @@ func TestExtractionFromDomain_ValidEntity(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, model)
 	assert.Equal(t, entity.ID, model.ID)
+	assert.Equal(t, entity.ConnectionID, model.ConnectionID)
 	assert.True(t, model.IngestionJobID.Valid)
 	assert.Equal(t, entity.IngestionJobID, model.IngestionJobID.UUID)
-	assert.Equal(t, entity.FetcherConnID, model.FetcherConnID)
 	assert.True(t, model.FetcherJobID.Valid)
 	assert.Equal(t, entity.FetcherJobID, model.FetcherJobID.String)
 	assert.Equal(t, "PENDING", model.Status)
@@ -212,6 +212,19 @@ func TestExtractionFromDomain_ZeroIngestionJobID(t *testing.T) {
 	assert.False(t, model.IngestionJobID.Valid, "zero UUID should produce invalid NullUUID")
 }
 
+func TestExtractionFromDomain_NilFiltersUsesSQLNull(t *testing.T) {
+	t.Parallel()
+
+	entity := validExtractionEntity()
+	entity.Filters = nil
+
+	model, err := FromDomain(entity)
+
+	require.NoError(t, err)
+	require.NotNil(t, model)
+	assert.Nil(t, model.Filters)
+}
+
 func TestExtractionModel_RoundTrip_PreservesAllFields(t *testing.T) {
 	t.Parallel()
 
@@ -226,8 +239,8 @@ func TestExtractionModel_RoundTrip_PreservesAllFields(t *testing.T) {
 	require.NotNil(t, roundTripped)
 
 	assert.Equal(t, original.ID, roundTripped.ID)
+	assert.Equal(t, original.ConnectionID, roundTripped.ConnectionID)
 	assert.Equal(t, original.IngestionJobID, roundTripped.IngestionJobID)
-	assert.Equal(t, original.FetcherConnID, roundTripped.FetcherConnID)
 	assert.Equal(t, original.FetcherJobID, roundTripped.FetcherJobID)
 	assert.Equal(t, original.Status, roundTripped.Status)
 	assert.Equal(t, original.ResultPath, roundTripped.ResultPath)
@@ -249,6 +262,7 @@ func TestExtractionModel_RoundTrip_NilFilters(t *testing.T) {
 	roundTripped, err := model.ToDomain()
 	require.NoError(t, err)
 	require.NotNil(t, roundTripped)
+	assert.Nil(t, model.Filters)
 	assert.Nil(t, roundTripped.Filters)
 }
 

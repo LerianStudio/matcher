@@ -8,10 +8,12 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"time"
 
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 
 	configWorker "github.com/LerianStudio/matcher/internal/configuration/services/worker"
+	discoveryWorker "github.com/LerianStudio/matcher/internal/discovery/services/worker"
 	governanceWorker "github.com/LerianStudio/matcher/internal/governance/services/worker"
 	reportingWorker "github.com/LerianStudio/matcher/internal/reporting/services/worker"
 )
@@ -48,7 +50,12 @@ const (
 	workerNameCleanup   = "cleanup"
 	workerNameArchival  = "archival"
 	workerNameScheduler = "scheduler"
+	workerNameDiscovery = "discovery"
 )
+
+type discoveryWorkerRuntimeConfig struct {
+	Interval time.Duration
+}
 
 // reconcileSlotLocked handles a single worker slot: starts, stops, or restarts
 // it based on the old and new configs. Caller must hold wm.mu.
@@ -293,6 +300,8 @@ func applyWorkerRuntimeConfig(name string, worker WorkerLifecycle, cfg *Config) 
 		return applyArchivalRuntimeConfig(worker, cfg)
 	case workerNameScheduler:
 		return applySchedulerRuntimeConfig(worker, cfg)
+	case workerNameDiscovery:
+		return applyDiscoveryRuntimeConfig(worker, cfg)
 	default:
 		return nil
 	}
@@ -377,6 +386,21 @@ func applySchedulerRuntimeConfig(worker WorkerLifecycle, cfg *Config) error {
 	return nil
 }
 
+func applyDiscoveryRuntimeConfig(worker WorkerLifecycle, cfg *Config) error {
+	discovery, ok := worker.(interface {
+		UpdateRuntimeConfig(discoveryWorker.DiscoveryWorkerConfig)
+	})
+	if !ok {
+		return nil
+	}
+
+	discovery.UpdateRuntimeConfig(discoveryWorker.DiscoveryWorkerConfig{
+		Interval: cfg.FetcherDiscoveryInterval(),
+	})
+
+	return nil
+}
+
 // workerConfigChanged checks whether the config section relevant to a worker
 // has changed between two configs. Uses reflect.DeepEqual on the relevant
 // sub-struct for simplicity — this runs at most once per config reload per worker,
@@ -430,6 +454,8 @@ func extractWorkerConfig(name string, cfg *Config) any {
 		return schedulerWorkerComparableConfig{
 			IntervalSec: cfg.Scheduler.IntervalSec,
 		}
+	case workerNameDiscovery:
+		return discoveryWorkerRuntimeConfig{Interval: cfg.FetcherDiscoveryInterval()}
 	default:
 		return nil
 	}

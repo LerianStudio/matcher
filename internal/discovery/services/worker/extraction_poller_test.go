@@ -24,12 +24,12 @@ import (
 
 // stubExtractionRepo implements repositories.ExtractionRepository for poller tests.
 type stubExtractionRepo struct {
-	createFn               func(ctx context.Context, req *entities.ExtractionRequest) error
-	createWithTxFn         func(ctx context.Context, tx *sql.Tx, req *entities.ExtractionRequest) error
-	updateFn               func(ctx context.Context, req *entities.ExtractionRequest) error
-	updateWithTxFn         func(ctx context.Context, tx *sql.Tx, req *entities.ExtractionRequest) error
-	findByIDFn             func(ctx context.Context, id uuid.UUID) (*entities.ExtractionRequest, error)
-	findByIngestionJobIDFn func(ctx context.Context, jobID uuid.UUID) (*entities.ExtractionRequest, error)
+	entity         *entities.ExtractionRequest
+	createFn       func(ctx context.Context, req *entities.ExtractionRequest) error
+	createWithTxFn func(ctx context.Context, tx *sql.Tx, req *entities.ExtractionRequest) error
+	updateFn       func(ctx context.Context, req *entities.ExtractionRequest) error
+	updateWithTxFn func(ctx context.Context, tx *sql.Tx, req *entities.ExtractionRequest) error
+	findByIDFn     func(ctx context.Context, id uuid.UUID) (*entities.ExtractionRequest, error)
 }
 
 var _ repositories.ExtractionRepository = (*stubExtractionRepo)(nil)
@@ -51,6 +51,7 @@ func (m *stubExtractionRepo) CreateWithTx(ctx context.Context, tx *sql.Tx, req *
 }
 
 func (m *stubExtractionRepo) Update(ctx context.Context, req *entities.ExtractionRequest) error {
+	m.entity = req
 	if m.updateFn != nil {
 		return m.updateFn(ctx, req)
 	}
@@ -71,12 +72,8 @@ func (m *stubExtractionRepo) FindByID(ctx context.Context, id uuid.UUID) (*entit
 		return m.findByIDFn(ctx, id)
 	}
 
-	return nil, sql.ErrNoRows
-}
-
-func (m *stubExtractionRepo) FindByIngestionJobID(ctx context.Context, jobID uuid.UUID) (*entities.ExtractionRequest, error) {
-	if m.findByIngestionJobIDFn != nil {
-		return m.findByIngestionJobIDFn(ctx, jobID)
+	if m.entity != nil && m.entity.ID == id {
+		return m.entity, nil
 	}
 
 	return nil, sql.ErrNoRows
@@ -212,10 +209,11 @@ func TestExtractionPoller_DoPoll_ImmediateComplete(t *testing.T) {
 		FetcherJobID: "job-complete",
 		Status:       vo.ExtractionStatusSubmitted, // Valid source state for COMPLETE transition
 	}
+	repo.entity = extraction
 
 	p.doPoll(
 		context.Background(),
-		extraction,
+		extraction.ID,
 		func(_ context.Context, path string) error {
 			completeCalled.Store(true)
 			resultPathReceived = path
@@ -246,9 +244,11 @@ func TestExtractionPoller_DoPoll_ImmediateFailed(t *testing.T) {
 		},
 	}
 
+	repo := &stubExtractionRepo{}
+
 	p, err := NewExtractionPoller(
 		fetcher,
-		&stubExtractionRepo{},
+		repo,
 		ExtractionPollerConfig{PollInterval: 10 * time.Millisecond, Timeout: time.Second},
 		&stubLogger{},
 	)
@@ -259,10 +259,11 @@ func TestExtractionPoller_DoPoll_ImmediateFailed(t *testing.T) {
 		FetcherJobID: "job-failed",
 		Status:       vo.ExtractionStatusSubmitted, // Valid source state for FAILED transition
 	}
+	repo.entity = extraction
 
 	p.doPoll(
 		context.Background(),
-		extraction,
+		extraction.ID,
 		nil,
 		func(_ context.Context, errMsg string) {
 			failedCalled.Store(true)
@@ -296,9 +297,11 @@ func TestExtractionPoller_DoPoll_EventualComplete(t *testing.T) {
 		},
 	}
 
+	repo := &stubExtractionRepo{}
+
 	p, err := NewExtractionPoller(
 		fetcher,
-		&stubExtractionRepo{},
+		repo,
 		ExtractionPollerConfig{PollInterval: 10 * time.Millisecond, Timeout: 5 * time.Second},
 		&stubLogger{},
 	)
@@ -309,10 +312,11 @@ func TestExtractionPoller_DoPoll_EventualComplete(t *testing.T) {
 		FetcherJobID: "job-eventual",
 		Status:       vo.ExtractionStatusSubmitted, // Valid source state for transitions
 	}
+	repo.entity = extraction
 
 	p.doPoll(
 		context.Background(),
-		extraction,
+		extraction.ID,
 		func(_ context.Context, _ string) error {
 			completeCalled.Store(true)
 
@@ -338,9 +342,11 @@ func TestExtractionPoller_DoPoll_Timeout(t *testing.T) {
 		},
 	}
 
+	repo := &stubExtractionRepo{}
+
 	p, err := NewExtractionPoller(
 		fetcher,
-		&stubExtractionRepo{},
+		repo,
 		ExtractionPollerConfig{PollInterval: 10 * time.Millisecond, Timeout: 50 * time.Millisecond},
 		&stubLogger{},
 	)
@@ -351,10 +357,11 @@ func TestExtractionPoller_DoPoll_Timeout(t *testing.T) {
 		FetcherJobID: "job-timeout",
 		Status:       vo.ExtractionStatusSubmitted, // Valid source state for FAILED transition
 	}
+	repo.entity = extraction
 
 	p.doPoll(
 		context.Background(),
-		extraction,
+		extraction.ID,
 		nil,
 		func(_ context.Context, errMsg string) {
 			failedCalled.Store(true)
@@ -376,9 +383,11 @@ func TestExtractionPoller_DoPoll_ContextCancelled(t *testing.T) {
 		},
 	}
 
+	repo := &stubExtractionRepo{}
+
 	p, err := NewExtractionPoller(
 		fetcher,
-		&stubExtractionRepo{},
+		repo,
 		ExtractionPollerConfig{PollInterval: 10 * time.Millisecond, Timeout: 5 * time.Second},
 		&stubLogger{},
 	)
@@ -389,13 +398,14 @@ func TestExtractionPoller_DoPoll_ContextCancelled(t *testing.T) {
 		FetcherJobID: "job-cancel",
 		Status:       vo.ExtractionStatusSubmitted, // Valid source state
 	}
+	repo.entity = extraction
 
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Cancel immediately.
 	cancel()
 
-	p.doPoll(ctx, extraction, nil, nil)
+	p.doPoll(ctx, extraction.ID, nil, nil)
 
 	// Should return without hanging. If this test doesn't time out, it passes.
 }
@@ -421,9 +431,11 @@ func TestExtractionPoller_DoPoll_StatusPollError_ContinuesPolling(t *testing.T) 
 		},
 	}
 
+	repo := &stubExtractionRepo{}
+
 	p, err := NewExtractionPoller(
 		fetcher,
-		&stubExtractionRepo{},
+		repo,
 		ExtractionPollerConfig{PollInterval: 10 * time.Millisecond, Timeout: 5 * time.Second},
 		&stubLogger{},
 	)
@@ -434,10 +446,11 @@ func TestExtractionPoller_DoPoll_StatusPollError_ContinuesPolling(t *testing.T) 
 		FetcherJobID: "job-recover",
 		Status:       vo.ExtractionStatusSubmitted, // Valid source state for transitions
 	}
+	repo.entity = extraction
 
 	p.doPoll(
 		context.Background(),
-		extraction,
+		extraction.ID,
 		func(_ context.Context, _ string) error {
 			completeCalled.Store(true)
 
@@ -462,9 +475,11 @@ func TestExtractionPoller_DoPoll_CompleteCallbackError_StillCompletes(t *testing
 		},
 	}
 
+	repo := &stubExtractionRepo{}
+
 	p, err := NewExtractionPoller(
 		fetcher,
-		&stubExtractionRepo{},
+		repo,
 		ExtractionPollerConfig{PollInterval: 10 * time.Millisecond, Timeout: time.Second},
 		&stubLogger{},
 	)
@@ -475,10 +490,11 @@ func TestExtractionPoller_DoPoll_CompleteCallbackError_StillCompletes(t *testing
 		FetcherJobID: "job-cb-err",
 		Status:       vo.ExtractionStatusSubmitted, // Valid source state for COMPLETE transition
 	}
+	repo.entity = extraction
 
 	p.doPoll(
 		context.Background(),
-		extraction,
+		extraction.ID,
 		func(_ context.Context, _ string) error {
 			return errors.New("callback failed")
 		},
@@ -524,13 +540,14 @@ func TestExtractionPoller_PollOnce_CompleteUpdateFailure_RollsBackState(t *testi
 		FetcherJobID: "job-complete-rollback",
 		Status:       vo.ExtractionStatusSubmitted,
 	}
+	repo.entity = extraction
 
-	done := p.pollOnce(context.Background(), extraction, nil, nil)
+	done := p.pollOnce(context.Background(), extraction.ID, nil, nil)
 	assert.False(t, done, "poller should retry after DB failure")
 	assert.Equal(t, vo.ExtractionStatusSubmitted, extraction.Status, "state must rollback when update fails")
 	assert.Empty(t, extraction.ResultPath)
 
-	done = p.pollOnce(context.Background(), extraction, nil, nil)
+	done = p.pollOnce(context.Background(), extraction.ID, nil, nil)
 	assert.True(t, done)
 	assert.Equal(t, vo.ExtractionStatusComplete, extraction.Status)
 	assert.Equal(t, "/data/final.csv", extraction.ResultPath)
@@ -571,16 +588,53 @@ func TestExtractionPoller_PollOnce_FailedUpdateFailure_RollsBackState(t *testing
 		FetcherJobID: "job-failed-rollback",
 		Status:       vo.ExtractionStatusSubmitted,
 	}
+	repo.entity = extraction
 
-	done := p.pollOnce(context.Background(), extraction, nil, nil)
+	done := p.pollOnce(context.Background(), extraction.ID, nil, nil)
 	assert.False(t, done, "poller should retry after DB failure")
 	assert.Equal(t, vo.ExtractionStatusSubmitted, extraction.Status, "state must rollback when update fails")
 	assert.Empty(t, extraction.ErrorMessage)
 
-	done = p.pollOnce(context.Background(), extraction, nil, nil)
+	done = p.pollOnce(context.Background(), extraction.ID, nil, nil)
 	assert.True(t, done)
 	assert.Equal(t, vo.ExtractionStatusFailed, extraction.Status)
 	assert.Equal(t, "fatal", extraction.ErrorMessage)
+}
+
+func TestExtractionPoller_PollOnce_ReloadsLatestEntityState(t *testing.T) {
+	t.Parallel()
+
+	fetcherCalls := 0
+	extractionID := uuid.New()
+
+	repo := &stubExtractionRepo{
+		findByIDFn: func(_ context.Context, id uuid.UUID) (*entities.ExtractionRequest, error) {
+			return &entities.ExtractionRequest{
+				ID:           id,
+				FetcherJobID: "job-cancelled",
+				Status:       vo.ExtractionStatusCancelled,
+			}, nil
+		},
+	}
+
+	fetcher := &stubFetcherClient{
+		getExtractionJobStatusFn: func(_ context.Context, _ string) (*sharedPorts.ExtractionJobStatus, error) {
+			fetcherCalls++
+			return &sharedPorts.ExtractionJobStatus{Status: "RUNNING"}, nil
+		},
+	}
+
+	p, err := NewExtractionPoller(
+		fetcher,
+		repo,
+		ExtractionPollerConfig{PollInterval: 10 * time.Millisecond, Timeout: time.Second},
+		&stubLogger{},
+	)
+	require.NoError(t, err)
+
+	done := p.pollOnce(context.Background(), extractionID, nil, nil)
+	assert.True(t, done)
+	assert.Equal(t, 0, fetcherCalls, "poller must stop on reloaded terminal state without calling fetcher")
 }
 
 // --- Sentinel errors ---

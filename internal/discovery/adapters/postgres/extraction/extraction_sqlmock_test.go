@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
+	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
 	vo "github.com/LerianStudio/matcher/internal/discovery/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 )
@@ -48,8 +49,8 @@ func createTestExtraction() *entities.ExtractionRequest {
 
 	return &entities.ExtractionRequest{
 		ID:             uuid.New(),
+		ConnectionID:   uuid.New(),
 		IngestionJobID: uuid.New(),
-		FetcherConnID:  "fetcher-conn-456",
 		FetcherJobID:   "fetcher-job-789",
 		Tables:         map[string]interface{}{"transactions": map[string]interface{}{"columns": []interface{}{"id", "amount"}}},
 		Filters:        map[string]interface{}{"date_from": "2026-01-01"},
@@ -63,7 +64,7 @@ func createTestExtraction() *entities.ExtractionRequest {
 
 func extractionColumns() []string {
 	return []string{
-		"id", "ingestion_job_id", "fetcher_conn_id", "fetcher_job_id",
+		"id", "connection_id", "ingestion_job_id", "fetcher_job_id",
 		"tables", "filters", "status", "result_path", "error_message",
 		"created_at", "updated_at",
 	}
@@ -136,11 +137,43 @@ func TestRepository_Create(t *testing.T) {
 		mock.ExpectExec("INSERT INTO extraction_requests").
 			WithArgs(
 				req.ID,
+				req.ConnectionID,
 				req.IngestionJobID,
-				req.FetcherConnID,
 				req.FetcherJobID,
 				sqlmock.AnyArg(),
 				sqlmock.AnyArg(),
+				req.Status.String(),
+				req.ResultPath,
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+			).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectCommit()
+
+		err := repo.Create(context.Background(), req)
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("nil filters persist as sql null", func(t *testing.T) {
+		t.Parallel()
+
+		repo, mock, finish := setupMockRepository(t)
+		defer finish()
+
+		req := createTestExtraction()
+		req.Filters = nil
+
+		mock.ExpectBegin()
+		mock.ExpectExec("INSERT INTO extraction_requests").
+			WithArgs(
+				req.ID,
+				req.ConnectionID,
+				req.IngestionJobID,
+				req.FetcherJobID,
+				sqlmock.AnyArg(),
+				nil,
 				req.Status.String(),
 				req.ResultPath,
 				sqlmock.AnyArg(),
@@ -167,8 +200,8 @@ func TestRepository_Create(t *testing.T) {
 		mock.ExpectExec("INSERT INTO extraction_requests").
 			WithArgs(
 				req.ID,
+				req.ConnectionID,
 				req.IngestionJobID,
-				req.FetcherConnID,
 				req.FetcherJobID,
 				sqlmock.AnyArg(),
 				sqlmock.AnyArg(),
@@ -223,12 +256,13 @@ func TestRepository_Update(t *testing.T) {
 		mock.ExpectBegin()
 		mock.ExpectExec("UPDATE extraction_requests SET").
 			WithArgs(
+				req.ConnectionID,
 				req.IngestionJobID,
 				req.FetcherJobID,
 				sqlmock.AnyArg(),
 				sqlmock.AnyArg(),
 				req.Status.String(),
-				req.ResultPath,
+				sqlmock.AnyArg(),
 				sqlmock.AnyArg(),
 				sqlmock.AnyArg(),
 				req.ID,
@@ -252,12 +286,13 @@ func TestRepository_Update(t *testing.T) {
 		mock.ExpectBegin()
 		mock.ExpectExec("UPDATE extraction_requests SET").
 			WithArgs(
+				req.ConnectionID,
 				req.IngestionJobID,
 				req.FetcherJobID,
 				sqlmock.AnyArg(),
 				sqlmock.AnyArg(),
 				req.Status.String(),
-				req.ResultPath,
+				sqlmock.AnyArg(),
 				sqlmock.AnyArg(),
 				sqlmock.AnyArg(),
 				req.ID,
@@ -300,8 +335,8 @@ func TestRepository_FindByID(t *testing.T) {
 		rows := sqlmock.NewRows(extractionColumns()).
 			AddRow(
 				req.ID,
+				req.ConnectionID,
 				req.IngestionJobID,
-				req.FetcherConnID,
 				sql.NullString{String: req.FetcherJobID, Valid: req.FetcherJobID != ""},
 				tablesJSON,
 				filtersJSON,
@@ -322,7 +357,7 @@ func TestRepository_FindByID(t *testing.T) {
 
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		assert.Equal(t, req.FetcherConnID, result.FetcherConnID)
+		assert.Equal(t, req.ConnectionID, result.ConnectionID)
 		assert.Equal(t, req.Status, result.Status)
 	})
 
@@ -339,79 +374,7 @@ func TestRepository_FindByID(t *testing.T) {
 
 		result, err := repo.FindByID(context.Background(), uuid.New())
 
-		assert.ErrorIs(t, err, ErrExtractionNotFound)
-		assert.Nil(t, result)
-	})
-}
-
-func TestRepository_FindByIngestionJobID(t *testing.T) {
-	t.Parallel()
-
-	t.Run("nil repository", func(t *testing.T) {
-		t.Parallel()
-
-		var repo *Repository
-		result, err := repo.FindByIngestionJobID(context.Background(), uuid.New())
-
-		assert.ErrorIs(t, err, ErrRepoNotInitialized)
-		assert.Nil(t, result)
-	})
-
-	t.Run("successful find by ingestion job id", func(t *testing.T) {
-		t.Parallel()
-
-		repo, mock, finish := setupMockRepository(t)
-		defer finish()
-
-		req := createTestExtraction()
-		tablesJSON, err := json.Marshal(req.Tables)
-		require.NoError(t, err)
-
-		filtersJSON, err := json.Marshal(req.Filters)
-		require.NoError(t, err)
-
-		rows := sqlmock.NewRows(extractionColumns()).
-			AddRow(
-				req.ID,
-				req.IngestionJobID,
-				req.FetcherConnID,
-				sql.NullString{String: req.FetcherJobID, Valid: req.FetcherJobID != ""},
-				tablesJSON,
-				filtersJSON,
-				req.Status.String(),
-				sql.NullString{String: req.ResultPath, Valid: req.ResultPath != ""},
-				sql.NullString{String: req.ErrorMessage, Valid: req.ErrorMessage != ""},
-				req.CreatedAt,
-				req.UpdatedAt,
-			)
-
-		mock.ExpectBegin()
-		mock.ExpectQuery("SELECT .+ FROM extraction_requests WHERE ingestion_job_id").
-			WithArgs(req.IngestionJobID.String()).
-			WillReturnRows(rows)
-		mock.ExpectCommit()
-
-		result, err := repo.FindByIngestionJobID(context.Background(), req.IngestionJobID)
-
-		require.NoError(t, err)
-		require.NotNil(t, result)
-		assert.Equal(t, req.IngestionJobID, result.IngestionJobID)
-	})
-
-	t.Run("not found", func(t *testing.T) {
-		t.Parallel()
-
-		repo, mock, finish := setupMockRepository(t)
-		defer finish()
-
-		mock.ExpectBegin()
-		mock.ExpectQuery("SELECT .+ FROM extraction_requests WHERE ingestion_job_id").
-			WillReturnError(sql.ErrNoRows)
-		mock.ExpectRollback()
-
-		result, err := repo.FindByIngestionJobID(context.Background(), uuid.New())
-
-		assert.ErrorIs(t, err, ErrExtractionNotFound)
+		assert.ErrorIs(t, err, repositories.ErrExtractionNotFound)
 		assert.Nil(t, result)
 	})
 }
@@ -471,8 +434,8 @@ func TestExtractionModel_RoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, entity)
 	assert.Equal(t, original.ID, entity.ID)
+	assert.Equal(t, original.ConnectionID, entity.ConnectionID)
 	assert.Equal(t, original.IngestionJobID, entity.IngestionJobID)
-	assert.Equal(t, original.FetcherConnID, entity.FetcherConnID)
 	assert.Equal(t, original.FetcherJobID, entity.FetcherJobID)
 	assert.Equal(t, original.Status, entity.Status)
 	assert.Equal(t, original.ResultPath, entity.ResultPath)
@@ -483,8 +446,8 @@ func TestExtractionModel_ToDomain_InvalidStatus(t *testing.T) {
 
 	model := &ExtractionModel{
 		ID:             uuid.New(),
+		ConnectionID:   uuid.New(),
 		IngestionJobID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
-		FetcherConnID:  "conn-1",
 		Tables:         []byte("{}"),
 		Status:         "INVALID_STATUS",
 		CreatedAt:      time.Now().UTC(),

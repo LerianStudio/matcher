@@ -125,6 +125,9 @@ func TestRepository_UpsertBatch(t *testing.T) {
 		require.NoError(t, err)
 
 		mock.ExpectBegin()
+		mock.ExpectExec("DELETE FROM discovered_schemas WHERE connection_id").
+			WithArgs(schema.ConnectionID.String()).
+			WillReturnResult(sqlmock.NewResult(0, 1))
 		mock.ExpectExec("INSERT INTO discovered_schemas").
 			WithArgs(
 				schema.ID,
@@ -150,6 +153,9 @@ func TestRepository_UpsertBatch(t *testing.T) {
 		schema := createTestSchema()
 
 		mock.ExpectBegin()
+		mock.ExpectExec("DELETE FROM discovered_schemas WHERE connection_id").
+			WithArgs(schema.ConnectionID.String()).
+			WillReturnResult(sqlmock.NewResult(0, 1))
 		mock.ExpectExec("INSERT INTO discovered_schemas").
 			WillReturnError(errTestExec)
 		mock.ExpectRollback()
@@ -157,6 +163,43 @@ func TestRepository_UpsertBatch(t *testing.T) {
 		err := repo.UpsertBatch(context.Background(), []*entities.DiscoveredSchema{schema})
 
 		assert.Error(t, err)
+	})
+
+	t.Run("replacement semantics delete removed tables before insert", func(t *testing.T) {
+		t.Parallel()
+
+		repo, mock, finish := setupMockRepository(t)
+		defer finish()
+
+		connID := uuid.New()
+		schemaOne := createTestSchema()
+		schemaOne.ConnectionID = connID
+		schemaOne.TableName = "accounts"
+		schemaTwo := createTestSchema()
+		schemaTwo.ID = uuid.New()
+		schemaTwo.ConnectionID = connID
+		schemaTwo.TableName = "transactions"
+
+		columnsOne, err := schemaOne.ColumnsJSON()
+		require.NoError(t, err)
+		columnsTwo, err := schemaTwo.ColumnsJSON()
+		require.NoError(t, err)
+
+		mock.ExpectBegin()
+		mock.ExpectExec("DELETE FROM discovered_schemas WHERE connection_id").
+			WithArgs(connID.String()).
+			WillReturnResult(sqlmock.NewResult(0, 2))
+		mock.ExpectExec("INSERT INTO discovered_schemas").
+			WithArgs(schemaOne.ID, schemaOne.ConnectionID, schemaOne.TableName, columnsOne, schemaOne.DiscoveredAt).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectExec("INSERT INTO discovered_schemas").
+			WithArgs(schemaTwo.ID, schemaTwo.ConnectionID, schemaTwo.TableName, columnsTwo, schemaTwo.DiscoveredAt).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectCommit()
+
+		err = repo.UpsertBatch(context.Background(), []*entities.DiscoveredSchema{schemaOne, schemaTwo})
+
+		assert.NoError(t, err)
 	})
 }
 

@@ -1,10 +1,14 @@
 // Package dto provides data transfer objects for discovery HTTP handlers.
 package dto
 
-// RefreshDiscoveryRequest is the request body for POST /v1/discovery/refresh.
-// Currently empty but included for future extensibility.
-type RefreshDiscoveryRequest struct{}
+// StartExtractionRequest is the request body for POST /v1/discovery/connections/:connectionId/extractions.
+type StartExtractionRequest struct {
+	Tables    map[string]any `json:"tables"`
+	StartDate string         `json:"startDate,omitempty"`
+	EndDate   string         `json:"endDate,omitempty"`
+	Filters   map[string]any `json:"filters,omitempty"`
+}
 
-// TestConnectionRequest is the request body for POST /v1/discovery/connections/:connectionId/test.
-// Currently empty -- connection ID comes from path param.
-type TestConnectionRequest struct{}
+// PollExtractionRequest is the request body for POST /v1/discovery/extractions/:extractionId/poll.
+// Currently empty because extraction ID comes from the path.
+type PollExtractionRequest struct{}

@@ -19,11 +19,6 @@ func TestSchemaSentinelErrors(t *testing.T) {
 		message string
 	}{
 		{
-			name:    "ErrSchemaNotFound",
-			err:     ErrSchemaNotFound,
-			message: "discovered schema not found",
-		},
-		{
 			name:    "ErrRepoNotInitialized",
 			err:     ErrRepoNotInitialized,
 			message: "schema repository not initialized",
@@ -32,11 +27,6 @@ func TestSchemaSentinelErrors(t *testing.T) {
 			name:    "ErrEntityRequired",
 			err:     ErrEntityRequired,
 			message: "discovered schema entity is required",
-		},
-		{
-			name:    "ErrSchemasRequired",
-			err:     ErrSchemasRequired,
-			message: "discovered schemas slice is required",
 		},
 		{
 			name:    "ErrModelRequired",

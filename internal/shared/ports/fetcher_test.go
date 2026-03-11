@@ -3,8 +3,6 @@
 package ports_test
 
 import (
-	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -13,96 +11,6 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 )
-
-// Compile-time interface compliance check.
-// Ensures that any future implementation satisfies the FetcherClient contract.
-var _ ports.FetcherClient = (*mockFetcherClient)(nil)
-
-type mockFetcherClient struct {
-	healthy     bool
-	connections []*ports.FetcherConnection
-	schema      *ports.FetcherSchema
-	testResult  *ports.FetcherTestResult
-	jobID       string
-	jobStatus   *ports.ExtractionJobStatus
-	err         error
-}
-
-func (m *mockFetcherClient) IsHealthy(_ context.Context) bool {
-	return m.healthy
-}
-
-func (m *mockFetcherClient) ListConnections(_ context.Context, _ string) ([]*ports.FetcherConnection, error) {
-	return m.connections, m.err
-}
-
-func (m *mockFetcherClient) GetSchema(_ context.Context, _ string) (*ports.FetcherSchema, error) {
-	return m.schema, m.err
-}
-
-func (m *mockFetcherClient) TestConnection(_ context.Context, _ string) (*ports.FetcherTestResult, error) {
-	return m.testResult, m.err
-}
-
-func (m *mockFetcherClient) SubmitExtractionJob(_ context.Context, _ ports.ExtractionJobInput) (string, error) {
-	return m.jobID, m.err
-}
-
-func (m *mockFetcherClient) GetExtractionJobStatus(_ context.Context, _ string) (*ports.ExtractionJobStatus, error) {
-	return m.jobStatus, m.err
-}
-
-func TestFetcherClientInterfaceSatisfaction(t *testing.T) {
-	t.Parallel()
-
-	client := &mockFetcherClient{healthy: true}
-
-	var fc ports.FetcherClient = client
-	healthy := fc.IsHealthy(context.Background())
-
-	assert.True(t, healthy)
-}
-
-func TestFetcherClientInterfaceSatisfaction_ListConnections(t *testing.T) {
-	t.Parallel()
-
-	expected := []*ports.FetcherConnection{
-		{
-			ID:           "conn-1",
-			ConfigName:   "prod-db",
-			DatabaseType: "POSTGRESQL",
-			Host:         "db.example.com",
-			Port:         5432,
-			DatabaseName: "production",
-			ProductName:  "PostgreSQL 16",
-			Status:       "AVAILABLE",
-		},
-	}
-
-	client := &mockFetcherClient{connections: expected}
-
-	var fc ports.FetcherClient = client
-	conns, err := fc.ListConnections(context.Background(), "org-1")
-
-	require.NoError(t, err)
-	require.Len(t, conns, 1)
-	assert.Equal(t, "conn-1", conns[0].ID)
-	assert.Equal(t, "POSTGRESQL", conns[0].DatabaseType)
-	assert.Equal(t, 5432, conns[0].Port)
-}
-
-func TestFetcherClientInterfaceSatisfaction_ErrorPath(t *testing.T) {
-	t.Parallel()
-
-	expectedErr := errors.New("fetcher unavailable")
-	client := &mockFetcherClient{err: expectedErr}
-
-	var fc ports.FetcherClient = client
-	conns, err := fc.ListConnections(context.Background(), "org-1")
-
-	assert.ErrorIs(t, err, expectedErr)
-	assert.Nil(t, conns)
-}
 
 func TestFetcherConnectionFields(t *testing.T) {
 	t.Parallel()

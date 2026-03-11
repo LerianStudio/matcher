@@ -622,6 +622,116 @@ func TestExportWorkerPollInterval(t *testing.T) {
 	}
 }
 
+func TestFetcherDurationHelpers(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		cfg      Config
+		getter   func(*Config) time.Duration
+		expected time.Duration
+	}{
+		{
+			name:     "request_timeout_defaults_when_zero",
+			cfg:      Config{Fetcher: FetcherConfig{RequestTimeoutSec: 0}},
+			getter:   (*Config).FetcherRequestTimeout,
+			expected: 30 * time.Second,
+		},
+		{
+			name:     "request_timeout_defaults_when_negative",
+			cfg:      Config{Fetcher: FetcherConfig{RequestTimeoutSec: -1}},
+			getter:   (*Config).FetcherRequestTimeout,
+			expected: 30 * time.Second,
+		},
+		{
+			name:     "request_timeout_uses_configured_value",
+			cfg:      Config{Fetcher: FetcherConfig{RequestTimeoutSec: 42}},
+			getter:   (*Config).FetcherRequestTimeout,
+			expected: 42 * time.Second,
+		},
+		{
+			name:     "discovery_interval_defaults_when_zero",
+			cfg:      Config{Fetcher: FetcherConfig{DiscoveryIntervalSec: 0}},
+			getter:   (*Config).FetcherDiscoveryInterval,
+			expected: time.Minute,
+		},
+		{
+			name:     "discovery_interval_defaults_when_negative",
+			cfg:      Config{Fetcher: FetcherConfig{DiscoveryIntervalSec: -5}},
+			getter:   (*Config).FetcherDiscoveryInterval,
+			expected: time.Minute,
+		},
+		{
+			name:     "discovery_interval_uses_configured_value",
+			cfg:      Config{Fetcher: FetcherConfig{DiscoveryIntervalSec: 90}},
+			getter:   (*Config).FetcherDiscoveryInterval,
+			expected: 90 * time.Second,
+		},
+		{
+			name:     "schema_cache_ttl_defaults_when_zero",
+			cfg:      Config{Fetcher: FetcherConfig{SchemaCacheTTLSec: 0}},
+			getter:   (*Config).FetcherSchemaCacheTTL,
+			expected: 5 * time.Minute,
+		},
+		{
+			name:     "schema_cache_ttl_defaults_when_negative",
+			cfg:      Config{Fetcher: FetcherConfig{SchemaCacheTTLSec: -10}},
+			getter:   (*Config).FetcherSchemaCacheTTL,
+			expected: 5 * time.Minute,
+		},
+		{
+			name:     "schema_cache_ttl_uses_configured_value",
+			cfg:      Config{Fetcher: FetcherConfig{SchemaCacheTTLSec: 120}},
+			getter:   (*Config).FetcherSchemaCacheTTL,
+			expected: 120 * time.Second,
+		},
+		{
+			name:     "extraction_poll_interval_defaults_when_zero",
+			cfg:      Config{Fetcher: FetcherConfig{ExtractionPollSec: 0}},
+			getter:   (*Config).FetcherExtractionPollInterval,
+			expected: 5 * time.Second,
+		},
+		{
+			name:     "extraction_poll_interval_defaults_when_negative",
+			cfg:      Config{Fetcher: FetcherConfig{ExtractionPollSec: -3}},
+			getter:   (*Config).FetcherExtractionPollInterval,
+			expected: 5 * time.Second,
+		},
+		{
+			name:     "extraction_poll_interval_uses_configured_value",
+			cfg:      Config{Fetcher: FetcherConfig{ExtractionPollSec: 11}},
+			getter:   (*Config).FetcherExtractionPollInterval,
+			expected: 11 * time.Second,
+		},
+		{
+			name:     "extraction_timeout_defaults_when_zero",
+			cfg:      Config{Fetcher: FetcherConfig{ExtractionTimeoutSec: 0}},
+			getter:   (*Config).FetcherExtractionTimeout,
+			expected: 10 * time.Minute,
+		},
+		{
+			name:     "extraction_timeout_defaults_when_negative",
+			cfg:      Config{Fetcher: FetcherConfig{ExtractionTimeoutSec: -2}},
+			getter:   (*Config).FetcherExtractionTimeout,
+			expected: 10 * time.Minute,
+		},
+		{
+			name:     "extraction_timeout_uses_configured_value",
+			cfg:      Config{Fetcher: FetcherConfig{ExtractionTimeoutSec: 601}},
+			getter:   (*Config).FetcherExtractionTimeout,
+			expected: 601 * time.Second,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.expected, tt.getter(&tt.cfg))
+		})
+	}
+}
+
 func TestConnMaxIdleTime(t *testing.T) {
 	t.Parallel()
 

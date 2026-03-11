@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 
 	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
@@ -96,13 +97,13 @@ func NewExtractionPoller(
 // It runs asynchronously in a goroutine managed by runtime.SafeGoWithContextAndComponent.
 func (ep *ExtractionPoller) PollUntilComplete(
 	ctx context.Context,
-	extraction *entities.ExtractionRequest,
+	extractionID uuid.UUID,
 	onComplete func(ctx context.Context, resultPath string) error,
 	onFailed func(ctx context.Context, errMsg string),
 ) {
-	if extraction == nil {
+	if extractionID == uuid.Nil {
 		if onFailed != nil {
-			onFailed(ctx, "nil extraction request")
+			onFailed(ctx, "extraction id is required")
 		}
 
 		return
@@ -115,14 +116,14 @@ func (ep *ExtractionPoller) PollUntilComplete(
 		"extraction_poller",
 		runtime.KeepRunning,
 		func(innerCtx context.Context) {
-			ep.doPoll(innerCtx, extraction, onComplete, onFailed)
+			ep.doPoll(innerCtx, extractionID, onComplete, onFailed)
 		},
 	)
 }
 
 func (ep *ExtractionPoller) doPoll(
 	ctx context.Context,
-	extraction *entities.ExtractionRequest,
+	extractionID uuid.UUID,
 	onComplete func(ctx context.Context, resultPath string) error,
 	onFailed func(ctx context.Context, errMsg string),
 ) {
@@ -136,11 +137,11 @@ func (ep *ExtractionPoller) doPoll(
 		case <-ctx.Done():
 			return
 		case <-deadline:
-			ep.handleTimeout(ctx, extraction, onFailed)
+			ep.handleTimeout(ctx, extractionID, onFailed)
 
 			return
 		case <-ticker.C:
-			done := ep.pollOnce(ctx, extraction, onComplete, onFailed)
+			done := ep.pollOnce(ctx, extractionID, onComplete, onFailed)
 			if done {
 				return
 			}
@@ -151,9 +152,22 @@ func (ep *ExtractionPoller) doPoll(
 // handleTimeout marks the extraction as failed due to timeout and invokes the failure callback.
 func (ep *ExtractionPoller) handleTimeout(
 	ctx context.Context,
-	extraction *entities.ExtractionRequest,
+	extractionID uuid.UUID,
 	onFailed func(ctx context.Context, errMsg string),
 ) {
+	extraction, err := ep.extractionRepo.FindByID(ctx, extractionID)
+	if err != nil || extraction == nil {
+		if onFailed != nil {
+			onFailed(ctx, "extraction timed out")
+		}
+
+		return
+	}
+
+	if extraction.Status.IsTerminal() {
+		return
+	}
+
 	if err := extraction.MarkFailed("extraction timed out"); err != nil {
 		ep.logger.With(libLog.Any("error", err.Error())).
 			Log(ctx, libLog.LevelWarn, "extraction poller: failed to mark extraction as failed on timeout")
@@ -172,7 +186,7 @@ func (ep *ExtractionPoller) handleTimeout(
 // pollOnce checks the extraction status once and returns true if terminal.
 func (ep *ExtractionPoller) pollOnce(
 	ctx context.Context,
-	extraction *entities.ExtractionRequest,
+	extractionID uuid.UUID,
 	onComplete func(ctx context.Context, resultPath string) error,
 	onFailed func(ctx context.Context, errMsg string),
 ) bool {
@@ -182,13 +196,25 @@ func (ep *ExtractionPoller) pollOnce(
 	ctx, span := tracer.Start(ctx, "discovery.poll_extraction_once")
 	defer span.End()
 
+	extraction, err := ep.extractionRepo.FindByID(ctx, extractionID)
+	if err != nil {
+		logger.With(libLog.Any("error", err.Error())).
+			Log(ctx, libLog.LevelWarn, "extraction poller: failed to reload extraction request")
+
+		return false
+	}
+
 	if extraction == nil {
-		logger.Log(ctx, libLog.LevelWarn, "extraction poller: nil extraction request")
+		logger.Log(ctx, libLog.LevelWarn, "extraction poller: extraction request not found")
 
 		if onFailed != nil {
-			onFailed(ctx, "nil extraction request")
+			onFailed(ctx, "extraction request not found")
 		}
 
+		return true
+	}
+
+	if extraction.Status.IsTerminal() {
 		return true
 	}
 
@@ -289,6 +315,9 @@ func (ep *ExtractionPoller) handlePollStatus(
 		return true
 
 	case "RUNNING", "EXTRACTING":
+		previousStatus := extraction.Status
+		previousUpdatedAt := extraction.UpdatedAt
+
 		if err := extraction.MarkExtracting(); err != nil {
 			// Non-fatal: log but don't update DB with potentially inconsistent state.
 			logger.With(libLog.Any("error", err.Error())).
@@ -297,9 +326,11 @@ func (ep *ExtractionPoller) handlePollStatus(
 			return false
 		}
 
-		if err := ep.extractionRepo.Update(ctx, extraction); err != nil {
-			logger.With(libLog.Any("error", err.Error())).
-				Log(ctx, libLog.LevelWarn, "extraction poller: failed to update extraction status")
+		if extraction.Status != previousStatus || !extraction.UpdatedAt.Equal(previousUpdatedAt) {
+			if err := ep.extractionRepo.Update(ctx, extraction); err != nil {
+				logger.With(libLog.Any("error", err.Error())).
+					Log(ctx, libLog.LevelWarn, "extraction poller: failed to update extraction status")
+			}
 		}
 	default:
 		logger.With(libLog.String("fetcher.status", status.Status)).

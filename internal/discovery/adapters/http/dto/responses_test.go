@@ -3,6 +3,7 @@
 package dto
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -124,4 +125,18 @@ func TestResponseDTOs_CompileCheck(t *testing.T) {
 	_ = ConnectionSchemaResponse{}
 	_ = RefreshDiscoveryResponse{}
 	_ = TestConnectionResponse{}
+}
+
+func TestDiscoveryStatusResponse_OmitsZeroLastSyncAt(t *testing.T) {
+	t.Parallel()
+
+	encoded, err := json.Marshal(DiscoveryStatusResponse{
+		FetcherHealthy:  true,
+		ConnectionCount: 0,
+	})
+	require.NoError(t, err)
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(encoded, &body))
+	assert.NotContains(t, body, "lastSyncAt")
 }

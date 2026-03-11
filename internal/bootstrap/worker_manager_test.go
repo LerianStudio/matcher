@@ -766,6 +766,35 @@ func TestWorkerConfigChanged(t *testing.T) {
 		assert.True(t, workerConfigChanged("scheduler", old, new_))
 	})
 
+	t.Run("detects discovery (fetcher) config change", func(t *testing.T) {
+		t.Parallel()
+
+		old := newTestConfig()
+		new_ := newTestConfig()
+		new_.Fetcher.DiscoveryIntervalSec = 120
+
+		assert.True(t, workerConfigChanged("discovery", old, new_))
+	})
+
+	t.Run("ignores non-runtime discovery config changes", func(t *testing.T) {
+		t.Parallel()
+
+		old := newTestConfig()
+		new_ := newTestConfig()
+		new_.Fetcher.SchemaCacheTTLSec = old.Fetcher.SchemaCacheTTLSec + 10
+
+		assert.False(t, workerConfigChanged("discovery", old, new_))
+	})
+
+	t.Run("ignores discovery enabled flips", func(t *testing.T) {
+		t.Parallel()
+
+		old := newTestConfig()
+		new_ := newTestConfig()
+		new_.Fetcher.Enabled = !old.Fetcher.Enabled
+
+		assert.False(t, workerConfigChanged("discovery", old, new_))
+	})
 }
 
 func TestExtractWorkerConfig(t *testing.T) {
@@ -807,6 +836,16 @@ func TestExtractWorkerConfig(t *testing.T) {
 		_, ok := result.(schedulerWorkerComparableConfig)
 
 		assert.True(t, ok)
+	})
+
+	t.Run("returns discovery runtime config for discovery", func(t *testing.T) {
+		t.Parallel()
+
+		result := extractWorkerConfig("discovery", cfg)
+		runtimeCfg, ok := result.(discoveryWorkerRuntimeConfig)
+
+		assert.True(t, ok)
+		assert.Equal(t, cfg.FetcherDiscoveryInterval(), runtimeCfg.Interval)
 	})
 
 	t.Run("returns nil for unknown worker", func(t *testing.T) {
@@ -952,6 +991,32 @@ func TestWorkerManager_RestartWhenFactoryReturnsSameInstance(t *testing.T) {
 
 	err = wm.Stop()
 	require.NoError(t, err)
+}
+
+func TestWorkerManager_DiscoveryIgnoresFetcherEnabledReloads(t *testing.T) {
+	t.Parallel()
+
+	logger := &libLog.NopLogger{}
+	startCfg := newTestConfig()
+	startCfg.Fetcher.Enabled = true
+	worker := &mockWorker{}
+
+	wm := NewWorkerManager(logger, nil)
+	wm.Register("discovery", func(_ *Config) (WorkerLifecycle, error) {
+		return worker, nil
+	}, func(_ *Config) bool { return true }, neverCritical)
+
+	require.NoError(t, wm.Start(context.Background(), startCfg))
+
+	updatedCfg := newTestConfig()
+	updatedCfg.Fetcher.Enabled = false
+
+	wm.onConfigChange(updatedCfg)
+
+	assert.Equal(t, 1, worker.startCount(), "discovery worker should keep running")
+	assert.Equal(t, 0, worker.stopCount(), "discovery worker should not stop on fetcher.enabled reload")
+
+	require.NoError(t, wm.Stop())
 }
 
 func TestWorkerManager_RestartSameInstance_AppliesRuntimeConfigAfterStop(t *testing.T) {

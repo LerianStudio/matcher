@@ -4,6 +4,7 @@ package command
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 
@@ -15,19 +16,17 @@ import (
 
 // Sentinel errors for discovery commands.
 var (
-	ErrFetcherNotEnabled          = errors.New("fetcher integration is not enabled")
-	ErrFetcherUnavailable         = errors.New("fetcher service is unavailable")
-	ErrConnectionNotFound         = errors.New("fetcher connection not found")
-	ErrSourceNotFetcherType       = errors.New("source is not a FETCHER type")
-	ErrMissingFetcherConnectionID = errors.New("source config missing fetcherConnectionId")
-	ErrExtractionTimeout          = errors.New("extraction job timed out")
-	ErrExtractionFailed           = errors.New("extraction job failed")
-	ErrExtractionNotFound         = errors.New("extraction request not found")
-	ErrNilExtractionStatus        = errors.New("fetcher returned nil extraction status")
-	ErrNilFetcherClient           = errors.New("fetcher client is required")
-	ErrNilConnectionRepository    = errors.New("connection repository is required")
-	ErrNilSchemaRepository        = errors.New("schema repository is required")
-	ErrNilExtractionRepository    = errors.New("extraction repository is required")
+	ErrFetcherUnavailable      = errors.New("fetcher service is unavailable")
+	ErrConnectionNotFound      = errors.New("fetcher connection not found")
+	ErrExtractionTimeout       = errors.New("extraction job timed out")
+	ErrExtractionFailed        = errors.New("extraction job failed")
+	ErrExtractionNotFound      = errors.New("extraction request not found")
+	ErrNilExtractionStatus     = errors.New("fetcher returned nil extraction status")
+	ErrNilTestConnectionResult = errors.New("fetcher returned nil connection test result")
+	ErrNilFetcherClient        = errors.New("fetcher client is required")
+	ErrNilConnectionRepository = errors.New("connection repository is required")
+	ErrNilSchemaRepository     = errors.New("schema repository is required")
+	ErrNilExtractionRepository = errors.New("extraction repository is required")
 )
 
 // UseCase orchestrates discovery write operations.
@@ -87,4 +86,14 @@ func NewUseCase(
 // WithExtractionPoller adds an optional extraction poller for async job monitoring.
 func (uc *UseCase) WithExtractionPoller(poller ports.ExtractionJobPoller) {
 	uc.extractionPoller = poller
+}
+
+// WithSchemaCache wires an optional cache into the connection syncer so manual
+// discovery refreshes immediately replace stale cached schemas.
+func (uc *UseCase) WithSchemaCache(cache ports.SchemaCache, ttl time.Duration) {
+	if uc == nil || uc.syncer == nil {
+		return
+	}
+
+	uc.syncer.WithSchemaCache(cache, ttl)
 }

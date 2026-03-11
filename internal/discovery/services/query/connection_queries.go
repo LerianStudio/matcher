@@ -97,6 +97,10 @@ func (uc *UseCase) GetConnection(ctx context.Context, id uuid.UUID) (*entities.F
 		return nil, fmt.Errorf("get connection: %w", err)
 	}
 
+	if conn == nil {
+		return nil, ErrConnectionNotFound
+	}
+
 	return conn, nil
 }
 
@@ -124,11 +128,13 @@ func (uc *UseCase) GetConnectionSchema(ctx context.Context, connectionID uuid.UU
 		return nil, fmt.Errorf("get connection schema: %w", err)
 	}
 
+	filteredSchemas := filterNilSchemas(schemas)
+
 	// Populate cache asynchronously (if configured).
-	if uc.schemaCache != nil && len(schemas) > 0 {
+	if uc.schemaCache != nil && len(filteredSchemas) > 0 {
 		detachedCtx := context.WithoutCancel(ctx)
 		connIDCopy := connectionID
-		schemasCopy := schemas
+		schemasCopy := filteredSchemas
 
 		runtime.SafeGoWithContextAndComponent(
 			detachedCtx,
@@ -140,7 +146,7 @@ func (uc *UseCase) GetConnectionSchema(ctx context.Context, connectionID uuid.UU
 		)
 	}
 
-	return schemas, nil
+	return filteredSchemas, nil
 }
 
 // convertFetcherSchemaToEntities converts a FetcherSchema to domain entities.
@@ -185,6 +191,10 @@ func (uc *UseCase) cacheSchemas(ctx context.Context, connectionID uuid.UUID, sch
 	tables := make([]sharedPorts.FetcherTableSchema, 0, len(schemas))
 
 	for _, schema := range schemas {
+		if schema == nil {
+			continue
+		}
+
 		cols := make([]sharedPorts.FetcherColumnInfo, 0, len(schema.Columns))
 		for _, col := range schema.Columns {
 			cols = append(cols, sharedPorts.FetcherColumnInfo{
@@ -206,4 +216,21 @@ func (uc *UseCase) cacheSchemas(ctx context.Context, connectionID uuid.UUID, sch
 			libLog.String("connectionID", connectionID.String()),
 			libLog.Any("error", err.Error()))
 	}
+}
+
+func filterNilSchemas(schemas []*entities.DiscoveredSchema) []*entities.DiscoveredSchema {
+	if len(schemas) == 0 {
+		return schemas
+	}
+
+	filtered := make([]*entities.DiscoveredSchema, 0, len(schemas))
+	for _, schema := range schemas {
+		if schema == nil {
+			continue
+		}
+
+		filtered = append(filtered, schema)
+	}
+
+	return filtered
 }

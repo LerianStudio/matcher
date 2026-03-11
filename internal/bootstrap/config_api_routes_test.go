@@ -7,6 +7,7 @@
 package bootstrap
 
 import (
+	"net/http"
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
@@ -44,12 +45,31 @@ func TestRegisterConfigAPIRoutes_Success(t *testing.T) {
 	err = RegisterConfigAPIRoutes(protected, handler)
 	assert.NoError(t, err)
 
-	require.Len(t, protectedCalls, 5)
-	assert.Equal(t, protectedCall{resource: auth.ResourceSystem, action: auth.ActionConfigRead}, protectedCalls[0])
-	assert.Equal(t, protectedCall{resource: auth.ResourceSystem, action: auth.ActionConfigRead}, protectedCalls[1])
-	assert.Equal(t, protectedCall{resource: auth.ResourceSystem, action: auth.ActionConfigRead}, protectedCalls[2])
-	assert.Equal(t, protectedCall{resource: auth.ResourceSystem, action: auth.ActionConfigWrite}, protectedCalls[3])
-	assert.Equal(t, protectedCall{resource: auth.ResourceSystem, action: auth.ActionConfigWrite}, protectedCalls[4])
+	expectedCalls := []protectedCall{
+		{resource: auth.ResourceSystem, action: auth.ActionConfigRead},
+		{resource: auth.ResourceSystem, action: auth.ActionConfigRead},
+		{resource: auth.ResourceSystem, action: auth.ActionConfigRead},
+		{resource: auth.ResourceSystem, action: auth.ActionConfigWrite},
+		{resource: auth.ResourceSystem, action: auth.ActionConfigWrite},
+	}
+	require.Equal(t, expectedCalls, protectedCalls)
+
+	registeredRoutes := make(map[string]bool)
+	for _, routesByMethod := range app.Stack() {
+		for _, route := range routesByMethod {
+			registeredRoutes[route.Method+" "+route.Path] = true
+		}
+	}
+
+	for _, routeKey := range []string{
+		http.MethodGet + " /v1/system/config",
+		http.MethodGet + " /v1/system/config/schema",
+		http.MethodGet + " /v1/system/config/history",
+		http.MethodPatch + " /v1/system/config",
+		http.MethodPost + " /v1/system/config/reload",
+	} {
+		assert.True(t, registeredRoutes[routeKey], "expected route %s to be registered", routeKey)
+	}
 }
 
 func TestRegisterConfigAPIRoutes_NilProtected_ReturnsError(t *testing.T) {

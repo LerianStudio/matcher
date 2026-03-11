@@ -24,11 +24,11 @@ var _ sharedPorts.FetcherClient = (*HTTPFetcherClient)(nil)
 
 // Sentinel errors.
 var (
-	ErrFetcherUnhealthy   = errors.New("fetcher service is unhealthy")
 	ErrFetcherUnreachable = errors.New("fetcher service is unreachable")
 	ErrFetcherBadResponse = errors.New("unexpected response from fetcher")
 	ErrFetcherNotFound    = errors.New("resource not found in fetcher")
 	ErrFetcherClientNil   = errors.New("fetcher client is not initialized")
+	ErrFetcherJobIDEmpty  = errors.New("fetcher extraction response missing job id")
 )
 
 // HTTPFetcherClient communicates with the Fetcher REST API over HTTP.
@@ -243,6 +243,10 @@ func (client *HTTPFetcherClient) SubmitExtractionJob(ctx context.Context, input 
 		return "", fmt.Errorf("decode extraction response: %w", err)
 	}
 
+	if strings.TrimSpace(resp.JobID) == "" {
+		return "", fmt.Errorf("%w: %w", ErrFetcherBadResponse, ErrFetcherJobIDEmpty)
+	}
+
 	return resp.JobID, nil
 }
 
@@ -342,11 +346,19 @@ func (client *HTTPFetcherClient) doRequest(ctx context.Context, method, requestU
 
 		limitedReader := io.LimitReader(resp.Body, int64(maxResponseBodySize)+1)
 		respBody, readErr := io.ReadAll(limitedReader)
-
-		resp.Body.Close()
+		closeErr := resp.Body.Close()
 
 		if readErr != nil {
 			lastErr = fmt.Errorf("read response body: %w", readErr)
+			if !retryable {
+				return nil, lastErr
+			}
+
+			continue
+		}
+
+		if closeErr != nil {
+			lastErr = fmt.Errorf("close response body: %w", closeErr)
 			if !retryable {
 				return nil, lastErr
 			}

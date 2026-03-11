@@ -5,12 +5,10 @@ package ports_test
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
 	"github.com/LerianStudio/matcher/internal/discovery/ports"
 )
 
@@ -18,7 +16,7 @@ import (
 type mockExtractionJobPoller struct {
 	pollUntilCompleteFunc func(
 		ctx context.Context,
-		extraction *entities.ExtractionRequest,
+		extractionID uuid.UUID,
 		onComplete func(ctx context.Context, resultPath string) error,
 		onFailed func(ctx context.Context, errMsg string),
 	)
@@ -26,12 +24,12 @@ type mockExtractionJobPoller struct {
 
 func (m *mockExtractionJobPoller) PollUntilComplete(
 	ctx context.Context,
-	extraction *entities.ExtractionRequest,
+	extractionID uuid.UUID,
 	onComplete func(ctx context.Context, resultPath string) error,
 	onFailed func(ctx context.Context, errMsg string),
 ) {
 	if m.pollUntilCompleteFunc != nil {
-		m.pollUntilCompleteFunc(ctx, extraction, onComplete, onFailed)
+		m.pollUntilCompleteFunc(ctx, extractionID, onComplete, onFailed)
 	}
 }
 
@@ -49,18 +47,18 @@ func TestExtractionJobPoller_InterfaceCompliance(t *testing.T) {
 func TestExtractionJobPoller_PollUntilComplete(t *testing.T) {
 	t.Parallel()
 
-	var capturedExtraction *entities.ExtractionRequest
+	var capturedExtractionID uuid.UUID
 
 	var onCompleteCalled bool
 
 	poller := &mockExtractionJobPoller{
 		pollUntilCompleteFunc: func(
 			_ context.Context,
-			extraction *entities.ExtractionRequest,
+			extractionID uuid.UUID,
 			onComplete func(ctx context.Context, resultPath string) error,
 			_ func(ctx context.Context, errMsg string),
 		) {
-			capturedExtraction = extraction
+			capturedExtractionID = extractionID
 			if onComplete != nil {
 				_ = onComplete(context.Background(), "/path/to/results")
 				onCompleteCalled = true
@@ -68,22 +66,15 @@ func TestExtractionJobPoller_PollUntilComplete(t *testing.T) {
 		},
 	}
 
-	extraction := &entities.ExtractionRequest{
-		ID:             uuid.New(),
-		IngestionJobID: uuid.New(),
-		FetcherConnID:  "test-conn",
-		FetcherJobID:   "job-123",
-		CreatedAt:      time.Now().UTC(),
-		UpdatedAt:      time.Now().UTC(),
-	}
+	extractionID := uuid.New()
 
 	poller.PollUntilComplete(
 		context.Background(),
-		extraction,
+		extractionID,
 		func(_ context.Context, _ string) error { return nil },
 		nil,
 	)
 
-	assert.Equal(t, extraction, capturedExtraction)
+	assert.Equal(t, extractionID, capturedExtractionID)
 	assert.True(t, onCompleteCalled)
 }

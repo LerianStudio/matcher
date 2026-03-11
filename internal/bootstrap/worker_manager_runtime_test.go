@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	configWorker "github.com/LerianStudio/matcher/internal/configuration/services/worker"
+	discoveryWorker "github.com/LerianStudio/matcher/internal/discovery/services/worker"
 	governanceWorker "github.com/LerianStudio/matcher/internal/governance/services/worker"
 	reportingWorker "github.com/LerianStudio/matcher/internal/reporting/services/worker"
 )
@@ -104,6 +105,32 @@ func (w *runtimeAwareSchedulerWorker) lastUpdate() *configWorker.SchedulerWorker
 	return &u
 }
 
+type runtimeAwareDiscoveryWorker struct {
+	mockWorker
+	mu      sync.Mutex
+	updates []discoveryWorker.DiscoveryWorkerConfig
+}
+
+func (w *runtimeAwareDiscoveryWorker) UpdateRuntimeConfig(cfg discoveryWorker.DiscoveryWorkerConfig) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	w.updates = append(w.updates, cfg)
+}
+
+func (w *runtimeAwareDiscoveryWorker) lastUpdate() *discoveryWorker.DiscoveryWorkerConfig {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if len(w.updates) == 0 {
+		return nil
+	}
+
+	u := w.updates[len(w.updates)-1]
+
+	return &u
+}
+
 // --- extractWorkerConfig tests ---
 
 func TestExtractWorkerConfig_AllNames(t *testing.T) {
@@ -120,6 +147,7 @@ func TestExtractWorkerConfig_AllNames(t *testing.T) {
 		{"cleanup", false, cleanupWorkerComparableConfig{IntervalSec: cfg.CleanupWorker.IntervalSec, BatchSize: cfg.CleanupWorker.BatchSize, GracePeriodSec: cfg.CleanupWorker.GracePeriodSec}},
 		{"archival", false, archivalWorkerComparableConfig{IntervalHours: cfg.Archival.IntervalHours, HotRetentionDays: cfg.Archival.HotRetentionDays, WarmRetentionMonths: cfg.Archival.WarmRetentionMonths, ColdRetentionMonths: cfg.Archival.ColdRetentionMonths, BatchSize: cfg.Archival.BatchSize, StorageBucket: cfg.Archival.StorageBucket, StoragePrefix: cfg.Archival.StoragePrefix, StorageClass: cfg.Archival.StorageClass, PartitionLookahead: cfg.Archival.PartitionLookahead}},
 		{"scheduler", false, schedulerWorkerComparableConfig{IntervalSec: cfg.Scheduler.IntervalSec}},
+		{"discovery", false, discoveryWorkerRuntimeConfig{Interval: cfg.FetcherDiscoveryInterval()}},
 		{"unknown", true, nil},
 	}
 
@@ -259,6 +287,20 @@ func TestApplyWorkerRuntimeConfig_Scheduler(t *testing.T) {
 	u := worker.lastUpdate()
 	require.NotNil(t, u)
 	assert.Equal(t, cfg.SchedulerInterval(), u.Interval)
+}
+
+func TestApplyWorkerRuntimeConfig_Discovery(t *testing.T) {
+	t.Parallel()
+
+	worker := &runtimeAwareDiscoveryWorker{}
+	cfg := defaultConfig()
+	cfg.Fetcher.DiscoveryIntervalSec = 45
+
+	require.NoError(t, applyWorkerRuntimeConfig("discovery", worker, cfg))
+
+	u := worker.lastUpdate()
+	require.NotNil(t, u)
+	assert.Equal(t, cfg.FetcherDiscoveryInterval(), u.Interval)
 }
 
 func TestApplyWorkerRuntimeConfig_NilConfig_IsNoop(t *testing.T) {

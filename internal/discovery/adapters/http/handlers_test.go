@@ -156,34 +156,54 @@ func (r *mockSchemaRepo) DeleteByConnectionIDWithTx(_ context.Context, _ *sql.Tx
 }
 
 // mockExtractionRepo implements repositories.ExtractionRepository.
-type mockExtractionRepo struct{}
+type mockExtractionRepo struct {
+	createCount int
+	updateCount int
+	createErr   error
+	updateErr   error
+	findByIDReq *entities.ExtractionRequest
+	findByIDErr error
+}
 
-func (r *mockExtractionRepo) Create(_ context.Context, _ *entities.ExtractionRequest) error {
-	return nil
+func (r *mockExtractionRepo) Create(_ context.Context, req *entities.ExtractionRequest) error {
+	r.createCount++
+	if r.findByIDReq == nil {
+		r.findByIDReq = req
+	}
+
+	return r.createErr
 }
 func (r *mockExtractionRepo) CreateWithTx(_ context.Context, _ *sql.Tx, _ *entities.ExtractionRequest) error {
-	return nil
+	return r.createErr
 }
-func (r *mockExtractionRepo) Update(_ context.Context, _ *entities.ExtractionRequest) error {
-	return nil
+func (r *mockExtractionRepo) Update(_ context.Context, req *entities.ExtractionRequest) error {
+	r.updateCount++
+	r.findByIDReq = req
+	return r.updateErr
 }
 func (r *mockExtractionRepo) UpdateWithTx(_ context.Context, _ *sql.Tx, _ *entities.ExtractionRequest) error {
-	return nil
+	return r.updateErr
 }
 func (r *mockExtractionRepo) FindByID(_ context.Context, _ uuid.UUID) (*entities.ExtractionRequest, error) {
-	return nil, sql.ErrNoRows
-}
-func (r *mockExtractionRepo) FindByIngestionJobID(_ context.Context, _ uuid.UUID) (*entities.ExtractionRequest, error) {
-	return nil, sql.ErrNoRows
+	if r.findByIDErr != nil {
+		return nil, r.findByIDErr
+	}
+
+	if r.findByIDReq == nil {
+		return nil, repositories.ErrExtractionNotFound
+	}
+
+	return r.findByIDReq, nil
 }
 
 // --- Test Helpers ---
 
 type handlerFixture struct {
-	handler     *Handler
-	fetcherMock *mockFetcherClient
-	connRepo    *mockConnectionRepo
-	schemaRepo  *mockSchemaRepo
+	handler        *Handler
+	fetcherMock    *mockFetcherClient
+	connRepo       *mockConnectionRepo
+	schemaRepo     *mockSchemaRepo
+	extractionRepo *mockExtractionRepo
 }
 
 func newHandlerFixture(t *testing.T) *handlerFixture {
@@ -197,17 +217,18 @@ func newHandlerFixture(t *testing.T) *handlerFixture {
 	cmdUC, err := discoveryCommand.NewUseCase(fetcherMock, connRepo, schemaRepo, extractionRepo, nil)
 	require.NoError(t, err)
 
-	queryUC, err := discoveryQuery.NewUseCase(fetcherMock, connRepo, schemaRepo, nil)
+	queryUC, err := discoveryQuery.NewUseCase(fetcherMock, connRepo, schemaRepo, extractionRepo, nil)
 	require.NoError(t, err)
 
-	handler, err := NewHandler(cmdUC, queryUC)
+	handler, err := NewHandler(cmdUC, queryUC, false)
 	require.NoError(t, err)
 
 	return &handlerFixture{
-		handler:     handler,
-		fetcherMock: fetcherMock,
-		connRepo:    connRepo,
-		schemaRepo:  schemaRepo,
+		handler:        handler,
+		fetcherMock:    fetcherMock,
+		connRepo:       connRepo,
+		schemaRepo:     schemaRepo,
+		extractionRepo: extractionRepo,
 	}
 }
 
@@ -242,9 +263,39 @@ func setupTestApp(t *testing.T, handler *Handler) *fiber.App {
 	app.Get("/v1/discovery/connections/:connectionId", handler.GetConnection)
 	app.Get("/v1/discovery/connections/:connectionId/schema", handler.GetConnectionSchema)
 	app.Post("/v1/discovery/connections/:connectionId/test", handler.TestConnection)
+	app.Post("/v1/discovery/connections/:connectionId/extractions", handler.StartExtraction)
+	app.Get("/v1/discovery/extractions/:extractionId", handler.GetExtraction)
+	app.Post("/v1/discovery/extractions/:extractionId/poll", handler.PollExtraction)
 	app.Post("/v1/discovery/refresh", handler.RefreshDiscovery)
 
 	return app
+}
+
+func assertStructuredErrorResponse(t *testing.T, resp *http.Response, expectedStatus int, expectedType, expectedMessage string) {
+	t.Helper()
+
+	assert.Equal(t, expectedStatus, resp.StatusCode)
+
+	var body struct {
+		Code    int    `json:"code"`
+		Title   string `json:"title"`
+		Message string `json:"message"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	assert.Equal(t, expectedStatus, body.Code)
+	assert.Equal(t, expectedType, body.Title)
+	assert.Equal(t, expectedMessage, body.Message)
+}
+
+func (f *handlerFixture) seedExtraction(t *testing.T, connectionID uuid.UUID) *entities.ExtractionRequest {
+	t.Helper()
+
+	extraction, err := entities.NewExtractionRequest(context.Background(), connectionID, map[string]any{"transactions": true}, map[string]any{"currency": "USD"})
+	require.NoError(t, err)
+	require.NoError(t, extraction.MarkSubmitted("job-123"))
+	f.extractionRepo.findByIDReq = extraction
+
+	return extraction
 }
 
 func (f *handlerFixture) seedConnection(t *testing.T) *entities.FetcherConnection {
@@ -293,7 +344,7 @@ func (f *handlerFixture) seedSchema(t *testing.T, connID uuid.UUID) {
 func TestNewHandler_NilCommand(t *testing.T) {
 	t.Parallel()
 
-	_, err := NewHandler(nil, &discoveryQuery.UseCase{})
+	_, err := NewHandler(nil, &discoveryQuery.UseCase{}, false)
 
 	require.ErrorIs(t, err, ErrNilCommandUseCase)
 }
@@ -309,7 +360,7 @@ func TestNewHandler_NilQuery(t *testing.T) {
 	cmdUC, err := discoveryCommand.NewUseCase(fetcherMock, connRepo, schemaRepo, extractionRepo, nil)
 	require.NoError(t, err)
 
-	_, err = NewHandler(cmdUC, nil)
+	_, err = NewHandler(cmdUC, nil, false)
 
 	require.ErrorIs(t, err, ErrNilQueryUseCase)
 }
@@ -332,6 +383,24 @@ func TestGetDiscoveryStatus_Success(t *testing.T) {
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
 	assert.True(t, body.FetcherHealthy)
 	assert.Equal(t, 1, body.ConnectionCount)
+	assert.NotNil(t, body.LastSyncAt)
+}
+
+func TestGetDiscoveryStatus_NoSyncOmitsLastSyncAt(t *testing.T) {
+	t.Parallel()
+
+	fixture := newHandlerFixture(t)
+	app := setupTestApp(t, fixture.handler)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/discovery/status", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var body dto.DiscoveryStatusResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	assert.Nil(t, body.LastSyncAt)
 }
 
 func TestListConnections_Success(t *testing.T) {
@@ -401,7 +470,7 @@ func TestGetConnection_InvalidID(t *testing.T) {
 	resp, err := app.Test(req)
 	require.NoError(t, err)
 
-	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	assertStructuredErrorResponse(t, resp, http.StatusBadRequest, "invalid_request", "invalid connection ID")
 }
 
 func TestGetConnection_NotFound(t *testing.T) {
@@ -414,7 +483,7 @@ func TestGetConnection_NotFound(t *testing.T) {
 	resp, err := app.Test(req)
 	require.NoError(t, err)
 
-	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+	assertStructuredErrorResponse(t, resp, http.StatusNotFound, "not_found", "connection not found")
 }
 
 func TestGetConnectionSchema_Success(t *testing.T) {
@@ -453,6 +522,19 @@ func TestGetConnectionSchema_InvalidID(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
+func TestGetConnectionSchema_NotFound(t *testing.T) {
+	t.Parallel()
+
+	fixture := newHandlerFixture(t)
+	app := setupTestApp(t, fixture.handler)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/discovery/connections/"+uuid.New().String()+"/schema", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+}
+
 func TestTestConnection_Success(t *testing.T) {
 	t.Parallel()
 
@@ -480,6 +562,32 @@ func TestTestConnection_Success(t *testing.T) {
 	assert.Equal(t, int64(42), body.LatencyMs)
 }
 
+func TestTestConnection_UnhealthyResponseSanitizesErrorMessage(t *testing.T) {
+	t.Parallel()
+
+	fixture := newHandlerFixture(t)
+	conn := fixture.seedConnection(t)
+	fixture.fetcherMock.testResult = &sharedPorts.FetcherTestResult{
+		ConnectionID: conn.FetcherConnID,
+		Healthy:      false,
+		LatencyMs:    7,
+		ErrorMessage: "dial tcp 10.0.0.8:5432: connection refused",
+	}
+
+	app := setupTestApp(t, fixture.handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/discovery/connections/"+conn.ID.String()+"/test", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var body dto.TestConnectionResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	assert.False(t, body.Healthy)
+	assert.Equal(t, "connection test failed", body.ErrorMessage)
+}
+
 func TestTestConnection_FetcherUnavailable(t *testing.T) {
 	t.Parallel()
 
@@ -493,7 +601,7 @@ func TestTestConnection_FetcherUnavailable(t *testing.T) {
 	resp, err := app.Test(req)
 	require.NoError(t, err)
 
-	assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
+	assertStructuredErrorResponse(t, resp, http.StatusServiceUnavailable, "service_unavailable", "fetcher service unavailable")
 }
 
 func TestRefreshDiscovery_Success(t *testing.T) {
@@ -554,8 +662,8 @@ func TestTestConnection_FetcherError(t *testing.T) {
 	resp, err := app.Test(req)
 	require.NoError(t, err)
 
-	// Should return 500, not 503, because it's not a health-related error
-	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+	// Should return 500, not 503, because it's not a health-related error.
+	assertStructuredErrorResponse(t, resp, http.StatusInternalServerError, "internal_error", "failed to test connection")
 }
 
 func TestTestConnection_InvalidConnectionID(t *testing.T) {

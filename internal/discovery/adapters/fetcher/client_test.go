@@ -5,10 +5,12 @@ package fetcher
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,6 +33,12 @@ func newTestClient(t *testing.T, serverURL string) *HTTPFetcherClient {
 	require.NoError(t, err)
 
 	return client
+}
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (fn roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return fn(req)
 }
 
 // --- NewHTTPFetcherClient tests ---
@@ -511,6 +519,30 @@ func TestSubmitExtractionJob_ServerError(t *testing.T) {
 	assert.Empty(t, jobID)
 }
 
+func TestSubmitExtractionJob_EmptyJobIDFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(fetcherExtractionSubmitResponse{}) //nolint:errcheck,errchkjson // test helper
+	}))
+	defer srv.Close()
+
+	client := newTestClient(t, srv.URL)
+
+	input := sharedPorts.ExtractionJobInput{
+		ConnectionID: "conn-1",
+		Tables:       map[string]sharedPorts.ExtractionTableConfig{"transactions": {}},
+	}
+
+	jobID, err := client.SubmitExtractionJob(context.Background(), input)
+
+	require.Error(t, err)
+	assert.Empty(t, jobID)
+	assert.ErrorIs(t, err, ErrFetcherBadResponse)
+	assert.ErrorIs(t, err, ErrFetcherJobIDEmpty)
+}
+
 // --- GetExtractionJobStatus tests ---
 
 func TestGetExtractionJobStatus_Success_Running(t *testing.T) {
@@ -749,6 +781,64 @@ func TestDoRequest_CanceledContext(t *testing.T) {
 	_, err = client.ListConnections(ctx, "")
 
 	require.Error(t, err)
+}
+
+func TestDoRequest_TransportFailure_RetryableGet(t *testing.T) {
+	t.Parallel()
+
+	var attempts atomic.Int32
+	transportErr := errors.New("dial tcp: connection refused")
+	client := &HTTPFetcherClient{
+		httpClient: &http.Client{Transport: roundTripperFunc(func(_ *http.Request) (*http.Response, error) {
+			attempts.Add(1)
+			return nil, transportErr
+		})},
+		baseURL: "http://fetcher.internal",
+		cfg: HTTPClientConfig{
+			RequestTimeout:  time.Second,
+			MaxRetries:      2,
+			RetryBaseDelay:  0,
+			AllowPrivateIPs: true,
+		},
+	}
+
+	conns, err := client.ListConnections(context.Background(), "")
+
+	require.Error(t, err)
+	assert.Nil(t, conns)
+	assert.Contains(t, err.Error(), "exhausted retries")
+	assert.ErrorIs(t, err, ErrFetcherUnreachable)
+	assert.Equal(t, int32(3), attempts.Load())
+}
+
+func TestDoRequest_TransportFailure_NonRetryablePost(t *testing.T) {
+	t.Parallel()
+
+	var attempts atomic.Int32
+	transportErr := errors.New("dial tcp: connection refused")
+	client := &HTTPFetcherClient{
+		httpClient: &http.Client{Transport: roundTripperFunc(func(_ *http.Request) (*http.Response, error) {
+			attempts.Add(1)
+			return nil, transportErr
+		})},
+		baseURL: "http://fetcher.internal",
+		cfg: HTTPClientConfig{
+			RequestTimeout:  time.Second,
+			MaxRetries:      3,
+			RetryBaseDelay:  0,
+			AllowPrivateIPs: true,
+		},
+	}
+
+	_, err := client.SubmitExtractionJob(context.Background(), sharedPorts.ExtractionJobInput{
+		ConnectionID: "conn-1",
+		Tables:       map[string]sharedPorts.ExtractionTableConfig{"transactions": {}},
+	})
+
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "exhausted retries")
+	assert.ErrorIs(t, err, ErrFetcherUnreachable)
+	assert.Equal(t, int32(1), attempts.Load())
 }
 
 func TestSubmitExtractionJob_DoesNotRetryOnServerError(t *testing.T) {

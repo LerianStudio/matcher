@@ -780,6 +780,46 @@ func TestConfigManager_Update_ImmutableKeysRejected(t *testing.T) {
 	assert.Equal(t, "***REDACTED***", rejectionsByKey["auth.token_secret"].Value)
 }
 
+func TestConfigManager_Update_FetcherEnabledRejected(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
+
+	cfg := defaultConfig()
+	cm := newTestConfigManager(t, cfg, yamlPath, &testLogger{})
+
+	result, err := cm.Update(map[string]any{
+		"fetcher.enabled": true,
+	})
+
+	require.NoError(t, err)
+	assert.Empty(t, result.Applied)
+	require.Len(t, result.Rejected, 1)
+	assert.Equal(t, "fetcher.enabled", result.Rejected[0].Key)
+	assert.Contains(t, result.Rejected[0].Reason, "not mutable")
+}
+
+func TestConfigManager_Update_FetcherDiscoveryIntervalMutable(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
+
+	cfg := defaultConfig()
+	cm := newTestConfigManager(t, cfg, yamlPath, &testLogger{})
+
+	result, err := cm.Update(map[string]any{
+		"fetcher.discovery_interval_sec": 120,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, result.Applied, 1)
+	assert.Empty(t, result.Rejected)
+	assert.Equal(t, "fetcher.discovery_interval_sec", result.Applied[0].Key)
+	assert.Equal(t, 120, cm.Get().Fetcher.DiscoveryIntervalSec)
+}
+
 func TestConfigManager_Update_MixedApplyAndReject(t *testing.T) {
 	t.Parallel()
 

@@ -3,6 +3,7 @@ package entities
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -13,6 +14,9 @@ import (
 	vo "github.com/LerianStudio/matcher/internal/discovery/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
+
+// ErrInvalidConnectionPort indicates a port outside the valid TCP range.
+var ErrInvalidConnectionPort = errors.New("connection port must be between 0 and 65535")
 
 // FetcherConnection represents a database connection discovered from the Fetcher service.
 type FetcherConnection struct {
@@ -64,17 +68,6 @@ func NewFetcherConnection(
 	}, nil
 }
 
-// MarkAvailable transitions the connection to AVAILABLE status.
-func (fc *FetcherConnection) MarkAvailable() {
-	if fc == nil {
-		return
-	}
-
-	fc.Status = vo.ConnectionStatusAvailable
-	fc.LastSeenAt = time.Now().UTC()
-	fc.UpdatedAt = time.Now().UTC()
-}
-
 // ApplyFetcherStatus updates the connection status from Fetcher's reported status string.
 // Returns true if the status was a recognized value, false if it was mapped to Unknown.
 func (fc *FetcherConnection) ApplyFetcherStatus(status string) bool {
@@ -118,25 +111,22 @@ func (fc *FetcherConnection) MarkSchemaDiscovered() {
 }
 
 // UpdateDetails updates the connection metadata from Fetcher.
-func (fc *FetcherConnection) UpdateDetails(host string, port int, dbName, productName string) {
+func (fc *FetcherConnection) UpdateDetails(host string, port int, dbName, productName string) error {
 	if fc == nil {
-		return
-	}
-
-	fc.Host = host
-
-	// Clamp port to valid TCP range; 0 means unspecified.
-	if port < 0 {
-		port = 0
+		return nil
 	}
 
 	const maxPort = 65535
-	if port > maxPort {
-		port = maxPort
+	if port < 0 || port > maxPort {
+		return fmt.Errorf("%w: got %d", ErrInvalidConnectionPort, port)
 	}
+
+	fc.Host = host
 
 	fc.Port = port
 	fc.DatabaseName = dbName
 	fc.ProductName = productName
 	fc.UpdatedAt = time.Now().UTC()
+
+	return nil
 }

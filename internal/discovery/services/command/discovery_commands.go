@@ -108,11 +108,23 @@ func (uc *UseCase) TestConnection(ctx context.Context, connectionID uuid.UUID) (
 		return nil, fmt.Errorf("find connection: %w", err)
 	}
 
+	if conn == nil {
+		libOpentelemetry.HandleSpanError(span, "find connection", ErrConnectionNotFound)
+
+		return nil, ErrConnectionNotFound
+	}
+
 	result, err := uc.fetcherClient.TestConnection(ctx, conn.FetcherConnID)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "test connection", err)
 
 		return nil, fmt.Errorf("test connection: %w", err)
+	}
+
+	if result == nil {
+		libOpentelemetry.HandleSpanError(span, "test connection", ErrNilTestConnectionResult)
+
+		return nil, ErrNilTestConnectionResult
 	}
 
 	return &ConnectionTestResult{

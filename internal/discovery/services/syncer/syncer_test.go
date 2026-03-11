@@ -18,6 +18,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
+	discoveryPorts "github.com/LerianStudio/matcher/internal/discovery/ports"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -168,6 +169,28 @@ func (m *stubLogger) With(_ ...libLog.Field) libLog.Logger { return m }
 func (m *stubLogger) WithGroup(_ string) libLog.Logger { return m }
 func (m *stubLogger) Enabled(_ libLog.Level) bool      { return true }
 func (m *stubLogger) Sync(_ context.Context) error     { return nil }
+
+type stubSchemaCache struct {
+	setSchemaFn func(ctx context.Context, connectionID string, schema *sharedPorts.FetcherSchema, ttl time.Duration) error
+}
+
+var _ discoveryPorts.SchemaCache = (*stubSchemaCache)(nil)
+
+func (m *stubSchemaCache) GetSchema(_ context.Context, _ string) (*sharedPorts.FetcherSchema, error) {
+	return nil, nil
+}
+
+func (m *stubSchemaCache) SetSchema(ctx context.Context, connectionID string, schema *sharedPorts.FetcherSchema, ttl time.Duration) error {
+	if m.setSchemaFn != nil {
+		return m.setSchemaFn(ctx, connectionID, schema, ttl)
+	}
+
+	return nil
+}
+
+func (m *stubSchemaCache) InvalidateSchema(_ context.Context, _ string) error {
+	return nil
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -518,6 +541,31 @@ func TestSyncConnection_UpsertNewFails_ReturnsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "upsert new connection")
 }
 
+func TestSyncConnection_InvalidPort_ReturnsError(t *testing.T) {
+	t.Parallel()
+
+	cs := mustNewSyncer(t, &stubConnectionRepo{
+		findByFetcherIDFn: func(_ context.Context, _ string) (*entities.FetcherConnection, error) {
+			return nil, repositories.ErrConnectionNotFound
+		},
+	}, &stubSchemaRepo{})
+	fc := makeFetcherConnection("fc-invalid-port", "c", "PG")
+	fc.Port = 70000
+
+	err := cs.SyncConnection(
+		context.Background(),
+		&stubLogger{},
+		fc,
+		func(_ context.Context, _ string) (*sharedPorts.FetcherSchema, error) {
+			return nil, nil
+		},
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, entities.ErrInvalidConnectionPort)
+	assert.Contains(t, err.Error(), "update new connection details")
+}
+
 // ---------------------------------------------------------------------------
 // SyncConnection — schema fetch failure logs warning but succeeds
 // ---------------------------------------------------------------------------
@@ -637,12 +685,14 @@ func TestSyncSchema_EmptyTables_ReturnsNil(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestSyncSchema_EmptyTables_DoesNotCallRepos(t *testing.T) {
+func TestSyncSchema_EmptyTables_ReplacesPersistedSnapshot(t *testing.T) {
 	t.Parallel()
 
 	var upsertBatchCalled atomic.Bool
 
 	var connUpsertCalled atomic.Bool
+
+	var deleteCalled atomic.Bool
 
 	connRepo := &stubConnectionRepo{
 		upsertFn: func(_ context.Context, _ *entities.FetcherConnection) error {
@@ -658,6 +708,11 @@ func TestSyncSchema_EmptyTables_DoesNotCallRepos(t *testing.T) {
 
 			return nil
 		},
+		deleteByConnectionIDFn: func(_ context.Context, _ uuid.UUID) error {
+			deleteCalled.Store(true)
+
+			return nil
+		},
 	}
 
 	cs := mustNewSyncer(t, connRepo, schemaRepo)
@@ -667,7 +722,8 @@ func TestSyncSchema_EmptyTables_DoesNotCallRepos(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.False(t, upsertBatchCalled.Load(), "UpsertBatch should not be called for empty tables")
-	assert.False(t, connUpsertCalled.Load(), "Upsert should not be called for empty tables")
+	assert.True(t, deleteCalled.Load(), "existing schemas should be removed for empty snapshots")
+	assert.True(t, connUpsertCalled.Load(), "connection should be marked schema-discovered after empty snapshot replacement")
 }
 
 // ---------------------------------------------------------------------------
@@ -752,6 +808,43 @@ func TestSyncSchema_Success_PersistsAndMarksDiscovered(t *testing.T) {
 	assert.True(t, markedConn.SchemaDiscovered)
 }
 
+func TestSyncSchema_Success_RefreshesSchemaCache(t *testing.T) {
+	t.Parallel()
+
+	conn := makeExistingConnection("fc-cache")
+
+	var cachedSchema *sharedPorts.FetcherSchema
+	var cachedConnID string
+	var cachedTTL time.Duration
+
+	cs := mustNewSyncer(t, &stubConnectionRepo{upsertFn: func(_ context.Context, _ *entities.FetcherConnection) error {
+		return nil
+	}}, &stubSchemaRepo{upsertBatchFn: func(_ context.Context, _ []*entities.DiscoveredSchema) error {
+		return nil
+	}})
+	cs.WithSchemaCache(&stubSchemaCache{setSchemaFn: func(_ context.Context, connectionID string, schema *sharedPorts.FetcherSchema, ttl time.Duration) error {
+		cachedConnID = connectionID
+		cachedSchema = schema
+		cachedTTL = ttl
+		return nil
+	}}, 2*time.Minute)
+
+	err := cs.SyncSchema(context.Background(), conn, &sharedPorts.FetcherSchema{
+		ConnectionID: "fc-cache",
+		Tables: []sharedPorts.FetcherTableSchema{{
+			TableName: "transactions",
+			Columns:   []sharedPorts.FetcherColumnInfo{{Name: "id", Type: "uuid", Nullable: false}},
+		}},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, conn.ID.String(), cachedConnID)
+	require.NotNil(t, cachedSchema)
+	require.Len(t, cachedSchema.Tables, 1)
+	assert.Equal(t, "transactions", cachedSchema.Tables[0].TableName)
+	assert.Equal(t, 2*time.Minute, cachedTTL)
+}
+
 // ---------------------------------------------------------------------------
 // SyncSchema — UpsertBatch failure propagates
 // ---------------------------------------------------------------------------
@@ -813,6 +906,44 @@ func TestSyncSchema_MarkDiscoveredUpsertFails_ReturnsError(t *testing.T) {
 	assert.ErrorIs(t, err, connUpsertErr)
 	assert.Contains(t, err.Error(), "update connection schema flag")
 	// Even though the upsert failed, MarkSchemaDiscovered was already called on the entity.
+	assert.True(t, conn.SchemaDiscovered)
+}
+
+func TestSyncSchema_EmptyTables_DeletesPersistedSchemasAndRefreshesEmptyCache(t *testing.T) {
+	t.Parallel()
+
+	conn := makeExistingConnection("fc-empty")
+
+	deleteCalled := false
+	upsertCalled := false
+	var cachedSchema *sharedPorts.FetcherSchema
+
+	connRepo := &stubConnectionRepo{upsertFn: func(_ context.Context, _ *entities.FetcherConnection) error {
+		upsertCalled = true
+		return nil
+	}}
+	schemaRepo := &stubSchemaRepo{deleteByConnectionIDFn: func(_ context.Context, connectionID uuid.UUID) error {
+		deleteCalled = true
+		assert.Equal(t, conn.ID, connectionID)
+		return nil
+	}}
+
+	cs := mustNewSyncer(t, connRepo, schemaRepo)
+	cs.WithSchemaCache(&stubSchemaCache{setSchemaFn: func(_ context.Context, _ string, schema *sharedPorts.FetcherSchema, _ time.Duration) error {
+		cachedSchema = schema
+		return nil
+	}}, time.Minute)
+
+	err := cs.SyncSchema(context.Background(), conn, &sharedPorts.FetcherSchema{
+		ConnectionID: "fc-empty",
+		Tables:       []sharedPorts.FetcherTableSchema{},
+	})
+
+	require.NoError(t, err)
+	assert.True(t, deleteCalled)
+	assert.True(t, upsertCalled)
+	require.NotNil(t, cachedSchema)
+	assert.Empty(t, cachedSchema.Tables)
 	assert.True(t, conn.SchemaDiscovered)
 }
 

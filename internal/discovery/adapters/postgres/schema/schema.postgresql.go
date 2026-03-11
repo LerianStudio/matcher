@@ -35,7 +35,8 @@ func NewRepository(provider ports.InfrastructureProvider) *Repository {
 	return &Repository{provider: provider}
 }
 
-// UpsertBatch creates or updates multiple DiscoveredSchema entries atomically.
+// UpsertBatch replaces the schema snapshot for every connection represented in
+// the batch within a single transaction.
 func (repo *Repository) UpsertBatch(ctx context.Context, schemas []*entities.DiscoveredSchema) error {
 	if repo == nil || repo.provider == nil {
 		return ErrRepoNotInitialized
@@ -68,7 +69,8 @@ func (repo *Repository) UpsertBatch(ctx context.Context, schemas []*entities.Dis
 	return nil
 }
 
-// UpsertBatchWithTx creates or updates multiple schemas within an existing transaction.
+// UpsertBatchWithTx replaces the schema snapshot for every connection
+// represented in the batch within an existing transaction.
 func (repo *Repository) UpsertBatchWithTx(ctx context.Context, tx *sql.Tx, schemas []*entities.DiscoveredSchema) error {
 	if repo == nil || repo.provider == nil {
 		return ErrRepoNotInitialized
@@ -105,8 +107,20 @@ func (repo *Repository) UpsertBatchWithTx(ctx context.Context, tx *sql.Tx, schem
 	return nil
 }
 
-// executeUpsertBatch performs the actual batch upsert within a transaction.
+// executeUpsertBatch performs the actual snapshot replacement within a
+// transaction by deleting prior rows for the affected connections and then
+// inserting the latest schema tables.
 func (repo *Repository) executeUpsertBatch(ctx context.Context, tx *sql.Tx, schemas []*entities.DiscoveredSchema) error {
+	for _, connectionID := range uniqueConnectionIDs(schemas) {
+		if _, err := tx.ExecContext(
+			ctx,
+			"DELETE FROM "+tableName+" WHERE connection_id = $1",
+			connectionID.String(),
+		); err != nil {
+			return fmt.Errorf("delete schemas for connection %s: %w", connectionID.String(), err)
+		}
+	}
+
 	query := `INSERT INTO ` + tableName + ` (` + allColumns + `)
 		VALUES ($1, $2, $3, $4, $5)
 		ON CONFLICT (connection_id, table_name) DO UPDATE SET
@@ -132,6 +146,26 @@ func (repo *Repository) executeUpsertBatch(ctx context.Context, tx *sql.Tx, sche
 	}
 
 	return nil
+}
+
+func uniqueConnectionIDs(schemas []*entities.DiscoveredSchema) []uuid.UUID {
+	seen := make(map[uuid.UUID]struct{}, len(schemas))
+	ids := make([]uuid.UUID, 0, len(schemas))
+
+	for _, schema := range schemas {
+		if schema == nil {
+			continue
+		}
+
+		if _, ok := seen[schema.ConnectionID]; ok {
+			continue
+		}
+
+		seen[schema.ConnectionID] = struct{}{}
+		ids = append(ids, schema.ConnectionID)
+	}
+
+	return ids
 }
 
 // FindByConnectionID retrieves all schemas discovered for a given connection.

@@ -19,11 +19,11 @@ import (
 // before being linked to an ingestion job.
 type ExtractionModel struct {
 	ID             uuid.UUID      `db:"id"`
+	ConnectionID   uuid.UUID      `db:"connection_id"`
 	IngestionJobID uuid.NullUUID  `db:"ingestion_job_id"` // Nullable
-	FetcherConnID  string         `db:"fetcher_conn_id"`
 	FetcherJobID   sql.NullString `db:"fetcher_job_id"`
 	Tables         []byte         `db:"tables"`  // JSONB
-	Filters        []byte         `db:"filters"` // JSONB, nullable
+	Filters        []byte         `db:"filters"` // JSONB, nullable (nil slice persists SQL NULL)
 	Status         string         `db:"status"`
 	ResultPath     sql.NullString `db:"result_path"`
 	ErrorMessage   sql.NullString `db:"error_message"`
@@ -64,8 +64,8 @@ func (model *ExtractionModel) ToDomain() (*entities.ExtractionRequest, error) {
 
 	return &entities.ExtractionRequest{
 		ID:             model.ID,
+		ConnectionID:   model.ConnectionID,
 		IngestionJobID: ingestionJobID,
-		FetcherConnID:  model.FetcherConnID,
 		FetcherJobID:   nullStringToString(model.FetcherJobID),
 		Tables:         tables,
 		Filters:        filters,
@@ -101,8 +101,8 @@ func FromDomain(entity *entities.ExtractionRequest) (*ExtractionModel, error) {
 
 	return &ExtractionModel{
 		ID:             entity.ID,
+		ConnectionID:   entity.ConnectionID,
 		IngestionJobID: ingestionJobID,
-		FetcherConnID:  entity.FetcherConnID,
 		FetcherJobID:   pgcommon.StringToNullString(entity.FetcherJobID),
 		Tables:         tablesJSON,
 		Filters:        filtersJSON,

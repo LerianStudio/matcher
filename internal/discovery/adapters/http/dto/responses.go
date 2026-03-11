@@ -10,9 +10,9 @@ import (
 
 // DiscoveryStatusResponse is the response for GET /v1/discovery/status.
 type DiscoveryStatusResponse struct {
-	FetcherHealthy  bool      `json:"fetcherHealthy"`
-	ConnectionCount int       `json:"connectionCount"`
-	LastSyncAt      time.Time `json:"lastSyncAt,omitempty"`
+	FetcherHealthy  bool       `json:"fetcherHealthy"`
+	ConnectionCount int        `json:"connectionCount"`
+	LastSyncAt      *time.Time `json:"lastSyncAt,omitempty"`
 }
 
 // ConnectionResponse is a single connection in list/detail responses.
@@ -68,6 +68,21 @@ type TestConnectionResponse struct {
 	ErrorMessage  string    `json:"errorMessage,omitempty"`
 }
 
+// ExtractionRequestResponse is the response for extraction request endpoints.
+type ExtractionRequestResponse struct {
+	ID             uuid.UUID      `json:"id"`
+	ConnectionID   uuid.UUID      `json:"connectionId"`
+	IngestionJobID *uuid.UUID     `json:"ingestionJobId,omitempty"`
+	FetcherJobID   string         `json:"fetcherJobId,omitempty"`
+	Tables         map[string]any `json:"tables"`
+	Filters        map[string]any `json:"filters,omitempty"`
+	Status         string         `json:"status"`
+	ResultPath     string         `json:"resultPath,omitempty"`
+	ErrorMessage   string         `json:"errorMessage,omitempty"`
+	CreatedAt      time.Time      `json:"createdAt"`
+	UpdatedAt      time.Time      `json:"updatedAt"`
+}
+
 // ConnectionFromEntity converts a domain entity to a response DTO.
 func ConnectionFromEntity(entity *entities.FetcherConnection) ConnectionResponse {
 	if entity == nil {
@@ -86,5 +101,33 @@ func ConnectionFromEntity(entity *entities.FetcherConnection) ConnectionResponse
 		Status:           entity.Status.String(),
 		SchemaDiscovered: entity.SchemaDiscovered,
 		LastSeenAt:       entity.LastSeenAt,
+	}
+}
+
+// ExtractionRequestFromEntity converts an extraction request entity to a response DTO.
+func ExtractionRequestFromEntity(entity *entities.ExtractionRequest) ExtractionRequestResponse {
+	if entity == nil {
+		return ExtractionRequestResponse{}
+	}
+
+	var ingestionJobID *uuid.UUID
+
+	if entity.IngestionJobID != uuid.Nil {
+		jobID := entity.IngestionJobID
+		ingestionJobID = &jobID
+	}
+
+	return ExtractionRequestResponse{
+		ID:             entity.ID,
+		ConnectionID:   entity.ConnectionID,
+		IngestionJobID: ingestionJobID,
+		FetcherJobID:   entity.FetcherJobID,
+		Tables:         entity.Tables,
+		Filters:        entity.Filters,
+		Status:         entity.Status.String(),
+		ResultPath:     entity.ResultPath,
+		ErrorMessage:   entity.ErrorMessage,
+		CreatedAt:      entity.CreatedAt,
+		UpdatedAt:      entity.UpdatedAt,
 	}
 }

@@ -144,6 +144,12 @@ var mutableConfigKeys = map[string]bool{
 	"cleanup_worker.batch_size":        true,
 	"cleanup_worker.grace_period_sec":  true,
 	"scheduler.interval_sec":           true,
+	"webhook.timeout_sec":              true,
+	"callback_rate_limit.per_minute":   true,
+	"idempotency.retry_window_sec":     true,
+	"idempotency.success_ttl_hours":    true,
+	"swagger.enabled":                  true,
+	"fetcher.discovery_interval_sec":   true,
 	"archival.interval_hours":          true,
 	"archival.batch_size":              true,
 }

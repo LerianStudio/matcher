@@ -14,6 +14,8 @@ var (
 	ErrProtectedRouteHelperRequired = errors.New("protected route helper is required")
 	// ErrHandlerRequired indicates handler is nil.
 	ErrHandlerRequired = errors.New("discovery handler is required")
+	// ErrHandlerNotInitialized indicates handler dependencies are missing.
+	ErrHandlerNotInitialized = errors.New("discovery handler dependencies are required")
 )
 
 // RegisterRoutes registers all discovery routes with the provided router.
@@ -24,6 +26,10 @@ func RegisterRoutes(protected func(resource, action string) fiber.Router, handle
 
 	if handler == nil {
 		return ErrHandlerRequired
+	}
+
+	if handler.command == nil || handler.query == nil {
+		return ErrHandlerNotInitialized
 	}
 
 	// Status
@@ -49,6 +55,18 @@ func RegisterRoutes(protected func(resource, action string) fiber.Router, handle
 		auth.ResourceDiscovery,
 		auth.ActionDiscoveryWrite,
 	).Post("/v1/discovery/connections/:connectionId/test", handler.TestConnection)
+	protected(
+		auth.ResourceDiscovery,
+		auth.ActionDiscoveryWrite,
+	).Post("/v1/discovery/connections/:connectionId/extractions", handler.StartExtraction)
+	protected(
+		auth.ResourceDiscovery,
+		auth.ActionDiscoveryRead,
+	).Get("/v1/discovery/extractions/:extractionId", handler.GetExtraction)
+	protected(
+		auth.ResourceDiscovery,
+		auth.ActionDiscoveryWrite,
+	).Post("/v1/discovery/extractions/:extractionId/poll", handler.PollExtraction)
 
 	// Refresh
 	protected(

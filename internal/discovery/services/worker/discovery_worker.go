@@ -22,6 +22,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
 	vo "github.com/LerianStudio/matcher/internal/discovery/domain/value_objects"
+	discoveryPorts "github.com/LerianStudio/matcher/internal/discovery/ports"
 	"github.com/LerianStudio/matcher/internal/discovery/services/syncer"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
@@ -60,14 +61,16 @@ type DiscoveryWorker struct {
 	tenantLister  sharedPorts.TenantLister
 	infraProvider sharedPorts.InfrastructureProvider
 	syncer        *syncer.ConnectionSyncer
-	cfg           DiscoveryWorkerConfig
 	logger        libLog.Logger
 	tracer        trace.Tracer
 
+	mu       sync.RWMutex
+	cfg      DiscoveryWorkerConfig
 	running  atomic.Bool
 	stopOnce sync.Once
 	stopCh   chan struct{}
 	doneCh   chan struct{}
+	updateCh chan time.Duration
 }
 
 // NewDiscoveryWorker creates a new discovery worker.
@@ -125,6 +128,7 @@ func NewDiscoveryWorker(
 		tracer:        otel.Tracer("discovery.worker"),
 		stopCh:        make(chan struct{}),
 		doneCh:        make(chan struct{}),
+		updateCh:      make(chan time.Duration, 1),
 	}, nil
 }
 
@@ -133,6 +137,8 @@ func (dw *DiscoveryWorker) Start(ctx context.Context) error {
 	if !dw.running.CompareAndSwap(false, true) {
 		return ErrWorkerAlreadyRunning
 	}
+
+	dw.resetLifecycleChannels()
 
 	runtime.SafeGoWithContextAndComponent(
 		ctx,
@@ -152,10 +158,12 @@ func (dw *DiscoveryWorker) Stop() error {
 		return ErrWorkerNotRunning
 	}
 
+	stopCh, doneCh := dw.lifecycleChannels()
+
 	dw.stopOnce.Do(func() {
-		close(dw.stopCh)
+		close(stopCh)
 	})
-	<-dw.doneCh
+	<-doneCh
 
 	dw.logger.Log(context.Background(), libLog.LevelInfo, "discovery worker stopped")
 
@@ -164,29 +172,117 @@ func (dw *DiscoveryWorker) Stop() error {
 
 // Done returns a channel that is closed when the worker stops.
 func (dw *DiscoveryWorker) Done() <-chan struct{} {
+	dw.mu.RLock()
+	defer dw.mu.RUnlock()
+
 	return dw.doneCh
+}
+
+// WithSchemaCache wires an optional cache into the shared syncer so successful
+// discovery cycles replace stale cached schemas immediately.
+func (dw *DiscoveryWorker) WithSchemaCache(cache discoveryPorts.SchemaCache, ttl time.Duration) {
+	if dw == nil || dw.syncer == nil {
+		return
+	}
+
+	dw.syncer.WithSchemaCache(cache, ttl)
+}
+
+// UpdateRuntimeConfig applies discovery-worker settings that can be changed
+// safely without reconstructing the surrounding discovery module.
+func (dw *DiscoveryWorker) UpdateRuntimeConfig(cfg DiscoveryWorkerConfig) {
+	if dw == nil {
+		return
+	}
+
+	if cfg.Interval <= 0 {
+		cfg.Interval = time.Minute
+	}
+
+	dw.mu.Lock()
+	dw.cfg.Interval = cfg.Interval
+	updateCh := dw.updateCh
+	dw.mu.Unlock()
+
+	if updateCh == nil {
+		return
+	}
+
+	select {
+	case updateCh <- cfg.Interval:
+	default:
+		select {
+		case <-updateCh:
+		default:
+		}
+
+		select {
+		case updateCh <- cfg.Interval:
+		default:
+		}
+	}
 }
 
 func (dw *DiscoveryWorker) run(ctx context.Context) {
 	defer runtime.RecoverAndLogWithContext(ctx, dw.logger, "discovery", "discovery_worker.run")
-	defer close(dw.doneCh)
+
+	stopCh, doneCh, updateCh, interval := dw.runtimeState()
+	defer close(doneCh)
 
 	// Run one cycle immediately on start.
 	dw.pollCycle(ctx)
 
-	ticker := time.NewTicker(dw.cfg.Interval)
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case <-dw.stopCh:
+		case <-stopCh:
 			return
 		case <-ctx.Done():
 			return
+		case newInterval := <-updateCh:
+			if newInterval <= 0 {
+				newInterval = time.Minute
+			}
+
+			ticker.Stop()
+			ticker.Reset(newInterval)
 		case <-ticker.C:
 			dw.pollCycle(ctx)
 		}
 	}
+}
+
+func (dw *DiscoveryWorker) resetLifecycleChannels() {
+	dw.mu.Lock()
+	defer dw.mu.Unlock()
+
+	dw.stopOnce = sync.Once{}
+	dw.stopCh = make(chan struct{})
+	dw.doneCh = make(chan struct{})
+	dw.updateCh = make(chan time.Duration, 1)
+}
+
+func (dw *DiscoveryWorker) lifecycleChannels() (chan struct{}, chan struct{}) {
+	dw.mu.RLock()
+	defer dw.mu.RUnlock()
+
+	return dw.stopCh, dw.doneCh
+}
+
+func (dw *DiscoveryWorker) runtimeState() (chan struct{}, chan struct{}, chan time.Duration, time.Duration) {
+	dw.mu.RLock()
+	defer dw.mu.RUnlock()
+
+	return dw.stopCh, dw.doneCh, dw.updateCh, dw.cfg.Interval
+}
+
+func (dw *DiscoveryWorker) currentInterval() time.Duration {
+	dw.mu.RLock()
+	defer dw.mu.RUnlock()
+
+	return dw.cfg.Interval
 }
 
 // pollCycle acquires a distributed lock, syncs connections and schemas from Fetcher,
@@ -376,7 +472,7 @@ func (dw *DiscoveryWorker) acquireLock(ctx context.Context, key string) (bool, s
 		return false, "", fmt.Errorf("get redis client for lock acquire: %w", err)
 	}
 
-	lockTTL := lockTTLMultiplier * dw.cfg.Interval
+	lockTTL := lockTTLMultiplier * dw.currentInterval()
 	token := uuid.New().String()
 
 	ok, err := rdb.SetNX(ctx, key, token, lockTTL).Result()

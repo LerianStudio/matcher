@@ -23,7 +23,7 @@ var _ repositories.ExtractionRepository = (*Repository)(nil)
 
 const (
 	tableName  = "extraction_requests"
-	allColumns = "id, ingestion_job_id, fetcher_conn_id, fetcher_job_id, tables, filters, status, result_path, error_message, created_at, updated_at"
+	allColumns = "id, connection_id, ingestion_job_id, fetcher_job_id, tables, filters, status, result_path, error_message, created_at, updated_at"
 )
 
 // Repository provides PostgreSQL operations for ExtractionRequest entities.
@@ -117,11 +117,11 @@ func (repo *Repository) executeCreate(ctx context.Context, tx *sql.Tx, req *enti
 		`INSERT INTO `+tableName+` (`+allColumns+`)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
 		model.ID,
+		model.ConnectionID,
 		model.IngestionJobID,
-		model.FetcherConnID,
 		model.FetcherJobID,
 		model.Tables,
-		model.Filters,
+		nullableJSON(model.Filters),
 		model.Status,
 		model.ResultPath,
 		model.ErrorMessage,
@@ -214,19 +214,21 @@ func (repo *Repository) executeUpdate(ctx context.Context, tx *sql.Tx, req *enti
 
 	result, err := tx.ExecContext(ctx,
 		`UPDATE `+tableName+` SET
-			ingestion_job_id = $1,
-			fetcher_job_id = $2,
-			tables = $3,
-			filters = $4,
-			status = $5,
-			result_path = $6,
-			error_message = $7,
-			updated_at = $8
-		WHERE id = $9`,
+			connection_id = $1,
+			ingestion_job_id = $2,
+			fetcher_job_id = $3,
+			tables = $4,
+			filters = $5,
+			status = $6,
+			result_path = $7,
+			error_message = $8,
+			updated_at = $9
+		WHERE id = $10`,
+		model.ConnectionID,
 		model.IngestionJobID,
 		model.FetcherJobID,
 		model.Tables,
-		model.Filters,
+		nullableJSON(model.Filters),
 		model.Status,
 		model.ResultPath,
 		model.ErrorMessage,
@@ -247,6 +249,14 @@ func (repo *Repository) executeUpdate(ctx context.Context, tx *sql.Tx, req *enti
 	}
 
 	return nil
+}
+
+func nullableJSON(data []byte) any {
+	if data == nil {
+		return nil
+	}
+
+	return data
 }
 
 // FindByID retrieves an ExtractionRequest by its internal ID.
@@ -271,7 +281,7 @@ func (repo *Repository) FindByID(ctx context.Context, id uuid.UUID) (*entities.E
 	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrExtractionNotFound
+			return nil, repositories.ErrExtractionNotFound
 		}
 
 		wrappedErr := fmt.Errorf("find extraction request by id: %w", err)
@@ -284,48 +294,13 @@ func (repo *Repository) FindByID(ctx context.Context, id uuid.UUID) (*entities.E
 	return result, nil
 }
 
-// FindByIngestionJobID retrieves the ExtractionRequest associated with an ingestion job.
-func (repo *Repository) FindByIngestionJobID(ctx context.Context, jobID uuid.UUID) (*entities.ExtractionRequest, error) {
-	if repo == nil || repo.provider == nil {
-		return nil, ErrRepoNotInitialized
-	}
-
-	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
-
-	ctx, span := tracer.Start(ctx, "postgres.find_extraction_request_by_ingestion_job_id")
-	defer span.End()
-
-	result, err := pgcommon.WithTenantTxProvider(ctx, repo.provider, func(tx *sql.Tx) (*entities.ExtractionRequest, error) {
-		row := tx.QueryRowContext(
-			ctx,
-			"SELECT "+allColumns+" FROM "+tableName+" WHERE ingestion_job_id = $1",
-			jobID.String(),
-		)
-
-		return scanExtraction(row)
-	})
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrExtractionNotFound
-		}
-
-		wrappedErr := fmt.Errorf("find extraction request by ingestion job id: %w", err)
-		libOpentelemetry.HandleSpanError(span, "failed to find extraction request by ingestion job id", wrappedErr)
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to find extraction request by ingestion job id")
-
-		return nil, wrappedErr
-	}
-
-	return result, nil
-}
-
 // scanExtraction scans a SQL row into an ExtractionRequest domain entity.
 func scanExtraction(scanner interface{ Scan(dest ...any) error }) (*entities.ExtractionRequest, error) {
 	var model ExtractionModel
 	if err := scanner.Scan(
 		&model.ID,
+		&model.ConnectionID,
 		&model.IngestionJobID,
-		&model.FetcherConnID,
 		&model.FetcherJobID,
 		&model.Tables,
 		&model.Filters,

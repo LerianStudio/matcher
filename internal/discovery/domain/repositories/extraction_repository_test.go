@@ -81,19 +81,6 @@ func (m *mockExtractionRepository) FindByID(
 	return nil, errExtractionNotFound
 }
 
-func (m *mockExtractionRepository) FindByIngestionJobID(
-	_ context.Context,
-	jobID uuid.UUID,
-) (*entities.ExtractionRequest, error) {
-	for _, req := range m.extractions {
-		if req.IngestionJobID == jobID {
-			return req, nil
-		}
-	}
-
-	return nil, errExtractionNotFound
-}
-
 func TestMockExtractionRepositoryOperations(t *testing.T) {
 	t.Parallel()
 
@@ -128,10 +115,8 @@ func TestMockExtractionRepositoryOperations(t *testing.T) {
 
 		repo := &mockExtractionRepository{}
 		reqID := uuid.New()
-		jobID := uuid.New()
 		req := &entities.ExtractionRequest{
-			ID:             reqID,
-			IngestionJobID: jobID,
+			ID: reqID,
 		}
 
 		err := repo.Create(context.Background(), req)
@@ -142,34 +127,6 @@ func TestMockExtractionRepositoryOperations(t *testing.T) {
 
 		found, err := repo.FindByID(context.Background(), reqID)
 		require.NoError(t, err)
-		assert.Equal(t, jobID, found.IngestionJobID)
-	})
-
-	t.Run("FindByIngestionJobID retrieves by job ID", func(t *testing.T) {
-		t.Parallel()
-
-		repo := &mockExtractionRepository{}
-		reqID := uuid.New()
-		jobID := uuid.New()
-		req := &entities.ExtractionRequest{
-			ID:             reqID,
-			IngestionJobID: jobID,
-		}
-
-		err := repo.Create(context.Background(), req)
-		require.NoError(t, err)
-
-		found, err := repo.FindByIngestionJobID(context.Background(), jobID)
-		require.NoError(t, err)
 		assert.Equal(t, reqID, found.ID)
-	})
-
-	t.Run("FindByIngestionJobID returns error for missing job", func(t *testing.T) {
-		t.Parallel()
-
-		repo := &mockExtractionRepository{}
-
-		_, err := repo.FindByIngestionJobID(context.Background(), uuid.New())
-		assert.ErrorIs(t, err, errExtractionNotFound)
 	})
 }

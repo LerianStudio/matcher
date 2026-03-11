@@ -5,12 +5,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
+
+	"github.com/google/uuid"
 
 	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
+	discoveryPorts "github.com/LerianStudio/matcher/internal/discovery/ports"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -30,8 +34,10 @@ type SchemaFetcher func(ctx context.Context, connectionID string) (*sharedPorts.
 // ConnectionSyncer centralizes connection/schema synchronization logic shared by
 // manual refreshes and the background discovery worker.
 type ConnectionSyncer struct {
-	connRepo   repositories.ConnectionRepository
-	schemaRepo repositories.SchemaRepository
+	connRepo    repositories.ConnectionRepository
+	schemaRepo  repositories.SchemaRepository
+	schemaCache discoveryPorts.SchemaCache
+	cacheTTL    time.Duration
 }
 
 // NewConnectionSyncer creates a reusable synchronizer for discovery flows.
@@ -49,6 +55,17 @@ func NewConnectionSyncer(
 	}
 
 	return &ConnectionSyncer{connRepo: connRepo, schemaRepo: schemaRepo}, nil
+}
+
+// WithSchemaCache wires an optional schema cache into the syncer so successful
+// refreshes immediately replace stale cached schemas.
+func (cs *ConnectionSyncer) WithSchemaCache(cache discoveryPorts.SchemaCache, ttl time.Duration) {
+	if cs == nil {
+		return
+	}
+
+	cs.schemaCache = cache
+	cs.cacheTTL = ttl
 }
 
 // SyncConnection upserts a Fetcher connection and best-effort synchronizes its schema.
@@ -107,7 +124,10 @@ func (cs *ConnectionSyncer) upsertConnection(
 	}
 
 	if existing != nil {
-		existing.UpdateDetails(fc.Host, fc.Port, fc.DatabaseName, fc.ProductName)
+		if err := existing.UpdateDetails(fc.Host, fc.Port, fc.DatabaseName, fc.ProductName); err != nil {
+			return nil, fmt.Errorf("update existing connection details: %w", err)
+		}
+
 		existing.ApplyFetcherStatus(fc.Status)
 
 		if err := cs.connRepo.Upsert(ctx, existing); err != nil {
@@ -122,7 +142,10 @@ func (cs *ConnectionSyncer) upsertConnection(
 		return nil, fmt.Errorf("create connection entity: %w", err)
 	}
 
-	newConn.UpdateDetails(fc.Host, fc.Port, fc.DatabaseName, fc.ProductName)
+	if err := newConn.UpdateDetails(fc.Host, fc.Port, fc.DatabaseName, fc.ProductName); err != nil {
+		return nil, fmt.Errorf("update new connection details: %w", err)
+	}
+
 	newConn.ApplyFetcherStatus(fc.Status)
 
 	if err := cs.connRepo.Upsert(ctx, newConn); err != nil {
@@ -136,23 +159,31 @@ func (cs *ConnectionSyncer) upsertConnection(
 // It processes all tables best-effort: invalid individual tables are logged and skipped
 // rather than aborting the entire batch.
 func (cs *ConnectionSyncer) SyncSchema(ctx context.Context, conn *entities.FetcherConnection, schema *sharedPorts.FetcherSchema) error {
-	if schema == nil || len(schema.Tables) == 0 {
+	if schema == nil {
 		return nil
 	}
 
 	logger, _, _, _ := libCommons.NewTrackingFromContext(ctx) //nolint:dogsled // only logger needed from tracking context
 
 	schemas := make([]*entities.DiscoveredSchema, 0, len(schema.Tables))
+	validTables := make([]sharedPorts.FetcherTableSchema, 0, len(schema.Tables))
 	skipped := 0
 
 	for _, tbl := range schema.Tables {
 		cols := make([]entities.ColumnInfo, 0, len(tbl.Columns))
+		cacheCols := make([]sharedPorts.FetcherColumnInfo, 0, len(tbl.Columns))
 
-		for _, c := range tbl.Columns {
+		for _, column := range tbl.Columns {
 			cols = append(cols, entities.ColumnInfo{
-				Name:     c.Name,
-				Type:     c.Type,
-				Nullable: c.Nullable,
+				Name:     column.Name,
+				Type:     column.Type,
+				Nullable: column.Nullable,
+			})
+
+			cacheCols = append(cacheCols, sharedPorts.FetcherColumnInfo{
+				Name:     column.Name,
+				Type:     column.Type,
+				Nullable: column.Nullable,
 			})
 		}
 
@@ -172,14 +203,24 @@ func (cs *ConnectionSyncer) SyncSchema(ctx context.Context, conn *entities.Fetch
 		}
 
 		schemas = append(schemas, discovered)
+		validTables = append(validTables, sharedPorts.FetcherTableSchema{
+			TableName: tbl.TableName,
+			Columns:   cacheCols,
+		})
 	}
 
-	if len(schemas) == 0 {
+	if len(schema.Tables) > 0 && len(schemas) == 0 {
 		return fmt.Errorf("schema sync (%d tables): %w", skipped, ErrAllTablesFailed)
 	}
 
-	if err := cs.schemaRepo.UpsertBatch(ctx, schemas); err != nil {
-		return fmt.Errorf("upsert schemas: %w", err)
+	if len(schemas) == 0 {
+		if err := cs.schemaRepo.DeleteByConnectionID(ctx, conn.ID); err != nil {
+			return fmt.Errorf("delete schemas: %w", err)
+		}
+	} else {
+		if err := cs.schemaRepo.UpsertBatch(ctx, schemas); err != nil {
+			return fmt.Errorf("upsert schemas: %w", err)
+		}
 	}
 
 	conn.MarkSchemaDiscovered()
@@ -188,5 +229,30 @@ func (cs *ConnectionSyncer) SyncSchema(ctx context.Context, conn *entities.Fetch
 		return fmt.Errorf("update connection schema flag: %w", err)
 	}
 
+	cs.refreshSchemaCache(ctx, logger, conn.ID, &sharedPorts.FetcherSchema{
+		ConnectionID: schema.ConnectionID,
+		Tables:       validTables,
+	})
+
 	return nil
+}
+
+func (cs *ConnectionSyncer) refreshSchemaCache(
+	ctx context.Context,
+	logger libLog.Logger,
+	connectionID uuid.UUID,
+	schema *sharedPorts.FetcherSchema,
+) {
+	if cs == nil || cs.schemaCache == nil || schema == nil {
+		return
+	}
+
+	if err := cs.schemaCache.SetSchema(ctx, connectionID.String(), schema, cs.cacheTTL); err != nil {
+		if logger != nil {
+			logger.With(
+				libLog.Any("connectionID", connectionID.String()),
+				libLog.Any("error", err.Error()),
+			).Log(ctx, libLog.LevelWarn, "failed to refresh schema cache after sync")
+		}
+	}
 }

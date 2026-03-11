@@ -2,6 +2,7 @@ package command
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -12,6 +13,7 @@ import (
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
+	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -20,12 +22,14 @@ import (
 // the actual extraction to the Fetcher service via the FetcherClient port.
 // The ingestionJobID is not required; extraction requests can exist independently
 // and be linked to ingestion jobs later when the data is imported.
+//
+//nolint:cyclop // workflow branches explicitly on connection ownership, persistence, and remote submission outcomes.
 func (uc *UseCase) StartExtraction(
 	ctx context.Context,
-	fetcherConnID string,
+	connectionID uuid.UUID,
 	tables map[string]any,
 	params sharedPorts.ExtractionParams,
-) error {
+) (*entities.ExtractionRequest, error) {
 	_, tracer, _, _ := libCommons.NewTrackingFromContext(ctx) //nolint:dogsled
 
 	ctx, span := tracer.Start(ctx, "command.discovery.start_extraction")
@@ -34,12 +38,38 @@ func (uc *UseCase) StartExtraction(
 	if !uc.fetcherClient.IsHealthy(ctx) {
 		libOpentelemetry.HandleSpanError(span, "fetcher unavailable", ErrFetcherUnavailable)
 
-		return ErrFetcherUnavailable
+		return nil, ErrFetcherUnavailable
+	}
+
+	conn, err := uc.connRepo.FindByID(ctx, connectionID)
+	if err != nil {
+		libOpentelemetry.HandleSpanError(span, "find connection", err)
+
+		if errors.Is(err, repositories.ErrConnectionNotFound) {
+			return nil, ErrConnectionNotFound
+		}
+
+		return nil, fmt.Errorf("find connection: %w", err)
+	}
+
+	if conn == nil {
+		libOpentelemetry.HandleSpanError(span, "find connection", ErrConnectionNotFound)
+
+		return nil, ErrConnectionNotFound
+	}
+
+	extractionReq, err := entities.NewExtractionRequest(ctx, connectionID, tables, params.Filters)
+	if err != nil {
+		return nil, fmt.Errorf("create extraction request: %w", err)
+	}
+
+	if err := uc.extractionRepo.Create(ctx, extractionReq); err != nil {
+		return nil, fmt.Errorf("persist pending extraction request: %w", err)
 	}
 
 	// Build the extraction job input from params.
 	input := sharedPorts.ExtractionJobInput{
-		ConnectionID: fetcherConnID,
+		ConnectionID: conn.FetcherConnID,
 		Filters:      params.Filters,
 		Tables:       make(map[string]sharedPorts.ExtractionTableConfig, len(tables)),
 	}
@@ -52,36 +82,31 @@ func (uc *UseCase) StartExtraction(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "submit extraction job", err)
 
-		return fmt.Errorf("submit extraction job: %w", err)
-	}
+		if markErr := extractionReq.MarkFailed(err.Error()); markErr == nil {
+			if updateErr := uc.extractionRepo.Update(ctx, extractionReq); updateErr != nil {
+				libOpentelemetry.HandleSpanError(span, "persist failed extraction request", updateErr)
+			}
+		}
 
-	// Create extraction request to track the job.
-	// IngestionJobID is not set at creation; it will be linked later when data is imported.
-	extractionReq, err := entities.NewExtractionRequest(ctx, fetcherConnID, tables)
-	if err != nil {
-		return fmt.Errorf("create extraction request: %w", err)
-	}
-
-	if params.Filters != nil {
-		extractionReq.Filters = params.Filters
+		return nil, fmt.Errorf("submit extraction job: %w", err)
 	}
 
 	if err := extractionReq.MarkSubmitted(jobID); err != nil {
-		return fmt.Errorf("mark extraction submitted: %w", err)
+		return nil, fmt.Errorf("mark extraction submitted: %w", err)
 	}
 
-	if err := uc.extractionRepo.Create(ctx, extractionReq); err != nil {
-		return fmt.Errorf("persist extraction request: %w", err)
+	if err := uc.extractionRepo.Update(ctx, extractionReq); err != nil {
+		return nil, fmt.Errorf("persist submitted extraction request: %w", err)
 	}
 
 	// Start async polling for extraction completion (if poller configured).
 	if uc.extractionPoller != nil {
 		// Polling must outlive the originating HTTP request context, otherwise
 		// client cancellation aborts extraction tracking mid-flight.
-		uc.extractionPoller.PollUntilComplete(context.WithoutCancel(ctx), extractionReq, nil, nil)
+		uc.extractionPoller.PollUntilComplete(context.WithoutCancel(ctx), extractionReq.ID, nil, nil)
 	}
 
-	return nil
+	return extractionReq, nil
 }
 
 // buildTableConfig normalizes a single table's configuration from raw JSON-deserialized data.
@@ -119,7 +144,7 @@ func buildTableConfig(cfg any, params sharedPorts.ExtractionParams) sharedPorts.
 // PollExtractionStatus checks the status of an in-flight extraction job and updates
 // the local ExtractionRequest accordingly. It transitions the request through
 // EXTRACTING, COMPLETE, or FAILED based on the Fetcher's response.
-func (uc *UseCase) PollExtractionStatus(ctx context.Context, extractionID uuid.UUID) error {
+func (uc *UseCase) PollExtractionStatus(ctx context.Context, extractionID uuid.UUID) (*entities.ExtractionRequest, error) {
 	_, tracer, _, _ := libCommons.NewTrackingFromContext(ctx) //nolint:dogsled
 
 	ctx, span := tracer.Start(ctx, "command.discovery.poll_extraction_status")
@@ -129,73 +154,109 @@ func (uc *UseCase) PollExtractionStatus(ctx context.Context, extractionID uuid.U
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "find extraction request", err)
 
-		return fmt.Errorf("find extraction request: %w", err)
+		if errors.Is(err, repositories.ErrExtractionNotFound) {
+			return nil, ErrExtractionNotFound
+		}
+
+		return nil, fmt.Errorf("find extraction request: %w", err)
 	}
 
 	if req == nil {
 		libOpentelemetry.HandleSpanError(span, "nil extraction request", ErrExtractionNotFound)
 
-		return ErrExtractionNotFound
+		return nil, ErrExtractionNotFound
 	}
 
 	if req.Status.IsTerminal() {
-		return nil // already complete or failed
+		return req, nil // already complete or failed
 	}
 
 	status, err := uc.fetcherClient.GetExtractionJobStatus(ctx, req.FetcherJobID)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "get extraction job status", err)
 
-		return fmt.Errorf("get extraction job status: %w", err)
+		return nil, fmt.Errorf("get extraction job status: %w", err)
 	}
 
 	if status == nil {
 		libOpentelemetry.HandleSpanError(span, "nil extraction status", ErrNilExtractionStatus)
 
-		return ErrNilExtractionStatus
+		return nil, ErrNilExtractionStatus
 	}
 
-	if err := uc.applyExtractionStatusTransition(ctx, span, req, status); err != nil {
-		return err
+	changed, err := uc.applyExtractionStatusTransition(ctx, span, req, status)
+	if err != nil {
+		return nil, err
 	}
 
-	if err := uc.extractionRepo.Update(ctx, req); err != nil {
-		return fmt.Errorf("update extraction request: %w", err)
+	if changed {
+		if err := uc.extractionRepo.Update(ctx, req); err != nil {
+			return nil, fmt.Errorf("update extraction request: %w", err)
+		}
 	}
 
-	return nil
+	return req, nil
 }
 
 // applyExtractionStatusTransition transitions the extraction request based on Fetcher's reported status.
+//
+//nolint:cyclop // extraction lifecycle is an explicit finite-state switch and reads clearest as one transition table.
 func (uc *UseCase) applyExtractionStatusTransition(
 	ctx context.Context,
 	span trace.Span,
 	req *entities.ExtractionRequest,
 	status *sharedPorts.ExtractionJobStatus,
-) error {
+) (bool, error) {
+	changed := false
+
 	switch status.Status {
 	case "RUNNING", "EXTRACTING":
+		previousStatus := req.Status
+		previousUpdatedAt := req.UpdatedAt
+
 		if err := req.MarkExtracting(); err != nil {
 			libOpentelemetry.HandleSpanError(span, "mark extracting", err)
 
-			return fmt.Errorf("mark extracting: %w", err)
+			return false, fmt.Errorf("mark extracting: %w", err)
 		}
+
+		changed = previousStatus != req.Status || !req.UpdatedAt.Equal(previousUpdatedAt)
 	case "COMPLETE":
+		previousStatus := req.Status
+		previousResultPath := req.ResultPath
+		previousErrorMessage := req.ErrorMessage
+		previousUpdatedAt := req.UpdatedAt
+
 		if err := req.MarkComplete(status.ResultPath); err != nil {
 			libOpentelemetry.HandleSpanError(span, "mark complete", err)
 
-			return fmt.Errorf("mark complete: %w", err)
+			return false, fmt.Errorf("mark complete: %w", err)
 		}
+
+		changed = previousStatus != req.Status ||
+			previousResultPath != req.ResultPath ||
+			previousErrorMessage != req.ErrorMessage ||
+			!req.UpdatedAt.Equal(previousUpdatedAt)
 	case "FAILED":
+		previousStatus := req.Status
+		previousErrorMessage := req.ErrorMessage
+		previousResultPath := req.ResultPath
+		previousUpdatedAt := req.UpdatedAt
+
 		if err := req.MarkFailed(status.ErrorMessage); err != nil {
 			libOpentelemetry.HandleSpanError(span, "mark failed", err)
 
-			return fmt.Errorf("mark failed: %w", err)
+			return false, fmt.Errorf("mark failed: %w", err)
 		}
+
+		changed = previousStatus != req.Status ||
+			previousErrorMessage != req.ErrorMessage ||
+			previousResultPath != req.ResultPath ||
+			!req.UpdatedAt.Equal(previousUpdatedAt)
 	default:
 		logger, _, _, _ := libCommons.NewTrackingFromContext(ctx)
 		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("unknown extraction status %q for job %s", status.Status, req.FetcherJobID))
 	}
 
-	return nil
+	return changed, nil
 }

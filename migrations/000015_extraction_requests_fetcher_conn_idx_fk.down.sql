@@ -1,6 +1,3 @@
--- Reverse: drop FK constraint and index on extraction_requests.fetcher_conn_id.
-
-ALTER TABLE extraction_requests
-    DROP CONSTRAINT IF EXISTS fk_extraction_requests_fetcher_conn_id;
-
-DROP INDEX IF EXISTS idx_extraction_requests_fetcher_conn_id;
+-- Reserved migration kept intentionally empty.
+-- No rollback action is required because 000015 no longer introduces schema
+-- changes; extraction_requests.connection_id is owned by 000013.

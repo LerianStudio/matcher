@@ -5,6 +5,7 @@ package query
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"testing"
 	"time"
 
@@ -15,6 +16,8 @@ import (
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
+	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
+	vo "github.com/LerianStudio/matcher/internal/discovery/domain/value_objects"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -105,6 +108,39 @@ type mockSchemaRepo struct {
 	findByConnErr  error
 }
 
+type mockExtractionRepo struct {
+	findByIDReq *entities.ExtractionRequest
+	findByIDErr error
+}
+
+func (m *mockExtractionRepo) Create(_ context.Context, _ *entities.ExtractionRequest) error {
+	return nil
+}
+
+func (m *mockExtractionRepo) CreateWithTx(_ context.Context, _ *sql.Tx, _ *entities.ExtractionRequest) error {
+	return nil
+}
+
+func (m *mockExtractionRepo) Update(_ context.Context, _ *entities.ExtractionRequest) error {
+	return nil
+}
+
+func (m *mockExtractionRepo) UpdateWithTx(_ context.Context, _ *sql.Tx, _ *entities.ExtractionRequest) error {
+	return nil
+}
+
+func (m *mockExtractionRepo) FindByID(_ context.Context, _ uuid.UUID) (*entities.ExtractionRequest, error) {
+	if m.findByIDErr != nil {
+		return nil, m.findByIDErr
+	}
+
+	if m.findByIDReq == nil {
+		return nil, repositories.ErrExtractionNotFound
+	}
+
+	return m.findByIDReq, nil
+}
+
 func (m *mockSchemaRepo) UpsertBatch(_ context.Context, _ []*entities.DiscoveredSchema) error {
 	return m.upsertBatchErr
 }
@@ -138,6 +174,7 @@ func TestSentinelErrors(t *testing.T) {
 		{"ErrNilFetcherClient", ErrNilFetcherClient, "fetcher client is required"},
 		{"ErrNilConnectionRepository", ErrNilConnectionRepository, "connection repository is required"},
 		{"ErrNilSchemaRepository", ErrNilSchemaRepository, "schema repository is required"},
+		{"ErrNilExtractionRepository", ErrNilExtractionRepository, "extraction repository is required"},
 	}
 
 	for _, tt := range tests {
@@ -156,6 +193,7 @@ func TestNewUseCase_Success(t *testing.T) {
 		&mockFetcherClient{},
 		&mockConnectionRepo{},
 		&mockSchemaRepo{},
+		&mockExtractionRepo{},
 		&libLog.NopLogger{},
 	)
 
@@ -174,6 +212,7 @@ func TestNewUseCase_NilFetcherClient(t *testing.T) {
 		nil,
 		&mockConnectionRepo{},
 		&mockSchemaRepo{},
+		&mockExtractionRepo{},
 		&libLog.NopLogger{},
 	)
 
@@ -188,6 +227,7 @@ func TestNewUseCase_NilConnectionRepo(t *testing.T) {
 		&mockFetcherClient{},
 		nil,
 		&mockSchemaRepo{},
+		&mockExtractionRepo{},
 		&libLog.NopLogger{},
 	)
 
@@ -202,11 +242,27 @@ func TestNewUseCase_NilSchemaRepo(t *testing.T) {
 		&mockFetcherClient{},
 		&mockConnectionRepo{},
 		nil,
+		&mockExtractionRepo{},
 		&libLog.NopLogger{},
 	)
 
 	assert.Nil(t, uc)
 	require.ErrorIs(t, err, ErrNilSchemaRepository)
+}
+
+func TestNewUseCase_NilExtractionRepo(t *testing.T) {
+	t.Parallel()
+
+	uc, err := NewUseCase(
+		&mockFetcherClient{},
+		&mockConnectionRepo{},
+		&mockSchemaRepo{},
+		nil,
+		&libLog.NopLogger{},
+	)
+
+	assert.Nil(t, uc)
+	require.ErrorIs(t, err, ErrNilExtractionRepository)
 }
 
 func TestNewUseCase_NilLogger_DefaultsToNop(t *testing.T) {
@@ -216,10 +272,74 @@ func TestNewUseCase_NilLogger_DefaultsToNop(t *testing.T) {
 		&mockFetcherClient{},
 		&mockConnectionRepo{},
 		&mockSchemaRepo{},
+		&mockExtractionRepo{},
 		nil,
 	)
 
 	require.NoError(t, err)
 	require.NotNil(t, uc)
 	assert.IsType(t, &libLog.NopLogger{}, uc.logger)
+}
+
+func TestGetExtraction(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		repo         *mockExtractionRepo
+		wantErr      error
+		wantStatus   vo.ExtractionStatus
+		wantContains string
+	}{
+		{
+			name:       "found extraction",
+			repo:       &mockExtractionRepo{findByIDReq: &entities.ExtractionRequest{ID: uuid.New(), Status: vo.ExtractionStatusSubmitted}},
+			wantStatus: vo.ExtractionStatusSubmitted,
+		},
+		{
+			name:    "not found",
+			repo:    &mockExtractionRepo{findByIDErr: repositories.ErrExtractionNotFound},
+			wantErr: ErrExtractionNotFound,
+		},
+		{
+			name:         "wrapped repository error",
+			repo:         &mockExtractionRepo{findByIDErr: errors.New("db down")},
+			wantContains: "get extraction",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			uc, err := NewUseCase(
+				&mockFetcherClient{},
+				&mockConnectionRepo{},
+				&mockSchemaRepo{},
+				tt.repo,
+				&libLog.NopLogger{},
+			)
+			require.NoError(t, err)
+
+			req, err := uc.GetExtraction(context.Background(), uuid.New())
+
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
+				assert.Nil(t, req)
+				return
+			}
+
+			if tt.wantContains != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantContains)
+				assert.Nil(t, req)
+				return
+			}
+
+			require.NoError(t, err)
+			require.NotNil(t, req)
+			assert.Equal(t, tt.wantStatus, req.Status)
+		})
+	}
 }

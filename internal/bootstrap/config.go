@@ -198,12 +198,12 @@ type CallbackRateLimitConfig struct {
 type FetcherConfig struct {
 	Enabled              bool   `env:"FETCHER_ENABLED"                envDefault:"false"                 mapstructure:"enabled"`
 	URL                  string `env:"FETCHER_URL"                    envDefault:"http://localhost:4006" mapstructure:"url"`
-	AllowPrivateIPs      bool   `env:"FETCHER_ALLOW_PRIVATE_IPS"      envDefault:"false"                 mapstructure:"allow_private_ips"`
+	AllowPrivateIPs      bool   `env:"FETCHER_ALLOW_PRIVATE_IPS"      envDefault:"true"                  mapstructure:"allow_private_ips"`
 	HealthTimeoutSec     int    `env:"FETCHER_HEALTH_TIMEOUT_SEC"     envDefault:"5"                     mapstructure:"health_timeout_sec"`
 	RequestTimeoutSec    int    `env:"FETCHER_REQUEST_TIMEOUT_SEC"    envDefault:"30"                    mapstructure:"request_timeout_sec"`
 	DiscoveryIntervalSec int    `env:"FETCHER_DISCOVERY_INTERVAL_SEC" envDefault:"60"                    mapstructure:"discovery_interval_sec"`
 	SchemaCacheTTLSec    int    `env:"FETCHER_SCHEMA_CACHE_TTL_SEC"   envDefault:"300"                   mapstructure:"schema_cache_ttl_sec"`
-	ExtractionPollSec    int    `env:"FETCHER_EXTRACTION_POLL_SEC"    envDefault:"5"                     mapstructure:"extraction_poll_sec"`
+	ExtractionPollSec    int    `env:"FETCHER_EXTRACTION_POLL_INTERVAL_SEC" envDefault:"5"              mapstructure:"extraction_poll_sec"`
 	ExtractionTimeoutSec int    `env:"FETCHER_EXTRACTION_TIMEOUT_SEC" envDefault:"600"                   mapstructure:"extraction_timeout_sec"`
 }
 

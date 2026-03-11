@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,12 +20,11 @@ import (
 var ErrInvalidTransition = errors.New("invalid status transition")
 
 // ExtractionRequest tracks a data extraction request to Fetcher.
-// IngestionJobID is optional and can be set after extraction completes
-// when the data is imported into an ingestion job.
+// IngestionJobID is optional and reserved for downstream ingestion linkage.
 type ExtractionRequest struct {
 	ID             uuid.UUID
-	IngestionJobID uuid.UUID // Nullable: set via SetIngestionJobID after extraction
-	FetcherConnID  string
+	ConnectionID   uuid.UUID
+	IngestionJobID uuid.UUID // Nullable: linked to downstream ingestion when available
 	FetcherJobID   string
 	Tables         map[string]any
 	Filters        map[string]any
@@ -36,45 +36,42 @@ type ExtractionRequest struct {
 }
 
 // NewExtractionRequest creates a new ExtractionRequest with validated invariants.
-// The ingestionJobID is not required at creation time; it can be linked later
-// via SetIngestionJobID when the extracted data is imported.
 func NewExtractionRequest(
 	ctx context.Context,
-	fetcherConnID string,
+	connectionID uuid.UUID,
 	tables map[string]any,
+	filters map[string]any,
 ) (*ExtractionRequest, error) {
 	asserter := assert.New(ctx, nil, constants.ApplicationName, "discovery.extraction_request.new")
 
-	if err := asserter.NotEmpty(ctx, fetcherConnID, "fetcher connection id required"); err != nil {
-		return nil, fmt.Errorf("extraction request fetcher connection id: %w", err)
+	if err := asserter.That(ctx, connectionID != uuid.Nil, "connection id required"); err != nil {
+		return nil, fmt.Errorf("extraction request connection id: %w", err)
 	}
 
-	// Initialize nil tables to empty map for consistency after DB roundtrip.
-	if tables == nil {
-		tables = make(map[string]any)
+	clonedTables, err := cloneMap(tables)
+	if err != nil {
+		return nil, fmt.Errorf("extraction request tables: %w", err)
+	}
+
+	var clonedFilters map[string]any
+	if filters != nil {
+		clonedFilters, err = cloneMap(filters)
+		if err != nil {
+			return nil, fmt.Errorf("extraction request filters: %w", err)
+		}
 	}
 
 	now := time.Now().UTC()
 
 	return &ExtractionRequest{
-		ID:            uuid.New(),
-		FetcherConnID: fetcherConnID,
-		Tables:        tables,
-		Status:        vo.ExtractionStatusPending,
-		CreatedAt:     now,
-		UpdatedAt:     now,
+		ID:           uuid.New(),
+		ConnectionID: connectionID,
+		Tables:       clonedTables,
+		Filters:      clonedFilters,
+		Status:       vo.ExtractionStatusPending,
+		CreatedAt:    now,
+		UpdatedAt:    now,
 	}, nil
-}
-
-// SetIngestionJobID links this extraction request to an ingestion job.
-// This is typically set after extraction completes and the data is imported.
-func (er *ExtractionRequest) SetIngestionJobID(jobID uuid.UUID) {
-	if er == nil {
-		return
-	}
-
-	er.IngestionJobID = jobID
-	er.UpdatedAt = time.Now().UTC()
 }
 
 // MarkSubmitted records the Fetcher job ID after successful submission.
@@ -84,12 +81,18 @@ func (er *ExtractionRequest) MarkSubmitted(fetcherJobID string) error {
 		return nil
 	}
 
+	if strings.TrimSpace(fetcherJobID) == "" {
+		return fmt.Errorf("%w: fetcher job id required", ErrInvalidTransition)
+	}
+
 	if er.Status != vo.ExtractionStatusPending {
 		return fmt.Errorf("%w: cannot transition from %s to SUBMITTED", ErrInvalidTransition, er.Status)
 	}
 
 	er.FetcherJobID = fetcherJobID
 	er.Status = vo.ExtractionStatusSubmitted
+	er.ResultPath = ""
+	er.ErrorMessage = ""
 	er.UpdatedAt = time.Now().UTC()
 
 	return nil
@@ -108,11 +111,16 @@ func (er *ExtractionRequest) MarkExtracting() error {
 		return nil
 	}
 
-	if er.Status != vo.ExtractionStatusPending && er.Status != vo.ExtractionStatusSubmitted {
+	if strings.TrimSpace(er.FetcherJobID) == "" {
+		return fmt.Errorf("%w: fetcher job id required before extracting", ErrInvalidTransition)
+	}
+
+	if er.Status != vo.ExtractionStatusSubmitted {
 		return fmt.Errorf("%w: cannot transition from %s to EXTRACTING", ErrInvalidTransition, er.Status)
 	}
 
 	er.Status = vo.ExtractionStatusExtracting
+	er.ErrorMessage = ""
 	er.UpdatedAt = time.Now().UTC()
 
 	return nil
@@ -125,12 +133,21 @@ func (er *ExtractionRequest) MarkComplete(resultPath string) error {
 		return nil
 	}
 
+	if strings.TrimSpace(er.FetcherJobID) == "" {
+		return fmt.Errorf("%w: fetcher job id required before completing", ErrInvalidTransition)
+	}
+
+	if strings.TrimSpace(resultPath) == "" {
+		return fmt.Errorf("%w: result path required", ErrInvalidTransition)
+	}
+
 	if er.Status != vo.ExtractionStatusSubmitted && er.Status != vo.ExtractionStatusExtracting {
 		return fmt.Errorf("%w: cannot transition from %s to COMPLETE", ErrInvalidTransition, er.Status)
 	}
 
 	er.Status = vo.ExtractionStatusComplete
 	er.ResultPath = resultPath
+	er.ErrorMessage = ""
 	er.UpdatedAt = time.Now().UTC()
 
 	return nil
@@ -143,32 +160,38 @@ func (er *ExtractionRequest) MarkFailed(errMsg string) error {
 		return nil
 	}
 
+	if strings.TrimSpace(errMsg) == "" {
+		return fmt.Errorf("%w: error message required", ErrInvalidTransition)
+	}
+
 	if er.Status.IsTerminal() {
 		return fmt.Errorf("%w: cannot fail from terminal state %s", ErrInvalidTransition, er.Status)
 	}
 
 	er.Status = vo.ExtractionStatusFailed
+	er.ResultPath = ""
 	er.ErrorMessage = errMsg
 	er.UpdatedAt = time.Now().UTC()
 
 	return nil
 }
 
-// MarkCancelled cancels the extraction request.
-// Valid transitions: Any non-terminal → CANCELLED.
-func (er *ExtractionRequest) MarkCancelled() error {
-	if er == nil {
-		return nil
+func cloneMap(src map[string]any) (map[string]any, error) {
+	if src == nil {
+		return make(map[string]any), nil
 	}
 
-	if er.Status.IsTerminal() {
-		return fmt.Errorf("%w: cannot cancel from terminal state %s", ErrInvalidTransition, er.Status)
+	data, err := json.Marshal(src)
+	if err != nil {
+		return nil, fmt.Errorf("marshal map clone: %w", err)
 	}
 
-	er.Status = vo.ExtractionStatusCancelled
-	er.UpdatedAt = time.Now().UTC()
+	cloned := make(map[string]any)
+	if err := json.Unmarshal(data, &cloned); err != nil {
+		return nil, fmt.Errorf("unmarshal map clone: %w", err)
+	}
 
-	return nil
+	return cloned, nil
 }
 
 // TablesJSON returns the tables config serialized as JSON.
@@ -186,9 +209,10 @@ func (er *ExtractionRequest) TablesJSON() ([]byte, error) {
 }
 
 // FiltersJSON returns the filters serialized as JSON.
+// Nil filters return nil so repositories can persist a real SQL NULL.
 func (er *ExtractionRequest) FiltersJSON() ([]byte, error) {
 	if er == nil || er.Filters == nil {
-		return []byte("null"), nil // SQL NULL representation for optional filters
+		return nil, nil
 	}
 
 	data, err := json.Marshal(er.Filters)

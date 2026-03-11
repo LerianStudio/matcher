@@ -29,6 +29,7 @@ import (
 	libRabbitmq "github.com/LerianStudio/lib-commons/v4/commons/rabbitmq"
 
 	"github.com/LerianStudio/matcher/internal/auth"
+	discoveryWorker "github.com/LerianStudio/matcher/internal/discovery/services/worker"
 	governanceWorker "github.com/LerianStudio/matcher/internal/governance/services/worker"
 	ingestionRabbitmq "github.com/LerianStudio/matcher/internal/ingestion/adapters/rabbitmq"
 	matchingRabbitmq "github.com/LerianStudio/matcher/internal/matching/adapters/rabbitmq"
@@ -36,6 +37,7 @@ import (
 	reportingWorker "github.com/LerianStudio/matcher/internal/reporting/services/worker"
 	sharedRabbitmq "github.com/LerianStudio/matcher/internal/shared/adapters/rabbitmq"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // errMatchRuleAdapterRequired is a test-only sentinel used to verify error handling paths.
@@ -1452,6 +1454,78 @@ func TestInitCleanupMetrics(t *testing.T) {
 
 		metrics := initCleanupMetrics()
 		assert.NotNil(t, metrics)
+	})
+}
+
+func TestFetcherHTTPClientConfig(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cfg.Fetcher.URL = "http://fetcher.internal:4006"
+	cfg.Fetcher.AllowPrivateIPs = false
+	cfg.Fetcher.HealthTimeoutSec = 9
+	cfg.Fetcher.RequestTimeoutSec = 41
+
+	clientCfg := fetcherHTTPClientConfig(cfg)
+
+	assert.Equal(t, "http://fetcher.internal:4006", clientCfg.BaseURL)
+	assert.False(t, clientCfg.AllowPrivateIPs)
+	assert.Equal(t, 9*time.Second, clientCfg.HealthTimeout)
+	assert.Equal(t, 41*time.Second, clientCfg.RequestTimeout)
+	assert.Equal(t, defaultFetcherClientMaxRetries, clientCfg.MaxRetries)
+	assert.Equal(t, defaultFetcherClientRetryBaseDelay, clientCfg.RetryBaseDelay)
+}
+
+func TestInitOptionalDiscoveryWorker(t *testing.T) {
+	t.Parallel()
+
+	t.Run("disabled_fetcher_skips_initialization", func(t *testing.T) {
+		t.Parallel()
+
+		logger := &recordingInitLogger{}
+		cfg := defaultConfig()
+		cfg.Fetcher.Enabled = false
+
+		called := false
+		worker := initOptionalDiscoveryWorker(
+			context.Background(),
+			nil,
+			cfg,
+			nil,
+			nil,
+			logger,
+			func(_ *Routes, _ *Config, _ sharedPorts.InfrastructureProvider, _ sharedPorts.TenantLister, _ libLog.Logger) (*discoveryWorker.DiscoveryWorker, error) {
+				called = true
+				return nil, nil
+			},
+		)
+
+		assert.Nil(t, worker)
+		assert.False(t, called)
+		assert.True(t, logger.hasEntry(libLog.LevelInfo, "discovery module disabled (FETCHER_ENABLED=false)"))
+	})
+
+	t.Run("degraded_startup_returns_nil_worker_without_failing_bootstrap", func(t *testing.T) {
+		t.Parallel()
+
+		logger := &recordingInitLogger{}
+		cfg := defaultConfig()
+		cfg.Fetcher.Enabled = true
+
+		worker := initOptionalDiscoveryWorker(
+			context.Background(),
+			nil,
+			cfg,
+			nil,
+			nil,
+			logger,
+			func(_ *Routes, _ *Config, _ sharedPorts.InfrastructureProvider, _ sharedPorts.TenantLister, _ libLog.Logger) (*discoveryWorker.DiscoveryWorker, error) {
+				return nil, errors.New("fetcher bootstrap failed")
+			},
+		)
+
+		assert.Nil(t, worker)
+		assert.True(t, logger.hasEntry(libLog.LevelWarn, "discovery module failed to initialize (continuing without it): fetcher bootstrap failed"))
 	})
 }
 

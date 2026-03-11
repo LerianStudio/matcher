@@ -32,6 +32,7 @@ type mockFetcherClient struct {
 	testErr            error
 	submitJobID        string
 	submitErr          error
+	lastSubmitInput    sharedPorts.ExtractionJobInput
 	jobStatus          *sharedPorts.ExtractionJobStatus
 	jobStatusErr       error
 	listCallCount      int
@@ -61,8 +62,9 @@ func (m *mockFetcherClient) TestConnection(_ context.Context, _ string) (*shared
 	return m.testResult, m.testErr
 }
 
-func (m *mockFetcherClient) SubmitExtractionJob(_ context.Context, _ sharedPorts.ExtractionJobInput) (string, error) {
+func (m *mockFetcherClient) SubmitExtractionJob(_ context.Context, input sharedPorts.ExtractionJobInput) (string, error) {
 	m.submitCallCount++
+	m.lastSubmitInput = input
 
 	return m.submitJobID, m.submitErr
 }
@@ -123,6 +125,7 @@ func (m *mockConnectionRepo) DeleteStaleWithTx(_ context.Context, _ *sql.Tx, _ t
 type mockSchemaRepo struct {
 	upsertBatchErr error
 	upsertCount    int
+	deleteCount    int
 	findByConnID   []*entities.DiscoveredSchema
 	findByConnErr  error
 }
@@ -142,6 +145,8 @@ func (m *mockSchemaRepo) FindByConnectionID(_ context.Context, _ uuid.UUID) ([]*
 }
 
 func (m *mockSchemaRepo) DeleteByConnectionID(_ context.Context, _ uuid.UUID) error {
+	m.deleteCount++
+
 	return nil
 }
 
@@ -183,10 +188,6 @@ func (m *mockExtractionRepo) FindByID(_ context.Context, _ uuid.UUID) (*entities
 	return m.findByIDReq, m.findByIDErr
 }
 
-func (m *mockExtractionRepo) FindByIngestionJobID(_ context.Context, _ uuid.UUID) (*entities.ExtractionRequest, error) {
-	return nil, nil
-}
-
 // --- Tests ---
 
 func TestSentinelErrors(t *testing.T) {
@@ -197,11 +198,8 @@ func TestSentinelErrors(t *testing.T) {
 		err     error
 		message string
 	}{
-		{"ErrFetcherNotEnabled", ErrFetcherNotEnabled, "fetcher integration is not enabled"},
 		{"ErrFetcherUnavailable", ErrFetcherUnavailable, "fetcher service is unavailable"},
 		{"ErrConnectionNotFound", ErrConnectionNotFound, "fetcher connection not found"},
-		{"ErrSourceNotFetcherType", ErrSourceNotFetcherType, "source is not a FETCHER type"},
-		{"ErrMissingFetcherConnectionID", ErrMissingFetcherConnectionID, "source config missing fetcherConnectionId"},
 		{"ErrExtractionTimeout", ErrExtractionTimeout, "extraction job timed out"},
 		{"ErrExtractionFailed", ErrExtractionFailed, "extraction job failed"},
 		{"ErrNilFetcherClient", ErrNilFetcherClient, "fetcher client is required"},

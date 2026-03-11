@@ -39,8 +39,8 @@ CREATE INDEX IF NOT EXISTS idx_discovered_schemas_conn_id ON discovered_schemas 
 --   - This allows extraction requests to exist without requiring a pre-existing ingestion job
 CREATE TABLE IF NOT EXISTS extraction_requests (
     id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    connection_id    UUID NOT NULL REFERENCES fetcher_connections(id) ON DELETE RESTRICT,
     ingestion_job_id UUID,
-    fetcher_conn_id  TEXT NOT NULL,
     fetcher_job_id   TEXT,
     tables           JSONB NOT NULL DEFAULT '{}',
     filters          JSONB,
@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS extraction_requests (
     updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Index on ingestion_job_id (nullable columns can be indexed; NULLs are excluded from lookups)
+-- Index on ingestion_job_id (nullable columns can be indexed and NULLs are excluded from lookups)
+CREATE INDEX IF NOT EXISTS idx_extraction_requests_connection_id ON extraction_requests (connection_id);
 CREATE INDEX IF NOT EXISTS idx_extraction_requests_job ON extraction_requests (ingestion_job_id) WHERE ingestion_job_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_extraction_requests_status ON extraction_requests (status);

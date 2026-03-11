@@ -44,8 +44,14 @@ func (m *mockSchemaRepository) UpsertBatchWithTx(
 		m.schemas = make(map[uuid.UUID][]*entities.DiscoveredSchema)
 	}
 
+	grouped := make(map[uuid.UUID][]*entities.DiscoveredSchema)
+
 	for _, s := range schemas {
-		m.schemas[s.ConnectionID] = append(m.schemas[s.ConnectionID], s)
+		grouped[s.ConnectionID] = append(grouped[s.ConnectionID], s)
+	}
+
+	for connectionID, connectionSchemas := range grouped {
+		m.schemas[connectionID] = connectionSchemas
 	}
 
 	return nil
@@ -130,7 +136,7 @@ func TestMockSchemaRepositoryOperations(t *testing.T) {
 		assert.Nil(t, found)
 	})
 
-	t.Run("UpsertBatch appends to existing schemas", func(t *testing.T) {
+	t.Run("UpsertBatch replaces existing schemas for a connection snapshot", func(t *testing.T) {
 		t.Parallel()
 
 		repo := &mockSchemaRepository{}
@@ -152,7 +158,8 @@ func TestMockSchemaRepositoryOperations(t *testing.T) {
 
 		found, err := repo.FindByConnectionID(context.Background(), connID)
 		require.NoError(t, err)
-		assert.Len(t, found, 2)
+		require.Len(t, found, 1)
+		assert.Equal(t, "table2", found[0].TableName)
 	})
 }
 

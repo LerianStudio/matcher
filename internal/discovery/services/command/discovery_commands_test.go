@@ -7,6 +7,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -293,9 +294,11 @@ func TestRefreshDiscovery_EmptySchemaTables_Skipped(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, synced)
-	// Connection saved once (no schema update since tables are empty).
-	assert.Equal(t, 1, connRepo.upsertCount)
+	// Connection saved once for upsert and again after replacing the persisted
+	// schema snapshot with an empty schema set.
+	assert.Equal(t, 2, connRepo.upsertCount)
 	assert.Equal(t, 0, schemaRepo.upsertCount)
+	assert.Equal(t, 1, schemaRepo.deleteCount)
 }
 
 func TestRefreshDiscovery_SchemaUpsertBatchError(t *testing.T) {
@@ -348,6 +351,76 @@ func TestSyncSchema_NilSchema(t *testing.T) {
 	err := cs.SyncSchema(context.Background(), conn, nil)
 
 	require.NoError(t, err)
+}
+
+func TestTestConnection_Success(t *testing.T) {
+	t.Parallel()
+
+	conn, err := newTestConnection(t)
+	require.NoError(t, err)
+
+	uc, err := NewUseCase(
+		&mockFetcherClient{
+			healthy: true,
+			testResult: &sharedPorts.FetcherTestResult{
+				ConnectionID: conn.FetcherConnID,
+				Healthy:      true,
+				LatencyMs:    25,
+			},
+		},
+		&mockConnectionRepo{findByIDConn: conn},
+		&mockSchemaRepo{},
+		&mockExtractionRepo{},
+		&libLog.NopLogger{},
+	)
+	require.NoError(t, err)
+
+	result, err := uc.TestConnection(context.Background(), conn.ID)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, conn.ID, result.ConnectionID)
+	assert.True(t, result.Healthy)
+	assert.Equal(t, int64(25), result.LatencyMs)
+}
+
+func TestTestConnection_NilConnection_ReturnsNotFound(t *testing.T) {
+	t.Parallel()
+
+	uc, err := NewUseCase(
+		&mockFetcherClient{healthy: true},
+		&mockConnectionRepo{},
+		&mockSchemaRepo{},
+		&mockExtractionRepo{},
+		&libLog.NopLogger{},
+	)
+	require.NoError(t, err)
+
+	result, err := uc.TestConnection(context.Background(), uuid.New())
+
+	assert.Nil(t, result)
+	require.ErrorIs(t, err, ErrConnectionNotFound)
+}
+
+func TestTestConnection_NilFetcherResult_ReturnsError(t *testing.T) {
+	t.Parallel()
+
+	conn, err := newTestConnection(t)
+	require.NoError(t, err)
+
+	uc, err := NewUseCase(
+		&mockFetcherClient{healthy: true},
+		&mockConnectionRepo{findByIDConn: conn},
+		&mockSchemaRepo{},
+		&mockExtractionRepo{},
+		&libLog.NopLogger{},
+	)
+	require.NoError(t, err)
+
+	result, err := uc.TestConnection(context.Background(), conn.ID)
+
+	assert.Nil(t, result)
+	require.ErrorIs(t, err, ErrNilTestConnectionResult)
 }
 
 // newTestConnection is a test helper that creates a valid FetcherConnection entity.

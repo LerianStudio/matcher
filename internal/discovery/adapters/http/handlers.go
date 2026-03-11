@@ -4,6 +4,7 @@ package http
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -28,6 +29,11 @@ var (
 	ErrNilQueryUseCase = errors.New("query use case is required")
 )
 
+// productionMode indicates whether the application is running in production.
+// Set once during handler construction via NewHandler; governs SafeError behavior
+// when logging internal failures.
+var productionMode atomic.Bool
+
 // Handler handles discovery HTTP requests.
 type Handler struct {
 	command *discoveryCommand.UseCase
@@ -38,6 +44,7 @@ type Handler struct {
 func NewHandler(
 	command *discoveryCommand.UseCase,
 	query *discoveryQuery.UseCase,
+	production bool,
 ) (*Handler, error) {
 	if command == nil {
 		return nil, ErrNilCommandUseCase
@@ -46,6 +53,8 @@ func NewHandler(
 	if query == nil {
 		return nil, ErrNilQueryUseCase
 	}
+
+	productionMode.Store(production)
 
 	return &Handler{
 		command: command,
@@ -68,7 +77,7 @@ func startHandlerSpan(fiberCtx *fiber.Ctx, name string) (context.Context, trace.
 
 func logSpanError(ctx context.Context, span trace.Span, logger libLog.Logger, message string, err error) {
 	libOpentelemetry.HandleSpanError(span, message, err)
-	libLog.SafeError(logger, ctx, message, err, false)
+	libLog.SafeError(logger, ctx, message, err, productionMode.Load())
 }
 
 // GetDiscoveryStatus handles GET /v1/discovery/status.
@@ -92,14 +101,20 @@ func (handler *Handler) GetDiscoveryStatus(fiberCtx *fiber.Ctx) error {
 	if err != nil {
 		logSpanError(ctx, span, logger, "get discovery status", err)
 
-		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_error", "failed to get discovery status") //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
+		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_error", "failed to get discovery status")
 	}
 
-	return fiberCtx.JSON(dto.DiscoveryStatusResponse{
+	response := dto.DiscoveryStatusResponse{
 		FetcherHealthy:  status.FetcherHealthy,
 		ConnectionCount: status.ConnectionCount,
-		LastSyncAt:      status.LastSyncAt,
-	})
+	}
+
+	if !status.LastSyncAt.IsZero() {
+		lastSyncAt := status.LastSyncAt
+		response.LastSyncAt = &lastSyncAt
+	}
+
+	return fiberCtx.JSON(response)
 }
 
 // ListConnections handles GET /v1/discovery/connections.
@@ -123,7 +138,7 @@ func (handler *Handler) ListConnections(fiberCtx *fiber.Ctx) error {
 	if err != nil {
 		logSpanError(ctx, span, logger, "list connections", err)
 
-		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_error", "failed to list connections") //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
+		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_error", "failed to list connections")
 	}
 
 	responses := make([]dto.ConnectionResponse, 0, len(conns))
@@ -159,7 +174,7 @@ func (handler *Handler) GetConnection(fiberCtx *fiber.Ctx) error {
 	if err != nil {
 		logSpanError(ctx, span, logger, "invalid connection id", err)
 
-		return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", "invalid connection ID") //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
+		return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", "invalid connection ID")
 	}
 
 	conn, err := handler.query.GetConnection(ctx, connID)
@@ -168,10 +183,10 @@ func (handler *Handler) GetConnection(fiberCtx *fiber.Ctx) error {
 
 		// Check if it's actually a not-found error
 		if errors.Is(err, discoveryQuery.ErrConnectionNotFound) {
-			return libHTTP.RespondError(fiberCtx, fiber.StatusNotFound, "not_found", "connection not found") //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
+			return libHTTP.RespondError(fiberCtx, fiber.StatusNotFound, "not_found", "connection not found")
 		}
 
-		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_error", "failed to get connection") //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
+		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_error", "failed to get connection")
 	}
 
 	return fiberCtx.JSON(dto.ConnectionFromEntity(conn))
@@ -190,6 +205,7 @@ func (handler *Handler) GetConnection(fiberCtx *fiber.Ctx) error {
 // @Success 200 {object} dto.ConnectionSchemaResponse "Schema for the connection"
 // @Failure 400 {object} ErrorResponse "Invalid connection ID"
 // @Failure 401 {object} ErrorResponse "Unauthorized"
+// @Failure 404 {object} ErrorResponse "Connection not found"
 // @Failure 500 {object} ErrorResponse "Internal server error"
 // @Router /v1/discovery/connections/{connectionId}/schema [get]
 func (handler *Handler) GetConnectionSchema(fiberCtx *fiber.Ctx) error {
@@ -202,18 +218,33 @@ func (handler *Handler) GetConnectionSchema(fiberCtx *fiber.Ctx) error {
 	if err != nil {
 		logSpanError(ctx, span, logger, "invalid connection id", err)
 
-		return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", "invalid connection ID") //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
+		return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", "invalid connection ID")
+	}
+
+	_, err = handler.query.GetConnection(ctx, connID)
+	if err != nil {
+		logSpanError(ctx, span, logger, "get connection for schema", err)
+
+		if errors.Is(err, discoveryQuery.ErrConnectionNotFound) {
+			return libHTTP.RespondError(fiberCtx, fiber.StatusNotFound, "not_found", "connection not found")
+		}
+
+		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_error", "failed to get connection")
 	}
 
 	schemas, err := handler.query.GetConnectionSchema(ctx, connID)
 	if err != nil {
 		logSpanError(ctx, span, logger, "get schema", err)
 
-		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_error", "failed to get schema") //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
+		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_error", "failed to get schema")
 	}
 
 	tables := make([]dto.SchemaTableResponse, 0, len(schemas))
 	for _, sch := range schemas {
+		if sch == nil {
+			continue
+		}
+
 		cols := make([]dto.SchemaColumnResponse, 0, len(sch.Columns))
 		for _, col := range sch.Columns {
 			cols = append(cols, dto.SchemaColumnResponse{
@@ -263,7 +294,7 @@ func (handler *Handler) TestConnection(fiberCtx *fiber.Ctx) error {
 	if err != nil {
 		logSpanError(ctx, span, logger, "invalid connection id", err)
 
-		return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", "invalid connection ID") //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
+		return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", "invalid connection ID")
 	}
 
 	result, err := handler.command.TestConnection(ctx, connID)
@@ -271,18 +302,18 @@ func (handler *Handler) TestConnection(fiberCtx *fiber.Ctx) error {
 		if errors.Is(err, discoveryCommand.ErrConnectionNotFound) {
 			logSpanError(ctx, span, logger, "connection not found", err)
 
-			return libHTTP.RespondError(fiberCtx, fiber.StatusNotFound, "not_found", "connection not found") //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
+			return libHTTP.RespondError(fiberCtx, fiber.StatusNotFound, "not_found", "connection not found")
 		}
 
 		if errors.Is(err, discoveryCommand.ErrFetcherUnavailable) {
 			logSpanError(ctx, span, logger, "fetcher unavailable", err)
 
-			return libHTTP.RespondError(fiberCtx, fiber.StatusServiceUnavailable, "service_unavailable", "fetcher service unavailable") //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
+			return libHTTP.RespondError(fiberCtx, fiber.StatusServiceUnavailable, "service_unavailable", "fetcher service unavailable")
 		}
 
 		logSpanError(ctx, span, logger, "test connection", err)
 
-		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_error", "failed to test connection") //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
+		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_error", "failed to test connection")
 	}
 
 	return fiberCtx.JSON(dto.TestConnectionResponse{
@@ -290,8 +321,16 @@ func (handler *Handler) TestConnection(fiberCtx *fiber.Ctx) error {
 		FetcherConnID: result.FetcherConnID,
 		Healthy:       result.Healthy,
 		LatencyMs:     result.LatencyMs,
-		ErrorMessage:  result.ErrorMessage,
+		ErrorMessage:  sanitizedConnectionTestError(result),
 	})
+}
+
+func sanitizedConnectionTestError(result *discoveryCommand.ConnectionTestResult) string {
+	if result == nil || result.Healthy || result.ErrorMessage == "" {
+		return ""
+	}
+
+	return "connection test failed"
 }
 
 // RefreshDiscovery handles POST /v1/discovery/refresh.
@@ -318,12 +357,12 @@ func (handler *Handler) RefreshDiscovery(fiberCtx *fiber.Ctx) error {
 		if errors.Is(err, discoveryCommand.ErrFetcherUnavailable) {
 			logSpanError(ctx, span, logger, "fetcher unavailable", err)
 
-			return libHTTP.RespondError(fiberCtx, fiber.StatusServiceUnavailable, "service_unavailable", "fetcher service unavailable") //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
+			return libHTTP.RespondError(fiberCtx, fiber.StatusServiceUnavailable, "service_unavailable", "fetcher service unavailable")
 		}
 
 		logSpanError(ctx, span, logger, "refresh discovery", err)
 
-		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_error", "failed to refresh discovery") //nolint:wrapcheck // HTTP response helper — wrapping adds no useful context for callers
+		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_error", "failed to refresh discovery")
 	}
 
 	return fiberCtx.JSON(dto.RefreshDiscoveryResponse{ConnectionsSynced: synced})
