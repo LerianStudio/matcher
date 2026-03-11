@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 package bootstrap
 
 import (
@@ -15,6 +19,10 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/fiber/v2/middleware/requestid"
 	"github.com/google/uuid"
+	// Direct OTel imports required for HTTP telemetry middleware instrumentation.
+	// lib-commons abstracts application-level tracing via NewTrackingFromContext,
+	// but middleware needs lower-level access to span kinds, semantic conventions,
+	// attribute builders, and status codes that lib-commons does not expose.
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"

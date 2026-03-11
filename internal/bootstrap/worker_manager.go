@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 package bootstrap
 
 import (
@@ -168,7 +172,7 @@ func (wm *WorkerManager) RunningWorkers() []string {
 	wm.mu.Lock()
 	defer wm.mu.Unlock()
 
-	var names []string
+	names := make([]string, 0)
 
 	for _, slot := range wm.slots {
 		if slot.instance != nil {

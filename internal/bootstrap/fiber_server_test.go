@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 //go:build unit
 
 package bootstrap
@@ -294,6 +298,7 @@ func TestApplyReadinessCheckUnknownOptional(t *testing.T) {
 		false,
 		true,
 		&libLog.NopLogger{},
+		0,
 	)
 	require.True(t, ok)
 	require.Equal(t, "unknown", checks["redis"])
@@ -313,6 +318,7 @@ func TestApplyReadinessCheckDownRequired(t *testing.T) {
 		true,
 		false,
 		&libLog.NopLogger{},
+		0,
 	)
 	require.False(t, ok)
 	require.Equal(t, "down", checks["database"])
@@ -931,6 +937,7 @@ func TestApplyReadinessCheckOKScenario(t *testing.T) {
 		true,
 		false,
 		&libLog.NopLogger{},
+		0,
 	)
 
 	require.True(t, ok)
@@ -954,6 +961,7 @@ func TestApplyReadinessCheckFailureScenario(t *testing.T) {
 			true,
 			false,
 			&libLog.NopLogger{},
+			0,
 		)
 
 		require.False(t, ok)
@@ -974,6 +982,7 @@ func TestApplyReadinessCheckFailureScenario(t *testing.T) {
 			true,
 			true,
 			&libLog.NopLogger{},
+			0,
 		)
 
 		require.True(t, ok)
@@ -1000,6 +1009,7 @@ func TestApplyReadinessCheckFailureScenario(t *testing.T) {
 			true,
 			false,
 			&libLog.NopLogger{},
+			0,
 		)
 
 		elapsed := time.Since(start)
@@ -1021,6 +1031,7 @@ func TestApplyReadinessCheckFailureScenario(t *testing.T) {
 			false,
 			true,
 			&libLog.NopLogger{},
+			0,
 		)
 
 		require.True(t, ok)
@@ -1375,10 +1386,11 @@ func TestEvaluateReadinessChecks_AllOptionalDependencies(t *testing.T) {
 		ObjectStorageOptional:   true,
 	}
 
-	status, readyStatus, checks := evaluateReadinessChecks(
+	status, readyStatus, checks := evaluateReadinessChecksWithTimeout(
 		context.Background(),
 		deps,
 		&libLog.NopLogger{},
+		0,
 	)
 
 	assert.Equal(t, fiber.StatusOK, status)
@@ -1842,10 +1854,11 @@ func TestStructuredRequestLogger(t *testing.T) {
 func TestEvaluateReadinessChecks_NilDeps(t *testing.T) {
 	t.Parallel()
 
-	status, readyStatus, checks := evaluateReadinessChecks(
+	status, readyStatus, checks := evaluateReadinessChecksWithTimeout(
 		context.Background(),
 		nil,
 		&libLog.NopLogger{},
+		0,
 	)
 
 	assert.Equal(t, fiber.StatusServiceUnavailable, status)
@@ -1865,10 +1878,11 @@ func TestEvaluateReadinessChecks_AllRequiredDown(t *testing.T) {
 		RabbitMQOptional: false,
 	}
 
-	status, readyStatus, checks := evaluateReadinessChecks(
+	status, readyStatus, checks := evaluateReadinessChecksWithTimeout(
 		context.Background(),
 		deps,
 		&libLog.NopLogger{},
+		0,
 	)
 
 	assert.Equal(t, fiber.StatusServiceUnavailable, status)

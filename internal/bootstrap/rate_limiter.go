@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 package bootstrap
 
 import (
@@ -71,6 +75,9 @@ func newDynamicLimiter(cfg dynamicLimiterConfig) fiber.Handler {
 		exp  int64 // unix timestamp when window expires
 	}
 
+	// NOTE: In-memory rate limit counters are per-instance. Multi-instance
+	// deployments have per-node limits. Use a shared storage backend (Redis)
+	// via NewRateLimiter/NewExportRateLimiter for cross-instance consistency.
 	var (
 		mu      sync.Mutex
 		entries = make(map[string]*rateLimitEntry)

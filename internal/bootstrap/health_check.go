@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 package bootstrap
 
 import (
@@ -129,13 +133,19 @@ func healthHandler(c *fiber.Ctx) error {
 //	@Router			/ready [get]
 //	@ID				getReady
 func readinessHandler(cfg *Config, deps *HealthDependencies, logger libLog.Logger) fiber.Handler {
+	// Derive per-check timeout from config; fall back to the default constant.
+	var healthCheckTimeout time.Duration
+	if cfg != nil && cfg.Infrastructure.HealthCheckTimeoutSec > 0 {
+		healthCheckTimeout = time.Duration(cfg.Infrastructure.HealthCheckTimeoutSec) * time.Second
+	}
+
 	return func(fiberCtx *fiber.Ctx) error {
 		ctx := fiberCtx.UserContext()
 		if ctx == nil {
 			ctx = context.Background()
 		}
 
-		status, readyStatus, checks := evaluateReadinessChecks(ctx, deps, logger)
+		status, readyStatus, checks := evaluateReadinessChecksWithTimeout(ctx, deps, logger, healthCheckTimeout)
 
 		response := ReadinessResponse{
 			Status: readyStatus,
@@ -177,10 +187,11 @@ func checksToString(checks fiber.Map, key string, logger libLog.Logger) string {
 	return stringVal
 }
 
-func evaluateReadinessChecks(
+func evaluateReadinessChecksWithTimeout(
 	ctx context.Context,
 	deps *HealthDependencies,
 	logger libLog.Logger,
+	timeout time.Duration,
 ) (int, string, fiber.Map) {
 	checks := fiber.Map{}
 	allOk := true
@@ -195,6 +206,7 @@ func evaluateReadinessChecks(
 		postgresAvailable,
 		postgresOptional,
 		logger,
+		timeout,
 	)
 	allOk = allOk && postgresOk
 
@@ -208,6 +220,7 @@ func evaluateReadinessChecks(
 		replicaAvailable,
 		replicaOptional,
 		logger,
+		timeout,
 	)
 	allOk = allOk && replicaOk
 
@@ -221,6 +234,7 @@ func evaluateReadinessChecks(
 		redisAvailable,
 		redisOptional,
 		logger,
+		timeout,
 	)
 	allOk = allOk && redisOk
 
@@ -234,6 +248,7 @@ func evaluateReadinessChecks(
 		rabbitAvailable,
 		rabbitOptional,
 		logger,
+		timeout,
 	)
 	allOk = allOk && rabbitOk
 
@@ -247,6 +262,7 @@ func evaluateReadinessChecks(
 		objectStorageAvailable,
 		objectStorageOptional,
 		logger,
+		timeout,
 	)
 	allOk = allOk && objectStorageOk
 
@@ -263,6 +279,7 @@ func evaluateReadinessChecks(
 
 // applyReadinessCheck performs a readiness check and returns true if the check passed
 // or the dependency is optional (allowing the service to remain ready despite optional failures).
+// The timeout parameter controls the per-check deadline; when zero, the default of 5s is used.
 func applyReadinessCheck(
 	ctx context.Context,
 	name string,
@@ -270,6 +287,7 @@ func applyReadinessCheck(
 	checkFunc HealthCheckFunc,
 	available, optional bool,
 	logger libLog.Logger,
+	timeout time.Duration,
 ) bool {
 	if !available || checkFunc == nil {
 		checks[name] = statusUnknown
@@ -281,7 +299,12 @@ func applyReadinessCheck(
 	// from blocking the entire readiness probe.
 	const perCheckTimeout = 5 * time.Second
 
-	checkCtx, checkCancel := context.WithTimeout(ctx, perCheckTimeout)
+	effectiveTimeout := perCheckTimeout
+	if timeout > 0 {
+		effectiveTimeout = timeout
+	}
+
+	checkCtx, checkCancel := context.WithTimeout(ctx, effectiveTimeout)
 	defer checkCancel()
 
 	if err := checkFunc(checkCtx); err != nil {

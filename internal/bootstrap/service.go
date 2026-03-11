@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 package bootstrap
 
 import (
@@ -47,6 +51,12 @@ type Service struct {
 
 type connectionCloser interface {
 	Close() error
+}
+
+// stoppable is a lifecycle interface for components that can be stopped
+// during graceful shutdown (e.g., the outbox dispatcher).
+type stoppable interface {
+	Stop()
 }
 
 // GetOutboxRunner returns the outbox dispatcher as a libCommons.App.
@@ -311,9 +321,15 @@ func (svc *Service) Shutdown(ctx context.Context) error {
 }
 
 // stopBackgroundWorkers stops all background workers and the outbox runner.
+//
+// Shutdown ordering contract:
+// 1. ConfigManager.Stop() — prevents file watcher from triggering reloads
+// 2. WorkerManager.Stop() — stops all managed workers
+// 3. Standalone workers — stops workers not yet migrated to WorkerManager
+// This order is CRITICAL: stopping ConfigManager first prevents the
+// config-change subscriber from restarting workers while we're shutting them down.
 func (svc *Service) stopBackgroundWorkers(ctx context.Context, logger libLog.Logger) {
-	// Stop config file watcher first so hot-reload doesn't restart workers
-	// while we're shutting them down.
+	// Step 1: Stop config file watcher first (see ordering contract above).
 	if svc.ConfigManager != nil {
 		svc.ConfigManager.Stop()
 	}
@@ -326,8 +342,8 @@ func (svc *Service) stopBackgroundWorkers(ctx context.Context, logger libLog.Log
 		svc.dbMetricsCollector.Stop()
 	}
 
-	if stoppable := svc.outboxStoppable(); stoppable != nil {
-		stoppable.Stop()
+	if outbox := svc.outboxStoppable(); outbox != nil {
+		outbox.Stop()
 	}
 }
 
@@ -371,17 +387,17 @@ func (svc *Service) stopWorkerWithoutContext(ctx context.Context, logger libLog.
 	}
 }
 
-func (svc *Service) outboxStoppable() interface{ Stop() } {
+func (svc *Service) outboxStoppable() stoppable {
 	if svc.outboxRunner == nil {
 		return nil
 	}
 
-	stoppable, ok := svc.outboxRunner.(interface{ Stop() })
+	s, ok := svc.outboxRunner.(stoppable)
 	if !ok {
 		return nil
 	}
 
-	return stoppable
+	return s
 }
 
 // shutdownServerAndConnections shuts down the HTTP server and closes all connections.
