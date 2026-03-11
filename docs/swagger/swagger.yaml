@@ -2431,6 +2431,131 @@ definitions:
         example: invalid_request
         type: string
     type: object
+  internal_bootstrap.ConfigChange:
+    properties:
+      key:
+        type: string
+      newValue: {}
+      oldValue: {}
+    type: object
+  internal_bootstrap.ConfigChangeRejection:
+    properties:
+      key:
+        type: string
+      reason:
+        type: string
+      value: {}
+    type: object
+  internal_bootstrap.ConfigChangeResult:
+    properties:
+      hotReloaded:
+        type: boolean
+      key:
+        type: string
+      newValue: {}
+      oldValue: {}
+    type: object
+  internal_bootstrap.ConfigFieldSchema:
+    description: Schema metadata for a single config field
+    properties:
+      constraints:
+        description: Validation constraints (e.g., "min:1", "max:10000")
+        example:
+        - min:1
+        - max:10000
+        items:
+          type: string
+        type: array
+      currentValue:
+        description: Current effective value (redacted for secrets)
+        example: "200"
+        type: string
+      defaultValue:
+        description: Default value
+        example: "100"
+        type: string
+      description:
+        description: Human-readable description
+        example: Maximum requests per rate limit window
+        type: string
+      envOverride:
+        description: Whether the field is currently overridden by an env var
+        example: false
+        type: boolean
+      envVar:
+        description: Name of the corresponding environment variable
+        example: RATE_LIMIT_MAX
+        type: string
+      hotReloadable:
+        description: Whether changes take effect without restart
+        example: true
+        type: boolean
+      key:
+        description: Dot-notation key (e.g., "rate_limit.max")
+        example: rate_limit.max
+        type: string
+      label:
+        description: Human-readable label
+        example: Rate Limit Max
+        type: string
+      section:
+        description: Logical section for UI grouping
+        example: rate_limit
+        type: string
+      type:
+        description: 'Data type: string, int, bool'
+        enum:
+        - string
+        - int
+        - bool
+        example: int
+        type: string
+    type: object
+  internal_bootstrap.ConfigHistoryEntry:
+    description: A historical configuration change event
+    properties:
+      actor:
+        description: Actor who made the change (user ID or "system")
+        example: system
+        type: string
+      changeType:
+        description: 'Type of change: "reload", "update", "startup"'
+        example: update
+        type: string
+      changes:
+        description: Changed fields with old/new values
+        items:
+          $ref: '#/definitions/internal_bootstrap.ConfigChange'
+        type: array
+      timestamp:
+        description: Timestamp of the change
+        example: "2025-07-15T10:30:00Z"
+        type: string
+    type: object
+  internal_bootstrap.ConfigHistoryResponse:
+    description: Configuration change history
+    properties:
+      items:
+        description: History entries ordered newest-first
+        items:
+          $ref: '#/definitions/internal_bootstrap.ConfigHistoryEntry'
+        type: array
+    type: object
+  internal_bootstrap.ConfigSchemaResponse:
+    description: Configuration schema grouped by section
+    properties:
+      sections:
+        additionalProperties:
+          items:
+            $ref: '#/definitions/internal_bootstrap.ConfigFieldSchema'
+          type: array
+        description: Sections maps section names to their field schemas
+        type: object
+      totalFields:
+        description: Total number of managed fields
+        example: 56
+        type: integer
+    type: object
   internal_bootstrap.DependencyChecks:
     description: Individual dependency health status
     properties:
@@ -2475,6 +2600,30 @@ definitions:
         example: ok
         type: string
     type: object
+  internal_bootstrap.GetConfigResponse:
+    description: Current system configuration with metadata
+    properties:
+      config:
+        additionalProperties: {}
+        description: Config sections with redacted secrets
+        type: object
+      envOverrides:
+        description: List of keys currently overridden by environment variables
+        example:
+        - postgres.primary_password
+        - auth.token_secret
+        items:
+          type: string
+        type: array
+      lastReloadAt:
+        description: Timestamp of last successful reload
+        example: "2025-07-15T10:30:00Z"
+        type: string
+      version:
+        description: Current config version (increments on each reload/update)
+        example: 3
+        type: integer
+    type: object
   internal_bootstrap.ReadinessResponse:
     description: Service readiness status with optional dependency checks
     properties:
@@ -2491,6 +2640,55 @@ definitions:
         - degraded
         example: ok
         type: string
+    type: object
+  internal_bootstrap.ReloadConfigResponse:
+    description: Result of a configuration reload operation
+    properties:
+      changes:
+        description: Details of each changed field
+        items:
+          $ref: '#/definitions/internal_bootstrap.ConfigChange'
+        type: array
+      changesDetected:
+        description: Number of changed fields detected
+        example: 2
+        type: integer
+      reloadedAt:
+        description: Timestamp of the reload
+        example: "2025-07-15T10:35:00Z"
+        type: string
+      version:
+        description: New config version after reload
+        example: 5
+        type: integer
+    type: object
+  internal_bootstrap.UpdateConfigRequest:
+    description: Request to update configuration values
+    properties:
+      changes:
+        additionalProperties: {}
+        description: Map of dotted keys to new values
+        type: object
+    required:
+    - changes
+    type: object
+  internal_bootstrap.UpdateConfigResponse:
+    description: Result of a configuration update operation
+    properties:
+      applied:
+        description: Successfully applied changes (secret values are redacted)
+        items:
+          $ref: '#/definitions/internal_bootstrap.ConfigChangeResult'
+        type: array
+      rejected:
+        description: Changes that were rejected (immutable keys, validation failures)
+        items:
+          $ref: '#/definitions/internal_bootstrap.ConfigChangeRejection'
+        type: array
+      version:
+        description: New config version after update
+        example: 4
+        type: integer
     type: object
   internal_configuration_adapters_http.ListContextsResponse:
     description: Cursor-paginated list of reconciliation contexts
@@ -8901,6 +9099,197 @@ paths:
       summary: Export variance report
       tags:
       - Reporting
+  /v1/system/config:
+    get:
+      description: |-
+        Returns the current effective configuration values with secrets redacted.
+        Includes metadata: version, last reload timestamp, and env var overrides.
+      operationId: getSystemConfig
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_bootstrap.GetConfigResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get current configuration
+      tags:
+      - System
+    patch:
+      consumes:
+      - application/json
+      description: |-
+        Apply runtime configuration changes. Changes are validated, written to
+        YAML, and hot-reloaded. Immutable keys (infrastructure-bound) are rejected.
+      operationId: updateSystemConfig
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Configuration changes
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_bootstrap.UpdateConfigRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_bootstrap.UpdateConfigResponse'
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/http.ErrorResponse'
+        "422":
+          description: Validation failed
+          schema:
+            $ref: '#/definitions/http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update configuration
+      tags:
+      - System
+  /v1/system/config/history:
+    get:
+      description: Returns recent configuration changes with timestamps, actors, and
+        diffs.
+      operationId: getSystemConfigHistory
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_bootstrap.ConfigHistoryResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get configuration change history
+      tags:
+      - System
+  /v1/system/config/reload:
+    post:
+      description: |-
+        Re-reads the YAML configuration file, applies environment variable overlays,
+        validates the result, and atomically swaps the active config. Returns a diff
+        of detected changes.
+      operationId: reloadSystemConfig
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_bootstrap.ReloadConfigResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Force reload configuration from disk
+      tags:
+      - System
+  /v1/system/config/schema:
+    get:
+      description: |-
+        Returns field metadata for all YAML-managed configuration fields,
+        grouped by section for UI rendering. Includes key, type, default,
+        current value, hot-reloadability, env override status, and constraints.
+      operationId: getSystemConfigSchema
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_bootstrap.ConfigSchemaResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get configuration schema
+      tags:
+      - System
 schemes:
 - https
 securityDefinitions:

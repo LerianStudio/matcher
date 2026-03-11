@@ -8822,6 +8822,288 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/v1/system/config": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the current effective configuration values with secrets redacted.\nIncludes metadata: version, last reload timestamp, and env var overrides.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "System"
+                ],
+                "summary": "Get current configuration",
+                "operationId": "getSystemConfig",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_bootstrap.GetConfigResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/http.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Apply runtime configuration changes. Changes are validated, written to\nYAML, and hot-reloaded. Immutable keys (infrastructure-bound) are rejected.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "System"
+                ],
+                "summary": "Update configuration",
+                "operationId": "updateSystemConfig",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "description": "Configuration changes",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_bootstrap.UpdateConfigRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_bootstrap.UpdateConfigResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request",
+                        "schema": {
+                            "$ref": "#/definitions/http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/http.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Validation failed",
+                        "schema": {
+                            "$ref": "#/definitions/http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/system/config/history": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns recent configuration changes with timestamps, actors, and diffs.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "System"
+                ],
+                "summary": "Get configuration change history",
+                "operationId": "getSystemConfigHistory",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_bootstrap.ConfigHistoryResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/system/config/reload": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Re-reads the YAML configuration file, applies environment variable overlays,\nvalidates the result, and atomically swaps the active config. Returns a diff\nof detected changes.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "System"
+                ],
+                "summary": "Force reload configuration from disk",
+                "operationId": "reloadSystemConfig",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_bootstrap.ReloadConfigResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/system/config/schema": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns field metadata for all YAML-managed configuration fields,\ngrouped by section for UI rendering. Includes key, type, default,\ncurrent value, hot-reloadability, env override status, and constraints.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "System"
+                ],
+                "summary": "Get configuration schema",
+                "operationId": "getSystemConfigSchema",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_bootstrap.ConfigSchemaResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/http.ErrorResponse"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -11998,6 +12280,175 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_bootstrap.ConfigChange": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string"
+                },
+                "newValue": {},
+                "oldValue": {}
+            }
+        },
+        "internal_bootstrap.ConfigChangeRejection": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "value": {}
+            }
+        },
+        "internal_bootstrap.ConfigChangeResult": {
+            "type": "object",
+            "properties": {
+                "hotReloaded": {
+                    "type": "boolean"
+                },
+                "key": {
+                    "type": "string"
+                },
+                "newValue": {},
+                "oldValue": {}
+            }
+        },
+        "internal_bootstrap.ConfigFieldSchema": {
+            "description": "Schema metadata for a single config field",
+            "type": "object",
+            "properties": {
+                "constraints": {
+                    "description": "Validation constraints (e.g., \"min:1\", \"max:10000\")",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "min:1",
+                        "max:10000"
+                    ]
+                },
+                "currentValue": {
+                    "description": "Current effective value (redacted for secrets)",
+                    "type": "string",
+                    "example": "200"
+                },
+                "defaultValue": {
+                    "description": "Default value",
+                    "type": "string",
+                    "example": "100"
+                },
+                "description": {
+                    "description": "Human-readable description",
+                    "type": "string",
+                    "example": "Maximum requests per rate limit window"
+                },
+                "envOverride": {
+                    "description": "Whether the field is currently overridden by an env var",
+                    "type": "boolean",
+                    "example": false
+                },
+                "envVar": {
+                    "description": "Name of the corresponding environment variable",
+                    "type": "string",
+                    "example": "RATE_LIMIT_MAX"
+                },
+                "hotReloadable": {
+                    "description": "Whether changes take effect without restart",
+                    "type": "boolean",
+                    "example": true
+                },
+                "key": {
+                    "description": "Dot-notation key (e.g., \"rate_limit.max\")",
+                    "type": "string",
+                    "example": "rate_limit.max"
+                },
+                "label": {
+                    "description": "Human-readable label",
+                    "type": "string",
+                    "example": "Rate Limit Max"
+                },
+                "section": {
+                    "description": "Logical section for UI grouping",
+                    "type": "string",
+                    "example": "rate_limit"
+                },
+                "type": {
+                    "description": "Data type: string, int, bool",
+                    "type": "string",
+                    "enum": [
+                        "string",
+                        "int",
+                        "bool"
+                    ],
+                    "example": "int"
+                }
+            }
+        },
+        "internal_bootstrap.ConfigHistoryEntry": {
+            "description": "A historical configuration change event",
+            "type": "object",
+            "properties": {
+                "actor": {
+                    "description": "Actor who made the change (user ID or \"system\")",
+                    "type": "string",
+                    "example": "system"
+                },
+                "changeType": {
+                    "description": "Type of change: \"reload\", \"update\", \"startup\"",
+                    "type": "string",
+                    "example": "update"
+                },
+                "changes": {
+                    "description": "Changed fields with old/new values",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_bootstrap.ConfigChange"
+                    }
+                },
+                "timestamp": {
+                    "description": "Timestamp of the change",
+                    "type": "string",
+                    "example": "2025-07-15T10:30:00Z"
+                }
+            }
+        },
+        "internal_bootstrap.ConfigHistoryResponse": {
+            "description": "Configuration change history",
+            "type": "object",
+            "properties": {
+                "items": {
+                    "description": "History entries ordered newest-first",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_bootstrap.ConfigHistoryEntry"
+                    }
+                }
+            }
+        },
+        "internal_bootstrap.ConfigSchemaResponse": {
+            "description": "Configuration schema grouped by section",
+            "type": "object",
+            "properties": {
+                "sections": {
+                    "description": "Sections maps section names to their field schemas",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/definitions/internal_bootstrap.ConfigFieldSchema"
+                        }
+                    }
+                },
+                "totalFields": {
+                    "description": "Total number of managed fields",
+                    "type": "integer",
+                    "example": 56
+                }
+            }
+        },
         "internal_bootstrap.DependencyChecks": {
             "description": "Individual dependency health status",
             "type": "object",
@@ -12054,6 +12505,38 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_bootstrap.GetConfigResponse": {
+            "description": "Current system configuration with metadata",
+            "type": "object",
+            "properties": {
+                "config": {
+                    "description": "Config sections with redacted secrets",
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "envOverrides": {
+                    "description": "List of keys currently overridden by environment variables",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "postgres.primary_password",
+                        "auth.token_secret"
+                    ]
+                },
+                "lastReloadAt": {
+                    "description": "Timestamp of last successful reload",
+                    "type": "string",
+                    "example": "2025-07-15T10:30:00Z"
+                },
+                "version": {
+                    "description": "Current config version (increments on each reload/update)",
+                    "type": "integer",
+                    "example": 3
+                }
+            }
+        },
         "internal_bootstrap.ReadinessResponse": {
             "description": "Service readiness status with optional dependency checks",
             "type": "object",
@@ -12074,6 +12557,73 @@ const docTemplate = `{
                         "degraded"
                     ],
                     "example": "ok"
+                }
+            }
+        },
+        "internal_bootstrap.ReloadConfigResponse": {
+            "description": "Result of a configuration reload operation",
+            "type": "object",
+            "properties": {
+                "changes": {
+                    "description": "Details of each changed field",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_bootstrap.ConfigChange"
+                    }
+                },
+                "changesDetected": {
+                    "description": "Number of changed fields detected",
+                    "type": "integer",
+                    "example": 2
+                },
+                "reloadedAt": {
+                    "description": "Timestamp of the reload",
+                    "type": "string",
+                    "example": "2025-07-15T10:35:00Z"
+                },
+                "version": {
+                    "description": "New config version after reload",
+                    "type": "integer",
+                    "example": 5
+                }
+            }
+        },
+        "internal_bootstrap.UpdateConfigRequest": {
+            "description": "Request to update configuration values",
+            "type": "object",
+            "required": [
+                "changes"
+            ],
+            "properties": {
+                "changes": {
+                    "description": "Map of dotted keys to new values",
+                    "type": "object",
+                    "additionalProperties": {}
+                }
+            }
+        },
+        "internal_bootstrap.UpdateConfigResponse": {
+            "description": "Result of a configuration update operation",
+            "type": "object",
+            "properties": {
+                "applied": {
+                    "description": "Successfully applied changes (secret values are redacted)",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_bootstrap.ConfigChangeResult"
+                    }
+                },
+                "rejected": {
+                    "description": "Changes that were rejected (immutable keys, validation failures)",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_bootstrap.ConfigChangeRejection"
+                    }
+                },
+                "version": {
+                    "description": "New config version after update",
+                    "type": "integer",
+                    "example": 4
                 }
             }
         },
