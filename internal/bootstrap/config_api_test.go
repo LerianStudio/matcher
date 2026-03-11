@@ -298,6 +298,14 @@ func TestUpdateConfig_ValidChange(t *testing.T) {
 	assert.NotEmpty(t, response.Applied, "should have applied changes")
 	assert.Empty(t, response.Rejected, "should not have rejected changes")
 
+	// Verify applied change details.
+	require.Len(t, response.Applied, 1)
+	assert.Equal(t, "rate_limit.max", response.Applied[0].Key)
+	assert.True(t, response.Applied[0].HotReloaded, "change should be hot-reloaded")
+
+	// Verify version was incremented.
+	assert.Greater(t, response.Version, uint64(0), "version should be greater than 0 after update")
+
 	// Verify the change was actually applied.
 	newCfg := cm.Get()
 	assert.Equal(t, 200, newCfg.RateLimit.Max)

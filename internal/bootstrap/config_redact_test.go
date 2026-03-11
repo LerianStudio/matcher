@@ -194,6 +194,64 @@ func TestRestoreZeroedFieldsRedact_PreservesExisting(t *testing.T) {
 	assert.Equal(t, "debug", dst.App.LogLevel)
 }
 
+// --- Test #34: redactCredentialURI tests ---
+
+func TestRedactCredentialURI(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input any
+		want  any
+	}{
+		{
+			// url.URL.String() percent-encodes '*' in userinfo as %2A.
+			name:  "uri_with_user_password",
+			input: "postgres://admin:s3cret@db.host:5432/mydb",
+			want:  "postgres://%2A%2A%2AREDACTED%2A%2A%2A:%2A%2A%2AREDACTED%2A%2A%2A@db.host:5432/mydb",
+		},
+		{
+			name:  "uri_with_user_only",
+			input: "postgres://admin@db.host:5432/mydb",
+			want:  "postgres://%2A%2A%2AREDACTED%2A%2A%2A@db.host:5432/mydb",
+		},
+		{
+			name:  "plain_string_not_uri",
+			input: "just a plain string",
+			want:  "just a plain string",
+		},
+		{
+			name:  "empty_string",
+			input: "",
+			want:  "",
+		},
+		{
+			name:  "non_string_int",
+			input: 42,
+			want:  42,
+		},
+		{
+			name:  "uri_without_userinfo",
+			input: "https://example.com/path?q=1",
+			want:  "https://example.com/path?q=1",
+		},
+		{
+			name:  "malformed_uri_no_scheme",
+			input: "not-a-uri-at-all",
+			want:  "not-a-uri-at-all",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := redactCredentialURI(tt.input)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestRestoreZeroedFieldsRedact_PreservesExplicitEnvZeroValues(t *testing.T) {
 	snapshot := defaultConfig()
 	snapshot.ObjectStorage.Endpoint = "http://storage.internal"
