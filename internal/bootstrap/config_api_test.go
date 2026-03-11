@@ -669,7 +669,7 @@ func TestIsEnvOverridden_UnsetVar(t *testing.T) {
 	envVar := "UNLIKELY_TEST_VAR_" + t.Name()
 
 	// Explicitly unset to be sure.
-	os.Unsetenv(envVar) //nolint:errcheck // test helper
+	require.NoError(t, os.Unsetenv(envVar))
 
 	assert.False(t, isEnvOverridden(envVar, "app.log_level"))
 }

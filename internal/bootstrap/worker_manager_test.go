@@ -31,25 +31,25 @@ type mockWorker struct {
 type runtimeAwareExportWorker struct {
 	mockWorker
 
-	mu            sync.Mutex
+	seqMu         sync.Mutex
 	sequence      []string
 	updates       []reportingWorker.ExportWorkerConfig
 	failNextStart atomic.Bool
 }
 
 func (worker *runtimeAwareExportWorker) UpdateRuntimeConfig(cfg reportingWorker.ExportWorkerConfig) {
-	worker.mu.Lock()
-	defer worker.mu.Unlock()
+	worker.seqMu.Lock()
+	defer worker.seqMu.Unlock()
 
 	worker.sequence = append(worker.sequence, "update")
 	worker.updates = append(worker.updates, cfg)
 }
 
 func (worker *runtimeAwareExportWorker) Start(ctx context.Context) error {
-	worker.mu.Lock()
+	worker.seqMu.Lock()
 	worker.sequence = append(worker.sequence, "start")
 	fail := worker.failNextStart.Swap(false)
-	worker.mu.Unlock()
+	worker.seqMu.Unlock()
 
 	if fail {
 		return errors.New("start failed")
@@ -59,16 +59,16 @@ func (worker *runtimeAwareExportWorker) Start(ctx context.Context) error {
 }
 
 func (worker *runtimeAwareExportWorker) Stop() error {
-	worker.mu.Lock()
+	worker.seqMu.Lock()
 	worker.sequence = append(worker.sequence, "stop")
-	worker.mu.Unlock()
+	worker.seqMu.Unlock()
 
 	return worker.mockWorker.Stop()
 }
 
 func (worker *runtimeAwareExportWorker) events() []string {
-	worker.mu.Lock()
-	defer worker.mu.Unlock()
+	worker.seqMu.Lock()
+	defer worker.seqMu.Unlock()
 
 	cloned := make([]string, len(worker.sequence))
 	copy(cloned, worker.sequence)
@@ -77,8 +77,8 @@ func (worker *runtimeAwareExportWorker) events() []string {
 }
 
 func (worker *runtimeAwareExportWorker) lastUpdates() []reportingWorker.ExportWorkerConfig {
-	worker.mu.Lock()
-	defer worker.mu.Unlock()
+	worker.seqMu.Lock()
+	defer worker.seqMu.Unlock()
 
 	cloned := make([]reportingWorker.ExportWorkerConfig, len(worker.updates))
 	copy(cloned, worker.updates)

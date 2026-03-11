@@ -1196,6 +1196,63 @@ func TestRestoreZeroedFields_BothZero(t *testing.T) {
 		"both-zero field should remain zero")
 }
 
+func TestConfigManager_SubscribeWithUnsubscribe_RemovesSubscriber(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
+
+	cfg := defaultConfig()
+	cm := newTestConfigManager(t, cfg, yamlPath, &testLogger{})
+
+	var callCount atomic.Int32
+
+	unsubscribe := cm.SubscribeWithUnsubscribe(func(_ *Config) {
+		callCount.Add(1)
+	})
+
+	// First reload — subscriber should fire.
+	_, err := cm.Reload()
+	require.NoError(t, err)
+	assert.Equal(t, int32(1), callCount.Load(), "subscriber should be called after first reload")
+
+	// Unsubscribe.
+	unsubscribe()
+
+	// Second reload — subscriber must NOT fire.
+	_, err = cm.Reload()
+	require.NoError(t, err)
+	assert.Equal(t, int32(1), callCount.Load(), "subscriber should NOT be called after unsubscribe")
+}
+
+func TestConfigManager_ReloadFromAPI_IncrementsVersionAndReturnsResult(t *testing.T) {
+	// Not parallel: clearConfigEnvVars uses t.Setenv.
+	clearConfigEnvVars(t)
+
+	tmpDir := t.TempDir()
+	yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
+
+	cfg := defaultConfig()
+	cm := newTestConfigManager(t, cfg, yamlPath, &testLogger{})
+
+	assert.Equal(t, uint64(0), cm.Version())
+
+	result, err := cm.ReloadFromAPI()
+	require.NoError(t, err)
+
+	// Verify the result has a valid version and timestamp.
+	assert.GreaterOrEqual(t, result.Version, uint64(1), "ReloadFromAPI should increment version")
+	assert.False(t, result.ReloadedAt.IsZero(), "ReloadedAt should be set")
+	assert.Equal(t, cm.Version(), result.Version, "result version should match manager version")
+
+	// Verify the lastUpdateSource is set to "reload_api" so audit subscribers
+	// can distinguish API-triggered reloads from file-watcher reloads.
+	source, ok := cm.lastUpdateSource.Load().(string)
+	require.True(t, ok, "lastUpdateSource should be a string")
+	assert.Equal(t, configUpdateSourceReloadAPI, source,
+		"ReloadFromAPI should set lastUpdateSource to reload_api")
+}
+
 func TestRestoreZeroedFields_RestoresBool(t *testing.T) {
 	// Not parallel: clearConfigEnvVars manipulates process env.
 	clearConfigEnvVars(t)
