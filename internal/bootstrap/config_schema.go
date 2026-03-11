@@ -73,12 +73,12 @@ const (
 	defaultIdempotencySuccessTTL  = 168
 
 	// fetcher defaults — use canonical constants from config_env.go.
-	defaultFetcherHealthTimeout    = defaultFetcherHealthTimeoutSec
-	defaultFetcherRequestTimeout   = defaultFetcherRequestTimeoutSec
-	defaultFetcherDiscoveryInt     = defaultFetcherDiscoveryIntervalSec
-	defaultFetcherSchemaCacheTTL   = defaultFetcherSchemaCacheTTLSec
-	defaultFetcherExtractionPoll   = defaultFetcherExtractionPollSec
-	defaultFetcherExtractionTimout = defaultFetcherExtractionTimeoutSec
+	defaultFetcherHealthTimeout     = defaultFetcherHealthTimeoutSec
+	defaultFetcherRequestTimeout    = defaultFetcherRequestTimeoutSec
+	defaultFetcherDiscoveryInt      = defaultFetcherDiscoveryIntervalSec
+	defaultFetcherSchemaCacheTTL    = defaultFetcherSchemaCacheTTLSec
+	defaultFetcherExtractionPoll    = defaultFetcherExtractionPollSec
+	defaultFetcherExtractionTimeout = defaultFetcherExtractionTimeoutSec
 
 	// archival defaults.
 	defaultArchivalIntervalHours = 24
@@ -182,7 +182,7 @@ func buildConfigSchema() []configFieldDef {
 		{Key: "fetcher.discovery_interval_sec", Label: "Discovery Interval (sec)", Type: "int", DefaultValue: defaultFetcherDiscoveryInt, HotReloadable: true, EnvVar: "FETCHER_DISCOVERY_INTERVAL_SEC", Constraints: []string{"min:1"}, Description: "Fetcher schema discovery interval in seconds", Section: "fetcher"},
 		{Key: "fetcher.schema_cache_ttl_sec", Label: "Schema Cache TTL (sec)", Type: "int", DefaultValue: defaultFetcherSchemaCacheTTL, HotReloadable: true, EnvVar: "FETCHER_SCHEMA_CACHE_TTL_SEC", Constraints: []string{"min:1"}, Description: "Fetcher schema cache TTL in seconds", Section: "fetcher"},
 		{Key: "fetcher.extraction_poll_sec", Label: "Extraction Poll (sec)", Type: "int", DefaultValue: defaultFetcherExtractionPoll, HotReloadable: true, EnvVar: "FETCHER_EXTRACTION_POLL_INTERVAL_SEC", Constraints: []string{"min:1"}, Description: "Fetcher extraction poll interval in seconds", Section: "fetcher"},
-		{Key: "fetcher.extraction_timeout_sec", Label: "Extraction Timeout (sec)", Type: "int", DefaultValue: defaultFetcherExtractionTimout, HotReloadable: true, EnvVar: "FETCHER_EXTRACTION_TIMEOUT_SEC", Constraints: []string{"min:1"}, Description: "Fetcher extraction timeout in seconds", Section: "fetcher"},
+		{Key: "fetcher.extraction_timeout_sec", Label: "Extraction Timeout (sec)", Type: "int", DefaultValue: defaultFetcherExtractionTimeout, HotReloadable: true, EnvVar: "FETCHER_EXTRACTION_TIMEOUT_SEC", Constraints: []string{"min:1"}, Description: "Fetcher extraction timeout in seconds", Section: "fetcher"},
 
 		// ── archival ────────────────────────────────────────────
 		{Key: "archival.enabled", Label: "Archival Enabled", Type: "bool", DefaultValue: false, HotReloadable: true, EnvVar: "ARCHIVAL_WORKER_ENABLED", Description: "Enable audit log archival worker", Section: "archival"},
