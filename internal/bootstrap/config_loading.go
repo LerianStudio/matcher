@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 package bootstrap
 
 import (
@@ -128,6 +132,10 @@ func (cfg *Config) enforceProductionSecurityDefaults(logger libLog.Logger) {
 // referenced by Config struct tags. This is defense-in-depth against .env files with
 // inline comments (e.g., "RATE_LIMIT_MAX=100  # comment") that Make's -include
 // directive loads verbatim, causing strconv.Atoi to fail on "100  # comment" or "100  ".
+//
+// This function mutates global process state via os.Setenv and is called exactly once
+// during bootstrap (LoadConfig), before any goroutines are spawned. Do NOT call from
+// concurrent contexts — it is not safe for concurrent use.
 func sanitizeEnvVarsForConfig() {
 	sanitizeEnvVarsForStruct(reflect.TypeOf(Config{}))
 }

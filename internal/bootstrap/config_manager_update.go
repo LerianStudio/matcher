@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 package bootstrap
 
 import (
@@ -68,7 +72,7 @@ func (cm *ConfigManager) Update(changes map[string]any) (*UpdateResult, error) {
 	// Phase 3: build, overlay, and validate the candidate config.
 	candidateCfg, err := cm.buildCandidateConfig(oldCfg)
 	if err != nil {
-		cm.rollbackViperKeys(applicableChanges, oldValues)
+		cm.rollbackViperKeysLocked(applicableChanges, oldValues)
 
 		return nil, fmt.Errorf("config update: %w", err)
 	}
@@ -76,7 +80,7 @@ func (cm *ConfigManager) Update(changes map[string]any) (*UpdateResult, error) {
 	// Phase 4: write YAML via atomic rename (temp file + rename).
 	if cm.filePath != "" {
 		if err := cm.writeConfigAtomically(); err != nil {
-			cm.rollbackViperKeys(applicableChanges, oldValues)
+			cm.rollbackViperKeysLocked(applicableChanges, oldValues)
 
 			cm.logger.Log(ctx, libLog.LevelError, "config update: YAML write failed", libLog.Err(err))
 
@@ -217,9 +221,10 @@ func sortedChangeKeys(values map[string]any) []string {
 	return keys
 }
 
-// rollbackViperKeys restores the given viper keys to their previous values.
+// rollbackViperKeysLocked restores the given viper keys to their previous values.
 // Used by Update() to undo partial changes when validation fails.
-func (cm *ConfigManager) rollbackViperKeys(keys, oldValues map[string]any) {
+// Caller MUST hold cm.mu.
+func (cm *ConfigManager) rollbackViperKeysLocked(keys, oldValues map[string]any) {
 	for key := range keys {
 		cm.viper.Set(key, oldValues[key])
 	}

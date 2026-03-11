@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 package bootstrap
 
 import (
@@ -11,15 +15,13 @@ import (
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 )
 
-// Fetcher duration defaults.
-const (
-	defaultFetcherHealthTimeoutSec     = 5
-	defaultFetcherRequestTimeoutSec    = 30
-	defaultFetcherDiscoveryIntervalSec = 60
-	defaultFetcherSchemaCacheTTLSec    = 300
-	defaultFetcherExtractionPollSec    = 5
-	defaultFetcherExtractionTimeoutSec = 600
-)
+// logConfigWarn logs a warning if the config logger is available.
+// Safe to call even when cfg.Logger is nil (e.g., during early bootstrap).
+func (cfg *Config) logConfigWarn(ctx context.Context, msg string) {
+	if cfg != nil && cfg.Logger != nil {
+		cfg.Logger.Log(ctx, libLog.LevelWarn, msg)
+	}
+}
 
 // PrimaryDSN returns the PostgreSQL connection string for the primary database.
 func (cfg *Config) PrimaryDSN() string {
@@ -199,17 +201,14 @@ func (cfg *Config) InfraConnectTimeout() time.Duration {
 	}
 
 	if cfg.Infrastructure.ConnectTimeoutSec > maxInfraConnectTimeoutSec {
-		if cfg.Logger != nil {
-			cfg.Logger.Log(
-				context.Background(),
-				libLog.LevelWarn,
-				fmt.Sprintf(
-					"INFRA_CONNECT_TIMEOUT_SEC=%d exceeds maximum of %d seconds, capping to maximum",
-					cfg.Infrastructure.ConnectTimeoutSec,
-					maxInfraConnectTimeoutSec,
-				),
-			)
-		}
+		cfg.logConfigWarn(
+			context.Background(),
+			fmt.Sprintf(
+				"INFRA_CONNECT_TIMEOUT_SEC=%d exceeds maximum of %d seconds, capping to maximum",
+				cfg.Infrastructure.ConnectTimeoutSec,
+				maxInfraConnectTimeoutSec,
+			),
+		)
 
 		return time.Duration(maxInfraConnectTimeoutSec) * time.Second
 	}
@@ -261,10 +260,8 @@ func (cfg *Config) WebhookTimeout() time.Duration {
 	}
 
 	if cfg.Webhook.TimeoutSec > maxWebhookTimeoutSec {
-		if cfg.Logger != nil {
-			cfg.Logger.Log(context.Background(), libLog.LevelWarn, fmt.Sprintf("WEBHOOK_TIMEOUT_SEC=%d exceeds maximum of %d seconds, capping to maximum",
-				cfg.Webhook.TimeoutSec, maxWebhookTimeoutSec))
-		}
+		cfg.logConfigWarn(context.Background(), fmt.Sprintf("WEBHOOK_TIMEOUT_SEC=%d exceeds maximum of %d seconds, capping to maximum",
+			cfg.Webhook.TimeoutSec, maxWebhookTimeoutSec))
 
 		return time.Duration(maxWebhookTimeoutSec) * time.Second
 	}
@@ -296,10 +293,8 @@ func (cfg *Config) ExportPresignExpiry() time.Duration {
 	}
 
 	if cfg.ExportWorker.PresignExpirySec > maxPresignExpiry {
-		if cfg.Logger != nil {
-			cfg.Logger.Log(context.Background(), libLog.LevelWarn, fmt.Sprintf("EXPORT_PRESIGN_EXPIRY_SEC=%d exceeds S3 maximum of %d seconds, capping to maximum",
-				cfg.ExportWorker.PresignExpirySec, maxPresignExpiry))
-		}
+		cfg.logConfigWarn(context.Background(), fmt.Sprintf("EXPORT_PRESIGN_EXPIRY_SEC=%d exceeds S3 maximum of %d seconds, capping to maximum",
+			cfg.ExportWorker.PresignExpirySec, maxPresignExpiry))
 
 		return time.Duration(maxPresignExpiry) * time.Second
 	}
@@ -369,10 +364,8 @@ func (cfg *Config) ArchivalPresignExpiry() time.Duration {
 	}
 
 	if cfg.Archival.PresignExpirySec > maxPresignExpiry {
-		if cfg.Logger != nil {
-			cfg.Logger.Log(context.Background(), libLog.LevelWarn, fmt.Sprintf("ARCHIVAL_PRESIGN_EXPIRY_SEC=%d exceeds S3 maximum of %d seconds, capping to maximum",
-				cfg.Archival.PresignExpirySec, maxPresignExpiry))
-		}
+		cfg.logConfigWarn(context.Background(), fmt.Sprintf("ARCHIVAL_PRESIGN_EXPIRY_SEC=%d exceeds S3 maximum of %d seconds, capping to maximum",
+			cfg.Archival.PresignExpirySec, maxPresignExpiry))
 
 		return time.Duration(maxPresignExpiry) * time.Second
 	}

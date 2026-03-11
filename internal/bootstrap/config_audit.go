@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 package bootstrap
 
 import (
@@ -25,6 +29,10 @@ const systemConfigEntityType = "system_config"
 // EntityID from the string "system_config". AuditLogCreatedEvent requires a
 // uuid.UUID for EntityID — using a deterministic UUID (instead of random) means
 // all config audit events share the same entity, enabling efficient history queries.
+//
+// This is a project-specific, arbitrarily chosen UUID v5 namespace. The specific
+// value has no external meaning but is stable — it MUST NOT change, as existing
+// audit log entries reference the EntityID derived from it.
 var systemConfigNamespace = uuid.MustParse("a1b2c3d4-e5f6-7890-abcd-ef1234567890")
 
 // systemConfigEntityID is the stable EntityID for all system config audit events.

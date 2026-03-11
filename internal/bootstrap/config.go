@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 // Package bootstrap provides application initialization and configuration
 // for the Matcher service, including server setup, database connections,
 // and observability infrastructure.
@@ -159,7 +163,8 @@ type RateLimitConfig struct {
 
 // InfrastructureConfig configures infrastructure-level behavior.
 type InfrastructureConfig struct {
-	ConnectTimeoutSec int `env:"INFRA_CONNECT_TIMEOUT_SEC" envDefault:"30" mapstructure:"connect_timeout_sec"`
+	ConnectTimeoutSec     int `env:"INFRA_CONNECT_TIMEOUT_SEC"  envDefault:"30" mapstructure:"connect_timeout_sec"`
+	HealthCheckTimeoutSec int `env:"HEALTH_CHECK_TIMEOUT_SEC"   envDefault:"5"  mapstructure:"health_check_timeout_sec"`
 }
 
 // IdempotencyConfig configures idempotency behavior.

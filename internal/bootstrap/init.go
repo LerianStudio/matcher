@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 package bootstrap
 
 import (
@@ -15,6 +19,10 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
+	// Direct OTel imports required for infrastructure-level meter/tracer setup.
+	// otel.Meter() and otel.Tracer() create named instruments for cleanup metrics
+	// and outbox/archival tracers. attribute/metric types are needed for metric
+	// recording. lib-commons does not abstract global provider accessors.
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"

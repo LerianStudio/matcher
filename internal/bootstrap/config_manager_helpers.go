@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 package bootstrap
 
 import (
@@ -7,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
@@ -36,9 +41,16 @@ func (cm *ConfigManager) notifySubscribers(cfg *Config, callbacks []func(*Config
 }
 
 func (cm *ConfigManager) snapshotSubscribersLocked() []func(*Config) {
-	callbacks := make([]func(*Config), 0, len(cm.subscribers))
-	for _, fn := range cm.subscribers {
-		callbacks = append(callbacks, fn)
+	ids := make([]uint64, 0, len(cm.subscribers))
+	for id := range cm.subscribers {
+		ids = append(ids, id)
+	}
+
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+
+	callbacks := make([]func(*Config), 0, len(ids))
+	for _, id := range ids {
+		callbacks = append(callbacks, cm.subscribers[id])
 	}
 
 	return callbacks

@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 package bootstrap
 
 import (
@@ -8,6 +12,9 @@ import (
 
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 )
+
+// errConfigManagerStopped is returned when a reload is attempted after the manager has stopped.
+var errConfigManagerStopped = errors.New("config manager stopped")
 
 func (cm *ConfigManager) reload(source string) (*ReloadResult, error) {
 	var (
@@ -39,7 +46,7 @@ func (cm *ConfigManager) reload(source string) (*ReloadResult, error) {
 func (cm *ConfigManager) reloadLocked(source string) (*ReloadResult, error) {
 	select {
 	case <-cm.stopCh:
-		return nil, errors.New("config manager stopped")
+		return nil, errConfigManagerStopped
 	default:
 	}
 

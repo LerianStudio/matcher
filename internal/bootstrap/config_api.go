@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 package bootstrap
 
 import (
@@ -8,6 +12,10 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
+	// Direct OTel imports required for span type signatures (trace.Span) and
+	// nil-tracer fallback (otel.Tracer). lib-commons provides tracer extraction
+	// via NewTrackingFromContext but does not re-export the trace.Span interface.
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 
 	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
@@ -34,6 +42,7 @@ type ConfigAPIHandler struct {
 	auditPublisher  *ConfigAuditPublisher
 	auditRepository sharedPorts.AuditLogRepository
 	logger          libLog.Logger
+	authEnabled     bool
 }
 
 // NewConfigAPIHandler creates a new ConfigAPIHandler.
@@ -46,10 +55,28 @@ func NewConfigAPIHandler(configManager *ConfigManager, logger libLog.Logger) (*C
 		logger = &libLog.NopLogger{}
 	}
 
+	// Derive authEnabled from the current config snapshot.
+	var authEnabled bool
+
+	if cfg := configManager.Get(); cfg != nil {
+		authEnabled = cfg.Auth.Enabled
+	}
+
 	return &ConfigAPIHandler{
 		configManager: configManager,
 		logger:        logger,
+		authEnabled:   authEnabled,
 	}, nil
+}
+
+// requireConfigAuth verifies that the request has valid auth context.
+// This is defense-in-depth — routes should already be behind auth middleware.
+func (handler *ConfigAPIHandler) requireConfigAuth(c *fiber.Ctx) error {
+	if !handler.authEnabled {
+		return sharedhttp.RespondError(c, fiber.StatusForbidden, "forbidden", "config API requires authentication")
+	}
+
+	return nil
 }
 
 // SetAuditPublisher attaches an audit publisher to the handler.
@@ -68,6 +95,11 @@ func (handler *ConfigAPIHandler) SetAuditRepository(repository sharedPorts.Audit
 	}
 }
 
+// SECURITY: systemTenantContext injects the default tenant ID from system configuration
+// into the request context, bypassing the normal JWT-based tenant extraction path.
+// This is intentional for system-level config operations (schema reads, audit history)
+// where no user JWT exists. The tenant ID comes from the trusted Config struct loaded
+// at bootstrap — NOT from any external request input.
 func (handler *ConfigAPIHandler) systemTenantContext(ctx context.Context) context.Context {
 	if handler == nil || handler.configManager == nil {
 		return ctx
@@ -87,6 +119,9 @@ func (handler *ConfigAPIHandler) systemTenantContext(ctx context.Context) contex
 }
 
 // startConfigSpan starts an OpenTelemetry span for a config API operation.
+// Follows the same nil-tracer fallback pattern used by all handler packages:
+// when the context lacks a tracer (e.g., telemetry disabled), falls back to
+// the global tracer so callers always receive a valid span.
 func startConfigSpan(c *fiber.Ctx, name string) (context.Context, trace.Span, libLog.Logger) {
 	ctx := c.UserContext()
 	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
@@ -96,7 +131,7 @@ func startConfigSpan(c *fiber.Ctx, name string) (context.Context, trace.Span, li
 	}
 
 	if tracer == nil {
-		return ctx, trace.SpanFromContext(ctx), logger
+		tracer = otel.Tracer("commons.default")
 	}
 
 	ctx, span := tracer.Start(ctx, name)
@@ -127,6 +162,10 @@ func logConfigSpanError(ctx context.Context, span trace.Span, logger libLog.Logg
 func (handler *ConfigAPIHandler) GetConfig(fiberCtx *fiber.Ctx) error {
 	if handler == nil || handler.configManager == nil {
 		return sharedhttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "handler_unavailable", "configuration handler is not initialized")
+	}
+
+	if err := handler.requireConfigAuth(fiberCtx); err != nil {
+		return err
 	}
 
 	ctx, span, logger := startConfigSpan(fiberCtx, "handler.system.get_config")
@@ -168,6 +207,10 @@ func (handler *ConfigAPIHandler) GetSchema(fiberCtx *fiber.Ctx) error {
 		return sharedhttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "handler_unavailable", "configuration handler is not initialized")
 	}
 
+	if err := handler.requireConfigAuth(fiberCtx); err != nil {
+		return err
+	}
+
 	ctx, span, logger := startConfigSpan(fiberCtx, "handler.system.get_config_schema")
 	defer span.End()
 
@@ -203,6 +246,10 @@ func (handler *ConfigAPIHandler) GetSchema(fiberCtx *fiber.Ctx) error {
 func (handler *ConfigAPIHandler) UpdateConfig(fiberCtx *fiber.Ctx) error {
 	if handler == nil || handler.configManager == nil {
 		return sharedhttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "handler_unavailable", "configuration handler is not initialized")
+	}
+
+	if err := handler.requireConfigAuth(fiberCtx); err != nil {
+		return err
 	}
 
 	ctx, span, logger := startConfigSpan(fiberCtx, "handler.system.update_config")
@@ -279,6 +326,10 @@ func (handler *ConfigAPIHandler) ReloadConfig(fiberCtx *fiber.Ctx) error {
 		return sharedhttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "handler_unavailable", "configuration handler is not initialized")
 	}
 
+	if err := handler.requireConfigAuth(fiberCtx); err != nil {
+		return err
+	}
+
 	ctx, span, logger := startConfigSpan(fiberCtx, "handler.system.reload_config")
 	defer span.End()
 
@@ -335,6 +386,10 @@ func (handler *ConfigAPIHandler) ReloadConfig(fiberCtx *fiber.Ctx) error {
 func (handler *ConfigAPIHandler) GetConfigHistory(fiberCtx *fiber.Ctx) error {
 	if handler == nil || handler.configManager == nil {
 		return sharedhttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "handler_unavailable", "configuration handler is not initialized")
+	}
+
+	if err := handler.requireConfigAuth(fiberCtx); err != nil {
+		return err
 	}
 
 	ctx, span, logger := startConfigSpan(fiberCtx, "handler.system.get_config_history")
