@@ -5,11 +5,17 @@
 # Define the root directory of the project
 MATCHER_ROOT := $(shell pwd)
 
-# Load environment variables from config/.env if it exists
+# Load environment variables from config/.env if it exists.
+# These are exported for docker-compose, migration, and dev-server targets.
+# Test targets use CLEAN_ENV prefix to unset them so viper-backed config
+# tests are not polluted by host env vars.
 -include config/.env
 ifneq ("$(wildcard config/.env)","")
 ENV_VARS := $(shell sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' config/.env)
 export $(ENV_VARS)
+CLEAN_ENV := env $(foreach v,$(ENV_VARS),-u $(v))
+else
+CLEAN_ENV :=
 endif
 
 # Directory configuration
@@ -328,8 +334,8 @@ coverage-unit: test-unit
 
 test-unit:
 	$(call print_title,Running unit tests)
-	@$(TEST_RUNNER) -tags=unit -coverprofile=$(COVER_PROFILE_UNIT) -race -cover ./...
-	@cd tools && $(TEST_RUNNER) -tags=unit -coverprofile=../$(COVER_PROFILE_TOOLS) -race ./...
+	@$(CLEAN_ENV) $(TEST_RUNNER) -tags=unit -coverprofile=$(COVER_PROFILE_UNIT) -race -cover ./...
+	@cd tools && $(CLEAN_ENV) $(TEST_RUNNER) -tags=unit -coverprofile=../$(COVER_PROFILE_TOOLS) -race ./...
 	$(call show_coverage,$(COVER_PROFILE_UNIT))
 	@printf "Coverage summary (%s): " $(COVER_PROFILE_TOOLS); cd tools && go tool cover -func=../$(COVER_PROFILE_TOOLS) | tail -n 1
 	@echo "[ok] Unit tests passed"
