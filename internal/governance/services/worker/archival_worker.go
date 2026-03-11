@@ -69,6 +69,9 @@ type ArchivalWorker struct {
 }
 
 // UpdateRuntimeConfig updates the worker runtime configuration used on the next start/restart.
+// NOTE: This does NOT affect a currently running worker's ticker. The WorkerManager
+// always performs a full stop→start cycle when config changes, ensuring the new
+// config is picked up when the worker's run() loop creates a fresh ticker.
 func (aw *ArchivalWorker) UpdateRuntimeConfig(cfg ArchivalWorkerConfig) {
 	aw.mu.Lock()
 	defer aw.mu.Unlock()
@@ -76,6 +79,10 @@ func (aw *ArchivalWorker) UpdateRuntimeConfig(cfg ArchivalWorkerConfig) {
 	aw.cfg = cfg
 }
 
+// prepareRunState reinitialises the worker's stop/done channels and sync.Once for
+// re-entrant Start→Stop→Start cycles. SAFETY: The caller (WorkerManager) MUST ensure
+// Stop() has fully completed before calling Start(), which calls prepareRunState().
+// The WorkerManager serialises all lifecycle transitions via its mutex.
 func (aw *ArchivalWorker) prepareRunState() {
 	aw.mu.Lock()
 	defer aw.mu.Unlock()

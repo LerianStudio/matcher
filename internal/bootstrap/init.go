@@ -1857,6 +1857,12 @@ func createIdempotencyRepository(
 	return sharedHTTP.NewIdempotencyRepositoryAdapter(exceptionIdempotencyRepo)
 }
 
+// createObjectStorage initialises the S3/MinIO client when a bucket is configured.
+// The S3 client is created regardless of ExportWorker.Enabled — the WorkerManager
+// controls worker lifecycle at the manager level. This allows dynamic enabling of
+// the export worker via hot-reload without requiring a restart to initialise S3.
+// Operators who do not have object storage should set OBJECT_STORAGE_BUCKET="" rather
+// than relying on EXPORT_WORKER_ENABLED=false to skip S3 initialisation.
 func createObjectStorage(
 	cfg *Config,
 	_ libLog.Logger,

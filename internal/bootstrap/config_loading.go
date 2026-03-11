@@ -13,6 +13,16 @@ import (
 	libZap "github.com/LerianStudio/lib-commons/v4/commons/zap"
 )
 
+// Architecture Decision: Dual Configuration Pipeline
+//
+// Viper handles YAML file reading and fsnotify-based file watching for hot-reload.
+// libCommons.SetConfigFromEnvVars handles env-var overlay for backward compatibility.
+//
+// This dual pipeline is intentional — lib-commons does not support YAML file loading
+// or file-watcher-based hot-reload. Env vars always take precedence over YAML values,
+// preserving the existing deployment contract where Kubernetes secrets and .env files
+// override file-based configuration.
+
 // LoadConfigWithLogger loads configuration from environment variables with an optional logger.
 // If logger is nil, a default logger will be created for warning messages.
 func LoadConfigWithLogger(logger libLog.Logger) (*Config, error) {

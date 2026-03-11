@@ -1,6 +1,11 @@
 package bootstrap
 
-// defaultConfig returns a Config populated with all default values.
+// defaultConfig returns a Config populated with sensible defaults for the YAML-only
+// loading path. These defaults MUST stay in sync with the envDefault struct tags on
+// Config fields — the envDefault tags govern the env-var-only path, while this function
+// governs the YAML path. Both must produce equivalent baseline values to ensure
+// consistent behavior regardless of config source.
+//
 // Secret fields (passwords, tokens, keys, certificates) are left as zero values
 // and must be supplied via environment variables.
 // Logger and ShutdownGracePeriod are left as zero values; they are set during bootstrap.
