@@ -123,6 +123,10 @@ help:
 	@echo "  make check-coverage              - Check coverage against thresholds"
 	@echo ""
 	@echo ""
+	@echo "CI Commands:"
+	@echo "  make ci                          - Run full CI pipeline (lint, test, test-int, sec, vet)"
+	@echo ""
+	@echo ""
 	@echo "Test Commands:"
 	@echo "  make test                        - Run unit tests (alias for 'test-unit')"
 	@echo "  make test-unit                   - Run unit tests"
@@ -391,6 +395,24 @@ cover:
 	@echo "----------------------------------------"
 	@echo "Open coverage.html in your browser to view detailed coverage report"
 	@echo "[ok] Coverage report generated successfully"
+
+#-------------------------------------------------------
+# CI Commands
+#-------------------------------------------------------
+
+.PHONY: ci
+
+ci:
+	$(call print_title,Running full CI pipeline)
+	@$(MAKE) lint
+	@$(MAKE) test
+	@$(MAKE) test-int
+	@$(MAKE) sec
+	@$(MAKE) vet
+	@echo ""
+	@echo "=========================================="
+	@echo "   [ok] CI pipeline passed"
+	@echo "=========================================="
 
 #-------------------------------------------------------
 # Service Commands
