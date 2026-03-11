@@ -49,6 +49,11 @@ func requireNoError(t *testing.T, err error) {
 
 // configEnvVarKeys lists every env var read by loadConfigFromEnv (via the `env:`
 // struct tags on Config sub-structs). Keep in sync with config.go.
+//
+// TODO(review): This list requires manual sync with Config struct env tags.
+// Consider adding a reflection-based test that walks Config struct `env:` tags
+// and compares against this list to catch drift automatically.
+// See TestConfigMapstructureTags_AllExportedFieldsTagged for a similar pattern.
 var configEnvVarKeys = []string{
 	// AppConfig
 	"ENV_NAME",
