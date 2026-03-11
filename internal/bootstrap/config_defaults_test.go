@@ -7,6 +7,8 @@
 package bootstrap
 
 import (
+	"reflect"
+	"strconv"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -439,6 +441,87 @@ func TestDefaultConfig_SyncWithBindDefaults(t *testing.T) {
 			assert.Equal(t, c.want, got,
 				"defaultConfig().%s = %v but bindDefaults() sets %v — sources of truth have drifted",
 				c.key, c.want, got)
+		})
+	}
+}
+
+// TestDefaultConfig_SyncWithEnvDefaultTags verifies that defaultConfig() values match
+// the envDefault struct tags on Config fields. This catches drift between the YAML
+// defaults path (defaultConfig) and the env-var-only path (envDefault tags) — a common
+// bug when a default is updated in one place but not the other.
+//
+// The test uses reflection to walk all Config fields recursively, extracting envDefault
+// tag values and comparing them (after type conversion) to the corresponding field
+// value from defaultConfig(). Fields without envDefault tags are skipped (they are
+// secrets or infrastructure fields that intentionally have no default).
+func TestDefaultConfig_SyncWithEnvDefaultTags(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+
+	walkAndCompare(t, "", reflect.TypeOf(*cfg), reflect.ValueOf(*cfg))
+}
+
+// walkAndCompare recursively walks a struct type, and for each field with an envDefault
+// tag, asserts that the parsed tag value matches the corresponding field value from
+// defaultConfig(). Nested structs are recursed into with a dotted path prefix.
+func walkAndCompare(t *testing.T, prefix string, typ reflect.Type, val reflect.Value) {
+	t.Helper()
+
+	for i := range typ.NumField() {
+		field := typ.Field(i)
+		fieldVal := val.Field(i)
+
+		// Build a human-readable path for subtest naming.
+		path := field.Name
+		if prefix != "" {
+			path = prefix + "." + field.Name
+		}
+
+		// Recurse into nested structs that don't have their own env tag.
+		if field.Type.Kind() == reflect.Struct &&
+			field.Tag.Get("env") == "" &&
+			field.Tag.Get("mapstructure") != "-" {
+			walkAndCompare(t, path, field.Type, fieldVal)
+
+			continue
+		}
+
+		// Skip fields without envDefault tags — they are secrets or
+		// infrastructure fields intentionally left as zero values.
+		envDefault := field.Tag.Get("envDefault")
+		if envDefault == "" {
+			continue
+		}
+
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+
+			switch field.Type.Kind() { //nolint:exhaustive // Only config field types need handling.
+			case reflect.String:
+				assert.Equal(t, envDefault, fieldVal.String(),
+					"defaultConfig().%s = %q but envDefault tag = %q — sources of truth have drifted",
+					path, fieldVal.String(), envDefault)
+
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+				parsed, err := strconv.ParseInt(envDefault, 10, 64)
+				require.NoError(t, err, "envDefault tag %q for %s is not a valid int", envDefault, path)
+
+				assert.Equal(t, parsed, fieldVal.Int(),
+					"defaultConfig().%s = %d but envDefault tag = %q — sources of truth have drifted",
+					path, fieldVal.Int(), envDefault)
+
+			case reflect.Bool:
+				parsed, err := strconv.ParseBool(envDefault)
+				require.NoError(t, err, "envDefault tag %q for %s is not a valid bool", envDefault, path)
+
+				assert.Equal(t, parsed, fieldVal.Bool(),
+					"defaultConfig().%s = %v but envDefault tag = %q — sources of truth have drifted",
+					path, fieldVal.Bool(), envDefault)
+
+			default:
+				t.Errorf("unsupported field type %s for %s — extend walkAndCompare", field.Type.Kind(), path)
+			}
 		})
 	}
 }
