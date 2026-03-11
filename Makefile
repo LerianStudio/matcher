@@ -7,16 +7,15 @@ MATCHER_ROOT := $(shell pwd)
 
 # Load environment variables from config/.env if it exists.
 # These are exported for docker-compose, migration, and dev-server targets.
-# Test targets use CLEAN_ENV prefix to unset them so viper-backed config
-# tests are not polluted by host env vars.
+# Test targets use CLEAN_ENV to unset the full Matcher config env surface so
+# viper-backed tests are not polluted by host or local config values.
 -include config/.env
 ifneq ("$(wildcard config/.env)","")
 ENV_VARS := $(shell sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' config/.env)
 export $(ENV_VARS)
-CLEAN_ENV := env $(foreach v,$(ENV_VARS),-u $(v))
-else
-CLEAN_ENV :=
 endif
+CONFIG_ENV_KEYS := $(shell sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' config/.env.example 2>/dev/null)
+CLEAN_ENV := env $(foreach v,$(CONFIG_ENV_KEYS),-u $(v))
 
 # Directory configuration
 CONFIG_DIR := ./config
@@ -130,7 +129,7 @@ help:
 	@echo ""
 	@echo ""
 	@echo "CI Commands:"
-	@echo "  make ci                          - Run full CI pipeline (lint, test, test-int, sec, vet)"
+	@echo "  make ci                          - Run local CI verification (lint, tests, security, metadata checks)"
 	@echo ""
 	@echo ""
 	@echo "Test Commands:"
@@ -409,15 +408,18 @@ cover:
 .PHONY: ci
 
 ci:
-	$(call print_title,Running full CI pipeline)
+	$(call print_title,Running local CI verification pipeline)
 	@$(MAKE) lint
 	@$(MAKE) test
 	@$(MAKE) test-int
+	@$(MAKE) check-tests
+	@$(MAKE) check-test-tags
 	@$(MAKE) sec
 	@$(MAKE) vet
+	@$(MAKE) vulncheck
 	@echo ""
 	@echo "=========================================="
-	@echo "   [ok] CI pipeline passed"
+	@echo "   [ok] Local CI verification passed"
 	@echo "=========================================="
 
 #-------------------------------------------------------

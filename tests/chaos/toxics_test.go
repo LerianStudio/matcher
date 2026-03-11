@@ -18,6 +18,15 @@ func TestIsolateService_UnknownService(t *testing.T) {
 	assert.Contains(t, err.Error(), "unknown service")
 }
 
+func TestIsolateService_KnownServiceNilProxy(t *testing.T) {
+	t.Parallel()
+
+	h := &ChaosHarness{}
+	err := h.IsolateService(t, "postgres")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "postgres proxy is nil")
+}
+
 func TestRemoveAllToxics_NilProxies(t *testing.T) {
 	t.Parallel()
 

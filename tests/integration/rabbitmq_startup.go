@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/docker/docker/api/types"
 	"github.com/docker/go-connections/nat"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -63,7 +64,13 @@ func rabbitMQContainerRequest() testcontainers.ContainerRequest {
 	}
 }
 
-func containerHostWithRetry(ctx context.Context, container testcontainers.Container) (string, error) {
+type rabbitMQStartupContainer interface {
+	Host(context.Context) (string, error)
+	MappedPort(context.Context, nat.Port) (nat.Port, error)
+	Inspect(context.Context) (*types.ContainerJSON, error)
+}
+
+func containerHostWithRetry(ctx context.Context, container rabbitMQStartupContainer) (string, error) {
 	if container == nil {
 		return "", errors.New("container is nil")
 	}
@@ -96,7 +103,7 @@ func containerHostWithRetry(ctx context.Context, container testcontainers.Contai
 
 func mappedPortWithRetry(
 	ctx context.Context,
-	container testcontainers.Container,
+	container rabbitMQStartupContainer,
 	containerPort string,
 ) (string, error) {
 	if container == nil {
@@ -131,7 +138,7 @@ func mappedPortWithRetry(
 
 func resolveMappedPort(
 	ctx context.Context,
-	container testcontainers.Container,
+	container rabbitMQStartupContainer,
 	containerPort string,
 ) (string, error) {
 	mappedPort, err := container.MappedPort(ctx, nat.Port(containerPort))

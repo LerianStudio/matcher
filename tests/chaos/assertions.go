@@ -237,45 +237,6 @@ func AssertTransactionStatuses(t *testing.T, db *sql.DB, txIDs []uuid.UUID, expe
 }
 
 // --------------------------------------------------------------------------
-// Health endpoint assertions
-// --------------------------------------------------------------------------
-
-// HealthStatus represents parsed /ready response.
-type HealthStatus struct {
-	Status string            `json:"status"`
-	Checks map[string]string `json:"checks,omitempty"`
-}
-
-// AssertTableRowCount verifies the row count of a specific table.
-func AssertTableRowCount(t *testing.T, db *sql.DB, table string, expected int) {
-	t.Helper()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	var count int
-	//nolint:gosec // table name is test-controlled, not user input.
-	err := db.QueryRowContext(ctx, fmt.Sprintf(`SELECT COUNT(*) FROM %s`, table)).Scan(&count)
-	require.NoError(t, err, "count rows in %s", table)
-	assert.Equal(t, expected, count, "table %s: expected %d rows, got %d", table, expected, count)
-}
-
-// AssertTableRowCountAtLeast verifies minimum row count.
-func AssertTableRowCountAtLeast(t *testing.T, db *sql.DB, table string, minCount int) {
-	t.Helper()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	var count int
-	//nolint:gosec // table name is test-controlled, not user input.
-	err := db.QueryRowContext(ctx, fmt.Sprintf(`SELECT COUNT(*) FROM %s`, table)).Scan(&count)
-	require.NoError(t, err, "count rows in %s", table)
-	assert.GreaterOrEqual(t, count, minCount,
-		"table %s: expected at least %d rows, got %d", table, minCount, count)
-}
-
-// --------------------------------------------------------------------------
 // Data consistency assertions
 // --------------------------------------------------------------------------
 

@@ -11,6 +11,7 @@ import (
 func TestPackageExists(t *testing.T) {
 	t.Parallel()
 
-	// Verify the command package is importable and the build tag is correct.
+	// commands.go contains package-level documentation only. This tiny test exists
+	// so scripts/check-tests.sh can enforce one *_test.go companion per source file.
 	assert.NotEmpty(t, "command", "package should exist")
 }

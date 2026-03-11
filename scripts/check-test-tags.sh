@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Verifies integration and e2e test files have required build tags
-# Unit tests (in internal/) do not require build tags
+# Verifies tests under ./tests declare one of the approved build tags.
+# Current suites use unit (static guards), integration, chaos, and e2e tags.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -20,8 +20,8 @@ for file in "${test_files[@]}"; do
   
   first_line=$(head -1 "$file")
   
-  # Check if file has build tag on first line (integration or e2e)
-  if ! echo "$first_line" | grep -qE "^//go:build (integration|e2e)"; then
+  # Check if file has build tag on first line.
+  if ! echo "$first_line" | grep -qE "^//go:build (unit|integration|chaos|e2e)$"; then
     missing+=("$file")
   fi
 done
@@ -30,10 +30,11 @@ if [ ${#missing[@]} -ne 0 ]; then
   printf "❌ Missing build tags in %d test files:\n" "${#missing[@]}"
   printf "   %s\n" "${missing[@]}"
   echo ""
-  echo "   Tests in tests/ directory must have: //go:build integration | //go:build e2e"
+  echo "   Tests in tests/ directory must have one of:"
+  echo "     //go:build unit | //go:build integration | //go:build chaos | //go:build e2e"
   echo ""
   exit 1
 fi
 
-echo "✅ All integration/e2e test files have valid build tags."
+echo "✅ All tests under ./tests have valid build tags."
 exit 0

@@ -306,6 +306,10 @@ func (h *ChaosHarness) IsolateService(t *testing.T, service string) error {
 		return fmt.Errorf("unknown service: %s (expected: postgres, redis, rabbitmq)", service)
 	}
 
+	if proxy == nil {
+		return fmt.Errorf("%s proxy is nil", service)
+	}
+
 	proxy.Enabled = false
 
 	if err := proxy.Save(); err != nil {

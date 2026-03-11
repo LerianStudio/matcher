@@ -38,19 +38,3 @@ func TestOutboxStats_String_ZeroValues(t *testing.T) {
 	assert.Contains(t, s, "total=0")
 	assert.Contains(t, s, "pending=0")
 }
-
-func TestHealthStatus_Fields(t *testing.T) {
-	t.Parallel()
-
-	hs := HealthStatus{
-		Status: "healthy",
-		Checks: map[string]string{
-			"postgres": "ok",
-			"redis":    "ok",
-		},
-	}
-
-	assert.Equal(t, "healthy", hs.Status)
-	assert.Len(t, hs.Checks, 2)
-	assert.Equal(t, "ok", hs.Checks["postgres"])
-}
