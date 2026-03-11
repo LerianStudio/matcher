@@ -1,8 +1,13 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 package bootstrap
 
 import (
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 )
 
@@ -24,171 +29,473 @@ type configFieldDef struct {
 // redactedValue is the placeholder shown for secret fields.
 const redactedValue = "********"
 
-// Default values for config schema fields, grouped by section.
-// Extracted as named constants to satisfy the mnd linter (no magic numbers).
-const (
-	// server defaults.
-	defaultSchemaBodyLimitBytes = 104857600
+// fieldDescriptions maps mapstructure keys to human-readable descriptions.
+// This is the single place to maintain descriptions — reflection derives everything else.
+//
+//nolint:gochecknoglobals // package-level lookup table, read-only after init.
+var fieldDescriptions = map[string]string{ // #nosec G101 -- UI description labels, not credentials
+	// app
+	"app.env_name":  "Deployment environment (development, staging, production)",
+	"app.log_level": "Application log verbosity level",
 
-	// postgres defaults.
-	defaultMaxOpenConns = 25
-	defaultMaxIdleConns = 5
-	defaultQueryTimeout = 30
+	// server
+	"server.address":                 "HTTP server bind address",
+	"server.body_limit_bytes":        "Maximum HTTP request body size in bytes",
+	"server.cors_allowed_origins":    "Comma-separated list of allowed CORS origins",
+	"server.cors_allowed_methods":    "Comma-separated list of allowed HTTP methods",
+	"server.cors_allowed_headers":    "Comma-separated list of allowed request headers",
+	"server.tls_cert_file":           "Path to TLS certificate file",
+	"server.tls_key_file":            "Path to TLS private key file",
+	"server.tls_terminated_upstream": "Whether TLS is terminated by a reverse proxy upstream",
+	"server.trusted_proxies":         "Comma-separated list of trusted proxy addresses",
 
-	// redis defaults.
-	defaultRedisPoolSize = 10
+	// tenancy
+	"tenancy.default_tenant_id":          "UUID of the default tenant",
+	"tenancy.default_tenant_slug":        "URL slug for the default tenant",
+	"tenancy.multi_tenant_infra_enabled": "Enable multi-tenant infrastructure isolation",
 
-	// rate_limit defaults.
-	defaultRateLimitMax         = 100
-	defaultRateLimitExpiry      = 60
-	defaultExportRateLimitMax   = 10
-	defaultExportRateLimitExp   = 60
-	defaultDispatchRateLimitMax = 50
-	defaultDispatchRateLimitExp = 60
+	// postgres
+	"postgres.primary_host":            "PostgreSQL primary server hostname",
+	"postgres.primary_port":            "PostgreSQL primary server port",
+	"postgres.primary_user":            "PostgreSQL primary username",
+	"postgres.primary_password":        "PostgreSQL primary password",
+	"postgres.primary_db":              "PostgreSQL primary database name",
+	"postgres.primary_ssl_mode":        "PostgreSQL primary SSL mode",
+	"postgres.replica_host":            "PostgreSQL replica server hostname",
+	"postgres.replica_port":            "PostgreSQL replica server port",
+	"postgres.replica_user":            "PostgreSQL replica username",
+	"postgres.replica_password":        "PostgreSQL replica password",
+	"postgres.replica_db":              "PostgreSQL replica database name",
+	"postgres.replica_ssl_mode":        "PostgreSQL replica SSL mode",
+	"postgres.max_open_connections":    "Maximum open database connections",
+	"postgres.max_idle_connections":    "Maximum idle database connections",
+	"postgres.conn_max_lifetime_mins":  "Maximum connection lifetime in minutes",
+	"postgres.conn_max_idle_time_mins": "Maximum idle time per connection in minutes",
+	"postgres.connect_timeout_sec":     "Database connection timeout in seconds",
+	"postgres.query_timeout_sec":       "Database query timeout in seconds",
+	"postgres.migrations_path":         "Path to database migration files",
 
-	// export_worker defaults.
-	defaultExportPollInterval = 5
-	defaultExportPageSize     = 1000
-	defaultPresignExpiry      = 3600
+	// redis
+	"redis.host":             "Redis server address",
+	"redis.master_name":      "Redis Sentinel master name",
+	"redis.password":         "Redis password",
+	"redis.db":               "Redis database number",
+	"redis.protocol":         "Redis protocol version",
+	"redis.tls":              "Enable TLS for Redis connections",
+	"redis.ca_cert":          "Redis CA certificate for TLS",
+	"redis.pool_size":        "Redis connection pool size",
+	"redis.min_idle_conn":    "Minimum idle Redis connections",
+	"redis.read_timeout_ms":  "Redis read timeout in milliseconds",
+	"redis.write_timeout_ms": "Redis write timeout in milliseconds",
+	"redis.dial_timeout_ms":  "Redis dial timeout in milliseconds",
 
-	// cleanup_worker defaults.
-	defaultCleanupInterval    = 3600
-	defaultCleanupBatchSize   = 100
-	defaultCleanupGracePeriod = 3600
+	// rabbitmq
+	"rabbitmq.uri":                         "RabbitMQ connection URI scheme",
+	"rabbitmq.host":                        "RabbitMQ server hostname",
+	"rabbitmq.port":                        "RabbitMQ server port",
+	"rabbitmq.user":                        "RabbitMQ username",
+	"rabbitmq.password":                    "RabbitMQ password",
+	"rabbitmq.vhost":                       "RabbitMQ virtual host",
+	"rabbitmq.health_url":                  "RabbitMQ management health URL",
+	"rabbitmq.allow_insecure_health_check": "Allow insecure TLS for health checks",
 
-	// scheduler defaults.
-	defaultSchedulerInterval = 60
+	// auth
+	"auth.enabled":      "Enable JWT authentication",
+	"auth.host":         "Auth service address",
+	"auth.token_secret": "JWT signing secret",
 
-	// webhook defaults.
-	defaultWebhookTimeout = 30
+	// swagger
+	"swagger.enabled": "Enable Swagger UI (non-production only)",
+	"swagger.host":    "Swagger spec host override",
+	"swagger.schemes": "Swagger spec schemes (comma-separated)",
 
-	// callback_rate_limit defaults.
-	defaultCallbackRatePerMin = 60
+	// telemetry
+	"telemetry.enabled":                 "Enable OpenTelemetry tracing and metrics",
+	"telemetry.service_name":            "OpenTelemetry service name",
+	"telemetry.library_name":            "OpenTelemetry instrumentation library name",
+	"telemetry.service_version":         "OpenTelemetry service version",
+	"telemetry.deployment_env":          "OpenTelemetry deployment environment",
+	"telemetry.collector_endpoint":      "OpenTelemetry collector OTLP endpoint",
+	"telemetry.db_metrics_interval_sec": "Database metrics collection interval in seconds",
 
-	// deduplication defaults.
-	defaultDedupeTTL = 3600
+	// rate_limit
+	"rate_limit.enabled":             "Enable global rate limiting",
+	"rate_limit.max":                 "Maximum requests per window",
+	"rate_limit.expiry_sec":          "Rate limit window duration in seconds",
+	"rate_limit.export_max":          "Maximum export requests per window",
+	"rate_limit.export_expiry_sec":   "Export rate limit window in seconds",
+	"rate_limit.dispatch_max":        "Maximum dispatch requests per window",
+	"rate_limit.dispatch_expiry_sec": "Dispatch rate limit window in seconds",
 
-	// idempotency defaults.
-	defaultIdempotencyRetryWindow = 300
-	defaultIdempotencySuccessTTL  = 168
+	// infrastructure
+	"infrastructure.connect_timeout_sec":      "Infrastructure connection timeout in seconds",
+	"infrastructure.health_check_timeout_sec": "Health check timeout in seconds",
 
-	// fetcher defaults — use canonical constants from config_env.go.
-	defaultFetcherHealthTimeout     = defaultFetcherHealthTimeoutSec
-	defaultFetcherRequestTimeout    = defaultFetcherRequestTimeoutSec
-	defaultFetcherDiscoveryInt      = defaultFetcherDiscoveryIntervalSec
-	defaultFetcherSchemaCacheTTL    = defaultFetcherSchemaCacheTTLSec
-	defaultFetcherExtractionPoll    = defaultFetcherExtractionPollSec
-	defaultFetcherExtractionTimeout = defaultFetcherExtractionTimeoutSec
+	// idempotency
+	"idempotency.retry_window_sec":  "Failed idempotency key retry window in seconds",
+	"idempotency.success_ttl_hours": "Completed idempotency key cache duration in hours",
+	"idempotency.hmac_secret":       "Server-side HMAC secret for idempotency key signing",
 
-	// archival defaults.
-	defaultArchivalIntervalHours = 24
-	defaultArchivalBatchSize     = 5000
-)
+	// callback_rate_limit
+	"callback_rate_limit.per_minute": "Max callbacks per external system per minute",
 
-// buildConfigSchema returns the static schema definitions for all YAML-managed fields.
+	// deduplication
+	"deduplication.ttl_sec": "Deduplication key TTL in seconds",
+
+	// object_storage
+	"object_storage.endpoint":          "Object storage endpoint URL",
+	"object_storage.region":            "Object storage region",
+	"object_storage.bucket":            "Object storage bucket name",
+	"object_storage.access_key_id":     "Object storage access key ID",
+	"object_storage.secret_access_key": "Object storage secret access key",
+	"object_storage.use_path_style":    "Use path-style addressing for S3",
+
+	// export_worker
+	"export_worker.enabled":            "Enable background export worker",
+	"export_worker.poll_interval_sec":  "Export worker poll interval in seconds",
+	"export_worker.page_size":          "Number of records per export page",
+	"export_worker.presign_expiry_sec": "Presigned URL expiry in seconds",
+
+	// cleanup_worker
+	"cleanup_worker.enabled":          "Enable background cleanup worker",
+	"cleanup_worker.interval_sec":     "Cleanup worker interval in seconds",
+	"cleanup_worker.batch_size":       "Number of records per cleanup batch",
+	"cleanup_worker.grace_period_sec": "Grace period before cleanup in seconds",
+
+	// scheduler
+	"scheduler.interval_sec": "Scheduler poll interval in seconds",
+
+	// archival
+	"archival.enabled":               "Enable audit log archival worker",
+	"archival.interval_hours":        "Archival worker run interval in hours",
+	"archival.hot_retention_days":    "Days to retain hot audit log data",
+	"archival.warm_retention_months": "Months to retain warm archived data",
+	"archival.cold_retention_months": "Months to retain cold archived data",
+	"archival.batch_size":            "Records per archival batch",
+	"archival.storage_bucket":        "Object storage bucket for archives",
+	"archival.storage_prefix":        "Object key prefix for archived files",
+	"archival.storage_class":         "Storage class for archived objects",
+	"archival.partition_lookahead":   "Number of future partitions to pre-create",
+	"archival.presign_expiry_sec":    "Presigned URL expiry for archive downloads",
+
+	// webhook
+	"webhook.timeout_sec": "HTTP timeout for webhook dispatches in seconds",
+
+	// fetcher
+	"fetcher.enabled":                "Enable Fetcher service integration",
+	"fetcher.url":                    "Fetcher service base URL",
+	"fetcher.allow_private_ips":      "Allow Fetcher to connect to private IPs",
+	"fetcher.health_timeout_sec":     "Fetcher health check timeout in seconds",
+	"fetcher.request_timeout_sec":    "Fetcher HTTP request timeout in seconds",
+	"fetcher.discovery_interval_sec": "Fetcher schema discovery interval in seconds",
+	"fetcher.schema_cache_ttl_sec":   "Fetcher schema cache TTL in seconds",
+	"fetcher.extraction_poll_sec":    "Fetcher extraction poll interval in seconds",
+	"fetcher.extraction_timeout_sec": "Fetcher extraction timeout in seconds",
+}
+
+// fieldLabels maps mapstructure keys to human-readable labels.
+// When absent, a label is auto-generated from the field name.
+//
+//nolint:gochecknoglobals // package-level lookup table, read-only after init.
+var fieldLabels = map[string]string{
+	"app.env_name":                            "Environment Name",
+	"app.log_level":                           "Log Level",
+	"server.address":                          "Listen Address",
+	"server.body_limit_bytes":                 "Body Limit (bytes)",
+	"server.cors_allowed_origins":             "CORS Allowed Origins",
+	"server.cors_allowed_methods":             "CORS Allowed Methods",
+	"server.cors_allowed_headers":             "CORS Allowed Headers",
+	"server.tls_cert_file":                    "TLS Certificate File",
+	"server.tls_key_file":                     "TLS Key File",
+	"server.tls_terminated_upstream":          "TLS Terminated Upstream",
+	"server.trusted_proxies":                  "Trusted Proxies",
+	"tenancy.default_tenant_id":               "Default Tenant ID",
+	"tenancy.default_tenant_slug":             "Default Tenant Slug",
+	"tenancy.multi_tenant_infra_enabled":      "Multi-Tenant Infra Enabled",
+	"postgres.primary_host":                   "Primary Host",
+	"postgres.primary_port":                   "Primary Port",
+	"postgres.primary_user":                   "Primary User",
+	"postgres.primary_password":               "Primary Password",
+	"postgres.primary_db":                     "Primary Database",
+	"postgres.primary_ssl_mode":               "Primary SSL Mode",
+	"postgres.replica_host":                   "Replica Host",
+	"postgres.replica_port":                   "Replica Port",
+	"postgres.replica_user":                   "Replica User",
+	"postgres.replica_password":               "Replica Password",
+	"postgres.replica_db":                     "Replica Database",
+	"postgres.replica_ssl_mode":               "Replica SSL Mode",
+	"postgres.max_open_connections":           "Max Open Connections",
+	"postgres.max_idle_connections":           "Max Idle Connections",
+	"postgres.conn_max_lifetime_mins":         "Conn Max Lifetime (min)",
+	"postgres.conn_max_idle_time_mins":        "Conn Max Idle Time (min)",
+	"postgres.connect_timeout_sec":            "Connect Timeout (sec)",
+	"postgres.query_timeout_sec":              "Query Timeout (sec)",
+	"postgres.migrations_path":                "Migrations Path",
+	"redis.host":                              "Host",
+	"redis.master_name":                       "Master Name",
+	"redis.password":                          "Password",
+	"redis.db":                                "Database",
+	"redis.protocol":                          "Protocol",
+	"redis.tls":                               "TLS Enabled",
+	"redis.ca_cert":                           "CA Certificate",
+	"redis.pool_size":                         "Pool Size",
+	"redis.min_idle_conn":                     "Min Idle Connections",
+	"redis.read_timeout_ms":                   "Read Timeout (ms)",
+	"redis.write_timeout_ms":                  "Write Timeout (ms)",
+	"redis.dial_timeout_ms":                   "Dial Timeout (ms)",
+	"rabbitmq.uri":                            "URI",
+	"rabbitmq.host":                           "Host",
+	"rabbitmq.port":                           "Port",
+	"rabbitmq.user":                           "User",
+	"rabbitmq.password":                       "Password",
+	"rabbitmq.vhost":                          "VHost",
+	"rabbitmq.health_url":                     "Health URL",
+	"rabbitmq.allow_insecure_health_check":    "Allow Insecure Health Check",
+	"auth.enabled":                            "Auth Enabled",
+	"auth.host":                               "Auth Host",
+	"auth.token_secret":                       "JWT Secret",
+	"swagger.enabled":                         "Swagger Enabled",
+	"swagger.host":                            "Swagger Host",
+	"swagger.schemes":                         "Swagger Schemes",
+	"telemetry.enabled":                       "Telemetry Enabled",
+	"telemetry.service_name":                  "Service Name",
+	"telemetry.library_name":                  "Library Name",
+	"telemetry.service_version":               "Service Version",
+	"telemetry.deployment_env":                "Deployment Environment",
+	"telemetry.collector_endpoint":            "Collector Endpoint",
+	"telemetry.db_metrics_interval_sec":       "DB Metrics Interval (sec)",
+	"rate_limit.enabled":                      "Rate Limit Enabled",
+	"rate_limit.max":                          "Max Requests",
+	"rate_limit.expiry_sec":                   "Window (sec)",
+	"rate_limit.export_max":                   "Export Max",
+	"rate_limit.export_expiry_sec":            "Export Window (sec)",
+	"rate_limit.dispatch_max":                 "Dispatch Max",
+	"rate_limit.dispatch_expiry_sec":          "Dispatch Window (sec)",
+	"infrastructure.connect_timeout_sec":      "Connect Timeout (sec)",
+	"infrastructure.health_check_timeout_sec": "Health Check Timeout (sec)",
+	"idempotency.retry_window_sec":            "Retry Window (sec)",
+	"idempotency.success_ttl_hours":           "Success TTL (hours)",
+	"idempotency.hmac_secret":                 "HMAC Secret",
+	"callback_rate_limit.per_minute":          "Callbacks Per Minute",
+	"deduplication.ttl_sec":                   "Dedupe TTL (sec)",
+	"object_storage.endpoint":                 "Endpoint",
+	"object_storage.region":                   "Region",
+	"object_storage.bucket":                   "Bucket",
+	"object_storage.access_key_id":            "Access Key ID",
+	"object_storage.secret_access_key":        "Secret Access Key",
+	"object_storage.use_path_style":           "Use Path Style",
+	"export_worker.enabled":                   "Export Worker Enabled",
+	"export_worker.poll_interval_sec":         "Poll Interval (sec)",
+	"export_worker.page_size":                 "Page Size",
+	"export_worker.presign_expiry_sec":        "Presign Expiry (sec)",
+	"cleanup_worker.enabled":                  "Cleanup Worker Enabled",
+	"cleanup_worker.interval_sec":             "Interval (sec)",
+	"cleanup_worker.batch_size":               "Batch Size",
+	"cleanup_worker.grace_period_sec":         "Grace Period (sec)",
+	"scheduler.interval_sec":                  "Scheduler Interval (sec)",
+	"archival.enabled":                        "Archival Enabled",
+	"archival.interval_hours":                 "Interval (hours)",
+	"archival.hot_retention_days":             "Hot Retention (days)",
+	"archival.warm_retention_months":          "Warm Retention (months)",
+	"archival.cold_retention_months":          "Cold Retention (months)",
+	"archival.batch_size":                     "Batch Size",
+	"archival.storage_bucket":                 "Storage Bucket",
+	"archival.storage_prefix":                 "Storage Prefix",
+	"archival.storage_class":                  "Storage Class",
+	"archival.partition_lookahead":            "Partition Lookahead",
+	"archival.presign_expiry_sec":             "Presign Expiry (sec)",
+	"webhook.timeout_sec":                     "Webhook Timeout (sec)",
+	"fetcher.enabled":                         "Fetcher Enabled",
+	"fetcher.url":                             "Fetcher URL",
+	"fetcher.allow_private_ips":               "Allow Private IPs",
+	"fetcher.health_timeout_sec":              "Health Timeout (sec)",
+	"fetcher.request_timeout_sec":             "Request Timeout (sec)",
+	"fetcher.discovery_interval_sec":          "Discovery Interval (sec)",
+	"fetcher.schema_cache_ttl_sec":            "Schema Cache TTL (sec)",
+	"fetcher.extraction_poll_sec":             "Extraction Poll (sec)",
+	"fetcher.extraction_timeout_sec":          "Extraction Timeout (sec)",
+}
+
+// fieldConstraints maps mapstructure keys to validation constraints.
+// Domain-specific constraints cannot be derived from struct tags.
+//
+//nolint:gochecknoglobals // package-level lookup table, read-only after init.
+var fieldConstraints = map[string][]string{
+	"app.log_level":                    {"enum:debug,info,warn,error"},
+	"server.body_limit_bytes":          {"min:1"},
+	"postgres.primary_ssl_mode":        {"enum:disable,require,verify-ca,verify-full"},
+	"postgres.max_open_connections":    {"min:1"},
+	"postgres.max_idle_connections":    {"min:0"},
+	"postgres.query_timeout_sec":       {"min:0"},
+	"redis.db":                         {"min:0"},
+	"redis.pool_size":                  {"min:1"},
+	"rate_limit.max":                   {"min:1", "max:1000000"},
+	"rate_limit.expiry_sec":            {"min:1"},
+	"rate_limit.export_max":            {"min:1"},
+	"rate_limit.export_expiry_sec":     {"min:1"},
+	"rate_limit.dispatch_max":          {"min:1"},
+	"rate_limit.dispatch_expiry_sec":   {"min:1"},
+	"export_worker.poll_interval_sec":  {"min:1"},
+	"export_worker.page_size":          {"min:1"},
+	"export_worker.presign_expiry_sec": {"min:60"},
+	"cleanup_worker.interval_sec":      {"min:60"},
+	"cleanup_worker.batch_size":        {"min:1"},
+	"cleanup_worker.grace_period_sec":  {"min:60"},
+	"scheduler.interval_sec":           {"min:1"},
+	"webhook.timeout_sec":              {"min:1"},
+	"callback_rate_limit.per_minute":   {"min:1"},
+	"deduplication.ttl_sec":            {"min:1"},
+	"idempotency.retry_window_sec":     {"min:1"},
+	"idempotency.success_ttl_hours":    {"min:1"},
+	"fetcher.health_timeout_sec":       {"min:1"},
+	"fetcher.request_timeout_sec":      {"min:1"},
+	"fetcher.discovery_interval_sec":   {"min:1"},
+	"fetcher.schema_cache_ttl_sec":     {"min:1"},
+	"fetcher.extraction_poll_sec":      {"min:1"},
+	"fetcher.extraction_timeout_sec":   {"min:1"},
+	"archival.interval_hours":          {"min:1"},
+	"archival.batch_size":              {"min:1"},
+}
+
+// buildConfigSchema returns the schema definitions for all config fields,
+// derived via reflection from the Config struct's tags. Descriptions,
+// labels, and constraints come from the companion maps above.
 func buildConfigSchema() []configFieldDef {
-	return []configFieldDef{
-		// ── app ──────────────────────────────────────────────────
-		{Key: "app.env_name", Label: "Environment Name", Type: "string", DefaultValue: "development", HotReloadable: false, EnvVar: "ENV_NAME", Description: "Deployment environment (development, staging, production)", Section: "app"},
-		{Key: "app.log_level", Label: "Log Level", Type: "string", DefaultValue: "info", HotReloadable: true, EnvVar: "LOG_LEVEL", Constraints: []string{"enum:debug,info,warn,error"}, Description: "Application log verbosity level", Section: "app"},
+	var defs []configFieldDef
 
-		// ── server ──────────────────────────────────────────────
-		{Key: "server.address", Label: "Listen Address", Type: "string", DefaultValue: ":4018", HotReloadable: false, EnvVar: "SERVER_ADDRESS", Description: "HTTP server bind address", Section: "server"},
-		{Key: "server.body_limit_bytes", Label: "Body Limit (bytes)", Type: "int", DefaultValue: defaultSchemaBodyLimitBytes, HotReloadable: false, EnvVar: "HTTP_BODY_LIMIT_BYTES", Constraints: []string{"min:1"}, Description: "Maximum HTTP request body size in bytes", Section: "server"},
-		{Key: "server.cors_allowed_origins", Label: "CORS Allowed Origins", Type: "string", DefaultValue: "http://localhost:3000", HotReloadable: false, EnvVar: "CORS_ALLOWED_ORIGINS", Description: "Comma-separated list of allowed CORS origins", Section: "server"},
-		{Key: "server.cors_allowed_methods", Label: "CORS Allowed Methods", Type: "string", DefaultValue: "GET,POST,PUT,PATCH,DELETE,OPTIONS", HotReloadable: false, EnvVar: "CORS_ALLOWED_METHODS", Description: "Comma-separated list of allowed HTTP methods", Section: "server"},
-		{Key: "server.cors_allowed_headers", Label: "CORS Allowed Headers", Type: "string", DefaultValue: "Origin,Content-Type,Accept,Authorization,X-Request-ID", HotReloadable: false, EnvVar: "CORS_ALLOWED_HEADERS", Description: "Comma-separated list of allowed request headers", Section: "server"},
-		{Key: "server.tls_cert_file", Label: "TLS Certificate File", Type: "string", DefaultValue: "", HotReloadable: false, EnvVar: "SERVER_TLS_CERT_FILE", Description: "Path to TLS certificate file", Section: "server"},
-		{Key: "server.tls_key_file", Label: "TLS Key File", Type: "string", DefaultValue: "", HotReloadable: false, EnvVar: "SERVER_TLS_KEY_FILE", Description: "Path to TLS private key file", Section: "server"},
-		{Key: "server.tls_terminated_upstream", Label: "TLS Terminated Upstream", Type: "bool", DefaultValue: false, HotReloadable: false, EnvVar: "TLS_TERMINATED_UPSTREAM", Description: "Whether TLS is terminated by a reverse proxy upstream", Section: "server"},
+	t := reflect.TypeOf(Config{})
 
-		// ── tenancy ─────────────────────────────────────────────
-		{Key: "tenancy.default_tenant_id", Label: "Default Tenant ID", Type: "string", DefaultValue: "11111111-1111-1111-1111-111111111111", HotReloadable: false, EnvVar: "DEFAULT_TENANT_ID", Description: "UUID of the default tenant", Section: "tenancy"},
-		{Key: "tenancy.default_tenant_slug", Label: "Default Tenant Slug", Type: "string", DefaultValue: "default", HotReloadable: false, EnvVar: "DEFAULT_TENANT_SLUG", Description: "URL slug for the default tenant", Section: "tenancy"},
+	for i := range t.NumField() {
+		sectionField := t.Field(i)
+		if !sectionField.IsExported() {
+			continue
+		}
 
-		// ── postgres ────────────────────────────────────────────
-		{Key: "postgres.primary_host", Label: "Primary Host", Type: "string", DefaultValue: "localhost", HotReloadable: false, EnvVar: "POSTGRES_HOST", Description: "PostgreSQL primary server hostname", Section: "postgres"},
-		{Key: "postgres.primary_port", Label: "Primary Port", Type: "string", DefaultValue: "5432", HotReloadable: false, EnvVar: "POSTGRES_PORT", Description: "PostgreSQL primary server port", Section: "postgres"},
-		{Key: "postgres.primary_user", Label: "Primary User", Type: "string", DefaultValue: "matcher", HotReloadable: false, EnvVar: "POSTGRES_USER", Description: "PostgreSQL primary username", Section: "postgres"},
-		{Key: "postgres.primary_password", Label: "Primary Password", Type: "string", DefaultValue: "", HotReloadable: false, EnvVar: "POSTGRES_PASSWORD", Description: "PostgreSQL primary password", Section: "postgres", Secret: true},
-		{Key: "postgres.primary_db", Label: "Primary Database", Type: "string", DefaultValue: "matcher", HotReloadable: false, EnvVar: "POSTGRES_DB", Description: "PostgreSQL primary database name", Section: "postgres"},
-		{Key: "postgres.primary_ssl_mode", Label: "Primary SSL Mode", Type: "string", DefaultValue: "disable", HotReloadable: false, EnvVar: "POSTGRES_SSLMODE", Constraints: []string{"enum:disable,require,verify-ca,verify-full"}, Description: "PostgreSQL primary SSL mode", Section: "postgres"},
-		{Key: "postgres.max_open_connections", Label: "Max Open Connections", Type: "int", DefaultValue: defaultMaxOpenConns, HotReloadable: false, EnvVar: "POSTGRES_MAX_OPEN_CONNS", Constraints: []string{"min:1"}, Description: "Maximum open database connections", Section: "postgres"},
-		{Key: "postgres.max_idle_connections", Label: "Max Idle Connections", Type: "int", DefaultValue: defaultMaxIdleConns, HotReloadable: false, EnvVar: "POSTGRES_MAX_IDLE_CONNS", Constraints: []string{"min:0"}, Description: "Maximum idle database connections", Section: "postgres"},
-		{Key: "postgres.query_timeout_sec", Label: "Query Timeout (sec)", Type: "int", DefaultValue: defaultQueryTimeout, HotReloadable: false, EnvVar: "POSTGRES_QUERY_TIMEOUT_SEC", Constraints: []string{"min:0"}, Description: "Database query timeout in seconds", Section: "postgres"},
+		sectionTag := sectionField.Tag.Get("mapstructure")
+		if sectionTag == "-" || sectionTag == "" {
+			continue
+		}
 
-		// ── redis ────────────────────────────────────────────────
-		{Key: "redis.host", Label: "Host", Type: "string", DefaultValue: "localhost:6379", HotReloadable: false, EnvVar: "REDIS_HOST", Description: "Redis server address", Section: "redis"},
-		{Key: "redis.password", Label: "Password", Type: "string", DefaultValue: "", HotReloadable: false, EnvVar: "REDIS_PASSWORD", Description: "Redis password", Section: "redis", Secret: true},
-		{Key: "redis.db", Label: "Database", Type: "int", DefaultValue: 0, HotReloadable: false, EnvVar: "REDIS_DB", Constraints: []string{"min:0"}, Description: "Redis database number", Section: "redis"},
-		{Key: "redis.pool_size", Label: "Pool Size", Type: "int", DefaultValue: defaultRedisPoolSize, HotReloadable: false, EnvVar: "REDIS_POOL_SIZE", Constraints: []string{"min:1"}, Description: "Redis connection pool size", Section: "redis"},
+		// Only recurse into struct types (sub-configs).
+		ft := sectionField.Type
+		if ft.Kind() != reflect.Struct {
+			continue
+		}
 
-		// ── rabbitmq ────────────────────────────────────────────
-		{Key: "rabbitmq.host", Label: "Host", Type: "string", DefaultValue: "localhost", HotReloadable: false, EnvVar: "RABBITMQ_HOST", Description: "RabbitMQ server hostname", Section: "rabbitmq"},
-		{Key: "rabbitmq.port", Label: "Port", Type: "string", DefaultValue: "5672", HotReloadable: false, EnvVar: "RABBITMQ_PORT", Description: "RabbitMQ server port", Section: "rabbitmq"},
-		{Key: "rabbitmq.user", Label: "User", Type: "string", DefaultValue: "guest", HotReloadable: false, EnvVar: "RABBITMQ_USER", Description: "RabbitMQ username", Section: "rabbitmq"},
-		{Key: "rabbitmq.password", Label: "Password", Type: "string", DefaultValue: "guest", HotReloadable: false, EnvVar: "RABBITMQ_PASSWORD", Description: "RabbitMQ password", Section: "rabbitmq", Secret: true},
-
-		// ── auth ─────────────────────────────────────────────────
-		{Key: "auth.enabled", Label: "Auth Enabled", Type: "bool", DefaultValue: false, HotReloadable: false, EnvVar: "AUTH_ENABLED", Description: "Enable JWT authentication", Section: "auth"},
-		{Key: "auth.host", Label: "Auth Host", Type: "string", DefaultValue: "", HotReloadable: false, EnvVar: "AUTH_SERVICE_ADDRESS", Description: "Auth service address", Section: "auth"},
-		{Key: "auth.token_secret", Label: "JWT Secret", Type: "string", DefaultValue: "", HotReloadable: false, EnvVar: "AUTH_JWT_SECRET", Description: "JWT signing secret", Section: "auth", Secret: true},
-
-		// ── rate_limit ──────────────────────────────────────────
-		{Key: "rate_limit.enabled", Label: "Rate Limit Enabled", Type: "bool", DefaultValue: true, HotReloadable: true, EnvVar: "RATE_LIMIT_ENABLED", Description: "Enable global rate limiting", Section: "rate_limit"},
-		{Key: "rate_limit.max", Label: "Max Requests", Type: "int", DefaultValue: defaultRateLimitMax, HotReloadable: true, EnvVar: "RATE_LIMIT_MAX", Constraints: []string{"min:1", "max:1000000"}, Description: "Maximum requests per window", Section: "rate_limit"},
-		{Key: "rate_limit.expiry_sec", Label: "Window (sec)", Type: "int", DefaultValue: defaultRateLimitExpiry, HotReloadable: true, EnvVar: "RATE_LIMIT_EXPIRY_SEC", Constraints: []string{"min:1"}, Description: "Rate limit window duration in seconds", Section: "rate_limit"},
-		{Key: "rate_limit.export_max", Label: "Export Max", Type: "int", DefaultValue: defaultExportRateLimitMax, HotReloadable: true, EnvVar: "EXPORT_RATE_LIMIT_MAX", Constraints: []string{"min:1"}, Description: "Maximum export requests per window", Section: "rate_limit"},
-		{Key: "rate_limit.export_expiry_sec", Label: "Export Window (sec)", Type: "int", DefaultValue: defaultExportRateLimitExp, HotReloadable: true, EnvVar: "EXPORT_RATE_LIMIT_EXPIRY_SEC", Constraints: []string{"min:1"}, Description: "Export rate limit window in seconds", Section: "rate_limit"},
-		{Key: "rate_limit.dispatch_max", Label: "Dispatch Max", Type: "int", DefaultValue: defaultDispatchRateLimitMax, HotReloadable: true, EnvVar: "DISPATCH_RATE_LIMIT_MAX", Constraints: []string{"min:1"}, Description: "Maximum dispatch requests per window", Section: "rate_limit"},
-		{Key: "rate_limit.dispatch_expiry_sec", Label: "Dispatch Window (sec)", Type: "int", DefaultValue: defaultDispatchRateLimitExp, HotReloadable: true, EnvVar: "DISPATCH_RATE_LIMIT_EXPIRY_SEC", Constraints: []string{"min:1"}, Description: "Dispatch rate limit window in seconds", Section: "rate_limit"},
-
-		// ── swagger ─────────────────────────────────────────────
-		{Key: "swagger.enabled", Label: "Swagger Enabled", Type: "bool", DefaultValue: false, HotReloadable: true, EnvVar: "SWAGGER_ENABLED", Description: "Enable Swagger UI (non-production only)", Section: "swagger"},
-
-		// ── export_worker ───────────────────────────────────────
-		{Key: "export_worker.enabled", Label: "Export Worker Enabled", Type: "bool", DefaultValue: true, HotReloadable: true, EnvVar: "EXPORT_WORKER_ENABLED", Description: "Enable background export worker", Section: "export_worker"},
-		{Key: "export_worker.poll_interval_sec", Label: "Poll Interval (sec)", Type: "int", DefaultValue: defaultExportPollInterval, HotReloadable: true, EnvVar: "EXPORT_WORKER_POLL_INTERVAL_SEC", Constraints: []string{"min:1"}, Description: "Export worker poll interval in seconds", Section: "export_worker"},
-		{Key: "export_worker.page_size", Label: "Page Size", Type: "int", DefaultValue: defaultExportPageSize, HotReloadable: true, EnvVar: "EXPORT_WORKER_PAGE_SIZE", Constraints: []string{"min:1"}, Description: "Number of records per export page", Section: "export_worker"},
-		{Key: "export_worker.presign_expiry_sec", Label: "Presign Expiry (sec)", Type: "int", DefaultValue: defaultPresignExpiry, HotReloadable: true, EnvVar: "EXPORT_PRESIGN_EXPIRY_SEC", Constraints: []string{"min:60"}, Description: "Presigned URL expiry in seconds", Section: "export_worker"},
-
-		// ── cleanup_worker ──────────────────────────────────────
-		{Key: "cleanup_worker.enabled", Label: "Cleanup Worker Enabled", Type: "bool", DefaultValue: true, HotReloadable: true, EnvVar: "CLEANUP_WORKER_ENABLED", Description: "Enable background cleanup worker", Section: "cleanup_worker"},
-		{Key: "cleanup_worker.interval_sec", Label: "Interval (sec)", Type: "int", DefaultValue: defaultCleanupInterval, HotReloadable: true, EnvVar: "CLEANUP_WORKER_INTERVAL_SEC", Constraints: []string{"min:60"}, Description: "Cleanup worker interval in seconds", Section: "cleanup_worker"},
-		{Key: "cleanup_worker.batch_size", Label: "Batch Size", Type: "int", DefaultValue: defaultCleanupBatchSize, HotReloadable: true, EnvVar: "CLEANUP_WORKER_BATCH_SIZE", Constraints: []string{"min:1"}, Description: "Number of records per cleanup batch", Section: "cleanup_worker"},
-		{Key: "cleanup_worker.grace_period_sec", Label: "Grace Period (sec)", Type: "int", DefaultValue: defaultCleanupGracePeriod, HotReloadable: true, EnvVar: "CLEANUP_WORKER_GRACE_PERIOD_SEC", Constraints: []string{"min:60"}, Description: "Grace period before cleanup in seconds", Section: "cleanup_worker"},
-
-		// ── scheduler ───────────────────────────────────────────
-		{Key: "scheduler.interval_sec", Label: "Scheduler Interval (sec)", Type: "int", DefaultValue: defaultSchedulerInterval, HotReloadable: true, EnvVar: "SCHEDULER_INTERVAL_SEC", Constraints: []string{"min:1"}, Description: "Scheduler poll interval in seconds", Section: "scheduler"},
-
-		// ── webhook ─────────────────────────────────────────────
-		{Key: "webhook.timeout_sec", Label: "Webhook Timeout (sec)", Type: "int", DefaultValue: defaultWebhookTimeout, HotReloadable: true, EnvVar: "WEBHOOK_TIMEOUT_SEC", Constraints: []string{"min:1"}, Description: "HTTP timeout for webhook dispatches in seconds", Section: "webhook"},
-
-		// ── callback_rate_limit ──────────────────────────────────
-		{Key: "callback_rate_limit.per_minute", Label: "Callbacks Per Minute", Type: "int", DefaultValue: defaultCallbackRatePerMin, HotReloadable: true, EnvVar: "CALLBACK_RATE_LIMIT_PER_MIN", Constraints: []string{"min:1"}, Description: "Max callbacks per external system per minute", Section: "callback_rate_limit"},
-
-		// ── deduplication ────────────────────────────────────────
-		{Key: "deduplication.ttl_sec", Label: "Dedupe TTL (sec)", Type: "int", DefaultValue: defaultDedupeTTL, HotReloadable: true, EnvVar: "DEDUPE_TTL_SEC", Constraints: []string{"min:1"}, Description: "Deduplication key TTL in seconds", Section: "deduplication"},
-
-		// ── idempotency ─────────────────────────────────────────
-		{Key: "idempotency.retry_window_sec", Label: "Retry Window (sec)", Type: "int", DefaultValue: defaultIdempotencyRetryWindow, HotReloadable: true, EnvVar: "IDEMPOTENCY_RETRY_WINDOW_SEC", Constraints: []string{"min:1"}, Description: "Failed idempotency key retry window in seconds", Section: "idempotency"},
-		{Key: "idempotency.success_ttl_hours", Label: "Success TTL (hours)", Type: "int", DefaultValue: defaultIdempotencySuccessTTL, HotReloadable: true, EnvVar: "IDEMPOTENCY_SUCCESS_TTL_HOURS", Constraints: []string{"min:1"}, Description: "Completed idempotency key cache duration in hours", Section: "idempotency"},
-		{Key: "idempotency.hmac_secret", Label: "HMAC Secret", Type: "string", DefaultValue: "", HotReloadable: false, EnvVar: "IDEMPOTENCY_HMAC_SECRET", Description: "Server-side HMAC secret for idempotency key signing", Section: "idempotency", Secret: true},
-
-		// ── fetcher ─────────────────────────────────────────────
-		{Key: "fetcher.enabled", Label: "Fetcher Enabled", Type: "bool", DefaultValue: false, HotReloadable: true, EnvVar: "FETCHER_ENABLED", Description: "Enable Fetcher service integration", Section: "fetcher"},
-		{Key: "fetcher.health_timeout_sec", Label: "Health Timeout (sec)", Type: "int", DefaultValue: defaultFetcherHealthTimeout, HotReloadable: true, EnvVar: "FETCHER_HEALTH_TIMEOUT_SEC", Constraints: []string{"min:1"}, Description: "Fetcher health check timeout in seconds", Section: "fetcher"},
-		{Key: "fetcher.request_timeout_sec", Label: "Request Timeout (sec)", Type: "int", DefaultValue: defaultFetcherRequestTimeout, HotReloadable: true, EnvVar: "FETCHER_REQUEST_TIMEOUT_SEC", Constraints: []string{"min:1"}, Description: "Fetcher HTTP request timeout in seconds", Section: "fetcher"},
-		{Key: "fetcher.discovery_interval_sec", Label: "Discovery Interval (sec)", Type: "int", DefaultValue: defaultFetcherDiscoveryInt, HotReloadable: true, EnvVar: "FETCHER_DISCOVERY_INTERVAL_SEC", Constraints: []string{"min:1"}, Description: "Fetcher schema discovery interval in seconds", Section: "fetcher"},
-		{Key: "fetcher.schema_cache_ttl_sec", Label: "Schema Cache TTL (sec)", Type: "int", DefaultValue: defaultFetcherSchemaCacheTTL, HotReloadable: true, EnvVar: "FETCHER_SCHEMA_CACHE_TTL_SEC", Constraints: []string{"min:1"}, Description: "Fetcher schema cache TTL in seconds", Section: "fetcher"},
-		{Key: "fetcher.extraction_poll_sec", Label: "Extraction Poll (sec)", Type: "int", DefaultValue: defaultFetcherExtractionPoll, HotReloadable: true, EnvVar: "FETCHER_EXTRACTION_POLL_INTERVAL_SEC", Constraints: []string{"min:1"}, Description: "Fetcher extraction poll interval in seconds", Section: "fetcher"},
-		{Key: "fetcher.extraction_timeout_sec", Label: "Extraction Timeout (sec)", Type: "int", DefaultValue: defaultFetcherExtractionTimeout, HotReloadable: true, EnvVar: "FETCHER_EXTRACTION_TIMEOUT_SEC", Constraints: []string{"min:1"}, Description: "Fetcher extraction timeout in seconds", Section: "fetcher"},
-
-		// ── archival ────────────────────────────────────────────
-		{Key: "archival.enabled", Label: "Archival Enabled", Type: "bool", DefaultValue: false, HotReloadable: true, EnvVar: "ARCHIVAL_WORKER_ENABLED", Description: "Enable audit log archival worker", Section: "archival"},
-		{Key: "archival.interval_hours", Label: "Interval (hours)", Type: "int", DefaultValue: defaultArchivalIntervalHours, HotReloadable: true, EnvVar: "ARCHIVAL_WORKER_INTERVAL_HOURS", Constraints: []string{"min:1"}, Description: "Archival worker run interval in hours", Section: "archival"},
-		{Key: "archival.batch_size", Label: "Batch Size", Type: "int", DefaultValue: defaultArchivalBatchSize, HotReloadable: true, EnvVar: "ARCHIVAL_BATCH_SIZE", Constraints: []string{"min:1"}, Description: "Records per archival batch", Section: "archival"},
+		collectSchemaFields(&defs, ft, sectionTag)
 	}
+
+	return defs
+}
+
+// collectSchemaFields appends a configFieldDef for each leaf field in the given
+// struct type, using the section prefix for dotted key construction.
+func collectSchemaFields(defs *[]configFieldDef, t reflect.Type, section string) {
+	for i := range t.NumField() {
+		field := t.Field(i)
+		if !field.IsExported() {
+			continue
+		}
+
+		tag := field.Tag.Get("mapstructure")
+		if tag == "-" || tag == "" {
+			continue
+		}
+
+		key := section + "." + tag
+
+		def := configFieldDef{
+			Key:           key,
+			Type:          goKindToSchemaType(field.Type.Kind()),
+			DefaultValue:  parseDefaultValue(field),
+			EnvVar:        extractEnvVar(field),
+			Section:       section,
+			Secret:        isSensitiveKey(key),
+			HotReloadable: mutableConfigKeys[key],
+			Description:   fieldDescriptions[key],
+			Label:         fieldLabels[key],
+			Constraints:   fieldConstraints[key],
+		}
+
+		// Fallback: generate label from the mapstructure tag if none is registered.
+		if def.Label == "" {
+			def.Label = labelFromTag(tag)
+		}
+
+		// Fallback: generate description from the label if none is registered.
+		if def.Description == "" {
+			def.Description = def.Label
+		}
+
+		*defs = append(*defs, def)
+	}
+}
+
+// goKindToSchemaType maps a reflect.Kind to the schema type string.
+func goKindToSchemaType(k reflect.Kind) string {
+	switch k {
+	case reflect.Bool:
+		return "bool"
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return "int"
+	default:
+		return "string"
+	}
+}
+
+// extractEnvVar reads the first token from the `env` struct tag.
+func extractEnvVar(field reflect.StructField) string {
+	env := field.Tag.Get("env")
+	if env == "" {
+		return ""
+	}
+
+	if idx := strings.IndexByte(env, ','); idx >= 0 {
+		return env[:idx]
+	}
+
+	return env
+}
+
+// parseDefaultValue extracts the envDefault tag value and coerces it to the
+// correct Go type (int/bool/string) to match the existing schema contract.
+func parseDefaultValue(field reflect.StructField) any {
+	raw := field.Tag.Get("envDefault")
+
+	switch field.Type.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		if raw == "" {
+			return 0
+		}
+
+		v, err := strconv.Atoi(raw)
+		if err != nil {
+			return 0
+		}
+
+		return v
+	case reflect.Bool:
+		return raw == "true"
+	default:
+		return raw
+	}
+}
+
+// labelFromTag converts a snake_case mapstructure tag to a Title Case label.
+// e.g. "primary_ssl_mode" → "Primary Ssl Mode".
+func labelFromTag(tag string) string {
+	parts := strings.Split(tag, "_")
+	for i, p := range parts {
+		if p == "" {
+			continue
+		}
+
+		parts[i] = strings.ToUpper(p[:1]) + p[1:]
+	}
+
+	return strings.Join(parts, " ")
 }
 
 // isEnvOverridden returns true if the given env var is set in the process environment.

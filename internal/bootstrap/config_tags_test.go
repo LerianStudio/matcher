@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 //go:build unit
 
 package bootstrap
@@ -25,7 +29,7 @@ func TestConfigMapstructureTags_AllExportedFieldsTagged(t *testing.T) {
 
 	var missing []string
 
-	walkStructFields(reflect.TypeOf(Config{}), "Config", func(path string, field reflect.StructField) {
+	walkStructFieldsForTags(reflect.TypeOf(Config{}), "Config", func(path string, field reflect.StructField) {
 		_, ok := field.Tag.Lookup("mapstructure")
 		if !ok {
 			missing = append(missing, path+"."+field.Name)
@@ -44,7 +48,7 @@ func TestConfigMapstructureTags_ValuesAreSnakeCase(t *testing.T) {
 
 	var violations []string
 
-	walkStructFields(reflect.TypeOf(Config{}), "Config", func(path string, field reflect.StructField) {
+	walkStructFieldsForTags(reflect.TypeOf(Config{}), "Config", func(path string, field reflect.StructField) {
 		tag, ok := field.Tag.Lookup("mapstructure")
 		if !ok {
 			return // missing tags are caught by the other test
@@ -93,7 +97,7 @@ func TestConfigMapstructureTags_FieldCount(t *testing.T) {
 
 	var count int
 
-	walkStructFields(reflect.TypeOf(Config{}), "Config", func(_ string, field reflect.StructField) {
+	walkStructFieldsForTags(reflect.TypeOf(Config{}), "Config", func(_ string, field reflect.StructField) {
 		if _, ok := field.Tag.Lookup("mapstructure"); ok {
 			count++
 		}
@@ -106,10 +110,10 @@ func TestConfigMapstructureTags_FieldCount(t *testing.T) {
 	t.Logf("total mapstructure-tagged fields: %d", count)
 }
 
-// walkStructFields recursively visits every exported field in a struct type,
+// walkStructFieldsForTags recursively visits every exported field in a struct type,
 // including fields inside nested structs. The callback receives the parent
 // path (e.g., "Config.Postgres") and the field descriptor.
-func walkStructFields(t reflect.Type, path string, fn func(path string, field reflect.StructField)) {
+func walkStructFieldsForTags(t reflect.Type, path string, fn func(path string, field reflect.StructField)) {
 	for i := range t.NumField() {
 		field := t.Field(i)
 		if !field.IsExported() {
@@ -127,7 +131,7 @@ func walkStructFields(t reflect.Type, path string, fn func(path string, field re
 				continue
 			}
 
-			walkStructFields(ft, path+"."+field.Name, fn)
+			walkStructFieldsForTags(ft, path+"."+field.Name, fn)
 		}
 	}
 }
