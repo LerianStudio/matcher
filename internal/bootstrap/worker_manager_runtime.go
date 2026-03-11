@@ -83,9 +83,10 @@ func (wm *WorkerManager) restartSlotLocked(ctx context.Context, slot *workerSlot
 
 	wm.stopSlotLocked(ctx, slot)
 
-	if sameInstance {
-		applyWorkerRuntimeConfig(ctx, slot.name, candidate, newCfg)
-	}
+	// Always apply runtime config to the candidate before starting, regardless of
+	// whether it is the same instance. If factories are refactored to return new
+	// instances in the future, this ensures they always receive the latest config.
+	applyWorkerRuntimeConfig(ctx, slot.name, candidate, newCfg)
 
 	if err := candidate.Start(ctx); err != nil {
 		if rollbackErr := wm.rollbackAfterRestartFailureLocked(ctx, slot, previous, oldCfg, sameInstance); rollbackErr != nil {
