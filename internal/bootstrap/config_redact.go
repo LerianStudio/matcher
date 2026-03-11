@@ -12,7 +12,7 @@ import (
 // fields containing secrets. Used by diffConfigs to redact secret values
 // from config change diffs, preventing credential leakage in API responses
 // and audit logs.
-var sensitiveKeyFragments = []string{"password", "secret", "token", "key", "cert"}
+var sensitiveKeyFragments = []string{"password", "secret", "token", "key", "cert", "uri"}
 
 // diffConfigs computes the list of top-level field changes between two configs.
 // Uses reflection on the exported struct fields of Config. Fields tagged with
@@ -103,6 +103,12 @@ func restoreZeroedFieldsRecursive(dst, snapshot reflect.Value) {
 			continue
 		}
 
+		// Interaction with envDefault tags: lib-commons' SetConfigFromEnvVars may
+		// set fields to zero when the corresponding env var is absent. The snapshot
+		// comparison here restores YAML-defined values that were incorrectly zeroed.
+		// This relies on envDefault values in struct tags being aligned with
+		// defaultConfig() values — misalignment would cause surprising behavior.
+		//
 		// Restore only when env var was not explicitly set for this field.
 		if dstField.IsZero() && !snapField.IsZero() && !hasExplicitEnvOverride(field) {
 			dstField.Set(snapField)

@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 
 	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
@@ -92,8 +91,12 @@ func startConfigSpan(c *fiber.Ctx, name string) (context.Context, trace.Span, li
 	ctx := c.UserContext()
 	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
 
+	if logger == nil {
+		logger = &libLog.NopLogger{}
+	}
+
 	if tracer == nil {
-		tracer = otel.Tracer("bootstrap.config_api")
+		return ctx, trace.SpanFromContext(ctx), logger
 	}
 
 	ctx, span := tracer.Start(ctx, name)

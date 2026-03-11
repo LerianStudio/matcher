@@ -696,6 +696,14 @@ func shouldEnableConfigAPIRoutes(cfg *Config) bool {
 	return cfg != nil && cfg.Auth.Enabled
 }
 
+// registerWorkerManagerSlots registers all worker slots with the worker manager.
+//
+// IMPORTANT: Worker re-entrancy contract
+// Each factory closure returns the SAME worker instance (captured from modules).
+// The WorkerManager calls Stop() → UpdateRuntimeConfig() → Start() on the same
+// instance during restarts. All workers MUST support this lifecycle by implementing
+// prepareRunState() to reinitialize channels and sync primitives. Workers that do
+// NOT support Stop→Start re-entrancy will fail silently on restart.
 func registerWorkerManagerSlots(workerMgr *WorkerManager, modules *modulesResult) {
 	if workerMgr == nil || modules == nil {
 		return
@@ -711,8 +719,12 @@ func registerExportWorkerSlot(workerMgr *WorkerManager, modules *modulesResult) 
 	workerMgr.Register(
 		"export",
 		func(cfg *Config) (WorkerLifecycle, error) {
-			if modules.exportWorker == nil || cfg == nil {
-				return modules.exportWorker, nil
+			if modules.exportWorker == nil {
+				return nil, errWorkerDependencyUnavailable
+			}
+
+			if cfg == nil {
+				return nil, fmt.Errorf("worker factory: %w", ErrConfigNil)
 			}
 
 			return modules.exportWorker, nil
@@ -726,8 +738,12 @@ func registerCleanupWorkerSlot(workerMgr *WorkerManager, modules *modulesResult)
 	workerMgr.Register(
 		"cleanup",
 		func(cfg *Config) (WorkerLifecycle, error) {
-			if modules.cleanupWorker == nil || cfg == nil {
-				return modules.cleanupWorker, nil
+			if modules.cleanupWorker == nil {
+				return nil, errWorkerDependencyUnavailable
+			}
+
+			if cfg == nil {
+				return nil, fmt.Errorf("worker factory: %w", ErrConfigNil)
 			}
 
 			return modules.cleanupWorker, nil
@@ -741,8 +757,12 @@ func registerArchivalWorkerSlot(workerMgr *WorkerManager, modules *modulesResult
 	workerMgr.Register(
 		"archival",
 		func(cfg *Config) (WorkerLifecycle, error) {
-			if modules.archivalWorker == nil || cfg == nil {
-				return modules.archivalWorker, nil
+			if modules.archivalWorker == nil {
+				return nil, errWorkerDependencyUnavailable
+			}
+
+			if cfg == nil {
+				return nil, fmt.Errorf("worker factory: %w", ErrConfigNil)
 			}
 
 			return modules.archivalWorker, nil
@@ -756,8 +776,12 @@ func registerSchedulerWorkerSlot(workerMgr *WorkerManager, modules *modulesResul
 	workerMgr.Register(
 		"scheduler",
 		func(cfg *Config) (WorkerLifecycle, error) {
-			if modules.schedulerWorker == nil || cfg == nil {
-				return modules.schedulerWorker, nil
+			if modules.schedulerWorker == nil {
+				return nil, errWorkerDependencyUnavailable
+			}
+
+			if cfg == nil {
+				return nil, fmt.Errorf("worker factory: %w", ErrConfigNil)
 			}
 
 			return modules.schedulerWorker, nil

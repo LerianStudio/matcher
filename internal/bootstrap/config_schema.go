@@ -136,7 +136,7 @@ func buildConfigSchema() []configFieldDef {
 
 		// ── rate_limit ──────────────────────────────────────────
 		{Key: "rate_limit.enabled", Label: "Rate Limit Enabled", Type: "bool", DefaultValue: true, HotReloadable: true, EnvVar: "RATE_LIMIT_ENABLED", Description: "Enable global rate limiting", Section: "rate_limit"},
-		{Key: "rate_limit.max", Label: "Max Requests", Type: "int", DefaultValue: defaultRateLimitMax, HotReloadable: true, EnvVar: "RATE_LIMIT_MAX", Constraints: []string{"min:1", "max:100000"}, Description: "Maximum requests per window", Section: "rate_limit"},
+		{Key: "rate_limit.max", Label: "Max Requests", Type: "int", DefaultValue: defaultRateLimitMax, HotReloadable: true, EnvVar: "RATE_LIMIT_MAX", Constraints: []string{"min:1", "max:1000000"}, Description: "Maximum requests per window", Section: "rate_limit"},
 		{Key: "rate_limit.expiry_sec", Label: "Window (sec)", Type: "int", DefaultValue: defaultRateLimitExpiry, HotReloadable: true, EnvVar: "RATE_LIMIT_EXPIRY_SEC", Constraints: []string{"min:1"}, Description: "Rate limit window duration in seconds", Section: "rate_limit"},
 		{Key: "rate_limit.export_max", Label: "Export Max", Type: "int", DefaultValue: defaultExportRateLimitMax, HotReloadable: true, EnvVar: "EXPORT_RATE_LIMIT_MAX", Constraints: []string{"min:1"}, Description: "Maximum export requests per window", Section: "rate_limit"},
 		{Key: "rate_limit.export_expiry_sec", Label: "Export Window (sec)", Type: "int", DefaultValue: defaultExportRateLimitExp, HotReloadable: true, EnvVar: "EXPORT_RATE_LIMIT_EXPIRY_SEC", Constraints: []string{"min:1"}, Description: "Export rate limit window in seconds", Section: "rate_limit"},

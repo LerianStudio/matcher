@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -188,17 +189,19 @@ func SetAuditCallback(
 	// Seed baseline from current version at registration time. Subscribers are
 	// not invoked immediately on registration, so this avoids dropping the first
 	// real change notification after callback wiring.
-	lastVersion := cm.Version()
+	var lastVersion atomic.Uint64
+
+	lastVersion.Store(cm.Version())
 
 	cm.Subscribe(func(newCfg *Config) {
 		currentVersion := cm.Version()
 
 		// Version unchanged means duplicate notification — skip.
-		if currentVersion <= lastVersion {
+		if currentVersion <= lastVersion.Load() {
 			return
 		}
 
-		lastVersion = currentVersion
+		lastVersion.Store(currentVersion)
 
 		// Skip API-driven updates/reloads — the API handler in config_api.go
 		// already publishes its own audit event with actor and changes.
@@ -217,6 +220,11 @@ func SetAuditCallback(
 		// any HTTP request context. The tenant ID comes from the config's
 		// default tenant (system-level operations have no JWT).
 		if newCfg == nil {
+			return
+		}
+
+		if newCfg.Tenancy.DefaultTenantID == "" {
+			logger.Log(context.Background(), libLog.LevelWarn, "skipping config audit: no default tenant ID configured")
 			return
 		}
 
