@@ -14,8 +14,10 @@ ifneq ("$(wildcard config/.env)","")
 ENV_VARS := $(shell sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' config/.env)
 export $(ENV_VARS)
 endif
-CONFIG_ENV_KEYS := $(shell sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' config/.env.example 2>/dev/null)
-CLEAN_ENV := env $(foreach v,$(CONFIG_ENV_KEYS),-u $(v))
+CONFIG_ENV_KEYS := $(shell sed -n 's/^[[:space:]]*"\([A-Z0-9_]*\)",/\1/p' internal/bootstrap/config_test_helpers_test.go 2>/dev/null)
+MATCHER_OVERRIDE_KEYS := $(shell awk '/^[a-z_]+:$$/ { section=$$1; sub(/:$$/,"",section); next } /^[[:space:]]{2}[a-z_]+:/ { key=$$1; sub(/:$$/,"",key); print "MATCHER_" toupper(section "_" key) }' config/matcher.yaml.example 2>/dev/null)
+TEST_ENV_KEYS := $(CONFIG_ENV_KEYS) CONFIG_FILE_PATH
+CLEAN_ENV := env $(foreach v,$(TEST_ENV_KEYS),-u $(v)) $(foreach v,$(MATCHER_OVERRIDE_KEYS),-u $(v))
 
 # Directory configuration
 CONFIG_DIR := ./config
@@ -232,7 +234,7 @@ clear-envs:
 # Code Quality Commands
 #-------------------------------------------------------
 
-.PHONY: lint lint-fix lint-custom format sec vet vulncheck check-tests check-test-tags check-coverage
+.PHONY: lint lint-fix lint-custom format sec vet vulncheck check-tests check-test-tags check-generated-artifacts check-coverage
 
 vet:
 	$(call print_title,Running go vet)
@@ -309,6 +311,20 @@ check-tests:
 check-test-tags:
 	$(call print_title,Checking test build tags)
 	@./scripts/check-test-tags.sh
+
+check-generated-artifacts:
+	$(call print_title,Checking generated artifacts)
+	@tmp_dir="$$(mktemp -d)"; \
+	trap 'rm -rf "$$tmp_dir"' EXIT; \
+	cp -R docs/swagger "$$tmp_dir/swagger-before"; \
+	$(MAKE) generate-docs >/dev/null; \
+	if ! diff -ru "$$tmp_dir/swagger-before" docs/swagger >/dev/null; then \
+		echo "❌ Swagger artifacts are out of date. Run: make generate-docs"; \
+		diff -ru "$$tmp_dir/swagger-before" docs/swagger || true; \
+		exit 1; \
+	fi; \
+	go test -tags unit ./internal/bootstrap -run 'TestLoadConfigFromYAML_ExampleFile_LoadsSuccessfully' >/dev/null; \
+	echo "[ok] Generated artifacts are up to date"
 
 check-coverage: test
 	$(call print_title,Checking coverage thresholds)

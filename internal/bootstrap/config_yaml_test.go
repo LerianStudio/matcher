@@ -393,6 +393,24 @@ redis:
 	assert.True(t, cfg.Redis.TLS)
 }
 
+func TestLoadConfigFromYAML_ExampleFile_LoadsSuccessfully(t *testing.T) {
+	t.Parallel()
+
+	exampleBytes, err := os.ReadFile("../../config/matcher.yaml.example")
+	require.NoError(t, err)
+
+	tmpDir := t.TempDir()
+	yamlPath := filepath.Join(tmpDir, "matcher.yaml")
+	require.NoError(t, os.WriteFile(yamlPath, exampleBytes, 0o600))
+
+	cfg := defaultConfig()
+	err = loadConfigFromYAML(cfg, yamlPath)
+	require.NoError(t, err)
+	assert.Equal(t, "info", cfg.App.LogLevel)
+	assert.Equal(t, 100, cfg.RateLimit.Max)
+	assert.Equal(t, 1000, cfg.ExportWorker.PageSize)
+}
+
 func TestLoadConfigFromYAML_StringFields(t *testing.T) {
 	t.Parallel()
 
