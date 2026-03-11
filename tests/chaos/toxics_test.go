@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestIsolateService_UnknownService(t *testing.T) {
@@ -14,7 +15,7 @@ func TestIsolateService_UnknownService(t *testing.T) {
 	h := &ChaosHarness{}
 
 	err := h.IsolateService(t, "unknown-service")
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown service")
 }
 
@@ -23,7 +24,7 @@ func TestIsolateService_KnownServiceNilProxy(t *testing.T) {
 
 	h := &ChaosHarness{}
 	err := h.IsolateService(t, "postgres")
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "postgres proxy is nil")
 }
 
@@ -40,6 +41,9 @@ func TestRemoveAllToxics_NilProxies(t *testing.T) {
 	assert.NotPanics(t, func() {
 		h.RemoveAllToxics(t)
 	})
+	assert.Nil(t, h.PGProxy)
+	assert.Nil(t, h.RedisProxy)
+	assert.Nil(t, h.RabbitProxy)
 }
 
 func TestEnableAllProxies_NilProxies(t *testing.T) {
@@ -55,4 +59,7 @@ func TestEnableAllProxies_NilProxies(t *testing.T) {
 	assert.NotPanics(t, func() {
 		h.EnableAllProxies(t)
 	})
+	assert.Nil(t, h.PGProxy)
+	assert.Nil(t, h.RedisProxy)
+	assert.Nil(t, h.RabbitProxy)
 }

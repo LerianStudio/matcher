@@ -14,8 +14,8 @@ import (
 func TestBuildCSVContent_ZeroRows(t *testing.T) {
 	t.Parallel()
 
-	csv := BuildCSVContent(0)
-	assert.Equal(t, "external_id,date,amount,currency\n", csv)
+	content := BuildCSVContent(0)
+	assert.Equal(t, "external_id,date,amount,currency\n", content)
 }
 
 func TestBuildCSVContent_SingleRow(t *testing.T) {

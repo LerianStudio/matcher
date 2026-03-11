@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/docker/docker/api/types"
+	dockercontainer "github.com/docker/docker/api/types/container"
 	"github.com/docker/go-connections/nat"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -22,11 +22,16 @@ const (
 	rabbitMQRetryDelay     = 2 * time.Second
 )
 
+var (
+	rabbitMQContainerFactory = testcontainers.GenericContainer
+	rabbitMQRetryWait        = waitWithContext
+)
+
 func startRabbitMQContainer(ctx context.Context) (testcontainers.Container, error) {
 	var lastErr error
 
 	for attempt := 1; attempt <= rabbitMQStartAttempts; attempt++ {
-		container, err := testcontainers.GenericContainer(
+		container, err := rabbitMQContainerFactory(
 			ctx,
 			testcontainers.GenericContainerRequest{
 				ContainerRequest: rabbitMQContainerRequest(),
@@ -47,7 +52,7 @@ func startRabbitMQContainer(ctx context.Context) (testcontainers.Container, erro
 			break
 		}
 
-		if waitErr := waitWithContext(ctx, time.Duration(attempt)*rabbitMQRetryDelay); waitErr != nil {
+		if waitErr := rabbitMQRetryWait(ctx, time.Duration(attempt)*rabbitMQRetryDelay); waitErr != nil {
 			return nil, fmt.Errorf("wait before retrying rabbitmq startup: %w", waitErr)
 		}
 	}
@@ -67,7 +72,7 @@ func rabbitMQContainerRequest() testcontainers.ContainerRequest {
 type rabbitMQStartupContainer interface {
 	Host(context.Context) (string, error)
 	MappedPort(context.Context, nat.Port) (nat.Port, error)
-	Inspect(context.Context) (*types.ContainerJSON, error)
+	Inspect(context.Context) (*dockercontainer.InspectResponse, error)
 }
 
 func containerHostWithRetry(ctx context.Context, container rabbitMQStartupContainer) (string, error) {
@@ -93,7 +98,7 @@ func containerHostWithRetry(ctx context.Context, container rabbitMQStartupContai
 			break
 		}
 
-		if waitErr := waitWithContext(ctx, rabbitMQRetryDelay); waitErr != nil {
+		if waitErr := rabbitMQRetryWait(ctx, rabbitMQRetryDelay); waitErr != nil {
 			return "", fmt.Errorf("wait before retrying rabbitmq host lookup: %w", waitErr)
 		}
 	}
@@ -128,7 +133,7 @@ func mappedPortWithRetry(
 			break
 		}
 
-		if waitErr := waitWithContext(ctx, rabbitMQRetryDelay); waitErr != nil {
+		if waitErr := rabbitMQRetryWait(ctx, rabbitMQRetryDelay); waitErr != nil {
 			return "", fmt.Errorf("wait before retrying mapped port lookup: %w", waitErr)
 		}
 	}
@@ -166,6 +171,10 @@ func resolveMappedPort(
 
 	inspect, inspectErr := container.Inspect(ctx)
 	if inspectErr == nil {
+		if inspect == nil {
+			return "", fmt.Errorf("inspect returned nil container details for %s", containerPort)
+		}
+
 		if inspect.NetworkSettings != nil {
 			for exposedPort, bindings := range inspect.NetworkSettings.Ports {
 				if len(bindings) == 0 {

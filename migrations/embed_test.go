@@ -55,6 +55,45 @@ func TestFS_InitializesMigrationSource(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, identifier)
 	assert.NotEmpty(t, body)
+
+	downReader, downIdentifier, err := driver.ReadDown(firstVersion)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, downReader.Close())
+	})
+
+	downBody, err := io.ReadAll(downReader)
+	require.NoError(t, err)
+	assert.NotEmpty(t, downIdentifier)
+	assert.NotEmpty(t, downBody)
+}
+
+func TestFS_CanWalkMigrationVersionsInOrder(t *testing.T) {
+	t.Parallel()
+
+	driver, err := iofs.New(FS, ".")
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, driver.Close())
+	})
+
+	version, err := driver.First()
+	require.NoError(t, err)
+	assert.NotZero(t, version)
+
+	count := 1
+	for {
+		nextVersion, nextErr := driver.Next(version)
+		if nextErr != nil {
+			break
+		}
+
+		assert.Greater(t, nextVersion, version)
+		version = nextVersion
+		count++
+	}
+
+	assert.Greater(t, count, 1, "embedded migration source should contain multiple ordered migration versions")
 }
 
 func TestFS_MigrationFilesAreReadable(t *testing.T) {
