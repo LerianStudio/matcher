@@ -152,8 +152,8 @@ func buildConfigChangesMap(changes []ConfigChange) map[string]any {
 	for _, c := range changes {
 		items = append(items, map[string]any{
 			"key":       c.Key,
-			"old_value": c.OldValue,
-			"new_value": c.NewValue,
+			"old_value": redactIfSensitive(c.Key, c.OldValue),
+			"new_value": redactIfSensitive(c.Key, c.NewValue),
 		})
 	}
 
