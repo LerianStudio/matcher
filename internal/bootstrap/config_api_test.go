@@ -35,6 +35,7 @@ func newAPITestConfigManager(t *testing.T) *ConfigManager {
 	t.Helper()
 
 	cfg := defaultConfig()
+	cfg.Auth.Enabled = true
 	cfg.App.LogLevel = "info"
 	cfg.RateLimit.Max = 100
 
@@ -50,6 +51,12 @@ func newTestApp(t *testing.T, handler *ConfigAPIHandler) *fiber.App {
 	t.Helper()
 
 	app := fiber.New()
+	app.Use(func(c *fiber.Ctx) error {
+		ctx := context.WithValue(c.UserContext(), auth.UserIDKey, "test-user")
+		c.SetUserContext(ctx)
+
+		return c.Next()
+	})
 
 	// Register routes directly (without auth middleware for unit testing).
 	app.Get("/v1/system/config", handler.GetConfig)
@@ -61,8 +68,50 @@ func newTestApp(t *testing.T, handler *ConfigAPIHandler) *fiber.App {
 	return app
 }
 
+func TestGetConfig_MissingAuthenticatedPrincipal_ReturnsUnauthorized(t *testing.T) {
+	t.Parallel()
+
+	cm := newAPITestConfigManager(t)
+	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
+	require.NoError(t, err)
+
+	app := fiber.New()
+	app.Get("/v1/system/config", handler.GetConfig)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/system/config", http.NoBody)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestGetConfig_AuthDisabledAtStartup_ReturnsForbidden(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cfg.Auth.Enabled = false
+
+	cm, err := NewConfigManager(cfg, "", &libLog.NopLogger{})
+	require.NoError(t, err)
+	t.Cleanup(cm.Stop)
+
+	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
+	require.NoError(t, err)
+
+	app := newTestApp(t, handler)
+	req := httptest.NewRequest(http.MethodGet, "/v1/system/config", http.NoBody)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+}
+
 type historyAuditRepoMock struct {
-	lastTenantID string
+	lastTenantID    string
+	listByEntityErr error
+	logs            []*sharedDomain.AuditLog
 }
 
 func (mock *historyAuditRepoMock) Create(_ context.Context, _ *sharedDomain.AuditLog) (*sharedDomain.AuditLog, error) {
@@ -90,7 +139,7 @@ func (mock *historyAuditRepoMock) ListByEntity(
 ) ([]*sharedDomain.AuditLog, string, error) {
 	mock.lastTenantID = auth.GetTenantID(ctx)
 
-	return nil, "", nil
+	return mock.logs, "", mock.listByEntityErr
 }
 
 func (mock *historyAuditRepoMock) List(
@@ -228,7 +277,7 @@ func TestGetSchema_ReturnsGroupedFields(t *testing.T) {
 	}
 }
 
-func TestGetSchema_RedactsSecretValues(t *testing.T) {
+func TestGetSchema_OmitsSecretFields(t *testing.T) {
 	t.Parallel()
 
 	cm := newAPITestConfigManager(t)
@@ -252,13 +301,12 @@ func TestGetSchema_RedactsSecretValues(t *testing.T) {
 	err = json.Unmarshal(body, &response)
 	require.NoError(t, err)
 
-	// Check that secret fields have redacted values.
+	// Secret fields should not appear in the schema because they must not be
+	// YAML-managed through the runtime config API surface.
 	for _, fields := range response.Sections {
 		for _, field := range fields {
-			if secretFields[field.Key] {
-				assert.Equal(t, redactedValue, field.CurrentValue,
-					"secret field %q should have redacted current value", field.Key)
-			}
+			assert.False(t, secretFields[field.Key],
+				"secret field %q should not be present in schema response", field.Key)
 		}
 	}
 }
@@ -420,6 +468,53 @@ func TestUpdateConfig_InvalidJSON(t *testing.T) {
 	assert.Equal(t, "invalid JSON body", response["message"])
 }
 
+func TestUpdateConfig_ValidationFailure_ReturnsUnprocessableEntity(t *testing.T) {
+	// Not parallel: clearConfigEnvVars uses t.Setenv.
+	clearConfigEnvVars(t)
+
+	cm := newAPITestConfigManager(t)
+	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
+	require.NoError(t, err)
+
+	app := newTestApp(t, handler)
+	bodyBytes, err := json.Marshal(UpdateConfigRequest{
+		Changes: map[string]any{"app.log_level": "banana"},
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPatch, "/v1/system/config", bytes.NewReader(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode)
+}
+
+func TestUpdateConfig_RuntimeApplyFailure_ReturnsInternalServerError(t *testing.T) {
+	t.Parallel()
+
+	cm := newAPITestConfigManager(t)
+	cm.SubscribeErr(func(_ *Config) error { return assert.AnError })
+	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
+	require.NoError(t, err)
+
+	app := newTestApp(t, handler)
+	bodyBytes, err := json.Marshal(UpdateConfigRequest{
+		Changes: map[string]any{"rate_limit.max": 200},
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPatch, "/v1/system/config", bytes.NewReader(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+}
+
 func TestReloadConfig_Success(t *testing.T) {
 	t.Parallel()
 
@@ -450,6 +545,48 @@ func TestReloadConfig_Success(t *testing.T) {
 	assert.False(t, response.ReloadedAt.IsZero())
 }
 
+func TestReloadConfig_Failure_ReturnsInternalServerError(t *testing.T) {
+	tmpDir := t.TempDir()
+	yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
+
+	cfg := defaultConfig()
+	cfg.Auth.Enabled = true
+
+	cm, err := NewConfigManager(cfg, yamlPath, &libLog.NopLogger{})
+	require.NoError(t, err)
+	t.Cleanup(cm.Stop)
+
+	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
+	require.NoError(t, err)
+	app := newTestApp(t, handler)
+
+	require.NoError(t, os.WriteFile(yamlPath, []byte("invalid: [[[yaml"), 0o600))
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/system/config/reload", http.NoBody)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+}
+
+func TestReloadConfig_RuntimeApplyFailure_ReturnsInternalServerError(t *testing.T) {
+	t.Parallel()
+
+	cm := newAPITestConfigManager(t)
+	cm.SubscribeErr(func(_ *Config) error { return assert.AnError })
+	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
+	require.NoError(t, err)
+
+	app := newTestApp(t, handler)
+	req := httptest.NewRequest(http.MethodPost, "/v1/system/config/reload", http.NoBody)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+}
+
 func TestGetConfigHistory_ReturnsEmptyList(t *testing.T) {
 	t.Parallel()
 
@@ -478,6 +615,23 @@ func TestGetConfigHistory_ReturnsEmptyList(t *testing.T) {
 
 	assert.NotNil(t, response.Items, "items should not be nil")
 	assert.Empty(t, response.Items, "items should be empty (T10 placeholder)")
+}
+
+func TestGetConfigHistory_LoadFailure_ReturnsInternalServerError(t *testing.T) {
+	t.Parallel()
+
+	cm := newAPITestConfigManager(t)
+	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
+	require.NoError(t, err)
+	handler.SetAuditRepository(&historyAuditRepoMock{listByEntityErr: assert.AnError})
+
+	app := newTestApp(t, handler)
+	req := httptest.NewRequest(http.MethodGet, "/v1/system/config/history", http.NoBody)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
 func TestRegisterConfigAPIRoutes_NilProtected(t *testing.T) {
@@ -621,6 +775,7 @@ func TestGetConfigHistory_UsesSystemTenantContext(t *testing.T) {
 	app := fiber.New()
 	app.Use(func(c *fiber.Ctx) error {
 		ctx := context.WithValue(c.UserContext(), auth.TenantIDKey, uuid.NewString())
+		ctx = context.WithValue(ctx, auth.UserIDKey, "user-42")
 		c.SetUserContext(ctx)
 
 		return c.Next()
@@ -634,6 +789,35 @@ func TestGetConfigHistory_UsesSystemTenantContext(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, defaultTenantID, auditRepo.lastTenantID)
+}
+
+func TestGetConfigHistory_UsesStableDefaultTenantContextWhenConfigDefaultChanges(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cfg.Auth.Enabled = true
+	cfg.Tenancy.DefaultTenantID = uuid.NewString()
+
+	cm, err := NewConfigManager(cfg, "", &libLog.NopLogger{})
+	require.NoError(t, err)
+	t.Cleanup(cm.Stop)
+
+	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
+	require.NoError(t, err)
+
+	auditRepo := &historyAuditRepoMock{}
+	handler.SetAuditRepository(auditRepo)
+
+	app := newTestApp(t, handler)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/system/config/history", http.NoBody)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, auth.GetDefaultTenantID(), auditRepo.lastTenantID)
+	assert.NotEqual(t, cfg.Tenancy.DefaultTenantID, auditRepo.lastTenantID)
 }
 
 func TestExtractAuditConfigChanges_RedactsSensitiveValues(t *testing.T) {

@@ -93,8 +93,8 @@ type ConfigHistoryEntry struct {
 	Timestamp time.Time `json:"timestamp" example:"2025-07-15T10:30:00Z"`
 	// Actor who made the change (user ID or "system")
 	Actor string `json:"actor" example:"system"`
-	// Type of change: "reload", "update", "startup"
-	ChangeType string `json:"changeType" example:"update"`
+	// Type of change: "reloaded", "updated", "startup"
+	ChangeType string `json:"changeType" example:"updated"`
 	// Changed fields with old/new values
 	Changes []ConfigChange `json:"changes,omitempty"`
 }

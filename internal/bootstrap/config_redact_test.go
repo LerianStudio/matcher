@@ -138,12 +138,11 @@ func TestIsSensitiveKeyTable(t *testing.T) {
 		key       string
 		sensitive bool
 	}{
-		{name: "password_lowercase", key: "password", sensitive: true},
-		{name: "password_mixed_case", key: "PrimaryPassword", sensitive: true},
-		{name: "secret_key", key: "jwt_secret", sensitive: true},
-		{name: "token_key", key: "auth_token", sensitive: true},
-		{name: "key_fragment", key: "access_key_id", sensitive: true},
-		{name: "cert_fragment", key: "tls_cert_file", sensitive: true},
+		{name: "postgres_password", key: "postgres.primary_password", sensitive: true},
+		{name: "auth_token_secret", key: "auth.token_secret", sensitive: true},
+		{name: "object_storage_access_key", key: "object_storage.access_key_id", sensitive: true},
+		{name: "rabbitmq_uri_not_sensitive", key: "rabbitmq.uri", sensitive: false},
+		{name: "tls_cert_file_not_sensitive", key: "server.tls_cert_file", sensitive: false},
 		{name: "host_not_sensitive", key: "primary_host", sensitive: false},
 		{name: "port_not_sensitive", key: "port", sensitive: false},
 		{name: "log_level_not_sensitive", key: "log_level", sensitive: false},
@@ -165,7 +164,7 @@ func TestRedactIfSensitiveTable(t *testing.T) {
 	t.Run("redacts_sensitive_key", func(t *testing.T) {
 		t.Parallel()
 
-		result := redactIfSensitive("password", "my-secret")
+		result := redactIfSensitive("postgres.primary_password", "my-secret")
 		assert.Equal(t, "***REDACTED***", result)
 	})
 
@@ -179,8 +178,15 @@ func TestRedactIfSensitiveTable(t *testing.T) {
 	t.Run("redacts_token_key", func(t *testing.T) {
 		t.Parallel()
 
-		result := redactIfSensitive("auth_token", "abc123")
+		result := redactIfSensitive("auth.token_secret", "abc123")
 		assert.Equal(t, "***REDACTED***", result)
+	})
+
+	t.Run("redacts_uri_credentials_without_masking_field", func(t *testing.T) {
+		t.Parallel()
+
+		result := redactIfSensitive("rabbitmq.uri", "amqp://user:pass@localhost:5672/")
+		assert.Equal(t, "amqp://%2A%2A%2AREDACTED%2A%2A%2A:%2A%2A%2AREDACTED%2A%2A%2A@localhost:5672/", result)
 	})
 }
 

@@ -137,6 +137,7 @@ func bindDefaults(viperCfg *viper.Viper) {
 	viperCfg.SetDefault("server.tls_cert_file", "")
 	viperCfg.SetDefault("server.tls_key_file", "")
 	viperCfg.SetDefault("server.tls_terminated_upstream", false)
+	viperCfg.SetDefault("server.trusted_proxies", "")
 
 	// --- Tenancy ---
 	viperCfg.SetDefault("tenancy.default_tenant_id", "11111111-1111-1111-1111-111111111111")

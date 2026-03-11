@@ -7,6 +7,7 @@ package bootstrap
 import (
 	"context"
 	"fmt"
+	"math"
 	"sort"
 	"time"
 
@@ -22,15 +23,15 @@ import (
 func (cm *ConfigManager) Update(changes map[string]any) (*UpdateResult, error) {
 	var (
 		notifyCfg *Config
-		callbacks []func(*Config)
+		callbacks []func(*Config) error
 	)
 
 	cm.mu.Lock()
-	defer func() {
-		cm.mu.Unlock()
+	locked := true
 
-		if notifyCfg != nil {
-			cm.notifySubscribers(notifyCfg, callbacks)
+	defer func() {
+		if locked {
+			cm.mu.Unlock()
 		}
 	}()
 
@@ -79,7 +80,7 @@ func (cm *ConfigManager) Update(changes map[string]any) (*UpdateResult, error) {
 
 	// Phase 4: write YAML via atomic rename (temp file + rename).
 	if cm.filePath != "" {
-		if err := cm.writeConfigAtomically(); err != nil {
+		if err := cm.writePersistedConfigAtomically(applicableChanges); err != nil {
 			cm.rollbackViperKeysLocked(applicableChanges, oldValues)
 
 			cm.logger.Log(ctx, libLog.LevelError, "config update: YAML write failed", libLog.Err(err))
@@ -110,6 +111,13 @@ func (cm *ConfigManager) Update(changes map[string]any) (*UpdateResult, error) {
 
 	notifyCfg = candidateCfg
 	callbacks = cm.snapshotSubscribersLocked()
+	cm.mu.Unlock()
+
+	locked = false
+
+	if notifyErr := cm.notifySubscribers(notifyCfg, callbacks); notifyErr != nil {
+		return result, fmt.Errorf("config update: %w", notifyErr)
+	}
 
 	return result, nil
 }
@@ -136,7 +144,7 @@ func rejectTypeErrors(applicableChanges map[string]any, result *UpdateResult) {
 		if !isValueTypeCompatible(value, def.Type) {
 			result.Rejected = append(result.Rejected, ConfigChangeRejection{
 				Key:    key,
-				Value:  value,
+				Value:  redactIfSensitive(key, value),
 				Reason: "type mismatch: expected " + def.Type,
 			})
 
@@ -153,7 +161,7 @@ func classifyApplicableChanges(changes map[string]any, result *UpdateResult) map
 		if !mutableConfigKeys[key] {
 			result.Rejected = append(result.Rejected, ConfigChangeRejection{
 				Key:    key,
-				Value:  value,
+				Value:  redactIfSensitive(key, value),
 				Reason: "key is not mutable via API (env-only or infrastructure-bound)",
 			})
 
@@ -243,9 +251,11 @@ func isValueTypeCompatible(value any, expectedType string) bool {
 		_, ok := value.(string)
 		return ok
 	case "int":
-		switch value.(type) {
-		case int, int64, float64: // JSON numbers deserialize as float64
+		switch typedValue := value.(type) {
+		case int, int64:
 			return true
+		case float64:
+			return !math.IsNaN(typedValue) && !math.IsInf(typedValue, 0) && math.Trunc(typedValue) == typedValue
 		default:
 			return false
 		}

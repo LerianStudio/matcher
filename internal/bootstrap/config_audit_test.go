@@ -9,6 +9,7 @@ package bootstrap
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -440,6 +441,64 @@ rate_limit:
 
 	_, hasConfigChanges := auditEvent.Changes["config_changes"]
 	assert.True(t, hasConfigChanges, "audit event should contain config_changes key")
+}
+
+func TestSetAuditCallback_UsesStableDefaultTenantForAuditStream(t *testing.T) {
+	clearConfigEnvVars(t)
+
+	tmpDir := t.TempDir()
+	yamlPath := filepath.Join(tmpDir, "matcher.yaml")
+	require.NoError(t, os.WriteFile(yamlPath, []byte(`
+app:
+  env_name: "development"
+  log_level: "info"
+server:
+  address: ":4018"
+  body_limit_bytes: 104857600
+tenancy:
+  default_tenant_id: "11111111-1111-1111-1111-111111111111"
+  default_tenant_slug: "default"
+rate_limit:
+  enabled: true
+  max: 100
+  expiry_sec: 60
+`), 0o600))
+
+	cm, err := NewConfigManager(defaultConfig(), yamlPath, &libLog.NopLogger{})
+	require.NoError(t, err)
+	t.Cleanup(cm.Stop)
+
+	repo := &testOutboxMock{}
+	pub, err := NewConfigAuditPublisher(repo, &libLog.NopLogger{})
+	require.NoError(t, err)
+
+	SetAuditCallback(cm, pub, &libLog.NopLogger{})
+
+	changedTenantID := uuid.NewString()
+	require.NoError(t, os.WriteFile(yamlPath, []byte(fmt.Sprintf(`
+app:
+  env_name: "development"
+  log_level: "debug"
+server:
+  address: ":4018"
+  body_limit_bytes: 104857600
+tenancy:
+  default_tenant_id: %q
+  default_tenant_slug: "default"
+rate_limit:
+  enabled: true
+  max: 100
+  expiry_sec: 60
+`, changedTenantID)), 0o600))
+
+	_, err = cm.Reload()
+	require.NoError(t, err)
+	require.Len(t, repo.createdEvents, 1)
+
+	var auditEvent sharedDomain.AuditLogCreatedEvent
+	require.NoError(t, json.Unmarshal(repo.createdEvents[0].Payload, &auditEvent))
+	assert.Equal(t, auth.GetDefaultTenantID(), auditEvent.TenantID.String())
+	assert.NotEqual(t, changedTenantID, auditEvent.TenantID.String())
 }
 
 func TestSetAuditCallback_SkipsAPIReloadSource(t *testing.T) {

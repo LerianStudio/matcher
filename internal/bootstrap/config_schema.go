@@ -527,8 +527,13 @@ func isEnvOverridden(envVar, key string) bool {
 func buildSchemaResponse(cm *ConfigManager) ConfigSchemaResponse {
 	defs := buildConfigSchema()
 	sections := make(map[string][]ConfigFieldSchema, len(defs))
+	visibleFields := 0
 
 	for _, def := range defs {
+		if def.Secret {
+			continue
+		}
+
 		currentVal := resolveCurrentValue(cm, def)
 
 		field := ConfigFieldSchema{
@@ -546,11 +551,12 @@ func buildSchemaResponse(cm *ConfigManager) ConfigSchemaResponse {
 		}
 
 		sections[def.Section] = append(sections[def.Section], field)
+		visibleFields++
 	}
 
 	return ConfigSchemaResponse{
 		Sections:    sections,
-		TotalFields: len(defs),
+		TotalFields: visibleFields,
 	}
 }
 

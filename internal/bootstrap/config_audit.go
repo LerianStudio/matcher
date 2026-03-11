@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -225,20 +226,21 @@ func SetAuditCallback(
 		}
 
 		// Use a background context because subscriber callbacks run outside
-		// any HTTP request context. The tenant ID comes from the config's
-		// default tenant (system-level operations have no JWT).
+		// any HTTP request context. The tenant ID comes from auth's stable
+		// default-tenant source so config history remains in one audit stream.
 		if newCfg == nil {
 			return
 		}
 
-		if newCfg.Tenancy.DefaultTenantID == "" {
+		stableTenantID := strings.TrimSpace(auth.GetDefaultTenantID())
+		if stableTenantID == "" {
 			logger.Log(context.Background(), libLog.LevelWarn, "skipping config audit: no default tenant ID configured")
 			return
 		}
 
 		ctx := context.Background()
 
-		ctx = context.WithValue(ctx, auth.TenantIDKey, newCfg.Tenancy.DefaultTenantID)
+		ctx = context.WithValue(ctx, auth.TenantIDKey, stableTenantID)
 
 		if err := publisher.PublishConfigChange(ctx, "system", "reloaded", changes); err != nil {
 			logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to publish config audit event from file watcher: %v", err))

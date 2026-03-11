@@ -7,6 +7,7 @@
 package bootstrap
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -17,11 +18,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// --- Test #26: writeConfigAtomically dedicated tests ---
+// --- Test #26: writeViperConfigAtomically dedicated tests ---
 
 // newWriteTestConfigManager creates a minimal ConfigManager with a real viper
 // instance pointing at the given filePath. This is the minimum viable setup
-// for exercising writeConfigAtomically without needing a full NewConfigManager.
+// for exercising writeViperConfigAtomically without needing a full NewConfigManager.
 func newWriteTestConfigManager(t *testing.T, filePath string) *ConfigManager {
 	t.Helper()
 
@@ -48,7 +49,7 @@ func TestWriteConfigAtomically_InvalidPath_EmptyString(t *testing.T) {
 	// the empty-path check in validateAtomicWritePath.
 	cm := newWriteTestConfigManager(t, "")
 
-	err := cm.writeConfigAtomically()
+	err := writeViperConfigAtomically(cm.viper, cm.filePath)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUnsafeConfigFileExtension)
 }
@@ -58,7 +59,7 @@ func TestWriteConfigAtomically_InvalidPath_NullBytes(t *testing.T) {
 
 	cm := newWriteTestConfigManager(t, "config\x00evil.yaml")
 
-	err := cm.writeConfigAtomically()
+	err := writeViperConfigAtomically(cm.viper, cm.filePath)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUnsafeConfigFilePath)
 }
@@ -80,7 +81,7 @@ func TestWriteConfigAtomically_PreservesPermissions(t *testing.T) {
 	cm.viper.SetConfigFile(filePath)
 	cm.viper.Set("app.log_level", "debug")
 
-	err = cm.writeConfigAtomically()
+	err = writeViperConfigAtomically(cm.viper, cm.filePath)
 	require.NoError(t, err)
 
 	info, err := os.Stat(filePath)
@@ -103,6 +104,8 @@ func TestIsValueTypeCompatible(t *testing.T) {
 	}{
 		{"string_match", "hello", "string", true},
 		{"int_from_float64", float64(42), "int", true},
+		{"int_from_fractional_float64", float64(42.5), "int", false},
+		{"int_from_nan_float64", math.NaN(), "int", false},
 		{"int_from_int", 42, "int", true},
 		{"int_from_int64", int64(42), "int", true},
 		{"bool_match", true, "bool", true},

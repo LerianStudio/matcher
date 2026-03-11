@@ -42,7 +42,7 @@ type ConfigAPIHandler struct {
 	auditPublisher  *ConfigAuditPublisher
 	auditRepository sharedPorts.AuditLogRepository
 	logger          libLog.Logger
-	authEnabled     bool
+	authRequired    bool
 	production      bool
 }
 
@@ -56,29 +56,41 @@ func NewConfigAPIHandler(configManager *ConfigManager, logger libLog.Logger, pro
 		logger = &libLog.NopLogger{}
 	}
 
-	// Derive authEnabled from the current config snapshot.
-	var authEnabled bool
+	// Auth route exposure is decided at startup. Changing auth.enabled requires a
+	// restart because routes are mounted once during bootstrap.
+	var authRequired bool
 
 	if cfg := configManager.Get(); cfg != nil {
-		authEnabled = cfg.Auth.Enabled
+		authRequired = cfg.Auth.Enabled
 	}
 
 	return &ConfigAPIHandler{
 		configManager: configManager,
 		logger:        logger,
-		authEnabled:   authEnabled,
+		authRequired:  authRequired,
 		production:    production,
 	}, nil
 }
 
 // requireConfigAuth verifies that the request has valid auth context.
-// This is defense-in-depth — routes should already be behind auth middleware.
-func (handler *ConfigAPIHandler) requireConfigAuth(c *fiber.Ctx) error {
-	if !handler.authEnabled {
-		return sharedhttp.RespondError(c, fiber.StatusForbidden, "forbidden", "config API requires authentication")
+//
+// Auth route exposure is a startup-time concern. If auth was disabled when the
+// handler was created, the config API remains unavailable until restart. If it
+// was enabled, the request must still carry an authenticated principal.
+// Returns true when it already wrote an error response and request handling
+// must stop.
+func (handler *ConfigAPIHandler) requireConfigAuth(fiberCtx *fiber.Ctx) bool {
+	if !handler.authRequired {
+		_ = sharedhttp.RespondError(fiberCtx, fiber.StatusForbidden, "forbidden", "config API requires authentication")
+		return true
 	}
 
-	return nil
+	if strings.TrimSpace(auth.GetUserID(fiberCtx.UserContext())) == "" {
+		_ = sharedhttp.RespondError(fiberCtx, fiber.StatusUnauthorized, "unauthorized", "missing authenticated principal")
+		return true
+	}
+
+	return false
 }
 
 // SetAuditPublisher attaches an audit publisher to the handler.
@@ -97,22 +109,19 @@ func (handler *ConfigAPIHandler) SetAuditRepository(repository sharedPorts.Audit
 	}
 }
 
-// SECURITY: systemTenantContext injects the default tenant ID from system configuration
-// into the request context, bypassing the normal JWT-based tenant extraction path.
-// This is intentional for system-level config operations (schema reads, audit history)
-// where no user JWT exists. The tenant ID comes from the trusted Config struct loaded
-// at bootstrap — NOT from any external request input.
+// SECURITY: systemTenantContext injects a stable system tenant ID into the
+// request context, bypassing the normal JWT-based tenant extraction path.
+//
+// This is intentional for system-level config operations (audit/history reads)
+// where no tenant should be derived from request input. The tenant comes from
+// auth's stable default-tenant source so config history does not fragment when
+// the runtime-config default tenant changes.
 func (handler *ConfigAPIHandler) systemTenantContext(ctx context.Context) context.Context {
-	if handler == nil || handler.configManager == nil {
+	if handler == nil {
 		return ctx
 	}
 
-	cfg := handler.configManager.Get()
-	if cfg == nil {
-		return ctx
-	}
-
-	tenantID := strings.TrimSpace(cfg.Tenancy.DefaultTenantID)
+	tenantID := strings.TrimSpace(auth.GetDefaultTenantID())
 	if tenantID == "" {
 		return ctx
 	}
@@ -166,8 +175,8 @@ func (handler *ConfigAPIHandler) GetConfig(fiberCtx *fiber.Ctx) error {
 		return sharedhttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "handler_unavailable", "configuration handler is not initialized")
 	}
 
-	if err := handler.requireConfigAuth(fiberCtx); err != nil {
-		return err
+	if handler.requireConfigAuth(fiberCtx) {
+		return nil
 	}
 
 	ctx, span, logger := startConfigSpan(fiberCtx, "handler.system.get_config")
@@ -209,8 +218,8 @@ func (handler *ConfigAPIHandler) GetSchema(fiberCtx *fiber.Ctx) error {
 		return sharedhttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "handler_unavailable", "configuration handler is not initialized")
 	}
 
-	if err := handler.requireConfigAuth(fiberCtx); err != nil {
-		return err
+	if handler.requireConfigAuth(fiberCtx) {
+		return nil
 	}
 
 	ctx, span, logger := startConfigSpan(fiberCtx, "handler.system.get_config_schema")
@@ -250,8 +259,8 @@ func (handler *ConfigAPIHandler) UpdateConfig(fiberCtx *fiber.Ctx) error {
 		return sharedhttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "handler_unavailable", "configuration handler is not initialized")
 	}
 
-	if err := handler.requireConfigAuth(fiberCtx); err != nil {
-		return err
+	if handler.requireConfigAuth(fiberCtx) {
+		return nil
 	}
 
 	ctx, span, logger := startConfigSpan(fiberCtx, "handler.system.update_config")
@@ -273,6 +282,10 @@ func (handler *ConfigAPIHandler) UpdateConfig(fiberCtx *fiber.Ctx) error {
 	result, err := handler.configManager.Update(req.Changes)
 	if err != nil {
 		logConfigSpanError(ctx, span, logger, "config update failed", err, handler.production)
+
+		if errors.Is(err, ErrConfigSubscriberFailure) {
+			return sharedhttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "runtime_apply_failed", "configuration update could not be fully applied at runtime")
+		}
 
 		return sharedhttp.RespondError(fiberCtx, fiber.StatusUnprocessableEntity, "validation_failed", err.Error())
 	}
@@ -328,8 +341,8 @@ func (handler *ConfigAPIHandler) ReloadConfig(fiberCtx *fiber.Ctx) error {
 		return sharedhttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "handler_unavailable", "configuration handler is not initialized")
 	}
 
-	if err := handler.requireConfigAuth(fiberCtx); err != nil {
-		return err
+	if handler.requireConfigAuth(fiberCtx) {
+		return nil
 	}
 
 	ctx, span, logger := startConfigSpan(fiberCtx, "handler.system.reload_config")
@@ -338,6 +351,10 @@ func (handler *ConfigAPIHandler) ReloadConfig(fiberCtx *fiber.Ctx) error {
 	result, err := handler.configManager.ReloadFromAPI()
 	if err != nil {
 		logConfigSpanError(ctx, span, logger, "config reload failed", err, handler.production)
+
+		if errors.Is(err, ErrConfigSubscriberFailure) {
+			return sharedhttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "runtime_apply_failed", "configuration reload could not be fully applied at runtime")
+		}
 
 		return sharedhttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "reload_failed", "configuration reload failed")
 	}
@@ -390,8 +407,8 @@ func (handler *ConfigAPIHandler) GetConfigHistory(fiberCtx *fiber.Ctx) error {
 		return sharedhttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "handler_unavailable", "configuration handler is not initialized")
 	}
 
-	if err := handler.requireConfigAuth(fiberCtx); err != nil {
-		return err
+	if handler.requireConfigAuth(fiberCtx) {
+		return nil
 	}
 
 	ctx, span, logger := startConfigSpan(fiberCtx, "handler.system.get_config_history")

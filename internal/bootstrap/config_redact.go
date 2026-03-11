@@ -12,11 +12,24 @@ import (
 	"strings"
 )
 
-// sensitiveKeyFragments lists substrings of mapstructure tags that identify
-// fields containing secrets. Used by diffConfigs to redact secret values
-// from config change diffs, preventing credential leakage in API responses
-// and audit logs.
-var sensitiveKeyFragments = []string{"password", "secret", "token", "key", "cert", "uri", "dsn", "connection"}
+// sensitiveConfigKeys lists the exact config keys whose values must always be
+// redacted in API responses, config diffs, and audit logs.
+//
+// This intentionally uses exact keys instead of substring matching. Some keys
+// contain terms like "uri" or "key" without being secrets themselves
+// (`rabbitmq.uri`, `server.tls_key_file`). URI-shaped values still receive
+// credential redaction via redactCredentialURI.
+var sensitiveConfigKeys = map[string]bool{
+	"postgres.primary_password":        true,
+	"postgres.replica_password":        true,
+	"redis.password":                   true,
+	"redis.ca_cert":                    true,
+	"rabbitmq.password":                true,
+	"auth.token_secret":                true,
+	"idempotency.hmac_secret":          true,
+	"object_storage.access_key_id":     true,
+	"object_storage.secret_access_key": true,
+}
 
 // diffConfigs computes field-level changes between two configs.
 // Uses reflection on exported struct fields of Config, recursing into
@@ -207,14 +220,7 @@ func safeUint64ToInt(version uint64) int {
 // isSensitiveKey returns true if the given mapstructure key contains a
 // sensitive fragment (password, secret, token).
 func isSensitiveKey(key string) bool {
-	lower := strings.ToLower(key)
-	for _, frag := range sensitiveKeyFragments {
-		if strings.Contains(lower, frag) {
-			return true
-		}
-	}
-
-	return false
+	return sensitiveConfigKeys[strings.ToLower(key)]
 }
 
 func redactCredentialURI(value any) any {

@@ -29,6 +29,8 @@ var (
 	errConfigManagerPathOutsideWorkdir = errors.New("config manager: config path must be contained within working directory")
 	errUnsafeConfigFilePath            = errors.New("unsafe config file path")
 	errUnsafeConfigFileExtension       = errors.New("unsafe config file extension")
+	// ErrConfigSubscriberFailure is returned when a config subscriber callback fails.
+	ErrConfigSubscriberFailure = errors.New("config subscriber failure")
 )
 
 const (
@@ -60,7 +62,7 @@ type ConfigManager struct {
 	mu          sync.Mutex // serializes writes (reload, update)
 	viper       *viper.Viper
 	filePath    string
-	subscribers map[uint64]func(*Config)
+	subscribers map[uint64]func(*Config) error
 	logger      libLog.Logger
 	version     atomic.Uint64
 	nextSubID   atomic.Uint64
@@ -143,19 +145,7 @@ var mutableConfigKeys = map[string]bool{
 	"cleanup_worker.batch_size":        true,
 	"cleanup_worker.grace_period_sec":  true,
 	"scheduler.interval_sec":           true,
-	"webhook.timeout_sec":              true,
-	"callback_rate_limit.per_minute":   true,
 	"deduplication.ttl_sec":            true,
-	"idempotency.retry_window_sec":     true,
-	"idempotency.success_ttl_hours":    true,
-	"swagger.enabled":                  true,
-	"fetcher.enabled":                  true,
-	"fetcher.health_timeout_sec":       true,
-	"fetcher.request_timeout_sec":      true,
-	"fetcher.discovery_interval_sec":   true,
-	"fetcher.schema_cache_ttl_sec":     true,
-	"fetcher.extraction_poll_sec":      true,
-	"fetcher.extraction_timeout_sec":   true,
 	"archival.enabled":                 true,
 	"archival.interval_hours":          true,
 	"archival.batch_size":              true,
@@ -196,7 +186,7 @@ func NewConfigManager(cfg *Config, filePath string, logger libLog.Logger) (*Conf
 		filePath:    filePath,
 		logger:      logger,
 		stopCh:      make(chan struct{}),
-		subscribers: make(map[uint64]func(*Config)),
+		subscribers: make(map[uint64]func(*Config) error),
 	}
 
 	cm.config.Store(cfg)
@@ -240,6 +230,12 @@ func (cm *ConfigManager) Subscribe(fn func(*Config)) {
 	_ = cm.SubscribeWithUnsubscribe(fn)
 }
 
+// SubscribeErr registers an error-returning callback that is invoked on every
+// config reload. Errors returned by the callback are wrapped and propagated.
+func (cm *ConfigManager) SubscribeErr(fn func(*Config) error) {
+	_ = cm.SubscribeWithUnsubscribeErr(fn)
+}
+
 // SubscribeWithUnsubscribe registers a callback and returns a function that
 // removes the subscription. The returned function is idempotent and safe for
 // repeated calls.
@@ -248,9 +244,22 @@ func (cm *ConfigManager) SubscribeWithUnsubscribe(fn func(*Config)) func() {
 		return func() {}
 	}
 
+	return cm.SubscribeWithUnsubscribeErr(func(cfg *Config) error {
+		fn(cfg)
+		return nil
+	})
+}
+
+// SubscribeWithUnsubscribeErr registers an error-returning callback and returns
+// a function that removes the subscription. The returned function is idempotent.
+func (cm *ConfigManager) SubscribeWithUnsubscribeErr(fn func(*Config) error) func() {
+	if fn == nil {
+		return func() {}
+	}
+
 	cm.mu.Lock()
 	if cm.subscribers == nil {
-		cm.subscribers = make(map[uint64]func(*Config))
+		cm.subscribers = make(map[uint64]func(*Config) error)
 	}
 
 	id := cm.nextSubID.Add(1)

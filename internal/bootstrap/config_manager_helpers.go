@@ -6,6 +6,7 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -14,20 +15,24 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/spf13/viper"
+
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 )
 
 // notifySubscribers calls each registered subscriber with the new config.
 // Panics in subscribers are recovered and logged.
-func (cm *ConfigManager) notifySubscribers(cfg *Config, callbacks []func(*Config)) {
+func (cm *ConfigManager) notifySubscribers(cfg *Config, callbacks []func(*Config) error) error {
 	ctx := context.Background()
 
 	if len(callbacks) == 0 {
-		return
+		return nil
 	}
 
+	var notifyErr error
+
 	for i, fn := range callbacks {
-		func(idx int, callback func(*Config)) {
+		func(idx int, callback func(*Config) error) {
 			defer func() {
 				if r := recover(); r != nil {
 					cm.logger.Log(ctx, libLog.LevelError,
@@ -35,12 +40,18 @@ func (cm *ConfigManager) notifySubscribers(cfg *Config, callbacks []func(*Config
 				}
 			}()
 
-			callback(cfg)
+			if err := callback(cfg); err != nil {
+				notifyErr = errors.Join(notifyErr, fmt.Errorf("%w: subscriber %d: %w", ErrConfigSubscriberFailure, idx, err))
+				cm.logger.Log(ctx, libLog.LevelError,
+					fmt.Sprintf("config subscriber %d failed: %v", idx, err))
+			}
 		}(i, fn)
 	}
+
+	return notifyErr
 }
 
-func (cm *ConfigManager) snapshotSubscribersLocked() []func(*Config) {
+func (cm *ConfigManager) snapshotSubscribersLocked() []func(*Config) error {
 	ids := make([]uint64, 0, len(cm.subscribers))
 	for id := range cm.subscribers {
 		ids = append(ids, id)
@@ -48,7 +59,7 @@ func (cm *ConfigManager) snapshotSubscribersLocked() []func(*Config) {
 
 	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
 
-	callbacks := make([]func(*Config), 0, len(ids))
+	callbacks := make([]func(*Config) error, 0, len(ids))
 	for _, id := range ids {
 		callbacks = append(callbacks, cm.subscribers[id])
 	}
@@ -56,12 +67,40 @@ func (cm *ConfigManager) snapshotSubscribersLocked() []func(*Config) {
 	return callbacks
 }
 
-// writeConfigAtomically writes the current viper state to the config file
-// using atomic rename: write to temp file in the same directory, then rename.
-// This prevents partial-write corruption. The original file's permissions are
-// preserved on the new file to avoid accidental permission changes.
-func (cm *ConfigManager) writeConfigAtomically() error {
+// writePersistedConfigAtomically writes only the file-backed config surface.
+//
+// This intentionally avoids dumping the manager's live viper state because that
+// state also reflects MATCHER_* environment overrides. Persisting that merged
+// state would write env-backed secrets and other deploy-time overrides into the
+// YAML file. Instead, we start from the current YAML file contents and apply
+// only the requested API changes.
+func (cm *ConfigManager) writePersistedConfigAtomically(changes map[string]any) error {
 	path := filepath.Clean(strings.TrimSpace(cm.filePath))
+	if err := validateAtomicWritePath(path); err != nil {
+		return err
+	}
+
+	persisted := viper.New()
+	persisted.SetConfigType("yaml")
+	persisted.SetConfigFile(path)
+
+	if err := persisted.ReadInConfig(); err != nil && !isConfigFileNotFound(err) {
+		return fmt.Errorf("read persisted config file: %w", err)
+	}
+
+	for _, key := range sortedChangeKeys(changes) {
+		persisted.Set(key, changes[key])
+	}
+
+	return writeViperConfigAtomically(persisted, path)
+}
+
+func writeViperConfigAtomically(viperCfg *viper.Viper, filePath string) error {
+	if viperCfg == nil {
+		return errUnsafeConfigFilePath
+	}
+
+	path := filepath.Clean(strings.TrimSpace(filePath))
 	if err := validateAtomicWritePath(path); err != nil {
 		return err
 	}
@@ -99,7 +138,7 @@ func (cm *ConfigManager) writeConfigAtomically() error {
 		}
 	}()
 
-	if err := cm.viper.WriteConfigAs(tmpPath); err != nil {
+	if err := viperCfg.WriteConfigAs(tmpPath); err != nil {
 		_ = tmpFile.Close()
 
 		return fmt.Errorf("write temp config file: %w", err)
@@ -173,6 +212,10 @@ func validateManagerConfigPath(filePath string) error {
 		return errConfigManagerInvalidExtension
 	}
 
+	// Absolute paths passed directly to ConfigManager are treated as trusted
+	// programmer input (common in tests and explicit process wiring). Untrusted
+	// external overrides must go through resolveConfigFilePathStrict(), which
+	// enforces workspace containment for both relative and absolute paths.
 	if !filepath.IsAbs(filePath) && !isPathContained(filePath) {
 		return errConfigManagerPathOutsideWorkdir
 	}
@@ -189,6 +232,9 @@ func validateAtomicWritePath(path string) error {
 		return errUnsafeConfigFileExtension
 	}
 
+	// writePersistedConfigAtomically only receives file paths already accepted by
+	// ConfigManager construction. Relative paths must still stay inside the working
+	// directory; absolute paths remain an explicit trusted-input escape hatch.
 	if !filepath.IsAbs(path) && !isPathContained(path) {
 		return errUnsafeConfigFilePath
 	}

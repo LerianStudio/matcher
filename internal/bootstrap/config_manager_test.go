@@ -678,6 +678,37 @@ func TestConfigManager_Update_RejectsEnvOverriddenRuntimeChange(t *testing.T) {
 	assert.Equal(t, "app.log_level", result.Rejected[0].Key)
 	assert.Contains(t, result.Rejected[0].Reason, "overridden by environment variable")
 	assert.Equal(t, "warn", cm.Get().App.LogLevel)
+
+	content, readErr := os.ReadFile(yamlPath)
+	require.NoError(t, readErr)
+	assert.Contains(t, string(content), "log_level: debug")
+	assert.NotContains(t, string(content), "log_level: warn")
+}
+
+func TestConfigManager_Update_DoesNotPersistEnvSecretOverrides(t *testing.T) {
+	// Not parallel: t.Setenv mutates process environment.
+	t.Setenv("MATCHER_AUTH_TOKEN_SECRET", "top-secret-from-env")
+	t.Setenv("MATCHER_POSTGRES_PRIMARY_PASSWORD", "db-secret-from-env")
+
+	tmpDir := t.TempDir()
+	yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
+
+	cfg := defaultConfig()
+	cm := newTestConfigManager(t, cfg, yamlPath, &testLogger{})
+
+	_, err := cm.Update(map[string]any{"rate_limit.max": 250})
+	require.NoError(t, err)
+
+	content, readErr := os.ReadFile(yamlPath)
+	require.NoError(t, readErr)
+	text := string(content)
+
+	assert.Contains(t, text, "rate_limit:")
+	assert.Contains(t, text, "max: 250")
+	assert.NotContains(t, text, "top-secret-from-env")
+	assert.NotContains(t, text, "db-secret-from-env")
+	assert.NotContains(t, text, "token_secret")
+	assert.NotContains(t, text, "primary_password")
 }
 
 func TestConfigManager_Update_MutableKeys(t *testing.T) {
@@ -724,6 +755,14 @@ func TestConfigManager_Update_ImmutableKeysRejected(t *testing.T) {
 	for _, rejected := range result.Rejected {
 		assert.Contains(t, rejected.Reason, "not mutable")
 	}
+
+	rejectionsByKey := make(map[string]ConfigChangeRejection, len(result.Rejected))
+	for _, rejected := range result.Rejected {
+		rejectionsByKey[rejected.Key] = rejected
+	}
+
+	assert.Equal(t, "evil-host", rejectionsByKey["postgres.primary_host"].Value)
+	assert.Equal(t, "***REDACTED***", rejectionsByKey["auth.token_secret"].Value)
 }
 
 func TestConfigManager_Update_MixedApplyAndReject(t *testing.T) {
@@ -745,6 +784,26 @@ func TestConfigManager_Update_MixedApplyAndReject(t *testing.T) {
 	assert.Len(t, result.Rejected, 1)
 	assert.Equal(t, "rate_limit.max", result.Applied[0].Key)
 	assert.Equal(t, "postgres.primary_host", result.Rejected[0].Key)
+}
+
+func TestConfigManager_Update_RejectsFractionalIntegerValues(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
+
+	cfg := defaultConfig()
+	cm := newTestConfigManager(t, cfg, yamlPath, &testLogger{})
+
+	result, err := cm.Update(map[string]any{
+		"rate_limit.max": 12.5,
+	})
+	require.NoError(t, err)
+	assert.Empty(t, result.Applied)
+	require.Len(t, result.Rejected, 1)
+	assert.Equal(t, "rate_limit.max", result.Rejected[0].Key)
+	assert.Contains(t, result.Rejected[0].Reason, "type mismatch: expected int")
+	assert.Equal(t, 100, cm.Get().RateLimit.Max)
 }
 
 func TestConfigManager_Update_EmptyChanges(t *testing.T) {
@@ -822,6 +881,22 @@ func TestConfigManager_Update_NotifiesSubscribers(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.True(t, called.Load(), "subscriber should be called after Update")
+}
+
+func TestConfigManager_Update_PropagatesSubscriberFailure(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
+
+	cm := newTestConfigManager(t, defaultConfig(), yamlPath, &testLogger{})
+	cm.SubscribeErr(func(_ *Config) error {
+		return assert.AnError
+	})
+
+	_, err := cm.Update(map[string]any{"rate_limit.max": 301})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrConfigSubscriberFailure)
 }
 
 func TestConfigManager_Update_WritesYAMLFile(t *testing.T) {
@@ -1085,18 +1160,14 @@ func TestIsSensitiveKey_MatchesExpectedPatterns(t *testing.T) {
 		key      string
 		expected bool
 	}{
-		{name: "lowercase password", key: "password", expected: true},
-		{name: "uppercase PASSWORD", key: "PASSWORD", expected: true},
-		{name: "mixed case Password", key: "Password", expected: true},
-		{name: "contains password", key: "primary_password", expected: true},
-		{name: "token", key: "token", expected: true},
-		{name: "contains token", key: "token_secret", expected: true},
-		{name: "TOKEN uppercase", key: "TOKEN", expected: true},
-		{name: "secret", key: "secret", expected: true},
-		{name: "contains secret", key: "hmac_secret", expected: true},
-		{name: "SECRET uppercase", key: "SECRET", expected: true},
+		{name: "postgres password", key: "postgres.primary_password", expected: true},
+		{name: "rabbitmq password", key: "rabbitmq.password", expected: true},
+		{name: "auth token secret", key: "auth.token_secret", expected: true},
+		{name: "idempotency hmac secret", key: "idempotency.hmac_secret", expected: true},
+		{name: "object storage access key", key: "object_storage.access_key_id", expected: true},
 		{name: "normal key", key: "rate_limit.max", expected: false},
 		{name: "host key", key: "postgres.primary_host", expected: false},
+		{name: "rabbitmq uri", key: "rabbitmq.uri", expected: false},
 		{name: "enabled key", key: "auth.enabled", expected: false},
 		{name: "empty string", key: "", expected: false},
 	}

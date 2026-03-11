@@ -19,15 +19,15 @@ var errConfigManagerStopped = errors.New("config manager stopped")
 func (cm *ConfigManager) reload(source string) (*ReloadResult, error) {
 	var (
 		notifyCfg *Config
-		callbacks []func(*Config)
+		callbacks []func(*Config) error
 	)
 
 	cm.mu.Lock()
-	defer func() {
-		cm.mu.Unlock()
+	locked := true
 
-		if notifyCfg != nil {
-			cm.notifySubscribers(notifyCfg, callbacks)
+	defer func() {
+		if locked {
+			cm.mu.Unlock()
 		}
 	}()
 
@@ -38,6 +38,13 @@ func (cm *ConfigManager) reload(source string) (*ReloadResult, error) {
 
 	notifyCfg = cm.config.Load()
 	callbacks = cm.snapshotSubscribersLocked()
+	cm.mu.Unlock()
+
+	locked = false
+
+	if notifyErr := cm.notifySubscribers(notifyCfg, callbacks); notifyErr != nil {
+		return result, fmt.Errorf("config reload: %w", notifyErr)
+	}
 
 	return result, nil
 }
