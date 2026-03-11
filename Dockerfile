@@ -54,3 +54,4 @@ USER nonroot:nonroot
 EXPOSE 4018
 
 ENTRYPOINT ["/app"]
+
