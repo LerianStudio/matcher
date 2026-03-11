@@ -1592,6 +1592,14 @@ func mapUpdateContextError(fiberCtx *fiber.Ctx, err error) error {
 	}
 }
 
+// ErrorResponse is a placeholder for Swagger documentation.
+// The actual error response type is defined in lib-commons.
+type ErrorResponse struct {
+	Code    int    `json:"code"`
+	Type    string `json:"type"`
+	Message string `json:"message"`
+}
+
 func writeServiceError(fiberCtx *fiber.Ctx, err error) error {
 	message := clientErrorMessage(err)
 	if isClientSafeError(err) {

@@ -1144,3 +1144,11 @@ func handleIgnoreTransactionError(
 
 	return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 }
+
+// ErrorResponse is a placeholder for Swagger documentation.
+// The actual error response type is defined in lib-commons.
+type ErrorResponse struct {
+	Code    int    `json:"code"`
+	Type    string `json:"type"`
+	Message string `json:"message"`
+}

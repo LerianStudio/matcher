@@ -1247,3 +1247,11 @@ func parseTimestampCursorPagination(fiberCtx *fiber.Ctx) (*libHTTP.TimestampCurs
 
 	return cursor, limit, nil
 }
+
+// ErrorResponse is a placeholder for Swagger documentation.
+// The actual error response type is defined in lib-commons.
+type ErrorResponse struct {
+	Code    int    `json:"code"`
+	Type    string `json:"type"`
+	Message string `json:"message"`
+}

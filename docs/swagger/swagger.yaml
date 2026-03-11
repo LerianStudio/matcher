@@ -34,6 +34,22 @@ definitions:
       prev:
         type: string
     type: object
+  github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse:
+    description: Standard error response returned by all API endpoints
+    properties:
+      code:
+        description: HTTP status code
+        example: 400
+        type: integer
+      message:
+        description: Human-readable error message
+        example: context name is required
+        type: string
+      title:
+        description: Error type identifier
+        example: invalid_request
+        type: string
+    type: object
   github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CloneContextRequest:
     description: Request payload for cloning a context with its configuration
     properties:
@@ -805,6 +821,134 @@ definitions:
         - CUSTOM
         example: LEDGER
         type: string
+    type: object
+  github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ConnectionListResponse:
+    properties:
+      connections:
+        items:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ConnectionResponse'
+        type: array
+    type: object
+  github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ConnectionResponse:
+    properties:
+      configName:
+        type: string
+      databaseName:
+        type: string
+      databaseType:
+        type: string
+      fetcherConnId:
+        type: string
+      host:
+        type: string
+      id:
+        type: string
+      lastSeenAt:
+        type: string
+      port:
+        type: integer
+      productName:
+        type: string
+      schemaDiscovered:
+        type: boolean
+      status:
+        type: string
+    type: object
+  github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ConnectionSchemaResponse:
+    properties:
+      connectionId:
+        type: string
+      tables:
+        items:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.SchemaTableResponse'
+        type: array
+    type: object
+  github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.DiscoveryStatusResponse:
+    properties:
+      connectionCount:
+        type: integer
+      fetcherHealthy:
+        type: boolean
+      lastSyncAt:
+        type: string
+    type: object
+  github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ExtractionRequestResponse:
+    properties:
+      connectionId:
+        type: string
+      createdAt:
+        type: string
+      errorMessage:
+        type: string
+      fetcherJobId:
+        type: string
+      filters:
+        additionalProperties: {}
+        type: object
+      id:
+        type: string
+      ingestionJobId:
+        type: string
+      resultPath:
+        type: string
+      status:
+        type: string
+      tables:
+        additionalProperties: {}
+        type: object
+      updatedAt:
+        type: string
+    type: object
+  github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.PollExtractionRequest:
+    type: object
+  github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.RefreshDiscoveryResponse:
+    properties:
+      connectionsSynced:
+        type: integer
+    type: object
+  github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.SchemaColumnResponse:
+    properties:
+      name:
+        type: string
+      nullable:
+        type: boolean
+      type:
+        type: string
+    type: object
+  github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.SchemaTableResponse:
+    properties:
+      columns:
+        items:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.SchemaColumnResponse'
+        type: array
+      tableName:
+        type: string
+    type: object
+  github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.StartExtractionRequest:
+    properties:
+      endDate:
+        type: string
+      filters:
+        additionalProperties: {}
+        type: object
+      startDate:
+        type: string
+      tables:
+        additionalProperties: {}
+        type: object
+    type: object
+  github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.TestConnectionResponse:
+    properties:
+      connectionId:
+        type: string
+      errorMessage:
+        type: string
+      fetcherConnId:
+        type: string
+      healthy:
+        type: boolean
+      latencyMs:
+        type: integer
     type: object
   github_com_LerianStudio_matcher_internal_exception_adapters_http_dto.AddCommentRequest:
     description: Add comment request payload
@@ -2415,22 +2559,6 @@ definitions:
         example: 700
         type: integer
     type: object
-  http.ErrorResponse:
-    description: Standard error response returned by all API endpoints
-    properties:
-      code:
-        description: HTTP status code
-        example: 400
-        type: integer
-      message:
-        description: Human-readable error message
-        example: context name is required
-        type: string
-      title:
-        description: Error type identifier
-        example: invalid_request
-        type: string
-    type: object
   internal_bootstrap.ConfigChange:
     properties:
       key:
@@ -2691,6 +2819,15 @@ definitions:
         example: 4
         type: integer
     type: object
+  internal_configuration_adapters_http.ErrorResponse:
+    properties:
+      code:
+        type: integer
+      message:
+        type: string
+      type:
+        type: string
+    type: object
   internal_configuration_adapters_http.ListContextsResponse:
     description: Cursor-paginated list of reconciliation contexts
     properties:
@@ -2774,6 +2911,24 @@ definitions:
     required:
     - ruleIds
     type: object
+  internal_discovery_adapters_http.ErrorResponse:
+    properties:
+      code:
+        type: integer
+      message:
+        type: string
+      type:
+        type: string
+    type: object
+  internal_exception_adapters_http.ErrorResponse:
+    properties:
+      code:
+        type: integer
+      message:
+        type: string
+      type:
+        type: string
+    type: object
   internal_governance_adapters_http.ArchiveDownloadResponse:
     description: Presigned download URL for an archived audit log
     properties:
@@ -2808,6 +2963,15 @@ definitions:
         maximum: 200
         minimum: 1
         type: integer
+    type: object
+  internal_ingestion_adapters_http.ErrorResponse:
+    properties:
+      code:
+        type: integer
+      message:
+        type: string
+      type:
+        type: string
     type: object
   internal_matching_adapters_http.AdjustmentResponse:
     properties:
@@ -3238,19 +3402,19 @@ paths:
         "400":
           description: Invalid query parameters
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: List reconciliation contexts
@@ -3282,23 +3446,23 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "409":
           description: 'Conflict: duplicate resource or idempotency key in progress'
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Create a reconciliation context
@@ -3325,23 +3489,23 @@ paths:
         "400":
           description: Invalid context ID format
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "404":
           description: Context not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Delete a reconciliation context
@@ -3371,23 +3535,23 @@ paths:
         "400":
           description: Invalid context ID format
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "404":
           description: Context not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Get a reconciliation context
@@ -3425,27 +3589,27 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "404":
           description: Context not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "409":
           description: 'Conflict: duplicate resource or idempotency key in progress'
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Update a reconciliation context
@@ -3485,27 +3649,27 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "404":
           description: Context not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "409":
           description: 'Conflict: duplicate resource or idempotency key in progress'
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Clone a reconciliation context
@@ -3556,23 +3720,23 @@ paths:
         "400":
           description: Invalid query parameters
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "404":
           description: Context not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: List match rules
@@ -3610,27 +3774,27 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "404":
           description: Context not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "409":
           description: 'Conflict: duplicate resource or idempotency key in progress'
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Create a match rule
@@ -3663,23 +3827,23 @@ paths:
         "400":
           description: Invalid rule ID format
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "404":
           description: Match rule not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Delete a match rule
@@ -3715,23 +3879,23 @@ paths:
         "400":
           description: Invalid rule ID format
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "404":
           description: Match rule not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Get a match rule
@@ -3775,27 +3939,27 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "404":
           description: Match rule not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "409":
           description: 'Conflict: duplicate resource or idempotency key in progress'
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Update a match rule
@@ -3832,23 +3996,23 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "404":
           description: Context not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Reorder match rules
@@ -3881,23 +4045,23 @@ paths:
         "400":
           description: Invalid context ID format
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "404":
           description: Context not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: List reconciliation schedules
@@ -3935,27 +4099,27 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "404":
           description: Context not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "409":
           description: 'Conflict: duplicate resource or idempotency key in progress'
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Create a reconciliation schedule
@@ -3988,23 +4152,23 @@ paths:
         "400":
           description: Invalid schedule ID format
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "404":
           description: Schedule not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Delete a reconciliation schedule
@@ -4040,23 +4204,23 @@ paths:
         "400":
           description: Invalid schedule ID format
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "404":
           description: Schedule not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Get a reconciliation schedule
@@ -4100,27 +4264,27 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "404":
           description: Schedule not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "409":
           description: 'Conflict: duplicate resource or idempotency key in progress'
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Update a reconciliation schedule
@@ -4173,23 +4337,23 @@ paths:
         "400":
           description: Invalid query parameters
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "404":
           description: Context not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: List reconciliation sources
@@ -4227,27 +4391,27 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "404":
           description: Context not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "409":
           description: 'Conflict: duplicate resource or idempotency key in progress'
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Create a reconciliation source
@@ -4280,23 +4444,23 @@ paths:
         "400":
           description: Invalid source ID format
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "404":
           description: Source not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Delete a reconciliation source
@@ -4332,23 +4496,23 @@ paths:
         "400":
           description: Invalid source ID format
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "404":
           description: Source not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Get a reconciliation source
@@ -4392,27 +4556,27 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "404":
           description: Source not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "409":
           description: 'Conflict: duplicate resource or idempotency key in progress'
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Update a reconciliation source
@@ -4449,23 +4613,23 @@ paths:
         "400":
           description: Invalid source ID format
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "404":
           description: Field map not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Get a field map by source
@@ -4509,27 +4673,27 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "404":
           description: Context or source not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "409":
           description: 'Conflict: duplicate resource or idempotency key in progress'
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Create a field map
@@ -4564,15 +4728,15 @@ paths:
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: List fee schedules
@@ -4608,23 +4772,23 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "409":
           description: 'Conflict: duplicate resource or idempotency key in progress'
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Create a fee schedule
@@ -4651,23 +4815,23 @@ paths:
         "400":
           description: Invalid schedule ID format
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "404":
           description: Fee schedule not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Delete a fee schedule
@@ -4697,23 +4861,23 @@ paths:
         "400":
           description: Invalid schedule ID format
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "404":
           description: Fee schedule not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Get a fee schedule
@@ -4755,27 +4919,27 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "404":
           description: Fee schedule not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "409":
           description: 'Conflict: duplicate resource or idempotency key in progress'
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Update a fee schedule
@@ -4814,23 +4978,23 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "404":
           description: Fee schedule not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Simulate fee calculation
@@ -4857,23 +5021,23 @@ paths:
         "400":
           description: Invalid field map ID format
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "404":
           description: Field map not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Delete a field map
@@ -4911,27 +5075,27 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "404":
           description: Field map not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "409":
           description: 'Conflict: duplicate resource or idempotency key in progress'
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Update a field map
@@ -4973,23 +5137,23 @@ paths:
         "400":
           description: Invalid query parameters
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "404":
           description: Context not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: List export jobs by context
@@ -5028,36 +5192,409 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "404":
           description: Context not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "409":
           description: 'Conflict: duplicate resource or idempotency key in progress'
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "503":
           description: Export worker disabled
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Create an export job
       tags:
       - Export Jobs
+  /v1/discovery/connections:
+    get:
+      description: Returns all discovered Fetcher database connections.
+      operationId: listDiscoveryConnections
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of connections
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ConnectionListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List discovered connections
+      tags:
+      - Discovery
+  /v1/discovery/connections/{connectionId}:
+    get:
+      description: Returns a single discovered Fetcher connection by its internal
+        ID.
+      operationId: getDiscoveryConnection
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Connection ID (UUID)
+        in: path
+        name: connectionId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Connection details
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ConnectionResponse'
+        "400":
+          description: Invalid connection ID
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+        "404":
+          description: Connection not found
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a discovered connection
+      tags:
+      - Discovery
+  /v1/discovery/connections/{connectionId}/extractions:
+    post:
+      consumes:
+      - application/json
+      description: Creates a tenant-scoped extraction request for a discovered connection
+        and submits it to Fetcher.
+      operationId: startDiscoveryExtraction
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Connection ID (UUID)
+        in: path
+        name: connectionId
+        required: true
+        type: string
+      - description: Extraction request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.StartExtractionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Extraction request
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ExtractionRequestResponse'
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+        "404":
+          description: Connection not found
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+        "503":
+          description: Fetcher service unavailable
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Start a connection extraction
+      tags:
+      - Discovery
+  /v1/discovery/connections/{connectionId}/schema:
+    get:
+      description: Returns all discovered table schemas for a connection.
+      operationId: getDiscoveryConnectionSchema
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Connection ID (UUID)
+        in: path
+        name: connectionId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Schema for the connection
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ConnectionSchemaResponse'
+        "400":
+          description: Invalid connection ID
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+        "404":
+          description: Connection not found
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get connection schema
+      tags:
+      - Discovery
+  /v1/discovery/connections/{connectionId}/test:
+    post:
+      consumes:
+      - application/json
+      description: Tests connectivity for a specific discovered connection owned by
+        the current tenant.
+      operationId: testDiscoveryConnection
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Connection ID (UUID)
+        in: path
+        name: connectionId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Test result
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.TestConnectionResponse'
+        "400":
+          description: Invalid connection ID
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+        "404":
+          description: Connection not found
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+        "503":
+          description: Fetcher service unavailable
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Test a connection
+      tags:
+      - Discovery
+  /v1/discovery/extractions/{extractionId}:
+    get:
+      description: Returns a single tenant-scoped extraction request by its internal
+        ID.
+      operationId: getDiscoveryExtraction
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Extraction ID (UUID)
+        in: path
+        name: extractionId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Extraction request
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ExtractionRequestResponse'
+        "400":
+          description: Invalid extraction ID
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+        "404":
+          description: Extraction not found
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get an extraction request
+      tags:
+      - Discovery
+  /v1/discovery/extractions/{extractionId}/poll:
+    post:
+      consumes:
+      - application/json
+      description: Polls Fetcher for the latest extraction status and persists any
+        lifecycle transition.
+      operationId: pollDiscoveryExtraction
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Extraction ID (UUID)
+        in: path
+        name: extractionId
+        required: true
+        type: string
+      - description: Poll request
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.PollExtractionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Updated extraction request
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ExtractionRequestResponse'
+        "400":
+          description: Invalid extraction ID
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+        "404":
+          description: Extraction not found
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Poll an extraction request
+      tags:
+      - Discovery
+  /v1/discovery/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Forces an immediate sync with the Fetcher service, updating connections
+        and schemas.
+      operationId: refreshDiscovery
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Refresh result
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.RefreshDiscoveryResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+        "503":
+          description: Fetcher service unavailable
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Refresh discovery
+      tags:
+      - Discovery
+  /v1/discovery/status:
+    get:
+      description: Returns the current Fetcher integration status including health
+        and connection count.
+      operationId: getDiscoveryStatus
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Discovery status
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.DiscoveryStatusResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get discovery status
+      tags:
+      - Discovery
   /v1/disputes:
     get:
       description: Lists all disputes with optional filters for state, category, and
@@ -5135,19 +5672,19 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: List disputes
@@ -5178,23 +5715,23 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "404":
           description: Dispute not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Get dispute
@@ -5238,27 +5775,27 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "404":
           description: Dispute not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "422":
           description: 'Unprocessable entity: invalid state transition'
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Close a dispute
@@ -5302,27 +5839,27 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "404":
           description: Dispute not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "422":
           description: 'Unprocessable entity: invalid state transition'
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Submit evidence to a dispute
@@ -5415,19 +5952,19 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: List exceptions
@@ -5458,23 +5995,23 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "404":
           description: Exception not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Get exception
@@ -5518,27 +6055,27 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "404":
           description: Exception not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "422":
           description: 'Unprocessable entity: invalid state transition'
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Adjust entry for an exception
@@ -5579,31 +6116,31 @@ paths:
         "400":
           description: Invalid request
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized - Bearer token missing or invalid
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden - insufficient permissions
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "404":
           description: Exception not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "409":
           description: Conflict or idempotency
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "429":
           description: Rate limit exceeded
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Process external system callback
@@ -5635,23 +6172,23 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "404":
           description: Exception not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: List comments for exception
@@ -5690,23 +6227,23 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "404":
           description: Exception not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Add comment to exception
@@ -5741,23 +6278,23 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "404":
           description: Comment not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Delete a comment
@@ -5801,27 +6338,27 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "404":
           description: Exception not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "422":
           description: 'Unprocessable entity: invalid state transition'
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Dispatch exception to external system
@@ -5865,23 +6402,23 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "404":
           description: Exception not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Open a dispute
@@ -5926,27 +6463,27 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "404":
           description: Exception not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "422":
           description: 'Unprocessable entity: invalid state transition'
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Force match an exception
@@ -5990,23 +6527,23 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "404":
           description: Exception not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Get exception history
@@ -6040,19 +6577,19 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Bulk assign exceptions
@@ -6086,19 +6623,19 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Bulk dispatch exceptions
@@ -6132,19 +6669,19 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Bulk resolve exceptions
@@ -6187,19 +6724,19 @@ paths:
         "400":
           description: Invalid query parameters
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: List export jobs
@@ -6230,23 +6767,23 @@ paths:
         "400":
           description: Invalid query parameters
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "404":
           description: Export job not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Get export job status
@@ -6277,27 +6814,27 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "404":
           description: Export job not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "409":
           description: Job in terminal state or idempotency conflict
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Cancel an export job
@@ -6328,27 +6865,27 @@ paths:
         "400":
           description: Invalid query parameters
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "404":
           description: Export job not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "409":
           description: Job not ready for download
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Download export file
@@ -6377,23 +6914,23 @@ paths:
         "400":
           description: Invalid request
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "404":
           description: Actor mapping not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Delete actor mapping
@@ -6422,23 +6959,23 @@ paths:
         "400":
           description: Invalid request
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "404":
           description: Actor mapping not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Get actor mapping
@@ -6476,19 +7013,19 @@ paths:
         "400":
           description: Invalid request
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Upsert actor mapping
@@ -6517,23 +7054,23 @@ paths:
         "400":
           description: Invalid request
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "404":
           description: Actor mapping not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Pseudonymize actor
@@ -6584,19 +7121,19 @@ paths:
         "400":
           description: Invalid query parameters
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: List audit log archives
@@ -6629,23 +7166,23 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "404":
           description: Archive not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Download audit log archive
@@ -6706,19 +7243,19 @@ paths:
         "400":
           description: Invalid query parameters
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: List audit logs
@@ -6750,23 +7287,23 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "404":
           description: Audit log not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Get audit log by ID
@@ -6817,19 +7354,19 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: List audit logs by entity
@@ -6889,19 +7426,19 @@ paths:
         "400":
           description: Invalid query parameters
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_ingestion_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_ingestion_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_ingestion_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_ingestion_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: List ingestion jobs for a context
@@ -6939,23 +7476,23 @@ paths:
         "400":
           description: Invalid query parameters
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_ingestion_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_ingestion_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_ingestion_adapters_http.ErrorResponse'
         "404":
           description: Job not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_ingestion_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_ingestion_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Get ingestion job status
@@ -7021,23 +7558,23 @@ paths:
         "400":
           description: Invalid query parameters
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_ingestion_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_ingestion_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_ingestion_adapters_http.ErrorResponse'
         "404":
           description: Job not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_ingestion_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_ingestion_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: List transactions for a job
@@ -7104,23 +7641,23 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_ingestion_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_ingestion_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_ingestion_adapters_http.ErrorResponse'
         "404":
           description: Source not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_ingestion_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_ingestion_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Preview uploaded file
@@ -7175,27 +7712,27 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_ingestion_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_ingestion_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_ingestion_adapters_http.ErrorResponse'
         "404":
           description: Source not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_ingestion_adapters_http.ErrorResponse'
         "409":
           description: 'Conflict: duplicate resource or idempotency key in progress'
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_ingestion_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_ingestion_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Upload transaction file
@@ -7241,27 +7778,27 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_ingestion_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_ingestion_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_ingestion_adapters_http.ErrorResponse'
         "404":
           description: Transaction not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_ingestion_adapters_http.ErrorResponse'
         "409":
           description: Transaction already matched/ignored or idempotency conflict
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_ingestion_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_ingestion_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Ignore a transaction
@@ -7350,19 +7887,19 @@ paths:
         "400":
           description: Invalid query parameters
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_ingestion_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_ingestion_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_ingestion_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/internal_ingestion_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Search transactions
@@ -7402,23 +7939,23 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "404":
           description: Context not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Create an adjustment
@@ -7459,23 +7996,23 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "404":
           description: Context not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Trigger a matching run
@@ -7525,23 +8062,23 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "404":
           description: Context not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: List match runs
@@ -7585,23 +8122,23 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "404":
           description: Match group not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Break/Unmatch a match group
@@ -7642,23 +8179,23 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "404":
           description: Transaction not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Create a manual match
@@ -7696,23 +8233,23 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "404":
           description: Match run not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Get match run
@@ -7777,23 +8314,23 @@ paths:
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "404":
           description: Match run not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Get match run results
@@ -7841,23 +8378,23 @@ paths:
         "400":
           description: Invalid query parameters
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "404":
           description: Context not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Get all dashboard aggregates
@@ -7905,23 +8442,23 @@ paths:
         "400":
           description: Invalid query parameters
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "404":
           description: Context not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Get cash impact summary
@@ -7969,23 +8506,23 @@ paths:
         "400":
           description: Invalid query parameters
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "404":
           description: Context not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Get match rate statistics
@@ -8033,23 +8570,23 @@ paths:
         "400":
           description: Invalid query parameters
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "404":
           description: Context not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Get comprehensive dashboard metrics
@@ -8097,23 +8634,23 @@ paths:
         "400":
           description: Invalid query parameters
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "404":
           description: Context not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Get SLA statistics
@@ -8161,23 +8698,23 @@ paths:
         "400":
           description: Invalid query parameters
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "404":
           description: Context not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Get per-source reconciliation breakdown
@@ -8225,23 +8762,23 @@ paths:
         "400":
           description: Invalid query parameters
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "404":
           description: Context not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Get volume statistics
@@ -8290,23 +8827,23 @@ paths:
         "400":
           description: Invalid query parameters
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "404":
           description: Context not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Count exceptions
@@ -8373,23 +8910,23 @@ paths:
         "400":
           description: Invalid query parameters
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "404":
           description: Context not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Get matched transactions report
@@ -8444,23 +8981,23 @@ paths:
         "400":
           description: Invalid query parameters
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "404":
           description: Context not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Export matched transactions report
@@ -8509,23 +9046,23 @@ paths:
         "400":
           description: Invalid query parameters
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "404":
           description: Context not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Count matched records
@@ -8573,23 +9110,23 @@ paths:
         "400":
           description: Invalid query parameters
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "404":
           description: Context not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Get reconciliation summary report
@@ -8644,23 +9181,23 @@ paths:
         "400":
           description: Invalid query parameters
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "404":
           description: Context not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Export summary report
@@ -8709,23 +9246,23 @@ paths:
         "400":
           description: Invalid query parameters
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "404":
           description: Context not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Count all transactions
@@ -8792,23 +9329,23 @@ paths:
         "400":
           description: Invalid query parameters
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "404":
           description: Context not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Get unmatched transactions report
@@ -8857,23 +9394,23 @@ paths:
         "400":
           description: Invalid query parameters
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "404":
           description: Context not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Count unmatched records
@@ -8928,23 +9465,23 @@ paths:
         "400":
           description: Invalid query parameters
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "404":
           description: Context not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Export unmatched transactions report
@@ -9011,23 +9548,23 @@ paths:
         "400":
           description: Invalid query parameters
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "404":
           description: Context not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Get variance report
@@ -9082,23 +9619,23 @@ paths:
         "400":
           description: Invalid query parameters
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "404":
           description: Context not found
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Export variance report
@@ -9126,15 +9663,15 @@ paths:
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Get current configuration
@@ -9170,23 +9707,23 @@ paths:
         "400":
           description: Invalid request
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "422":
           description: Validation failed
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Update configuration
@@ -9214,15 +9751,15 @@ paths:
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Get configuration change history
@@ -9252,15 +9789,15 @@ paths:
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Force reload configuration from disk
@@ -9289,15 +9826,15 @@ paths:
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/http.ErrorResponse'
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Get configuration schema
