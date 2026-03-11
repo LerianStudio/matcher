@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 //go:build unit
 
 package bootstrap
@@ -580,6 +584,9 @@ func TestConfigManager_Stop_StopsDebounceTimer(t *testing.T) {
 }
 
 func TestConfigManager_Debounce_CoalescesEvents(t *testing.T) {
+	// NOTE: This test uses real-time delays for debounce verification.
+	// If it becomes flaky on heavily-loaded CI machines, consider increasing
+	// the sleep durations or switching to a channel-based synchronization pattern.
 	t.Parallel()
 
 	tmpDir := t.TempDir()
@@ -899,14 +906,14 @@ func TestDiffConfigs_DetectsChanges(t *testing.T) {
 	changes := diffConfigs(old, newCfg)
 	assert.NotEmpty(t, changes)
 
-	// Should detect changes in "app" and "rate_limit" sections.
+	// Should detect field-level changes with dotted keys.
 	keys := make(map[string]bool, len(changes))
 	for _, c := range changes {
 		keys[c.Key] = true
 	}
 
-	assert.True(t, keys["app"], "should detect app config change")
-	assert.True(t, keys["rate_limit"], "should detect rate_limit config change")
+	assert.True(t, keys["app.log_level"], "should detect app.log_level change")
+	assert.True(t, keys["rate_limit.max"], "should detect rate_limit.max change")
 }
 
 func TestDiffConfigs_NoChanges(t *testing.T) {

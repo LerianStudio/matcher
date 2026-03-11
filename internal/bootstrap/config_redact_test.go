@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 //go:build unit
 
 package bootstrap
@@ -50,18 +54,10 @@ func TestDiffConfigsRedact_DetectsAppChange(t *testing.T) {
 	newCfg.App.LogLevel = "debug"
 
 	changes := diffConfigs(oldCfg, newCfg)
-	require.NotEmpty(t, changes)
-
-	found := false
-	for _, c := range changes {
-		if c.Key == "app" {
-			found = true
-
-			break
-		}
-	}
-
-	assert.True(t, found, "should detect app config change")
+	require.Len(t, changes, 1)
+	assert.Equal(t, "app.log_level", changes[0].Key)
+	assert.Equal(t, "info", changes[0].OldValue)
+	assert.Equal(t, "debug", changes[0].NewValue)
 }
 
 func TestDiffConfigsRedact_DetectsMultipleChanges(t *testing.T) {
@@ -73,7 +69,65 @@ func TestDiffConfigsRedact_DetectsMultipleChanges(t *testing.T) {
 	newCfg.Server.Address = ":9090"
 
 	changes := diffConfigs(oldCfg, newCfg)
-	assert.GreaterOrEqual(t, len(changes), 2) //nolint:mnd // expecting at least app + server changes
+	require.Len(t, changes, 2) //nolint:mnd // exactly app.log_level + server.address
+
+	keys := make(map[string]bool, len(changes))
+	for _, c := range changes {
+		keys[c.Key] = true
+	}
+
+	assert.True(t, keys["app.log_level"], "should detect app.log_level change")
+	assert.True(t, keys["server.address"], "should detect server.address change")
+}
+
+func TestDiffConfigsRedact_FieldLevelNestedStruct(t *testing.T) {
+	t.Parallel()
+
+	oldCfg := defaultConfig()
+	newCfg := defaultConfig()
+
+	// Change a single leaf field inside a nested struct.
+	newCfg.RateLimit.Max = 999
+
+	changes := diffConfigs(oldCfg, newCfg)
+	require.Len(t, changes, 1, "should detect exactly one field-level change")
+	assert.Equal(t, "rate_limit.max", changes[0].Key)
+	assert.Equal(t, 100, changes[0].OldValue)
+	assert.Equal(t, 999, changes[0].NewValue)
+}
+
+func TestDiffConfigsRedact_FieldLevelSecretRedaction(t *testing.T) {
+	t.Parallel()
+
+	oldCfg := defaultConfig()
+	newCfg := defaultConfig()
+	newCfg.Postgres.PrimaryPassword = "new-secret"
+
+	changes := diffConfigs(oldCfg, newCfg)
+	require.Len(t, changes, 1)
+	assert.Equal(t, "postgres.primary_password", changes[0].Key)
+	assert.Equal(t, "***REDACTED***", changes[0].OldValue)
+	assert.Equal(t, "***REDACTED***", changes[0].NewValue)
+}
+
+func TestDiffConfigsRedact_MultipleFieldsSameSubStruct(t *testing.T) {
+	t.Parallel()
+
+	oldCfg := defaultConfig()
+	newCfg := defaultConfig()
+	newCfg.RateLimit.Max = 200
+	newCfg.RateLimit.ExpirySec = 120
+
+	changes := diffConfigs(oldCfg, newCfg)
+	require.Len(t, changes, 2) //nolint:mnd // exactly rate_limit.max + rate_limit.expiry_sec
+
+	keys := make(map[string]bool, len(changes))
+	for _, c := range changes {
+		keys[c.Key] = true
+	}
+
+	assert.True(t, keys["rate_limit.max"], "should detect rate_limit.max change")
+	assert.True(t, keys["rate_limit.expiry_sec"], "should detect rate_limit.expiry_sec change")
 }
 
 func TestIsSensitiveKeyTable(t *testing.T) {

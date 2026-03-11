@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 package bootstrap
 
 import (
@@ -12,11 +16,12 @@ import (
 // fields containing secrets. Used by diffConfigs to redact secret values
 // from config change diffs, preventing credential leakage in API responses
 // and audit logs.
-var sensitiveKeyFragments = []string{"password", "secret", "token", "key", "cert", "uri"}
+var sensitiveKeyFragments = []string{"password", "secret", "token", "key", "cert", "uri", "dsn", "connection"}
 
-// diffConfigs computes the list of top-level field changes between two configs.
-// Uses reflection on the exported struct fields of Config. Fields tagged with
-// `mapstructure:"-"` (like Logger) are skipped.
+// diffConfigs computes field-level changes between two configs.
+// Uses reflection on exported struct fields of Config, recursing into
+// sub-structs to produce dotted keys (e.g., "rate_limit.max") consistent
+// with the API update path. Fields tagged `mapstructure:"-"` are skipped.
 //
 // Secret fields (passwords, tokens, secrets) are redacted in the diff output
 // to prevent credential leakage in API responses and audit logs.
@@ -27,14 +32,28 @@ func diffConfigs(oldCfg, newCfg *Config) []ConfigChange {
 
 	var changes []ConfigChange
 
-	oldVal := reflect.ValueOf(*oldCfg)
-	newVal := reflect.ValueOf(*newCfg)
+	diffConfigsRecursive(reflect.ValueOf(*oldCfg), reflect.ValueOf(*newCfg), "", &changes)
+
+	return changes
+}
+
+// diffConfigsRecursive walks struct fields, comparing leaf values and recursing
+// into nested structs. Keys are built from mapstructure tags joined by dots.
+//
+// maxDiffDepth guards against hypothetical pointer cycles; Config has none today
+// but the guard is cheap insurance against future struct evolution.
+func diffConfigsRecursive(oldVal, newVal reflect.Value, prefix string, changes *[]ConfigChange) {
+	const maxDiffDepth = 10
+
+	if depthFromPrefix(prefix) > maxDiffDepth {
+		return
+	}
+
 	oldType := oldVal.Type()
 
 	for i := range oldType.NumField() {
 		field := oldType.Field(i)
 
-		// Skip unexported fields and non-config fields.
 		if !field.IsExported() {
 			continue
 		}
@@ -44,20 +63,39 @@ func diffConfigs(oldCfg, newCfg *Config) []ConfigChange {
 			continue
 		}
 
+		key := tag
+		if prefix != "" {
+			key = prefix + "." + tag
+		}
+
 		oldField := oldVal.Field(i)
 		newField := newVal.Field(i)
 
-		// Compare using reflect.DeepEqual for nested structs.
+		// Recurse into nested structs for field-level granularity.
+		if field.Type.Kind() == reflect.Struct {
+			diffConfigsRecursive(oldField, newField, key, changes)
+			continue
+		}
+
+		// Leaf field: compare and record if different.
 		if !reflect.DeepEqual(oldField.Interface(), newField.Interface()) {
-			changes = append(changes, ConfigChange{
-				Key:      tag,
-				OldValue: redactStructSecrets(oldField),
-				NewValue: redactStructSecrets(newField),
+			*changes = append(*changes, ConfigChange{
+				Key:      key,
+				OldValue: redactIfSensitive(key, oldField.Interface()),
+				NewValue: redactIfSensitive(key, newField.Interface()),
 			})
 		}
 	}
+}
 
-	return changes
+// depthFromPrefix counts the nesting depth by counting dots in the key prefix.
+// An empty prefix is depth 0, "rate_limit" is depth 1, "a.b.c" is depth 3.
+func depthFromPrefix(prefix string) int {
+	if prefix == "" {
+		return 0
+	}
+
+	return strings.Count(prefix, ".") + 1
 }
 
 // restoreZeroedFields restores fields in dst that loadConfigFromEnv() zeroed out.
@@ -75,10 +113,19 @@ func restoreZeroedFields(dst, snapshot *Config) {
 		return
 	}
 
-	restoreZeroedFieldsRecursive(reflect.ValueOf(dst).Elem(), reflect.ValueOf(snapshot).Elem())
+	restoreZeroedFieldsRecursive(reflect.ValueOf(dst).Elem(), reflect.ValueOf(snapshot).Elem(), 0)
 }
 
-func restoreZeroedFieldsRecursive(dst, snapshot reflect.Value) {
+func restoreZeroedFieldsRecursive(dst, snapshot reflect.Value, depth int) {
+	// maxRestoreDepth caps recursion as cheap insurance against pointer cycles.
+	// Config currently has no pointer cycles, but this guard prevents stack
+	// overflow if the struct evolves to include self-referential types.
+	const maxRestoreDepth = 10
+
+	if depth > maxRestoreDepth {
+		return
+	}
+
 	dstType := dst.Type()
 
 	for i := range dstType.NumField() {
@@ -98,7 +145,7 @@ func restoreZeroedFieldsRecursive(dst, snapshot reflect.Value) {
 
 		// Recurse into embedded structs (AppConfig, ServerConfig, etc).
 		if field.Type.Kind() == reflect.Struct {
-			restoreZeroedFieldsRecursive(dstField, snapField)
+			restoreZeroedFieldsRecursive(dstField, snapField, depth+1)
 
 			continue
 		}
@@ -132,47 +179,6 @@ func hasExplicitEnvOverride(field reflect.StructField) bool {
 	_, exists := os.LookupEnv(envName)
 
 	return exists
-}
-
-// redactStructSecrets returns a copy of a config sub-struct with sensitive
-// fields (password, secret, token) replaced by "***REDACTED***". For non-struct
-// values, returns the value as-is since leaf values in the diff are individual
-// keys that get redacted via redactIfSensitive.
-func redactStructSecrets(val reflect.Value) any {
-	if val.Kind() != reflect.Struct {
-		return val.Interface()
-	}
-
-	structType := val.Type()
-	redacted := make(map[string]any, structType.NumField())
-
-	for i := range structType.NumField() {
-		field := structType.Field(i)
-		if !field.IsExported() {
-			continue
-		}
-
-		tag := field.Tag.Get("mapstructure")
-		if tag == "" || tag == "-" {
-			continue
-		}
-
-		fieldVal := val.Field(i)
-
-		// Recurse into nested structs.
-		if field.Type.Kind() == reflect.Struct {
-			redacted[tag] = redactStructSecrets(fieldVal)
-			continue
-		}
-
-		if isSensitiveKey(tag) {
-			redacted[tag] = "***REDACTED***"
-		} else {
-			redacted[tag] = redactCredentialURI(fieldVal.Interface())
-		}
-	}
-
-	return redacted
 }
 
 // redactIfSensitive returns "***REDACTED***" if the key matches a sensitive
