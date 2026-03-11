@@ -691,7 +691,7 @@ func newConnectionSetupContext(parent context.Context) (context.Context, context
 		parent = context.Background()
 	}
 
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), defaultConnectionSetupTimeout)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), defaultConnectionSetupTimeout) // #nosec G118 -- cancel is returned to the caller
 
 	return ctx, cancel
 }

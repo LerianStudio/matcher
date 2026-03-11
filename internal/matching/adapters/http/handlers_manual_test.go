@@ -248,7 +248,7 @@ func TestCreateManualMatchContextNotFound(t *testing.T) {
 		&command.UseCase{},
 		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
 		ctxProv,
-			false,
+		false,
 	)
 	require.NoError(t, err)
 
@@ -389,7 +389,7 @@ func TestCreateManualMatchMissingContextID(t *testing.T) {
 		&command.UseCase{},
 		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
 		ctxProv,
-			false,
+		false,
 	)
 	require.NoError(t, err)
 
@@ -439,7 +439,7 @@ func TestCreateManualMatchContextNotActive(t *testing.T) {
 		&command.UseCase{},
 		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
 		ctxProv,
-			false,
+		false,
 	)
 	require.NoError(t, err)
 

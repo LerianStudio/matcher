@@ -171,7 +171,7 @@ func TestRunMatchHandler_ContextNotFound(t *testing.T) {
 		&command.UseCase{},
 		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
 		ctxProv,
-			false,
+		false,
 	)
 	require.NoError(t, err)
 
@@ -214,7 +214,7 @@ func TestRunMatchHandler_ContextNotActive(t *testing.T) {
 		&command.UseCase{},
 		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
 		ctxProv,
-			false,
+		false,
 	)
 	require.NoError(t, err)
 
@@ -261,7 +261,7 @@ func TestGetMatchRunHandler_InvalidRunID(t *testing.T) {
 		&command.UseCase{},
 		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
 		ctxProv,
-			false,
+		false,
 	)
 	require.NoError(t, err)
 
@@ -301,7 +301,7 @@ func TestGetMatchRunHandler_MissingContextID(t *testing.T) {
 		&command.UseCase{},
 		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
 		ctxProv,
-			false,
+		false,
 	)
 	require.NoError(t, err)
 
@@ -335,7 +335,7 @@ func TestListMatchRunsHandler_InvalidSortOrder(t *testing.T) {
 		&command.UseCase{},
 		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
 		ctxProv,
-			false,
+		false,
 	)
 	require.NoError(t, err)
 
@@ -393,7 +393,7 @@ func TestListMatchRunsHandler_LimitBounds(t *testing.T) {
 				&command.UseCase{},
 				newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
 				ctxProv,
-					false,
+				false,
 			)
 			require.NoError(t, err)
 
@@ -437,7 +437,7 @@ func TestGetMatchRunResultsHandler_InvalidRunID(t *testing.T) {
 		&command.UseCase{},
 		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
 		ctxProv,
-			false,
+		false,
 	)
 	require.NoError(t, err)
 
@@ -480,7 +480,7 @@ func TestGetMatchRunResultsHandler_InvalidSortOrder(t *testing.T) {
 		&command.UseCase{},
 		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
 		ctxProv,
-			false,
+		false,
 	)
 	require.NoError(t, err)
 
@@ -523,7 +523,7 @@ func TestGetMatchRunResultsHandler_InvalidSortBy(t *testing.T) {
 		&command.UseCase{},
 		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
 		ctxProv,
-			false,
+		false,
 	)
 	require.NoError(t, err)
 
@@ -643,7 +643,7 @@ func TestGetMatchRunHandler_ContextNotActive(t *testing.T) {
 		&command.UseCase{},
 		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
 		ctxProv,
-			false,
+		false,
 	)
 	require.NoError(t, err)
 
@@ -684,7 +684,7 @@ func TestGetMatchRunHandler_ContextNotFound(t *testing.T) {
 		&command.UseCase{},
 		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
 		ctxProv,
-			false,
+		false,
 	)
 	require.NoError(t, err)
 
@@ -796,7 +796,7 @@ func TestListMatchRunsHandler_ContextNotFound(t *testing.T) {
 		&command.UseCase{},
 		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
 		ctxProv,
-			false,
+		false,
 	)
 	require.NoError(t, err)
 
@@ -1084,7 +1084,7 @@ func TestListMatchRunsHandler_SortOrderAsc(t *testing.T) {
 		&command.UseCase{},
 		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
 		ctxProv,
-			false,
+		false,
 	)
 	require.NoError(t, err)
 
@@ -1122,7 +1122,7 @@ func TestListMatchRunsHandler_WithCursor(t *testing.T) {
 		&command.UseCase{},
 		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
 		ctxProv,
-			false,
+		false,
 	)
 	require.NoError(t, err)
 
@@ -1210,7 +1210,7 @@ func TestGetMatchRunResultsHandler_ContextNotFound(t *testing.T) {
 		&command.UseCase{},
 		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
 		ctxProv,
-			false,
+		false,
 	)
 	require.NoError(t, err)
 
@@ -1249,7 +1249,7 @@ func TestGetMatchRunResultsHandler_ContextNotActive(t *testing.T) {
 		&command.UseCase{},
 		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
 		ctxProv,
-			false,
+		false,
 	)
 	require.NoError(t, err)
 

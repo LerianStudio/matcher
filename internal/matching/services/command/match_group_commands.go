@@ -1434,7 +1434,7 @@ func (uc *UseCase) startLockRefreshWatcher(
 	cancelRun, cancel context.CancelFunc,
 	logger libLog.Logger,
 ) func() {
-	watchCtx, watchCancel := context.WithCancel(ctx)
+	watchCtx, watchCancel := context.WithCancel(ctx) // #nosec G118 -- watchCancel is returned to the caller
 	runtime.SafeGoWithContextAndComponent(
 		watchCtx,
 		logger,
