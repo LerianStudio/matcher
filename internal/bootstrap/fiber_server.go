@@ -227,6 +227,7 @@ func NewFiberApp(
 		if len(trimmedProxies) > 0 {
 			fiberCfg.EnableTrustedProxyCheck = true
 			fiberCfg.TrustedProxies = trimmedProxies
+			fiberCfg.ProxyHeader = fiber.HeaderXForwardedFor
 		}
 	}
 
