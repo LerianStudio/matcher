@@ -217,7 +217,8 @@ func bindDefaults(viperCfg *viper.Viper) {
 	viperCfg.SetDefault("rate_limit.dispatch_expiry_sec", 60) //nolint:mnd // 60 seconds
 
 	// --- Infrastructure ---
-	viperCfg.SetDefault("infrastructure.connect_timeout_sec", 30) //nolint:mnd // 30 seconds
+	viperCfg.SetDefault("infrastructure.connect_timeout_sec", 30)     //nolint:mnd // 30 seconds
+	viperCfg.SetDefault("infrastructure.health_check_timeout_sec", 5) //nolint:mnd // 5 seconds
 
 	// --- Idempotency ---
 	viperCfg.SetDefault("idempotency.retry_window_sec", 300)  //nolint:mnd // 5 minutes

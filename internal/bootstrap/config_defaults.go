@@ -95,7 +95,8 @@ func defaultConfig() *Config {
 			DispatchExpirySec: 60,
 		},
 		Infrastructure: InfrastructureConfig{
-			ConnectTimeoutSec: 30,
+			ConnectTimeoutSec:     30,
+			HealthCheckTimeoutSec: 5,
 		},
 		Idempotency: IdempotencyConfig{
 			RetryWindowSec:  300,
