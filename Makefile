@@ -26,6 +26,7 @@ CONFIG_DIR := ./config
 BINARY_NAME ?= matcher
 BIN_DIR ?= bin
 GOLANGCI_LINT_VERSION ?= v2.6.2
+GO_CI_PACKAGES := ./cmd/... ./internal/... ./pkg/... ./tests/...
 
 # Migration configuration
 MIGRATE_PATH ?= migrations
@@ -238,7 +239,7 @@ clear-envs:
 
 vet:
 	$(call print_title,Running go vet)
-	@go vet ./...
+	@go vet $(GO_CI_PACKAGES)
 	@echo "[ok] go vet completed successfully"
 
 lint:
@@ -247,13 +248,13 @@ lint:
 		echo "golangci-lint not found, installing..."; \
 		go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION); \
 	fi
-	@golangci-lint run ./...
+	@golangci-lint run $(GO_CI_PACKAGES)
 	@echo "[ok] Linting completed successfully"
 
 lint-fix:
 	$(call print_title,Running linters with auto-fix on all packages)
 	$(call check_command,golangci-lint,"go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)")
-	@golangci-lint run --fix ./...
+	@golangci-lint run --fix $(GO_CI_PACKAGES)
 	@echo "[ok] Lint auto-fix completed"
 
 lint-custom:
@@ -300,7 +301,7 @@ vulncheck:
 		echo "Installing govulncheck..."; \
 		go install golang.org/x/vuln/cmd/govulncheck@latest; \
 	fi
-	@govulncheck ./...
+	@govulncheck $(GO_CI_PACKAGES)
 	@echo "[ok] Vulnerability check completed"
 
 check-tests:
@@ -350,7 +351,7 @@ coverage-unit: test-unit
 
 test-unit:
 	$(call print_title,Running unit tests)
-	@$(CLEAN_ENV) $(TEST_RUNNER) -tags=unit -coverprofile=$(COVER_PROFILE_UNIT) -race -cover ./...
+	@$(CLEAN_ENV) $(TEST_RUNNER) -tags=unit -coverprofile=$(COVER_PROFILE_UNIT) -race -cover $(GO_CI_PACKAGES)
 	@cd tools && $(CLEAN_ENV) $(TEST_RUNNER) -tags=unit -coverprofile=../$(COVER_PROFILE_TOOLS) -race ./...
 	$(call show_coverage,$(COVER_PROFILE_UNIT))
 	@printf "Coverage summary (%s): " $(COVER_PROFILE_TOOLS); cd tools && go tool cover -func=../$(COVER_PROFILE_TOOLS) | tail -n 1
