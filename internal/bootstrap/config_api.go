@@ -283,27 +283,11 @@ func (handler *ConfigAPIHandler) UpdateConfig(fiberCtx *fiber.Ctx) error {
 	if err != nil {
 		logConfigSpanError(ctx, span, logger, "config update failed", err, handler.production)
 
-		if errors.Is(err, ErrConfigSubscriberFailure) {
-			return sharedhttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "runtime_apply_failed", "configuration update could not be fully applied at runtime")
-		}
-
-		return sharedhttp.RespondError(fiberCtx, fiber.StatusUnprocessableEntity, "validation_failed", err.Error())
+		return respondConfigUpdateError(fiberCtx, err)
 	}
 
-	// Publish audit event for the config update (best-effort — don't fail the request).
-	if handler.auditPublisher != nil && len(result.Applied) > 0 {
-		actor := auth.GetUserID(fiberCtx.UserContext())
-		if actor == "" {
-			actor = "unknown"
-		}
-
-		changes := appliedToConfigChanges(result.Applied)
-		auditCtx := handler.systemTenantContext(ctx)
-
-		if auditErr := handler.auditPublisher.PublishConfigChange(auditCtx, actor, "updated", changes); auditErr != nil {
-			// Log but don't fail the request — the config update itself succeeded.
-			logConfigSpanError(ctx, span, logger, "failed to publish config update audit event", auditErr, handler.production)
-		}
+	if auditErr := handler.publishConfigUpdateAudit(ctx, result); auditErr != nil {
+		logConfigSpanError(ctx, span, logger, "failed to publish config update audit event", auditErr, handler.production)
 	}
 
 	response := UpdateConfigResponse{
@@ -319,6 +303,37 @@ func (handler *ConfigAPIHandler) UpdateConfig(fiberCtx *fiber.Ctx) error {
 	}
 
 	return nil
+}
+
+func respondConfigUpdateError(fiberCtx *fiber.Ctx, err error) error {
+	if errors.Is(err, ErrConfigSubscriberFailure) {
+		return sharedhttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "runtime_apply_failed", "configuration update could not be fully applied at runtime")
+	}
+
+	if errors.Is(err, ErrConfigValidationFailure) {
+		return sharedhttp.RespondError(fiberCtx, fiber.StatusUnprocessableEntity, "validation_failed", err.Error())
+	}
+
+	return sharedhttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "update_failed", "configuration update failed")
+}
+
+func (handler *ConfigAPIHandler) publishConfigUpdateAudit(
+	ctx context.Context,
+	result *UpdateResult,
+) error {
+	if handler == nil || handler.auditPublisher == nil || result == nil || len(result.Applied) == 0 {
+		return nil
+	}
+
+	actor := auth.GetUserID(ctx)
+	if actor == "" {
+		actor = "unknown"
+	}
+
+	changes := appliedToConfigChanges(result.Applied)
+	auditCtx := handler.systemTenantContext(ctx)
+
+	return handler.auditPublisher.PublishConfigChange(auditCtx, actor, "updated", changes)
 }
 
 // ReloadConfig forces a configuration reload from disk.

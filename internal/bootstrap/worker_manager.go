@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
+	"time"
 
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
@@ -34,6 +35,15 @@ var (
 	errWorkerFactoryRequired       = errors.New("worker factory is required")
 	errWorkerDependencyUnavailable = errors.New("worker dependency unavailable")
 	errNoPreviousWorkerForRollback = errors.New("no previous worker instance available for rollback")
+	errWorkerStartTimedOut         = errors.New("worker start timed out")
+	errWorkerStopTimedOut          = errors.New("worker stop timed out")
+	errWorkerStartPanicked         = errors.New("worker start panicked")
+	errWorkerStopPanicked          = errors.New("worker stop panicked")
+)
+
+var (
+	workerStartTimeout = 30 * time.Second
+	workerStopTimeout  = 30 * time.Second
 )
 
 // workerSlot tracks a single managed worker: its current instance, its factory,
@@ -56,6 +66,7 @@ type workerSlot struct {
 // callback runs under mu, so concurrent reloads are safe.
 type WorkerManager struct {
 	mu            sync.Mutex
+	opsMu         sync.Mutex
 	logger        libLog.Logger
 	configManager *ConfigManager
 	slots         []*workerSlot
@@ -113,10 +124,13 @@ func (wm *WorkerManager) Register(
 // Start launches all enabled workers and subscribes to config changes.
 // Returns an error if a critical worker fails to start.
 func (wm *WorkerManager) Start(ctx context.Context, cfg *Config) error {
+	wm.opsMu.Lock()
+	defer wm.opsMu.Unlock()
+
 	wm.mu.Lock()
-	defer wm.mu.Unlock()
 
 	if wm.running {
+		wm.mu.Unlock()
 		return nil
 	}
 
@@ -133,10 +147,13 @@ func (wm *WorkerManager) Start(ctx context.Context, cfg *Config) error {
 	}
 
 	wm.lastCfg = cfg
+	wm.mu.Unlock()
 
-	if err := wm.startEnabledWorkersLocked(workerCtx, cfg); err != nil {
+	if err := wm.startEnabledWorkers(workerCtx, cfg); err != nil {
 		// On critical failure, stop any workers that did start.
-		wm.stopAllWorkersLocked(workerCtx)
+		_ = wm.stopAllWorkers(workerCtx)
+
+		wm.mu.Lock()
 
 		if wm.cancel != nil {
 			wm.cancel()
@@ -151,6 +168,7 @@ func (wm *WorkerManager) Start(ctx context.Context, cfg *Config) error {
 		wm.cancel = nil
 		wm.lastCfg = nil
 		wm.running = false
+		wm.mu.Unlock()
 
 		return err
 	}
@@ -160,14 +178,20 @@ func (wm *WorkerManager) Start(ctx context.Context, cfg *Config) error {
 
 // Stop gracefully shuts down all running workers. Idempotent.
 func (wm *WorkerManager) Stop() error {
+	wm.opsMu.Lock()
+	defer wm.opsMu.Unlock()
+
 	wm.mu.Lock()
-	defer wm.mu.Unlock()
 
 	if !wm.running {
+		wm.mu.Unlock()
 		return nil
 	}
+	wm.mu.Unlock()
 
-	wm.stopAllWorkersLocked(context.Background())
+	stopErr := wm.stopAllWorkers(context.Background())
+
+	wm.mu.Lock()
 
 	if wm.cancel != nil {
 		wm.cancel()
@@ -181,8 +205,9 @@ func (wm *WorkerManager) Stop() error {
 
 	wm.running = false
 	wm.parentCtx = nil
+	wm.mu.Unlock()
 
-	return nil
+	return stopErr
 }
 
 // RunningWorkers returns the names of currently running workers.
@@ -213,10 +238,13 @@ func (wm *WorkerManager) onConfigChange(newCfg *Config) error {
 		"worker_manager.on_config_change",
 	)
 
+	wm.opsMu.Lock()
+	defer wm.opsMu.Unlock()
+
 	wm.mu.Lock()
-	defer wm.mu.Unlock()
 
 	if !wm.running || newCfg == nil {
+		wm.mu.Unlock()
 		return nil
 	}
 
@@ -225,6 +253,7 @@ func (wm *WorkerManager) onConfigChange(newCfg *Config) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	wm.mu.Unlock()
 
 	var reconcileErr error
 
@@ -234,14 +263,16 @@ func (wm *WorkerManager) onConfigChange(newCfg *Config) error {
 		}
 	}
 
+	wm.mu.Lock()
 	wm.lastCfg = newCfg
+	wm.mu.Unlock()
 
 	return reconcileErr
 }
 
-// startEnabledWorkersLocked starts all workers that are enabled in the given config.
-// Returns an error if a critical worker fails to start. Caller must hold wm.mu.
-func (wm *WorkerManager) startEnabledWorkersLocked(ctx context.Context, cfg *Config) error {
+// startEnabledWorkers starts all workers that are enabled in the given config.
+// Returns an error if a critical worker fails to start.
+func (wm *WorkerManager) startEnabledWorkers(ctx context.Context, cfg *Config) error {
 	for _, slot := range wm.slots {
 		if !isSlotEnabled(slot, cfg) {
 			wm.logger.Log(ctx, libLog.LevelDebug,
@@ -265,7 +296,13 @@ func (wm *WorkerManager) startEnabledWorkersLocked(ctx context.Context, cfg *Con
 
 // startSlotLocked creates a new worker via the factory and starts it.
 // Caller must hold wm.mu.
-func (wm *WorkerManager) startSlotLocked(ctx context.Context, slot *workerSlot, cfg *Config) error {
+func (wm *WorkerManager) startSlotLocked(ctx context.Context, slot *workerSlot, cfg *Config) (startErr error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			startErr = fmt.Errorf("start worker %q: %w: %v", slot.name, errWorkerStartPanicked, recovered)
+		}
+	}()
+
 	if slot.factory == nil {
 		return errWorkerFactoryRequired
 	}
@@ -281,12 +318,14 @@ func (wm *WorkerManager) startSlotLocked(ctx context.Context, slot *workerSlot, 
 
 	applyWorkerRuntimeConfig(ctx, slot.name, worker, cfg)
 
-	if err := worker.Start(ctx); err != nil {
+	if err := startWorkerWithTimeout(ctx, worker); err != nil {
 		return fmt.Errorf("start worker %q: %w", slot.name, err)
 	}
 
+	wm.mu.Lock()
 	slot.instance = worker
 	slot.lastCfg = cfg
+	wm.mu.Unlock()
 
 	wm.logger.Log(ctx, libLog.LevelInfo,
 		fmt.Sprintf("worker %q started", slot.name))
@@ -295,25 +334,96 @@ func (wm *WorkerManager) startSlotLocked(ctx context.Context, slot *workerSlot, 
 }
 
 // stopSlotLocked stops a single worker slot. Caller must hold wm.mu.
-func (wm *WorkerManager) stopSlotLocked(ctx context.Context, slot *workerSlot) {
-	if isNilWorkerLifecycle(slot.instance) {
+func (wm *WorkerManager) stopSlotLocked(ctx context.Context, slot *workerSlot) error {
+	wm.mu.Lock()
+	instance := slot.instance
+	wm.mu.Unlock()
+
+	if isNilWorkerLifecycle(instance) {
+		wm.mu.Lock()
 		slot.instance = nil
-		return
+		wm.mu.Unlock()
+
+		return nil
 	}
 
-	if err := slot.instance.Stop(); err != nil {
+	if err := stopWorkerWithTimeout(instance); err != nil {
+		if errors.Is(err, errWorkerStopTimedOut) {
+			return fmt.Errorf("stop worker %q: %w", slot.name, err)
+		}
+
 		wm.logger.Log(ctx, libLog.LevelWarn,
 			fmt.Sprintf("worker %q stop error (non-fatal): %v", slot.name, err))
 	}
 
+	wm.mu.Lock()
 	slot.instance = nil
+	wm.mu.Unlock()
+
+	return nil
 }
 
 // stopAllWorkersLocked stops all running workers in reverse registration order.
 // Caller must hold wm.mu.
-func (wm *WorkerManager) stopAllWorkersLocked(ctx context.Context) {
+
+func (wm *WorkerManager) stopAllWorkers(ctx context.Context) error {
+	var stopErr error
+
 	for i := len(wm.slots) - 1; i >= 0; i-- {
-		wm.stopSlotLocked(ctx, wm.slots[i])
+		if err := wm.stopSlotLocked(ctx, wm.slots[i]); err != nil {
+			stopErr = errors.Join(stopErr, err)
+		}
+	}
+
+	return stopErr
+}
+
+func startWorkerWithTimeout(ctx context.Context, worker WorkerLifecycle) error {
+	startCtx, cancel := context.WithTimeout(ctx, workerStartTimeout)
+	defer cancel()
+
+	errCh := make(chan error, 1)
+
+	runtime.SafeGo(nil, "worker_manager.start_worker_with_timeout", runtime.KeepRunning, func() {
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				errCh <- fmt.Errorf("%w: %v", errWorkerStartPanicked, recovered)
+			}
+		}()
+
+		errCh <- worker.Start(startCtx)
+	})
+
+	select {
+	case err := <-errCh:
+		return err
+	case <-startCtx.Done():
+		if errors.Is(startCtx.Err(), context.DeadlineExceeded) {
+			return errWorkerStartTimedOut
+		}
+
+		return fmt.Errorf("worker start canceled: %w", startCtx.Err())
+	}
+}
+
+func stopWorkerWithTimeout(worker WorkerLifecycle) error {
+	errCh := make(chan error, 1)
+
+	runtime.SafeGo(nil, "worker_manager.stop_worker_with_timeout", runtime.KeepRunning, func() {
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				errCh <- fmt.Errorf("%w: %v", errWorkerStopPanicked, recovered)
+			}
+		}()
+
+		errCh <- worker.Stop()
+	})
+
+	select {
+	case err := <-errCh:
+		return err
+	case <-time.After(workerStopTimeout):
+		return errWorkerStopTimedOut
 	}
 }
 

@@ -17,10 +17,43 @@ import (
 	reportingWorker "github.com/LerianStudio/matcher/internal/reporting/services/worker"
 )
 
+type exportWorkerComparableConfig struct {
+	Enabled         bool
+	PollIntervalSec int
+	PageSize        int
+}
+
+type cleanupWorkerComparableConfig struct {
+	Enabled        bool
+	IntervalSec    int
+	BatchSize      int
+	GracePeriodSec int
+}
+
+type archivalWorkerComparableConfig struct {
+	Enabled             bool
+	IntervalHours       int
+	HotRetentionDays    int
+	WarmRetentionMonths int
+	ColdRetentionMonths int
+	BatchSize           int
+	StorageBucket       string
+	StoragePrefix       string
+	StorageClass        string
+	PartitionLookahead  int
+}
+
+type schedulerWorkerComparableConfig struct {
+	IntervalSec int
+}
+
 // reconcileSlotLocked handles a single worker slot: starts, stops, or restarts
 // it based on the old and new configs. Caller must hold wm.mu.
 func (wm *WorkerManager) reconcileSlotLocked(ctx context.Context, slot *workerSlot, newCfg *Config) error {
+	wm.mu.Lock()
 	wasEnabled := !isNilWorkerLifecycle(slot.instance)
+	wm.mu.Unlock()
+
 	nowEnabled := isSlotEnabled(slot, newCfg)
 
 	switch {
@@ -45,7 +78,10 @@ func (wm *WorkerManager) reconcileSlotLocked(ctx context.Context, slot *workerSl
 		// Worker was enabled, now disabled — stop it.
 		wm.logger.Log(ctx, libLog.LevelInfo,
 			fmt.Sprintf("worker %q disabled by config change, stopping", slot.name))
-		wm.stopSlotLocked(ctx, slot)
+
+		if err := wm.stopSlotLocked(ctx, slot); err != nil {
+			return err
+		}
 
 	case wasEnabled && nowEnabled:
 		// Worker enabled in both — check if config changed.
@@ -68,14 +104,18 @@ func (wm *WorkerManager) reconcileSlotLocked(ctx context.Context, slot *workerSl
 // old and new configs — it restarts the worker only if its config section changed.
 // Caller must hold wm.mu.
 func (wm *WorkerManager) reconcileRunningSlotLocked(ctx context.Context, slot *workerSlot, newCfg *Config) error {
-	if !workerConfigChanged(slot.name, slot.lastCfg, newCfg) {
+	wm.mu.Lock()
+	previousCfg := slot.lastCfg
+	wm.mu.Unlock()
+
+	if !workerConfigChanged(slot.name, previousCfg, newCfg) {
 		return nil
 	}
 
 	wm.logger.Log(ctx, libLog.LevelInfo,
 		fmt.Sprintf("worker %q config changed, restarting", slot.name))
 
-	if err := wm.restartSlotLocked(ctx, slot, slot.lastCfg, newCfg); err != nil {
+	if err := wm.restartSlotLocked(ctx, slot, previousCfg, newCfg); err != nil {
 		if isSlotCritical(slot, newCfg) {
 			wm.logger.Log(ctx, libLog.LevelError,
 				fmt.Sprintf("critical worker %q failed to restart after config change: %v", slot.name, err))
@@ -98,7 +138,11 @@ func (wm *WorkerManager) restartSlotLocked(ctx context.Context, slot *workerSlot
 		return nil
 	}
 
-	if slot.instance == nil {
+	wm.mu.Lock()
+	currentInstance := slot.instance
+	wm.mu.Unlock()
+
+	if currentInstance == nil {
 		return wm.startSlotLocked(ctx, slot, newCfg)
 	}
 
@@ -115,17 +159,19 @@ func (wm *WorkerManager) restartSlotLocked(ctx context.Context, slot *workerSlot
 		return fmt.Errorf("worker %q: %w", slot.name, errWorkerDependencyUnavailable)
 	}
 
-	previous := slot.instance
+	previous := currentInstance
 	sameInstance := sameWorkerInstance(previous, candidate)
 
-	wm.stopSlotLocked(ctx, slot)
+	if err := wm.stopSlotLocked(ctx, slot); err != nil {
+		return err
+	}
 
 	// Always apply runtime config to the candidate before starting, regardless of
 	// whether it is the same instance. If factories are refactored to return new
 	// instances in the future, this ensures they always receive the latest config.
 	applyWorkerRuntimeConfig(ctx, slot.name, candidate, newCfg)
 
-	if err := candidate.Start(ctx); err != nil {
+	if err := startWorkerWithTimeout(ctx, candidate); err != nil {
 		if rollbackErr := wm.rollbackAfterRestartFailureLocked(ctx, slot, previous, oldCfg, sameInstance); rollbackErr != nil {
 			return fmt.Errorf("start worker %q after restart: %w (rollback failed: %w)", slot.name, err, rollbackErr)
 		}
@@ -133,8 +179,10 @@ func (wm *WorkerManager) restartSlotLocked(ctx context.Context, slot *workerSlot
 		return fmt.Errorf("start worker %q after restart: %w (rolled back to previous config)", slot.name, err)
 	}
 
+	wm.mu.Lock()
 	slot.instance = candidate
 	slot.lastCfg = newCfg
+	wm.mu.Unlock()
 
 	wm.logger.Log(ctx, libLog.LevelInfo,
 		fmt.Sprintf("worker %q restarted", slot.name))
@@ -158,11 +206,13 @@ func (wm *WorkerManager) rollbackAfterRestartFailureLocked(
 		return err
 	}
 
-	if err := rollbackCandidate.Start(ctx); err != nil {
+	if err := startWorkerWithTimeout(ctx, rollbackCandidate); err != nil {
 		return fmt.Errorf("restart previous worker %q: %w", slot.name, err)
 	}
 
+	wm.mu.Lock()
 	slot.instance = rollbackCandidate
+	wm.mu.Unlock()
 
 	wm.logger.Log(ctx, libLog.LevelWarn,
 		fmt.Sprintf("worker %q rollback succeeded after restart failure", slot.name))
@@ -202,9 +252,7 @@ func prepareRollbackCandidate(
 		return previous, nil
 	}
 
-	if sameWorkerInstance(rebuilt, previous) {
-		applyWorkerRuntimeConfig(ctx, slot.name, rebuilt, oldCfg)
-	}
+	applyWorkerRuntimeConfig(ctx, slot.name, rebuilt, oldCfg)
 
 	return rebuilt, nil
 }
@@ -327,13 +375,35 @@ func extractWorkerConfig(name string, cfg *Config) any {
 
 	switch name {
 	case "export":
-		return cfg.ExportWorker
+		return exportWorkerComparableConfig{
+			Enabled:         cfg.ExportWorker.Enabled,
+			PollIntervalSec: cfg.ExportWorker.PollIntervalSec,
+			PageSize:        cfg.ExportWorker.PageSize,
+		}
 	case "cleanup":
-		return cfg.CleanupWorker
+		return cleanupWorkerComparableConfig{
+			Enabled:        cfg.CleanupWorker.Enabled,
+			IntervalSec:    cfg.CleanupWorker.IntervalSec,
+			BatchSize:      cfg.CleanupWorker.BatchSize,
+			GracePeriodSec: cfg.CleanupWorker.GracePeriodSec,
+		}
 	case "archival":
-		return cfg.Archival
+		return archivalWorkerComparableConfig{
+			Enabled:             cfg.Archival.Enabled,
+			IntervalHours:       cfg.Archival.IntervalHours,
+			HotRetentionDays:    cfg.Archival.HotRetentionDays,
+			WarmRetentionMonths: cfg.Archival.WarmRetentionMonths,
+			ColdRetentionMonths: cfg.Archival.ColdRetentionMonths,
+			BatchSize:           cfg.Archival.BatchSize,
+			StorageBucket:       cfg.Archival.StorageBucket,
+			StoragePrefix:       cfg.Archival.StoragePrefix,
+			StorageClass:        cfg.Archival.StorageClass,
+			PartitionLookahead:  cfg.Archival.PartitionLookahead,
+		}
 	case "scheduler":
-		return cfg.Scheduler
+		return schedulerWorkerComparableConfig{
+			IntervalSec: cfg.Scheduler.IntervalSec,
+		}
 	default:
 		return nil
 	}

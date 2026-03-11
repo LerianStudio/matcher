@@ -167,7 +167,7 @@ func (worker *SchedulerWorker) Start(ctx context.Context) error {
 
 // Stop gracefully shuts down the worker.
 func (worker *SchedulerWorker) Stop() error {
-	if !worker.running.CompareAndSwap(true, false) {
+	if !worker.running.Load() {
 		return ErrWorkerNotRunning
 	}
 
@@ -175,6 +175,10 @@ func (worker *SchedulerWorker) Stop() error {
 		close(worker.stopCh)
 	})
 	<-worker.doneCh
+
+	if !worker.running.CompareAndSwap(true, false) {
+		return ErrWorkerNotRunning
+	}
 
 	worker.logger.Log(context.Background(), libLog.LevelInfo, "scheduler worker stopped")
 

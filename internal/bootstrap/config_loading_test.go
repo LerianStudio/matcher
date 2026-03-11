@@ -129,3 +129,27 @@ func TestLoadConfigFromEnv_NilConfig_ReturnsError(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrConfigNil)
 }
+
+func TestLoadConfigFromEnvForStartup_TrimsWhitespaceBeforeParsing(t *testing.T) {
+	// Not parallel: modifies env vars.
+	clearConfigEnvVars(t)
+	t.Setenv("RATE_LIMIT_MAX", "100  ")
+
+	cfg := defaultConfig()
+	err := loadConfigFromEnvForStartup(cfg)
+	require.NoError(t, err)
+	assert.Equal(t, 100, cfg.RateLimit.Max)
+	assert.Equal(t, "100", os.Getenv("RATE_LIMIT_MAX"))
+}
+
+func TestLoadConfigFromEnv_DoesNotMutateProcessEnvironment(t *testing.T) {
+	// Not parallel: modifies env vars.
+	clearConfigEnvVars(t)
+	t.Setenv("LOG_LEVEL", "debug  ")
+
+	cfg := defaultConfig()
+	err := loadConfigFromEnv(cfg)
+	require.NoError(t, err)
+	assert.Equal(t, "debug  ", os.Getenv("LOG_LEVEL"))
+	assert.Equal(t, "debug  ", cfg.App.LogLevel)
+}

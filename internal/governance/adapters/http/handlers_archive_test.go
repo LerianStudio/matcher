@@ -489,6 +489,41 @@ func TestDownloadArchive(t *testing.T) {
 		assert.NotEmpty(t, response.ExpiresAt)
 	})
 
+	t.Run("uses runtime presign expiry override when configured", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		tenantID := uuid.New()
+		archiveID := uuid.New()
+		now := time.Now().UTC()
+		runtimeExpiry := 45 * time.Minute
+
+		archive := createTestArchiveMetadata(tenantID, archiveID, now)
+
+		repo := repoMocks.NewMockArchiveMetadataRepository(ctrl)
+		repo.EXPECT().GetByID(gomock.Any(), archiveID).Return(archive, nil)
+
+		storage := storageMocks.NewMockObjectStorageClient(ctrl)
+		storage.EXPECT().
+			GeneratePresignedURL(gomock.Any(), archive.ArchiveKey, runtimeExpiry).
+			Return(testPresignedURL, nil)
+
+		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry)
+		require.NoError(t, err)
+		handler.SetRuntimePresignExpiryGetter(func() time.Duration { return runtimeExpiry })
+
+		ctx := createTestContextWithTenant(tenantID)
+		resp := testDownloadArchiveRequest(ctx, t, handler, archiveID.String())
+		defer resp.Body.Close()
+
+		require.Equal(t, fiber.StatusOK, resp.StatusCode)
+
+		var response ArchiveDownloadResponse
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
+		assert.Equal(t, testPresignedURL, response.DownloadURL)
+		assert.Equal(t, archive.Checksum, response.Checksum)
+	})
+
 	t.Run("missing archive id", func(t *testing.T) {
 		t.Parallel()
 

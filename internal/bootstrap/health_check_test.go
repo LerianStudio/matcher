@@ -7,11 +7,13 @@
 package bootstrap
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/stretchr/testify/assert"
@@ -164,4 +166,36 @@ func TestReadinessHandler_UsesRuntimeConfigGetter(t *testing.T) {
 	var response ReadinessResponse
 	require.NoError(t, json.Unmarshal(body, &response))
 	assert.Nil(t, response.Checks)
+}
+
+func TestReadinessHandler_UsesRuntimeTimeoutFromConfigGetter(t *testing.T) {
+	t.Parallel()
+
+	initialCfg := &Config{App: AppConfig{EnvName: "development"}, Infrastructure: InfrastructureConfig{HealthCheckTimeoutSec: 5}}
+	runtimeCfg := &Config{App: AppConfig{EnvName: "development"}, Infrastructure: InfrastructureConfig{HealthCheckTimeoutSec: 1}}
+	deps := &HealthDependencies{
+		PostgresCheck: func(ctx context.Context) error {
+			<-ctx.Done()
+			return ctx.Err()
+		},
+	}
+
+	app := fiber.New()
+	app.Get("/ready", readinessHandler(initialCfg, func() *Config { return runtimeCfg }, deps, nil))
+
+	started := time.Now()
+	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/ready", http.NoBody), 2000)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
+	assert.Less(t, time.Since(started), 2*time.Second)
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	var response ReadinessResponse
+	require.NoError(t, json.Unmarshal(body, &response))
+	assert.Equal(t, "degraded", response.Status)
+	require.NotNil(t, response.Checks)
+	assert.Equal(t, "down", response.Checks.Database)
 }

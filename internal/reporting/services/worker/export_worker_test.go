@@ -249,6 +249,27 @@ func TestExportWorker_StartStop(t *testing.T) {
 		err = worker.Stop()
 		require.ErrorIs(t, err, ErrWorkerNotRunning)
 	})
+
+	t.Run("supports stop start stop restart cycle", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		jobRepo := repomocks.NewMockExportJobRepository(ctrl)
+		reportRepo := &mockReportRepoForWorker{}
+		storage := portsmocks.NewMockObjectStorageClient(ctrl)
+		cfg := ExportWorkerConfig{PollInterval: 100 * time.Millisecond}
+		logger := &libLog.NopLogger{}
+
+		jobRepo.EXPECT().ClaimNextQueued(gomock.Any()).Return(nil, nil).AnyTimes()
+
+		worker, err := NewExportWorker(jobRepo, reportRepo, storage, cfg, logger)
+		require.NoError(t, err)
+
+		require.NoError(t, worker.Start(context.Background()))
+		require.NoError(t, worker.Stop())
+		require.NoError(t, worker.Start(context.Background()))
+		require.NoError(t, worker.Stop())
+	})
 }
 
 func TestNewCleanupWorker(t *testing.T) {
@@ -386,6 +407,29 @@ func TestCleanupWorker_StartStop(t *testing.T) {
 
 		err = worker.Stop()
 		require.NoError(t, err)
+	})
+
+	t.Run("supports stop start stop restart cycle", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		jobRepo := repomocks.NewMockExportJobRepository(ctrl)
+		storage := portsmocks.NewMockObjectStorageClient(ctrl)
+		cfg := CleanupWorkerConfig{Interval: 100 * time.Millisecond}
+		logger := &libLog.NopLogger{}
+
+		jobRepo.EXPECT().
+			ListExpired(gomock.Any(), gomock.Any()).
+			Return([]*entities.ExportJob{}, nil).
+			AnyTimes()
+
+		worker, err := NewCleanupWorker(jobRepo, storage, cfg, logger)
+		require.NoError(t, err)
+
+		require.NoError(t, worker.Start(context.Background()))
+		require.NoError(t, worker.Stop())
+		require.NoError(t, worker.Start(context.Background()))
+		require.NoError(t, worker.Stop())
 	})
 }
 

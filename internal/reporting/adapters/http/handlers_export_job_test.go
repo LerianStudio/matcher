@@ -226,6 +226,20 @@ func setupCreateExportJobHandlers(
 	return handlers
 }
 
+func TestExportJobHandlers_CurrentRuntimeConfig_PreservesDefaultEnabledOnPartialOverride(t *testing.T) {
+	t.Parallel()
+
+	handlers := &ExportJobHandlers{presignExpiry: time.Hour}
+	handlers.SetRuntimeConfigGetter(func() ExportJobRuntimeConfig {
+		return ExportJobRuntimeConfig{PresignExpiry: 2 * time.Hour}
+	})
+
+	runtimeCfg := handlers.currentRuntimeConfig()
+	require.NotNil(t, runtimeCfg.Enabled)
+	assert.True(t, *runtimeCfg.Enabled)
+	assert.Equal(t, 2*time.Hour, runtimeCfg.PresignExpiry)
+}
+
 func makeCreateExportJobRequest(
 	t *testing.T,
 	app *fiber.App,
@@ -292,7 +306,8 @@ func TestExportJobHandlers_CreateExportJob(t *testing.T) {
 
 		handlers := setupCreateExportJobHandlers(t, contextID, repo)
 		handlers.SetRuntimeConfigGetter(func() ExportJobRuntimeConfig {
-			return ExportJobRuntimeConfig{Enabled: false, PresignExpiry: time.Hour}
+			disabled := false
+			return ExportJobRuntimeConfig{Enabled: &disabled, PresignExpiry: time.Hour}
 		})
 		app := setupExportJobTestAppWithContext(handlers.CreateExportJob, "create", contextID)
 
@@ -307,6 +322,55 @@ func TestExportJobHandlers_CreateExportJob(t *testing.T) {
 		defer resp.Body.Close()
 
 		assert.Equal(t, fiber.StatusServiceUnavailable, resp.StatusCode)
+	})
+
+	t.Run("validates tenant-scoped context before disabled worker response", func(t *testing.T) {
+		t.Parallel()
+
+		contextID := uuid.New()
+		repo := newExportJobRepoMock(t)
+
+		handlers := setupCreateExportJobHandlers(t, contextID, repo)
+		handlers.SetRuntimeConfigGetter(func() ExportJobRuntimeConfig {
+			disabled := false
+			return ExportJobRuntimeConfig{Enabled: &disabled, PresignExpiry: time.Hour}
+		})
+
+		app := fiber.New()
+		app.Use(func(c *fiber.Ctx) error {
+			ctx := context.WithValue(
+				c.UserContext(),
+				auth.TenantIDKey,
+				"11111111-1111-1111-1111-111111111111",
+			)
+			c.SetUserContext(ctx)
+
+			return c.Next()
+		})
+		app.Post("/v1/contexts/:contextId/export-jobs", handlers.CreateExportJob)
+
+		reqBody := CreateExportJobRequest{
+			ReportType: "MATCHED",
+			Format:     "CSV",
+			DateFrom:   "2024-01-01",
+			DateTo:     "2024-01-31",
+		}
+
+		body, err := json.Marshal(reqBody)
+		require.NoError(t, err)
+
+		req := httptest.NewRequest(
+			stdhttp.MethodPost,
+			"/v1/contexts/not-a-uuid/export-jobs",
+			bytes.NewReader(body),
+		)
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := app.Test(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 	})
 
 	t.Run("accepts MATCHES alias and normalizes to MATCHED", func(t *testing.T) {
@@ -1162,7 +1226,8 @@ func TestExportJobHandlers_DownloadExportJob(t *testing.T) {
 		handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour)
 		require.NoError(t, err)
 		handlers.SetRuntimeConfigGetter(func() ExportJobRuntimeConfig {
-			return ExportJobRuntimeConfig{Enabled: true, PresignExpiry: 2 * time.Hour}
+			enabled := true
+			return ExportJobRuntimeConfig{Enabled: &enabled, PresignExpiry: 2 * time.Hour}
 		})
 
 		app := setupExportJobTestApp(downloadHandler(handlers), "download")

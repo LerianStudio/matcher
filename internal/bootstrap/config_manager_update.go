@@ -97,7 +97,7 @@ func (cm *ConfigManager) Update(changes map[string]any) (*UpdateResult, error) {
 	cm.lastReload.Store(now)
 
 	// Build applied/rejected results and derive config changes for subscribers.
-	configChanges := buildUpdateResults(applicableChanges, oldCfg, candidateCfg, result)
+	configChanges := buildUpdateResults(applicableChanges, oldValues, oldCfg, candidateCfg, result)
 
 	cm.logger.Log(ctx, libLog.LevelInfo, "config updated via API",
 		libLog.Int("version", safeUint64ToInt(newVersion)),
@@ -178,6 +178,7 @@ func classifyApplicableChanges(changes map[string]any, result *UpdateResult) map
 // (env-overridden) and returns the derived ConfigChange slice for subscriber notification.
 func buildUpdateResults(
 	applicableChanges map[string]any,
+	oldValues map[string]any,
 	oldCfg, candidateCfg *Config,
 	result *UpdateResult,
 ) []ConfigChange {
@@ -188,10 +189,12 @@ func buildUpdateResults(
 		hotReloaded := !valuesEquivalent(effectiveOld, effectiveNew)
 
 		if !hotReloaded && !valuesEquivalent(requested, effectiveNew) {
-			result.Rejected = append(result.Rejected, ConfigChangeRejection{
-				Key:    key,
-				Value:  redactIfSensitive(key, requested),
-				Reason: "overridden by environment variable; value persisted but not effective at runtime",
+			oldPersisted := oldValues[key]
+			result.Applied = append(result.Applied, ConfigChangeResult{
+				Key:         key,
+				OldValue:    redactIfSensitive(key, oldPersisted),
+				NewValue:    redactIfSensitive(key, requested),
+				HotReloaded: false,
 			})
 
 			continue

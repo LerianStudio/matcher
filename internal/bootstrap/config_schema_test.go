@@ -122,6 +122,27 @@ func TestBuildConfigSchema_MutableKeysAreHotReloadable(t *testing.T) {
 	}
 }
 
+func TestBuildConfigSchema_StartupOnlyWorkerEnableFlagsAreNotHotReloadable(t *testing.T) {
+	t.Parallel()
+
+	schema := buildConfigSchema()
+	schemaMap := make(map[string]configFieldDef, len(schema))
+
+	for _, field := range schema {
+		schemaMap[field.Key] = field
+	}
+
+	for _, key := range []string{
+		"export_worker.enabled",
+		"cleanup_worker.enabled",
+		"archival.enabled",
+	} {
+		field, exists := schemaMap[key]
+		require.True(t, exists, "schema should include %s", key)
+		assert.False(t, field.HotReloadable, "%s should remain startup-only", key)
+	}
+}
+
 func TestSchemaKeySet_ReturnsAllKeys(t *testing.T) {
 	t.Parallel()
 

@@ -7,6 +7,7 @@
 package bootstrap
 
 import (
+	"io"
 	"net/http/httptest"
 	"sync"
 	"testing"
@@ -159,6 +160,8 @@ func TestDynamicRateLimiter_ConcurrentRebuild(t *testing.T) {
 	const requestsPerGoroutine = 20
 
 	var wg sync.WaitGroup
+	errCh := make(chan error, goroutines*requestsPerGoroutine)
+	mutatorDone := make(chan struct{})
 
 	wg.Add(goroutines)
 
@@ -169,15 +172,22 @@ func TestDynamicRateLimiter_ConcurrentRebuild(t *testing.T) {
 			for range requestsPerGoroutine {
 				resp, err := app.Test(httptest.NewRequest("GET", "/test", nil))
 				if err != nil {
-					continue
+					errCh <- err
+					return
 				}
+				_, readErr := io.ReadAll(resp.Body)
 				resp.Body.Close()
+				if readErr != nil {
+					errCh <- readErr
+					return
+				}
 			}
 		}()
 	}
 
 	// Concurrently change config max to trigger handler rebuild.
 	go func() {
+		defer close(mutatorDone)
 		for i := range 5 {
 			mu.Lock()
 			newCfg := *cfg
@@ -188,7 +198,14 @@ func TestDynamicRateLimiter_ConcurrentRebuild(t *testing.T) {
 	}()
 
 	wg.Wait()
+	<-mutatorDone
+	close(errCh)
+	for err := range errCh {
+		require.NoError(t, err)
+	}
 
-	// If we get here without panics or data races, the test passes.
-	// The goal is to detect race conditions under concurrent access.
+	resp, err := app.Test(httptest.NewRequest("GET", "/test", nil))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, "900", resp.Header.Get("X-RateLimit-Limit"))
 }

@@ -68,6 +68,7 @@ import (
 	governancePostgres "github.com/LerianStudio/matcher/internal/governance/adapters/postgres"
 	actorMappingRepoAdapter "github.com/LerianStudio/matcher/internal/governance/adapters/postgres/actor_mapping"
 	archiveMetadataRepo "github.com/LerianStudio/matcher/internal/governance/adapters/postgres/archive_metadata"
+	governanceRepositories "github.com/LerianStudio/matcher/internal/governance/domain/repositories"
 	governanceCommand "github.com/LerianStudio/matcher/internal/governance/services/command"
 	governanceQuery "github.com/LerianStudio/matcher/internal/governance/services/query"
 	governanceWorker "github.com/LerianStudio/matcher/internal/governance/services/worker"
@@ -383,6 +384,14 @@ func (t *tenantExtractorAdapter) GetTenantID(ctx context.Context) uuid.UUID {
 }
 
 func buildTenantExtractor(cfg *Config) (*auth.TenantExtractor, error) {
+	if err := auth.SetDefaultTenantID(cfg.Tenancy.DefaultTenantID); err != nil {
+		return nil, fmt.Errorf("set default tenant id: %w", err)
+	}
+
+	if err := auth.SetDefaultTenantSlug(cfg.Tenancy.DefaultTenantSlug); err != nil {
+		return nil, fmt.Errorf("set default tenant slug: %w", err)
+	}
+
 	extractor, err := auth.NewTenantExtractor(
 		cfg.Auth.Enabled,
 		cfg.Tenancy.DefaultTenantID,
@@ -607,7 +616,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		return nil, err
 	}
 
-	archivalWorker, archivalErr := initArchivalComponents(routes, cfg, infraProvider, logger, &cleanups)
+	archivalWorker, archivalErr := initArchivalComponents(routes, cfg, configManager.Get, infraProvider, logger, &cleanups)
 	if archivalErr != nil {
 		if cfg.Archival.Enabled {
 			return nil, fmt.Errorf("init archival components: %w", archivalErr)
@@ -686,8 +695,6 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		Config:             cfg,
 		Routes:             routes,
 		ConfigManager:      configManager,
-		authClient:         authClient,
-		tenantExtractor:    tenantExtractor,
 		outboxRunner:       modules.outboxDispatcher,
 		dbMetricsCollector: dbMetricsCollector,
 		workerManager:      workerMgr,
@@ -1459,6 +1466,10 @@ func applySQLPoolSettings(dbs []*sql.DB, maxLifetime, maxIdle time.Duration) {
 	}
 }
 
+func boolPointer(value bool) *bool {
+	return &value
+}
+
 type modulesResult struct {
 	outboxDispatcher *outboxServices.Dispatcher
 	exportWorker     *reportingWorker.ExportWorker
@@ -1559,7 +1570,7 @@ func initModulesAndMessaging(
 		return nil, err
 	}
 
-	if err := initIngestionModule(routes, provider, sharedOutboxRepository, ingestionPublisher, matchingUseCase, sharedRepos, isProduction); err != nil {
+	if err := initIngestionModule(cfg, routes, provider, sharedOutboxRepository, ingestionPublisher, matchingUseCase, sharedRepos, isProduction); err != nil {
 		return nil, err
 	}
 
@@ -1960,6 +1971,7 @@ func initConfigurationModule(
 }
 
 func initIngestionModule(
+	cfg *Config,
 	routes *Routes,
 	provider sharedPorts.InfrastructureProvider,
 	outboxRepository outboxRepositories.OutboxRepository,
@@ -2008,6 +2020,7 @@ func initIngestionModule(
 		JobRepo:         repos.ingestionJob,
 		TransactionRepo: repos.ingestionTx,
 		Dedupe:          dedupeService,
+		DedupeTTL:       cfg.DedupeTTL(),
 		Publisher:       publisher,
 		OutboxRepo:      outboxRepository,
 		Parsers:         ingestionRegistry,
@@ -2228,13 +2241,13 @@ func initExportWorkers(
 			runtimeCfg := configGetter()
 			if runtimeCfg == nil {
 				return reportingHTTP.ExportJobRuntimeConfig{
-					Enabled:       cfg.ExportWorker.Enabled,
+					Enabled:       boolPointer(cfg.ExportWorker.Enabled),
 					PresignExpiry: cfg.ExportPresignExpiry(),
 				}
 			}
 
 			return reportingHTTP.ExportJobRuntimeConfig{
-				Enabled:       runtimeCfg.ExportWorker.Enabled,
+				Enabled:       boolPointer(runtimeCfg.ExportWorker.Enabled),
 				PresignExpiry: runtimeCfg.ExportPresignExpiry(),
 			}
 		})
@@ -2552,7 +2565,11 @@ func initExceptionCallbackUseCase(
 	exceptionRepository *exceptionExceptionRepo.Repository,
 	deps *exceptionModuleDeps,
 ) (*exceptionCommand.CallbackUseCase, error) {
-	callbackRateLimiter, err := exceptionRedis.NewCallbackRateLimiter(provider, 0, 0) // 0 values -> defaults: 60/min
+	callbackRateLimiter, err := exceptionRedis.NewCallbackRateLimiter(
+		provider,
+		cfg.CallbackRateLimitPerMinute(),
+		time.Minute,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("create callback rate limiter: %w", err)
 	}
@@ -2726,6 +2743,7 @@ func formatWorkerStatus(enabled bool, interval time.Duration) string {
 func initArchivalComponents(
 	routes *Routes,
 	cfg *Config,
+	configGetter func() *Config,
 	provider sharedPorts.InfrastructureProvider,
 	logger libLog.Logger,
 	cleanups *[]func(),
@@ -2739,21 +2757,8 @@ func initArchivalComponents(
 		return nil, fmt.Errorf("create archival storage: %w", err)
 	}
 
-	// Register archive retrieval routes when storage is available.
-	// This allows querying existing archives even when the worker is paused.
-	if archivalStorage != nil {
-		archiveHandler, handlerErr := governanceHTTP.NewArchiveHandler(
-			archiveRepo,
-			archivalStorage,
-			cfg.ArchivalPresignExpiry(),
-		)
-		if handlerErr != nil {
-			return nil, fmt.Errorf("create archive handler: %w", handlerErr)
-		}
-
-		if routeErr := governanceHTTP.RegisterArchiveRoutes(routes.Protected, archiveHandler); routeErr != nil {
-			return nil, fmt.Errorf("register archive routes: %w", routeErr)
-		}
+	if err := registerArchiveRoutes(routes, cfg, configGetter, archiveRepo, archivalStorage); err != nil {
+		return nil, err
 	}
 
 	if archivalStorage == nil {
@@ -2831,6 +2836,44 @@ func initArchivalComponents(
 	})
 
 	return worker, nil
+}
+
+func registerArchiveRoutes(
+	routes *Routes,
+	cfg *Config,
+	configGetter func() *Config,
+	archiveRepo governanceRepositories.ArchiveMetadataRepository,
+	archivalStorage reportingPorts.ObjectStorageClient,
+) error {
+	if archivalStorage == nil {
+		return nil
+	}
+
+	archiveHandler, err := governanceHTTP.NewArchiveHandler(
+		archiveRepo,
+		archivalStorage,
+		cfg.ArchivalPresignExpiry(),
+	)
+	if err != nil {
+		return fmt.Errorf("create archive handler: %w", err)
+	}
+
+	if configGetter != nil {
+		archiveHandler.SetRuntimePresignExpiryGetter(func() time.Duration {
+			runtimeCfg := configGetter()
+			if runtimeCfg == nil {
+				return cfg.ArchivalPresignExpiry()
+			}
+
+			return runtimeCfg.ArchivalPresignExpiry()
+		})
+	}
+
+	if err := governanceHTTP.RegisterArchiveRoutes(routes.Protected, archiveHandler); err != nil {
+		return fmt.Errorf("register archive routes: %w", err)
+	}
+
+	return nil
 }
 
 // createArchivalStorage creates an S3-compatible object storage client for the archival bucket.

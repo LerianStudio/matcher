@@ -482,6 +482,35 @@ func TestNewDynamicDispatchRateLimiter_RuntimeMaxUpdate_InMemory(t *testing.T) {
 	assert.Equal(t, "3", resp3.Header.Get("X-RateLimit-Limit"))
 }
 
+func TestNewDynamicDispatchRateLimiter_EmitsRateLimitHeaders(t *testing.T) {
+	t.Parallel()
+
+	activeCfg := &Config{RateLimit: RateLimitConfig{Enabled: true, DispatchMax: 1, DispatchExpirySec: 60}}
+
+	app := fiber.New()
+	app.Use(NewDynamicDispatchRateLimiter(func() *Config { return activeCfg }, nil))
+	app.Post("/dispatch", func(c *fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusOK)
+	})
+
+	resp1, err := app.Test(httptest.NewRequest(http.MethodPost, "/dispatch", http.NoBody))
+	require.NoError(t, err)
+	defer resp1.Body.Close()
+	assert.Equal(t, http.StatusOK, resp1.StatusCode)
+	assert.Equal(t, "1", resp1.Header.Get("X-RateLimit-Limit"))
+	assert.Equal(t, "0", resp1.Header.Get("X-RateLimit-Remaining"))
+	assert.NotEmpty(t, resp1.Header.Get("X-RateLimit-Reset"))
+
+	resp2, err := app.Test(httptest.NewRequest(http.MethodPost, "/dispatch", http.NoBody))
+	require.NoError(t, err)
+	defer resp2.Body.Close()
+	assert.Equal(t, http.StatusTooManyRequests, resp2.StatusCode)
+	assert.Equal(t, "1", resp2.Header.Get("X-RateLimit-Limit"))
+	assert.Equal(t, "0", resp2.Header.Get("X-RateLimit-Remaining"))
+	assert.NotEmpty(t, resp2.Header.Get("X-RateLimit-Reset"))
+	assert.Equal(t, "60", resp2.Header.Get("Retry-After"))
+}
+
 func TestNewDynamicDispatchRateLimiter_DistributedHandlerRebuildsOnConfigChange(t *testing.T) {
 	t.Parallel()
 

@@ -29,6 +29,8 @@ var (
 	errConfigManagerPathOutsideWorkdir = errors.New("config manager: config path must be contained within working directory")
 	errUnsafeConfigFilePath            = errors.New("unsafe config file path")
 	errUnsafeConfigFileExtension       = errors.New("unsafe config file extension")
+	// ErrConfigValidationFailure identifies validation failures returned from reload/update flows.
+	ErrConfigValidationFailure = errors.New("config validation failure")
 	// ErrConfigSubscriberFailure is returned when a config subscriber callback fails.
 	ErrConfigSubscriberFailure = errors.New("config subscriber failure")
 )
@@ -136,17 +138,13 @@ var mutableConfigKeys = map[string]bool{
 	"rate_limit.export_expiry_sec":     true,
 	"rate_limit.dispatch_max":          true,
 	"rate_limit.dispatch_expiry_sec":   true,
-	"export_worker.enabled":            true,
 	"export_worker.poll_interval_sec":  true,
 	"export_worker.page_size":          true,
 	"export_worker.presign_expiry_sec": true,
-	"cleanup_worker.enabled":           true,
 	"cleanup_worker.interval_sec":      true,
 	"cleanup_worker.batch_size":        true,
 	"cleanup_worker.grace_period_sec":  true,
 	"scheduler.interval_sec":           true,
-	"deduplication.ttl_sec":            true,
-	"archival.enabled":                 true,
 	"archival.interval_hours":          true,
 	"archival.batch_size":              true,
 }
@@ -312,8 +310,8 @@ func (cm *ConfigManager) LastReloadAt() time.Time {
 }
 
 // Stop halts the file watcher and cleans up resources. Idempotent — safe to
-// call multiple times. After Stop(), Reload() and Update() still work but no
-// automatic file-driven reloads will occur.
+// call multiple times. After Stop(), automatic file-driven reloads stop and
+// Reload()/Update() reject further calls.
 func (cm *ConfigManager) Stop() {
 	cm.stopOnce.Do(func() {
 		close(cm.stopCh)

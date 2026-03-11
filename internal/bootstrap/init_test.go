@@ -928,6 +928,13 @@ func TestBuildTenantExtractor(t *testing.T) {
 	t.Run("creates extractor with valid config", func(t *testing.T) {
 		t.Parallel()
 
+		originalID := auth.GetDefaultTenantID()
+		originalSlug := auth.GetTenantSlug(context.Background())
+		t.Cleanup(func() {
+			require.NoError(t, auth.SetDefaultTenantID(originalID))
+			require.NoError(t, auth.SetDefaultTenantSlug(originalSlug))
+		})
+
 		cfg := &Config{
 			Auth: AuthConfig{Enabled: false, TokenSecret: ""},
 			Tenancy: TenancyConfig{
@@ -941,6 +948,8 @@ func TestBuildTenantExtractor(t *testing.T) {
 
 		require.NoError(t, err)
 		require.NotNil(t, extractor)
+		assert.Equal(t, cfg.Tenancy.DefaultTenantID, auth.GetDefaultTenantID())
+		assert.Equal(t, cfg.Tenancy.DefaultTenantSlug, auth.GetTenantSlug(context.Background()))
 	})
 
 	t.Run("creates extractor with auth enabled", func(t *testing.T) {
@@ -1158,7 +1167,7 @@ func TestInitArchivalComponents_DisabledNoStorage(t *testing.T) {
 		}
 
 		var cleanups []func()
-		worker, err := initArchivalComponents(nil, cfg, nil, &libLog.NopLogger{}, &cleanups)
+		worker, err := initArchivalComponents(nil, cfg, nil, nil, &libLog.NopLogger{}, &cleanups)
 
 		assert.NoError(t, err)
 		assert.Nil(t, worker)

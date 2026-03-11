@@ -32,9 +32,10 @@ var (
 
 // ArchiveHandler handles HTTP requests for archive retrieval.
 type ArchiveHandler struct {
-	archiveRepo   repositories.ArchiveMetadataRepository
-	storage       sharedPorts.ObjectStorageClient
-	presignExpiry time.Duration
+	archiveRepo         repositories.ArchiveMetadataRepository
+	storage             sharedPorts.ObjectStorageClient
+	presignExpiry       time.Duration
+	presignExpiryGetter func() time.Duration
 }
 
 type (
@@ -69,6 +70,29 @@ func NewArchiveHandler(
 		storage:       storage,
 		presignExpiry: presignExpiry,
 	}, nil
+}
+
+// SetRuntimePresignExpiryGetter injects a live config-backed presign expiry source.
+func (ah *ArchiveHandler) SetRuntimePresignExpiryGetter(getter func() time.Duration) {
+	if ah == nil {
+		return
+	}
+
+	ah.presignExpiryGetter = getter
+}
+
+func (ah *ArchiveHandler) currentPresignExpiry() time.Duration {
+	if ah == nil {
+		return 0
+	}
+
+	if ah.presignExpiryGetter != nil {
+		if runtimeExpiry := ah.presignExpiryGetter(); runtimeExpiry > 0 {
+			return runtimeExpiry
+		}
+	}
+
+	return ah.presignExpiry
 }
 
 // ListArchives retrieves completed audit log archives for the tenant.
@@ -215,12 +239,14 @@ func (ah *ArchiveHandler) DownloadArchive(fiberCtx *fiber.Ctx) error {
 		return writeNotFound(ctx, fiberCtx, span, logger, "archive not found", governanceErrors.ErrMetadataNotFound)
 	}
 
-	downloadURL, err := ah.storage.GeneratePresignedURL(ctx, archive.ArchiveKey, ah.presignExpiry)
+	presignExpiry := ah.currentPresignExpiry()
+
+	downloadURL, err := ah.storage.GeneratePresignedURL(ctx, archive.ArchiveKey, presignExpiry)
 	if err != nil {
 		return writeServiceError(ctx, fiberCtx, span, logger, "failed to generate download url", err)
 	}
 
-	expiresAt := time.Now().UTC().Add(ah.presignExpiry)
+	expiresAt := time.Now().UTC().Add(presignExpiry)
 
 	response := dto.ArchiveDownloadResponse{
 		DownloadURL: downloadURL,

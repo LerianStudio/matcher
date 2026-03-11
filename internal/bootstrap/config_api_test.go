@@ -16,7 +16,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -36,6 +38,8 @@ func newAPITestConfigManager(t *testing.T) *ConfigManager {
 
 	cfg := defaultConfig()
 	cfg.Auth.Enabled = true
+	cfg.Auth.Host = "http://auth:8080"
+	cfg.Auth.TokenSecret = "test-secret"
 	cfg.App.LogLevel = "info"
 	cfg.RateLimit.Max = 100
 
@@ -240,6 +244,29 @@ func TestGetConfig_RedactsSecrets(t *testing.T) {
 	}
 }
 
+func TestGetConfig_RedactsCredentialURIs(t *testing.T) {
+	t.Parallel()
+
+	cm := newAPITestConfigManager(t)
+	cfg := cm.Get()
+	cfg.Fetcher.URL = "https://user:pass@example.com/fetch"
+
+	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
+	require.NoError(t, err)
+
+	app := newTestApp(t, handler)
+	req := httptest.NewRequest(http.MethodGet, "/v1/system/config", http.NoBody)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	var response GetConfigResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
+	assert.Equal(t, "https://%2A%2A%2AREDACTED%2A%2A%2A:%2A%2A%2AREDACTED%2A%2A%2A@example.com/fetch", response.Config["fetcher.url"])
+}
+
 func TestGetSchema_ReturnsGroupedFields(t *testing.T) {
 	t.Parallel()
 
@@ -309,6 +336,88 @@ func TestGetSchema_OmitsSecretFields(t *testing.T) {
 				"secret field %q should not be present in schema response", field.Key)
 		}
 	}
+}
+
+func TestGetSchema_IncludesCurrentValueEnvOverrideHotReloadableAndConstraints(t *testing.T) {
+	// Not parallel: uses t.Setenv.
+	clearConfigEnvVars(t)
+	t.Setenv("LOG_LEVEL", "warn")
+
+	cm := newAPITestConfigManager(t)
+	_, err := cm.Reload()
+	require.NoError(t, err)
+
+	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
+	require.NoError(t, err)
+
+	app := newTestApp(t, handler)
+	req := httptest.NewRequest(http.MethodGet, "/v1/system/config/schema", http.NoBody)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	var response ConfigSchemaResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
+
+	findField := func(section, key string) *ConfigFieldSchema {
+		for i := range response.Sections[section] {
+			field := &response.Sections[section][i]
+			if field.Key == key {
+				return field
+			}
+		}
+
+		return nil
+	}
+
+	logLevelField := findField("app", "app.log_level")
+	require.NotNil(t, logLevelField)
+	assert.Equal(t, "warn", logLevelField.CurrentValue)
+	assert.True(t, logLevelField.EnvOverride)
+	assert.True(t, logLevelField.HotReloadable)
+
+	rateLimitField := findField("rate_limit", "rate_limit.max")
+	require.NotNil(t, rateLimitField)
+	assert.Equal(t, "100", rateLimitField.DefaultValue)
+	assert.Equal(t, "100", rateLimitField.CurrentValue)
+	assert.False(t, rateLimitField.EnvOverride)
+	assert.True(t, rateLimitField.HotReloadable)
+	assert.Contains(t, rateLimitField.Constraints, "min:1")
+}
+
+func TestGetSchema_RedactsCredentialURICurrentValue(t *testing.T) {
+	t.Parallel()
+
+	cm := newAPITestConfigManager(t)
+	cfg := cm.Get()
+	cfg.Fetcher.URL = "https://user:pass@example.com/fetch"
+
+	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
+	require.NoError(t, err)
+
+	app := newTestApp(t, handler)
+	req := httptest.NewRequest(http.MethodGet, "/v1/system/config/schema", http.NoBody)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	var response ConfigSchemaResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
+
+	var found *ConfigFieldSchema
+	for i := range response.Sections["fetcher"] {
+		field := &response.Sections["fetcher"][i]
+		if field.Key == "fetcher.url" {
+			found = field
+			break
+		}
+	}
+	require.NotNil(t, found)
+	assert.Equal(t, "https://%2A%2A%2AREDACTED%2A%2A%2A:%2A%2A%2AREDACTED%2A%2A%2A@example.com/fetch", found.CurrentValue)
 }
 
 func TestUpdateConfig_ValidChange(t *testing.T) {
@@ -513,6 +622,85 @@ func TestUpdateConfig_RuntimeApplyFailure_ReturnsInternalServerError(t *testing.
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+}
+
+func TestUpdateConfig_EnvOverriddenChange_IsPersistedButNotHotReloaded(t *testing.T) {
+	// Not parallel: modifies env vars.
+	clearConfigEnvVars(t)
+	t.Setenv("LOG_LEVEL", "warn")
+
+	cm := newAPITestConfigManager(t)
+	_, err := cm.Reload()
+	require.NoError(t, err)
+
+	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
+	require.NoError(t, err)
+
+	app := newTestApp(t, handler)
+	bodyBytes, err := json.Marshal(UpdateConfigRequest{
+		Changes: map[string]any{"app.log_level": "debug"},
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPatch, "/v1/system/config", bytes.NewReader(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var response UpdateConfigResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
+	require.Len(t, response.Applied, 1)
+	assert.Equal(t, "app.log_level", response.Applied[0].Key)
+	assert.Equal(t, "info", response.Applied[0].OldValue)
+	assert.Equal(t, "debug", response.Applied[0].NewValue)
+	assert.False(t, response.Applied[0].HotReloaded)
+	assert.Empty(t, response.Rejected)
+	assert.Equal(t, "warn", cm.Get().App.LogLevel)
+}
+
+func TestUpdateConfig_InternalWriteFailure_ReturnsInternalServerError(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	yamlPath := filepath.Join(tmpDir, "missing", "matcher.yaml")
+
+	cfg := defaultConfig()
+	cfg.Auth.Enabled = true
+	cfg.Auth.Host = "http://auth:8080"
+	cfg.Auth.TokenSecret = "test-secret"
+
+	cm, err := NewConfigManager(cfg, yamlPath, &libLog.NopLogger{})
+	require.NoError(t, err)
+	t.Cleanup(cm.Stop)
+
+	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
+	require.NoError(t, err)
+
+	app := newTestApp(t, handler)
+	bodyBytes, err := json.Marshal(UpdateConfigRequest{
+		Changes: map[string]any{"rate_limit.max": 200},
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPatch, "/v1/system/config", bytes.NewReader(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	var response map[string]any
+	require.NoError(t, json.Unmarshal(body, &response))
+	assert.Equal(t, "update_failed", response["title"])
 }
 
 func TestReloadConfig_Success(t *testing.T) {
@@ -820,6 +1008,56 @@ func TestGetConfigHistory_UsesStableDefaultTenantContextWhenConfigDefaultChanges
 	assert.NotEqual(t, cfg.Tenancy.DefaultTenantID, auditRepo.lastTenantID)
 }
 
+func TestGetConfigHistory_MapsAuditLogsAndRedactsSecrets(t *testing.T) {
+	t.Parallel()
+
+	cm := newAPITestConfigManager(t)
+	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
+	require.NoError(t, err)
+
+	actor := "user-42"
+	now := time.Now().UTC()
+	auditRepo := &historyAuditRepoMock{
+		logs: []*sharedDomain.AuditLog{
+			{
+				CreatedAt: now,
+				ActorID:   nil,
+				Action:    "reloaded",
+				Changes:   []byte(`{"config_changes":[{"key":"auth.token_secret","old_value":"old-secret","new_value":"new-secret"}]}`),
+			},
+			{
+				CreatedAt: now.Add(-time.Minute),
+				ActorID:   &actor,
+				Action:    "updated",
+				Changes:   []byte(`{"config_changes":[{"key":"rate_limit.max","old_value":100,"new_value":200}]}`),
+			},
+		},
+	}
+	handler.SetAuditRepository(auditRepo)
+
+	app := newTestApp(t, handler)
+	req := httptest.NewRequest(http.MethodGet, "/v1/system/config/history", http.NoBody)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var response ConfigHistoryResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
+	require.Len(t, response.Items, 2)
+	assert.Equal(t, "system", response.Items[0].Actor)
+	assert.Equal(t, "reloaded", response.Items[0].ChangeType)
+	require.Len(t, response.Items[0].Changes, 1)
+	assert.Equal(t, "***REDACTED***", response.Items[0].Changes[0].OldValue)
+	assert.Equal(t, "***REDACTED***", response.Items[0].Changes[0].NewValue)
+	assert.Equal(t, "user-42", response.Items[1].Actor)
+	assert.Equal(t, "updated", response.Items[1].ChangeType)
+	require.Len(t, response.Items[1].Changes, 1)
+	assert.Equal(t, 100.0, response.Items[1].Changes[0].OldValue)
+	assert.Equal(t, 200.0, response.Items[1].Changes[0].NewValue)
+}
+
 func TestExtractAuditConfigChanges_RedactsSensitiveValues(t *testing.T) {
 	t.Parallel()
 
@@ -921,6 +1159,62 @@ func TestUpdateConfig_AuditPublisherCalledOnSuccess(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.NotEmpty(t, response.Applied, "should have applied changes")
+	assert.True(t, mockRepo.createCalled)
+	require.Len(t, mockRepo.createdEvents, 1)
+
+	var auditEvent sharedDomain.AuditLogCreatedEvent
+	require.NoError(t, json.Unmarshal(mockRepo.createdEvents[0].Payload, &auditEvent))
+	assert.Equal(t, "updated", auditEvent.Action)
+	changes, ok := auditEvent.Changes["config_changes"].([]any)
+	require.True(t, ok)
+	require.Len(t, changes, 1)
+}
+
+func TestUpdateConfig_EnvOverriddenChange_IsAuditedAsPersistedChange(t *testing.T) {
+	// Not parallel: modifies env vars.
+	clearConfigEnvVars(t)
+	t.Setenv("LOG_LEVEL", "warn")
+
+	cm := newAPITestConfigManager(t)
+	_, err := cm.Reload()
+	require.NoError(t, err)
+
+	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
+	require.NoError(t, err)
+
+	mockRepo := &testOutboxMock{}
+	publisher, err := NewConfigAuditPublisher(mockRepo, &libLog.NopLogger{})
+	require.NoError(t, err)
+	handler.SetAuditPublisher(publisher)
+
+	app := newTestApp(t, handler)
+	bodyBytes, err := json.Marshal(UpdateConfigRequest{
+		Changes: map[string]any{"app.log_level": "debug"},
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPatch, "/v1/system/config", bytes.NewReader(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.True(t, mockRepo.createCalled)
+	require.Len(t, mockRepo.createdEvents, 1)
+
+	var auditEvent sharedDomain.AuditLogCreatedEvent
+	require.NoError(t, json.Unmarshal(mockRepo.createdEvents[0].Payload, &auditEvent))
+	changes, ok := auditEvent.Changes["config_changes"].([]any)
+	require.True(t, ok)
+	require.Len(t, changes, 1)
+
+	change, ok := changes[0].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "app.log_level", change["key"])
+	assert.Equal(t, "info", change["old_value"])
+	assert.Equal(t, "debug", change["new_value"])
 }
 
 func TestUpdateConfig_AuditFailureDoesNotFailRequest(t *testing.T) {

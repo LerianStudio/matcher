@@ -236,10 +236,103 @@ type mockCloser struct {
 	closed bool
 }
 
+type recordingLifecycleWorker struct {
+	startErr     error
+	stopObserved bool
+	stopFn       func()
+}
+
+func (worker *recordingLifecycleWorker) Start(_ context.Context) error {
+	return worker.startErr
+}
+
+func (worker *recordingLifecycleWorker) Stop() error {
+	if worker.stopFn != nil {
+		worker.stopFn()
+	}
+
+	return nil
+}
+
 func (m *mockCloser) Close() error {
 	m.closed = true
 
 	return nil
+}
+
+func TestServiceResolveActiveConfig_UsesConfigManagerSnapshot(t *testing.T) {
+	t.Parallel()
+
+	initialCfg := defaultConfig()
+	initialCfg.App.LogLevel = "info"
+	managedCfg := defaultConfig()
+	managedCfg.App.LogLevel = "debug"
+
+	cm, err := NewConfigManager(managedCfg, "", &libLog.NopLogger{})
+	require.NoError(t, err)
+	t.Cleanup(cm.Stop)
+
+	svc := &Service{
+		Config:        initialCfg,
+		ConfigManager: cm,
+	}
+
+	resolved := svc.resolveActiveConfig()
+	require.NotNil(t, resolved)
+	assert.Equal(t, "debug", resolved.App.LogLevel)
+	assert.Equal(t, resolved, svc.Config)
+}
+
+func TestServiceRun_PropagatesWorkerManagerStartFailure(t *testing.T) {
+	t.Parallel()
+
+	worker := &recordingLifecycleWorker{startErr: errors.New("worker start failed")}
+	wm := NewWorkerManager(&libLog.NopLogger{}, nil)
+	wm.Register("critical", func(_ *Config) (WorkerLifecycle, error) {
+		return worker, nil
+	}, alwaysEnabled, alwaysCritical)
+
+	svc := &Service{
+		Logger:        &libLog.NopLogger{},
+		Config:        defaultConfig(),
+		workerManager: wm,
+	}
+
+	err := svc.Run()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "critical worker \"critical\" failed to start")
+}
+
+func TestServiceStopBackgroundWorkers_StopsConfigManagerBeforeWorkers(t *testing.T) {
+	t.Parallel()
+
+	cm, err := NewConfigManager(defaultConfig(), "", &libLog.NopLogger{})
+	require.NoError(t, err)
+	t.Cleanup(cm.Stop)
+
+	worker := &recordingLifecycleWorker{}
+	worker.stopFn = func() {
+		select {
+		case <-cm.stopCh:
+			worker.stopObserved = true
+		default:
+			worker.stopObserved = false
+		}
+	}
+
+	wm := NewWorkerManager(&libLog.NopLogger{}, nil)
+	wm.Register("worker", func(_ *Config) (WorkerLifecycle, error) {
+		return worker, nil
+	}, alwaysEnabled, neverCritical)
+	require.NoError(t, wm.Start(context.Background(), defaultConfig()))
+
+	svc := &Service{
+		ConfigManager: cm,
+		workerManager: wm,
+	}
+
+	svc.stopBackgroundWorkers(context.Background(), &libLog.NopLogger{})
+	assert.True(t, worker.stopObserved)
 }
 
 func TestServerRun_StartsAndShutdowns(t *testing.T) {

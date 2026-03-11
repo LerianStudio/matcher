@@ -343,6 +343,24 @@ func TestSchedulerWorker_Done_ClosedAfterStop(t *testing.T) {
 	}
 }
 
+func TestSchedulerWorker_StartStopStartStop_Success(t *testing.T) {
+	t.Parallel()
+
+	worker, err := NewSchedulerWorker(
+		&stubScheduleRepo{},
+		&stubMatchTrigger{},
+		&stubInfraProvider{},
+		SchedulerWorkerConfig{Interval: time.Hour},
+		&stubLogger{},
+	)
+	require.NoError(t, err)
+
+	require.NoError(t, worker.Start(context.Background()))
+	require.NoError(t, worker.Stop())
+	require.NoError(t, worker.Start(context.Background()))
+	require.NoError(t, worker.Stop())
+}
+
 // --- Sentinel errors ---
 
 func TestSchedulerWorkerErrors_AreDistinct(t *testing.T) {

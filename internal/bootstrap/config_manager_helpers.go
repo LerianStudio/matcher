@@ -35,8 +35,10 @@ func (cm *ConfigManager) notifySubscribers(cfg *Config, callbacks []func(*Config
 		func(idx int, callback func(*Config) error) {
 			defer func() {
 				if r := recover(); r != nil {
+					panicErr := fmt.Errorf("%w: subscriber %d panicked: %v", ErrConfigSubscriberFailure, idx, r)
+					notifyErr = errors.Join(notifyErr, panicErr)
 					cm.logger.Log(ctx, libLog.LevelError,
-						fmt.Sprintf("config subscriber %d panicked: %v", idx, r))
+						panicErr.Error())
 				}
 			}()
 

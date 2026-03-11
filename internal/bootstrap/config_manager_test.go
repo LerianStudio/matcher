@@ -459,7 +459,8 @@ func TestConfigManager_Subscribe_PanicRecovery(t *testing.T) {
 	})
 
 	_, err := cm.Reload()
-	require.NoError(t, err)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrConfigSubscriberFailure)
 
 	assert.True(t, secondCalled.Load(), "second subscriber should run even after first panics")
 
@@ -673,10 +674,12 @@ func TestConfigManager_Update_RejectsEnvOverriddenRuntimeChange(t *testing.T) {
 	result, err := cm.Update(map[string]any{"app.log_level": "debug"})
 	require.NoError(t, err)
 
-	assert.Empty(t, result.Applied)
-	require.Len(t, result.Rejected, 1)
-	assert.Equal(t, "app.log_level", result.Rejected[0].Key)
-	assert.Contains(t, result.Rejected[0].Reason, "overridden by environment variable")
+	require.Len(t, result.Applied, 1)
+	assert.Equal(t, "app.log_level", result.Applied[0].Key)
+	assert.Equal(t, "info", result.Applied[0].OldValue)
+	assert.Equal(t, "debug", result.Applied[0].NewValue)
+	assert.False(t, result.Applied[0].HotReloaded)
+	assert.Empty(t, result.Rejected)
 	assert.Equal(t, "warn", cm.Get().App.LogLevel)
 
 	content, readErr := os.ReadFile(yamlPath)
@@ -784,6 +787,47 @@ func TestConfigManager_Update_MixedApplyAndReject(t *testing.T) {
 	assert.Len(t, result.Rejected, 1)
 	assert.Equal(t, "rate_limit.max", result.Applied[0].Key)
 	assert.Equal(t, "postgres.primary_host", result.Rejected[0].Key)
+}
+
+func TestConfigManager_Update_RejectsStartupOnlyWorkerEnableFlags(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
+
+	cfg := defaultConfig()
+	cfg.ExportWorker.Enabled = false
+	cm := newTestConfigManager(t, cfg, yamlPath, &testLogger{})
+
+	result, err := cm.Update(map[string]any{
+		"export_worker.enabled": true,
+	})
+
+	require.NoError(t, err)
+	assert.Empty(t, result.Applied)
+	require.Len(t, result.Rejected, 1)
+	assert.Equal(t, "export_worker.enabled", result.Rejected[0].Key)
+	assert.Contains(t, result.Rejected[0].Reason, "not mutable")
+	assert.False(t, cm.Get().ExportWorker.Enabled)
+}
+
+func TestConfigManager_Update_RejectsStartupOnlyDedupeTTL(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
+
+	cm := newTestConfigManager(t, defaultConfig(), yamlPath, &testLogger{})
+
+	result, err := cm.Update(map[string]any{
+		"deduplication.ttl_sec": 7200,
+	})
+
+	require.NoError(t, err)
+	assert.Empty(t, result.Applied)
+	require.Len(t, result.Rejected, 1)
+	assert.Equal(t, "deduplication.ttl_sec", result.Rejected[0].Key)
+	assert.Contains(t, result.Rejected[0].Reason, "not mutable")
 }
 
 func TestConfigManager_Update_RejectsFractionalIntegerValues(t *testing.T) {
@@ -897,6 +941,23 @@ func TestConfigManager_Update_PropagatesSubscriberFailure(t *testing.T) {
 	_, err := cm.Update(map[string]any{"rate_limit.max": 301})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrConfigSubscriberFailure)
+}
+
+func TestConfigManager_Update_PropagatesSubscriberPanicAsFailure(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
+
+	cm := newTestConfigManager(t, defaultConfig(), yamlPath, &testLogger{})
+	cm.SubscribeErr(func(_ *Config) error {
+		panic("subscriber panic")
+	})
+
+	_, err := cm.Update(map[string]any{"rate_limit.max": 301})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrConfigSubscriberFailure)
+	assert.Contains(t, err.Error(), "subscriber panic")
 }
 
 func TestConfigManager_Update_WritesYAMLFile(t *testing.T) {

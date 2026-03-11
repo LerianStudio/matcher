@@ -2467,11 +2467,12 @@ definitions:
           type: string
         type: array
       currentValue:
-        description: Current effective value (redacted for secrets)
+        description: Current effective value (redacted for secrets), serialized as
+          a string.
         example: "200"
         type: string
       defaultValue:
-        description: Default value
+        description: Default value serialized as a string for a stable OpenAPI contract.
         example: "100"
         type: string
       description:
@@ -2519,8 +2520,8 @@ definitions:
         example: system
         type: string
       changeType:
-        description: 'Type of change: "reload", "update", "startup"'
-        example: update
+        description: 'Type of change: "reloaded", "updated", "startup"'
+        example: updated
         type: string
       changes:
         description: Changed fields with old/new values
@@ -5046,6 +5047,10 @@ paths:
             $ref: '#/definitions/http.ErrorResponse'
         "500":
           description: Internal server error
+          schema:
+            $ref: '#/definitions/http.ErrorResponse'
+        "503":
+          description: Export worker disabled
           schema:
             $ref: '#/definitions/http.ErrorResponse'
       security:

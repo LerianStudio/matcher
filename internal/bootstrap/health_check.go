@@ -21,13 +21,6 @@ import (
 // HealthCheckFunc is a function type for performing health checks on dependencies.
 type HealthCheckFunc func(ctx context.Context) error
 
-// HealthResponse represents the liveness check response.
-// @Description Service liveness status
-type HealthResponse struct {
-	// Status indicates the service health (always "healthy" if responding)
-	Status string `json:"status" example:"healthy"`
-}
-
 // ReadinessResponse represents the readiness check response.
 // @Description Service readiness status with optional dependency checks
 type ReadinessResponse struct {

@@ -28,10 +28,10 @@ type ConfigFieldSchema struct {
 	Label string `json:"label" example:"Rate Limit Max"`
 	// Data type: string, int, bool
 	Type string `json:"type" example:"int" enums:"string,int,bool"`
-	// Default value
-	DefaultValue any `json:"defaultValue" swaggertype:"string" example:"100"`
-	// Current effective value (redacted for secrets)
-	CurrentValue any `json:"currentValue" swaggertype:"string" example:"200"`
+	// Default value serialized as a string for a stable OpenAPI contract.
+	DefaultValue string `json:"defaultValue" example:"100"`
+	// Current effective value (redacted for secrets), serialized as a string.
+	CurrentValue string `json:"currentValue" example:"200"`
 	// Whether changes take effect without restart
 	HotReloadable bool `json:"hotReloadable" example:"true"`
 	// Whether the field is currently overridden by an env var

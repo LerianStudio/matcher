@@ -32,6 +32,45 @@ type mockWorker struct {
 	stopErr  error
 }
 
+type panicWorker struct{}
+
+type blockingWorker struct {
+	startCalled chan struct{}
+	startGate   chan struct{}
+	stopCalled  chan struct{}
+	stopGate    chan struct{}
+}
+
+func (panicWorker) Start(_ context.Context) error {
+	panic("boom")
+}
+
+func (panicWorker) Stop() error {
+	return nil
+}
+
+func (worker *blockingWorker) Start(_ context.Context) error {
+	if worker.startCalled != nil {
+		close(worker.startCalled)
+	}
+	if worker.startGate != nil {
+		<-worker.startGate
+	}
+
+	return nil
+}
+
+func (worker *blockingWorker) Stop() error {
+	if worker.stopCalled != nil {
+		close(worker.stopCalled)
+	}
+	if worker.stopGate != nil {
+		<-worker.stopGate
+	}
+
+	return nil
+}
+
 type runtimeAwareExportWorker struct {
 	mockWorker
 
@@ -255,6 +294,23 @@ func TestWorkerManager_StartStop(t *testing.T) {
 		assert.Equal(t, int32(1), callCount.Load())
 
 		require.NoError(t, wm.Stop())
+	})
+
+	t.Run("worker start panic returns error instead of escaping", func(t *testing.T) {
+		t.Parallel()
+
+		logger := &libLog.NopLogger{}
+
+		wm := NewWorkerManager(logger, nil)
+		wm.Register("panic-worker", func(_ *Config) (WorkerLifecycle, error) {
+			return panicWorker{}, nil
+		}, alwaysEnabled, alwaysCritical)
+
+		err := wm.Start(context.Background(), newTestConfig())
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "panic-worker")
+		assert.Contains(t, err.Error(), "worker start panicked: boom")
+		assert.False(t, wm.running)
 	})
 }
 
@@ -606,6 +662,16 @@ func TestWorkerConfigChanged(t *testing.T) {
 		assert.True(t, workerConfigChanged("export", old, new_))
 	})
 
+	t.Run("ignores export presign expiry only change", func(t *testing.T) {
+		t.Parallel()
+
+		old := newTestConfig()
+		new_ := newTestConfig()
+		new_.ExportWorker.PresignExpirySec = old.ExportWorker.PresignExpirySec + 300
+
+		assert.False(t, workerConfigChanged("export", old, new_))
+	})
+
 	t.Run("no change returns false", func(t *testing.T) {
 		t.Parallel()
 
@@ -647,6 +713,16 @@ func TestWorkerConfigChanged(t *testing.T) {
 		assert.True(t, workerConfigChanged("archival", old, new_))
 	})
 
+	t.Run("ignores archival presign expiry only change", func(t *testing.T) {
+		t.Parallel()
+
+		old := newTestConfig()
+		new_ := newTestConfig()
+		new_.Archival.PresignExpirySec = old.Archival.PresignExpirySec + 300
+
+		assert.False(t, workerConfigChanged("archival", old, new_))
+	})
+
 	t.Run("detects scheduler config change", func(t *testing.T) {
 		t.Parallel()
 
@@ -668,7 +744,7 @@ func TestExtractWorkerConfig(t *testing.T) {
 		t.Parallel()
 
 		result := extractWorkerConfig("export", cfg)
-		_, ok := result.(ExportWorkerConfig)
+		_, ok := result.(exportWorkerComparableConfig)
 
 		assert.True(t, ok)
 	})
@@ -677,7 +753,7 @@ func TestExtractWorkerConfig(t *testing.T) {
 		t.Parallel()
 
 		result := extractWorkerConfig("cleanup", cfg)
-		_, ok := result.(CleanupWorkerConfig)
+		_, ok := result.(cleanupWorkerComparableConfig)
 
 		assert.True(t, ok)
 	})
@@ -686,7 +762,7 @@ func TestExtractWorkerConfig(t *testing.T) {
 		t.Parallel()
 
 		result := extractWorkerConfig("archival", cfg)
-		_, ok := result.(ArchivalConfig)
+		_, ok := result.(archivalWorkerComparableConfig)
 
 		assert.True(t, ok)
 	})
@@ -695,7 +771,7 @@ func TestExtractWorkerConfig(t *testing.T) {
 		t.Parallel()
 
 		result := extractWorkerConfig("scheduler", cfg)
-		_, ok := result.(SchedulerConfig)
+		_, ok := result.(schedulerWorkerComparableConfig)
 
 		assert.True(t, ok)
 	})
@@ -954,6 +1030,45 @@ func TestWorkerManager_RestartRollback_ReappliesPreviousRuntimeConfig(t *testing
 	require.NoError(t, wm.Stop())
 }
 
+func TestWorkerManager_RestartRollback_ReappliesPreviousRuntimeConfigToRebuiltWorker(t *testing.T) {
+	t.Parallel()
+
+	cfg := newTestConfig()
+	initialWorker := &runtimeAwareExportWorker{}
+	failingWorker := &runtimeAwareExportWorker{}
+	failingWorker.failNextStart.Store(true)
+	rollbackWorker := &runtimeAwareExportWorker{}
+
+	callCount := atomic.Int32{}
+	wm := NewWorkerManager(&libLog.NopLogger{}, nil)
+	wm.Register("export", func(_ *Config) (WorkerLifecycle, error) {
+		switch callCount.Add(1) {
+		case 1:
+			return initialWorker, nil
+		case 2:
+			return failingWorker, nil
+		default:
+			return rollbackWorker, nil
+		}
+	}, alwaysEnabled, alwaysCritical)
+
+	require.NoError(t, wm.Start(context.Background(), cfg))
+
+	updatedCfg := newTestConfig()
+	updatedCfg.ExportWorker.PollIntervalSec = cfg.ExportWorker.PollIntervalSec + 5
+	updatedCfg.ExportWorker.PageSize = cfg.ExportWorker.PageSize + 100
+
+	wm.onConfigChange(updatedCfg)
+
+	updates := rollbackWorker.lastUpdates()
+	require.Len(t, updates, 1)
+	assert.Equal(t, cfg.ExportWorkerPollInterval(), updates[0].PollInterval)
+	assert.Equal(t, cfg.ExportWorker.PageSize, updates[0].PageSize)
+	assert.Equal(t, []string{"export"}, wm.RunningWorkers())
+
+	require.NoError(t, wm.Stop())
+}
+
 func TestWorkerManager_Start_UsesLatestConfigManagerSnapshot(t *testing.T) {
 	t.Parallel()
 
@@ -977,6 +1092,88 @@ func TestWorkerManager_Start_UsesLatestConfigManagerSnapshot(t *testing.T) {
 	require.NoError(t, wm.Start(context.Background(), initialCfg))
 	assert.Equal(t, 1, worker.startCount())
 	require.NoError(t, wm.Stop())
+}
+
+func TestWorkerManager_Stop_DoesNotBlockRunningWorkersRead(t *testing.T) {
+	t.Parallel()
+
+	worker := &blockingWorker{
+		stopCalled: make(chan struct{}),
+		stopGate:   make(chan struct{}),
+	}
+
+	wm := NewWorkerManager(&libLog.NopLogger{}, nil)
+	wm.Register("blocking", func(_ *Config) (WorkerLifecycle, error) {
+		return worker, nil
+	}, alwaysEnabled, neverCritical)
+
+	require.NoError(t, wm.Start(context.Background(), newTestConfig()))
+
+	stopDone := make(chan error, 1)
+	go func() {
+		stopDone <- wm.Stop()
+	}()
+
+	<-worker.stopCalled
+
+	done := make(chan []string, 1)
+	go func() {
+		done <- wm.RunningWorkers()
+	}()
+
+	select {
+	case names := <-done:
+		assert.Equal(t, []string{"blocking"}, names)
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("RunningWorkers blocked while worker stop was in progress")
+	}
+
+	close(worker.stopGate)
+	require.NoError(t, <-stopDone)
+}
+
+func TestWorkerManager_Stop_ReturnsTimeoutWhenWorkerBlocks(t *testing.T) {
+	// Not parallel: overrides package-level timeout.
+
+	originalTimeout := workerStopTimeout
+	workerStopTimeout = 20 * time.Millisecond
+	t.Cleanup(func() { workerStopTimeout = originalTimeout })
+
+	worker := &blockingWorker{stopGate: make(chan struct{})}
+
+	wm := NewWorkerManager(&libLog.NopLogger{}, nil)
+	wm.Register("blocking", func(_ *Config) (WorkerLifecycle, error) {
+		return worker, nil
+	}, alwaysEnabled, neverCritical)
+
+	require.NoError(t, wm.Start(context.Background(), newTestConfig()))
+
+	err := wm.Stop()
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errWorkerStopTimedOut)
+
+	close(worker.stopGate)
+}
+
+func TestWorkerManager_Start_ReturnsTimeoutWhenWorkerBlocks(t *testing.T) {
+	// Not parallel: overrides package-level timeout.
+
+	originalTimeout := workerStartTimeout
+	workerStartTimeout = 20 * time.Millisecond
+	t.Cleanup(func() { workerStartTimeout = originalTimeout })
+
+	worker := &blockingWorker{startGate: make(chan struct{})}
+
+	wm := NewWorkerManager(&libLog.NopLogger{}, nil)
+	wm.Register("blocking", func(_ *Config) (WorkerLifecycle, error) {
+		return worker, nil
+	}, alwaysEnabled, alwaysCritical)
+
+	err := wm.Start(context.Background(), newTestConfig())
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errWorkerStartTimedOut)
+
+	close(worker.startGate)
 }
 
 func TestWorkerManager_RegisterNilEnabledPredicate_DoesNotPanicOnNilConfig(t *testing.T) {

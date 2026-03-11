@@ -555,6 +555,29 @@ func TestCallbackRateLimitPerMinute(t *testing.T) {
 	}
 }
 
+func TestDedupeTTL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		sec      int
+		expected time.Duration
+	}{
+		{name: "defaults_to_1h_when_zero", sec: 0, expected: time.Hour},
+		{name: "defaults_to_1h_when_negative", sec: -1, expected: time.Hour},
+		{name: "uses_configured_value", sec: 120, expected: 120 * time.Second},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := &Config{Dedupe: DedupeConfig{TTLSec: tt.sec}}
+			assert.Equal(t, tt.expected, cfg.DedupeTTL())
+		})
+	}
+}
+
 func TestDBMetricsInterval(t *testing.T) {
 	t.Parallel()
 

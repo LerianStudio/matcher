@@ -60,7 +60,7 @@ var (
 // ExportJobRuntimeConfig controls runtime-sensitive handler behavior without
 // coupling the reporting package to bootstrap internals.
 type ExportJobRuntimeConfig struct {
-	Enabled       bool
+	Enabled       *bool
 	PresignExpiry time.Duration
 }
 
@@ -123,8 +123,9 @@ func (handler *ExportJobHandlers) SetRuntimeConfigGetter(getter func() ExportJob
 }
 
 func (handler *ExportJobHandlers) currentRuntimeConfig() ExportJobRuntimeConfig {
+	enabled := true
 	config := ExportJobRuntimeConfig{
-		Enabled:       true,
+		Enabled:       &enabled,
 		PresignExpiry: entities.DefaultPresignExpiry,
 	}
 
@@ -141,6 +142,10 @@ func (handler *ExportJobHandlers) currentRuntimeConfig() ExportJobRuntimeConfig 
 	}
 
 	runtimeConfig := handler.runtimeConfig()
+	if runtimeConfig.Enabled == nil {
+		runtimeConfig.Enabled = config.Enabled
+	}
+
 	if runtimeConfig.PresignExpiry <= 0 {
 		runtimeConfig.PresignExpiry = config.PresignExpiry
 	}
@@ -334,21 +339,13 @@ func verifyJobTenantOwnership(ctx context.Context, job *entities.ExportJob) erro
 // @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
 // @Failure 404 {object} libHTTP.ErrorResponse "Context not found"
 // @Failure 409 {object} libHTTP.ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
+// @Failure 503 {object} libHTTP.ErrorResponse "Export worker disabled"
 // @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
 // @Router /v1/contexts/{contextId}/export-jobs [post]
 func (handler *ExportJobHandlers) CreateExportJob(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startExportJobSpan(fiberCtx, "handler.export_job.create")
 
 	defer span.End()
-
-	if !handler.currentRuntimeConfig().Enabled {
-		return libHTTP.RespondError(
-			fiberCtx,
-			fiber.StatusServiceUnavailable,
-			"export_worker_disabled",
-			ErrExportWorkerDisabled.Error(),
-		)
-	}
 
 	contextID, tenantID, err := libHTTP.ParseAndVerifyTenantScopedID(
 		fiberCtx,
@@ -365,6 +362,16 @@ func (handler *ExportJobHandlers) CreateExportJob(fiberCtx *fiber.Ctx) error {
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
+
+	runtimeConfig := handler.currentRuntimeConfig()
+	if runtimeConfig.Enabled != nil && !*runtimeConfig.Enabled {
+		return libHTTP.RespondError(
+			fiberCtx,
+			fiber.StatusServiceUnavailable,
+			"export_worker_disabled",
+			ErrExportWorkerDisabled.Error(),
+		)
+	}
 
 	var req CreateExportJobRequest
 	if err := libHTTP.ParseBodyAndValidate(fiberCtx, &req); err != nil {

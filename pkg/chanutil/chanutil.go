@@ -18,11 +18,3 @@ func ClosedSignalChannel(ch <-chan struct{}) bool {
 		return false
 	}
 }
-
-// Closed is kept for backward compatibility with existing internal call sites.
-//
-// Deprecated: use ClosedSignalChannel. This helper is only valid for close-only
-// lifecycle channels; readable open channels will also return true.
-func Closed(ch <-chan struct{}) bool {
-	return ClosedSignalChannel(ch)
-}

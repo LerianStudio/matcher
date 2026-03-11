@@ -113,10 +113,10 @@ func TestExtractWorkerConfig_AllNames(t *testing.T) {
 		wantNil  bool
 		expected any
 	}{
-		{"export", false, cfg.ExportWorker},
-		{"cleanup", false, cfg.CleanupWorker},
-		{"archival", false, cfg.Archival},
-		{"scheduler", false, cfg.Scheduler},
+		{"export", false, exportWorkerComparableConfig{Enabled: cfg.ExportWorker.Enabled, PollIntervalSec: cfg.ExportWorker.PollIntervalSec, PageSize: cfg.ExportWorker.PageSize}},
+		{"cleanup", false, cleanupWorkerComparableConfig{Enabled: cfg.CleanupWorker.Enabled, IntervalSec: cfg.CleanupWorker.IntervalSec, BatchSize: cfg.CleanupWorker.BatchSize, GracePeriodSec: cfg.CleanupWorker.GracePeriodSec}},
+		{"archival", false, archivalWorkerComparableConfig{Enabled: cfg.Archival.Enabled, IntervalHours: cfg.Archival.IntervalHours, HotRetentionDays: cfg.Archival.HotRetentionDays, WarmRetentionMonths: cfg.Archival.WarmRetentionMonths, ColdRetentionMonths: cfg.Archival.ColdRetentionMonths, BatchSize: cfg.Archival.BatchSize, StorageBucket: cfg.Archival.StorageBucket, StoragePrefix: cfg.Archival.StoragePrefix, StorageClass: cfg.Archival.StorageClass, PartitionLookahead: cfg.Archival.PartitionLookahead}},
+		{"scheduler", false, schedulerWorkerComparableConfig{IntervalSec: cfg.Scheduler.IntervalSec}},
 		{"unknown", true, nil},
 	}
 
@@ -158,6 +158,26 @@ func TestWorkerConfigChanged_DifferentConfig_ReturnsTrue(t *testing.T) {
 	newCfg.ExportWorker.PageSize = 9999
 
 	assert.True(t, workerConfigChanged("export", old, newCfg))
+}
+
+func TestWorkerConfigChanged_ExportPresignExpiryOnly_ReturnsFalse(t *testing.T) {
+	t.Parallel()
+
+	old := defaultConfig()
+	newCfg := defaultConfig()
+	newCfg.ExportWorker.PresignExpirySec = old.ExportWorker.PresignExpirySec + 300
+
+	assert.False(t, workerConfigChanged("export", old, newCfg))
+}
+
+func TestWorkerConfigChanged_ArchivalPresignExpiryOnly_ReturnsFalse(t *testing.T) {
+	t.Parallel()
+
+	old := defaultConfig()
+	newCfg := defaultConfig()
+	newCfg.Archival.PresignExpirySec = old.Archival.PresignExpirySec + 300
+
+	assert.False(t, workerConfigChanged("archival", old, newCfg))
 }
 
 func TestWorkerConfigChanged_NilOldConfig_ReturnsTrue(t *testing.T) {

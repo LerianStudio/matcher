@@ -11,13 +11,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/LerianStudio/lib-auth/v2/auth/middleware"
 	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
 	libZap "github.com/LerianStudio/lib-commons/v4/commons/zap"
 
-	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
 
@@ -33,8 +31,6 @@ type Service struct {
 	Routes        *Routes
 	ConfigManager *ConfigManager
 
-	authClient         *middleware.AuthClient
-	tenantExtractor    *auth.TenantExtractor
 	outboxRunner       libCommons.App
 	dbMetricsCollector *DBMetricsCollector
 	workerManager      *WorkerManager

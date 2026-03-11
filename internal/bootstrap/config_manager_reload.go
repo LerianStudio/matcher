@@ -101,6 +101,8 @@ func (cm *ConfigManager) reloadLocked(source string) (*ReloadResult, error) {
 		return nil, fmt.Errorf("config reload: %w", errConfigNilAtomicLoad)
 	}
 
+	preserveStartupOnlyRuntimeSettings(newCfg, oldCfg)
+
 	newCfg.Logger = oldCfg.Logger
 	newCfg.ShutdownGracePeriod = oldCfg.ShutdownGracePeriod
 
@@ -116,7 +118,7 @@ func (cm *ConfigManager) reloadLocked(source string) (*ReloadResult, error) {
 	if err := newCfg.Validate(); err != nil {
 		cm.logger.Log(ctx, libLog.LevelError, "config reload: validation failed", libLog.Err(err))
 
-		return nil, fmt.Errorf("config reload: validation: %w", err)
+		return nil, fmt.Errorf("config reload: validation: %w: %w", ErrConfigValidationFailure, err)
 	}
 
 	// Compute diff before swap.
@@ -175,12 +177,35 @@ func (cm *ConfigManager) buildCandidateConfig(oldCfg *Config) (*Config, error) {
 	}
 
 	restoreZeroedFields(candidateCfg, &candidateSnapshot)
+	preserveStartupOnlyRuntimeSettings(candidateCfg, oldCfg)
 
 	candidateCfg.enforceProductionSecurityDefaults(cm.logger)
 
 	if err := candidateCfg.Validate(); err != nil {
-		return nil, fmt.Errorf("validation failed: %w", err)
+		return nil, fmt.Errorf("validation failed: %w: %w", ErrConfigValidationFailure, err)
 	}
 
 	return candidateCfg, nil
+}
+
+// preserveStartupOnlyRuntimeSettings keeps settings that still require bootstrap-time
+// construction stable across reload/update cycles. These values can change in YAML
+// and take effect on the next process start, but they must not change the active
+// runtime config for the running process.
+func preserveStartupOnlyRuntimeSettings(candidateCfg, oldCfg *Config) {
+	if candidateCfg == nil || oldCfg == nil {
+		return
+	}
+
+	candidateCfg.ExportWorker.Enabled = oldCfg.ExportWorker.Enabled
+	candidateCfg.CleanupWorker.Enabled = oldCfg.CleanupWorker.Enabled
+	candidateCfg.Archival.Enabled = oldCfg.Archival.Enabled
+	candidateCfg.Auth = oldCfg.Auth
+	candidateCfg.Tenancy.DefaultTenantID = oldCfg.Tenancy.DefaultTenantID
+	candidateCfg.Tenancy.DefaultTenantSlug = oldCfg.Tenancy.DefaultTenantSlug
+	candidateCfg.ObjectStorage = oldCfg.ObjectStorage
+	candidateCfg.Archival.StorageBucket = oldCfg.Archival.StorageBucket
+	candidateCfg.Archival.StoragePrefix = oldCfg.Archival.StoragePrefix
+	candidateCfg.Archival.StorageClass = oldCfg.Archival.StorageClass
+	candidateCfg.Dedupe = oldCfg.Dedupe
 }

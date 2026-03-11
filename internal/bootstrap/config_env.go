@@ -383,6 +383,16 @@ func (cfg *Config) CallbackRateLimitPerMinute() int {
 	return cfg.CallbackRateLimit.PerMinute
 }
 
+// DedupeTTL returns the deduplication TTL as a time.Duration.
+// Returns a default of 1 hour if configured value is non-positive.
+func (cfg *Config) DedupeTTL() time.Duration {
+	if cfg == nil || cfg.Dedupe.TTLSec <= 0 {
+		return time.Hour
+	}
+
+	return time.Duration(cfg.Dedupe.TTLSec) * time.Second
+}
+
 // SchedulerInterval returns the scheduler worker poll interval as a time.Duration.
 // Returns a default of 1 minute if configured value is non-positive.
 func (cfg *Config) SchedulerInterval() time.Duration {

@@ -259,6 +259,41 @@ func TestArchivalWorker_StartStop(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestArchivalWorker_StartStopStartStop_Success(t *testing.T) {
+	t.Parallel()
+
+	deps := setupTestDeps(t)
+	defer deps.ctrl.Finish()
+
+	deps.archiveRepo.EXPECT().ListIncomplete(gomock.Any()).Return(nil, nil).AnyTimes()
+
+	w, err := NewArchivalWorker(
+		deps.archiveRepo,
+		deps.partitionMgr,
+		deps.storage,
+		deps.db,
+		deps.provider,
+		deps.cfg,
+		deps.logger,
+	)
+	require.NoError(t, err)
+
+	deps.sqlMock.ExpectQuery("SELECT nspname FROM pg_namespace").WillReturnRows(sqlmock.NewRows([]string{"nspname"}))
+	deps.sqlMock.ExpectQuery("SELECT nspname FROM pg_namespace").WillReturnRows(sqlmock.NewRows([]string{"nspname"}))
+
+	ctx := context.Background()
+	require.NoError(t, w.Start(ctx))
+	require.Eventually(t, func() bool {
+		return w.running.Load()
+	}, 500*time.Millisecond, 10*time.Millisecond)
+	require.NoError(t, w.Stop())
+	require.NoError(t, w.Start(ctx))
+	require.Eventually(t, func() bool {
+		return deps.sqlMock.ExpectationsWereMet() == nil
+	}, 2*time.Second, 10*time.Millisecond)
+	require.NoError(t, w.Stop())
+}
+
 func TestArchivalWorker_StopWithoutStart(t *testing.T) {
 	t.Parallel()
 

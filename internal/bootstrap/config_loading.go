@@ -45,7 +45,7 @@ func LoadConfigWithLogger(logger libLog.Logger) (*Config, error) {
 
 	yamlSnapshot := *cfg
 
-	if err := asserter.NoError(ctx, loadConfigFromEnv(cfg), "failed to load config from environment variables"); err != nil {
+	if err := asserter.NoError(ctx, loadConfigFromEnvForStartup(cfg), "failed to load config from environment variables"); err != nil {
 		return nil, fmt.Errorf("load config: %w", err)
 	}
 
@@ -181,14 +181,20 @@ func sanitizeEnvVarsForStruct(structType reflect.Type) {
 	}
 }
 
+func loadConfigFromEnvForStartup(cfg *Config) error {
+	// Trim trailing whitespace from all config-related env vars before parsing.
+	// This is safe during bootstrap because it happens before background goroutines
+	// are started and preserves compatibility with `.env` files that include
+	// inline comments or trailing spaces.
+	sanitizeEnvVarsForConfig()
+
+	return loadConfigFromEnv(cfg)
+}
+
 func loadConfigFromEnv(cfg *Config) error {
 	if cfg == nil {
 		return ErrConfigNil
 	}
-
-	// Trim trailing whitespace from all config-related env vars before parsing.
-	// Prevents strconv.Atoi failures from inline .env comments loaded by Make.
-	sanitizeEnvVarsForConfig()
 
 	var loadErr error
 

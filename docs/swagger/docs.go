@@ -2877,6 +2877,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/http.ErrorResponse"
                         }
+                    },
+                    "503": {
+                        "description": "Export worker disabled",
+                        "schema": {
+                            "$ref": "#/definitions/http.ErrorResponse"
+                        }
                     }
                 }
             }
@@ -12331,12 +12337,12 @@ const docTemplate = `{
                     ]
                 },
                 "currentValue": {
-                    "description": "Current effective value (redacted for secrets)",
+                    "description": "Current effective value (redacted for secrets), serialized as a string.",
                     "type": "string",
                     "example": "200"
                 },
                 "defaultValue": {
-                    "description": "Default value",
+                    "description": "Default value serialized as a string for a stable OpenAPI contract.",
                     "type": "string",
                     "example": "100"
                 },
@@ -12397,9 +12403,9 @@ const docTemplate = `{
                     "example": "system"
                 },
                 "changeType": {
-                    "description": "Type of change: \"reload\", \"update\", \"startup\"",
+                    "description": "Type of change: \"reloaded\", \"updated\", \"startup\"",
                     "type": "string",
-                    "example": "update"
+                    "example": "updated"
                 },
                 "changes": {
                     "description": "Changed fields with old/new values",
