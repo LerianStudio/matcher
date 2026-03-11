@@ -8,8 +8,12 @@ package bootstrap
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
+	libRabbitmq "github.com/LerianStudio/lib-commons/v4/commons/rabbitmq"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -125,6 +129,54 @@ func TestResolveRabbitMQCheck_CustomCheckUsed(t *testing.T) {
 	fn, ok := resolveRabbitMQCheck(deps)
 	assert.NotNil(t, fn)
 	assert.True(t, ok)
+}
+
+func TestResolveRabbitMQCheck_SkipsInsecureHTTPProbeWhenPolicyDisallowsIt(t *testing.T) {
+	t.Parallel()
+
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	deps := &HealthDependencies{
+		RabbitMQ: &libRabbitmq.RabbitMQConnection{
+			HealthCheckURL:           server.URL,
+			AllowInsecureHealthCheck: false,
+		},
+	}
+
+	fn, ok := resolveRabbitMQCheck(deps)
+	assert.True(t, ok)
+	assert.NotNil(t, fn)
+	assert.Error(t, fn(context.Background()))
+	assert.Equal(t, int32(0), requests.Load())
+}
+
+func TestResolveRabbitMQCheck_UsesHTTPProbeWhenAllowed(t *testing.T) {
+	t.Parallel()
+
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	deps := &HealthDependencies{
+		RabbitMQ: &libRabbitmq.RabbitMQConnection{
+			HealthCheckURL:           server.URL,
+			AllowInsecureHealthCheck: true,
+		},
+	}
+
+	fn, ok := resolveRabbitMQCheck(deps)
+	assert.True(t, ok)
+	assert.NotNil(t, fn)
+	assert.NoError(t, fn(context.Background()))
+	assert.Equal(t, int32(1), requests.Load())
 }
 
 func TestResolveObjectStorageCheck_NilDeps(t *testing.T) {

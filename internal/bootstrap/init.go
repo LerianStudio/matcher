@@ -690,10 +690,6 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		tenantExtractor:    tenantExtractor,
 		outboxRunner:       modules.outboxDispatcher,
 		dbMetricsCollector: dbMetricsCollector,
-		exportWorker:       modules.exportWorker,
-		cleanupWorker:      modules.cleanupWorker,
-		archivalWorker:     modules.archivalWorker,
-		schedulerWorker:    modules.schedulerWorker,
 		workerManager:      workerMgr,
 		connectionManager:  connCloser,
 		cleanupFuncs:       cleanups,
@@ -827,6 +823,17 @@ func checkClientConnected[T interface{ IsConnected() (bool, error) }](client T) 
 	return connected
 }
 
+func buildWorkerStatus(cfg *Config, modules *modulesResult) (export, cleanup, archival, scheduler bool) {
+	if modules == nil {
+		return false, false, false, false
+	}
+
+	return modules.exportWorker != nil && cfg.ExportWorker.Enabled,
+		modules.cleanupWorker != nil && cfg.CleanupWorker.Enabled,
+		modules.archivalWorker != nil && cfg.Archival.Enabled,
+		modules.schedulerWorker != nil
+}
+
 func buildInfraStatus(
 	cfg *Config,
 	postgres *libPostgres.Client,
@@ -838,6 +845,7 @@ func buildInfraStatus(
 ) *InfraStatus {
 	pgConnected := postgres != nil && checkClientConnected(postgres)
 	redisConnected := redis != nil && checkClientConnected(redis)
+	exportEnabled, cleanupEnabled, archivalEnabled, schedulerEnabled := buildWorkerStatus(cfg, modules)
 
 	status := &InfraStatus{
 		PostgresConnected:      pgConnected,
@@ -845,10 +853,10 @@ func buildInfraStatus(
 		RabbitMQConnected:      rabbitmq != nil && rabbitmq.Channel != nil,
 		HasReplica:             cfg.Postgres.ReplicaHost != "" && cfg.Postgres.ReplicaHost != cfg.Postgres.PrimaryHost,
 		ObjectStorageEnabled:   healthDeps != nil && healthDeps.ObjectStorage != nil,
-		ExportWorkerEnabled:    modules != nil && modules.exportWorker != nil,
-		CleanupWorkerEnabled:   modules != nil && modules.cleanupWorker != nil,
-		ArchivalWorkerEnabled:  modules != nil && modules.archivalWorker != nil,
-		SchedulerWorkerEnabled: modules != nil && modules.schedulerWorker != nil,
+		ExportWorkerEnabled:    exportEnabled,
+		CleanupWorkerEnabled:   cleanupEnabled,
+		ArchivalWorkerEnabled:  archivalEnabled,
+		SchedulerWorkerEnabled: schedulerEnabled,
 		TelemetryConfigured:    cfg.Telemetry.Enabled,
 		TelemetryActive:        telemetry != nil && telemetry.EnableTelemetry,
 	}
@@ -1865,21 +1873,18 @@ func createIdempotencyRepository(
 	return sharedHTTP.NewIdempotencyRepositoryAdapter(exceptionIdempotencyRepo)
 }
 
-// createObjectStorage initialises the S3/MinIO client when a bucket is configured.
-// The S3 client is created regardless of ExportWorker.Enabled — the WorkerManager
-// controls worker lifecycle at the manager level. This allows dynamic enabling of
-// the export worker via hot-reload without requiring a restart to initialise S3.
-// Operators who do not have object storage should set OBJECT_STORAGE_BUCKET="" rather
-// than relying on EXPORT_WORKER_ENABLED=false to skip S3 initialisation.
+// createObjectStorage initialises the S3/MinIO client only when the reporting
+// background workers actually need it at startup.
 func createObjectStorage(
 	cfg *Config,
 	_ libLog.Logger,
 ) (reportingPorts.ObjectStorageClient, error) {
-	if cfg.ObjectStorage.Bucket == "" {
-		if !cfg.ExportWorker.Enabled {
-			return nil, nil
-		}
+	needsReportingStorage := cfg.ExportWorker.Enabled || cfg.CleanupWorker.Enabled
+	if !needsReportingStorage {
+		return nil, nil
+	}
 
+	if cfg.ObjectStorage.Bucket == "" {
 		return nil, ErrObjectStorageBucketRequired
 	}
 
@@ -2176,6 +2181,7 @@ func initReportingModule(
 	return initExportWorkers(
 		routes,
 		cfg,
+		configGetter,
 		exportJobRepository,
 		reportRepository,
 		storage,
@@ -2188,6 +2194,7 @@ func initReportingModule(
 func initExportWorkers(
 	routes *Routes,
 	cfg *Config,
+	configGetter func() *Config,
 	exportJobRepository *reportExportJob.Repository,
 	reportRepository *reportRepo.Repository,
 	storage reportingPorts.ObjectStorageClient,
@@ -2214,6 +2221,23 @@ func initExportWorkers(
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("create export job handler: %w", err)
+	}
+
+	if configGetter != nil {
+		exportJobHandler.SetRuntimeConfigGetter(func() reportingHTTP.ExportJobRuntimeConfig {
+			runtimeCfg := configGetter()
+			if runtimeCfg == nil {
+				return reportingHTTP.ExportJobRuntimeConfig{
+					Enabled:       cfg.ExportWorker.Enabled,
+					PresignExpiry: cfg.ExportPresignExpiry(),
+				}
+			}
+
+			return reportingHTTP.ExportJobRuntimeConfig{
+				Enabled:       runtimeCfg.ExportWorker.Enabled,
+				PresignExpiry: runtimeCfg.ExportPresignExpiry(),
+			}
+		})
 	}
 
 	if err := reportingHTTP.RegisterExportJobRoutes(routes.Protected, exportJobHandler, exportLimiter); err != nil {
@@ -2692,7 +2716,8 @@ func formatWorkerStatus(enabled bool, interval time.Duration) string {
 
 // initArchivalComponents initializes the archival worker and archive retrieval routes.
 // Archive routes are registered when archival storage is available (even if the worker is disabled),
-// allowing users to query existing archives. The worker is only constructed when cfg.Archival.Enabled is true.
+// allowing users to query existing archives. When dependencies are available, the
+// worker is constructed regardless of enabled state so WorkerManager can hot-enable it later.
 //
 // A dedicated *sql.DB connection pool is created for archival operations because:
 // 1. lib-commons postgres.Client.Resolver() returns dbresolver.DB (not *sql.DB)
@@ -2731,11 +2756,11 @@ func initArchivalComponents(
 		}
 	}
 
-	if !cfg.Archival.Enabled {
-		return nil, nil
-	}
-
 	if archivalStorage == nil {
+		if !cfg.Archival.Enabled {
+			return nil, nil
+		}
+
 		return nil, ErrArchivalStorageRequired
 	}
 

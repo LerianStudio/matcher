@@ -577,6 +577,22 @@ func TestWorkerManager_FactoryReturnsNil(t *testing.T) {
 	require.NoError(t, wm.Stop())
 }
 
+func TestWorkerManager_FactoryReturnsTypedNil(t *testing.T) {
+	t.Parallel()
+
+	logger := &libLog.NopLogger{}
+
+	wm := NewWorkerManager(logger, nil)
+	wm.Register("typednil", func(_ *Config) (WorkerLifecycle, error) {
+		var worker *mockWorker
+		return worker, nil
+	}, alwaysEnabled, alwaysCritical)
+
+	err := wm.Start(context.Background(), newTestConfig())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "worker dependency unavailable")
+}
+
 func TestWorkerConfigChanged(t *testing.T) {
 	t.Parallel()
 
@@ -641,15 +657,6 @@ func TestWorkerConfigChanged(t *testing.T) {
 		assert.True(t, workerConfigChanged("scheduler", old, new_))
 	})
 
-	t.Run("detects discovery (fetcher) config change", func(t *testing.T) {
-		t.Parallel()
-
-		old := newTestConfig()
-		new_ := newTestConfig()
-		new_.Fetcher.DiscoveryIntervalSec = 120
-
-		assert.True(t, workerConfigChanged("discovery", old, new_))
-	})
 }
 
 func TestExtractWorkerConfig(t *testing.T) {
@@ -689,15 +696,6 @@ func TestExtractWorkerConfig(t *testing.T) {
 
 		result := extractWorkerConfig("scheduler", cfg)
 		_, ok := result.(SchedulerConfig)
-
-		assert.True(t, ok)
-	})
-
-	t.Run("returns FetcherConfig for discovery", func(t *testing.T) {
-		t.Parallel()
-
-		result := extractWorkerConfig("discovery", cfg)
-		_, ok := result.(FetcherConfig)
 
 		assert.True(t, ok)
 	})
@@ -748,10 +746,18 @@ func TestWorkerManager_ConcurrentAccess(t *testing.T) {
 
 	logger := &libLog.NopLogger{}
 	cfg := newTestConfig()
+	createCount := atomic.Int32{}
+	workers := make([]*mockWorker, 0, 8)
+	var workersMu sync.Mutex
 
 	wm := NewWorkerManager(logger, nil)
-	wm.Register("concurrent-worker", func(_ *Config) (WorkerLifecycle, error) {
-		return &mockWorker{}, nil
+	wm.Register("export", func(_ *Config) (WorkerLifecycle, error) {
+		worker := &mockWorker{}
+		createCount.Add(1)
+		workersMu.Lock()
+		workers = append(workers, worker)
+		workersMu.Unlock()
+		return worker, nil
 	}, alwaysEnabled, neverCritical)
 
 	// Start first so there's state for goroutines to contend on.
@@ -779,7 +785,7 @@ func TestWorkerManager_ConcurrentAccess(t *testing.T) {
 			case 2:
 				// Trigger config change handler.
 				newCfg := newTestConfig()
-				newCfg.ExportWorker.PollIntervalSec = n
+				newCfg.ExportWorker.PollIntervalSec = cfg.ExportWorker.PollIntervalSec + n + 1
 				wm.onConfigChange(newCfg)
 			case 3:
 				// Read running workers again (different timing).
@@ -795,10 +801,21 @@ func TestWorkerManager_ConcurrentAccess(t *testing.T) {
 		require.NoError(t, startErr)
 	}
 
-	// The test passes if no panics occurred during concurrent access.
-	// Stop to clean up.
+	running := wm.RunningWorkers()
+	assert.Equal(t, []string{"export"}, running)
+	assert.GreaterOrEqual(t, createCount.Load(), int32(1))
+
+	workersMu.Lock()
+	createdWorkers := append([]*mockWorker(nil), workers...)
+	workersMu.Unlock()
+
 	err = wm.Stop()
 	require.NoError(t, err)
+
+	for _, worker := range createdWorkers {
+		assert.Equal(t, 1, worker.startCount())
+		assert.Equal(t, 1, worker.stopCount())
+	}
 }
 
 func TestWorkerManager_RestartWhenFactoryReturnsSameInstance(t *testing.T) {
@@ -828,6 +845,42 @@ func TestWorkerManager_RestartWhenFactoryReturnsSameInstance(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestWorkerManager_EnableSameInstance_AppliesRuntimeConfigBeforeStart(t *testing.T) {
+	t.Parallel()
+
+	initialCfg := newTestConfig()
+	initialCfg.ExportWorker.Enabled = false
+
+	worker := &runtimeAwareExportWorker{}
+	wm := NewWorkerManager(&libLog.NopLogger{}, nil)
+	wm.Register("export", func(_ *Config) (WorkerLifecycle, error) {
+		return worker, nil
+	}, func(cfg *Config) bool {
+		return cfg != nil && cfg.ExportWorker.Enabled
+	}, alwaysCritical)
+
+	require.NoError(t, wm.Start(context.Background(), initialCfg))
+	assert.Equal(t, 0, worker.startCount())
+
+	enabledCfg := newTestConfig()
+	enabledCfg.ExportWorker.Enabled = true
+	enabledCfg.ExportWorker.PollIntervalSec = initialCfg.ExportWorker.PollIntervalSec + 7
+	enabledCfg.ExportWorker.PageSize = initialCfg.ExportWorker.PageSize + 50
+
+	wm.onConfigChange(enabledCfg)
+
+	events := worker.events()
+	require.GreaterOrEqual(t, len(events), 2)
+	assert.Equal(t, []string{"update", "start"}, events[len(events)-2:])
+
+	updates := worker.lastUpdates()
+	require.Len(t, updates, 1)
+	assert.Equal(t, enabledCfg.ExportWorkerPollInterval(), updates[0].PollInterval)
+	assert.Equal(t, enabledCfg.ExportWorker.PageSize, updates[0].PageSize)
+
+	require.NoError(t, wm.Stop())
+}
+
 func TestWorkerManager_RestartSameInstance_AppliesRuntimeConfigAfterStop(t *testing.T) {
 	t.Parallel()
 
@@ -852,9 +905,11 @@ func TestWorkerManager_RestartSameInstance_AppliesRuntimeConfigAfterStop(t *test
 	assert.Equal(t, []string{"stop", "update", "start"}, events[len(events)-3:])
 
 	updates := worker.lastUpdates()
-	require.Len(t, updates, 1)
-	assert.Equal(t, updatedCfg.ExportWorkerPollInterval(), updates[0].PollInterval)
-	assert.Equal(t, updatedCfg.ExportWorker.PageSize, updates[0].PageSize)
+	require.Len(t, updates, 2)
+	assert.Equal(t, cfg.ExportWorkerPollInterval(), updates[0].PollInterval)
+	assert.Equal(t, cfg.ExportWorker.PageSize, updates[0].PageSize)
+	assert.Equal(t, updatedCfg.ExportWorkerPollInterval(), updates[1].PollInterval)
+	assert.Equal(t, updatedCfg.ExportWorker.PageSize, updates[1].PageSize)
 
 	require.NoError(t, wm.Stop())
 }
@@ -881,13 +936,46 @@ func TestWorkerManager_RestartRollback_ReappliesPreviousRuntimeConfig(t *testing
 	wm.onConfigChange(updatedCfg)
 
 	updates := worker.lastUpdates()
-	require.Len(t, updates, 2)
-	assert.Equal(t, updatedCfg.ExportWorkerPollInterval(), updates[0].PollInterval)
-	assert.Equal(t, updatedCfg.ExportWorker.PageSize, updates[0].PageSize)
-	assert.Equal(t, cfg.ExportWorkerPollInterval(), updates[1].PollInterval)
-	assert.Equal(t, cfg.ExportWorker.PageSize, updates[1].PageSize)
+	require.Len(t, updates, 3)
+	assert.Equal(t, cfg.ExportWorkerPollInterval(), updates[0].PollInterval)
+	assert.Equal(t, cfg.ExportWorker.PageSize, updates[0].PageSize)
+	assert.Equal(t, updatedCfg.ExportWorkerPollInterval(), updates[1].PollInterval)
+	assert.Equal(t, updatedCfg.ExportWorker.PageSize, updates[1].PageSize)
+	assert.Equal(t, cfg.ExportWorkerPollInterval(), updates[2].PollInterval)
+	assert.Equal(t, cfg.ExportWorker.PageSize, updates[2].PageSize)
 
 	assert.Equal(t, []string{"export"}, wm.RunningWorkers())
+
+	// The same updated config should still be treated as unapplied after rollback.
+	wm.onConfigChange(updatedCfg)
+	assert.GreaterOrEqual(t, worker.startCount(), 2)
+	assert.Equal(t, []string{"export"}, wm.RunningWorkers())
+
+	require.NoError(t, wm.Stop())
+}
+
+func TestWorkerManager_Start_UsesLatestConfigManagerSnapshot(t *testing.T) {
+	t.Parallel()
+
+	initialCfg := newTestConfig()
+	initialCfg.ExportWorker.Enabled = false
+
+	latestCfg := newTestConfig()
+	latestCfg.ExportWorker.Enabled = true
+
+	cm := newWorkerMgrTestConfigManager(t, initialCfg)
+	cm.config.Store(latestCfg)
+
+	worker := &mockWorker{}
+	wm := NewWorkerManager(&libLog.NopLogger{}, cm)
+	wm.Register("export", func(_ *Config) (WorkerLifecycle, error) {
+		return worker, nil
+	}, func(cfg *Config) bool {
+		return cfg != nil && cfg.ExportWorker.Enabled
+	}, alwaysCritical)
+
+	require.NoError(t, wm.Start(context.Background(), initialCfg))
+	assert.Equal(t, 1, worker.startCount())
 	require.NoError(t, wm.Stop())
 }
 

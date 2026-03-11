@@ -43,6 +43,7 @@ type workerSlot struct {
 	name     string
 	factory  WorkerFactory
 	instance WorkerLifecycle
+	lastCfg  *Config
 	critical func(cfg *Config) bool // returns true if this worker is critical given the config
 	enabled  func(cfg *Config) bool // returns true if this worker should be running given the config
 }
@@ -122,20 +123,36 @@ func (wm *WorkerManager) Start(ctx context.Context, cfg *Config) error {
 	workerCtx, cancel := context.WithCancel(ctx)
 	wm.parentCtx = workerCtx
 	wm.cancel = cancel
-	wm.lastCfg = cfg
 	wm.running = true
+
+	if wm.configManager != nil {
+		wm.unsubscribe = wm.configManager.SubscribeWithUnsubscribeErr(wm.onConfigChange)
+		if latestCfg := wm.configManager.Get(); latestCfg != nil {
+			cfg = latestCfg
+		}
+	}
+
+	wm.lastCfg = cfg
 
 	if err := wm.startEnabledWorkersLocked(workerCtx, cfg); err != nil {
 		// On critical failure, stop any workers that did start.
 		wm.stopAllWorkersLocked(workerCtx)
+
+		if wm.cancel != nil {
+			wm.cancel()
+		}
+
+		if wm.unsubscribe != nil {
+			wm.unsubscribe()
+			wm.unsubscribe = nil
+		}
+
+		wm.parentCtx = nil
+		wm.cancel = nil
+		wm.lastCfg = nil
 		wm.running = false
 
 		return err
-	}
-
-	// Subscribe to config changes for hot-reload.
-	if wm.configManager != nil {
-		wm.unsubscribe = wm.configManager.SubscribeWithUnsubscribe(wm.onConfigChange)
 	}
 
 	return nil
@@ -154,6 +171,7 @@ func (wm *WorkerManager) Stop() error {
 
 	if wm.cancel != nil {
 		wm.cancel()
+		wm.cancel = nil
 	}
 
 	if wm.unsubscribe != nil {
@@ -162,6 +180,7 @@ func (wm *WorkerManager) Stop() error {
 	}
 
 	wm.running = false
+	wm.parentCtx = nil
 
 	return nil
 }
@@ -175,7 +194,7 @@ func (wm *WorkerManager) RunningWorkers() []string {
 	names := make([]string, 0)
 
 	for _, slot := range wm.slots {
-		if slot.instance != nil {
+		if !isNilWorkerLifecycle(slot.instance) {
 			names = append(names, slot.name)
 		}
 	}
@@ -186,7 +205,7 @@ func (wm *WorkerManager) RunningWorkers() []string {
 // onConfigChange is the subscriber callback invoked by ConfigManager after
 // every successful config reload. It compares the worker-relevant config
 // sections and restarts workers whose config actually changed.
-func (wm *WorkerManager) onConfigChange(newCfg *Config) {
+func (wm *WorkerManager) onConfigChange(newCfg *Config) error {
 	defer runtime.RecoverAndLogWithContext(
 		context.Background(),
 		wm.logger,
@@ -198,7 +217,7 @@ func (wm *WorkerManager) onConfigChange(newCfg *Config) {
 	defer wm.mu.Unlock()
 
 	if !wm.running || newCfg == nil {
-		return
+		return nil
 	}
 
 	// Use parentCtx for worker lifecycle operations (Start needs a cancellable ctx).
@@ -207,12 +226,17 @@ func (wm *WorkerManager) onConfigChange(newCfg *Config) {
 		ctx = context.Background()
 	}
 
-	oldCfg := wm.lastCfg
-	wm.lastCfg = newCfg
+	var reconcileErr error
 
 	for _, slot := range wm.slots {
-		wm.reconcileSlotLocked(ctx, slot, oldCfg, newCfg)
+		if err := wm.reconcileSlotLocked(ctx, slot, newCfg); err != nil {
+			reconcileErr = errors.Join(reconcileErr, err)
+		}
 	}
+
+	wm.lastCfg = newCfg
+
+	return reconcileErr
 }
 
 // startEnabledWorkersLocked starts all workers that are enabled in the given config.
@@ -251,15 +275,18 @@ func (wm *WorkerManager) startSlotLocked(ctx context.Context, slot *workerSlot, 
 		return fmt.Errorf("create worker %q: %w", slot.name, err)
 	}
 
-	if worker == nil {
+	if isNilWorkerLifecycle(worker) {
 		return fmt.Errorf("worker %q: %w", slot.name, errWorkerDependencyUnavailable)
 	}
+
+	applyWorkerRuntimeConfig(ctx, slot.name, worker, cfg)
 
 	if err := worker.Start(ctx); err != nil {
 		return fmt.Errorf("start worker %q: %w", slot.name, err)
 	}
 
 	slot.instance = worker
+	slot.lastCfg = cfg
 
 	wm.logger.Log(ctx, libLog.LevelInfo,
 		fmt.Sprintf("worker %q started", slot.name))
@@ -269,7 +296,8 @@ func (wm *WorkerManager) startSlotLocked(ctx context.Context, slot *workerSlot, 
 
 // stopSlotLocked stops a single worker slot. Caller must hold wm.mu.
 func (wm *WorkerManager) stopSlotLocked(ctx context.Context, slot *workerSlot) {
-	if slot.instance == nil {
+	if isNilWorkerLifecycle(slot.instance) {
+		slot.instance = nil
 		return
 	}
 
@@ -310,7 +338,7 @@ func isSlotCritical(slot *workerSlot, cfg *Config) bool {
 }
 
 func sameWorkerInstance(a, other WorkerLifecycle) bool {
-	if a == nil || other == nil {
+	if isNilWorkerLifecycle(a) || isNilWorkerLifecycle(other) {
 		return false
 	}
 
@@ -322,4 +350,17 @@ func sameWorkerInstance(a, other WorkerLifecycle) bool {
 	}
 
 	return av.Pointer() == otherVal.Pointer()
+}
+
+func isNilWorkerLifecycle(worker WorkerLifecycle) bool {
+	if worker == nil {
+		return true
+	}
+
+	value := reflect.ValueOf(worker)
+	if value.Kind() != reflect.Pointer {
+		return false
+	}
+
+	return value.IsNil()
 }

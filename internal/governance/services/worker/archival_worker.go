@@ -102,11 +102,11 @@ func (aw *ArchivalWorker) prepareRunState() {
 
 	aw.stopOnce = sync.Once{}
 
-	if chanutil.Closed(aw.stopCh) {
+	if chanutil.ClosedSignalChannel(aw.stopCh) {
 		aw.stopCh = make(chan struct{})
 	}
 
-	if chanutil.Closed(aw.doneCh) {
+	if chanutil.ClosedSignalChannel(aw.doneCh) {
 		aw.doneCh = make(chan struct{})
 	}
 }

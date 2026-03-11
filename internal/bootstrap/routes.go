@@ -64,7 +64,7 @@ func RegisterRoutes(
 	}
 
 	app.Get("/health", healthHandler)
-	app.Get("/ready", readinessHandler(cfg, deps, logger))
+	app.Get("/ready", readinessHandler(cfg, configGetter, deps, logger))
 
 	if cfg.Swagger.Enabled && !IsProductionEnvironment(cfg.App.EnvName) {
 		// Override the generated spec host when SWAGGER_HOST is set.

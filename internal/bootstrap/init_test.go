@@ -29,9 +29,11 @@ import (
 	libRabbitmq "github.com/LerianStudio/lib-commons/v4/commons/rabbitmq"
 
 	"github.com/LerianStudio/matcher/internal/auth"
+	governanceWorker "github.com/LerianStudio/matcher/internal/governance/services/worker"
 	ingestionRabbitmq "github.com/LerianStudio/matcher/internal/ingestion/adapters/rabbitmq"
 	matchingRabbitmq "github.com/LerianStudio/matcher/internal/matching/adapters/rabbitmq"
 	reportingStorage "github.com/LerianStudio/matcher/internal/reporting/adapters/storage"
+	reportingWorker "github.com/LerianStudio/matcher/internal/reporting/services/worker"
 	sharedRabbitmq "github.com/LerianStudio/matcher/internal/shared/adapters/rabbitmq"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 )
@@ -1294,6 +1296,28 @@ func TestBuildInfraStatus(t *testing.T) {
 		assert.Equal(t, "standalone", status.RedisMode)
 	})
 
+	t.Run("worker status follows effective enablement not object existence", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := &Config{
+			ExportWorker:  ExportWorkerConfig{Enabled: false},
+			CleanupWorker: CleanupWorkerConfig{Enabled: false},
+			Archival:      ArchivalConfig{Enabled: false},
+		}
+
+		modules := &modulesResult{
+			exportWorker:   &reportingWorker.ExportWorker{},
+			cleanupWorker:  &reportingWorker.CleanupWorker{},
+			archivalWorker: &governanceWorker.ArchivalWorker{},
+		}
+
+		status := buildInfraStatus(cfg, nil, nil, nil, modules, nil, nil)
+
+		assert.False(t, status.ExportWorkerEnabled)
+		assert.False(t, status.CleanupWorkerEnabled)
+		assert.False(t, status.ArchivalWorkerEnabled)
+	})
+
 	t.Run("same primary and replica host means no replica", func(t *testing.T) {
 		t.Parallel()
 
@@ -1432,6 +1456,22 @@ func TestCreateObjectStorage_EnabledWithoutBucket(t *testing.T) {
 		ObjectStorage: ObjectStorageConfig{
 			Bucket: "",
 		},
+	}
+
+	client, err := createObjectStorage(cfg, &libLog.NopLogger{})
+
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, ErrObjectStorageBucketRequired)
+	assert.Nil(t, client)
+}
+
+func TestCreateObjectStorage_CleanupEnabledWithoutBucket(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		ExportWorker:  ExportWorkerConfig{Enabled: false},
+		CleanupWorker: CleanupWorkerConfig{Enabled: true},
+		ObjectStorage: ObjectStorageConfig{Bucket: ""},
 	}
 
 	client, err := createObjectStorage(cfg, &libLog.NopLogger{})

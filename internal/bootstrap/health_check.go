@@ -132,17 +132,26 @@ func healthHandler(c *fiber.Ctx) error {
 //	@Failure		503	{object}	ReadinessResponse	"Service is not ready (degraded state)"
 //	@Router			/ready [get]
 //	@ID				getReady
-func readinessHandler(cfg *Config, deps *HealthDependencies, logger libLog.Logger) fiber.Handler {
-	// Derive per-check timeout from config; fall back to the default constant.
-	var healthCheckTimeout time.Duration
-	if cfg != nil && cfg.Infrastructure.HealthCheckTimeoutSec > 0 {
-		healthCheckTimeout = time.Duration(cfg.Infrastructure.HealthCheckTimeoutSec) * time.Second
-	}
-
+func readinessHandler(initialCfg *Config, configGetter func() *Config, deps *HealthDependencies, logger libLog.Logger) fiber.Handler {
 	return func(fiberCtx *fiber.Ctx) error {
 		ctx := fiberCtx.UserContext()
 		if ctx == nil {
 			ctx = context.Background()
+		}
+
+		cfg := initialCfg
+
+		if configGetter != nil {
+			if runtimeCfg := configGetter(); runtimeCfg != nil {
+				cfg = runtimeCfg
+			}
+		}
+
+		// Derive per-check timeout from the current effective config; fall back to
+		// the default in applyReadinessCheck when zero/non-positive.
+		var healthCheckTimeout time.Duration
+		if cfg != nil && cfg.Infrastructure.HealthCheckTimeoutSec > 0 {
+			healthCheckTimeout = time.Duration(cfg.Infrastructure.HealthCheckTimeoutSec) * time.Second
 		}
 
 		status, readyStatus, checks := evaluateReadinessChecksWithTimeout(ctx, deps, logger, healthCheckTimeout)

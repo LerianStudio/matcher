@@ -104,11 +104,11 @@ func (worker *CleanupWorker) prepareRunState() {
 
 	worker.stopOnce = sync.Once{}
 
-	if chanutil.Closed(worker.stopCh) {
+	if chanutil.ClosedSignalChannel(worker.stopCh) {
 		worker.stopCh = make(chan struct{})
 	}
 
-	if chanutil.Closed(worker.doneCh) {
+	if chanutil.ClosedSignalChannel(worker.doneCh) {
 		worker.doneCh = make(chan struct{})
 	}
 }

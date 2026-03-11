@@ -53,7 +53,16 @@ var (
 	ErrDateRangeInvalid = errors.New("dateFrom must be before or equal to dateTo")
 	// ErrAsyncExportDateRangeExceeded indicates the date range exceeds the maximum for async export jobs.
 	ErrAsyncExportDateRangeExceeded = errors.New("date range exceeds maximum allowed for export jobs")
+	// ErrExportWorkerDisabled indicates async export job creation is unavailable.
+	ErrExportWorkerDisabled = errors.New("export worker is disabled")
 )
+
+// ExportJobRuntimeConfig controls runtime-sensitive handler behavior without
+// coupling the reporting package to bootstrap internals.
+type ExportJobRuntimeConfig struct {
+	Enabled       bool
+	PresignExpiry time.Duration
+}
 
 // ExportJobHandlers provides HTTP handlers for export job operations.
 type ExportJobHandlers struct {
@@ -62,6 +71,7 @@ type ExportJobHandlers struct {
 	storage         ports.ObjectStorageClient
 	contextVerifier libHTTP.TenantOwnershipVerifier
 	presignExpiry   time.Duration
+	runtimeConfig   func() ExportJobRuntimeConfig
 }
 
 // NewExportJobHandlers creates a new ExportJobHandlers instance.
@@ -103,6 +113,39 @@ func NewExportJobHandlers(
 		contextVerifier: verifier,
 		presignExpiry:   presignExpiry,
 	}, nil
+}
+
+// SetRuntimeConfigGetter allows bootstrap to inject live runtime settings.
+func (handler *ExportJobHandlers) SetRuntimeConfigGetter(getter func() ExportJobRuntimeConfig) {
+	if handler != nil {
+		handler.runtimeConfig = getter
+	}
+}
+
+func (handler *ExportJobHandlers) currentRuntimeConfig() ExportJobRuntimeConfig {
+	config := ExportJobRuntimeConfig{
+		Enabled:       true,
+		PresignExpiry: entities.DefaultPresignExpiry,
+	}
+
+	if handler == nil {
+		return config
+	}
+
+	if handler.presignExpiry > 0 {
+		config.PresignExpiry = handler.presignExpiry
+	}
+
+	if handler.runtimeConfig == nil {
+		return config
+	}
+
+	runtimeConfig := handler.runtimeConfig()
+	if runtimeConfig.PresignExpiry <= 0 {
+		runtimeConfig.PresignExpiry = config.PresignExpiry
+	}
+
+	return runtimeConfig
 }
 
 // CreateExportJobRequest represents the request body for creating an export job.
@@ -297,6 +340,15 @@ func (handler *ExportJobHandlers) CreateExportJob(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startExportJobSpan(fiberCtx, "handler.export_job.create")
 
 	defer span.End()
+
+	if !handler.currentRuntimeConfig().Enabled {
+		return libHTTP.RespondError(
+			fiberCtx,
+			fiber.StatusServiceUnavailable,
+			"export_worker_disabled",
+			ErrExportWorkerDisabled.Error(),
+		)
+	}
 
 	contextID, tenantID, err := libHTTP.ParseAndVerifyTenantScopedID(
 		fiberCtx,
@@ -651,7 +703,9 @@ func (handler *ExportJobHandlers) DownloadExportJob(fiberCtx *fiber.Ctx) error {
 		)
 	}
 
-	downloadURL, err := handler.storage.GeneratePresignedURL(ctx, job.FileKey, handler.presignExpiry)
+	runtimeConfig := handler.currentRuntimeConfig()
+
+	downloadURL, err := handler.storage.GeneratePresignedURL(ctx, job.FileKey, runtimeConfig.PresignExpiry)
 	if err != nil {
 		logSpanError(ctx, span, logger, "failed to generate download URL", err)
 
@@ -662,7 +716,7 @@ func (handler *ExportJobHandlers) DownloadExportJob(fiberCtx *fiber.Ctx) error {
 		DownloadURL: downloadURL,
 		FileName:    job.FileName,
 		SHA256:      job.SHA256,
-		ExpiresIn:   int(handler.presignExpiry.Seconds()),
+		ExpiresIn:   int(runtimeConfig.PresignExpiry.Seconds()),
 	})
 }
 

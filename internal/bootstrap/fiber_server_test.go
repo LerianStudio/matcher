@@ -127,7 +127,7 @@ func TestReadinessHandler_ProductionHidesChecks(t *testing.T) {
 
 	app := fiber.New()
 	cfg := &Config{App: AppConfig{EnvName: "production"}}
-	app.Get("/ready", readinessHandler(cfg, nil, &libLog.NopLogger{}))
+	app.Get("/ready", readinessHandler(cfg, nil, nil, &libLog.NopLogger{}))
 
 	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/ready", http.NoBody))
 	require.NoError(t, err)
@@ -146,7 +146,7 @@ func TestReadinessHandler_NonProductionIncludesChecks(t *testing.T) {
 
 	app := fiber.New()
 	cfg := &Config{App: AppConfig{EnvName: "development"}}
-	app.Get("/ready", readinessHandler(cfg, nil, &libLog.NopLogger{}))
+	app.Get("/ready", readinessHandler(cfg, nil, nil, &libLog.NopLogger{}))
 
 	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/ready", http.NoBody))
 	require.NoError(t, err)
@@ -177,7 +177,7 @@ func TestReadinessHandler_UsesCheckHooks(t *testing.T) {
 		PostgresReplicaOptional: true,
 		ObjectStorageOptional:   true,
 	}
-	app.Get("/ready", readinessHandler(cfg, deps, &libLog.NopLogger{}))
+	app.Get("/ready", readinessHandler(cfg, nil, deps, &libLog.NopLogger{}))
 
 	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/ready", http.NoBody))
 	require.NoError(t, err)
@@ -205,7 +205,7 @@ func TestReadinessHandler_AllChecksPass(t *testing.T) {
 		PostgresReplicaOptional: true,
 		ObjectStorageOptional:   true,
 	}
-	app.Get("/ready", readinessHandler(cfg, deps, &libLog.NopLogger{}))
+	app.Get("/ready", readinessHandler(cfg, nil, deps, &libLog.NopLogger{}))
 
 	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/ready", http.NoBody))
 	require.NoError(t, err)
@@ -230,7 +230,7 @@ func TestReadinessHandler_OptionalDependencyDoesNotDegrade(t *testing.T) {
 		PostgresReplicaOptional: true,
 		ObjectStorageOptional:   true,
 	}
-	app.Get("/ready", readinessHandler(cfg, deps, &libLog.NopLogger{}))
+	app.Get("/ready", readinessHandler(cfg, nil, deps, &libLog.NopLogger{}))
 
 	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/ready", http.NoBody))
 	require.NoError(t, err)
@@ -1754,6 +1754,46 @@ func TestNewFiberApp_WithTLSTerminatedUpstreamCreatesApp(t *testing.T) {
 	assert.Equal(t, "DENY", resp.Header.Get("X-Frame-Options"))
 }
 
+func TestNewFiberApp_TrustedProxiesControlsForwardedIPTrust(t *testing.T) {
+	t.Parallel()
+
+	t.Run("without trusted proxies ignores forwarded header", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := &Config{Server: ServerConfig{BodyLimitBytes: 1024, CORSAllowedOrigins: "*", CORSAllowedMethods: "GET", CORSAllowedHeaders: "Content-Type"}}
+		app := NewFiberApp(cfg, &libLog.NopLogger{}, nil)
+		app.Get("/ip", func(c *fiber.Ctx) error { return c.SendString(c.IP()) })
+
+		req := httptest.NewRequest(http.MethodGet, "/ip", http.NoBody)
+		req.Header.Set("X-Forwarded-For", "203.0.113.10")
+		resp, err := app.Test(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		assert.NotEqual(t, "203.0.113.10", string(body))
+	})
+
+	t.Run("with trusted proxies honors forwarded header", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := &Config{Server: ServerConfig{BodyLimitBytes: 1024, CORSAllowedOrigins: "*", CORSAllowedMethods: "GET", CORSAllowedHeaders: "Content-Type", TrustedProxies: "0.0.0.0/0,127.0.0.1"}}
+		app := NewFiberApp(cfg, &libLog.NopLogger{}, nil)
+		app.Get("/ip", func(c *fiber.Ctx) error { return c.SendString(c.IP()) })
+
+		req := httptest.NewRequest(http.MethodGet, "/ip", http.NoBody)
+		req.Header.Set("X-Forwarded-For", "203.0.113.10")
+		resp, err := app.Test(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		assert.Equal(t, "203.0.113.10", string(body))
+	})
+}
+
 func TestNewFiberApp_WithQueryTimeoutZero(t *testing.T) {
 	t.Parallel()
 
@@ -2117,7 +2157,8 @@ func TestResolveRabbitMQCheck_WithConnection_HealthCheckSuccess(t *testing.T) {
 
 	deps := &HealthDependencies{
 		RabbitMQ: &libRabbitmq.RabbitMQConnection{
-			HealthCheckURL: server.URL,
+			HealthCheckURL:           server.URL,
+			AllowInsecureHealthCheck: true,
 		},
 		RabbitMQCheck: nil,
 	}
@@ -2179,7 +2220,7 @@ func TestReadinessHandler_NilContext(t *testing.T) {
 		PostgresReplicaOptional: true,
 		ObjectStorageOptional:   true,
 	}
-	app.Get("/ready", readinessHandler(cfg, deps, &libLog.NopLogger{}))
+	app.Get("/ready", readinessHandler(cfg, nil, deps, &libLog.NopLogger{}))
 
 	req := httptest.NewRequest(http.MethodGet, "/ready", http.NoBody)
 	resp, err := app.Test(req)

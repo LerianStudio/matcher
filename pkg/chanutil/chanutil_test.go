@@ -8,24 +8,33 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestClosed_OpenChannel(t *testing.T) {
+func TestClosedSignalChannel_OpenChannel(t *testing.T) {
 	t.Parallel()
 
 	ch := make(chan struct{})
-	assert.False(t, Closed(ch), "open channel should not be reported as closed")
+	assert.False(t, ClosedSignalChannel(ch), "open channel should not be reported as closed")
 }
 
-func TestClosed_ClosedChannel(t *testing.T) {
+func TestClosedSignalChannel_ClosedChannel(t *testing.T) {
 	t.Parallel()
 
 	ch := make(chan struct{})
 	close(ch)
 
-	assert.True(t, Closed(ch), "closed channel should be reported as closed")
+	assert.True(t, ClosedSignalChannel(ch), "closed channel should be reported as closed")
 }
 
-func TestClosed_NilChannel(t *testing.T) {
+func TestClosedSignalChannel_NilChannel(t *testing.T) {
 	t.Parallel()
 
-	assert.True(t, Closed(nil), "nil channel should be reported as closed")
+	assert.True(t, ClosedSignalChannel(nil), "nil channel should be reported as closed")
+}
+
+func TestClosedSignalChannel_BufferedReadableChannelDocumentsContract(t *testing.T) {
+	t.Parallel()
+
+	ch := make(chan struct{}, 1)
+	ch <- struct{}{}
+
+	assert.True(t, ClosedSignalChannel(ch), "readable open channels are invalid input for this close-only helper")
 }

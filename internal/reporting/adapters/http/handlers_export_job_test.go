@@ -284,6 +284,31 @@ func TestExportJobHandlers_CreateExportJob(t *testing.T) {
 		assert.Equal(t, string(entities.ExportJobStatusQueued), response.Status)
 	})
 
+	t.Run("returns service unavailable when export worker is disabled", func(t *testing.T) {
+		t.Parallel()
+
+		contextID := uuid.New()
+		repo := newExportJobRepoMock(t)
+
+		handlers := setupCreateExportJobHandlers(t, contextID, repo)
+		handlers.SetRuntimeConfigGetter(func() ExportJobRuntimeConfig {
+			return ExportJobRuntimeConfig{Enabled: false, PresignExpiry: time.Hour}
+		})
+		app := setupExportJobTestAppWithContext(handlers.CreateExportJob, "create", contextID)
+
+		reqBody := CreateExportJobRequest{
+			ReportType: "MATCHED",
+			Format:     "CSV",
+			DateFrom:   "2024-01-01",
+			DateTo:     "2024-01-31",
+		}
+
+		resp := makeCreateExportJobRequest(t, app, contextID, reqBody)
+		defer resp.Body.Close()
+
+		assert.Equal(t, fiber.StatusServiceUnavailable, resp.StatusCode)
+	})
+
 	t.Run("accepts MATCHES alias and normalizes to MATCHED", func(t *testing.T) {
 		t.Parallel()
 
@@ -1095,6 +1120,62 @@ func TestExportJobHandlers_DownloadExportJob(t *testing.T) {
 
 		assert.Equal(t, "https://storage.example.com/test.csv?presigned", response["downloadUrl"])
 		assert.Equal(t, "test.csv", response["fileName"])
+	})
+
+	t.Run("uses runtime presign expiry when configured", func(t *testing.T) {
+		t.Parallel()
+
+		jobID := uuid.New()
+		job := &entities.ExportJob{
+			ID:         jobID,
+			TenantID:   testTenantID,
+			ContextID:  uuid.New(),
+			ReportType: "MATCHED",
+			Format:     "CSV",
+			Status:     entities.ExportJobStatusSucceeded,
+			FileKey:    "exports/test.csv",
+			FileName:   "test.csv",
+			SHA256:     "abc123",
+			CreatedAt:  time.Now().UTC(),
+			ExpiresAt:  time.Now().UTC().Add(7 * 24 * time.Hour),
+			UpdatedAt:  time.Now().UTC(),
+		}
+
+		repo := newExportJobRepoMock(t)
+		repo.EXPECT().GetByID(gomock.Any(), jobID).Return(job, nil).Times(1)
+
+		ctrl := gomock.NewController(t)
+		storage := portsmocks.NewMockObjectStorageClient(ctrl)
+		var gotExpiry time.Duration
+		storage.EXPECT().GeneratePresignedURL(gomock.Any(), job.FileKey, gomock.Any()).DoAndReturn(
+			func(_ context.Context, _ string, expiry time.Duration) (string, error) {
+				gotExpiry = expiry
+				return "https://storage.example.com/test.csv?presigned", nil
+			},
+		)
+
+		uc, err := command.NewExportJobUseCase(repo)
+		require.NoError(t, err)
+		querySvc, err := query.NewExportJobQueryService(repo)
+		require.NoError(t, err)
+
+		handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour)
+		require.NoError(t, err)
+		handlers.SetRuntimeConfigGetter(func() ExportJobRuntimeConfig {
+			return ExportJobRuntimeConfig{Enabled: true, PresignExpiry: 2 * time.Hour}
+		})
+
+		app := setupExportJobTestApp(downloadHandler(handlers), "download")
+		resp := makeDownloadRequest(t, app, jobID)
+		defer resp.Body.Close()
+
+		assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+		assert.Equal(t, 2*time.Hour, gotExpiry)
+
+		var response map[string]any
+		err = json.NewDecoder(resp.Body).Decode(&response)
+		require.NoError(t, err)
+		assert.Equal(t, float64((2 * time.Hour).Seconds()), response["expiresIn"])
 	})
 
 	t.Run("returns conflict for non-downloadable job", func(t *testing.T) {

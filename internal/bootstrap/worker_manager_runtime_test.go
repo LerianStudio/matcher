@@ -117,7 +117,6 @@ func TestExtractWorkerConfig_AllNames(t *testing.T) {
 		{"cleanup", false, cfg.CleanupWorker},
 		{"archival", false, cfg.Archival},
 		{"scheduler", false, cfg.Scheduler},
-		{"discovery", false, cfg.Fetcher},
 		{"unknown", true, nil},
 	}
 

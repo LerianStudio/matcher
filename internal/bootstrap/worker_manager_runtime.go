@@ -19,8 +19,8 @@ import (
 
 // reconcileSlotLocked handles a single worker slot: starts, stops, or restarts
 // it based on the old and new configs. Caller must hold wm.mu.
-func (wm *WorkerManager) reconcileSlotLocked(ctx context.Context, slot *workerSlot, oldCfg, newCfg *Config) {
-	wasEnabled := isSlotEnabled(slot, oldCfg)
+func (wm *WorkerManager) reconcileSlotLocked(ctx context.Context, slot *workerSlot, newCfg *Config) error {
+	wasEnabled := !isNilWorkerLifecycle(slot.instance)
 	nowEnabled := isSlotEnabled(slot, newCfg)
 
 	switch {
@@ -30,6 +30,13 @@ func (wm *WorkerManager) reconcileSlotLocked(ctx context.Context, slot *workerSl
 			fmt.Sprintf("worker %q enabled by config change, starting", slot.name))
 
 		if err := wm.startSlotLocked(ctx, slot, newCfg); err != nil {
+			if isSlotCritical(slot, newCfg) {
+				wm.logger.Log(ctx, libLog.LevelError,
+					fmt.Sprintf("critical worker %q failed to start after enable: %v", slot.name, err))
+
+				return fmt.Errorf("critical worker %q failed to start after enable: %w", slot.name, err)
+			}
+
 			wm.logger.Log(ctx, libLog.LevelWarn,
 				fmt.Sprintf("worker %q failed to start after enable: %v", slot.name, err))
 		}
@@ -42,19 +49,45 @@ func (wm *WorkerManager) reconcileSlotLocked(ctx context.Context, slot *workerSl
 
 	case wasEnabled && nowEnabled:
 		// Worker enabled in both — check if config changed.
-		if workerConfigChanged(slot.name, oldCfg, newCfg) {
-			wm.logger.Log(ctx, libLog.LevelInfo,
-				fmt.Sprintf("worker %q config changed, restarting", slot.name))
-
-			if err := wm.restartSlotLocked(ctx, slot, oldCfg, newCfg); err != nil {
-				wm.logger.Log(ctx, libLog.LevelWarn,
-					fmt.Sprintf("worker %q failed to restart after config change: %v", slot.name, err))
-			}
+		if err := wm.reconcileRunningSlotLocked(ctx, slot, newCfg); err != nil {
+			return err
 		}
 
 	default:
 		// Was disabled, still disabled — nothing to do.
 	}
+
+	if !nowEnabled {
+		slot.lastCfg = newCfg
+	}
+
+	return nil
+}
+
+// reconcileRunningSlotLocked handles the case where a worker is enabled in both
+// old and new configs — it restarts the worker only if its config section changed.
+// Caller must hold wm.mu.
+func (wm *WorkerManager) reconcileRunningSlotLocked(ctx context.Context, slot *workerSlot, newCfg *Config) error {
+	if !workerConfigChanged(slot.name, slot.lastCfg, newCfg) {
+		return nil
+	}
+
+	wm.logger.Log(ctx, libLog.LevelInfo,
+		fmt.Sprintf("worker %q config changed, restarting", slot.name))
+
+	if err := wm.restartSlotLocked(ctx, slot, slot.lastCfg, newCfg); err != nil {
+		if isSlotCritical(slot, newCfg) {
+			wm.logger.Log(ctx, libLog.LevelError,
+				fmt.Sprintf("critical worker %q failed to restart after config change: %v", slot.name, err))
+
+			return fmt.Errorf("critical worker %q failed to restart after config change: %w", slot.name, err)
+		}
+
+		wm.logger.Log(ctx, libLog.LevelWarn,
+			fmt.Sprintf("worker %q failed to restart after config change: %v", slot.name, err))
+	}
+
+	return nil
 }
 
 // restartSlotLocked restarts a running worker with a newly built instance.
@@ -78,7 +111,7 @@ func (wm *WorkerManager) restartSlotLocked(ctx context.Context, slot *workerSlot
 		return fmt.Errorf("create worker %q for restart: %w", slot.name, err)
 	}
 
-	if candidate == nil {
+	if isNilWorkerLifecycle(candidate) {
 		return fmt.Errorf("worker %q: %w", slot.name, errWorkerDependencyUnavailable)
 	}
 
@@ -101,6 +134,7 @@ func (wm *WorkerManager) restartSlotLocked(ctx context.Context, slot *workerSlot
 	}
 
 	slot.instance = candidate
+	slot.lastCfg = newCfg
 
 	wm.logger.Log(ctx, libLog.LevelInfo,
 		fmt.Sprintf("worker %q restarted", slot.name))
@@ -164,7 +198,7 @@ func prepareRollbackCandidate(
 		return nil, fmt.Errorf("rebuild rollback worker %q: %w", slot.name, err)
 	}
 
-	if rebuilt == nil {
+	if isNilWorkerLifecycle(rebuilt) {
 		return previous, nil
 	}
 
@@ -300,9 +334,6 @@ func extractWorkerConfig(name string, cfg *Config) any {
 		return cfg.Archival
 	case "scheduler":
 		return cfg.Scheduler
-	case "discovery":
-		// "discovery" is reserved for the fetcher/discovery worker (not yet managed by WorkerManager).
-		return cfg.Fetcher
 	default:
 		return nil
 	}

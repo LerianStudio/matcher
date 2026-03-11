@@ -7,10 +7,15 @@
 package bootstrap
 
 import (
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Tests in this file complement coverage from fiber_server_test.go by testing
@@ -137,4 +142,26 @@ func TestShouldIncludeReadinessDetailsTable(t *testing.T) {
 			assert.Equal(t, tt.expected, shouldIncludeReadinessDetails(tt.cfg))
 		})
 	}
+}
+
+func TestReadinessHandler_UsesRuntimeConfigGetter(t *testing.T) {
+	t.Parallel()
+
+	initialCfg := &Config{App: AppConfig{EnvName: "development"}}
+	runtimeCfg := &Config{App: AppConfig{EnvName: "production"}}
+
+	app := fiber.New()
+	app.Get("/ready", readinessHandler(initialCfg, func() *Config { return runtimeCfg }, nil, nil))
+
+	req := httptest.NewRequest(http.MethodGet, "/ready", http.NoBody)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	var response ReadinessResponse
+	require.NoError(t, json.Unmarshal(body, &response))
+	assert.Nil(t, response.Checks)
 }

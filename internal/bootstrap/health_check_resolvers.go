@@ -8,7 +8,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"time"
 )
 
 func resolvePostgresCheck(deps *HealthDependencies) (HealthCheckFunc, bool) {
@@ -137,7 +136,8 @@ func resolveRabbitMQCheck(deps *HealthDependencies) (HealthCheckFunc, bool) {
 	}
 
 	return func(ctx context.Context) error {
-		if deps.RabbitMQ.HealthCheckURL != "" {
+		if deps.RabbitMQ.HealthCheckURL != "" &&
+			(deps.RabbitMQ.AllowInsecureHealthCheck || !isInsecureHTTPHealthCheckURL(deps.RabbitMQ.HealthCheckURL)) {
 			if err := checkRabbitMQHTTPHealth(ctx, deps.RabbitMQ.HealthCheckURL); err == nil {
 				return nil
 			}
@@ -173,12 +173,11 @@ func resolveObjectStorageCheck(deps *HealthDependencies) (HealthCheckFunc, bool)
 	}, true
 }
 
-const rabbitMQHealthCheckTimeout = 5 * time.Second
-
 // rabbitMQHTTPClient is a reusable HTTP client for RabbitMQ health checks.
 // http.Client is safe for concurrent use, so a single package-level instance
-// avoids per-call allocations and connection pool churn.
-var rabbitMQHTTPClient = &http.Client{Timeout: rabbitMQHealthCheckTimeout}
+// avoids per-call allocations and connection pool churn. Per-check timeouts are
+// enforced by the request context from applyReadinessCheck.
+var rabbitMQHTTPClient = &http.Client{}
 
 func checkRabbitMQHTTPHealth(ctx context.Context, healthURL string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, http.NoBody)
