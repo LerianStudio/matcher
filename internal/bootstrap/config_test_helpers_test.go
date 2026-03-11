@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 //go:build unit
 
 package bootstrap
@@ -146,6 +150,7 @@ var configEnvVarKeys = []string{
 
 	// InfrastructureConfig
 	"INFRA_CONNECT_TIMEOUT_SEC",
+	"HEALTH_CHECK_TIMEOUT_SEC",
 
 	// IdempotencyConfig
 	"IDEMPOTENCY_RETRY_WINDOW_SEC",
