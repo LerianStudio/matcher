@@ -154,6 +154,12 @@ func (uc *UseCase) GetConnectionSchema(ctx context.Context, connectionID uuid.UU
 func convertFetcherSchemaToEntities(ctx context.Context, connectionID uuid.UUID, schema *sharedPorts.FetcherSchema) []*entities.DiscoveredSchema {
 	logger, _, _, _ := libCommons.NewTrackingFromContext(ctx) //nolint:dogsled // only logger needed from tracking context
 
+	discoveredAt := schema.DiscoveredAt
+
+	if discoveredAt.IsZero() {
+		discoveredAt = time.Now().UTC()
+	}
+
 	result := make([]*entities.DiscoveredSchema, 0, len(schema.Tables))
 
 	for _, table := range schema.Tables {
@@ -179,6 +185,9 @@ func convertFetcherSchemaToEntities(ctx context.Context, connectionID uuid.UUID,
 			continue
 		}
 
+		discovered.ID = uuid.NewSHA1(connectionID, []byte(table.TableName))
+		discovered.DiscoveredAt = discoveredAt
+
 		result = append(result, discovered)
 	}
 
@@ -189,10 +198,15 @@ func convertFetcherSchemaToEntities(ctx context.Context, connectionID uuid.UUID,
 func (uc *UseCase) cacheSchemas(ctx context.Context, connectionID uuid.UUID, schemas []*entities.DiscoveredSchema) {
 	// Convert domain entities to FetcherSchema for caching.
 	tables := make([]sharedPorts.FetcherTableSchema, 0, len(schemas))
+	discoveredAt := time.Time{}
 
 	for _, schema := range schemas {
 		if schema == nil {
 			continue
+		}
+
+		if schema.DiscoveredAt.After(discoveredAt) {
+			discoveredAt = schema.DiscoveredAt
 		}
 
 		cols := make([]sharedPorts.FetcherColumnInfo, 0, len(schema.Columns))
@@ -210,7 +224,7 @@ func (uc *UseCase) cacheSchemas(ctx context.Context, connectionID uuid.UUID, sch
 		})
 	}
 
-	fetcherSchema := &sharedPorts.FetcherSchema{Tables: tables}
+	fetcherSchema := &sharedPorts.FetcherSchema{Tables: tables, DiscoveredAt: discoveredAt}
 	if err := uc.schemaCache.SetSchema(ctx, connectionID.String(), fetcherSchema, uc.cacheTTL); err != nil {
 		uc.logger.Log(ctx, libLog.LevelWarn, "failed to cache schemas in Redis",
 			libLog.String("connectionID", connectionID.String()),

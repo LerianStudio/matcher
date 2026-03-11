@@ -15,9 +15,8 @@ import (
 
 // mockSchemaCache is a test double for the SchemaCache interface.
 type mockSchemaCache struct {
-	getSchemaFunc        func(ctx context.Context, connectionID string) (*sharedPorts.FetcherSchema, error)
-	setSchemaFunc        func(ctx context.Context, connectionID string, schema *sharedPorts.FetcherSchema, ttl time.Duration) error
-	invalidateSchemaFunc func(ctx context.Context, connectionID string) error
+	getSchemaFunc func(ctx context.Context, connectionID string) (*sharedPorts.FetcherSchema, error)
+	setSchemaFunc func(ctx context.Context, connectionID string, schema *sharedPorts.FetcherSchema, ttl time.Duration) error
 }
 
 func (m *mockSchemaCache) GetSchema(ctx context.Context, connectionID string) (*sharedPorts.FetcherSchema, error) {
@@ -31,14 +30,6 @@ func (m *mockSchemaCache) GetSchema(ctx context.Context, connectionID string) (*
 func (m *mockSchemaCache) SetSchema(ctx context.Context, connectionID string, schema *sharedPorts.FetcherSchema, ttl time.Duration) error {
 	if m.setSchemaFunc != nil {
 		return m.setSchemaFunc(ctx, connectionID, schema, ttl)
-	}
-
-	return nil
-}
-
-func (m *mockSchemaCache) InvalidateSchema(ctx context.Context, connectionID string) error {
-	if m.invalidateSchemaFunc != nil {
-		return m.invalidateSchemaFunc(ctx, connectionID)
 	}
 
 	return nil
@@ -107,22 +98,4 @@ func TestSchemaCache_SetSchema(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "test-conn", capturedConnectionID)
 	assert.Equal(t, 5*time.Minute, capturedTTL)
-}
-
-func TestSchemaCache_InvalidateSchema(t *testing.T) {
-	t.Parallel()
-
-	var capturedConnectionID string
-
-	cache := &mockSchemaCache{
-		invalidateSchemaFunc: func(_ context.Context, connectionID string) error {
-			capturedConnectionID = connectionID
-
-			return nil
-		},
-	}
-
-	err := cache.InvalidateSchema(context.Background(), "test-conn")
-	assert.NoError(t, err)
-	assert.Equal(t, "test-conn", capturedConnectionID)
 }

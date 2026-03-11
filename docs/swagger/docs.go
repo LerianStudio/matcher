@@ -10828,9 +10828,6 @@ const docTemplate = `{
                 "ingestionJobId": {
                     "type": "string"
                 },
-                "resultPath": {
-                    "type": "string"
-                },
                 "status": {
                     "type": "string"
                 },
@@ -10884,6 +10881,9 @@ const docTemplate = `{
         },
         "github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.StartExtractionRequest": {
             "type": "object",
+            "required": [
+                "tables"
+            ],
             "properties": {
                 "endDate": {
                     "type": "string"
@@ -13406,7 +13406,7 @@ const docTemplate = `{
                 "message": {
                     "type": "string"
                 },
-                "type": {
+                "title": {
                     "type": "string"
                 }
             }
@@ -13532,7 +13532,7 @@ const docTemplate = `{
                 "message": {
                     "type": "string"
                 },
-                "type": {
+                "title": {
                     "type": "string"
                 }
             }
@@ -13546,7 +13546,7 @@ const docTemplate = `{
                 "message": {
                     "type": "string"
                 },
-                "type": {
+                "title": {
                     "type": "string"
                 }
             }
@@ -13606,7 +13606,7 @@ const docTemplate = `{
                 "message": {
                     "type": "string"
                 },
-                "type": {
+                "title": {
                     "type": "string"
                 }
             }

@@ -889,8 +889,6 @@ definitions:
         type: string
       ingestionJobId:
         type: string
-      resultPath:
-        type: string
       status:
         type: string
       tables:
@@ -936,6 +934,8 @@ definitions:
       tables:
         additionalProperties: {}
         type: object
+    required:
+    - tables
     type: object
   github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.TestConnectionResponse:
     properties:
@@ -2825,7 +2825,7 @@ definitions:
         type: integer
       message:
         type: string
-      type:
+      title:
         type: string
     type: object
   internal_configuration_adapters_http.ListContextsResponse:
@@ -2917,7 +2917,7 @@ definitions:
         type: integer
       message:
         type: string
-      type:
+      title:
         type: string
     type: object
   internal_exception_adapters_http.ErrorResponse:
@@ -2926,7 +2926,7 @@ definitions:
         type: integer
       message:
         type: string
-      type:
+      title:
         type: string
     type: object
   internal_governance_adapters_http.ArchiveDownloadResponse:
@@ -2970,7 +2970,7 @@ definitions:
         type: integer
       message:
         type: string
-      type:
+      title:
         type: string
     type: object
   internal_matching_adapters_http.AdjustmentResponse:

@@ -1252,6 +1252,6 @@ func parseTimestampCursorPagination(fiberCtx *fiber.Ctx) (*libHTTP.TimestampCurs
 // The actual error response type is defined in lib-commons.
 type ErrorResponse struct {
 	Code    int    `json:"code"`
-	Type    string `json:"type"`
+	Title   string `json:"title"`
 	Message string `json:"message"`
 }

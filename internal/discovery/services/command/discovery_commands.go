@@ -13,6 +13,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
+	vo "github.com/LerianStudio/matcher/internal/discovery/domain/value_objects"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -42,11 +43,14 @@ func (uc *UseCase) RefreshDiscovery(ctx context.Context) (int, error) {
 	}
 
 	synced := 0
+	seenFetcherIDs := make(map[string]bool, len(fetcherConns))
 
 	for _, fc := range fetcherConns {
 		if fc == nil {
 			continue
 		}
+
+		seenFetcherIDs[fc.ID] = true
 
 		if err := uc.syncConnection(ctx, logger, fc); err != nil {
 			logger.With(
@@ -60,6 +64,10 @@ func (uc *UseCase) RefreshDiscovery(ctx context.Context) (int, error) {
 		synced++
 	}
 
+	if err := uc.reconcileStaleConnections(ctx, logger, seenFetcherIDs); err != nil {
+		return synced, err
+	}
+
 	return synced, nil
 }
 
@@ -69,6 +77,32 @@ func (uc *UseCase) RefreshDiscovery(ctx context.Context) (int, error) {
 func (uc *UseCase) syncConnection(ctx context.Context, logger libLog.Logger, fc *sharedPorts.FetcherConnection) error {
 	if err := uc.syncer.SyncConnection(ctx, logger, fc, uc.fetcherClient.GetSchema); err != nil {
 		return fmt.Errorf("sync connection: %w", err)
+	}
+
+	return nil
+}
+
+func (uc *UseCase) reconcileStaleConnections(ctx context.Context, logger libLog.Logger, seenFetcherIDs map[string]bool) error {
+	allConns, err := uc.connRepo.FindAll(ctx)
+	if err != nil {
+		return fmt.Errorf("find all connections for stale reconciliation: %w", err)
+	}
+
+	for _, conn := range allConns {
+		if conn == nil || seenFetcherIDs[conn.FetcherConnID] || conn.Status == vo.ConnectionStatusUnreachable {
+			continue
+		}
+
+		conn.MarkUnreachable()
+
+		if err := uc.connRepo.Upsert(ctx, conn); err != nil {
+			if logger != nil {
+				logger.With(
+					libLog.String("connection.id", conn.ID.String()),
+					libLog.Any("error", err.Error()),
+				).Log(ctx, libLog.LevelWarn, "failed to mark stale connection unreachable during manual refresh")
+			}
+		}
 	}
 
 	return nil

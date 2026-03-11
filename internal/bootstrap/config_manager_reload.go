@@ -8,13 +8,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 )
 
 // errConfigManagerStopped is returned when a reload is attempted after the manager has stopped.
-var errConfigManagerStopped = errors.New("config manager stopped")
+var (
+	errConfigManagerStopped       = errors.New("config manager stopped")
+	errImmutableReloadKeysChanged = errors.New("immutable keys changed via file reload")
+)
+
+var blockedFileReloadKeys = map[string]bool{
+	"fetcher.enabled": true,
+}
 
 func (cm *ConfigManager) reload(source string) (*ReloadResult, error) {
 	var (
@@ -143,6 +151,11 @@ func (cm *ConfigManager) reloadLocked(source string) (*ReloadResult, error) {
 
 	// Compute diff before swap.
 	changes := diffConfigs(oldCfg, newCfg)
+	if err := rejectImmutableReloadChanges(changes); err != nil {
+		cm.logger.Log(ctx, libLog.LevelWarn, "config reload rejected: immutable keys changed", libLog.Err(err))
+
+		return nil, fmt.Errorf("config reload: %w", err)
+	}
 
 	// Atomic swap — readers see the new config immediately.
 	cm.config.Store(newCfg)
@@ -167,6 +180,24 @@ func (cm *ConfigManager) reloadLocked(source string) (*ReloadResult, error) {
 	cm.lastUpdateSource.Store(source)
 
 	return result, nil
+}
+
+func rejectImmutableReloadChanges(changes []ConfigChange) error {
+	immutableKeys := make([]string, 0)
+
+	for _, change := range changes {
+		if !blockedFileReloadKeys[change.Key] {
+			continue
+		}
+
+		immutableKeys = append(immutableKeys, change.Key)
+	}
+
+	if len(immutableKeys) == 0 {
+		return nil
+	}
+
+	return fmt.Errorf("%w: %s", errImmutableReloadKeysChanged, strings.Join(immutableKeys, ", "))
 }
 
 // buildCandidateConfig unmarshals the current viper state into a new Config,

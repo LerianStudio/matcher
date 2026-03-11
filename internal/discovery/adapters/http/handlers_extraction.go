@@ -45,7 +45,7 @@ func (handler *Handler) StartExtraction(fiberCtx *fiber.Ctx) error {
 	}
 
 	var request dto.StartExtractionRequest
-	if err := fiberCtx.BodyParser(&request); err != nil {
+	if err := libHTTP.ParseBodyAndValidate(fiberCtx, &request); err != nil {
 		logSpanError(ctx, span, logger, "invalid extraction payload", err)
 
 		return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", "invalid extraction request body")
@@ -63,6 +63,9 @@ func (handler *Handler) StartExtraction(fiberCtx *fiber.Ctx) error {
 	)
 	if err != nil {
 		switch {
+		case errors.Is(err, discoveryCommand.ErrInvalidExtractionRequest):
+			logSpanError(ctx, span, logger, "invalid extraction request", err)
+			return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", err.Error())
 		case errors.Is(err, discoveryCommand.ErrConnectionNotFound):
 			logSpanError(ctx, span, logger, "connection not found", err)
 			return libHTTP.RespondError(fiberCtx, fiber.StatusNotFound, "not_found", "connection not found")
@@ -75,7 +78,7 @@ func (handler *Handler) StartExtraction(fiberCtx *fiber.Ctx) error {
 		}
 	}
 
-	return fiberCtx.Status(fiber.StatusCreated).JSON(dto.ExtractionRequestFromEntity(extraction))
+	return libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.ExtractionRequestFromEntity(extraction))
 }
 
 // GetExtraction handles GET /v1/discovery/extractions/:extractionId.
@@ -116,7 +119,7 @@ func (handler *Handler) GetExtraction(fiberCtx *fiber.Ctx) error {
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_error", "failed to get extraction")
 	}
 
-	return fiberCtx.JSON(dto.ExtractionRequestFromEntity(extraction))
+	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ExtractionRequestFromEntity(extraction))
 }
 
 // PollExtraction handles POST /v1/discovery/extractions/:extractionId/poll.
@@ -156,8 +159,12 @@ func (handler *Handler) PollExtraction(fiberCtx *fiber.Ctx) error {
 			return libHTTP.RespondError(fiberCtx, fiber.StatusNotFound, "not_found", "extraction not found")
 		}
 
+		if errors.Is(err, discoveryCommand.ErrFetcherUnavailable) {
+			return libHTTP.RespondError(fiberCtx, fiber.StatusServiceUnavailable, "service_unavailable", "fetcher service unavailable")
+		}
+
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_error", "failed to poll extraction")
 	}
 
-	return fiberCtx.JSON(dto.ExtractionRequestFromEntity(extraction))
+	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ExtractionRequestFromEntity(extraction))
 }

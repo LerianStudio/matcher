@@ -94,21 +94,11 @@ func (cs *ConnectionSyncer) SyncConnection(
 
 	schema, err := fetchSchema(ctx, fc.ID)
 	if err != nil {
-		if logger != nil {
-			logger.With(
-				libLog.Any("fetcherConnID", fc.ID),
-				libLog.Any("error", err.Error()),
-			).Log(ctx, libLog.LevelWarn, "schema discovery failed for connection")
-		}
-
-		return nil
+		return fmt.Errorf("fetch schema for connection %s: %w", fc.ID, err)
 	}
 
-	if err := cs.SyncSchema(ctx, conn, schema); err != nil && logger != nil {
-		logger.With(
-			libLog.Any("fetcherConnID", fc.ID),
-			libLog.Any("error", err.Error()),
-		).Log(ctx, libLog.LevelWarn, "schema sync failed for connection")
+	if err := cs.SyncSchema(ctx, conn, schema); err != nil {
+		return fmt.Errorf("sync schema for connection %s: %w", fc.ID, err)
 	}
 
 	return nil
@@ -124,6 +114,9 @@ func (cs *ConnectionSyncer) upsertConnection(
 	}
 
 	if existing != nil {
+		existing.ConfigName = fc.ConfigName
+		existing.DatabaseType = fc.DatabaseType
+
 		if err := existing.UpdateDetails(fc.Host, fc.Port, fc.DatabaseName, fc.ProductName); err != nil {
 			return nil, fmt.Errorf("update existing connection details: %w", err)
 		}
@@ -232,6 +225,7 @@ func (cs *ConnectionSyncer) SyncSchema(ctx context.Context, conn *entities.Fetch
 	cs.refreshSchemaCache(ctx, logger, conn.ID, &sharedPorts.FetcherSchema{
 		ConnectionID: schema.ConnectionID,
 		Tables:       validTables,
+		DiscoveredAt: schema.DiscoveredAt,
 	})
 
 	return nil

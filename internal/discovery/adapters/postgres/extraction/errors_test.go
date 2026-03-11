@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 	"github.com/stretchr/testify/assert"
 )
@@ -58,4 +59,10 @@ func TestErrTransactionRequired_CanonicalIdentity(t *testing.T) {
 	t.Parallel()
 
 	assert.True(t, errors.Is(ErrTransactionRequired, pgcommon.ErrTransactionRequired))
+}
+
+func TestErrExtractionNotFound_CanonicalIdentity(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, errors.Is(ErrExtractionNotFound, repositories.ErrExtractionNotFound))
 }

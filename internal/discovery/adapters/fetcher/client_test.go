@@ -101,102 +101,6 @@ func TestHTTPFetcherClient_NilReceiverSafety(t *testing.T) {
 	require.ErrorIs(t, err, ErrFetcherClientNil)
 }
 
-// --- IsHealthy tests ---
-
-func TestIsHealthy_Healthy_StatusOK(t *testing.T) {
-	t.Parallel()
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-
-		resp := fetcherHealthResponse{Status: "ok"}
-		json.NewEncoder(w).Encode(resp) //nolint:errcheck,errchkjson // test helper
-	}))
-	defer srv.Close()
-
-	client := newTestClient(t, srv.URL)
-	healthy := client.IsHealthy(context.Background())
-
-	assert.True(t, healthy)
-}
-
-func TestIsHealthy_Healthy_StatusHealthy(t *testing.T) {
-	t.Parallel()
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-
-		resp := fetcherHealthResponse{Status: "healthy"}
-		json.NewEncoder(w).Encode(resp) //nolint:errcheck,errchkjson // test helper
-	}))
-	defer srv.Close()
-
-	client := newTestClient(t, srv.URL)
-	healthy := client.IsHealthy(context.Background())
-
-	assert.True(t, healthy)
-}
-
-func TestIsHealthy_Unhealthy_BadStatus(t *testing.T) {
-	t.Parallel()
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-
-		resp := fetcherHealthResponse{Status: "degraded"}
-		json.NewEncoder(w).Encode(resp) //nolint:errcheck,errchkjson // test helper
-	}))
-	defer srv.Close()
-
-	client := newTestClient(t, srv.URL)
-	healthy := client.IsHealthy(context.Background())
-
-	assert.False(t, healthy)
-}
-
-func TestIsHealthy_Unhealthy_NonOKStatusCode(t *testing.T) {
-	t.Parallel()
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusServiceUnavailable)
-	}))
-	defer srv.Close()
-
-	client := newTestClient(t, srv.URL)
-	healthy := client.IsHealthy(context.Background())
-
-	assert.False(t, healthy)
-}
-
-func TestIsHealthy_Unreachable(t *testing.T) {
-	t.Parallel()
-
-	cfg := DefaultConfig()
-	cfg.BaseURL = "http://127.0.0.1:1" // port 1 is extremely unlikely to be open
-
-	client, err := NewHTTPFetcherClient(cfg)
-	require.NoError(t, err)
-
-	healthy := client.IsHealthy(context.Background())
-
-	assert.False(t, healthy)
-}
-
-func TestIsHealthy_InvalidJSON(t *testing.T) {
-	t.Parallel()
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("not json")) //nolint:errcheck // test helper
-	}))
-	defer srv.Close()
-
-	client := newTestClient(t, srv.URL)
-	healthy := client.IsHealthy(context.Background())
-
-	assert.False(t, healthy)
-}
-
 // --- ListConnections tests ---
 
 func TestListConnections_Success(t *testing.T) {
@@ -318,82 +222,22 @@ func TestListConnections_BadJSON(t *testing.T) {
 	assert.Contains(t, err.Error(), "decode connections response")
 }
 
-// --- GetSchema tests ---
-
-func TestGetSchema_Success(t *testing.T) {
-	t.Parallel()
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/api/v1/connections/conn-abc/schema", r.URL.Path)
-
-		resp := fetcherSchemaResponse{
-			ConnectionID: "conn-abc",
-			Tables: []fetcherTableResponse{
-				{
-					TableName: "transactions",
-					Columns: []fetcherColumnResponse{
-						{Name: "id", Type: "uuid", Nullable: false},
-						{Name: "amount", Type: "decimal", Nullable: false},
-						{Name: "note", Type: "text", Nullable: true},
-					},
-				},
-			},
-		}
-
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(resp) //nolint:errcheck,errchkjson // test helper
-	}))
-	defer srv.Close()
-
-	client := newTestClient(t, srv.URL)
-	schema, err := client.GetSchema(context.Background(), "conn-abc")
-
-	require.NoError(t, err)
-	assert.Equal(t, "conn-abc", schema.ConnectionID)
-	assert.False(t, schema.DiscoveredAt.IsZero())
-	require.Len(t, schema.Tables, 1)
-	assert.Equal(t, "transactions", schema.Tables[0].TableName)
-	require.Len(t, schema.Tables[0].Columns, 3)
-	assert.Equal(t, "id", schema.Tables[0].Columns[0].Name)
-	assert.False(t, schema.Tables[0].Columns[0].Nullable)
-	assert.True(t, schema.Tables[0].Columns[2].Nullable)
-}
-
-func TestGetSchema_NotFound(t *testing.T) {
+func TestListConnections_NullPayloadRejected(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("null"))
 	}))
 	defer srv.Close()
 
 	client := newTestClient(t, srv.URL)
-	schema, err := client.GetSchema(context.Background(), "nonexistent")
+	conns, err := client.ListConnections(context.Background(), "")
 
 	require.Error(t, err)
-	assert.Nil(t, schema)
-	assert.ErrorIs(t, err, ErrFetcherNotFound)
-}
-
-func TestGetSchema_EmptyTables(t *testing.T) {
-	t.Parallel()
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		resp := fetcherSchemaResponse{
-			ConnectionID: "conn-empty",
-			Tables:       []fetcherTableResponse{},
-		}
-
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(resp) //nolint:errcheck,errchkjson // test helper
-	}))
-	defer srv.Close()
-
-	client := newTestClient(t, srv.URL)
-	schema, err := client.GetSchema(context.Background(), "conn-empty")
-
-	require.NoError(t, err)
-	assert.Empty(t, schema.Tables)
+	assert.Nil(t, conns)
+	assert.ErrorIs(t, err, ErrFetcherBadResponse)
+	assert.Contains(t, err.Error(), "null/empty payload")
 }
 
 // --- TestConnection tests ---
@@ -448,6 +292,43 @@ func TestTestConnection_Success_Unhealthy(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, result.Healthy)
 	assert.Equal(t, "connection refused", result.ErrorMessage)
+}
+
+func TestTestConnection_MismatchedConnectionID(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		resp := fetcherTestResponse{ConnectionID: "conn-other", Healthy: true, LatencyMs: 12}
+
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(resp) //nolint:errcheck,errchkjson // test helper
+	}))
+	defer srv.Close()
+
+	client := newTestClient(t, srv.URL)
+	result, err := client.TestConnection(context.Background(), "conn-1")
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.ErrorIs(t, err, ErrFetcherBadResponse)
+	assert.Contains(t, err.Error(), "connection id mismatch")
+}
+
+func TestTestConnection_NullPayloadRejected(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("null"))
+	}))
+	defer srv.Close()
+
+	client := newTestClient(t, srv.URL)
+	result, err := client.TestConnection(context.Background(), "conn-1")
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.ErrorIs(t, err, ErrFetcherBadResponse)
 }
 
 // --- SubmitExtractionJob tests ---
@@ -543,98 +424,21 @@ func TestSubmitExtractionJob_EmptyJobIDFailsClosed(t *testing.T) {
 	assert.ErrorIs(t, err, ErrFetcherJobIDEmpty)
 }
 
-// --- GetExtractionJobStatus tests ---
-
-func TestGetExtractionJobStatus_Success_Running(t *testing.T) {
-	t.Parallel()
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/api/v1/extractions/job-1", r.URL.Path)
-
-		resp := fetcherExtractionStatusResponse{
-			JobID:    "job-1",
-			Status:   "RUNNING",
-			Progress: 60,
-		}
-
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(resp) //nolint:errcheck,errchkjson // test helper
-	}))
-	defer srv.Close()
-
-	client := newTestClient(t, srv.URL)
-	status, err := client.GetExtractionJobStatus(context.Background(), "job-1")
-
-	require.NoError(t, err)
-	assert.Equal(t, "job-1", status.JobID)
-	assert.Equal(t, "RUNNING", status.Status)
-	assert.Equal(t, 60, status.Progress)
-	assert.Empty(t, status.ResultPath)
-}
-
-func TestGetExtractionJobStatus_Success_Complete(t *testing.T) {
+func TestSubmitExtractionJob_NullPayloadRejected(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		resp := fetcherExtractionStatusResponse{
-			JobID:      "job-2",
-			Status:     "COMPLETE",
-			Progress:   100,
-			ResultPath: "/data/results/job-2.json",
-		}
-
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(resp) //nolint:errcheck,errchkjson // test helper
+		_, _ = w.Write([]byte("null"))
 	}))
 	defer srv.Close()
 
 	client := newTestClient(t, srv.URL)
-	status, err := client.GetExtractionJobStatus(context.Background(), "job-2")
-
-	require.NoError(t, err)
-	assert.Equal(t, "COMPLETE", status.Status)
-	assert.Equal(t, 100, status.Progress)
-	assert.Equal(t, "/data/results/job-2.json", status.ResultPath)
-}
-
-func TestGetExtractionJobStatus_Success_Failed(t *testing.T) {
-	t.Parallel()
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		resp := fetcherExtractionStatusResponse{
-			JobID:        "job-3",
-			Status:       "FAILED",
-			Progress:     25,
-			ErrorMessage: "connection lost during extraction",
-		}
-
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(resp) //nolint:errcheck,errchkjson // test helper
-	}))
-	defer srv.Close()
-
-	client := newTestClient(t, srv.URL)
-	status, err := client.GetExtractionJobStatus(context.Background(), "job-3")
-
-	require.NoError(t, err)
-	assert.Equal(t, "FAILED", status.Status)
-	assert.Equal(t, "connection lost during extraction", status.ErrorMessage)
-}
-
-func TestGetExtractionJobStatus_NotFound(t *testing.T) {
-	t.Parallel()
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	defer srv.Close()
-
-	client := newTestClient(t, srv.URL)
-	status, err := client.GetExtractionJobStatus(context.Background(), "nonexistent")
+	jobID, err := client.SubmitExtractionJob(context.Background(), sharedPorts.ExtractionJobInput{ConnectionID: "conn-1", Tables: map[string]sharedPorts.ExtractionTableConfig{"transactions": {}}})
 
 	require.Error(t, err)
-	assert.Nil(t, status)
-	assert.ErrorIs(t, err, ErrFetcherNotFound)
+	assert.Empty(t, jobID)
+	assert.ErrorIs(t, err, ErrFetcherBadResponse)
 }
 
 // --- Retry behavior tests ---

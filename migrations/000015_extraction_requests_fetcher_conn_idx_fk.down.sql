@@ -1,3 +1,2 @@
--- Reserved migration kept intentionally empty.
--- No rollback action is required because 000015 no longer introduces schema
--- changes; extraction_requests.connection_id is owned by 000013.
+-- Reserved migration kept intentionally as a no-op.
+SELECT 1;

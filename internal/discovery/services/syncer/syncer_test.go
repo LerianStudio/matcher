@@ -567,10 +567,10 @@ func TestSyncConnection_InvalidPort_ReturnsError(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// SyncConnection — schema fetch failure logs warning but succeeds
+// SyncConnection — schema fetch failure propagates
 // ---------------------------------------------------------------------------
 
-func TestSyncConnection_SchemaFetchFails_LogsWarning_ReturnsNil(t *testing.T) {
+func TestSyncConnection_SchemaFetchFails_ReturnsError(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -591,8 +591,8 @@ func TestSyncConnection_SchemaFetchFails_LogsWarning_ReturnsNil(t *testing.T) {
 
 	err := cs.SyncConnection(ctx, logger, makeFetcherConnection("fc-warn", "c", "PG"), fetchSchema)
 
-	require.NoError(t, err, "schema fetch failure is best-effort — should not propagate")
-	assert.GreaterOrEqual(t, logger.logCount.Load(), int32(1), "warning should be logged")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "fetch schema for connection fc-warn")
 }
 
 func TestSyncConnection_SchemaFetchFails_NilLogger_DoesNotPanic(t *testing.T) {
@@ -614,15 +614,15 @@ func TestSyncConnection_SchemaFetchFails_NilLogger_DoesNotPanic(t *testing.T) {
 
 	assert.NotPanics(t, func() {
 		err := cs.SyncConnection(context.Background(), nil, makeFetcherConnection("fc-nil-log", "c", "PG"), fetchSchema)
-		require.NoError(t, err)
+		require.Error(t, err)
 	})
 }
 
 // ---------------------------------------------------------------------------
-// SyncConnection — SyncSchema failure logs warning but SyncConnection still returns nil
+// SyncConnection — SyncSchema failure propagates
 // ---------------------------------------------------------------------------
 
-func TestSyncConnection_SchemaSyncFails_LogsWarning_ReturnsNil(t *testing.T) {
+func TestSyncConnection_SchemaSyncFails_ReturnsError(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -653,8 +653,8 @@ func TestSyncConnection_SchemaSyncFails_LogsWarning_ReturnsNil(t *testing.T) {
 
 	err := cs.SyncConnection(ctx, logger, makeFetcherConnection("fc-sync-fail", "c", "PG"), fetchSchema)
 
-	require.NoError(t, err, "SyncSchema failure is best-effort — SyncConnection should still succeed")
-	assert.GreaterOrEqual(t, logger.logCount.Load(), int32(1), "warning should be logged")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "sync schema for connection fc-sync-fail")
 }
 
 // ---------------------------------------------------------------------------
@@ -1051,6 +1051,8 @@ func TestSyncConnection_ExistingConnection_UpdatesHostPortDbProduct(t *testing.T
 
 	require.NoError(t, err)
 	require.NotNil(t, upsertedConn)
+	assert.Equal(t, "updated-config", upsertedConn.ConfigName)
+	assert.Equal(t, "POSTGRESQL", upsertedConn.DatabaseType)
 	assert.Equal(t, "new-host.example.com", upsertedConn.Host)
 	assert.Equal(t, 5433, upsertedConn.Port)
 	assert.Equal(t, "new_db", upsertedConn.DatabaseName)

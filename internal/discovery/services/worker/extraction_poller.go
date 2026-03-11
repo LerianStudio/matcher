@@ -168,12 +168,18 @@ func (ep *ExtractionPoller) handleTimeout(
 		return
 	}
 
+	expectedUpdatedAt := extraction.UpdatedAt
+
 	if err := extraction.MarkFailed("extraction timed out"); err != nil {
 		ep.logger.With(libLog.Any("error", err.Error())).
 			Log(ctx, libLog.LevelWarn, "extraction poller: failed to mark extraction as failed on timeout")
 	}
 
-	if err := ep.extractionRepo.Update(ctx, extraction); err != nil {
+	if err := ep.extractionRepo.UpdateIfUnchanged(ctx, extraction, expectedUpdatedAt); err != nil {
+		if errors.Is(err, repositories.ErrExtractionConflict) {
+			return
+		}
+
 		ep.logger.With(libLog.Any("error", err.Error())).
 			Log(ctx, libLog.LevelWarn, "extraction poller: failed to update extraction on timeout")
 	}
@@ -184,6 +190,8 @@ func (ep *ExtractionPoller) handleTimeout(
 }
 
 // pollOnce checks the extraction status once and returns true if terminal.
+//
+//nolint:cyclop,nestif // polling must handle fetcher drift, remote cancellation, and conflict-aware persistence in one place.
 func (ep *ExtractionPoller) pollOnce(
 	ctx context.Context,
 	extractionID uuid.UUID,
@@ -230,6 +238,34 @@ func (ep *ExtractionPoller) pollOnce(
 
 	status, err := ep.fetcherClient.GetExtractionJobStatus(ctx, extraction.FetcherJobID)
 	if err != nil {
+		if errors.Is(err, sharedPorts.ErrFetcherResourceNotFound) {
+			expectedUpdatedAt := extraction.UpdatedAt
+
+			if cancelErr := extraction.MarkCancelled(); cancelErr != nil {
+				logger.With(libLog.Any("error", cancelErr.Error())).
+					Log(ctx, libLog.LevelWarn, "extraction poller: failed to mark extraction as cancelled")
+
+				return true
+			}
+
+			if updateErr := ep.extractionRepo.UpdateIfUnchanged(ctx, extraction, expectedUpdatedAt); updateErr != nil {
+				if errors.Is(updateErr, repositories.ErrExtractionConflict) {
+					return ep.stopOnConflict(ctx, extraction.ID)
+				}
+
+				logger.With(libLog.Any("error", updateErr.Error())).
+					Log(ctx, libLog.LevelWarn, "extraction poller: failed to persist cancelled extraction")
+
+				return false
+			}
+
+			if onFailed != nil {
+				onFailed(ctx, "extraction cancelled")
+			}
+
+			return true
+		}
+
 		logger.With(libLog.Any("error", err.Error())).
 			Log(ctx, libLog.LevelWarn,
 				fmt.Sprintf("poll extraction %s: %v", extraction.FetcherJobID, err))
@@ -248,7 +284,7 @@ func (ep *ExtractionPoller) pollOnce(
 
 // handlePollStatus processes the extraction status and invokes callbacks.
 //
-//nolint:cyclop // status switch inherently branches per extraction state; further splitting hurts readability.
+//nolint:cyclop,funlen,gocognit,gocyclo // status switch inherently branches per extraction state; further splitting hurts readability.
 func (ep *ExtractionPoller) handlePollStatus(
 	ctx context.Context,
 	span trace.Span,
@@ -260,6 +296,7 @@ func (ep *ExtractionPoller) handlePollStatus(
 ) bool {
 	switch status.Status {
 	case "COMPLETE":
+		expectedUpdatedAt := extraction.UpdatedAt
 		previousStatus := extraction.Status
 		previousResultPath := extraction.ResultPath
 		previousUpdatedAt := extraction.UpdatedAt
@@ -269,7 +306,11 @@ func (ep *ExtractionPoller) handlePollStatus(
 			return true // terminal — stop polling even on transition error
 		}
 
-		if err := ep.extractionRepo.Update(ctx, extraction); err != nil {
+		if err := ep.extractionRepo.UpdateIfUnchanged(ctx, extraction, expectedUpdatedAt); err != nil {
+			if errors.Is(err, repositories.ErrExtractionConflict) {
+				return ep.stopOnConflict(ctx, extraction.ID)
+			}
+
 			libOpentelemetry.HandleSpanError(span, "update extraction complete", err)
 
 			extraction.Status = previousStatus
@@ -289,16 +330,21 @@ func (ep *ExtractionPoller) handlePollStatus(
 		return true
 
 	case "FAILED":
+		expectedUpdatedAt := extraction.UpdatedAt
 		previousStatus := extraction.Status
 		previousErrorMessage := extraction.ErrorMessage
 		previousUpdatedAt := extraction.UpdatedAt
 
-		if err := extraction.MarkFailed(status.ErrorMessage); err != nil {
+		if err := extraction.MarkFailed(entities.SanitizedExtractionFailureMessage); err != nil {
 			libOpentelemetry.HandleSpanError(span, "mark extraction failed", err)
 			return true // terminal — stop polling even on transition error
 		}
 
-		if err := ep.extractionRepo.Update(ctx, extraction); err != nil {
+		if err := ep.extractionRepo.UpdateIfUnchanged(ctx, extraction, expectedUpdatedAt); err != nil {
+			if errors.Is(err, repositories.ErrExtractionConflict) {
+				return ep.stopOnConflict(ctx, extraction.ID)
+			}
+
 			libOpentelemetry.HandleSpanError(span, "update extraction failed", err)
 
 			extraction.Status = previousStatus
@@ -309,12 +355,46 @@ func (ep *ExtractionPoller) handlePollStatus(
 		}
 
 		if onFailed != nil {
-			onFailed(ctx, status.ErrorMessage)
+			onFailed(ctx, entities.SanitizedExtractionFailureMessage)
+		}
+
+		return true
+
+	case "CANCELLED":
+		expectedUpdatedAt := extraction.UpdatedAt
+		previousStatus := extraction.Status
+		previousErrorMessage := extraction.ErrorMessage
+		previousResultPath := extraction.ResultPath
+		previousUpdatedAt := extraction.UpdatedAt
+
+		if err := extraction.MarkCancelled(); err != nil {
+			libOpentelemetry.HandleSpanError(span, "mark extraction cancelled", err)
+			return true
+		}
+
+		if err := ep.extractionRepo.UpdateIfUnchanged(ctx, extraction, expectedUpdatedAt); err != nil {
+			if errors.Is(err, repositories.ErrExtractionConflict) {
+				return ep.stopOnConflict(ctx, extraction.ID)
+			}
+
+			libOpentelemetry.HandleSpanError(span, "update extraction cancelled", err)
+
+			extraction.Status = previousStatus
+			extraction.ErrorMessage = previousErrorMessage
+			extraction.ResultPath = previousResultPath
+			extraction.UpdatedAt = previousUpdatedAt
+
+			return false
+		}
+
+		if onFailed != nil {
+			onFailed(ctx, "extraction cancelled")
 		}
 
 		return true
 
 	case "RUNNING", "EXTRACTING":
+		expectedUpdatedAt := extraction.UpdatedAt
 		previousStatus := extraction.Status
 		previousUpdatedAt := extraction.UpdatedAt
 
@@ -327,7 +407,11 @@ func (ep *ExtractionPoller) handlePollStatus(
 		}
 
 		if extraction.Status != previousStatus || !extraction.UpdatedAt.Equal(previousUpdatedAt) {
-			if err := ep.extractionRepo.Update(ctx, extraction); err != nil {
+			if err := ep.extractionRepo.UpdateIfUnchanged(ctx, extraction, expectedUpdatedAt); err != nil {
+				if errors.Is(err, repositories.ErrExtractionConflict) {
+					return ep.stopOnConflict(ctx, extraction.ID)
+				}
+
 				logger.With(libLog.Any("error", err.Error())).
 					Log(ctx, libLog.LevelWarn, "extraction poller: failed to update extraction status")
 			}
@@ -338,4 +422,13 @@ func (ep *ExtractionPoller) handlePollStatus(
 	}
 
 	return false
+}
+
+func (ep *ExtractionPoller) stopOnConflict(ctx context.Context, extractionID uuid.UUID) bool {
+	latest, err := ep.extractionRepo.FindByID(ctx, extractionID)
+	if err != nil || latest == nil {
+		return false
+	}
+
+	return latest.Status.IsTerminal()
 }

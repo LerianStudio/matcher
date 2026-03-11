@@ -79,6 +79,82 @@ func TestReloadLocked_ValidYAMLChange_PicksUpNewValues(t *testing.T) {
 	assert.Equal(t, "debug", got.App.LogLevel)
 }
 
+func TestReloadLocked_ImmutableFetcherChangeRejected(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	yamlPath := filepath.Join(tmpDir, "matcher.yaml")
+
+	initialYAML := `fetcher:
+  enabled: false
+  discovery_interval_sec: 60
+`
+	require.NoError(t, os.WriteFile(yamlPath, []byte(initialYAML), 0o600))
+
+	cfg := defaultConfig()
+	logger := &libLog.NopLogger{}
+
+	cm, err := NewConfigManager(cfg, yamlPath, logger)
+	require.NoError(t, err)
+
+	updatedYAML := `fetcher:
+  enabled: true
+  discovery_interval_sec: 60
+`
+	require.NoError(t, os.WriteFile(yamlPath, []byte(updatedYAML), 0o600))
+
+	cm.mu.Lock()
+	_, reloadErr := cm.reloadLocked("test")
+	cm.mu.Unlock()
+
+	require.Error(t, reloadErr)
+	assert.Contains(t, reloadErr.Error(), "immutable keys changed via file reload")
+	assert.Contains(t, reloadErr.Error(), "fetcher.enabled")
+
+	got := cm.Get()
+	require.NotNil(t, got)
+	assert.False(t, got.Fetcher.Enabled)
+	assert.Equal(t, 60, got.Fetcher.DiscoveryIntervalSec)
+}
+
+func TestReloadLocked_MutableFetcherIntervalApplied(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	yamlPath := filepath.Join(tmpDir, "matcher.yaml")
+
+	initialYAML := `fetcher:
+  enabled: false
+  discovery_interval_sec: 60
+`
+	require.NoError(t, os.WriteFile(yamlPath, []byte(initialYAML), 0o600))
+
+	cfg := defaultConfig()
+	logger := &libLog.NopLogger{}
+
+	cm, err := NewConfigManager(cfg, yamlPath, logger)
+	require.NoError(t, err)
+
+	updatedYAML := `fetcher:
+  enabled: false
+  discovery_interval_sec: 120
+`
+	require.NoError(t, os.WriteFile(yamlPath, []byte(updatedYAML), 0o600))
+
+	cm.mu.Lock()
+	result, reloadErr := cm.reloadLocked("test")
+	cm.mu.Unlock()
+
+	require.NoError(t, reloadErr)
+	require.NotNil(t, result)
+	assert.GreaterOrEqual(t, result.ChangesDetected, 1)
+
+	got := cm.Get()
+	require.NotNil(t, got)
+	assert.False(t, got.Fetcher.Enabled)
+	assert.Equal(t, 120, got.Fetcher.DiscoveryIntervalSec)
+}
+
 func TestReloadLocked_InvalidYAML_PreservesExistingConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	yamlPath := filepath.Join(tmpDir, "matcher.yaml")

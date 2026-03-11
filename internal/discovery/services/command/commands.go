@@ -16,17 +16,18 @@ import (
 
 // Sentinel errors for discovery commands.
 var (
-	ErrFetcherUnavailable      = errors.New("fetcher service is unavailable")
-	ErrConnectionNotFound      = errors.New("fetcher connection not found")
-	ErrExtractionTimeout       = errors.New("extraction job timed out")
-	ErrExtractionFailed        = errors.New("extraction job failed")
-	ErrExtractionNotFound      = errors.New("extraction request not found")
-	ErrNilExtractionStatus     = errors.New("fetcher returned nil extraction status")
-	ErrNilTestConnectionResult = errors.New("fetcher returned nil connection test result")
-	ErrNilFetcherClient        = errors.New("fetcher client is required")
-	ErrNilConnectionRepository = errors.New("connection repository is required")
-	ErrNilSchemaRepository     = errors.New("schema repository is required")
-	ErrNilExtractionRepository = errors.New("extraction repository is required")
+	ErrFetcherUnavailable       = errors.New("fetcher service is unavailable")
+	ErrConnectionNotFound       = errors.New("fetcher connection not found")
+	ErrInvalidExtractionRequest = errors.New("invalid extraction request")
+	ErrExtractionTimeout        = errors.New("extraction job timed out")
+	ErrExtractionFailed         = errors.New("extraction job failed")
+	ErrExtractionNotFound       = errors.New("extraction request not found")
+	ErrNilExtractionStatus      = errors.New("fetcher returned nil extraction status")
+	ErrNilTestConnectionResult  = errors.New("fetcher returned nil connection test result")
+	ErrNilFetcherClient         = errors.New("fetcher client is required")
+	ErrNilConnectionRepository  = errors.New("connection repository is required")
+	ErrNilSchemaRepository      = errors.New("schema repository is required")
+	ErrNilExtractionRepository  = errors.New("extraction repository is required")
 )
 
 // UseCase orchestrates discovery write operations.

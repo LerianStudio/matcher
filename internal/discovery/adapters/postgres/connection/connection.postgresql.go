@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
@@ -28,7 +27,6 @@ var psql = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 const (
 	tableName      = "fetcher_connections"
 	allColumns     = "id, fetcher_conn_id, config_name, database_type, host, port, database_name, product_name, status, last_seen_at, schema_discovered, created_at, updated_at"
-	columnCount    = 13
 	upsertConflict = "fetcher_conn_id"
 )
 
@@ -280,82 +278,6 @@ func (repo *Repository) FindByFetcherID(ctx context.Context, fetcherConnID strin
 	}
 
 	return result, nil
-}
-
-// DeleteStale removes connections not seen since the given duration.
-func (repo *Repository) DeleteStale(ctx context.Context, notSeenSince time.Duration) (int64, error) {
-	if repo == nil || repo.provider == nil {
-		return 0, ErrRepoNotInitialized
-	}
-
-	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
-
-	ctx, span := tracer.Start(ctx, "postgres.delete_stale_fetcher_connections")
-	defer span.End()
-
-	result, err := pgcommon.WithTenantTxProvider(ctx, repo.provider, func(tx *sql.Tx) (int64, error) {
-		return repo.executeDeleteStale(ctx, tx, notSeenSince)
-	})
-	if err != nil {
-		wrappedErr := fmt.Errorf("delete stale fetcher connections: %w", err)
-		libOpentelemetry.HandleSpanError(span, "failed to delete stale fetcher connections", wrappedErr)
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to delete stale fetcher connections")
-
-		return 0, wrappedErr
-	}
-
-	return result, nil
-}
-
-// DeleteStaleWithTx removes stale connections within an existing transaction.
-func (repo *Repository) DeleteStaleWithTx(ctx context.Context, tx *sql.Tx, notSeenSince time.Duration) (int64, error) {
-	if repo == nil || repo.provider == nil {
-		return 0, ErrRepoNotInitialized
-	}
-
-	if tx == nil {
-		return 0, ErrTransactionRequired
-	}
-
-	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
-
-	ctx, span := tracer.Start(ctx, "postgres.delete_stale_fetcher_connections_with_tx")
-	defer span.End()
-
-	result, err := pgcommon.WithTenantTxOrExistingProvider(ctx, repo.provider, tx, func(innerTx *sql.Tx) (int64, error) {
-		return repo.executeDeleteStale(ctx, innerTx, notSeenSince)
-	})
-	if err != nil {
-		wrappedErr := fmt.Errorf("delete stale fetcher connections with tx: %w", err)
-		libOpentelemetry.HandleSpanError(span, "failed to delete stale fetcher connections", wrappedErr)
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to delete stale fetcher connections")
-
-		return 0, wrappedErr
-	}
-
-	return result, nil
-}
-
-// executeDeleteStale performs the actual stale connection deletion within a transaction.
-func (repo *Repository) executeDeleteStale(ctx context.Context, tx *sql.Tx, notSeenSince time.Duration) (int64, error) {
-	// Convert Go duration to PostgreSQL interval string (e.g., "86400 seconds").
-	intervalStr := fmt.Sprintf("%d seconds", int64(notSeenSince.Seconds()))
-
-	result, err := tx.ExecContext(
-		ctx,
-		"DELETE FROM "+tableName+" WHERE last_seen_at < NOW() - $1::interval",
-		intervalStr,
-	)
-	if err != nil {
-		return 0, fmt.Errorf("execute delete stale fetcher connections: %w", err)
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return 0, fmt.Errorf("get rows affected: %w", err)
-	}
-
-	return rowsAffected, nil
 }
 
 // scanConnection scans a SQL row into a FetcherConnection domain entity.

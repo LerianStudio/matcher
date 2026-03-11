@@ -1,4 +1,12 @@
--- PostgreSQL does not support removing enum values directly.
--- The FETCHER value will remain in the enum type but can be ignored.
--- To fully remove it, a migration that recreates the type would be needed.
--- This is intentionally a no-op for safety.
+-- Recreate the enum without FETCHER.
+-- This down migration will fail if any reconciliation_sources rows still use FETCHER,
+-- which is safer than silently pretending rollback succeeded.
+ALTER TYPE reconciliation_source_type RENAME TO reconciliation_source_type_old;
+
+CREATE TYPE reconciliation_source_type AS ENUM ('LEDGER', 'BANK', 'GATEWAY', 'CUSTOM');
+
+ALTER TABLE reconciliation_sources
+    ALTER COLUMN type TYPE reconciliation_source_type
+    USING type::text::reconciliation_source_type;
+
+DROP TYPE reconciliation_source_type_old;

@@ -26,7 +26,7 @@ CONFIG_DIR := ./config
 BINARY_NAME ?= matcher
 BIN_DIR ?= bin
 GOLANGCI_LINT_VERSION ?= v2.6.2
-GO_CI_PACKAGES := ./cmd/... ./internal/... ./pkg/... ./tests/...
+GO_CI_PACKAGES := ./cmd/... ./internal/... ./migrations/... ./pkg/... ./tests/...
 
 # Migration configuration
 MIGRATE_PATH ?= migrations

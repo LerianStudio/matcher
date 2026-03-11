@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -168,6 +169,39 @@ func (repo *Repository) Update(ctx context.Context, req *entities.ExtractionRequ
 	return nil
 }
 
+// UpdateIfUnchanged persists changes only if the row still matches the expected updated_at value.
+func (repo *Repository) UpdateIfUnchanged(ctx context.Context, req *entities.ExtractionRequest, expectedUpdatedAt time.Time) error {
+	if repo == nil || repo.provider == nil {
+		return ErrRepoNotInitialized
+	}
+
+	if req == nil {
+		return ErrEntityRequired
+	}
+
+	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
+
+	ctx, span := tracer.Start(ctx, "postgres.update_extraction_request_if_unchanged")
+	defer span.End()
+
+	_, err := pgcommon.WithTenantTxProvider(ctx, repo.provider, func(tx *sql.Tx) (bool, error) {
+		if execErr := repo.executeConditionalUpdate(ctx, tx, req, expectedUpdatedAt); execErr != nil {
+			return false, execErr
+		}
+
+		return true, nil
+	})
+	if err != nil {
+		wrappedErr := fmt.Errorf("update extraction request if unchanged: %w", err)
+		libOpentelemetry.HandleSpanError(span, "failed to update extraction request if unchanged", wrappedErr)
+		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to update extraction request if unchanged")
+
+		return wrappedErr
+	}
+
+	return nil
+}
+
 // UpdateWithTx persists changes within an existing transaction.
 func (repo *Repository) UpdateWithTx(ctx context.Context, tx *sql.Tx, req *entities.ExtractionRequest) error {
 	if repo == nil || repo.provider == nil {
@@ -246,6 +280,52 @@ func (repo *Repository) executeUpdate(ctx context.Context, tx *sql.Tx, req *enti
 
 	if rowsAffected == 0 {
 		return sql.ErrNoRows
+	}
+
+	return nil
+}
+
+func (repo *Repository) executeConditionalUpdate(ctx context.Context, tx *sql.Tx, req *entities.ExtractionRequest, expectedUpdatedAt time.Time) error {
+	model, err := FromDomain(req)
+	if err != nil {
+		return fmt.Errorf("convert extraction request to model: %w", err)
+	}
+
+	result, err := tx.ExecContext(ctx,
+		`UPDATE `+tableName+` SET
+			connection_id = $1,
+			ingestion_job_id = $2,
+			fetcher_job_id = $3,
+			tables = $4,
+			filters = $5,
+			status = $6,
+			result_path = $7,
+			error_message = $8,
+			updated_at = $9
+		WHERE id = $10 AND updated_at = $11`,
+		model.ConnectionID,
+		model.IngestionJobID,
+		model.FetcherJobID,
+		model.Tables,
+		nullableJSON(model.Filters),
+		model.Status,
+		model.ResultPath,
+		model.ErrorMessage,
+		model.UpdatedAt,
+		model.ID,
+		expectedUpdatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("update extraction request conditionally: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return repositories.ErrExtractionConflict
 	}
 
 	return nil

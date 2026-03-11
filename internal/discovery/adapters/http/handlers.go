@@ -114,7 +114,7 @@ func (handler *Handler) GetDiscoveryStatus(fiberCtx *fiber.Ctx) error {
 		response.LastSyncAt = &lastSyncAt
 	}
 
-	return fiberCtx.JSON(response)
+	return libHTTP.Respond(fiberCtx, fiber.StatusOK, response)
 }
 
 // ListConnections handles GET /v1/discovery/connections.
@@ -146,7 +146,7 @@ func (handler *Handler) ListConnections(fiberCtx *fiber.Ctx) error {
 		responses = append(responses, dto.ConnectionFromEntity(conn))
 	}
 
-	return fiberCtx.JSON(dto.ConnectionListResponse{Connections: responses})
+	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ConnectionListResponse{Connections: responses})
 }
 
 // GetConnection handles GET /v1/discovery/connections/:connectionId.
@@ -189,7 +189,7 @@ func (handler *Handler) GetConnection(fiberCtx *fiber.Ctx) error {
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_error", "failed to get connection")
 	}
 
-	return fiberCtx.JSON(dto.ConnectionFromEntity(conn))
+	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ConnectionFromEntity(conn))
 }
 
 // GetConnectionSchema handles GET /v1/discovery/connections/:connectionId/schema.
@@ -260,7 +260,7 @@ func (handler *Handler) GetConnectionSchema(fiberCtx *fiber.Ctx) error {
 		})
 	}
 
-	return fiberCtx.JSON(dto.ConnectionSchemaResponse{
+	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ConnectionSchemaResponse{
 		ConnectionID: connID,
 		Tables:       tables,
 	})
@@ -316,7 +316,7 @@ func (handler *Handler) TestConnection(fiberCtx *fiber.Ctx) error {
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_error", "failed to test connection")
 	}
 
-	return fiberCtx.JSON(dto.TestConnectionResponse{
+	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.TestConnectionResponse{
 		ConnectionID:  result.ConnectionID,
 		FetcherConnID: result.FetcherConnID,
 		Healthy:       result.Healthy,
@@ -365,13 +365,13 @@ func (handler *Handler) RefreshDiscovery(fiberCtx *fiber.Ctx) error {
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_error", "failed to refresh discovery")
 	}
 
-	return fiberCtx.JSON(dto.RefreshDiscoveryResponse{ConnectionsSynced: synced})
+	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.RefreshDiscoveryResponse{ConnectionsSynced: synced})
 }
 
 // ErrorResponse is a placeholder for Swagger documentation.
 // The actual error response type is defined in lib-commons.
 type ErrorResponse struct {
 	Code    int    `json:"code"`
-	Type    string `json:"type"`
+	Title   string `json:"title"`
 	Message string `json:"message"`
 }

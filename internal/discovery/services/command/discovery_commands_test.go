@@ -229,7 +229,7 @@ func TestRefreshDiscovery_ConnectionUpsertError_ContinuesToNext(t *testing.T) {
 	assert.Equal(t, 0, synced)
 }
 
-func TestRefreshDiscovery_SchemaDiscoveryError_NonFatal(t *testing.T) {
+func TestRefreshDiscovery_SchemaDiscoveryError_ReturnsError(t *testing.T) {
 	t.Parallel()
 
 	connRepo := &mockConnectionRepo{}
@@ -257,8 +257,7 @@ func TestRefreshDiscovery_SchemaDiscoveryError_NonFatal(t *testing.T) {
 	synced, err := uc.RefreshDiscovery(context.Background())
 
 	require.NoError(t, err)
-	// Connection is saved successfully even though schema failed.
-	assert.Equal(t, 1, synced)
+	assert.Equal(t, 0, synced)
 	assert.Equal(t, 1, connRepo.upsertCount)
 	assert.Equal(t, 0, schemaRepo.upsertCount)
 }
@@ -338,8 +337,53 @@ func TestRefreshDiscovery_SchemaUpsertBatchError(t *testing.T) {
 	synced, err := uc.RefreshDiscovery(context.Background())
 
 	require.NoError(t, err)
-	// Connection sync succeeds even though schema upsert batch failed (non-fatal).
+	assert.Equal(t, 0, synced)
+}
+
+func TestRefreshDiscovery_MarksStaleConnectionsUnreachable(t *testing.T) {
+	t.Parallel()
+
+	staleConn := &entities.FetcherConnection{
+		ID:            uuid.New(),
+		FetcherConnID: "conn-stale",
+		Status:        vo.ConnectionStatusAvailable,
+	}
+
+	var staleMarked bool
+	connRepo := &mockConnectionRepo{
+		findAllConns: []*entities.FetcherConnection{staleConn},
+		upsertFn: func(_ context.Context, conn *entities.FetcherConnection) error {
+			if conn.ID == staleConn.ID && conn.Status == vo.ConnectionStatusUnreachable {
+				staleMarked = true
+			}
+
+			return nil
+		},
+	}
+
+	uc, err := NewUseCase(
+		&mockFetcherClient{
+			healthy: true,
+			connections: []*sharedPorts.FetcherConnection{{
+				ID:           "conn-live",
+				ConfigName:   "pg-primary",
+				DatabaseType: "POSTGRES",
+			}},
+			schema: &sharedPorts.FetcherSchema{Tables: []sharedPorts.FetcherTableSchema{}},
+		},
+		connRepo,
+		&mockSchemaRepo{},
+		&mockExtractionRepo{},
+		&libLog.NopLogger{},
+	)
+	require.NoError(t, err)
+
+	synced, err := uc.RefreshDiscovery(context.Background())
+
+	require.NoError(t, err)
 	assert.Equal(t, 1, synced)
+	assert.True(t, staleMarked)
+	assert.Equal(t, vo.ConnectionStatusUnreachable, staleConn.Status)
 }
 
 func TestSyncSchema_NilSchema(t *testing.T) {

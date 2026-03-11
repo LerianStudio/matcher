@@ -6,7 +6,6 @@ import (
 	"context"
 	"database/sql"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -124,21 +123,6 @@ func (m *mockConnectionRepository) FindByFetcherID(
 	}
 
 	return nil, ErrConnectionNotFound
-}
-
-func (m *mockConnectionRepository) DeleteStale(
-	ctx context.Context,
-	notSeenSince time.Duration,
-) (int64, error) {
-	return m.DeleteStaleWithTx(ctx, nil, notSeenSince)
-}
-
-func (m *mockConnectionRepository) DeleteStaleWithTx(
-	_ context.Context,
-	_ *sql.Tx,
-	_ time.Duration,
-) (int64, error) {
-	return 0, nil
 }
 
 func TestMockConnectionRepositoryOperations(t *testing.T) {

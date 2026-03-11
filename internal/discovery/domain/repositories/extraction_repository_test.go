@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -54,6 +55,14 @@ func (m *mockExtractionRepository) Update(
 	req *entities.ExtractionRequest,
 ) error {
 	return m.UpdateWithTx(ctx, nil, req)
+}
+
+func (m *mockExtractionRepository) UpdateIfUnchanged(
+	ctx context.Context,
+	req *entities.ExtractionRequest,
+	_ time.Time,
+) error {
+	return m.Update(ctx, req)
 }
 
 func (m *mockExtractionRepository) UpdateWithTx(

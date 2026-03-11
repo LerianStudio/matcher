@@ -115,6 +115,14 @@ func TestExtractionRequest_Transitions(t *testing.T) {
 			status: vo.ExtractionStatusFailed,
 			errMsg: "fetcher timeout",
 		},
+		{
+			name: "cancelled",
+			mutate: func(t *testing.T, req *entities.ExtractionRequest) {
+				t.Helper()
+				require.NoError(t, req.MarkCancelled())
+			},
+			status: vo.ExtractionStatusCancelled,
+		},
 	}
 
 	for _, tt := range tests {
@@ -176,6 +184,14 @@ func TestExtractionRequest_InvalidTransitions(t *testing.T) {
 				require.NoError(t, req.MarkSubmitted("job-123"))
 				require.NoError(t, req.MarkComplete("/tmp/result.csv"))
 				return req.MarkFailed("boom")
+			},
+		},
+		{
+			name: "terminal cannot be cancelled again",
+			mutate: func(t *testing.T, req *entities.ExtractionRequest) error {
+				t.Helper()
+				require.NoError(t, req.MarkCancelled())
+				return req.MarkCancelled()
 			},
 		},
 	}

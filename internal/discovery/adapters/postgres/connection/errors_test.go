@@ -26,11 +26,6 @@ func TestConnectionSentinelErrors(t *testing.T) {
 			message: "fetcher connection not found",
 		},
 		{
-			name:    "ErrProviderRequired",
-			err:     ErrProviderRequired,
-			message: "infrastructure provider is required",
-		},
-		{
 			name:    "ErrRepoNotInitialized",
 			err:     ErrRepoNotInitialized,
 			message: "connection repository not initialized",
@@ -74,12 +69,6 @@ func TestConnectionErrors_CanonicalIdentity(t *testing.T) {
 		t.Parallel()
 
 		assert.True(t, errors.Is(ErrConnectionNotFound, repositories.ErrConnectionNotFound))
-	})
-
-	t.Run("ErrProviderRequired re-exports repositories", func(t *testing.T) {
-		t.Parallel()
-
-		assert.True(t, errors.Is(ErrProviderRequired, repositories.ErrProviderRequired))
 	})
 
 	t.Run("ErrRepoNotInitialized re-exports repositories", func(t *testing.T) {

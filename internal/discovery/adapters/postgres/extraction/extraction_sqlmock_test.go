@@ -390,6 +390,36 @@ func TestRepository_CreateWithTx_NilTransaction(t *testing.T) {
 	assert.ErrorIs(t, err, ErrTransactionRequired)
 }
 
+func TestRepository_CreateWithTx_Success(t *testing.T) {
+	t.Parallel()
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	provider := testutil.NewMockProviderFromDB(t, db)
+	repo := NewRepository(provider)
+	req := createTestExtraction()
+	tablesJSON, err := req.TablesJSON()
+	require.NoError(t, err)
+	filtersJSON, err := req.FiltersJSON()
+	require.NoError(t, err)
+
+	mock.ExpectBegin()
+	tx, err := db.Begin()
+	require.NoError(t, err)
+
+	mock.ExpectExec("INSERT INTO extraction_requests").
+		WithArgs(req.ID, req.ConnectionID, req.IngestionJobID, req.FetcherJobID, tablesJSON, filtersJSON, req.Status.String(), req.ResultPath, sqlmock.AnyArg(), req.CreatedAt, req.UpdatedAt).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectRollback()
+
+	err = repo.CreateWithTx(context.Background(), tx, req)
+	require.NoError(t, err)
+	require.NoError(t, tx.Rollback())
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestRepository_UpdateWithTx_NilTransaction(t *testing.T) {
 	t.Parallel()
 
@@ -399,6 +429,36 @@ func TestRepository_UpdateWithTx_NilTransaction(t *testing.T) {
 	err := repo.UpdateWithTx(context.Background(), nil, createTestExtraction())
 
 	assert.ErrorIs(t, err, ErrTransactionRequired)
+}
+
+func TestRepository_UpdateWithTx_Success(t *testing.T) {
+	t.Parallel()
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	provider := testutil.NewMockProviderFromDB(t, db)
+	repo := NewRepository(provider)
+	req := createTestExtraction()
+	tablesJSON, err := req.TablesJSON()
+	require.NoError(t, err)
+	filtersJSON, err := req.FiltersJSON()
+	require.NoError(t, err)
+
+	mock.ExpectBegin()
+	tx, err := db.Begin()
+	require.NoError(t, err)
+
+	mock.ExpectExec("UPDATE extraction_requests SET").
+		WithArgs(req.ConnectionID, req.IngestionJobID, req.FetcherJobID, tablesJSON, filtersJSON, req.Status.String(), req.ResultPath, sqlmock.AnyArg(), req.UpdatedAt, req.ID).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectRollback()
+
+	err = repo.UpdateWithTx(context.Background(), tx, req)
+	require.NoError(t, err)
+	require.NoError(t, tx.Rollback())
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestExtractionModel_ToDomain_Nil(t *testing.T) {

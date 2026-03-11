@@ -77,7 +77,6 @@ type ExtractionRequestResponse struct {
 	Tables         map[string]any `json:"tables"`
 	Filters        map[string]any `json:"filters,omitempty"`
 	Status         string         `json:"status"`
-	ResultPath     string         `json:"resultPath,omitempty"`
 	ErrorMessage   string         `json:"errorMessage,omitempty"`
 	CreatedAt      time.Time      `json:"createdAt"`
 	UpdatedAt      time.Time      `json:"updatedAt"`
@@ -125,7 +124,6 @@ func ExtractionRequestFromEntity(entity *entities.ExtractionRequest) ExtractionR
 		Tables:         entity.Tables,
 		Filters:        entity.Filters,
 		Status:         entity.Status.String(),
-		ResultPath:     entity.ResultPath,
 		ErrorMessage:   entity.ErrorMessage,
 		CreatedAt:      entity.CreatedAt,
 		UpdatedAt:      entity.UpdatedAt,

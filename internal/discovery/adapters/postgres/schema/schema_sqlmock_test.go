@@ -345,6 +345,35 @@ func TestRepository_UpsertBatchWithTx_NilTransaction(t *testing.T) {
 	assert.ErrorIs(t, err, ErrTransactionRequired)
 }
 
+func TestRepository_UpsertBatchWithTx_Success(t *testing.T) {
+	t.Parallel()
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	provider := testutil.NewMockProviderFromDB(t, db)
+	repo := NewRepository(provider)
+	schema := createTestSchema()
+
+	mock.ExpectBegin()
+	tx, err := db.Begin()
+	require.NoError(t, err)
+
+	mock.ExpectExec("DELETE FROM discovered_schemas").
+		WithArgs(schema.ConnectionID).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec("INSERT INTO discovered_schemas").
+		WithArgs(schema.ID, schema.ConnectionID, schema.TableName, sqlmock.AnyArg(), schema.DiscoveredAt).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectRollback()
+
+	err = repo.UpsertBatchWithTx(context.Background(), tx, []*entities.DiscoveredSchema{schema})
+	require.NoError(t, err)
+	require.NoError(t, tx.Rollback())
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestRepository_DeleteByConnectionIDWithTx_NilTransaction(t *testing.T) {
 	t.Parallel()
 
@@ -354,6 +383,32 @@ func TestRepository_DeleteByConnectionIDWithTx_NilTransaction(t *testing.T) {
 	err := repo.DeleteByConnectionIDWithTx(context.Background(), nil, uuid.New())
 
 	assert.ErrorIs(t, err, ErrTransactionRequired)
+}
+
+func TestRepository_DeleteByConnectionIDWithTx_Success(t *testing.T) {
+	t.Parallel()
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	provider := testutil.NewMockProviderFromDB(t, db)
+	repo := NewRepository(provider)
+	connectionID := uuid.New()
+
+	mock.ExpectBegin()
+	tx, err := db.Begin()
+	require.NoError(t, err)
+
+	mock.ExpectExec("DELETE FROM discovered_schemas").
+		WithArgs(connectionID).
+		WillReturnResult(sqlmock.NewResult(0, 2))
+	mock.ExpectRollback()
+
+	err = repo.DeleteByConnectionIDWithTx(context.Background(), tx, connectionID)
+	require.NoError(t, err)
+	require.NoError(t, tx.Rollback())
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestSchemaModel_ToDomain_Nil(t *testing.T) {

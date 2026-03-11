@@ -1184,7 +1184,7 @@ func TestInitArchivalComponents_DisabledNoStorage(t *testing.T) {
 		}
 
 		var cleanups []func()
-		worker, err := initArchivalComponents(nil, cfg, nil, nil, &libLog.NopLogger{}, &cleanups)
+		worker, err := initArchivalComponents(nil, cfg, nil, &libLog.NopLogger{}, &cleanups)
 
 		assert.NoError(t, err)
 		assert.Nil(t, worker)
@@ -1478,6 +1478,34 @@ func TestFetcherHTTPClientConfig(t *testing.T) {
 
 func TestInitOptionalDiscoveryWorker(t *testing.T) {
 	t.Parallel()
+
+	t.Run("enabled_fetcher_returns_initialized_worker", func(t *testing.T) {
+		t.Parallel()
+
+		logger := &recordingInitLogger{}
+		cfg := defaultConfig()
+		cfg.Fetcher.Enabled = true
+
+		expectedWorker := &discoveryWorker.DiscoveryWorker{}
+		called := false
+
+		worker := initOptionalDiscoveryWorker(
+			context.Background(),
+			nil,
+			cfg,
+			nil,
+			nil,
+			logger,
+			func(_ *Routes, _ *Config, _ sharedPorts.InfrastructureProvider, _ sharedPorts.TenantLister, _ libLog.Logger) (*discoveryWorker.DiscoveryWorker, error) {
+				called = true
+				return expectedWorker, nil
+			},
+		)
+
+		assert.True(t, called)
+		assert.Same(t, expectedWorker, worker)
+		assert.False(t, logger.hasEntry(libLog.LevelWarn, "discovery module failed to initialize"))
+	})
 
 	t.Run("disabled_fetcher_skips_initialization", func(t *testing.T) {
 		t.Parallel()

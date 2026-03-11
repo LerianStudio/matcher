@@ -125,6 +125,31 @@ func TestResponseDTOs_CompileCheck(t *testing.T) {
 	_ = ConnectionSchemaResponse{}
 	_ = RefreshDiscoveryResponse{}
 	_ = TestConnectionResponse{}
+	_ = ExtractionRequestResponse{}
+}
+
+func TestExtractionRequestFromEntity_HidesInternalResultPath(t *testing.T) {
+	t.Parallel()
+
+	entity := &entities.ExtractionRequest{
+		ID:           uuid.New(),
+		ConnectionID: uuid.New(),
+		FetcherJobID: "job-123",
+		Tables:       map[string]any{"transactions": true},
+		Status:       vo.ExtractionStatusComplete,
+		ResultPath:   "/tmp/internal/result.csv",
+		CreatedAt:    time.Now().UTC(),
+		UpdatedAt:    time.Now().UTC(),
+	}
+
+	resp := ExtractionRequestFromEntity(entity)
+
+	assert.Equal(t, vo.ExtractionStatusComplete.String(), resp.Status)
+	assert.Empty(t, resp.ErrorMessage)
+
+	encoded, err := json.Marshal(resp)
+	require.NoError(t, err)
+	assert.NotContains(t, string(encoded), "resultPath")
 }
 
 func TestDiscoveryStatusResponse_OmitsZeroLastSyncAt(t *testing.T) {

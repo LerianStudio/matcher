@@ -402,55 +402,6 @@ func TestRepository_FindByFetcherID(t *testing.T) {
 	})
 }
 
-func TestRepository_DeleteStale(t *testing.T) {
-	t.Parallel()
-
-	t.Run("nil repository", func(t *testing.T) {
-		t.Parallel()
-
-		var repo *Repository
-		count, err := repo.DeleteStale(context.Background(), 24*time.Hour)
-
-		assert.ErrorIs(t, err, ErrRepoNotInitialized)
-		assert.Equal(t, int64(0), count)
-	})
-
-	t.Run("successful delete stale", func(t *testing.T) {
-		t.Parallel()
-
-		repo, mock, finish := setupMockRepository(t)
-		defer finish()
-
-		mock.ExpectBegin()
-		mock.ExpectExec("DELETE FROM fetcher_connections WHERE last_seen_at").
-			WithArgs("86400 seconds").
-			WillReturnResult(sqlmock.NewResult(0, 3))
-		mock.ExpectCommit()
-
-		count, err := repo.DeleteStale(context.Background(), 24*time.Hour)
-
-		require.NoError(t, err)
-		assert.Equal(t, int64(3), count)
-	})
-
-	t.Run("exec error", func(t *testing.T) {
-		t.Parallel()
-
-		repo, mock, finish := setupMockRepository(t)
-		defer finish()
-
-		mock.ExpectBegin()
-		mock.ExpectExec("DELETE FROM fetcher_connections").
-			WillReturnError(errTestExec)
-		mock.ExpectRollback()
-
-		count, err := repo.DeleteStale(context.Background(), 24*time.Hour)
-
-		assert.Error(t, err)
-		assert.Equal(t, int64(0), count)
-	})
-}
-
 func TestRepository_UpsertWithTx_NilTransaction(t *testing.T) {
 	t.Parallel()
 
@@ -462,16 +413,43 @@ func TestRepository_UpsertWithTx_NilTransaction(t *testing.T) {
 	assert.ErrorIs(t, err, ErrTransactionRequired)
 }
 
-func TestRepository_DeleteStaleWithTx_NilTransaction(t *testing.T) {
+func TestRepository_UpsertWithTx_Success(t *testing.T) {
 	t.Parallel()
 
-	repo, _, finish := setupMockRepository(t)
-	defer finish()
+	conn := createTestConnection()
+	db, dbMock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
 
-	count, err := repo.DeleteStaleWithTx(context.Background(), nil, 24*time.Hour)
+	provider := testutil.NewMockProviderFromDB(t, db)
+	repo := NewRepository(provider)
 
-	assert.ErrorIs(t, err, ErrTransactionRequired)
-	assert.Equal(t, int64(0), count)
+	dbMock.ExpectBegin()
+	mockTx, err := db.Begin()
+	require.NoError(t, err)
+
+	dbMock.ExpectExec("INSERT INTO fetcher_connections").
+		WithArgs(
+			conn.ID,
+			conn.FetcherConnID,
+			conn.ConfigName,
+			conn.DatabaseType,
+			conn.Host,
+			conn.Port,
+			conn.DatabaseName,
+			conn.ProductName,
+			conn.Status.String(),
+			conn.LastSeenAt,
+			conn.SchemaDiscovered,
+			conn.CreatedAt,
+			conn.UpdatedAt,
+		).WillReturnResult(sqlmock.NewResult(1, 1))
+	dbMock.ExpectRollback()
+
+	err = repo.UpsertWithTx(context.Background(), mockTx, conn)
+	require.NoError(t, err)
+	require.NoError(t, mockTx.Rollback())
+	require.NoError(t, dbMock.ExpectationsWereMet())
 }
 
 func TestConnectionModel_ToDomain_Nil(t *testing.T) {

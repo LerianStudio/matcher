@@ -1,4 +1,2 @@
--- Reserved migration kept intentionally empty.
--- Extraction requests now reference the authoritative local connection UUID via
--- extraction_requests.connection_id, and the foreign key/index are created in
--- 000013_fetcher_discovery.up.sql to keep the shipped branch schema clean.
+-- Reserved migration kept intentionally as a no-op.
+SELECT 1;

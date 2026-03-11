@@ -6,7 +6,7 @@
 //
 //   - [ConnectionRepository]: Manages [entities.FetcherConnection] aggregates, representing
 //     database connections discovered from the Fetcher service. Supports upsert semantics
-//     for idempotent sync, lookup by internal or Fetcher-assigned ID, and stale cleanup.
+//     for idempotent sync and lookup by internal or Fetcher-assigned ID.
 //
 //   - [SchemaRepository]: Manages [entities.DiscoveredSchema] entities that represent
 //     table schemas discovered from Fetcher connections. Supports batch upsert for
@@ -25,7 +25,6 @@ package repositories
 import (
 	"context"
 	"errors"
-	"time"
 
 	"github.com/google/uuid"
 
@@ -56,8 +55,4 @@ type ConnectionRepository interface {
 	FindByID(ctx context.Context, id uuid.UUID) (*entities.FetcherConnection, error)
 	// FindByFetcherID retrieves a FetcherConnection by its Fetcher-assigned external ID.
 	FindByFetcherID(ctx context.Context, fetcherConnID string) (*entities.FetcherConnection, error)
-	// DeleteStale removes connections not seen since the given duration.
-	DeleteStale(ctx context.Context, notSeenSince time.Duration) (int64, error)
-	// DeleteStaleWithTx removes stale connections within an existing transaction.
-	DeleteStaleWithTx(ctx context.Context, tx sharedPorts.Tx, notSeenSince time.Duration) (int64, error)
 }

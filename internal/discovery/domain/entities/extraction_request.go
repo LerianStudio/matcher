@@ -19,6 +19,10 @@ import (
 // ErrInvalidTransition indicates an invalid status transition.
 var ErrInvalidTransition = errors.New("invalid status transition")
 
+// SanitizedExtractionFailureMessage is the client-safe failure detail persisted
+// for extraction requests when upstream systems return internal diagnostics.
+const SanitizedExtractionFailureMessage = "extraction failed"
+
 // ExtractionRequest tracks a data extraction request to Fetcher.
 // IngestionJobID is optional and reserved for downstream ingestion linkage.
 type ExtractionRequest struct {
@@ -171,6 +175,25 @@ func (er *ExtractionRequest) MarkFailed(errMsg string) error {
 	er.Status = vo.ExtractionStatusFailed
 	er.ResultPath = ""
 	er.ErrorMessage = errMsg
+	er.UpdatedAt = time.Now().UTC()
+
+	return nil
+}
+
+// MarkCancelled records extraction cancellation.
+// Valid transitions: Any non-terminal state -> CANCELLED.
+func (er *ExtractionRequest) MarkCancelled() error {
+	if er == nil {
+		return nil
+	}
+
+	if er.Status.IsTerminal() {
+		return fmt.Errorf("%w: cannot cancel from terminal state %s", ErrInvalidTransition, er.Status)
+	}
+
+	er.Status = vo.ExtractionStatusCancelled
+	er.ResultPath = ""
+	er.ErrorMessage = ""
 	er.UpdatedAt = time.Now().UTC()
 
 	return nil

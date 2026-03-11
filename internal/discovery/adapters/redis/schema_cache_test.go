@@ -157,6 +157,25 @@ func TestSchemaCache_GetSchema(t *testing.T) {
 		assert.Nil(t, result)
 		assert.Contains(t, err.Error(), "unmarshal cached schema")
 	})
+
+	t.Run("cached null is treated as miss", func(t *testing.T) {
+		t.Parallel()
+
+		client, _, cleanup := setupRedis(t)
+		defer cleanup()
+
+		ctx := testCacheContext()
+		err := client.Set(ctx, mustSchemaKey(t, ctx, "conn-1"), "null", 5*time.Minute).Err()
+		require.NoError(t, err)
+
+		cache, err := NewSchemaCache(client)
+		require.NoError(t, err)
+
+		result, err := cache.GetSchema(ctx, "conn-1")
+
+		assert.ErrorIs(t, err, ErrCacheMiss)
+		assert.Nil(t, result)
+	})
 }
 
 func TestSchemaCache_SetSchema(t *testing.T) {
@@ -197,47 +216,8 @@ func TestSchemaCache_SetSchema(t *testing.T) {
 		require.NoError(t, json.Unmarshal(data, &stored))
 		assert.Equal(t, "conn-1", stored.ConnectionID)
 	})
-}
 
-func TestSchemaCache_InvalidateSchema(t *testing.T) {
-	t.Parallel()
-
-	t.Run("nil cache", func(t *testing.T) {
-		t.Parallel()
-
-		var cache *SchemaCache
-		err := cache.InvalidateSchema(context.Background(), "conn-1")
-
-		assert.ErrorIs(t, err, ErrCacheNotInitialized)
-	})
-
-	t.Run("successful invalidation", func(t *testing.T) {
-		t.Parallel()
-
-		client, srv, cleanup := setupRedis(t)
-		defer cleanup()
-
-		cache, err := NewSchemaCache(client)
-		require.NoError(t, err)
-
-		// Populate schema caches
-		ctx := testCacheContext()
-		err = cache.SetSchema(ctx, "conn-1", createTestFetcherSchema(), 5*time.Minute)
-		require.NoError(t, err)
-
-		err = cache.SetSchema(ctx, "conn-2", createTestFetcherSchema(), 5*time.Minute)
-		require.NoError(t, err)
-
-		// Invalidate only conn-1
-		err = cache.InvalidateSchema(ctx, "conn-1")
-		require.NoError(t, err)
-
-		// Verify conn-1 is gone but conn-2 remains
-		assert.False(t, srv.Exists(mustSchemaKey(t, ctx, "conn-1")))
-		assert.True(t, srv.Exists(mustSchemaKey(t, ctx, "conn-2")))
-	})
-
-	t.Run("key does not exist", func(t *testing.T) {
+	t.Run("nil schema rejected", func(t *testing.T) {
 		t.Parallel()
 
 		client, _, cleanup := setupRedis(t)
@@ -246,10 +226,9 @@ func TestSchemaCache_InvalidateSchema(t *testing.T) {
 		cache, err := NewSchemaCache(client)
 		require.NoError(t, err)
 
-		// Invalidating non-existent key should not error
-		err = cache.InvalidateSchema(testCacheContext(), "nonexistent")
+		err = cache.SetSchema(testCacheContext(), "conn-1", nil, 5*time.Minute)
 
-		assert.NoError(t, err)
+		assert.ErrorIs(t, err, ErrSchemaRequired)
 	})
 }
 
@@ -275,34 +254,4 @@ func TestSchemaCache_TenantIsolation(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, "conn-1", result.ConnectionID)
-}
-
-func TestSchemaCache_InvalidateSchema_IsTenantScoped(t *testing.T) {
-	t.Parallel()
-
-	client, _, cleanup := setupRedis(t)
-	defer cleanup()
-
-	cache, err := NewSchemaCache(client)
-	require.NoError(t, err)
-
-	tenantA := context.WithValue(context.Background(), auth.TenantIDKey, "tenant-a")
-	tenantB := context.WithValue(context.Background(), auth.TenantIDKey, "tenant-b")
-	schemaA := createTestFetcherSchema()
-	schemaB := createTestFetcherSchema()
-	schemaB.ConnectionID = "conn-1"
-	schemaB.Tables[0].TableName = "tenant_b_transactions"
-
-	require.NoError(t, cache.SetSchema(tenantA, "conn-1", schemaA, 5*time.Minute))
-	require.NoError(t, cache.SetSchema(tenantB, "conn-1", schemaB, 5*time.Minute))
-
-	require.NoError(t, cache.InvalidateSchema(tenantA, "conn-1"))
-
-	_, err = cache.GetSchema(tenantA, "conn-1")
-	assert.ErrorIs(t, err, ErrCacheMiss)
-
-	remaining, err := cache.GetSchema(tenantB, "conn-1")
-	require.NoError(t, err)
-	require.NotNil(t, remaining)
-	assert.Equal(t, "tenant_b_transactions", remaining.Tables[0].TableName)
 }

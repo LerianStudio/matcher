@@ -160,8 +160,10 @@ type mockExtractionRepo struct {
 	createCount int
 	updateErr   error
 	updateCount int
+	updateIfFn  func(ctx context.Context, req *entities.ExtractionRequest, expectedUpdatedAt time.Time) error
 	findByIDReq *entities.ExtractionRequest
 	findByIDErr error
+	findByIDFn  func(ctx context.Context, id uuid.UUID) (*entities.ExtractionRequest, error)
 }
 
 func (m *mockExtractionRepo) Create(_ context.Context, _ *entities.ExtractionRequest) error {
@@ -180,11 +182,24 @@ func (m *mockExtractionRepo) Update(_ context.Context, _ *entities.ExtractionReq
 	return m.updateErr
 }
 
+func (m *mockExtractionRepo) UpdateIfUnchanged(ctx context.Context, req *entities.ExtractionRequest, expectedUpdatedAt time.Time) error {
+	m.updateCount++
+	if m.updateIfFn != nil {
+		return m.updateIfFn(ctx, req, expectedUpdatedAt)
+	}
+
+	return m.updateErr
+}
+
 func (m *mockExtractionRepo) UpdateWithTx(_ context.Context, _ *sql.Tx, _ *entities.ExtractionRequest) error {
 	return m.updateErr
 }
 
-func (m *mockExtractionRepo) FindByID(_ context.Context, _ uuid.UUID) (*entities.ExtractionRequest, error) {
+func (m *mockExtractionRepo) FindByID(ctx context.Context, id uuid.UUID) (*entities.ExtractionRequest, error) {
+	if m.findByIDFn != nil {
+		return m.findByIDFn(ctx, id)
+	}
+
 	return m.findByIDReq, m.findByIDErr
 }
 
@@ -200,6 +215,7 @@ func TestSentinelErrors(t *testing.T) {
 	}{
 		{"ErrFetcherUnavailable", ErrFetcherUnavailable, "fetcher service is unavailable"},
 		{"ErrConnectionNotFound", ErrConnectionNotFound, "fetcher connection not found"},
+		{"ErrInvalidExtractionRequest", ErrInvalidExtractionRequest, "invalid extraction request"},
 		{"ErrExtractionTimeout", ErrExtractionTimeout, "extraction job timed out"},
 		{"ErrExtractionFailed", ErrExtractionFailed, "extraction job failed"},
 		{"ErrNilFetcherClient", ErrNilFetcherClient, "fetcher client is required"},

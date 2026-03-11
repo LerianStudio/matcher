@@ -10,7 +10,6 @@ import (
 var (
 	// ErrConnectionNotFound re-exports the domain-level sentinel for adapter compatibility.
 	ErrConnectionNotFound  = repositories.ErrConnectionNotFound
-	ErrProviderRequired    = repositories.ErrProviderRequired
 	ErrRepoNotInitialized  = repositories.ErrRepoNotInitialized
 	ErrEntityRequired      = repositories.ErrEntityRequired
 	ErrModelRequired       = repositories.ErrModelRequired

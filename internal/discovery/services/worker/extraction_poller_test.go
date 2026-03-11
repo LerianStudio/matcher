@@ -28,6 +28,7 @@ type stubExtractionRepo struct {
 	createFn       func(ctx context.Context, req *entities.ExtractionRequest) error
 	createWithTxFn func(ctx context.Context, tx *sql.Tx, req *entities.ExtractionRequest) error
 	updateFn       func(ctx context.Context, req *entities.ExtractionRequest) error
+	updateIfFn     func(ctx context.Context, req *entities.ExtractionRequest, expectedUpdatedAt time.Time) error
 	updateWithTxFn func(ctx context.Context, tx *sql.Tx, req *entities.ExtractionRequest) error
 	findByIDFn     func(ctx context.Context, id uuid.UUID) (*entities.ExtractionRequest, error)
 }
@@ -57,6 +58,18 @@ func (m *stubExtractionRepo) Update(ctx context.Context, req *entities.Extractio
 	}
 
 	return nil
+}
+
+func (m *stubExtractionRepo) UpdateIfUnchanged(ctx context.Context, req *entities.ExtractionRequest, expectedUpdatedAt time.Time) error {
+	if m.updateIfFn != nil {
+		if err := m.updateIfFn(ctx, req, expectedUpdatedAt); err != nil {
+			return err
+		}
+	}
+
+	m.entity = req
+
+	return m.Update(ctx, req)
 }
 
 func (m *stubExtractionRepo) UpdateWithTx(ctx context.Context, tx *sql.Tx, req *entities.ExtractionRequest) error {
@@ -272,7 +285,7 @@ func TestExtractionPoller_DoPoll_ImmediateFailed(t *testing.T) {
 	)
 
 	assert.True(t, failedCalled.Load(), "onFailed should be called")
-	assert.Equal(t, "connection refused", failErrMsg)
+	assert.Equal(t, entities.SanitizedExtractionFailureMessage, failErrMsg)
 	assert.Equal(t, "FAILED", string(extraction.Status))
 }
 
@@ -327,6 +340,67 @@ func TestExtractionPoller_DoPoll_EventualComplete(t *testing.T) {
 
 	assert.True(t, completeCalled.Load(), "onComplete should eventually be called")
 	assert.GreaterOrEqual(t, pollCount.Load(), int32(3), "should poll at least 3 times")
+}
+
+func TestExtractionPoller_PollOnce_RemoteNotFoundCancelsExtraction(t *testing.T) {
+	t.Parallel()
+
+	repo := &stubExtractionRepo{}
+	fetcher := &stubFetcherClient{
+		getExtractionJobStatusFn: func(_ context.Context, _ string) (*sharedPorts.ExtractionJobStatus, error) {
+			return nil, sharedPorts.ErrFetcherResourceNotFound
+		},
+	}
+
+	p, err := NewExtractionPoller(
+		fetcher,
+		repo,
+		ExtractionPollerConfig{PollInterval: 10 * time.Millisecond, Timeout: time.Second},
+		&stubLogger{},
+	)
+	require.NoError(t, err)
+
+	extraction := &entities.ExtractionRequest{ID: uuid.New(), FetcherJobID: "job-missing", Status: vo.ExtractionStatusSubmitted}
+	repo.entity = extraction
+
+	done := p.pollOnce(context.Background(), extraction.ID, nil, nil)
+	assert.True(t, done)
+	assert.Equal(t, vo.ExtractionStatusCancelled, extraction.Status)
+}
+
+func TestExtractionPoller_PollOnce_CancelledStatusStopsPolling(t *testing.T) {
+	t.Parallel()
+
+	var failedCalled atomic.Bool
+	var failErrMsg string
+
+	repo := &stubExtractionRepo{}
+	fetcher := &stubFetcherClient{
+		getExtractionJobStatusFn: func(_ context.Context, _ string) (*sharedPorts.ExtractionJobStatus, error) {
+			return &sharedPorts.ExtractionJobStatus{Status: "CANCELLED", JobID: "job-cancelled"}, nil
+		},
+	}
+
+	p, err := NewExtractionPoller(
+		fetcher,
+		repo,
+		ExtractionPollerConfig{PollInterval: 10 * time.Millisecond, Timeout: time.Second},
+		&stubLogger{},
+	)
+	require.NoError(t, err)
+
+	extraction := &entities.ExtractionRequest{ID: uuid.New(), FetcherJobID: "job-cancelled", Status: vo.ExtractionStatusExtracting}
+	repo.entity = extraction
+
+	done := p.pollOnce(context.Background(), extraction.ID, nil, func(_ context.Context, msg string) {
+		failedCalled.Store(true)
+		failErrMsg = msg
+	})
+
+	assert.True(t, done)
+	assert.True(t, failedCalled.Load())
+	assert.Equal(t, "extraction cancelled", failErrMsg)
+	assert.Equal(t, vo.ExtractionStatusCancelled, extraction.Status)
 }
 
 func TestExtractionPoller_DoPoll_Timeout(t *testing.T) {
@@ -598,7 +672,7 @@ func TestExtractionPoller_PollOnce_FailedUpdateFailure_RollsBackState(t *testing
 	done = p.pollOnce(context.Background(), extraction.ID, nil, nil)
 	assert.True(t, done)
 	assert.Equal(t, vo.ExtractionStatusFailed, extraction.Status)
-	assert.Equal(t, "fatal", extraction.ErrorMessage)
+	assert.Equal(t, entities.SanitizedExtractionFailureMessage, extraction.ErrorMessage)
 }
 
 func TestExtractionPoller_PollOnce_ReloadsLatestEntityState(t *testing.T) {
@@ -635,6 +709,59 @@ func TestExtractionPoller_PollOnce_ReloadsLatestEntityState(t *testing.T) {
 	done := p.pollOnce(context.Background(), extractionID, nil, nil)
 	assert.True(t, done)
 	assert.Equal(t, 0, fetcherCalls, "poller must stop on reloaded terminal state without calling fetcher")
+}
+
+func TestExtractionPoller_PollOnce_ConcurrentUpdateStopsOnReloadedTerminalState(t *testing.T) {
+	t.Parallel()
+
+	staleExtraction := &entities.ExtractionRequest{
+		ID:           uuid.New(),
+		FetcherJobID: "job-conflict",
+		Status:       vo.ExtractionStatusSubmitted,
+		UpdatedAt:    time.Now().UTC().Add(-time.Second),
+	}
+	latestExtraction := &entities.ExtractionRequest{
+		ID:           staleExtraction.ID,
+		FetcherJobID: staleExtraction.FetcherJobID,
+		Status:       vo.ExtractionStatusComplete,
+		ResultPath:   "/data/existing.csv",
+		UpdatedAt:    time.Now().UTC(),
+	}
+
+	var findCount int
+	repo := &stubExtractionRepo{
+		findByIDFn: func(_ context.Context, id uuid.UUID) (*entities.ExtractionRequest, error) {
+			findCount++
+			if findCount == 1 {
+				return staleExtraction, nil
+			}
+
+			return latestExtraction, nil
+		},
+		updateIfFn: func(_ context.Context, _ *entities.ExtractionRequest, _ time.Time) error {
+			return repositories.ErrExtractionConflict
+		},
+	}
+
+	fetcher := &stubFetcherClient{
+		getExtractionJobStatusFn: func(_ context.Context, _ string) (*sharedPorts.ExtractionJobStatus, error) {
+			return &sharedPorts.ExtractionJobStatus{Status: "FAILED", ErrorMessage: "lost connection"}, nil
+		},
+	}
+
+	p, err := NewExtractionPoller(
+		fetcher,
+		repo,
+		ExtractionPollerConfig{PollInterval: 10 * time.Millisecond, Timeout: time.Second},
+		&stubLogger{},
+	)
+	require.NoError(t, err)
+
+	done := p.pollOnce(context.Background(), staleExtraction.ID, nil, nil)
+	assert.True(t, done)
+	assert.Equal(t, 2, findCount)
+	assert.Equal(t, vo.ExtractionStatusComplete, latestExtraction.Status)
+	assert.Equal(t, "/data/existing.csv", latestExtraction.ResultPath)
 }
 
 // --- Sentinel errors ---

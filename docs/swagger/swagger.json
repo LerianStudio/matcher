@@ -10878,9 +10878,6 @@
                 "ingestionJobId": {
                     "type": "string"
                 },
-                "resultPath": {
-                    "type": "string"
-                },
                 "status": {
                     "type": "string"
                 },
@@ -10934,6 +10931,9 @@
         },
         "github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.StartExtractionRequest": {
             "type": "object",
+            "required": [
+                "tables"
+            ],
             "properties": {
                 "endDate": {
                     "type": "string"
@@ -13456,7 +13456,7 @@
                 "message": {
                     "type": "string"
                 },
-                "type": {
+                "title": {
                     "type": "string"
                 }
             }
@@ -13582,7 +13582,7 @@
                 "message": {
                     "type": "string"
                 },
-                "type": {
+                "title": {
                     "type": "string"
                 }
             }
@@ -13596,7 +13596,7 @@
                 "message": {
                     "type": "string"
                 },
-                "type": {
+                "title": {
                     "type": "string"
                 }
             }
@@ -13656,7 +13656,7 @@
                 "message": {
                     "type": "string"
                 },
-                "type": {
+                "title": {
                     "type": "string"
                 }
             }

@@ -19,7 +19,6 @@ var (
 	ErrMissingHost      = errors.New("fetcher URL host is required")
 	ErrPrivateIPBlocked = errors.New("connections to private IPs are not allowed")
 	ErrNoIPsFound       = errors.New("no IPs found for host")
-	ErrNoDialableIPs    = errors.New("no dialable IPs for host")
 )
 
 // Default client configuration constants.
@@ -130,7 +129,7 @@ func (cfg HTTPClientConfig) buildTransport() *http.Transport {
 				}
 			}
 
-			var lastDialErr error
+			lastDialErr := ErrNoIPsFound
 
 			for _, ipAddr := range ips {
 				targetAddr := net.JoinHostPort(ipAddr.IP.String(), port)
@@ -143,11 +142,7 @@ func (cfg HTTPClientConfig) buildTransport() *http.Transport {
 				lastDialErr = dialErr
 			}
 
-			if lastDialErr != nil {
-				return nil, fmt.Errorf("dial resolved host: %w", lastDialErr)
-			}
-
-			return nil, fmt.Errorf("dial resolved host %s: %w", host, ErrNoDialableIPs)
+			return nil, fmt.Errorf("dial resolved host: %w", lastDialErr)
 		},
 	}
 }

@@ -24,9 +24,9 @@ var _ sharedPorts.FetcherClient = (*HTTPFetcherClient)(nil)
 
 // Sentinel errors.
 var (
-	ErrFetcherUnreachable = errors.New("fetcher service is unreachable")
+	ErrFetcherUnreachable = sharedPorts.ErrFetcherUnavailable
 	ErrFetcherBadResponse = errors.New("unexpected response from fetcher")
-	ErrFetcherNotFound    = errors.New("resource not found in fetcher")
+	ErrFetcherNotFound    = sharedPorts.ErrFetcherResourceNotFound
 	ErrFetcherClientNil   = errors.New("fetcher client is not initialized")
 	ErrFetcherJobIDEmpty  = errors.New("fetcher extraction response missing job id")
 )
@@ -87,14 +87,29 @@ func (client *HTTPFetcherClient) IsHealthy(ctx context.Context) bool {
 	if err != nil {
 		return false
 	}
-	defer resp.Body.Close()
+
+	body, err := func() ([]byte, error) {
+		defer func() {
+			_ = resp.Body.Close()
+		}()
+
+		return readBoundedBody(resp.Body)
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return false
 	}
 
+	if err != nil {
+		return false
+	}
+
+	if err := rejectEmptyOrNullBody(body); err != nil {
+		return false
+	}
+
 	var health fetcherHealthResponse
-	if err := json.NewDecoder(resp.Body).Decode(&health); err != nil {
+	if err := json.Unmarshal(body, &health); err != nil {
 		return false
 	}
 
@@ -118,6 +133,11 @@ func (client *HTTPFetcherClient) ListConnections(ctx context.Context, orgID stri
 	}
 
 	var listResp fetcherConnectionListResponse
+
+	if err := rejectEmptyOrNullBody(body); err != nil {
+		return nil, err
+	}
+
 	if err := json.Unmarshal(body, &listResp); err != nil {
 		return nil, fmt.Errorf("decode connections response: %w", err)
 	}
@@ -153,8 +173,17 @@ func (client *HTTPFetcherClient) GetSchema(ctx context.Context, connectionID str
 	}
 
 	var schemaResp fetcherSchemaResponse
+
+	if err := rejectEmptyOrNullBody(body); err != nil {
+		return nil, err
+	}
+
 	if err := json.Unmarshal(body, &schemaResp); err != nil {
 		return nil, fmt.Errorf("decode schema response: %w", err)
+	}
+
+	if err := validateFetcherResourceID("connection", connectionID, schemaResp.ConnectionID); err != nil {
+		return nil, err
 	}
 
 	tables := make([]sharedPorts.FetcherTableSchema, 0, len(schemaResp.Tables))
@@ -195,8 +224,17 @@ func (client *HTTPFetcherClient) TestConnection(ctx context.Context, connectionI
 	}
 
 	var testResp fetcherTestResponse
+
+	if err := rejectEmptyOrNullBody(body); err != nil {
+		return nil, err
+	}
+
 	if err := json.Unmarshal(body, &testResp); err != nil {
 		return nil, fmt.Errorf("decode test response: %w", err)
+	}
+
+	if err := validateFetcherResourceID("connection", connectionID, testResp.ConnectionID); err != nil {
+		return nil, err
 	}
 
 	return &sharedPorts.FetcherTestResult{
@@ -239,6 +277,11 @@ func (client *HTTPFetcherClient) SubmitExtractionJob(ctx context.Context, input 
 	}
 
 	var resp fetcherExtractionSubmitResponse
+
+	if err := rejectEmptyOrNullBody(body); err != nil {
+		return "", err
+	}
+
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return "", fmt.Errorf("decode extraction response: %w", err)
 	}
@@ -264,17 +307,74 @@ func (client *HTTPFetcherClient) GetExtractionJobStatus(ctx context.Context, job
 	}
 
 	var resp fetcherExtractionStatusResponse
+
+	if err := rejectEmptyOrNullBody(body); err != nil {
+		return nil, err
+	}
+
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return nil, fmt.Errorf("decode extraction status: %w", err)
 	}
 
+	if err := validateFetcherResourceID("job", jobID, resp.JobID); err != nil {
+		return nil, err
+	}
+
+	normalizedStatus, err := normalizeExtractionStatus(resp)
+	if err != nil {
+		return nil, err
+	}
+
 	return &sharedPorts.ExtractionJobStatus{
 		JobID:        resp.JobID,
-		Status:       resp.Status,
+		Status:       normalizedStatus,
 		Progress:     resp.Progress,
 		ResultPath:   resp.ResultPath,
 		ErrorMessage: resp.ErrorMessage,
 	}, nil
+}
+
+func validateFetcherResourceID(resource, expected, actual string) error {
+	trimmedExpected := strings.TrimSpace(expected)
+	trimmedActual := strings.TrimSpace(actual)
+
+	if trimmedExpected == "" || trimmedActual == "" {
+		return fmt.Errorf("%w: %s id is required", ErrFetcherBadResponse, resource)
+	}
+
+	if trimmedExpected != trimmedActual {
+		return fmt.Errorf("%w: %s id mismatch (expected %q, got %q)", ErrFetcherBadResponse, resource, trimmedExpected, trimmedActual)
+	}
+
+	return nil
+}
+
+func normalizeExtractionStatus(resp fetcherExtractionStatusResponse) (string, error) {
+	normalizedStatus := strings.ToUpper(strings.TrimSpace(resp.Status))
+	if normalizedStatus == "CANCELED" {
+		normalizedStatus = "CANCELLED"
+	}
+
+	switch normalizedStatus {
+	case "PENDING", "SUBMITTED", "RUNNING", "EXTRACTING":
+		return normalizedStatus, nil
+	case "COMPLETE":
+		if strings.TrimSpace(resp.ResultPath) == "" {
+			return "", fmt.Errorf("%w: complete extraction missing result path", ErrFetcherBadResponse)
+		}
+
+		return normalizedStatus, nil
+	case "FAILED":
+		if strings.TrimSpace(resp.ErrorMessage) == "" {
+			return "", fmt.Errorf("%w: failed extraction missing error message", ErrFetcherBadResponse)
+		}
+
+		return normalizedStatus, nil
+	case "CANCELLED":
+		return normalizedStatus, nil
+	default:
+		return "", fmt.Errorf("%w: unknown extraction status %q", ErrFetcherBadResponse, resp.Status)
+	}
 }
 
 // doGet performs a GET request with retry logic.
@@ -285,6 +385,30 @@ func (client *HTTPFetcherClient) doGet(ctx context.Context, requestURL string) (
 // doPost performs a POST request with retry logic.
 func (client *HTTPFetcherClient) doPost(ctx context.Context, requestURL string, body []byte) ([]byte, error) {
 	return client.doRequest(ctx, http.MethodPost, requestURL, body, false)
+}
+
+func readBoundedBody(body io.Reader) ([]byte, error) {
+	limitedReader := io.LimitReader(body, int64(maxResponseBodySize)+1)
+
+	respBody, readErr := io.ReadAll(limitedReader)
+	if readErr != nil {
+		return nil, fmt.Errorf("read response body: %w", readErr)
+	}
+
+	if int64(len(respBody)) > int64(maxResponseBodySize) {
+		return nil, fmt.Errorf("%w: response body exceeds %d bytes", ErrFetcherBadResponse, maxResponseBodySize)
+	}
+
+	return respBody, nil
+}
+
+func rejectEmptyOrNullBody(body []byte) error {
+	trimmed := strings.TrimSpace(string(body))
+	if trimmed == "" || trimmed == "null" {
+		return fmt.Errorf("%w: null/empty payload", ErrFetcherBadResponse)
+	}
+
+	return nil
 }
 
 // maxBackoffDelay caps the exponential backoff to prevent indefinite waits
@@ -344,30 +468,20 @@ func (client *HTTPFetcherClient) doRequest(ctx context.Context, method, requestU
 			continue
 		}
 
-		limitedReader := io.LimitReader(resp.Body, int64(maxResponseBodySize)+1)
-		respBody, readErr := io.ReadAll(limitedReader)
-		closeErr := resp.Body.Close()
+		respBody, bodyErr := func() ([]byte, error) {
+			defer func() {
+				_ = resp.Body.Close()
+			}()
 
-		if readErr != nil {
-			lastErr = fmt.Errorf("read response body: %w", readErr)
+			return readBoundedBody(resp.Body)
+		}()
+		if bodyErr != nil {
+			lastErr = bodyErr
 			if !retryable {
 				return nil, lastErr
 			}
 
 			continue
-		}
-
-		if closeErr != nil {
-			lastErr = fmt.Errorf("close response body: %w", closeErr)
-			if !retryable {
-				return nil, lastErr
-			}
-
-			continue
-		}
-
-		if int64(len(respBody)) > int64(maxResponseBodySize) {
-			return nil, fmt.Errorf("%w: response body exceeds %d bytes", ErrFetcherBadResponse, maxResponseBodySize)
 		}
 
 		result, statusErr := classifyResponse(resp.StatusCode, respBody)

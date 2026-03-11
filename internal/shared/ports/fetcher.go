@@ -2,7 +2,15 @@ package ports
 
 import (
 	"context"
+	"errors"
 	"time"
+)
+
+var (
+	// ErrFetcherUnavailable indicates the Fetcher service could not be reached.
+	ErrFetcherUnavailable = errors.New("fetcher service is unavailable")
+	// ErrFetcherResourceNotFound indicates Fetcher returned 404 for a requested resource.
+	ErrFetcherResourceNotFound = errors.New("fetcher resource not found")
 )
 
 //go:generate mockgen -source=fetcher.go -destination=mocks/fetcher_mock.go -package=mocks

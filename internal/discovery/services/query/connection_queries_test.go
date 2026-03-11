@@ -379,6 +379,7 @@ func TestGetConnectionSchema_UsesCacheWhenAvailable(t *testing.T) {
 	t.Parallel()
 
 	connID := uuid.New()
+	discoveredAt := time.Date(2026, 3, 11, 12, 0, 0, 0, time.UTC)
 	uc, err := NewUseCase(
 		&mockFetcherClient{healthy: true},
 		&mockConnectionRepo{},
@@ -395,15 +396,22 @@ func TestGetConnectionSchema_UsesCacheWhenAvailable(t *testing.T) {
 			return &sharedPorts.FetcherSchema{Tables: []sharedPorts.FetcherTableSchema{{
 				TableName: "transactions",
 				Columns:   []sharedPorts.FetcherColumnInfo{{Name: "id", Type: "uuid", Nullable: false}},
-			}}}, nil
+			}}, DiscoveredAt: discoveredAt}, nil
 		},
 	}, time.Minute)
 
-	schemas, err := uc.GetConnectionSchema(context.Background(), connID)
+	first, err := uc.GetConnectionSchema(context.Background(), connID)
 
 	require.NoError(t, err)
-	require.Len(t, schemas, 1)
-	assert.Equal(t, "transactions", schemas[0].TableName)
+	require.Len(t, first, 1)
+	assert.Equal(t, "transactions", first[0].TableName)
+	assert.Equal(t, discoveredAt, first[0].DiscoveredAt)
+
+	second, err := uc.GetConnectionSchema(context.Background(), connID)
+	require.NoError(t, err)
+	require.Len(t, second, 1)
+	assert.Equal(t, first[0].ID, second[0].ID)
+	assert.Equal(t, first[0].DiscoveredAt, second[0].DiscoveredAt)
 }
 
 func TestGetConnectionSchema_FallsBackToRepositoryOnCacheError(t *testing.T) {
@@ -435,4 +443,39 @@ func TestGetConnectionSchema_FallsBackToRepositoryOnCacheError(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, expected, schemas)
+}
+
+func TestCacheSchemas_PreservesLatestDiscoveredAt(t *testing.T) {
+	t.Parallel()
+
+	connID := uuid.New()
+	firstSeen := time.Date(2026, 3, 10, 12, 0, 0, 0, time.UTC)
+	secondSeen := firstSeen.Add(2 * time.Hour)
+
+	uc, err := NewUseCase(
+		&mockFetcherClient{healthy: true},
+		&mockConnectionRepo{},
+		&mockSchemaRepo{},
+		&mockExtractionRepo{},
+		&libLog.NopLogger{},
+	)
+	require.NoError(t, err)
+
+	var cached *sharedPorts.FetcherSchema
+	uc.WithSchemaCache(&mockSchemaCache{
+		setSchemaFn: func(_ context.Context, connectionID string, schema *sharedPorts.FetcherSchema, ttl time.Duration) error {
+			assert.Equal(t, connID.String(), connectionID)
+			assert.Equal(t, time.Minute, ttl)
+			cached = schema
+			return nil
+		},
+	}, time.Minute)
+
+	uc.cacheSchemas(context.Background(), connID, []*entities.DiscoveredSchema{
+		{ID: uuid.New(), ConnectionID: connID, TableName: "accounts", DiscoveredAt: firstSeen},
+		{ID: uuid.New(), ConnectionID: connID, TableName: "transactions", DiscoveredAt: secondSeen},
+	})
+
+	require.NotNil(t, cached)
+	assert.Equal(t, secondSeen, cached.DiscoveredAt)
 }

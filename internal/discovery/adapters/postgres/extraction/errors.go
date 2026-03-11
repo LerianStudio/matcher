@@ -4,12 +4,13 @@ package extraction
 import (
 	"errors"
 
+	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 )
 
 // Sentinel errors for extraction repository operations.
 var (
-	ErrExtractionNotFound  = errors.New("extraction request not found")
+	ErrExtractionNotFound  = repositories.ErrExtractionNotFound
 	ErrRepoNotInitialized  = errors.New("extraction repository not initialized")
 	ErrEntityRequired      = errors.New("extraction request entity is required")
 	ErrModelRequired       = errors.New("extraction request model is required")

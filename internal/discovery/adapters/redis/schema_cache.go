@@ -84,6 +84,8 @@ var (
 	ErrRedisClientRequired = errors.New("redis client is required")
 	// ErrEmptyConnectionID indicates an empty connection ID was provided for cache key.
 	ErrEmptyConnectionID = errors.New("connection ID is required for schema cache key")
+	// ErrSchemaRequired indicates a nil schema was provided for cache storage.
+	ErrSchemaRequired = errors.New("schema is required for cache storage")
 )
 
 // tracerFromContext extracts the OpenTelemetry tracer from context.
@@ -138,6 +140,11 @@ func (cache *SchemaCache) GetSchema(ctx context.Context, connectionID string) (*
 		return nil, wrappedErr
 	}
 
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "" || trimmed == "null" {
+		return nil, ErrCacheMiss
+	}
+
 	var schema sharedPorts.FetcherSchema
 	if err := json.Unmarshal(data, &schema); err != nil {
 		wrappedErr := fmt.Errorf("unmarshal cached schema: %w", err)
@@ -153,6 +160,10 @@ func (cache *SchemaCache) GetSchema(ctx context.Context, connectionID string) (*
 func (cache *SchemaCache) SetSchema(ctx context.Context, connID string, schema *sharedPorts.FetcherSchema, ttl time.Duration) error {
 	if cache == nil || cache.client == nil {
 		return ErrCacheNotInitialized
+	}
+
+	if schema == nil {
+		return ErrSchemaRequired
 	}
 
 	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
@@ -180,35 +191,6 @@ func (cache *SchemaCache) SetSchema(ctx context.Context, connID string, schema *
 		wrappedErr := fmt.Errorf("set schema in cache: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to set schema in cache", wrappedErr)
 		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to set schema in cache")
-
-		return wrappedErr
-	}
-
-	return nil
-}
-
-// InvalidateSchema removes a specific connection's cached schema.
-func (cache *SchemaCache) InvalidateSchema(ctx context.Context, connectionID string) error {
-	if cache == nil || cache.client == nil {
-		return ErrCacheNotInitialized
-	}
-
-	tracer := tracerFromContext(ctx)
-
-	ctx, span := tracer.Start(ctx, "redis.discovery.invalidate_schema")
-	defer span.End()
-
-	key, err := schemaKey(ctx, connectionID)
-	if err != nil {
-		wrappedErr := fmt.Errorf("construct schema key: %w", err)
-		libOpentelemetry.HandleSpanError(span, "failed to construct schema key", wrappedErr)
-
-		return wrappedErr
-	}
-
-	if err := cache.client.Del(ctx, key).Err(); err != nil {
-		wrappedErr := fmt.Errorf("invalidate schema cache: %w", err)
-		libOpentelemetry.HandleSpanError(span, "failed to invalidate schema cache", wrappedErr)
 
 		return wrappedErr
 	}
