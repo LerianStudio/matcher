@@ -2918,6 +2918,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
                         }
                     },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
@@ -2973,6 +2979,12 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
                             "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
                         }
@@ -3048,6 +3060,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
                         }
                     },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
                     "404": {
                         "description": "Connection not found",
                         "schema": {
@@ -3119,6 +3137,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
                         }
                     },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
                     "404": {
                         "description": "Connection not found",
                         "schema": {
@@ -3183,6 +3207,12 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
                             "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
                         }
@@ -3258,6 +3288,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
                         }
                     },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
                     "404": {
                         "description": "Extraction not found",
                         "schema": {
@@ -3281,9 +3317,6 @@ const docTemplate = `{
                     }
                 ],
                 "description": "Polls Fetcher for the latest extraction status and persists any lifecycle transition.",
-                "consumes": [
-                    "application/json"
-                ],
                 "produces": [
                     "application/json"
                 ],
@@ -3305,14 +3338,6 @@ const docTemplate = `{
                         "name": "extractionId",
                         "in": "path",
                         "required": true
-                    },
-                    {
-                        "description": "Poll request",
-                        "name": "request",
-                        "in": "body",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.PollExtractionRequest"
-                        }
                     }
                 ],
                 "responses": {
@@ -3334,6 +3359,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
                         }
                     },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
                     "404": {
                         "description": "Extraction not found",
                         "schema": {
@@ -3342,6 +3373,12 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Fetcher service unavailable",
                         "schema": {
                             "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
                         }
@@ -3385,6 +3422,18 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Refresh already in progress",
                         "schema": {
                             "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
                         }
@@ -3437,6 +3486,12 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
                             "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
                         }
@@ -9882,7 +9937,8 @@ const docTemplate = `{
                         "LEDGER",
                         "BANK",
                         "GATEWAY",
-                        "CUSTOM"
+                        "CUSTOM",
+                        "FETCHER"
                     ],
                     "example": "BANK"
                 }
@@ -10061,7 +10117,8 @@ const docTemplate = `{
                         "LEDGER",
                         "BANK",
                         "GATEWAY",
-                        "CUSTOM"
+                        "CUSTOM",
+                        "FETCHER"
                     ],
                     "example": "BANK"
                 }
@@ -10720,7 +10777,8 @@ const docTemplate = `{
                         "LEDGER",
                         "BANK",
                         "GATEWAY",
-                        "CUSTOM"
+                        "CUSTOM",
+                        "FETCHER"
                     ],
                     "example": "LEDGER"
                 }
@@ -10743,28 +10801,13 @@ const docTemplate = `{
                 "configName": {
                     "type": "string"
                 },
-                "databaseName": {
-                    "type": "string"
-                },
                 "databaseType": {
-                    "type": "string"
-                },
-                "fetcherConnId": {
-                    "type": "string"
-                },
-                "host": {
                     "type": "string"
                 },
                 "id": {
                     "type": "string"
                 },
                 "lastSeenAt": {
-                    "type": "string"
-                },
-                "port": {
-                    "type": "integer"
-                },
-                "productName": {
                     "type": "string"
                 },
                 "schemaDiscovered": {
@@ -10812,15 +10855,14 @@ const docTemplate = `{
                 "createdAt": {
                     "type": "string"
                 },
+                "endDate": {
+                    "type": "string"
+                },
                 "errorMessage": {
                     "type": "string"
                 },
-                "fetcherJobId": {
-                    "type": "string"
-                },
                 "filters": {
-                    "type": "object",
-                    "additionalProperties": {}
+                    "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_shared_ports.ExtractionFilters"
                 },
                 "id": {
                     "type": "string"
@@ -10828,20 +10870,48 @@ const docTemplate = `{
                 "ingestionJobId": {
                     "type": "string"
                 },
+                "startDate": {
+                    "type": "string"
+                },
                 "status": {
                     "type": "string"
                 },
                 "tables": {
                     "type": "object",
-                    "additionalProperties": {}
+                    "additionalProperties": {
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ExtractionTableResponse"
+                    }
                 },
                 "updatedAt": {
                     "type": "string"
                 }
             }
         },
-        "github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.PollExtractionRequest": {
-            "type": "object"
+        "github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ExtractionTableRequest": {
+            "type": "object",
+            "required": [
+                "columns"
+            ],
+            "properties": {
+                "columns": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ExtractionTableResponse": {
+            "type": "object",
+            "properties": {
+                "columns": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
         },
         "github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.RefreshDiscoveryResponse": {
             "type": "object",
@@ -10889,15 +10959,16 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "filters": {
-                    "type": "object",
-                    "additionalProperties": {}
+                    "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_shared_ports.ExtractionFilters"
                 },
                 "startDate": {
                     "type": "string"
                 },
                 "tables": {
                     "type": "object",
-                    "additionalProperties": {}
+                    "additionalProperties": {
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ExtractionTableRequest"
+                    }
                 }
             }
         },
@@ -10908,9 +10979,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "errorMessage": {
-                    "type": "string"
-                },
-                "fetcherConnId": {
                     "type": "string"
                 },
                 "healthy": {
@@ -13047,6 +13115,17 @@ const docTemplate = `{
                 "unmatchedCount": {
                     "type": "integer",
                     "example": 700
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_shared_ports.ExtractionFilters": {
+            "type": "object",
+            "properties": {
+                "equals": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
                 }
             }
         },

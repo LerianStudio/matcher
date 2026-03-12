@@ -177,6 +177,7 @@ definitions:
         - BANK
         - GATEWAY
         - CUSTOM
+        - FETCHER
         example: BANK
         type: string
     required:
@@ -312,6 +313,7 @@ definitions:
         - BANK
         - GATEWAY
         - CUSTOM
+        - FETCHER
         example: BANK
         type: string
     required:
@@ -819,6 +821,7 @@ definitions:
         - BANK
         - GATEWAY
         - CUSTOM
+        - FETCHER
         example: LEDGER
         type: string
     type: object
@@ -833,21 +836,11 @@ definitions:
     properties:
       configName:
         type: string
-      databaseName:
-        type: string
       databaseType:
-        type: string
-      fetcherConnId:
-        type: string
-      host:
         type: string
       id:
         type: string
       lastSeenAt:
-        type: string
-      port:
-        type: integer
-      productName:
         type: string
       schemaDiscovered:
         type: boolean
@@ -878,26 +871,43 @@ definitions:
         type: string
       createdAt:
         type: string
+      endDate:
+        type: string
       errorMessage:
         type: string
-      fetcherJobId:
-        type: string
       filters:
-        additionalProperties: {}
-        type: object
+        $ref: '#/definitions/github_com_LerianStudio_matcher_internal_shared_ports.ExtractionFilters'
       id:
         type: string
       ingestionJobId:
         type: string
+      startDate:
+        type: string
       status:
         type: string
       tables:
-        additionalProperties: {}
+        additionalProperties:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ExtractionTableResponse'
         type: object
       updatedAt:
         type: string
     type: object
-  github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.PollExtractionRequest:
+  github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ExtractionTableRequest:
+    properties:
+      columns:
+        items:
+          type: string
+        minItems: 1
+        type: array
+    required:
+    - columns
+    type: object
+  github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ExtractionTableResponse:
+    properties:
+      columns:
+        items:
+          type: string
+        type: array
     type: object
   github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.RefreshDiscoveryResponse:
     properties:
@@ -927,12 +937,12 @@ definitions:
       endDate:
         type: string
       filters:
-        additionalProperties: {}
-        type: object
+        $ref: '#/definitions/github_com_LerianStudio_matcher_internal_shared_ports.ExtractionFilters'
       startDate:
         type: string
       tables:
-        additionalProperties: {}
+        additionalProperties:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ExtractionTableRequest'
         type: object
     required:
     - tables
@@ -942,8 +952,6 @@ definitions:
       connectionId:
         type: string
       errorMessage:
-        type: string
-      fetcherConnId:
         type: string
       healthy:
         type: boolean
@@ -2558,6 +2566,13 @@ definitions:
       unmatchedCount:
         example: 700
         type: integer
+    type: object
+  github_com_LerianStudio_matcher_internal_shared_ports.ExtractionFilters:
+    properties:
+      equals:
+        additionalProperties:
+          type: string
+        type: object
     type: object
   internal_bootstrap.ConfigChange:
     properties:
@@ -5242,6 +5257,10 @@ paths:
           description: Unauthorized
           schema:
             $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
@@ -5279,6 +5298,10 @@ paths:
             $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
           schema:
             $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
         "404":
@@ -5328,6 +5351,10 @@ paths:
           description: Unauthorized
           schema:
             $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
         "404":
           description: Connection not found
           schema:
@@ -5374,6 +5401,10 @@ paths:
           description: Unauthorized
           schema:
             $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
         "404":
           description: Connection not found
           schema:
@@ -5417,6 +5448,10 @@ paths:
             $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
           schema:
             $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
         "404":
@@ -5466,6 +5501,10 @@ paths:
           description: Unauthorized
           schema:
             $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
         "404":
           description: Extraction not found
           schema:
@@ -5481,8 +5520,6 @@ paths:
       - Discovery
   /v1/discovery/extractions/{extractionId}/poll:
     post:
-      consumes:
-      - application/json
       description: Polls Fetcher for the latest extraction status and persists any
         lifecycle transition.
       operationId: pollDiscoveryExtraction
@@ -5496,11 +5533,6 @@ paths:
         name: extractionId
         required: true
         type: string
-      - description: Poll request
-        in: body
-        name: request
-        schema:
-          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.PollExtractionRequest'
       produces:
       - application/json
       responses:
@@ -5516,12 +5548,20 @@ paths:
           description: Unauthorized
           schema:
             $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
         "404":
           description: Extraction not found
           schema:
             $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+        "503":
+          description: Fetcher service unavailable
           schema:
             $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
       security:
@@ -5550,6 +5590,14 @@ paths:
             $ref: '#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.RefreshDiscoveryResponse'
         "401":
           description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+        "409":
+          description: Refresh already in progress
           schema:
             $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
         "500":
@@ -5584,6 +5632,10 @@ paths:
             $ref: '#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.DiscoveryStatusResponse'
         "401":
           description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
           schema:
             $ref: '#/definitions/internal_discovery_adapters_http.ErrorResponse'
         "500":
