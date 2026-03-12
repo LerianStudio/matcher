@@ -16,6 +16,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
+	vo "github.com/LerianStudio/matcher/internal/discovery/domain/value_objects"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -66,6 +67,13 @@ func (uc *UseCase) StartExtraction(
 		return nil, ErrConnectionNotFound
 	}
 
+	if conn.Status != vo.ConnectionStatusAvailable || !conn.SchemaDiscovered {
+		err = fmt.Errorf("%w: connection schema is not available for extraction", ErrInvalidExtractionRequest)
+		libOpentelemetry.HandleSpanError(span, "connection not ready for extraction", err)
+
+		return nil, err
+	}
+
 	schemas, err := uc.schemaRepo.FindByConnectionID(ctx, connectionID)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "find connection schema", err)
@@ -79,7 +87,7 @@ func (uc *UseCase) StartExtraction(
 		return nil, err
 	}
 
-	extractionReq, err := entities.NewExtractionRequest(ctx, connectionID, tables, params.Filters)
+	extractionReq, err := entities.NewExtractionRequest(ctx, connectionID, tables, params.StartDate, params.EndDate, params.Filters.ToMap())
 	if err != nil {
 		return nil, fmt.Errorf("create extraction request: %w", err)
 	}
@@ -121,7 +129,7 @@ func (uc *UseCase) StartExtraction(
 		return nil, fmt.Errorf("mark extraction submitted: %w", err)
 	}
 
-	if err := uc.extractionRepo.Update(ctx, extractionReq); err != nil {
+	if err := uc.persistSubmittedExtraction(ctx, span, extractionReq); err != nil {
 		return nil, fmt.Errorf("persist submitted extraction request: %w", err)
 	}
 
@@ -343,6 +351,12 @@ func (uc *UseCase) PollExtractionStatus(ctx context.Context, extractionID uuid.U
 		return req, nil // already complete or failed
 	}
 
+	if strings.TrimSpace(req.FetcherJobID) == "" {
+		libOpentelemetry.HandleSpanError(span, "missing fetcher job id", ErrExtractionTrackingIncomplete)
+
+		return nil, ErrExtractionTrackingIncomplete
+	}
+
 	expectedUpdatedAt := req.UpdatedAt
 
 	status, err := uc.fetcherClient.GetExtractionJobStatus(ctx, req.FetcherJobID)
@@ -426,6 +440,8 @@ func (uc *UseCase) applyExtractionStatusTransition(
 	changed := false
 
 	switch status.Status {
+	case "PENDING", "SUBMITTED":
+		return false, nil
 	case "RUNNING", "EXTRACTING":
 		previousStatus := req.Status
 		previousUpdatedAt := req.UpdatedAt
@@ -491,4 +507,93 @@ func (uc *UseCase) applyExtractionStatusTransition(
 	}
 
 	return changed, nil
+}
+
+func (uc *UseCase) persistSubmittedExtraction(
+	ctx context.Context,
+	span trace.Span,
+	extractionReq *entities.ExtractionRequest,
+) error {
+	err := uc.extractionRepo.Update(ctx, extractionReq)
+	if err == nil {
+		return nil
+	}
+
+	libOpentelemetry.HandleSpanError(span, "persist submitted extraction request", err)
+
+	recovered, recoverErr := uc.recoverSubmittedExtraction(ctx, extractionReq)
+	if recoverErr == nil {
+		if recovered != nil && recovered != extractionReq {
+			*extractionReq = *recovered
+		}
+
+		return nil
+	}
+
+	libOpentelemetry.HandleSpanError(span, "recover submitted extraction request", recoverErr)
+
+	return fmt.Errorf("%w: extraction %s: %w", ErrExtractionTrackingIncomplete, extractionReq.ID, recoverErr)
+}
+
+func (uc *UseCase) recoverSubmittedExtraction(
+	ctx context.Context,
+	submitted *entities.ExtractionRequest,
+) (*entities.ExtractionRequest, error) {
+	latest, err := uc.extractionRepo.FindByID(ctx, submitted.ID)
+	if err != nil {
+		if errors.Is(err, repositories.ErrExtractionNotFound) {
+			return nil, ErrExtractionNotFound
+		}
+
+		return nil, fmt.Errorf("reload extraction request: %w", err)
+	}
+
+	if latest == nil {
+		return nil, ErrExtractionNotFound
+	}
+
+	if latest.Status == submitted.Status && latest.FetcherJobID == submitted.FetcherJobID {
+		return latest, nil
+	}
+
+	if strings.TrimSpace(latest.FetcherJobID) != "" {
+		return latest, nil
+	}
+
+	expectedUpdatedAt := latest.UpdatedAt
+	if expectedUpdatedAt.IsZero() {
+		expectedUpdatedAt = submitted.CreatedAt
+	}
+
+	err = uc.extractionRepo.UpdateIfUnchanged(ctx, submitted, expectedUpdatedAt)
+	if err == nil {
+		return submitted, nil
+	}
+
+	if !errors.Is(err, repositories.ErrExtractionConflict) {
+		return nil, fmt.Errorf("repair submitted extraction request: %w", err)
+	}
+
+	return uc.reloadRecoveredExtraction(ctx, submitted.ID)
+}
+
+func (uc *UseCase) reloadRecoveredExtraction(ctx context.Context, extractionID uuid.UUID) (*entities.ExtractionRequest, error) {
+	reloaded, err := uc.extractionRepo.FindByID(ctx, extractionID)
+	if err != nil {
+		if errors.Is(err, repositories.ErrExtractionNotFound) {
+			return nil, ErrExtractionNotFound
+		}
+
+		return nil, fmt.Errorf("reload extraction request after repair conflict: %w", err)
+	}
+
+	if reloaded == nil {
+		return nil, ErrExtractionNotFound
+	}
+
+	if strings.TrimSpace(reloaded.FetcherJobID) == "" {
+		return nil, fmt.Errorf("repair submitted extraction request: %w", repositories.ErrExtractionConflict)
+	}
+
+	return reloaded, nil
 }

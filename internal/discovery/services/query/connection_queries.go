@@ -15,6 +15,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
+	vo "github.com/LerianStudio/matcher/internal/discovery/domain/value_objects"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -110,6 +111,25 @@ func (uc *UseCase) GetConnectionSchema(ctx context.Context, connectionID uuid.UU
 
 	ctx, span := tracer.Start(ctx, "query.discovery.get_connection_schema")
 	defer span.End()
+
+	conn, err := uc.connRepo.FindByID(ctx, connectionID)
+	if err != nil {
+		libOpentelemetry.HandleSpanError(span, "get connection for schema", err)
+
+		if errors.Is(err, repositories.ErrConnectionNotFound) {
+			return nil, ErrConnectionNotFound
+		}
+
+		return nil, fmt.Errorf("get connection for schema: %w", err)
+	}
+
+	if conn == nil {
+		return nil, ErrConnectionNotFound
+	}
+
+	if conn.Status == vo.ConnectionStatusUnreachable || !conn.SchemaDiscovered {
+		return []*entities.DiscoveredSchema{}, nil
+	}
 
 	// Try cache first (if configured).
 	if uc.schemaCache != nil {

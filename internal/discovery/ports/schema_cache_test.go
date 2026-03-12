@@ -17,6 +17,7 @@ import (
 type mockSchemaCache struct {
 	getSchemaFunc func(ctx context.Context, connectionID string) (*sharedPorts.FetcherSchema, error)
 	setSchemaFunc func(ctx context.Context, connectionID string, schema *sharedPorts.FetcherSchema, ttl time.Duration) error
+	invalidateFn  func(ctx context.Context, connectionID string) error
 }
 
 func (m *mockSchemaCache) GetSchema(ctx context.Context, connectionID string) (*sharedPorts.FetcherSchema, error) {
@@ -30,6 +31,14 @@ func (m *mockSchemaCache) GetSchema(ctx context.Context, connectionID string) (*
 func (m *mockSchemaCache) SetSchema(ctx context.Context, connectionID string, schema *sharedPorts.FetcherSchema, ttl time.Duration) error {
 	if m.setSchemaFunc != nil {
 		return m.setSchemaFunc(ctx, connectionID, schema, ttl)
+	}
+
+	return nil
+}
+
+func (m *mockSchemaCache) InvalidateSchema(ctx context.Context, connectionID string) error {
+	if m.invalidateFn != nil {
+		return m.invalidateFn(ctx, connectionID)
 	}
 
 	return nil

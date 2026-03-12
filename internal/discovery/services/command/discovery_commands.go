@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -17,6 +19,10 @@ import (
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
+const discoveryRefreshLockKey = "matcher:discovery:sync"
+
+const defaultDiscoveryRefreshLockTTL = 2 * time.Minute
+
 // RefreshDiscovery forces an immediate discovery sync with Fetcher.
 // It fetches all connections and their schemas, upserting into the database.
 // Returns the number of successfully synced connections.
@@ -26,6 +32,13 @@ func (uc *UseCase) RefreshDiscovery(ctx context.Context) (int, error) {
 	ctx, span := tracer.Start(ctx, "command.discovery.refresh_discovery")
 	defer span.End()
 
+	lockToken, err := uc.acquireDiscoveryRefreshLock(ctx)
+	if err != nil {
+		libOpentelemetry.HandleSpanError(span, "acquire refresh lock", err)
+		return 0, err
+	}
+	defer uc.releaseDiscoveryRefreshLock(ctx, lockToken)
+
 	if !uc.fetcherClient.IsHealthy(ctx) {
 		libOpentelemetry.HandleSpanError(span, "fetcher unavailable", ErrFetcherUnavailable)
 
@@ -33,7 +46,22 @@ func (uc *UseCase) RefreshDiscovery(ctx context.Context) (int, error) {
 	}
 
 	// List all connections from Fetcher.
-	orgID := auth.GetTenantID(ctx)
+	orgID, tenantPresent := ctx.Value(auth.TenantIDKey).(string)
+
+	orgID = strings.TrimSpace(orgID)
+	if orgID == "" && tenantPresent {
+		orgID = strings.TrimSpace(auth.GetTenantID(ctx))
+	}
+
+	if uc.requireTenantContext && orgID == "" {
+		libOpentelemetry.HandleSpanError(span, "missing tenant context", ErrTenantContextRequired)
+
+		return 0, ErrTenantContextRequired
+	}
+
+	if orgID == "" {
+		orgID = auth.GetTenantID(ctx)
+	}
 
 	fetcherConns, err := uc.fetcherClient.ListConnections(ctx, orgID)
 	if err != nil {
@@ -71,6 +99,69 @@ func (uc *UseCase) RefreshDiscovery(ctx context.Context) (int, error) {
 	return synced, nil
 }
 
+func (uc *UseCase) acquireDiscoveryRefreshLock(ctx context.Context) (string, error) {
+	if uc == nil || uc.refreshLockProvider == nil {
+		return "", nil
+	}
+
+	redisConn, err := uc.refreshLockProvider.GetRedisConnection(ctx)
+	if err != nil {
+		return "", fmt.Errorf("get redis connection for discovery refresh lock: %w", err)
+	}
+
+	if redisConn == nil {
+		return "", nil
+	}
+
+	rdb, err := redisConn.GetClient(ctx)
+	if err != nil {
+		return "", fmt.Errorf("get redis client for discovery refresh lock: %w", err)
+	}
+
+	token := uuid.NewString()
+
+	ttl := uc.refreshLockTTL
+	if ttl <= 0 {
+		ttl = defaultDiscoveryRefreshLockTTL
+	}
+
+	ok, err := rdb.SetNX(ctx, discoveryRefreshLockKey, token, ttl).Result()
+	if err != nil {
+		return "", fmt.Errorf("acquire discovery refresh lock: %w", err)
+	}
+
+	if !ok {
+		return "", ErrDiscoveryRefreshInProgress
+	}
+
+	return token, nil
+}
+
+func (uc *UseCase) releaseDiscoveryRefreshLock(ctx context.Context, token string) {
+	if uc == nil || uc.refreshLockProvider == nil || token == "" {
+		return
+	}
+
+	redisConn, err := uc.refreshLockProvider.GetRedisConnection(ctx)
+	if err != nil || redisConn == nil {
+		return
+	}
+
+	rdb, err := redisConn.GetClient(ctx)
+	if err != nil {
+		return
+	}
+
+	script := `
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+  return redis.call("DEL", KEYS[1])
+else
+  return 0
+end
+`
+	_, _ = rdb.Eval(ctx, script, []string{discoveryRefreshLockKey}, token).Result()
+}
+
 // syncConnection upserts a single Fetcher connection and its schema.
 // It looks up existing connections by Fetcher-assigned ID to preserve internal UUIDs,
 // preventing FK mismatches in discovered_schemas after upsert.
@@ -93,9 +184,7 @@ func (uc *UseCase) reconcileStaleConnections(ctx context.Context, logger libLog.
 			continue
 		}
 
-		conn.MarkUnreachable()
-
-		if err := uc.connRepo.Upsert(ctx, conn); err != nil {
+		if err := uc.syncer.MarkConnectionUnreachable(ctx, conn); err != nil {
 			if logger != nil {
 				logger.With(
 					libLog.String("connection.id", conn.ID.String()),

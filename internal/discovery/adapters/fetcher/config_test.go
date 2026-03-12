@@ -20,7 +20,7 @@ func TestDefaultConfig(t *testing.T) {
 	assert.Equal(t, 30*time.Second, cfg.RequestTimeout)
 	assert.Equal(t, 3, cfg.MaxRetries)
 	assert.Equal(t, 500*time.Millisecond, cfg.RetryBaseDelay)
-	assert.True(t, cfg.AllowPrivateIPs)
+	assert.False(t, cfg.AllowPrivateIPs)
 }
 
 func TestHTTPClientConfig_Validate_ValidConfig(t *testing.T) {
@@ -147,4 +147,59 @@ func TestHTTPClientConfig_Validate_RejectsQueryAndFragment(t *testing.T) {
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrInvalidURL)
+}
+
+func TestHTTPClientConfig_Validate_RejectsNegativeRetries(t *testing.T) {
+	t.Parallel()
+
+	cfg := DefaultConfig()
+	cfg.MaxRetries = -1
+
+	err := cfg.Validate()
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "max retries")
+}
+
+func TestHTTPClientConfig_Validate_RejectsNonPositiveTimeouts(t *testing.T) {
+	t.Parallel()
+
+	cfg := DefaultConfig()
+	cfg.HealthTimeout = 0
+	cfg.RequestTimeout = -1 * time.Second
+
+	err := cfg.Validate()
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "health timeout")
+}
+
+func TestHTTPClientConfig_BuildTransport_BlocksPrivateIPWhenDisabled(t *testing.T) {
+	t.Parallel()
+
+	cfg := DefaultConfig()
+	transport := cfg.buildTransport()
+
+	conn, err := transport.DialContext(t.Context(), "tcp", "127.0.0.1:80")
+	if conn != nil {
+		_ = conn.Close()
+	}
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrPrivateIPBlocked)
+}
+
+func TestHTTPClientConfig_BuildTransport_ResolveFailure(t *testing.T) {
+	t.Parallel()
+
+	cfg := DefaultConfig()
+	transport := cfg.buildTransport()
+
+	conn, err := transport.DialContext(t.Context(), "tcp", "host.invalid:80")
+	if conn != nil {
+		_ = conn.Close()
+	}
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "resolve host")
 }

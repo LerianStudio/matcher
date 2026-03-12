@@ -22,10 +22,12 @@ import (
 
 func testConnectionEntity() *entities.FetcherConnection {
 	return &entities.FetcherConnection{
-		ID:            uuid.New(),
-		FetcherConnID: "fetcher-conn-1",
-		ConfigName:    "config-1",
-		DatabaseType:  "postgresql",
+		ID:               uuid.New(),
+		FetcherConnID:    "fetcher-conn-1",
+		ConfigName:       "config-1",
+		DatabaseType:     "postgresql",
+		Status:           vo.ConnectionStatusAvailable,
+		SchemaDiscovered: true,
 	}
 }
 
@@ -72,12 +74,13 @@ func TestStartExtraction_SubmitJobError(t *testing.T) {
 	submitErr := errors.New("submit failed")
 
 	connection := testConnectionEntity()
+	extractionRepo := &mockExtractionRepo{}
 
 	uc, err := NewUseCase(
 		&mockFetcherClient{healthy: true, submitErr: submitErr},
 		&mockConnectionRepo{findByIDConn: connection},
 		&mockSchemaRepo{findByConnID: testDiscoveredSchema(connection.ID)},
-		&mockExtractionRepo{},
+		extractionRepo,
 		&libLog.NopLogger{},
 	)
 	require.NoError(t, err)
@@ -86,11 +89,107 @@ func TestStartExtraction_SubmitJobError(t *testing.T) {
 		context.Background(),
 		connection.ID,
 		map[string]any{"transactions": map[string]any{"columns": []string{"id"}}},
-		sharedPorts.ExtractionParams{Filters: map[string]interface{}{"currency": "USD"}},
+		sharedPorts.ExtractionParams{Filters: &sharedPorts.ExtractionFilters{Equals: map[string]string{"currency": "USD"}}},
 	)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "submit extraction job")
+	assert.Equal(t, 1, extractionRepo.createCount)
+	assert.Equal(t, 1, extractionRepo.updateCount)
+	require.NotNil(t, extractionRepo.updatedReq)
+	assert.Equal(t, vo.ExtractionStatusFailed, extractionRepo.updatedReq.Status)
+	assert.Equal(t, entities.SanitizedExtractionFailureMessage, extractionRepo.updatedReq.ErrorMessage)
+}
+
+func TestStartExtraction_SubmittedPersistenceFailure_RecoversWithConditionalUpdate(t *testing.T) {
+	t.Parallel()
+
+	connection := testConnectionEntity()
+	extractionRepo := &mockExtractionRepo{
+		updateErr: errors.New("temporary update failure"),
+		findByIDFn: func(_ context.Context, id uuid.UUID) (*entities.ExtractionRequest, error) {
+			return &entities.ExtractionRequest{
+				ID:           id,
+				ConnectionID: connection.ID,
+				Tables:       map[string]any{"transactions": map[string]any{"columns": []any{"id"}}},
+				Filters:      map[string]any{"equals": map[string]any{"currency": "USD"}},
+				Status:       vo.ExtractionStatusPending,
+				CreatedAt:    time.Now().UTC(),
+				UpdatedAt:    time.Now().UTC(),
+			}, nil
+		},
+		updateIfFn: func(_ context.Context, req *entities.ExtractionRequest, _ time.Time) error {
+			assert.Equal(t, vo.ExtractionStatusSubmitted, req.Status)
+			assert.Equal(t, "job-123", req.FetcherJobID)
+
+			return nil
+		},
+	}
+
+	uc, err := NewUseCase(
+		&mockFetcherClient{healthy: true, submitJobID: "job-123"},
+		&mockConnectionRepo{findByIDConn: connection},
+		&mockSchemaRepo{findByConnID: testDiscoveredSchema(connection.ID)},
+		extractionRepo,
+		&libLog.NopLogger{},
+	)
+	require.NoError(t, err)
+
+	extraction, err := uc.StartExtraction(
+		context.Background(),
+		connection.ID,
+		map[string]any{"transactions": map[string]any{"columns": []string{"id"}}},
+		sharedPorts.ExtractionParams{Filters: &sharedPorts.ExtractionFilters{Equals: map[string]string{"currency": "USD"}}},
+	)
+
+	require.NoError(t, err)
+	require.NotNil(t, extraction)
+	assert.Equal(t, vo.ExtractionStatusSubmitted, extraction.Status)
+	assert.Equal(t, "job-123", extraction.FetcherJobID)
+	assert.Equal(t, 1, extractionRepo.createCount)
+	assert.Equal(t, 2, extractionRepo.updateCount)
+}
+
+func TestStartExtraction_SubmittedPersistenceFailure_ReturnsTrackingError(t *testing.T) {
+	t.Parallel()
+
+	connection := testConnectionEntity()
+	extractionRepo := &mockExtractionRepo{
+		updateErr: errors.New("primary update failed"),
+		findByIDFn: func(_ context.Context, id uuid.UUID) (*entities.ExtractionRequest, error) {
+			return &entities.ExtractionRequest{
+				ID:           id,
+				ConnectionID: connection.ID,
+				Tables:       map[string]any{"transactions": map[string]any{"columns": []any{"id"}}},
+				Status:       vo.ExtractionStatusPending,
+				CreatedAt:    time.Now().UTC(),
+				UpdatedAt:    time.Now().UTC(),
+			}, nil
+		},
+		updateIfFn: func(_ context.Context, _ *entities.ExtractionRequest, _ time.Time) error {
+			return errors.New("repair update failed")
+		},
+	}
+
+	uc, err := NewUseCase(
+		&mockFetcherClient{healthy: true, submitJobID: "job-123"},
+		&mockConnectionRepo{findByIDConn: connection},
+		&mockSchemaRepo{findByConnID: testDiscoveredSchema(connection.ID)},
+		extractionRepo,
+		&libLog.NopLogger{},
+	)
+	require.NoError(t, err)
+
+	_, err = uc.StartExtraction(
+		context.Background(),
+		connection.ID,
+		map[string]any{"transactions": map[string]any{"columns": []string{"id"}}},
+		sharedPorts.ExtractionParams{},
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrExtractionTrackingIncomplete)
+	assert.Contains(t, err.Error(), "repair submitted extraction request")
 }
 
 func TestStartExtraction_PersistError(t *testing.T) {
@@ -144,7 +243,7 @@ func TestStartExtraction_Success(t *testing.T) {
 		sharedPorts.ExtractionParams{
 			StartDate: "2026-03-01",
 			EndDate:   "2026-03-08",
-			Filters:   map[string]interface{}{"currency": "USD"},
+			Filters:   &sharedPorts.ExtractionFilters{Equals: map[string]string{"currency": "USD"}},
 		},
 	)
 
@@ -157,7 +256,8 @@ func TestStartExtraction_Success(t *testing.T) {
 	assert.Equal(t, "job-123", extraction.FetcherJobID)
 	assert.Equal(t, vo.ExtractionStatusSubmitted, extraction.Status)
 	assert.Equal(t, connection.FetcherConnID, fetcherClient.lastSubmitInput.ConnectionID)
-	assert.Equal(t, map[string]interface{}{"currency": "USD"}, fetcherClient.lastSubmitInput.Filters)
+	require.NotNil(t, fetcherClient.lastSubmitInput.Filters)
+	assert.Equal(t, map[string]string{"currency": "USD"}, fetcherClient.lastSubmitInput.Filters.Equals)
 	require.Contains(t, fetcherClient.lastSubmitInput.Tables, "transactions")
 	assert.Equal(t, []string{"id", "amount"}, fetcherClient.lastSubmitInput.Tables["transactions"].Columns)
 	assert.Equal(t, "2026-03-01", fetcherClient.lastSubmitInput.Tables["transactions"].StartDate)
@@ -233,6 +333,33 @@ func TestStartExtraction_ConnectionNotFound(t *testing.T) {
 	)
 
 	require.ErrorIs(t, err, ErrConnectionNotFound)
+}
+
+func TestStartExtraction_ConnectionNotReadyRejected(t *testing.T) {
+	t.Parallel()
+
+	connection := testConnectionEntity()
+	connection.Status = vo.ConnectionStatusUnreachable
+	connection.SchemaDiscovered = false
+
+	uc, err := NewUseCase(
+		&mockFetcherClient{healthy: true},
+		&mockConnectionRepo{findByIDConn: connection},
+		&mockSchemaRepo{findByConnID: testDiscoveredSchema(connection.ID)},
+		&mockExtractionRepo{},
+		&libLog.NopLogger{},
+	)
+	require.NoError(t, err)
+
+	_, err = uc.StartExtraction(
+		context.Background(),
+		connection.ID,
+		map[string]any{"transactions": map[string]any{"columns": []string{"id"}}},
+		sharedPorts.ExtractionParams{},
+	)
+
+	require.ErrorIs(t, err, ErrInvalidExtractionRequest)
+	assert.Contains(t, err.Error(), "connection schema is not available")
 }
 
 func TestStartExtraction_InvalidRequestRejected(t *testing.T) {
@@ -398,6 +525,43 @@ func TestPollExtractionStatus_TransitionsToRunning(t *testing.T) {
 	assert.Equal(t, vo.ExtractionStatusExtracting, req.Status)
 }
 
+func TestPollExtractionStatus_QueuedStatusDoesNotUpdate(t *testing.T) {
+	t.Parallel()
+
+	req := &entities.ExtractionRequest{
+		ID:           uuid.New(),
+		FetcherJobID: "job-queued",
+		Status:       vo.ExtractionStatusSubmitted,
+		ConnectionID: uuid.New(),
+		CreatedAt:    time.Now().UTC(),
+		UpdatedAt:    time.Now().UTC(),
+	}
+
+	extractionRepo := &mockExtractionRepo{findByIDReq: req}
+
+	uc, err := NewUseCase(
+		&mockFetcherClient{
+			healthy: true,
+			jobStatus: &sharedPorts.ExtractionJobStatus{
+				JobID:  "job-queued",
+				Status: "SUBMITTED",
+			},
+		},
+		&mockConnectionRepo{},
+		&mockSchemaRepo{},
+		extractionRepo,
+		&libLog.NopLogger{},
+	)
+	require.NoError(t, err)
+
+	result, err := uc.PollExtractionStatus(context.Background(), req.ID)
+
+	require.NoError(t, err)
+	assert.Equal(t, req, result)
+	assert.Equal(t, vo.ExtractionStatusSubmitted, req.Status)
+	assert.Equal(t, 0, extractionRepo.updateCount)
+}
+
 func TestPollExtractionStatus_TransitionsToComplete(t *testing.T) {
 	t.Parallel()
 
@@ -506,6 +670,34 @@ func TestPollExtractionStatus_GetStatusError(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "get extraction job status")
+}
+
+func TestPollExtractionStatus_MissingFetcherJobID(t *testing.T) {
+	t.Parallel()
+
+	req := &entities.ExtractionRequest{
+		ID:           uuid.New(),
+		Status:       vo.ExtractionStatusPending,
+		ConnectionID: uuid.New(),
+		CreatedAt:    time.Now().UTC(),
+		UpdatedAt:    time.Now().UTC(),
+	}
+
+	extractionRepo := &mockExtractionRepo{findByIDReq: req}
+
+	uc, err := NewUseCase(
+		&mockFetcherClient{healthy: true},
+		&mockConnectionRepo{},
+		&mockSchemaRepo{},
+		extractionRepo,
+		&libLog.NopLogger{},
+	)
+	require.NoError(t, err)
+
+	_, err = uc.PollExtractionStatus(context.Background(), req.ID)
+
+	require.ErrorIs(t, err, ErrExtractionTrackingIncomplete)
+	assert.Equal(t, 0, extractionRepo.updateCount)
 }
 
 func TestPollExtractionStatus_FetcherUnavailable(t *testing.T) {

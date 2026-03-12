@@ -6,8 +6,11 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
+	goredis "github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -18,6 +21,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
 	vo "github.com/LerianStudio/matcher/internal/discovery/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/discovery/services/syncer"
+	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -78,6 +82,58 @@ func TestRefreshDiscovery_UsesTenantIDAsFetcherScope(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "22222222-2222-2222-2222-222222222222", fetcherClient.lastListOrgID)
+}
+
+func TestRefreshDiscovery_RequiresTenantContextWhenConfigured(t *testing.T) {
+	t.Parallel()
+
+	fetcherClient := &mockFetcherClient{healthy: true, connections: []*sharedPorts.FetcherConnection{}}
+	uc, err := NewUseCase(
+		fetcherClient,
+		&mockConnectionRepo{},
+		&mockSchemaRepo{},
+		&mockExtractionRepo{},
+		&libLog.NopLogger{},
+	)
+	require.NoError(t, err)
+	uc.WithTenantContextRequirement(true)
+
+	_, err = uc.RefreshDiscovery(context.Background())
+
+	require.ErrorIs(t, err, ErrTenantContextRequired)
+	assert.Empty(t, fetcherClient.lastListOrgID)
+}
+
+func TestRefreshDiscovery_RejectsConcurrentManualRefresh(t *testing.T) {
+	t.Parallel()
+
+	redisServer := miniredis.RunT(t)
+	defer redisServer.Close()
+
+	redisClient := goredis.NewClient(&goredis.Options{Addr: redisServer.Addr()})
+	defer redisClient.Close()
+
+	provider := &testutil.MockInfrastructureProvider{RedisConn: testutil.NewRedisClientWithMock(redisClient)}
+	fetcherClient := &mockFetcherClient{healthy: true, connections: []*sharedPorts.FetcherConnection{}}
+	uc, err := NewUseCase(
+		fetcherClient,
+		&mockConnectionRepo{},
+		&mockSchemaRepo{},
+		&mockExtractionRepo{},
+		&libLog.NopLogger{},
+	)
+	require.NoError(t, err)
+	uc.WithDiscoveryRefreshLock(provider, time.Minute)
+
+	ctx := context.WithValue(context.Background(), auth.TenantIDKey, "22222222-2222-2222-2222-222222222222")
+	locked, err := redisClient.SetNX(ctx, discoveryRefreshLockKey, "other-token", 2*time.Minute).Result()
+	require.NoError(t, err)
+	require.True(t, locked)
+
+	_, err = uc.RefreshDiscovery(ctx)
+
+	require.ErrorIs(t, err, ErrDiscoveryRefreshInProgress)
+	assert.Empty(t, fetcherClient.lastListOrgID)
 }
 
 func TestRefreshDiscovery_NoConnections(t *testing.T) {
@@ -344,9 +400,10 @@ func TestRefreshDiscovery_MarksStaleConnectionsUnreachable(t *testing.T) {
 	t.Parallel()
 
 	staleConn := &entities.FetcherConnection{
-		ID:            uuid.New(),
-		FetcherConnID: "conn-stale",
-		Status:        vo.ConnectionStatusAvailable,
+		ID:               uuid.New(),
+		FetcherConnID:    "conn-stale",
+		Status:           vo.ConnectionStatusAvailable,
+		SchemaDiscovered: true,
 	}
 
 	var staleMarked bool
@@ -360,6 +417,7 @@ func TestRefreshDiscovery_MarksStaleConnectionsUnreachable(t *testing.T) {
 			return nil
 		},
 	}
+	schemaRepo := &mockSchemaRepo{}
 
 	uc, err := NewUseCase(
 		&mockFetcherClient{
@@ -369,10 +427,13 @@ func TestRefreshDiscovery_MarksStaleConnectionsUnreachable(t *testing.T) {
 				ConfigName:   "pg-primary",
 				DatabaseType: "POSTGRES",
 			}},
-			schema: &sharedPorts.FetcherSchema{Tables: []sharedPorts.FetcherTableSchema{}},
+			schema: &sharedPorts.FetcherSchema{Tables: []sharedPorts.FetcherTableSchema{{
+				TableName: "transactions",
+				Columns:   []sharedPorts.FetcherColumnInfo{{Name: "id", Type: "uuid", Nullable: false}},
+			}}},
 		},
 		connRepo,
-		&mockSchemaRepo{},
+		schemaRepo,
 		&mockExtractionRepo{},
 		&libLog.NopLogger{},
 	)
@@ -384,6 +445,8 @@ func TestRefreshDiscovery_MarksStaleConnectionsUnreachable(t *testing.T) {
 	assert.Equal(t, 1, synced)
 	assert.True(t, staleMarked)
 	assert.Equal(t, vo.ConnectionStatusUnreachable, staleConn.Status)
+	assert.False(t, staleConn.SchemaDiscovered)
+	assert.Equal(t, 1, schemaRepo.deleteCount)
 }
 
 func TestSyncSchema_NilSchema(t *testing.T) {

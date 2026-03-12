@@ -10,8 +10,14 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"path"
 	"strings"
 	"time"
+
+	"go.opentelemetry.io/otel/attribute"
+
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
@@ -24,11 +30,15 @@ var _ sharedPorts.FetcherClient = (*HTTPFetcherClient)(nil)
 
 // Sentinel errors.
 var (
-	ErrFetcherUnreachable = sharedPorts.ErrFetcherUnavailable
-	ErrFetcherBadResponse = errors.New("unexpected response from fetcher")
-	ErrFetcherNotFound    = sharedPorts.ErrFetcherResourceNotFound
-	ErrFetcherClientNil   = errors.New("fetcher client is not initialized")
-	ErrFetcherJobIDEmpty  = errors.New("fetcher extraction response missing job id")
+	ErrFetcherUnreachable             = sharedPorts.ErrFetcherUnavailable
+	ErrFetcherBadResponse             = errors.New("unexpected response from fetcher")
+	ErrFetcherNotFound                = sharedPorts.ErrFetcherResourceNotFound
+	ErrFetcherClientNil               = errors.New("fetcher client is not initialized")
+	ErrFetcherJobIDEmpty              = errors.New("fetcher extraction response missing job id")
+	ErrFetcherResultPathRequired      = errors.New("result path required")
+	ErrFetcherResultPathNotAbsolute   = errors.New("result path must be absolute")
+	ErrFetcherResultPathInvalidFormat = errors.New("result path must not include URL scheme, query, or fragment")
+	ErrFetcherResultPathTraversal     = errors.New("result path must not contain traversal segments")
 )
 
 // HTTPFetcherClient communicates with the Fetcher REST API over HTTP.
@@ -363,6 +373,10 @@ func normalizeExtractionStatus(resp fetcherExtractionStatusResponse) (string, er
 			return "", fmt.Errorf("%w: complete extraction missing result path", ErrFetcherBadResponse)
 		}
 
+		if err := validateFetcherResultPath(resp.ResultPath); err != nil {
+			return "", fmt.Errorf("%w: %w", ErrFetcherBadResponse, err)
+		}
+
 		return normalizedStatus, nil
 	case "FAILED":
 		if strings.TrimSpace(resp.ErrorMessage) == "" {
@@ -375,6 +389,29 @@ func normalizeExtractionStatus(resp fetcherExtractionStatusResponse) (string, er
 	default:
 		return "", fmt.Errorf("%w: unknown extraction status %q", ErrFetcherBadResponse, resp.Status)
 	}
+}
+
+func validateFetcherResultPath(resultPath string) error {
+	trimmed := strings.TrimSpace(resultPath)
+
+	if trimmed == "" {
+		return ErrFetcherResultPathRequired
+	}
+
+	if !strings.HasPrefix(trimmed, "/") {
+		return ErrFetcherResultPathNotAbsolute
+	}
+
+	if strings.Contains(trimmed, "://") || strings.ContainsAny(trimmed, "?#") {
+		return ErrFetcherResultPathInvalidFormat
+	}
+
+	cleaned := path.Clean(trimmed)
+	if cleaned != trimmed || strings.Contains(trimmed, "..") {
+		return ErrFetcherResultPathTraversal
+	}
+
+	return nil
 }
 
 // doGet performs a GET request with retry logic.
@@ -423,6 +460,20 @@ func (client *HTTPFetcherClient) doRequest(ctx context.Context, method, requestU
 		return nil, err
 	}
 
+	trackingLogger, tracer, trackingHeaderID, trackingMetricsFactory := libCommons.NewTrackingFromContext(ctx)
+	_ = trackingLogger
+	_ = trackingHeaderID
+	_ = trackingMetricsFactory
+
+	ctx, span := tracer.Start(ctx, "fetcher.http.request")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("http.method", method),
+		attribute.String("http.url", requestURL),
+		attribute.Bool("fetcher.retryable", retryable),
+	)
+
 	var lastErr error
 
 	attempts := 1
@@ -461,6 +512,8 @@ func (client *HTTPFetcherClient) doRequest(ctx context.Context, method, requestU
 		resp, err := client.httpClient.Do(req)
 		if err != nil {
 			lastErr = fmt.Errorf("%w: %v", ErrFetcherUnreachable, err) //nolint:errorlint // wrapping sentinel with context detail
+			libOpentelemetry.HandleSpanError(span, "fetcher http request failed", lastErr)
+
 			if !retryable {
 				return nil, lastErr
 			}
@@ -486,8 +539,12 @@ func (client *HTTPFetcherClient) doRequest(ctx context.Context, method, requestU
 
 		result, statusErr := classifyResponse(resp.StatusCode, respBody)
 		if statusErr == nil {
+			span.SetAttributes(attribute.Int("http.status_code", resp.StatusCode))
+
 			return result, nil
 		}
+
+		libOpentelemetry.HandleSpanError(span, "fetcher classify response", statusErr)
 
 		if resp.StatusCode >= http.StatusInternalServerError && retryable {
 			lastErr = statusErr

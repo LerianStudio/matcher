@@ -97,6 +97,7 @@ func (fc *FetcherConnection) MarkUnreachable() {
 	}
 
 	fc.Status = vo.ConnectionStatusUnreachable
+	fc.SchemaDiscovered = false
 	fc.UpdatedAt = time.Now().UTC()
 }
 

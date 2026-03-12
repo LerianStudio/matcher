@@ -18,6 +18,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
+	vo "github.com/LerianStudio/matcher/internal/discovery/domain/value_objects"
 	discoveryPorts "github.com/LerianStudio/matcher/internal/discovery/ports"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
@@ -171,7 +172,8 @@ func (m *stubLogger) Enabled(_ libLog.Level) bool      { return true }
 func (m *stubLogger) Sync(_ context.Context) error     { return nil }
 
 type stubSchemaCache struct {
-	setSchemaFn func(ctx context.Context, connectionID string, schema *sharedPorts.FetcherSchema, ttl time.Duration) error
+	setSchemaFn        func(ctx context.Context, connectionID string, schema *sharedPorts.FetcherSchema, ttl time.Duration) error
+	invalidateSchemaFn func(ctx context.Context, connectionID string) error
 }
 
 var _ discoveryPorts.SchemaCache = (*stubSchemaCache)(nil)
@@ -188,7 +190,11 @@ func (m *stubSchemaCache) SetSchema(ctx context.Context, connectionID string, sc
 	return nil
 }
 
-func (m *stubSchemaCache) InvalidateSchema(_ context.Context, _ string) error {
+func (m *stubSchemaCache) InvalidateSchema(ctx context.Context, connectionID string) error {
+	if m.invalidateSchemaFn != nil {
+		return m.invalidateSchemaFn(ctx, connectionID)
+	}
+
 	return nil
 }
 
@@ -672,6 +678,16 @@ func TestSyncSchema_NilSchema_ReturnsNil(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestSyncSchema_NilConnection_ReturnsError(t *testing.T) {
+	t.Parallel()
+
+	cs := mustNewSyncer(t, &stubConnectionRepo{}, &stubSchemaRepo{})
+
+	err := cs.SyncSchema(context.Background(), nil, &sharedPorts.FetcherSchema{Tables: []sharedPorts.FetcherTableSchema{}})
+
+	require.ErrorIs(t, err, ErrNilConnection)
+}
+
 func TestSyncSchema_EmptyTables_ReturnsNil(t *testing.T) {
 	t.Parallel()
 
@@ -945,6 +961,43 @@ func TestSyncSchema_EmptyTables_DeletesPersistedSchemasAndRefreshesEmptyCache(t 
 	require.NotNil(t, cachedSchema)
 	assert.Empty(t, cachedSchema.Tables)
 	assert.True(t, conn.SchemaDiscovered)
+}
+
+func TestMarkConnectionUnreachable_ClearsSchemasAndInvalidatesCache(t *testing.T) {
+	t.Parallel()
+
+	conn := makeExistingConnection("fc-stale")
+	conn.Status = vo.ConnectionStatusAvailable
+	conn.SchemaDiscovered = true
+
+	deleteCalled := false
+	invalidateCalled := false
+
+	cs := mustNewSyncer(t,
+		&stubConnectionRepo{upsertFn: func(_ context.Context, updated *entities.FetcherConnection) error {
+			assert.Equal(t, vo.ConnectionStatusUnreachable, updated.Status)
+			assert.False(t, updated.SchemaDiscovered)
+			return nil
+		}},
+		&stubSchemaRepo{deleteByConnectionIDFn: func(_ context.Context, connectionID uuid.UUID) error {
+			deleteCalled = true
+			assert.Equal(t, conn.ID, connectionID)
+			return nil
+		}},
+	)
+	cs.WithSchemaCache(&stubSchemaCache{invalidateSchemaFn: func(_ context.Context, connectionID string) error {
+		invalidateCalled = true
+		assert.Equal(t, conn.ID.String(), connectionID)
+		return nil
+	}}, time.Minute)
+
+	err := cs.MarkConnectionUnreachable(context.Background(), conn)
+
+	require.NoError(t, err)
+	assert.True(t, deleteCalled)
+	assert.True(t, invalidateCalled)
+	assert.Equal(t, vo.ConnectionStatusUnreachable, conn.Status)
+	assert.False(t, conn.SchemaDiscovered)
 }
 
 // ---------------------------------------------------------------------------

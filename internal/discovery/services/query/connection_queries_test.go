@@ -14,9 +14,8 @@ import (
 
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 
-	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
-
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
+	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
 	vo "github.com/LerianStudio/matcher/internal/discovery/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/discovery/ports"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
@@ -47,6 +46,14 @@ func (m *mockSchemaCache) SetSchema(ctx context.Context, connectionID string, sc
 
 func (m *mockSchemaCache) InvalidateSchema(_ context.Context, _ string) error {
 	return nil
+}
+
+func readySchemaConnection(id uuid.UUID) *entities.FetcherConnection {
+	return &entities.FetcherConnection{
+		ID:               id,
+		Status:           vo.ConnectionStatusAvailable,
+		SchemaDiscovered: true,
+	}
 }
 
 func TestGetDiscoveryStatus_FetcherHealthy(t *testing.T) {
@@ -134,7 +141,7 @@ func TestGetDiscoveryStatus_IgnoresNilConnectionEntries(t *testing.T) {
 		&mockFetcherClient{healthy: true},
 		&mockConnectionRepo{findAllConns: []*entities.FetcherConnection{
 			nil,
-			&entities.FetcherConnection{ID: uuid.New(), LastSeenAt: now},
+			{ID: uuid.New(), LastSeenAt: now},
 		}},
 		&mockSchemaRepo{},
 		&mockExtractionRepo{},
@@ -295,7 +302,7 @@ func TestGetConnectionSchema_Success(t *testing.T) {
 
 	uc, err := NewUseCase(
 		&mockFetcherClient{healthy: true},
-		&mockConnectionRepo{},
+		&mockConnectionRepo{findByIDConn: readySchemaConnection(connID)},
 		&mockSchemaRepo{findByConnID: expected},
 		&mockExtractionRepo{},
 		&libLog.NopLogger{},
@@ -312,16 +319,17 @@ func TestGetConnectionSchema_Success(t *testing.T) {
 func TestGetConnectionSchema_Error(t *testing.T) {
 	t.Parallel()
 
+	connID := uuid.New()
 	uc, err := NewUseCase(
 		&mockFetcherClient{healthy: true},
-		&mockConnectionRepo{},
+		&mockConnectionRepo{findByIDConn: readySchemaConnection(connID)},
 		&mockSchemaRepo{findByConnErr: errors.New("schema query failed")},
 		&mockExtractionRepo{},
 		&libLog.NopLogger{},
 	)
 	require.NoError(t, err)
 
-	schemas, err := uc.GetConnectionSchema(context.Background(), uuid.New())
+	schemas, err := uc.GetConnectionSchema(context.Background(), connID)
 
 	assert.Nil(t, schemas)
 	require.Error(t, err)
@@ -331,16 +339,17 @@ func TestGetConnectionSchema_Error(t *testing.T) {
 func TestGetConnectionSchema_EmptyResult(t *testing.T) {
 	t.Parallel()
 
+	connID := uuid.New()
 	uc, err := NewUseCase(
 		&mockFetcherClient{healthy: true},
-		&mockConnectionRepo{},
+		&mockConnectionRepo{findByIDConn: readySchemaConnection(connID)},
 		&mockSchemaRepo{findByConnID: []*entities.DiscoveredSchema{}},
 		&mockExtractionRepo{},
 		&libLog.NopLogger{},
 	)
 	require.NoError(t, err)
 
-	schemas, err := uc.GetConnectionSchema(context.Background(), uuid.New())
+	schemas, err := uc.GetConnectionSchema(context.Background(), connID)
 
 	require.NoError(t, err)
 	assert.Empty(t, schemas)
@@ -361,7 +370,7 @@ func TestGetConnectionSchema_FiltersNilEntries(t *testing.T) {
 
 	uc, err := NewUseCase(
 		&mockFetcherClient{healthy: true},
-		&mockConnectionRepo{},
+		&mockConnectionRepo{findByIDConn: readySchemaConnection(connID)},
 		&mockSchemaRepo{findByConnID: []*entities.DiscoveredSchema{nil, valid}},
 		&mockExtractionRepo{},
 		&libLog.NopLogger{},
@@ -375,6 +384,35 @@ func TestGetConnectionSchema_FiltersNilEntries(t *testing.T) {
 	assert.Equal(t, valid, schemas[0])
 }
 
+func TestGetConnectionSchema_UnavailableConnectionReturnsEmptyWithoutUsingCache(t *testing.T) {
+	t.Parallel()
+
+	connID := uuid.New()
+	cacheCalled := false
+
+	uc, err := NewUseCase(
+		&mockFetcherClient{healthy: true},
+		&mockConnectionRepo{findByIDConn: &entities.FetcherConnection{ID: connID, Status: vo.ConnectionStatusUnreachable}},
+		&mockSchemaRepo{findByConnErr: errors.New("schema repo should not be called")},
+		&mockExtractionRepo{},
+		&libLog.NopLogger{},
+	)
+	require.NoError(t, err)
+
+	uc.WithSchemaCache(&mockSchemaCache{
+		getSchemaFn: func(_ context.Context, _ string) (*sharedPorts.FetcherSchema, error) {
+			cacheCalled = true
+			return &sharedPorts.FetcherSchema{}, nil
+		},
+	}, time.Minute)
+
+	schemas, err := uc.GetConnectionSchema(context.Background(), connID)
+
+	require.NoError(t, err)
+	assert.False(t, cacheCalled)
+	assert.Empty(t, schemas)
+}
+
 func TestGetConnectionSchema_UsesCacheWhenAvailable(t *testing.T) {
 	t.Parallel()
 
@@ -382,7 +420,7 @@ func TestGetConnectionSchema_UsesCacheWhenAvailable(t *testing.T) {
 	discoveredAt := time.Date(2026, 3, 11, 12, 0, 0, 0, time.UTC)
 	uc, err := NewUseCase(
 		&mockFetcherClient{healthy: true},
-		&mockConnectionRepo{},
+		&mockConnectionRepo{findByIDConn: readySchemaConnection(connID)},
 		&mockSchemaRepo{findByConnErr: errors.New("db should not be called")},
 		&mockExtractionRepo{},
 		&libLog.NopLogger{},
@@ -426,7 +464,7 @@ func TestGetConnectionSchema_FallsBackToRepositoryOnCacheError(t *testing.T) {
 
 	uc, err := NewUseCase(
 		&mockFetcherClient{healthy: true},
-		&mockConnectionRepo{},
+		&mockConnectionRepo{findByIDConn: readySchemaConnection(connID)},
 		&mockSchemaRepo{findByConnID: expected},
 		&mockExtractionRepo{},
 		&libLog.NopLogger{},

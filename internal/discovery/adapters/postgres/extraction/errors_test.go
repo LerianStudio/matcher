@@ -6,9 +6,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
-	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 	"github.com/stretchr/testify/assert"
+
+	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 )
 
 func TestExtractionSentinelErrors(t *testing.T) {
@@ -19,11 +19,6 @@ func TestExtractionSentinelErrors(t *testing.T) {
 		err     error
 		message string
 	}{
-		{
-			name:    "ErrExtractionNotFound",
-			err:     ErrExtractionNotFound,
-			message: "extraction request not found",
-		},
 		{
 			name:    "ErrRepoNotInitialized",
 			err:     ErrRepoNotInitialized,
@@ -59,10 +54,4 @@ func TestErrTransactionRequired_CanonicalIdentity(t *testing.T) {
 	t.Parallel()
 
 	assert.True(t, errors.Is(ErrTransactionRequired, pgcommon.ErrTransactionRequired))
-}
-
-func TestErrExtractionNotFound_CanonicalIdentity(t *testing.T) {
-	t.Parallel()
-
-	assert.True(t, errors.Is(ErrExtractionNotFound, repositories.ErrExtractionNotFound))
 }

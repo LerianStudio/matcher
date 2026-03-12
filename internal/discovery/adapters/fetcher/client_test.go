@@ -27,6 +27,7 @@ func newTestClient(t *testing.T, serverURL string) *HTTPFetcherClient {
 
 	cfg := DefaultConfig()
 	cfg.BaseURL = serverURL
+	cfg.AllowPrivateIPs = true
 	cfg.MaxRetries = 0 // no retries by default to keep tests fast
 
 	client, err := NewHTTPFetcherClient(cfg)
@@ -368,9 +369,7 @@ func TestSubmitExtractionJob_Success(t *testing.T) {
 				EndDate:   "2026-01-31",
 			},
 		},
-		Filters: map[string]interface{}{
-			"currency": "USD",
-		},
+		Filters: &sharedPorts.ExtractionFilters{Equals: map[string]string{"currency": "USD"}},
 	}
 
 	jobID, err := client.SubmitExtractionJob(context.Background(), input)
@@ -468,6 +467,7 @@ func TestDoRequest_RetriesOn500(t *testing.T) {
 
 	cfg := DefaultConfig()
 	cfg.BaseURL = srv.URL
+	cfg.AllowPrivateIPs = true
 	cfg.MaxRetries = 3
 	cfg.RetryBaseDelay = 0 // no delay for tests
 
@@ -494,6 +494,7 @@ func TestDoRequest_ExhaustsRetries(t *testing.T) {
 
 	cfg := DefaultConfig()
 	cfg.BaseURL = srv.URL
+	cfg.AllowPrivateIPs = true
 	cfg.MaxRetries = 2
 	cfg.RetryBaseDelay = 0
 
@@ -523,6 +524,7 @@ func TestDoRequest_NoRetryOn4xx(t *testing.T) {
 
 	cfg := DefaultConfig()
 	cfg.BaseURL = srv.URL
+	cfg.AllowPrivateIPs = true
 	cfg.MaxRetries = 3
 	cfg.RetryBaseDelay = 0
 
@@ -550,6 +552,7 @@ func TestDoRequest_NoRetryOn404(t *testing.T) {
 
 	cfg := DefaultConfig()
 	cfg.BaseURL = srv.URL
+	cfg.AllowPrivateIPs = true
 	cfg.MaxRetries = 3
 	cfg.RetryBaseDelay = 0
 
@@ -573,6 +576,7 @@ func TestDoRequest_CanceledContext(t *testing.T) {
 
 	cfg := DefaultConfig()
 	cfg.BaseURL = srv.URL
+	cfg.AllowPrivateIPs = true
 	cfg.MaxRetries = 5
 	cfg.RetryBaseDelay = 0
 
@@ -658,6 +662,7 @@ func TestSubmitExtractionJob_DoesNotRetryOnServerError(t *testing.T) {
 
 	cfg := DefaultConfig()
 	cfg.BaseURL = srv.URL
+	cfg.AllowPrivateIPs = true
 	cfg.MaxRetries = 3
 	cfg.RetryBaseDelay = 0
 

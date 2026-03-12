@@ -24,7 +24,7 @@ func testCacheContext() context.Context {
 func mustSchemaKey(t *testing.T, ctx context.Context, connectionID string) string {
 	t.Helper()
 
-	key, err := schemaKey(ctx, connectionID)
+	key, err := (&SchemaCache{allowSingleTenantFallback: true}).schemaKey(ctx, connectionID)
 	require.NoError(t, err)
 
 	return key
@@ -46,6 +46,7 @@ func setupRedis(t *testing.T) (*goredis.Client, *miniredis.Miniredis, func()) {
 
 	return client, srv, cleanup
 }
+
 func createTestFetcherSchema() *sharedPorts.FetcherSchema {
 	return &sharedPorts.FetcherSchema{
 		ConnectionID: "conn-1",
@@ -71,7 +72,7 @@ func TestNewSchemaCache(t *testing.T) {
 		client, _, cleanup := setupRedis(t)
 		defer cleanup()
 
-		cache, err := NewSchemaCache(client)
+		cache, err := NewSchemaCache(client, true)
 
 		require.NoError(t, err)
 		require.NotNil(t, cache)
@@ -80,7 +81,7 @@ func TestNewSchemaCache(t *testing.T) {
 	t.Run("with nil client", func(t *testing.T) {
 		t.Parallel()
 
-		cache, err := NewSchemaCache(nil)
+		cache, err := NewSchemaCache(nil, true)
 
 		assert.ErrorIs(t, err, ErrRedisClientRequired)
 		assert.Nil(t, cache)
@@ -106,7 +107,7 @@ func TestSchemaCache_GetSchema(t *testing.T) {
 		client, _, cleanup := setupRedis(t)
 		defer cleanup()
 
-		cache, err := NewSchemaCache(client)
+		cache, err := NewSchemaCache(client, true)
 		require.NoError(t, err)
 
 		result, err := cache.GetSchema(context.Background(), "conn-1")
@@ -121,7 +122,7 @@ func TestSchemaCache_GetSchema(t *testing.T) {
 		client, _, cleanup := setupRedis(t)
 		defer cleanup()
 
-		cache, err := NewSchemaCache(client)
+		cache, err := NewSchemaCache(client, true)
 		require.NoError(t, err)
 
 		schema := createTestFetcherSchema()
@@ -148,7 +149,7 @@ func TestSchemaCache_GetSchema(t *testing.T) {
 		err := client.Set(ctx, mustSchemaKey(t, ctx, "conn-1"), "not-json", 5*time.Minute).Err()
 		require.NoError(t, err)
 
-		cache, err := NewSchemaCache(client)
+		cache, err := NewSchemaCache(client, true)
 		require.NoError(t, err)
 
 		result, err := cache.GetSchema(ctx, "conn-1")
@@ -168,7 +169,7 @@ func TestSchemaCache_GetSchema(t *testing.T) {
 		err := client.Set(ctx, mustSchemaKey(t, ctx, "conn-1"), "null", 5*time.Minute).Err()
 		require.NoError(t, err)
 
-		cache, err := NewSchemaCache(client)
+		cache, err := NewSchemaCache(client, true)
 		require.NoError(t, err)
 
 		result, err := cache.GetSchema(ctx, "conn-1")
@@ -196,7 +197,7 @@ func TestSchemaCache_SetSchema(t *testing.T) {
 		client, srv, cleanup := setupRedis(t)
 		defer cleanup()
 
-		cache, err := NewSchemaCache(client)
+		cache, err := NewSchemaCache(client, true)
 		require.NoError(t, err)
 
 		schema := createTestFetcherSchema()
@@ -223,7 +224,7 @@ func TestSchemaCache_SetSchema(t *testing.T) {
 		client, _, cleanup := setupRedis(t)
 		defer cleanup()
 
-		cache, err := NewSchemaCache(client)
+		cache, err := NewSchemaCache(client, true)
 		require.NoError(t, err)
 
 		err = cache.SetSchema(testCacheContext(), "conn-1", nil, 5*time.Minute)
@@ -238,7 +239,7 @@ func TestSchemaCache_TenantIsolation(t *testing.T) {
 	client, _, cleanup := setupRedis(t)
 	defer cleanup()
 
-	cache, err := NewSchemaCache(client)
+	cache, err := NewSchemaCache(client, true)
 	require.NoError(t, err)
 
 	tenantA := context.WithValue(context.Background(), auth.TenantIDKey, "tenant-a")
@@ -254,4 +255,72 @@ func TestSchemaCache_TenantIsolation(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, "conn-1", result.ConnectionID)
+}
+
+func TestSchemaCache_StrictTenantContextFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	client, _, cleanup := setupRedis(t)
+	defer cleanup()
+
+	cache, err := NewSchemaCache(client, false)
+	require.NoError(t, err)
+
+	err = cache.SetSchema(context.Background(), "conn-1", createTestFetcherSchema(), 5*time.Minute)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrTenantContextRequired)
+}
+
+func TestSchemaCache_UnsafeKeyInputsRejected(t *testing.T) {
+	t.Parallel()
+
+	client, _, cleanup := setupRedis(t)
+	defer cleanup()
+
+	cache, err := NewSchemaCache(client, true)
+	require.NoError(t, err)
+
+	err = cache.SetSchema(context.WithValue(context.Background(), auth.TenantIDKey, "tenant bad"), "conn-1", createTestFetcherSchema(), time.Minute)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrUnsafeTenantID)
+
+	err = cache.SetSchema(testCacheContext(), "conn bad", createTestFetcherSchema(), time.Minute)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrUnsafeConnectionID)
+
+	err = cache.SetSchema(testCacheContext(), "", createTestFetcherSchema(), time.Minute)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrEmptyConnectionID)
+}
+
+func TestSchemaCache_InvalidateSchema(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil cache", func(t *testing.T) {
+		t.Parallel()
+
+		var cache *SchemaCache
+		err := cache.InvalidateSchema(testCacheContext(), "conn-1")
+
+		assert.ErrorIs(t, err, ErrCacheNotInitialized)
+	})
+
+	t.Run("successful invalidate", func(t *testing.T) {
+		t.Parallel()
+
+		client, srv, cleanup := setupRedis(t)
+		defer cleanup()
+
+		cache, err := NewSchemaCache(client, true)
+		require.NoError(t, err)
+
+		ctx := testCacheContext()
+		err = cache.SetSchema(ctx, "conn-1", createTestFetcherSchema(), 5*time.Minute)
+		require.NoError(t, err)
+		assert.True(t, srv.Exists(mustSchemaKey(t, ctx, "conn-1")))
+
+		err = cache.InvalidateSchema(ctx, "conn-1")
+		require.NoError(t, err)
+		assert.False(t, srv.Exists(mustSchemaKey(t, ctx, "conn-1")))
+	})
 }

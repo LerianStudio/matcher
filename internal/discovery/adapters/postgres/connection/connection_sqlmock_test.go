@@ -133,9 +133,10 @@ func TestRepository_Upsert(t *testing.T) {
 		defer finish()
 
 		conn := createTestConnection()
+		rows := sqlmock.NewRows([]string{"id", "created_at", "updated_at"}).AddRow(conn.ID, conn.CreatedAt, conn.UpdatedAt)
 
 		mock.ExpectBegin()
-		mock.ExpectExec("INSERT INTO fetcher_connections").
+		mock.ExpectQuery("INSERT INTO fetcher_connections").
 			WithArgs(
 				conn.ID,
 				conn.FetcherConnID,
@@ -151,12 +152,52 @@ func TestRepository_Upsert(t *testing.T) {
 				conn.CreatedAt,
 				conn.UpdatedAt,
 			).
-			WillReturnResult(sqlmock.NewResult(1, 1))
+			WillReturnRows(rows)
 		mock.ExpectCommit()
 
 		err := repo.Upsert(context.Background(), conn)
 
 		assert.NoError(t, err)
+	})
+
+	t.Run("upsert conflict hydrates persisted identity", func(t *testing.T) {
+		t.Parallel()
+
+		repo, mock, finish := setupMockRepository(t)
+		defer finish()
+
+		conn := createTestConnection()
+		persistedID := uuid.New()
+		persistedCreatedAt := conn.CreatedAt.Add(-time.Hour)
+		persistedUpdatedAt := conn.UpdatedAt.Add(time.Second)
+		rows := sqlmock.NewRows([]string{"id", "created_at", "updated_at"}).AddRow(persistedID, persistedCreatedAt, persistedUpdatedAt)
+
+		mock.ExpectBegin()
+		mock.ExpectQuery("INSERT INTO fetcher_connections").
+			WithArgs(
+				conn.ID,
+				conn.FetcherConnID,
+				conn.ConfigName,
+				conn.DatabaseType,
+				conn.Host,
+				conn.Port,
+				conn.DatabaseName,
+				conn.ProductName,
+				conn.Status.String(),
+				conn.LastSeenAt,
+				conn.SchemaDiscovered,
+				conn.CreatedAt,
+				conn.UpdatedAt,
+			).
+			WillReturnRows(rows)
+		mock.ExpectCommit()
+
+		err := repo.Upsert(context.Background(), conn)
+
+		assert.NoError(t, err)
+		assert.Equal(t, persistedID, conn.ID)
+		assert.Equal(t, persistedCreatedAt, conn.CreatedAt)
+		assert.Equal(t, persistedUpdatedAt, conn.UpdatedAt)
 	})
 
 	t.Run("exec error", func(t *testing.T) {
@@ -168,7 +209,7 @@ func TestRepository_Upsert(t *testing.T) {
 		conn := createTestConnection()
 
 		mock.ExpectBegin()
-		mock.ExpectExec("INSERT INTO fetcher_connections").
+		mock.ExpectQuery("INSERT INTO fetcher_connections").
 			WillReturnError(errTestExec)
 		mock.ExpectRollback()
 
@@ -428,7 +469,8 @@ func TestRepository_UpsertWithTx_Success(t *testing.T) {
 	mockTx, err := db.Begin()
 	require.NoError(t, err)
 
-	dbMock.ExpectExec("INSERT INTO fetcher_connections").
+	rows := sqlmock.NewRows([]string{"id", "created_at", "updated_at"}).AddRow(conn.ID, conn.CreatedAt, conn.UpdatedAt)
+	dbMock.ExpectQuery("INSERT INTO fetcher_connections").
 		WithArgs(
 			conn.ID,
 			conn.FetcherConnID,
@@ -443,7 +485,7 @@ func TestRepository_UpsertWithTx_Success(t *testing.T) {
 			conn.SchemaDiscovered,
 			conn.CreatedAt,
 			conn.UpdatedAt,
-		).WillReturnResult(sqlmock.NewResult(1, 1))
+		).WillReturnRows(rows)
 	dbMock.ExpectRollback()
 
 	err = repo.UpsertWithTx(context.Background(), mockTx, conn)

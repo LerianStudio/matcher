@@ -22,7 +22,9 @@ func newExtractionRequest(t *testing.T) *entities.ExtractionRequest {
 		context.Background(),
 		uuid.New(),
 		map[string]any{"transactions": map[string]any{"columns": []string{"id", "amount"}}},
-		map[string]any{"currency": "USD"},
+		"2026-03-01",
+		"2026-03-08",
+		map[string]any{"equals": map[string]any{"currency": "USD"}},
 	)
 	require.NoError(t, err)
 
@@ -34,32 +36,39 @@ func TestNewExtractionRequest(t *testing.T) {
 
 	connectionID := uuid.New()
 	tables := map[string]any{"transactions": map[string]any{"columns": []string{"id", "amount"}}}
-	filters := map[string]any{"currency": "USD"}
+	filters := map[string]any{"equals": map[string]any{"currency": "USD"}}
 
-	req, err := entities.NewExtractionRequest(context.Background(), connectionID, tables, filters)
+	req, err := entities.NewExtractionRequest(context.Background(), connectionID, tables, "2026-03-01", "2026-03-08", filters)
 	require.NoError(t, err)
 	require.NotNil(t, req)
 
 	assert.Equal(t, connectionID, req.ConnectionID)
 	assert.Equal(t, vo.ExtractionStatusPending, req.Status)
 	assert.Empty(t, req.FetcherJobID)
+	assert.Equal(t, "2026-03-01", req.StartDate)
+	assert.Equal(t, "2026-03-08", req.EndDate)
 	assert.NotNil(t, req.Tables)
 	assert.NotNil(t, req.Filters)
-	assert.Equal(t, "USD", req.Filters["currency"])
+	require.Contains(t, req.Filters, "equals")
+	equals, ok := req.Filters["equals"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "USD", equals["currency"])
 	assert.False(t, req.CreatedAt.IsZero())
 	assert.True(t, req.CreatedAt.Equal(req.UpdatedAt))
 
 	// Defensive copy - mutating caller-owned maps must not affect the entity.
-	filters["currency"] = "BRL"
+	filters["equals"].(map[string]any)["currency"] = "BRL"
 	tables["transactions"] = false
-	assert.Equal(t, "USD", req.Filters["currency"])
+	equals, ok = req.Filters["equals"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "USD", equals["currency"])
 	assert.NotEqual(t, false, req.Tables["transactions"])
 }
 
 func TestNewExtractionRequest_RequiresConnectionID(t *testing.T) {
 	t.Parallel()
 
-	req, err := entities.NewExtractionRequest(context.Background(), uuid.Nil, nil, nil)
+	req, err := entities.NewExtractionRequest(context.Background(), uuid.Nil, nil, "", "", nil)
 	require.Error(t, err)
 	assert.Nil(t, req)
 	assert.Contains(t, err.Error(), "connection id")
@@ -171,6 +180,14 @@ func TestExtractionRequest_InvalidTransitions(t *testing.T) {
 			},
 		},
 		{
+			name: "complete rejects path traversal",
+			mutate: func(t *testing.T, req *entities.ExtractionRequest) error {
+				t.Helper()
+				require.NoError(t, req.MarkSubmitted("job-123"))
+				return req.MarkComplete("/data/../secret.csv")
+			},
+		},
+		{
 			name: "failed requires message",
 			mutate: func(t *testing.T, req *entities.ExtractionRequest) error {
 				t.Helper()
@@ -225,7 +242,11 @@ func TestExtractionRequest_JSONSerialization(t *testing.T) {
 
 	var filters map[string]any
 	require.NoError(t, json.Unmarshal(filtersJSON, &filters))
-	assert.Equal(t, "USD", filters["currency"])
+	equalsJSON, err := json.Marshal(filters["equals"])
+	require.NoError(t, err)
+	var equals map[string]string
+	require.NoError(t, json.Unmarshal(equalsJSON, &equals))
+	assert.Equal(t, "USD", equals["currency"])
 }
 
 func TestExtractionRequest_FiltersJSON_NilFiltersReturnsNil(t *testing.T) {

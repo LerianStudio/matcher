@@ -1493,7 +1493,6 @@ func applySQLPoolSettings(dbs []*sql.DB, maxLifetime, maxIdle time.Duration) {
 
 type modulesResult struct {
 	outboxDispatcher *outboxServices.Dispatcher
-	outboxRepo       sharedPorts.OutboxRepository
 	exportWorker     *reportingWorker.ExportWorker
 	cleanupWorker    *reportingWorker.CleanupWorker
 	archivalWorker   *governanceWorker.ArchivalWorker
@@ -1637,7 +1636,10 @@ func initModulesAndMessaging(
 	}
 
 	// Discovery module (optional — non-critical, gated by FETCHER_ENABLED).
-	discWorker := initOptionalDiscoveryWorker(ctx, routes, cfg, provider, sharedOutboxRepository, logger, initDiscoveryModule)
+	discWorker, err := initOptionalDiscoveryWorker(ctx, routes, cfg, provider, sharedOutboxRepository, logger, initDiscoveryModule)
+	if err != nil {
+		return nil, fmt.Errorf("init optional discovery worker: %w", err)
+	}
 
 	// Create governance audit consumer for processing audit events from the outbox.
 	// Audit publishing is compliance-critical (SOX) — the system MUST NOT start without it.
@@ -1680,7 +1682,6 @@ func initModulesAndMessaging(
 
 	return &modulesResult{
 		outboxDispatcher: outboxDispatcher,
-		outboxRepo:       sharedOutboxRepository,
 		exportWorker:     exportWorker,
 		cleanupWorker:    cleanupWorker,
 		schedulerWorker:  schedulerWorker,

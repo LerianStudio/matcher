@@ -40,13 +40,8 @@ func TestConnectionFromEntity_ValidEntity(t *testing.T) {
 	resp := ConnectionFromEntity(entity)
 
 	assert.Equal(t, id, resp.ID)
-	assert.Equal(t, "fetcher-conn-001", resp.FetcherConnID)
 	assert.Equal(t, "prod-config", resp.ConfigName)
 	assert.Equal(t, "POSTGRESQL", resp.DatabaseType)
-	assert.Equal(t, "db.example.com", resp.Host)
-	assert.Equal(t, 5432, resp.Port)
-	assert.Equal(t, "ledger", resp.DatabaseName)
-	assert.Equal(t, "PostgreSQL 17.2", resp.ProductName)
 	assert.Equal(t, "AVAILABLE", resp.Status)
 	assert.True(t, resp.SchemaDiscovered)
 	assert.Equal(t, now, resp.LastSeenAt)
@@ -101,13 +96,8 @@ func TestConnectionFromEntity_ZeroValues(t *testing.T) {
 
 	require.NotNil(t, resp)
 	assert.Equal(t, uuid.MustParse("11111111-2222-3333-4444-555555555555"), resp.ID)
-	assert.Empty(t, resp.FetcherConnID)
 	assert.Empty(t, resp.ConfigName)
 	assert.Empty(t, resp.DatabaseType)
-	assert.Empty(t, resp.Host)
-	assert.Equal(t, 0, resp.Port)
-	assert.Empty(t, resp.DatabaseName)
-	assert.Empty(t, resp.ProductName)
 	assert.Equal(t, "UNKNOWN", resp.Status)
 	assert.False(t, resp.SchemaDiscovered)
 	assert.True(t, resp.LastSeenAt.IsZero())
@@ -134,8 +124,9 @@ func TestExtractionRequestFromEntity_HidesInternalResultPath(t *testing.T) {
 	entity := &entities.ExtractionRequest{
 		ID:           uuid.New(),
 		ConnectionID: uuid.New(),
-		FetcherJobID: "job-123",
-		Tables:       map[string]any{"transactions": true},
+		Tables:       map[string]any{"transactions": map[string]any{"columns": []string{"id", "amount"}}},
+		StartDate:    "2026-03-01",
+		EndDate:      "2026-03-08",
 		Status:       vo.ExtractionStatusComplete,
 		ResultPath:   "/tmp/internal/result.csv",
 		CreatedAt:    time.Now().UTC(),
@@ -145,6 +136,9 @@ func TestExtractionRequestFromEntity_HidesInternalResultPath(t *testing.T) {
 	resp := ExtractionRequestFromEntity(entity)
 
 	assert.Equal(t, vo.ExtractionStatusComplete.String(), resp.Status)
+	assert.Equal(t, "2026-03-01", resp.StartDate)
+	assert.Equal(t, "2026-03-08", resp.EndDate)
+	assert.Equal(t, []string{"id", "amount"}, resp.Tables["transactions"].Columns)
 	assert.Empty(t, resp.ErrorMessage)
 
 	encoded, err := json.Marshal(resp)

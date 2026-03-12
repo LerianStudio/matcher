@@ -121,6 +121,24 @@ func TestGetExtractionJobStatus_CompleteMissingResultPath(t *testing.T) {
 	assert.Contains(t, err.Error(), "missing result path")
 }
 
+func TestGetExtractionJobStatus_CompleteRejectsInvalidResultPath(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		resp := fetcherExtractionStatusResponse{JobID: "job-6b", Status: "COMPLETE", Progress: 100, ResultPath: "s3://bucket/output.csv"}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(resp) //nolint:errcheck,errchkjson // test helper
+	}))
+	defer srv.Close()
+
+	client := newTestClient(t, srv.URL)
+	status, err := client.GetExtractionJobStatus(context.Background(), "job-6b")
+	require.Error(t, err)
+	assert.Nil(t, status)
+	assert.ErrorIs(t, err, ErrFetcherBadResponse)
+	assert.Contains(t, err.Error(), "result path")
+}
+
 func TestGetExtractionJobStatus_FailedMissingErrorMessage(t *testing.T) {
 	t.Parallel()
 

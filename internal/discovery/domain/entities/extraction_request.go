@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path"
 	"strings"
 	"time"
 
@@ -16,8 +17,14 @@ import (
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
 
-// ErrInvalidTransition indicates an invalid status transition.
-var ErrInvalidTransition = errors.New("invalid status transition")
+// Sentinel errors for extraction state transitions.
+var (
+	ErrInvalidTransition       = errors.New("invalid status transition")
+	ErrResultPathRequired      = errors.New("result path required")
+	ErrResultPathNotAbsolute   = errors.New("result path must be absolute")
+	ErrResultPathInvalidFormat = errors.New("result path must not include URL scheme, query, or fragment")
+	ErrResultPathPathTraversal = errors.New("result path must not contain traversal segments")
+)
 
 // SanitizedExtractionFailureMessage is the client-safe failure detail persisted
 // for extraction requests when upstream systems return internal diagnostics.
@@ -31,6 +38,8 @@ type ExtractionRequest struct {
 	IngestionJobID uuid.UUID // Nullable: linked to downstream ingestion when available
 	FetcherJobID   string
 	Tables         map[string]any
+	StartDate      string
+	EndDate        string
 	Filters        map[string]any
 	Status         vo.ExtractionStatus
 	ResultPath     string
@@ -44,6 +53,8 @@ func NewExtractionRequest(
 	ctx context.Context,
 	connectionID uuid.UUID,
 	tables map[string]any,
+	startDate string,
+	endDate string,
 	filters map[string]any,
 ) (*ExtractionRequest, error) {
 	asserter := assert.New(ctx, nil, constants.ApplicationName, "discovery.extraction_request.new")
@@ -71,6 +82,8 @@ func NewExtractionRequest(
 		ID:           uuid.New(),
 		ConnectionID: connectionID,
 		Tables:       clonedTables,
+		StartDate:    strings.TrimSpace(startDate),
+		EndDate:      strings.TrimSpace(endDate),
 		Filters:      clonedFilters,
 		Status:       vo.ExtractionStatusPending,
 		CreatedAt:    now,
@@ -145,6 +158,10 @@ func (er *ExtractionRequest) MarkComplete(resultPath string) error {
 		return fmt.Errorf("%w: result path required", ErrInvalidTransition)
 	}
 
+	if err := validateResultPath(resultPath); err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalidTransition, err)
+	}
+
 	if er.Status != vo.ExtractionStatusSubmitted && er.Status != vo.ExtractionStatusExtracting {
 		return fmt.Errorf("%w: cannot transition from %s to COMPLETE", ErrInvalidTransition, er.Status)
 	}
@@ -153,6 +170,28 @@ func (er *ExtractionRequest) MarkComplete(resultPath string) error {
 	er.ResultPath = resultPath
 	er.ErrorMessage = ""
 	er.UpdatedAt = time.Now().UTC()
+
+	return nil
+}
+
+func validateResultPath(resultPath string) error {
+	trimmed := strings.TrimSpace(resultPath)
+	if trimmed == "" {
+		return ErrResultPathRequired
+	}
+
+	if !strings.HasPrefix(trimmed, "/") {
+		return ErrResultPathNotAbsolute
+	}
+
+	if strings.Contains(trimmed, "://") || strings.ContainsAny(trimmed, "?#") {
+		return ErrResultPathInvalidFormat
+	}
+
+	cleaned := path.Clean(trimmed)
+	if cleaned != trimmed || strings.Contains(trimmed, "..") {
+		return ErrResultPathPathTraversal
+	}
 
 	return nil
 }

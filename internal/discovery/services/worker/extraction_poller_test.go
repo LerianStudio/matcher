@@ -764,6 +764,50 @@ func TestExtractionPoller_PollOnce_ConcurrentUpdateStopsOnReloadedTerminalState(
 	assert.Equal(t, "/data/existing.csv", latestExtraction.ResultPath)
 }
 
+func TestExtractionPoller_PollOnce_QueuedStatusKeepsPollingWithoutUpdate(t *testing.T) {
+	t.Parallel()
+
+	extraction := &entities.ExtractionRequest{
+		ID:           uuid.New(),
+		FetcherJobID: "job-queued",
+		Status:       vo.ExtractionStatusSubmitted,
+		UpdatedAt:    time.Now().UTC(),
+	}
+
+	updateCalled := false
+	repo := &stubExtractionRepo{
+		findByIDFn: func(_ context.Context, id uuid.UUID) (*entities.ExtractionRequest, error) {
+			assert.Equal(t, extraction.ID, id)
+			return extraction, nil
+		},
+		updateIfFn: func(_ context.Context, _ *entities.ExtractionRequest, _ time.Time) error {
+			updateCalled = true
+			return nil
+		},
+	}
+
+	fetcher := &stubFetcherClient{
+		getExtractionJobStatusFn: func(_ context.Context, jobID string) (*sharedPorts.ExtractionJobStatus, error) {
+			assert.Equal(t, extraction.FetcherJobID, jobID)
+			return &sharedPorts.ExtractionJobStatus{JobID: jobID, Status: "PENDING"}, nil
+		},
+	}
+
+	p, err := NewExtractionPoller(
+		fetcher,
+		repo,
+		ExtractionPollerConfig{PollInterval: 10 * time.Millisecond, Timeout: time.Second},
+		&stubLogger{},
+	)
+	require.NoError(t, err)
+
+	done := p.pollOnce(context.Background(), extraction.ID, nil, nil)
+
+	assert.False(t, done)
+	assert.False(t, updateCalled)
+	assert.Equal(t, vo.ExtractionStatusSubmitted, extraction.Status)
+}
+
 // --- Sentinel errors ---
 
 func TestExtractionPollerErrors_AreDistinct(t *testing.T) {
@@ -783,4 +827,18 @@ func TestExtractionPollerErrors_AreDistinct(t *testing.T) {
 
 		seen[msg] = msg
 	}
+}
+
+func TestExtractionPoller_PollUntilComplete_NilReceiverInvokesFailureCallback(t *testing.T) {
+	t.Parallel()
+
+	var poller *ExtractionPoller
+	called := false
+
+	poller.PollUntilComplete(context.Background(), uuid.New(), nil, func(_ context.Context, errMsg string) {
+		called = true
+		assert.Equal(t, "extraction poller unavailable", errMsg)
+	})
+
+	assert.True(t, called)
 }

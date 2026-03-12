@@ -107,9 +107,7 @@ func TestExtractionJobInputFields(t *testing.T) {
 				EndDate:   "2026-03-08",
 			},
 		},
-		Filters: map[string]interface{}{
-			"currency": "USD",
-		},
+		Filters: &ports.ExtractionFilters{Equals: map[string]string{"currency": "USD"}},
 	}
 
 	assert.Equal(t, "conn-1", input.ConnectionID)
@@ -120,7 +118,8 @@ func TestExtractionJobInputFields(t *testing.T) {
 	assert.Equal(t, []string{"id", "amount"}, txConfig.Columns)
 	assert.Equal(t, "2026-03-01", txConfig.StartDate)
 	assert.Equal(t, "2026-03-08", txConfig.EndDate)
-	assert.Equal(t, "USD", input.Filters["currency"])
+	require.NotNil(t, input.Filters)
+	assert.Equal(t, "USD", input.Filters.Equals["currency"])
 }
 
 func TestExtractionJobStatusFields(t *testing.T) {

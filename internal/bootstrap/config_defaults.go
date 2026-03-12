@@ -147,7 +147,7 @@ func defaultConfig() *Config {
 		Fetcher: FetcherConfig{
 			Enabled:              false,
 			URL:                  "http://localhost:4006",
-			AllowPrivateIPs:      true,
+			AllowPrivateIPs:      false,
 			HealthTimeoutSec:     5,
 			RequestTimeoutSec:    30,
 			DiscoveryIntervalSec: 60,

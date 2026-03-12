@@ -6,10 +6,10 @@ import (
 	"errors"
 	"testing"
 
-	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
+	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 )
 
 func TestConnectionSentinelErrors(t *testing.T) {
@@ -34,11 +34,6 @@ func TestConnectionSentinelErrors(t *testing.T) {
 			name:    "ErrEntityRequired",
 			err:     ErrEntityRequired,
 			message: "fetcher connection entity is required",
-		},
-		{
-			name:    "ErrModelRequired",
-			err:     ErrModelRequired,
-			message: "fetcher connection model is required",
 		},
 		{
 			name:    "ErrTransactionRequired",
@@ -81,11 +76,5 @@ func TestConnectionErrors_CanonicalIdentity(t *testing.T) {
 		t.Parallel()
 
 		assert.True(t, errors.Is(ErrEntityRequired, repositories.ErrEntityRequired))
-	})
-
-	t.Run("ErrModelRequired re-exports repositories", func(t *testing.T) {
-		t.Parallel()
-
-		assert.True(t, errors.Is(ErrModelRequired, repositories.ErrModelRequired))
 	})
 }

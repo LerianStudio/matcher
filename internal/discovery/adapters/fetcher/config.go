@@ -49,7 +49,7 @@ type HTTPClientConfig struct {
 	RetryBaseDelay time.Duration
 
 	// AllowPrivateIPs allows connections to private IP ranges.
-	// Defaults to true since Fetcher is an internal service.
+	// Defaults to false; internal deployments must opt in explicitly.
 	AllowPrivateIPs bool
 }
 
@@ -61,7 +61,7 @@ func DefaultConfig() HTTPClientConfig {
 		RequestTimeout:  defaultRequestTimeout,
 		MaxRetries:      defaultMaxRetries,
 		RetryBaseDelay:  defaultRetryBaseDelay,
-		AllowPrivateIPs: true,
+		AllowPrivateIPs: false,
 	}
 }
 
@@ -90,6 +90,22 @@ func (cfg HTTPClientConfig) Validate() error {
 
 	if parsed.RawQuery != "" || parsed.Fragment != "" {
 		return fmt.Errorf("%w: query strings and fragments are not allowed", ErrInvalidURL)
+	}
+
+	if cfg.HealthTimeout <= 0 {
+		return fmt.Errorf("%w: health timeout must be positive", ErrInvalidURL)
+	}
+
+	if cfg.RequestTimeout <= 0 {
+		return fmt.Errorf("%w: request timeout must be positive", ErrInvalidURL)
+	}
+
+	if cfg.MaxRetries < 0 {
+		return fmt.Errorf("%w: max retries must be non-negative", ErrInvalidURL)
+	}
+
+	if cfg.RetryBaseDelay < 0 {
+		return fmt.Errorf("%w: retry base delay must be non-negative", ErrInvalidURL)
 	}
 
 	return nil

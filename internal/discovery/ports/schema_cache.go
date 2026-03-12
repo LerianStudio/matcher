@@ -16,4 +16,7 @@ type SchemaCache interface {
 
 	// SetSchema stores a schema in the cache with a TTL.
 	SetSchema(ctx context.Context, connectionID string, schema *sharedPorts.FetcherSchema, ttl time.Duration) error
+
+	// InvalidateSchema removes cached schema for a connection.
+	InvalidateSchema(ctx context.Context, connectionID string) error
 }

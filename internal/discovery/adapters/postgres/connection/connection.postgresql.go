@@ -129,9 +129,10 @@ func (repo *Repository) executeUpsert(ctx context.Context, tx *sql.Tx, conn *ent
 			status = EXCLUDED.status,
 			last_seen_at = EXCLUDED.last_seen_at,
 			schema_discovered = EXCLUDED.schema_discovered,
-			updated_at = EXCLUDED.updated_at`
+			updated_at = EXCLUDED.updated_at
+		RETURNING id, created_at, updated_at`
 
-	_, err := tx.ExecContext(ctx, query,
+	if err := tx.QueryRowContext(ctx, query,
 		model.ID,
 		model.FetcherConnID,
 		model.ConfigName,
@@ -145,10 +146,13 @@ func (repo *Repository) executeUpsert(ctx context.Context, tx *sql.Tx, conn *ent
 		model.SchemaDiscovered,
 		model.CreatedAt,
 		model.UpdatedAt,
-	)
-	if err != nil {
+	).Scan(&model.ID, &model.CreatedAt, &model.UpdatedAt); err != nil {
 		return fmt.Errorf("execute upsert fetcher connection: %w", err)
 	}
+
+	conn.ID = model.ID
+	conn.CreatedAt = model.CreatedAt
+	conn.UpdatedAt = model.UpdatedAt
 
 	return nil
 }

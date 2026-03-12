@@ -13,13 +13,14 @@ import (
 	"testing"
 	"time"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
+
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 )
 
 func TestRunMigrations_DiscoverySlice_ApplyRollbackAndReapply(t *testing.T) {
@@ -100,6 +101,63 @@ func TestRunMigrations_DiscoverySlice_ApplyRollbackAndReapply(t *testing.T) {
 			fetcherConnID,
 		)
 		require.Error(t, err, "status CHECK constraint must reject invalid values")
+
+		_, err = db.ExecContext(ctx,
+			"INSERT INTO extraction_requests (id, connection_id, tables, status) VALUES (gen_random_uuid(), $1, '{}'::jsonb, 'SUBMITTED')",
+			fetcherConnID,
+		)
+		require.Error(t, err, "submitted extraction must require fetcher_job_id")
+
+		_, err = db.ExecContext(ctx,
+			"INSERT INTO fetcher_connections (fetcher_conn_id, config_name, database_type, host, port, database_name, product_name, status) VALUES ($1, 'cfg', 'POSTGRESQL', 'db.internal', 70000, 'ledger', 'PostgreSQL 17', 'AVAILABLE')",
+			"fetcher-conn-bad-port",
+		)
+		require.Error(t, err, "port CHECK constraint must reject invalid values")
+
+		_, err = db.ExecContext(ctx,
+			"INSERT INTO fetcher_connections (fetcher_conn_id, config_name, database_type, host, port, database_name, product_name, status) VALUES ($1, '', 'POSTGRESQL', 'db.internal', 5432, 'ledger', 'PostgreSQL 17', 'AVAILABLE')",
+			"fetcher-conn-empty-config",
+		)
+		require.Error(t, err, "non-empty config_name CHECK constraint must reject blank values")
+
+		_, err = db.ExecContext(ctx,
+			"INSERT INTO fetcher_connections (fetcher_conn_id, config_name, database_type, host, port, database_name, product_name, status) VALUES ($1, 'cfg', 'POSTGRESQL', 'db.internal', 5432, 'ledger', 'PostgreSQL 17', 'AVAILABLE')",
+			"fetcher-conn-1",
+		)
+		require.Error(t, err, "fetcher connection id must remain unique")
+
+		_, err = db.ExecContext(ctx,
+			"INSERT INTO discovered_schemas (connection_id, table_name, columns) VALUES ($1, 'transactions', '{}'::jsonb)",
+			fetcherConnID,
+		)
+		require.Error(t, err, "columns CHECK constraint must require array JSON")
+
+		mustInsertDiscoveredSchema(t, ctx, db, fetcherConnID, "transactions")
+		_, err = db.ExecContext(ctx,
+			"INSERT INTO discovered_schemas (connection_id, table_name, columns) VALUES ($1, 'transactions', '[]'::jsonb)",
+			fetcherConnID,
+		)
+		require.Error(t, err, "schema uniqueness must reject duplicate table snapshot")
+
+		_, err = db.ExecContext(ctx,
+			"INSERT INTO extraction_requests (id, connection_id, tables, status) VALUES (gen_random_uuid(), $1, '[]'::jsonb, 'PENDING')",
+			fetcherConnID,
+		)
+		require.Error(t, err, "tables CHECK constraint must require object JSON")
+
+		_, err = db.ExecContext(ctx,
+			"INSERT INTO extraction_requests (id, connection_id, tables, filters, status) VALUES (gen_random_uuid(), $1, '{}'::jsonb, '[]'::jsonb, 'PENDING')",
+			fetcherConnID,
+		)
+		require.Error(t, err, "filters CHECK constraint must require object-or-null JSON")
+
+		_, err = db.ExecContext(ctx, "DELETE FROM ingestion_jobs WHERE id = $1", ingestionJobID)
+		require.NoError(t, err)
+
+		var ingestionJobIDAfterDelete sql.NullString
+		err = db.QueryRowContext(ctx, "SELECT ingestion_job_id FROM extraction_requests WHERE id = $1", extractionID).Scan(&ingestionJobIDAfterDelete)
+		require.NoError(t, err)
+		assert.False(t, ingestionJobIDAfterDelete.Valid, "ingestion job FK must null out on parent deletion")
 	})
 
 	t.Run("rolls back enum and table slice, then reapplies cleanly", func(t *testing.T) {
@@ -126,6 +184,30 @@ func TestRunMigrations_DiscoverySlice_ApplyRollbackAndReapply(t *testing.T) {
 		assert.True(t, tableExists(t, ctx, db, "discovered_schemas"))
 		assert.True(t, tableExists(t, ctx, db, "extraction_requests"))
 		assert.Contains(t, enumLabels(t, ctx, db, "reconciliation_source_type"), "FETCHER")
+	})
+
+	t.Run("rejects enum rollback when FETCHER sources exist", func(t *testing.T) {
+		rollbackDB, err := sql.Open("pgx", dsn)
+		require.NoError(t, err)
+		defer rollbackDB.Close()
+		require.NoError(t, rollbackDB.PingContext(ctx))
+
+		contextID := mustInsertReconciliationContext(t, ctx, rollbackDB)
+		mustInsertReconciliationSource(t, ctx, rollbackDB, contextID, uniqueName("fetcher-source"), "FETCHER")
+
+		migrator, err := newMigrator(rollbackDB, "matcher_test", "migrations")
+		require.NoError(t, err)
+		defer func() {
+			require.NoError(t, closeMigrator(migrator))
+		}()
+
+		stepper, ok := migrator.(interface{ Steps(int) error })
+		require.True(t, ok, "migrator must support stepping for rollback verification")
+
+		require.NoError(t, stepper.Steps(-1))
+		err = stepper.Steps(-1)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "FETCHER")
 	})
 }
 
@@ -210,6 +292,22 @@ func mustInsertExtractionRequest(t *testing.T, ctx context.Context, db *sql.DB, 
 func mustInsertIngestionJob(t *testing.T, ctx context.Context, db *sql.DB) string {
 	t.Helper()
 
+	contextID := mustInsertReconciliationContext(t, ctx, db)
+	sourceID := mustInsertReconciliationSource(t, ctx, db, contextID, uniqueName("source"), "LEDGER")
+
+	var ingestionJobID string
+	err := db.QueryRowContext(ctx, `
+		INSERT INTO ingestion_jobs (context_id, source_id, status)
+		VALUES ($1, $2, 'QUEUED')
+		RETURNING id`, contextID, sourceID).Scan(&ingestionJobID)
+	require.NoError(t, err)
+
+	return ingestionJobID
+}
+
+func mustInsertReconciliationContext(t *testing.T, ctx context.Context, db *sql.DB) string {
+	t.Helper()
+
 	var contextID string
 	err := db.QueryRowContext(ctx, `
 		INSERT INTO reconciliation_contexts (tenant_id, name, type, interval)
@@ -217,21 +315,20 @@ func mustInsertIngestionJob(t *testing.T, ctx context.Context, db *sql.DB) strin
 		RETURNING id`, uniqueName("ctx")).Scan(&contextID)
 	require.NoError(t, err)
 
+	return contextID
+}
+
+func mustInsertReconciliationSource(t *testing.T, ctx context.Context, db *sql.DB, contextID, name, sourceType string) string {
+	t.Helper()
+
 	var sourceID string
-	err = db.QueryRowContext(ctx, `
+	err := db.QueryRowContext(ctx, `
 		INSERT INTO reconciliation_sources (context_id, name, type, config)
-		VALUES ($1, $2, 'LEDGER', '{}'::jsonb)
-		RETURNING id`, contextID, uniqueName("source")).Scan(&sourceID)
+		VALUES ($1, $2, $3, '{}'::jsonb)
+		RETURNING id`, contextID, name, sourceType).Scan(&sourceID)
 	require.NoError(t, err)
 
-	var ingestionJobID string
-	err = db.QueryRowContext(ctx, `
-		INSERT INTO ingestion_jobs (context_id, source_id, status)
-		VALUES ($1, $2, 'QUEUED')
-		RETURNING id`, contextID, sourceID).Scan(&ingestionJobID)
-	require.NoError(t, err)
-
-	return ingestionJobID
+	return sourceID
 }
 
 func uniqueName(prefix string) string {

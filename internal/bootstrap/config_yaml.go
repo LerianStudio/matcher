@@ -274,7 +274,7 @@ func bindDefaults(viperCfg *viper.Viper) {
 	// --- Fetcher ---
 	viperCfg.SetDefault("fetcher.enabled", false)
 	viperCfg.SetDefault("fetcher.url", "http://localhost:4006")
-	viperCfg.SetDefault("fetcher.allow_private_ips", true)
+	viperCfg.SetDefault("fetcher.allow_private_ips", false)
 	viperCfg.SetDefault("fetcher.health_timeout_sec", 5)       //nolint:mnd // 5 seconds
 	viperCfg.SetDefault("fetcher.request_timeout_sec", 30)     //nolint:mnd // 30 seconds
 	viperCfg.SetDefault("fetcher.discovery_interval_sec", 60)  //nolint:mnd // 1 minute

@@ -29,6 +29,7 @@ import (
 // @Success 201 {object} dto.ExtractionRequestResponse "Extraction request"
 // @Failure 400 {object} ErrorResponse "Invalid request"
 // @Failure 401 {object} ErrorResponse "Unauthorized"
+// @Failure 403 {object} ErrorResponse "Forbidden"
 // @Failure 404 {object} ErrorResponse "Connection not found"
 // @Failure 503 {object} ErrorResponse "Fetcher service unavailable"
 // @Failure 500 {object} ErrorResponse "Internal server error"
@@ -54,7 +55,7 @@ func (handler *Handler) StartExtraction(fiberCtx *fiber.Ctx) error {
 	extraction, err := handler.command.StartExtraction(
 		ctx,
 		connectionID,
-		request.Tables,
+		rawExtractionTables(request.Tables),
 		sharedPorts.ExtractionParams{
 			StartDate: request.StartDate,
 			EndDate:   request.EndDate,
@@ -74,7 +75,7 @@ func (handler *Handler) StartExtraction(fiberCtx *fiber.Ctx) error {
 			return libHTTP.RespondError(fiberCtx, fiber.StatusServiceUnavailable, "service_unavailable", "fetcher service unavailable")
 		default:
 			logSpanError(ctx, span, logger, "start extraction", err)
-			return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_error", "failed to start extraction")
+			return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "failed to start extraction")
 		}
 	}
 
@@ -94,6 +95,7 @@ func (handler *Handler) StartExtraction(fiberCtx *fiber.Ctx) error {
 // @Success 200 {object} dto.ExtractionRequestResponse "Extraction request"
 // @Failure 400 {object} ErrorResponse "Invalid extraction ID"
 // @Failure 401 {object} ErrorResponse "Unauthorized"
+// @Failure 403 {object} ErrorResponse "Forbidden"
 // @Failure 404 {object} ErrorResponse "Extraction not found"
 // @Failure 500 {object} ErrorResponse "Internal server error"
 // @Router /v1/discovery/extractions/{extractionId} [get]
@@ -116,10 +118,28 @@ func (handler *Handler) GetExtraction(fiberCtx *fiber.Ctx) error {
 			return libHTTP.RespondError(fiberCtx, fiber.StatusNotFound, "not_found", "extraction not found")
 		}
 
-		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_error", "failed to get extraction")
+		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "failed to get extraction")
 	}
 
 	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ExtractionRequestFromEntity(extraction))
+}
+
+func rawExtractionTables(tables map[string]dto.ExtractionTableRequest) map[string]any {
+	if len(tables) == 0 {
+		return map[string]any{}
+	}
+
+	raw := make(map[string]any, len(tables))
+	for tableName, cfg := range tables {
+		tableCfg := make(map[string]any, 1)
+		if len(cfg.Columns) > 0 {
+			tableCfg["columns"] = cfg.Columns
+		}
+
+		raw[tableName] = tableCfg
+	}
+
+	return raw
 }
 
 // PollExtraction handles POST /v1/discovery/extractions/:extractionId/poll.
@@ -128,16 +148,16 @@ func (handler *Handler) GetExtraction(fiberCtx *fiber.Ctx) error {
 // @Summary Poll an extraction request
 // @Description Polls Fetcher for the latest extraction status and persists any lifecycle transition.
 // @Tags Discovery
-// @Accept json
 // @Produce json
 // @Security BearerAuth
 // @Param X-Request-Id header string false "Request ID for tracing"
 // @Param extractionId path string true "Extraction ID (UUID)"
-// @Param request body dto.PollExtractionRequest false "Poll request"
 // @Success 200 {object} dto.ExtractionRequestResponse "Updated extraction request"
 // @Failure 400 {object} ErrorResponse "Invalid extraction ID"
 // @Failure 401 {object} ErrorResponse "Unauthorized"
+// @Failure 403 {object} ErrorResponse "Forbidden"
 // @Failure 404 {object} ErrorResponse "Extraction not found"
+// @Failure 503 {object} ErrorResponse "Fetcher service unavailable"
 // @Failure 500 {object} ErrorResponse "Internal server error"
 // @Router /v1/discovery/extractions/{extractionId}/poll [post]
 func (handler *Handler) PollExtraction(fiberCtx *fiber.Ctx) error {
@@ -163,7 +183,7 @@ func (handler *Handler) PollExtraction(fiberCtx *fiber.Ctx) error {
 			return libHTTP.RespondError(fiberCtx, fiber.StatusServiceUnavailable, "service_unavailable", "fetcher service unavailable")
 		}
 
-		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_error", "failed to poll extraction")
+		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "failed to poll extraction")
 	}
 
 	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ExtractionRequestFromEntity(extraction))

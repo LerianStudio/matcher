@@ -12,6 +12,5 @@ var (
 	ErrConnectionNotFound  = repositories.ErrConnectionNotFound
 	ErrRepoNotInitialized  = repositories.ErrRepoNotInitialized
 	ErrEntityRequired      = repositories.ErrEntityRequired
-	ErrModelRequired       = repositories.ErrModelRequired
 	ErrTransactionRequired = pgcommon.ErrTransactionRequired
 )

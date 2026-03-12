@@ -6,7 +6,13 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
+
+// ExtractionTableResponse is the per-table extraction config returned by the API.
+type ExtractionTableResponse struct {
+	Columns []string `json:"columns,omitempty"`
+}
 
 // DiscoveryStatusResponse is the response for GET /v1/discovery/status.
 type DiscoveryStatusResponse struct {
@@ -18,13 +24,8 @@ type DiscoveryStatusResponse struct {
 // ConnectionResponse is a single connection in list/detail responses.
 type ConnectionResponse struct {
 	ID               uuid.UUID `json:"id"`
-	FetcherConnID    string    `json:"fetcherConnId"`
 	ConfigName       string    `json:"configName"`
 	DatabaseType     string    `json:"databaseType"`
-	Host             string    `json:"host"`
-	Port             int       `json:"port"`
-	DatabaseName     string    `json:"databaseName"`
-	ProductName      string    `json:"productName"`
 	Status           string    `json:"status"`
 	SchemaDiscovered bool      `json:"schemaDiscovered"`
 	LastSeenAt       time.Time `json:"lastSeenAt"`
@@ -61,25 +62,25 @@ type RefreshDiscoveryResponse struct {
 
 // TestConnectionResponse is the response for POST /v1/discovery/connections/:connectionId/test.
 type TestConnectionResponse struct {
-	ConnectionID  uuid.UUID `json:"connectionId"`
-	FetcherConnID string    `json:"fetcherConnId"`
-	Healthy       bool      `json:"healthy"`
-	LatencyMs     int64     `json:"latencyMs"`
-	ErrorMessage  string    `json:"errorMessage,omitempty"`
+	ConnectionID uuid.UUID `json:"connectionId"`
+	Healthy      bool      `json:"healthy"`
+	LatencyMs    int64     `json:"latencyMs"`
+	ErrorMessage string    `json:"errorMessage,omitempty"`
 }
 
 // ExtractionRequestResponse is the response for extraction request endpoints.
 type ExtractionRequestResponse struct {
-	ID             uuid.UUID      `json:"id"`
-	ConnectionID   uuid.UUID      `json:"connectionId"`
-	IngestionJobID *uuid.UUID     `json:"ingestionJobId,omitempty"`
-	FetcherJobID   string         `json:"fetcherJobId,omitempty"`
-	Tables         map[string]any `json:"tables"`
-	Filters        map[string]any `json:"filters,omitempty"`
-	Status         string         `json:"status"`
-	ErrorMessage   string         `json:"errorMessage,omitempty"`
-	CreatedAt      time.Time      `json:"createdAt"`
-	UpdatedAt      time.Time      `json:"updatedAt"`
+	ID             uuid.UUID                          `json:"id"`
+	ConnectionID   uuid.UUID                          `json:"connectionId"`
+	IngestionJobID *uuid.UUID                         `json:"ingestionJobId,omitempty"`
+	Tables         map[string]ExtractionTableResponse `json:"tables"`
+	StartDate      string                             `json:"startDate,omitempty"`
+	EndDate        string                             `json:"endDate,omitempty"`
+	Filters        *sharedPorts.ExtractionFilters     `json:"filters,omitempty"`
+	Status         string                             `json:"status"`
+	ErrorMessage   string                             `json:"errorMessage,omitempty"`
+	CreatedAt      time.Time                          `json:"createdAt"`
+	UpdatedAt      time.Time                          `json:"updatedAt"`
 }
 
 // ConnectionFromEntity converts a domain entity to a response DTO.
@@ -90,13 +91,8 @@ func ConnectionFromEntity(entity *entities.FetcherConnection) ConnectionResponse
 
 	return ConnectionResponse{
 		ID:               entity.ID,
-		FetcherConnID:    entity.FetcherConnID,
 		ConfigName:       entity.ConfigName,
 		DatabaseType:     entity.DatabaseType,
-		Host:             entity.Host,
-		Port:             entity.Port,
-		DatabaseName:     entity.DatabaseName,
-		ProductName:      entity.ProductName,
 		Status:           entity.Status.String(),
 		SchemaDiscovered: entity.SchemaDiscovered,
 		LastSeenAt:       entity.LastSeenAt,
@@ -116,16 +112,64 @@ func ExtractionRequestFromEntity(entity *entities.ExtractionRequest) ExtractionR
 		ingestionJobID = &jobID
 	}
 
+	filters, _ := sharedPorts.ExtractionFiltersFromMap(entity.Filters)
+
 	return ExtractionRequestResponse{
 		ID:             entity.ID,
 		ConnectionID:   entity.ConnectionID,
 		IngestionJobID: ingestionJobID,
-		FetcherJobID:   entity.FetcherJobID,
-		Tables:         entity.Tables,
-		Filters:        entity.Filters,
+		Tables:         extractionTablesFromEntity(entity.Tables),
+		StartDate:      entity.StartDate,
+		EndDate:        entity.EndDate,
+		Filters:        filters,
 		Status:         entity.Status.String(),
 		ErrorMessage:   entity.ErrorMessage,
 		CreatedAt:      entity.CreatedAt,
 		UpdatedAt:      entity.UpdatedAt,
 	}
+}
+
+func extractionTablesFromEntity(tables map[string]any) map[string]ExtractionTableResponse {
+	if len(tables) == 0 {
+		return map[string]ExtractionTableResponse{}
+	}
+
+	result := make(map[string]ExtractionTableResponse, len(tables))
+	for tableName, rawCfg := range tables {
+		cfgMap, ok := rawCfg.(map[string]any)
+		if !ok {
+			result[tableName] = ExtractionTableResponse{}
+			continue
+		}
+
+		rawColumns, ok := cfgMap["columns"]
+		if !ok {
+			result[tableName] = ExtractionTableResponse{}
+			continue
+		}
+
+		result[tableName] = ExtractionTableResponse{Columns: extractionColumnsFromAny(rawColumns)}
+	}
+
+	return result
+}
+
+func extractionColumnsFromAny(rawColumns any) []string {
+	columns := make([]string, 0)
+
+	switch typed := rawColumns.(type) {
+	case []string:
+		columns = append(columns, typed...)
+	case []any:
+		for _, rawColumn := range typed {
+			column, isString := rawColumn.(string)
+			if !isString {
+				continue
+			}
+
+			columns = append(columns, column)
+		}
+	}
+
+	return columns
 }

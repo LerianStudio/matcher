@@ -22,7 +22,9 @@ type ExtractionModel struct {
 	ConnectionID   uuid.UUID      `db:"connection_id"`
 	IngestionJobID uuid.NullUUID  `db:"ingestion_job_id"` // Nullable
 	FetcherJobID   sql.NullString `db:"fetcher_job_id"`
-	Tables         []byte         `db:"tables"`  // JSONB
+	Tables         []byte         `db:"tables"` // JSONB
+	StartDate      sql.NullString `db:"start_date"`
+	EndDate        sql.NullString `db:"end_date"`
 	Filters        []byte         `db:"filters"` // JSONB, nullable (nil slice persists SQL NULL)
 	Status         string         `db:"status"`
 	ResultPath     sql.NullString `db:"result_path"`
@@ -68,6 +70,8 @@ func (model *ExtractionModel) ToDomain() (*entities.ExtractionRequest, error) {
 		IngestionJobID: ingestionJobID,
 		FetcherJobID:   nullStringToString(model.FetcherJobID),
 		Tables:         tables,
+		StartDate:      nullStringToString(model.StartDate),
+		EndDate:        nullStringToString(model.EndDate),
 		Filters:        filters,
 		Status:         status,
 		ResultPath:     nullStringToString(model.ResultPath),
@@ -105,6 +109,8 @@ func FromDomain(entity *entities.ExtractionRequest) (*ExtractionModel, error) {
 		IngestionJobID: ingestionJobID,
 		FetcherJobID:   pgcommon.StringToNullString(entity.FetcherJobID),
 		Tables:         tablesJSON,
+		StartDate:      pgcommon.StringToNullString(entity.StartDate),
+		EndDate:        pgcommon.StringToNullString(entity.EndDate),
 		Filters:        filtersJSON,
 		Status:         entity.Status.String(),
 		ResultPath:     pgcommon.StringToNullString(entity.ResultPath),

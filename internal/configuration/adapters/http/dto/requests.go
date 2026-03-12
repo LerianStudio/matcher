@@ -46,7 +46,7 @@ type CreateContextRequest struct {
 // @Description Request payload for creating a source inline with a context
 type CreateContextSourceRequest struct {
 	Name          string         `json:"name"                    validate:"required,max=50" example:"Primary Bank Account"               minLength:"1" maxLength:"50"`
-	Type          string         `json:"type"                    validate:"required,oneof=LEDGER BANK GATEWAY CUSTOM" example:"BANK"                              enums:"LEDGER,BANK,GATEWAY,CUSTOM"`
+	Type          string         `json:"type"                    validate:"required,oneof=LEDGER BANK GATEWAY CUSTOM FETCHER" example:"BANK"                              enums:"LEDGER,BANK,GATEWAY,CUSTOM,FETCHER"`
 	Config        map[string]any `json:"config"`
 	FeeScheduleID *string        `json:"feeScheduleId,omitempty" validate:"omitempty,uuid" example:"550e8400-e29b-41d4-a716-446655440000" format:"uuid"`
 	Mapping       map[string]any `json:"mapping,omitempty"       validate:"omitempty"   swaggertype:"object"`
@@ -184,7 +184,7 @@ func (req *UpdateContextRequest) ToDomainInput() (entities.UpdateReconciliationC
 // @Description Request payload for creating a reconciliation source
 type CreateSourceRequest struct {
 	Name          string         `json:"name"                    validate:"required,max=50" example:"Primary Bank Account"               minLength:"1" maxLength:"50"`
-	Type          string         `json:"type"                    validate:"required,oneof=LEDGER BANK GATEWAY CUSTOM" example:"BANK"                              enums:"LEDGER,BANK,GATEWAY,CUSTOM"`
+	Type          string         `json:"type"                    validate:"required,oneof=LEDGER BANK GATEWAY CUSTOM FETCHER" example:"BANK"                              enums:"LEDGER,BANK,GATEWAY,CUSTOM,FETCHER"`
 	Config        map[string]any `json:"config"`
 	FeeScheduleID *string        `json:"feeScheduleId,omitempty" validate:"omitempty,uuid" example:"550e8400-e29b-41d4-a716-446655440000" format:"uuid"`
 }
@@ -218,7 +218,7 @@ func (req *CreateSourceRequest) ToDomainInput() (entities.CreateReconciliationSo
 // @Description Request payload for updating a reconciliation source
 type UpdateSourceRequest struct {
 	Name          *string        `json:"name,omitempty"            validate:"omitempty,max=50" example:"Secondary Bank Account" maxLength:"50"`
-	Type          *string        `json:"type,omitempty"            validate:"omitempty,oneof=LEDGER BANK GATEWAY CUSTOM" example:"LEDGER"  enums:"LEDGER,BANK,GATEWAY,CUSTOM"`
+	Type          *string        `json:"type,omitempty"            validate:"omitempty,oneof=LEDGER BANK GATEWAY CUSTOM FETCHER" example:"LEDGER"  enums:"LEDGER,BANK,GATEWAY,CUSTOM,FETCHER"`
 	Config        map[string]any `json:"config,omitempty"`
 	FeeScheduleID *string        `json:"feeScheduleId,omitempty"   validate:"omitempty,uuid"   example:"550e8400-e29b-41d4-a716-446655440000" format:"uuid"`
 }

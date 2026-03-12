@@ -25,7 +25,9 @@ func validExtractionModel() *ExtractionModel {
 		IngestionJobID: uuid.NullUUID{UUID: uuid.MustParse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"), Valid: true},
 		FetcherJobID:   sql.NullString{String: "fetcher-job-abc", Valid: true},
 		Tables:         []byte(`{"transactions":{"columns":["id","amount"]}}`),
-		Filters:        []byte(`{"date_from":"2026-01-01"}`),
+		StartDate:      sql.NullString{String: "2026-03-01", Valid: true},
+		EndDate:        sql.NullString{String: "2026-03-08", Valid: true},
+		Filters:        []byte(`{"equals":{"currency":"USD"}}`),
 		Status:         "PENDING",
 		ResultPath:     sql.NullString{String: "/data/result.csv", Valid: true},
 		ErrorMessage:   sql.NullString{},
@@ -44,7 +46,9 @@ func validExtractionEntity() *entities.ExtractionRequest {
 		IngestionJobID: uuid.MustParse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"),
 		FetcherJobID:   "fetcher-job-abc",
 		Tables:         map[string]any{"transactions": map[string]any{"columns": []any{"id", "amount"}}},
-		Filters:        map[string]any{"date_from": "2026-01-01"},
+		StartDate:      "2026-03-01",
+		EndDate:        "2026-03-08",
+		Filters:        map[string]any{"equals": map[string]any{"currency": "USD"}},
 		Status:         vo.ExtractionStatusPending,
 		ResultPath:     "/data/result.csv",
 		ErrorMessage:   "",
@@ -65,6 +69,8 @@ func TestExtractionModel_ToDomain_ValidModel(t *testing.T) {
 	assert.Equal(t, model.ConnectionID, entity.ConnectionID)
 	assert.Equal(t, model.IngestionJobID.UUID, entity.IngestionJobID)
 	assert.Equal(t, "fetcher-job-abc", entity.FetcherJobID)
+	assert.Equal(t, "2026-03-01", entity.StartDate)
+	assert.Equal(t, "2026-03-08", entity.EndDate)
 	assert.Equal(t, vo.ExtractionStatusPending, entity.Status)
 	assert.Equal(t, "/data/result.csv", entity.ResultPath)
 	assert.Empty(t, entity.ErrorMessage)
@@ -115,6 +121,8 @@ func TestExtractionModel_ToDomain_NullOptionalStrings(t *testing.T) {
 
 	model := validExtractionModel()
 	model.FetcherJobID = sql.NullString{}
+	model.StartDate = sql.NullString{}
+	model.EndDate = sql.NullString{}
 	model.ResultPath = sql.NullString{}
 	model.ErrorMessage = sql.NullString{}
 
@@ -123,6 +131,8 @@ func TestExtractionModel_ToDomain_NullOptionalStrings(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, entity)
 	assert.Empty(t, entity.FetcherJobID)
+	assert.Empty(t, entity.StartDate)
+	assert.Empty(t, entity.EndDate)
 	assert.Empty(t, entity.ResultPath)
 	assert.Empty(t, entity.ErrorMessage)
 }
@@ -182,6 +192,10 @@ func TestExtractionFromDomain_ValidEntity(t *testing.T) {
 	assert.Equal(t, entity.IngestionJobID, model.IngestionJobID.UUID)
 	assert.True(t, model.FetcherJobID.Valid)
 	assert.Equal(t, entity.FetcherJobID, model.FetcherJobID.String)
+	assert.True(t, model.StartDate.Valid)
+	assert.Equal(t, entity.StartDate, model.StartDate.String)
+	assert.True(t, model.EndDate.Valid)
+	assert.Equal(t, entity.EndDate, model.EndDate.String)
 	assert.Equal(t, "PENDING", model.Status)
 	assert.True(t, model.ResultPath.Valid)
 	assert.Equal(t, entity.ResultPath, model.ResultPath.String)
@@ -242,6 +256,8 @@ func TestExtractionModel_RoundTrip_PreservesAllFields(t *testing.T) {
 	assert.Equal(t, original.ConnectionID, roundTripped.ConnectionID)
 	assert.Equal(t, original.IngestionJobID, roundTripped.IngestionJobID)
 	assert.Equal(t, original.FetcherJobID, roundTripped.FetcherJobID)
+	assert.Equal(t, original.StartDate, roundTripped.StartDate)
+	assert.Equal(t, original.EndDate, roundTripped.EndDate)
 	assert.Equal(t, original.Status, roundTripped.Status)
 	assert.Equal(t, original.ResultPath, roundTripped.ResultPath)
 	assert.Equal(t, original.ErrorMessage, roundTripped.ErrorMessage)

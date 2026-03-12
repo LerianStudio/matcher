@@ -43,9 +43,28 @@ var ErrUnsafeConnectionID = errors.New("connection ID contains unsafe characters
 // safe for use as a Redis key component.
 var ErrUnsafeTenantID = errors.New("tenant ID contains unsafe characters for cache key")
 
+// ErrTenantContextRequired indicates tenant-aware cache access was attempted without tenant context.
+var ErrTenantContextRequired = errors.New("tenant context is required for schema cache access")
+
+// SchemaCache provides Redis-backed caching for Fetcher discovery data.
+type SchemaCache struct {
+	client                    goredis.UniversalClient
+	allowSingleTenantFallback bool
+}
+
 // schemaKey constructs a validated Redis key for a connection's schema.
-func tenantScopeFromContext(ctx context.Context) (string, error) {
-	tenantID := strings.TrimSpace(auth.GetTenantID(ctx))
+func (cache *SchemaCache) tenantScopeFromContext(ctx context.Context) (string, error) {
+	tenantID, hasTenantValue := ctx.Value(auth.TenantIDKey).(string)
+
+	tenantID = strings.TrimSpace(tenantID)
+	if cache != nil && !cache.allowSingleTenantFallback {
+		if !hasTenantValue || tenantID == "" {
+			return "", ErrTenantContextRequired
+		}
+	} else if tenantID == "" {
+		tenantID = strings.TrimSpace(auth.GetTenantID(ctx))
+	}
+
 	if tenantID == "" {
 		return singleTenantScope, nil
 	}
@@ -57,7 +76,7 @@ func tenantScopeFromContext(ctx context.Context) (string, error) {
 	return tenantID, nil
 }
 
-func schemaKey(ctx context.Context, connectionID string) (string, error) {
+func (cache *SchemaCache) schemaKey(ctx context.Context, connectionID string) (string, error) {
 	if connectionID == "" {
 		return "", ErrEmptyConnectionID
 	}
@@ -66,7 +85,7 @@ func schemaKey(ctx context.Context, connectionID string) (string, error) {
 		return "", fmt.Errorf("%w: %q", ErrUnsafeConnectionID, connectionID)
 	}
 
-	tenantScope, err := tenantScopeFromContext(ctx)
+	tenantScope, err := cache.tenantScopeFromContext(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -95,18 +114,13 @@ func tracerFromContext(ctx context.Context) trace.Tracer {
 	return tracer
 }
 
-// SchemaCache provides Redis-backed caching for Fetcher discovery data.
-type SchemaCache struct {
-	client goredis.UniversalClient
-}
-
 // NewSchemaCache creates a new Redis schema cache.
-func NewSchemaCache(client goredis.UniversalClient) (*SchemaCache, error) {
+func NewSchemaCache(client goredis.UniversalClient, allowSingleTenantFallback bool) (*SchemaCache, error) {
 	if client == nil {
 		return nil, ErrRedisClientRequired
 	}
 
-	return &SchemaCache{client: client}, nil
+	return &SchemaCache{client: client, allowSingleTenantFallback: allowSingleTenantFallback}, nil
 }
 
 // GetSchema retrieves a cached schema for a specific connection.
@@ -120,7 +134,7 @@ func (cache *SchemaCache) GetSchema(ctx context.Context, connectionID string) (*
 	ctx, span := tracer.Start(ctx, "redis.discovery.get_schema")
 	defer span.End()
 
-	key, err := schemaKey(ctx, connectionID)
+	key, err := cache.schemaKey(ctx, connectionID)
 	if err != nil {
 		wrappedErr := fmt.Errorf("construct schema key: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to construct schema key", wrappedErr)
@@ -179,7 +193,7 @@ func (cache *SchemaCache) SetSchema(ctx context.Context, connID string, schema *
 		return wrappedErr
 	}
 
-	key, err := schemaKey(ctx, connID)
+	key, err := cache.schemaKey(ctx, connID)
 	if err != nil {
 		wrappedErr := fmt.Errorf("construct schema key: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to construct schema key", wrappedErr)
@@ -191,6 +205,35 @@ func (cache *SchemaCache) SetSchema(ctx context.Context, connID string, schema *
 		wrappedErr := fmt.Errorf("set schema in cache: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to set schema in cache", wrappedErr)
 		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to set schema in cache")
+
+		return wrappedErr
+	}
+
+	return nil
+}
+
+// InvalidateSchema removes a cached schema for a specific connection.
+func (cache *SchemaCache) InvalidateSchema(ctx context.Context, connectionID string) error {
+	if cache == nil || cache.client == nil {
+		return ErrCacheNotInitialized
+	}
+
+	tracer := tracerFromContext(ctx)
+
+	ctx, span := tracer.Start(ctx, "redis.discovery.invalidate_schema")
+	defer span.End()
+
+	key, err := cache.schemaKey(ctx, connectionID)
+	if err != nil {
+		wrappedErr := fmt.Errorf("construct schema key: %w", err)
+		libOpentelemetry.HandleSpanError(span, "failed to construct schema key", wrappedErr)
+
+		return wrappedErr
+	}
+
+	if err := cache.client.Del(ctx, key).Err(); err != nil {
+		wrappedErr := fmt.Errorf("invalidate schema in cache: %w", err)
+		libOpentelemetry.HandleSpanError(span, "failed to invalidate schema in cache", wrappedErr)
 
 		return wrappedErr
 	}

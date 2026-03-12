@@ -8,6 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 func TestFetcherHealthResponse_Unmarshal(t *testing.T) {
@@ -242,9 +244,7 @@ func TestFetcherExtractionSubmitRequest_Marshal(t *testing.T) {
 				EndDate:   "2026-01-31",
 			},
 		},
-		Filters: map[string]interface{}{
-			"currency": "USD",
-		},
+		Filters: &sharedPorts.ExtractionFilters{Equals: map[string]string{"currency": "USD"}},
 	}
 
 	data, err := json.Marshal(req)
@@ -259,7 +259,8 @@ func TestFetcherExtractionSubmitRequest_Marshal(t *testing.T) {
 	assert.Equal(t, "conn-abc", roundTrip.ConnectionID)
 	require.Contains(t, roundTrip.Tables, "transactions")
 	assert.Equal(t, []string{"id", "amount"}, roundTrip.Tables["transactions"].Columns)
-	assert.Equal(t, "USD", roundTrip.Filters["currency"])
+	require.NotNil(t, roundTrip.Filters)
+	assert.Equal(t, "USD", roundTrip.Filters.Equals["currency"])
 }
 
 func TestFetcherExtractionSubmitRequest_OmitsEmptyFilters(t *testing.T) {

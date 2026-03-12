@@ -152,6 +152,10 @@ func (cs *ConnectionSyncer) upsertConnection(
 // It processes all tables best-effort: invalid individual tables are logged and skipped
 // rather than aborting the entire batch.
 func (cs *ConnectionSyncer) SyncSchema(ctx context.Context, conn *entities.FetcherConnection, schema *sharedPorts.FetcherSchema) error {
+	if conn == nil {
+		return ErrNilConnection
+	}
+
 	if schema == nil {
 		return nil
 	}
@@ -249,4 +253,43 @@ func (cs *ConnectionSyncer) refreshSchemaCache(
 			).Log(ctx, libLog.LevelWarn, "failed to refresh schema cache after sync")
 		}
 	}
+}
+
+// MarkConnectionUnreachable marks a connection unreachable and clears stale schema state.
+func (cs *ConnectionSyncer) MarkConnectionUnreachable(ctx context.Context, conn *entities.FetcherConnection) error {
+	if cs == nil {
+		return ErrNilSyncer
+	}
+
+	if conn == nil {
+		return ErrNilConnection
+	}
+
+	conn.MarkUnreachable()
+
+	if err := cs.connRepo.Upsert(ctx, conn); err != nil {
+		return fmt.Errorf("mark connection unreachable: %w", err)
+	}
+
+	if err := cs.schemaRepo.DeleteByConnectionID(ctx, conn.ID); err != nil {
+		return fmt.Errorf("delete stale schemas: %w", err)
+	}
+
+	if err := cs.invalidateSchemaCache(ctx, conn.ID); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (cs *ConnectionSyncer) invalidateSchemaCache(ctx context.Context, connectionID uuid.UUID) error {
+	if cs == nil || cs.schemaCache == nil {
+		return nil
+	}
+
+	if err := cs.schemaCache.InvalidateSchema(ctx, connectionID.String()); err != nil {
+		return fmt.Errorf("invalidate schema cache: %w", err)
+	}
+
+	return nil
 }

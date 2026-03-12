@@ -59,7 +59,7 @@ type FetcherTestResult struct {
 type ExtractionJobInput struct {
 	ConnectionID string
 	Tables       map[string]ExtractionTableConfig
-	Filters      map[string]any
+	Filters      *ExtractionFilters
 }
 
 // ExtractionTableConfig defines what to extract from a single table.

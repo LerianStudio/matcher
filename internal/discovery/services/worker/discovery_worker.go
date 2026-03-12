@@ -439,9 +439,7 @@ func (dw *DiscoveryWorker) markStaleConnections(ctx context.Context, seenFetcher
 			continue
 		}
 
-		conn.MarkUnreachable()
-
-		if err := dw.connRepo.Upsert(ctx, conn); err != nil {
+		if err := dw.syncer.MarkConnectionUnreachable(ctx, conn); err != nil {
 			logger.With(
 				libLog.String("connection.id", conn.ID.String()),
 				libLog.Any("error", err.Error()),

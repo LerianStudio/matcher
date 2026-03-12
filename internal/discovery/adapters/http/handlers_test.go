@@ -51,15 +51,19 @@ func (m *mockFetcherClient) IsHealthy(_ context.Context) bool { return m.healthy
 func (m *mockFetcherClient) ListConnections(_ context.Context, _ string) ([]*sharedPorts.FetcherConnection, error) {
 	return m.connections, m.listErr
 }
+
 func (m *mockFetcherClient) GetSchema(_ context.Context, _ string) (*sharedPorts.FetcherSchema, error) {
 	return m.schema, m.schemaErr
 }
+
 func (m *mockFetcherClient) TestConnection(_ context.Context, _ string) (*sharedPorts.FetcherTestResult, error) {
 	return m.testResult, m.testErr
 }
+
 func (m *mockFetcherClient) SubmitExtractionJob(_ context.Context, _ sharedPorts.ExtractionJobInput) (string, error) {
 	return m.submitJobID, m.submitErr
 }
+
 func (m *mockFetcherClient) GetExtractionJobStatus(_ context.Context, _ string) (*sharedPorts.ExtractionJobStatus, error) {
 	return m.jobStatus, m.jobStatusErr
 }
@@ -173,9 +177,11 @@ func (r *mockExtractionRepo) Create(_ context.Context, req *entities.ExtractionR
 
 	return r.createErr
 }
+
 func (r *mockExtractionRepo) CreateWithTx(_ context.Context, _ *sql.Tx, _ *entities.ExtractionRequest) error {
 	return r.createErr
 }
+
 func (r *mockExtractionRepo) Update(_ context.Context, req *entities.ExtractionRequest) error {
 	r.updateCount++
 	r.findByIDReq = req
@@ -191,6 +197,7 @@ func (r *mockExtractionRepo) UpdateIfUnchanged(_ context.Context, req *entities.
 func (r *mockExtractionRepo) UpdateWithTx(_ context.Context, _ *sql.Tx, _ *entities.ExtractionRequest) error {
 	return r.updateErr
 }
+
 func (r *mockExtractionRepo) FindByID(_ context.Context, _ uuid.UUID) (*entities.ExtractionRequest, error) {
 	if r.findByIDErr != nil {
 		return nil, r.findByIDErr
@@ -297,7 +304,7 @@ func assertStructuredErrorResponse(t *testing.T, resp *http.Response, expectedSt
 func (f *handlerFixture) seedExtraction(t *testing.T, connectionID uuid.UUID) *entities.ExtractionRequest {
 	t.Helper()
 
-	extraction, err := entities.NewExtractionRequest(context.Background(), connectionID, map[string]any{"transactions": true}, map[string]any{"currency": "USD"})
+	extraction, err := entities.NewExtractionRequest(context.Background(), connectionID, map[string]any{"transactions": true}, "2026-03-01", "2026-03-08", map[string]any{"currency": "USD"})
 	require.NoError(t, err)
 	require.NoError(t, extraction.MarkSubmitted("job-123"))
 	f.extractionRepo.findByIDReq = extraction
@@ -564,7 +571,6 @@ func TestTestConnection_Success(t *testing.T) {
 	var body dto.TestConnectionResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
 	assert.Equal(t, conn.ID, body.ConnectionID)
-	assert.Equal(t, conn.FetcherConnID, body.FetcherConnID)
 	assert.True(t, body.Healthy)
 	assert.Equal(t, int64(42), body.LatencyMs)
 }
@@ -670,7 +676,7 @@ func TestTestConnection_FetcherError(t *testing.T) {
 	require.NoError(t, err)
 
 	// Should return 500, not 503, because it's not a health-related error.
-	assertStructuredErrorResponse(t, resp, http.StatusInternalServerError, "internal_error", "failed to test connection")
+	assertStructuredErrorResponse(t, resp, http.StatusInternalServerError, "internal_server_error", "failed to test connection")
 }
 
 func TestTestConnection_InvalidConnectionID(t *testing.T) {

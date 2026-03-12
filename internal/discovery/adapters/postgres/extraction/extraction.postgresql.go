@@ -24,7 +24,7 @@ var _ repositories.ExtractionRepository = (*Repository)(nil)
 
 const (
 	tableName  = "extraction_requests"
-	allColumns = "id, connection_id, ingestion_job_id, fetcher_job_id, tables, filters, status, result_path, error_message, created_at, updated_at"
+	allColumns = "id, connection_id, ingestion_job_id, fetcher_job_id, tables, start_date, end_date, filters, status, result_path, error_message, created_at, updated_at"
 )
 
 // Repository provides PostgreSQL operations for ExtractionRequest entities.
@@ -116,12 +116,14 @@ func (repo *Repository) executeCreate(ctx context.Context, tx *sql.Tx, req *enti
 
 	_, err = tx.ExecContext(ctx,
 		`INSERT INTO `+tableName+` (`+allColumns+`)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
 		model.ID,
 		model.ConnectionID,
 		model.IngestionJobID,
 		model.FetcherJobID,
 		model.Tables,
+		model.StartDate,
+		model.EndDate,
 		nullableJSON(model.Filters),
 		model.Status,
 		model.ResultPath,
@@ -252,16 +254,20 @@ func (repo *Repository) executeUpdate(ctx context.Context, tx *sql.Tx, req *enti
 			ingestion_job_id = $2,
 			fetcher_job_id = $3,
 			tables = $4,
-			filters = $5,
-			status = $6,
-			result_path = $7,
-			error_message = $8,
-			updated_at = $9
-		WHERE id = $10`,
+			start_date = $5,
+			end_date = $6,
+			filters = $7,
+			status = $8,
+			result_path = $9,
+			error_message = $10,
+			updated_at = $11
+		WHERE id = $12`,
 		model.ConnectionID,
 		model.IngestionJobID,
 		model.FetcherJobID,
 		model.Tables,
+		model.StartDate,
+		model.EndDate,
 		nullableJSON(model.Filters),
 		model.Status,
 		model.ResultPath,
@@ -297,16 +303,20 @@ func (repo *Repository) executeConditionalUpdate(ctx context.Context, tx *sql.Tx
 			ingestion_job_id = $2,
 			fetcher_job_id = $3,
 			tables = $4,
-			filters = $5,
-			status = $6,
-			result_path = $7,
-			error_message = $8,
-			updated_at = $9
-		WHERE id = $10 AND updated_at = $11`,
+			start_date = $5,
+			end_date = $6,
+			filters = $7,
+			status = $8,
+			result_path = $9,
+			error_message = $10,
+			updated_at = $11
+		WHERE id = $12 AND updated_at = $13`,
 		model.ConnectionID,
 		model.IngestionJobID,
 		model.FetcherJobID,
 		model.Tables,
+		model.StartDate,
+		model.EndDate,
 		nullableJSON(model.Filters),
 		model.Status,
 		model.ResultPath,
@@ -383,6 +393,8 @@ func scanExtraction(scanner interface{ Scan(dest ...any) error }) (*entities.Ext
 		&model.IngestionJobID,
 		&model.FetcherJobID,
 		&model.Tables,
+		&model.StartDate,
+		&model.EndDate,
 		&model.Filters,
 		&model.Status,
 		&model.ResultPath,

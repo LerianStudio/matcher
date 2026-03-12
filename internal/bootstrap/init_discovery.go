@@ -29,14 +29,15 @@ const (
 )
 
 func fetcherHTTPClientConfig(cfg *Config) discoveryFetcher.HTTPClientConfig {
-	return discoveryFetcher.HTTPClientConfig{
-		BaseURL:         cfg.Fetcher.URL,
-		AllowPrivateIPs: cfg.Fetcher.AllowPrivateIPs,
-		HealthTimeout:   cfg.FetcherHealthTimeout(),
-		RequestTimeout:  cfg.FetcherRequestTimeout(),
-		MaxRetries:      defaultFetcherClientMaxRetries,
-		RetryBaseDelay:  defaultFetcherClientRetryBaseDelay,
-	}
+	clientCfg := discoveryFetcher.DefaultConfig()
+	clientCfg.BaseURL = cfg.Fetcher.URL
+	clientCfg.AllowPrivateIPs = cfg.Fetcher.AllowPrivateIPs
+	clientCfg.HealthTimeout = cfg.FetcherHealthTimeout()
+	clientCfg.RequestTimeout = cfg.FetcherRequestTimeout()
+	clientCfg.MaxRetries = defaultFetcherClientMaxRetries
+	clientCfg.RetryBaseDelay = defaultFetcherClientRetryBaseDelay
+
+	return clientCfg
 }
 
 type discoveryModuleInitFunc func(
@@ -55,25 +56,21 @@ func initOptionalDiscoveryWorker(
 	tenantLister sharedPorts.TenantLister,
 	logger libLog.Logger,
 	initFn discoveryModuleInitFunc,
-) *discoveryWorker.DiscoveryWorker {
+) (*discoveryWorker.DiscoveryWorker, error) {
 	if cfg == nil || !cfg.Fetcher.Enabled {
 		if logger != nil {
 			logger.Log(ctx, libLog.LevelInfo, "discovery module disabled (FETCHER_ENABLED=false)")
 		}
 
-		return nil
+		return nil, nil
 	}
 
 	worker, err := initFn(routes, cfg, provider, tenantLister, logger)
 	if err != nil {
-		if logger != nil {
-			logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("discovery module failed to initialize (continuing without it): %v", err))
-		}
-
-		return nil
+		return nil, fmt.Errorf("initialize discovery module: %w", err)
 	}
 
-	return worker
+	return worker, nil
 }
 
 // initDiscoveryModule initializes the Fetcher discovery module including HTTP handlers,
@@ -110,6 +107,11 @@ func initDiscoveryModule(
 		return nil, fmt.Errorf("create discovery handler: %w", err)
 	}
 
+	if cfg.Auth.Enabled {
+		logger.Log(context.Background(), libLog.LevelWarn,
+			"discovery: auth is enabled; ensure RBAC resource 'discovery' with actions 'discovery:read' and 'discovery:write' is provisioned before exposing discovery routes")
+	}
+
 	if err := discoveryHTTP.RegisterRoutes(routes.Protected, handler); err != nil {
 		return nil, fmt.Errorf("register discovery routes: %w", err)
 	}
@@ -132,6 +134,9 @@ func initDiscoveryModule(
 			fmt.Sprintf("discovery: extraction poller wired into command use case (poll: %s, timeout: %s)",
 				cfg.FetcherExtractionPollInterval(), cfg.FetcherExtractionTimeout()))
 	}
+
+	cmdUseCase.WithTenantContextRequirement(cfg.Auth.Enabled)
+	cmdUseCase.WithDiscoveryRefreshLock(provider, cfg.FetcherDiscoveryInterval())
 
 	worker, err := discoveryWorker.NewDiscoveryWorker(
 		fetcherClient,
@@ -183,7 +188,7 @@ func wireDiscoverySchemaCacheFromRedis(
 		return
 	}
 
-	schemaCache, cacheErr := discoveryRedis.NewSchemaCache(redisClient)
+	schemaCache, cacheErr := discoveryRedis.NewSchemaCache(redisClient, !cfg.Auth.Enabled)
 	if cacheErr != nil {
 		logger.Log(ctx, libLog.LevelWarn,
 			fmt.Sprintf("discovery: failed to create schema cache: %v", cacheErr))

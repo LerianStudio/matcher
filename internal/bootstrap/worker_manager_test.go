@@ -14,10 +14,10 @@ import (
 	"testing"
 	"time"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 
 	reportingWorker "github.com/LerianStudio/matcher/internal/reporting/services/worker"
 )
@@ -253,6 +253,29 @@ func TestWorkerManager_StartStop(t *testing.T) {
 
 		assert.Equal(t, 1, worker1.stopCount())
 		assert.Equal(t, 1, worker2.stopCount())
+	})
+
+	t.Run("applies runtime config before initial discovery start", func(t *testing.T) {
+		t.Parallel()
+
+		worker := &runtimeAwareDiscoveryWorker{}
+		logger := &libLog.NopLogger{}
+		wm := NewWorkerManager(logger, nil)
+		wm.Register("discovery", func(_ *Config) (WorkerLifecycle, error) {
+			return worker, nil
+		}, alwaysEnabled, neverCritical)
+
+		cfg := newTestConfig()
+		cfg.Fetcher.DiscoveryIntervalSec = 123
+
+		err := wm.Start(context.Background(), cfg)
+		require.NoError(t, err)
+		require.NotNil(t, worker.lastUpdate())
+		assert.Equal(t, 123*time.Second, worker.lastUpdate().Interval)
+		assert.Equal(t, 1, worker.startCount())
+
+		err = wm.Stop()
+		require.NoError(t, err)
 	})
 
 	t.Run("does not start disabled workers", func(t *testing.T) {

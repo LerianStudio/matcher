@@ -73,6 +73,7 @@ func TestIsHealthy_Unreachable(t *testing.T) {
 
 	cfg := DefaultConfig()
 	cfg.BaseURL = "http://127.0.0.1:1"
+	cfg.AllowPrivateIPs = true
 
 	client, err := NewHTTPFetcherClient(cfg)
 	require.NoError(t, err)

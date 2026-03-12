@@ -1,5 +1,7 @@
 package fetcher
 
+import sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+
 // fetcherHealthResponse maps to GET /health.
 type fetcherHealthResponse struct {
 	Status string `json:"status"`
@@ -53,7 +55,7 @@ type fetcherTestResponse struct {
 type fetcherExtractionSubmitRequest struct {
 	ConnectionID string                            `json:"connectionId"`
 	Tables       map[string]fetcherExtractionTable `json:"tables"`
-	Filters      map[string]any                    `json:"filters,omitempty"`
+	Filters      *sharedPorts.ExtractionFilters    `json:"filters,omitempty"`
 }
 
 // fetcherExtractionTable configures extraction for a single table.

@@ -18,6 +18,11 @@ import (
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
+type nilAwarePoller struct{}
+
+func (*nilAwarePoller) PollUntilComplete(context.Context, uuid.UUID, func(context.Context, string) error, func(context.Context, string)) {
+}
+
 // --- Mock implementations for testing ---
 
 // mockFetcherClient is a configurable mock for sharedPorts.FetcherClient.
@@ -158,16 +163,20 @@ func (m *mockSchemaRepo) DeleteByConnectionIDWithTx(_ context.Context, _ *sql.Tx
 type mockExtractionRepo struct {
 	createErr   error
 	createCount int
+	createdReq  *entities.ExtractionRequest
 	updateErr   error
 	updateCount int
+	updatedReq  *entities.ExtractionRequest
+	updateFn    func(ctx context.Context, req *entities.ExtractionRequest) error
 	updateIfFn  func(ctx context.Context, req *entities.ExtractionRequest, expectedUpdatedAt time.Time) error
 	findByIDReq *entities.ExtractionRequest
 	findByIDErr error
 	findByIDFn  func(ctx context.Context, id uuid.UUID) (*entities.ExtractionRequest, error)
 }
 
-func (m *mockExtractionRepo) Create(_ context.Context, _ *entities.ExtractionRequest) error {
+func (m *mockExtractionRepo) Create(_ context.Context, req *entities.ExtractionRequest) error {
 	m.createCount++
+	m.createdReq = req
 
 	return m.createErr
 }
@@ -176,14 +185,19 @@ func (m *mockExtractionRepo) CreateWithTx(_ context.Context, _ *sql.Tx, _ *entit
 	return m.createErr
 }
 
-func (m *mockExtractionRepo) Update(_ context.Context, _ *entities.ExtractionRequest) error {
+func (m *mockExtractionRepo) Update(ctx context.Context, req *entities.ExtractionRequest) error {
 	m.updateCount++
+	m.updatedReq = req
+	if m.updateFn != nil {
+		return m.updateFn(ctx, req)
+	}
 
 	return m.updateErr
 }
 
 func (m *mockExtractionRepo) UpdateIfUnchanged(ctx context.Context, req *entities.ExtractionRequest, expectedUpdatedAt time.Time) error {
 	m.updateCount++
+	m.updatedReq = req
 	if m.updateIfFn != nil {
 		return m.updateIfFn(ctx, req, expectedUpdatedAt)
 	}
@@ -216,8 +230,6 @@ func TestSentinelErrors(t *testing.T) {
 		{"ErrFetcherUnavailable", ErrFetcherUnavailable, "fetcher service is unavailable"},
 		{"ErrConnectionNotFound", ErrConnectionNotFound, "fetcher connection not found"},
 		{"ErrInvalidExtractionRequest", ErrInvalidExtractionRequest, "invalid extraction request"},
-		{"ErrExtractionTimeout", ErrExtractionTimeout, "extraction job timed out"},
-		{"ErrExtractionFailed", ErrExtractionFailed, "extraction job failed"},
 		{"ErrNilFetcherClient", ErrNilFetcherClient, "fetcher client is required"},
 		{"ErrNilConnectionRepository", ErrNilConnectionRepository, "connection repository is required"},
 		{"ErrNilSchemaRepository", ErrNilSchemaRepository, "schema repository is required"},
@@ -251,6 +263,24 @@ func TestNewUseCase_Success(t *testing.T) {
 	assert.NotNil(t, uc.schemaRepo)
 	assert.NotNil(t, uc.extractionRepo)
 	assert.NotNil(t, uc.logger)
+}
+
+func TestWithExtractionPoller_TypedNilNormalizedToNil(t *testing.T) {
+	t.Parallel()
+
+	uc, err := NewUseCase(
+		&mockFetcherClient{},
+		&mockConnectionRepo{},
+		&mockSchemaRepo{},
+		&mockExtractionRepo{},
+		&libLog.NopLogger{},
+	)
+	require.NoError(t, err)
+
+	var poller *nilAwarePoller
+	uc.WithExtractionPoller(poller)
+
+	assert.Nil(t, uc.extractionPoller)
 }
 
 func TestNewUseCase_NilFetcherClient(t *testing.T) {

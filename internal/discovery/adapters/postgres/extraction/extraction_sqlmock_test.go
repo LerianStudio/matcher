@@ -53,7 +53,9 @@ func createTestExtraction() *entities.ExtractionRequest {
 		IngestionJobID: uuid.New(),
 		FetcherJobID:   "fetcher-job-789",
 		Tables:         map[string]interface{}{"transactions": map[string]interface{}{"columns": []interface{}{"id", "amount"}}},
-		Filters:        map[string]interface{}{"date_from": "2026-01-01"},
+		StartDate:      "2026-03-01",
+		EndDate:        "2026-03-08",
+		Filters:        map[string]interface{}{"equals": map[string]interface{}{"currency": "USD"}},
 		Status:         vo.ExtractionStatusPending,
 		ResultPath:     "/data/output/result.csv",
 		ErrorMessage:   "",
@@ -65,7 +67,7 @@ func createTestExtraction() *entities.ExtractionRequest {
 func extractionColumns() []string {
 	return []string{
 		"id", "connection_id", "ingestion_job_id", "fetcher_job_id",
-		"tables", "filters", "status", "result_path", "error_message",
+		"tables", "start_date", "end_date", "filters", "status", "result_path", "error_message",
 		"created_at", "updated_at",
 	}
 }
@@ -142,6 +144,8 @@ func TestRepository_Create(t *testing.T) {
 				req.FetcherJobID,
 				sqlmock.AnyArg(),
 				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
 				req.Status.String(),
 				req.ResultPath,
 				sqlmock.AnyArg(),
@@ -173,6 +177,8 @@ func TestRepository_Create(t *testing.T) {
 				req.IngestionJobID,
 				req.FetcherJobID,
 				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
 				nil,
 				req.Status.String(),
 				req.ResultPath,
@@ -203,6 +209,8 @@ func TestRepository_Create(t *testing.T) {
 				req.ConnectionID,
 				req.IngestionJobID,
 				req.FetcherJobID,
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
 				sqlmock.AnyArg(),
 				sqlmock.AnyArg(),
 				req.Status.String(),
@@ -261,6 +269,8 @@ func TestRepository_Update(t *testing.T) {
 				req.FetcherJobID,
 				sqlmock.AnyArg(),
 				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
 				req.Status.String(),
 				sqlmock.AnyArg(),
 				sqlmock.AnyArg(),
@@ -289,6 +299,8 @@ func TestRepository_Update(t *testing.T) {
 				req.ConnectionID,
 				req.IngestionJobID,
 				req.FetcherJobID,
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
 				sqlmock.AnyArg(),
 				sqlmock.AnyArg(),
 				req.Status.String(),
@@ -339,6 +351,8 @@ func TestRepository_FindByID(t *testing.T) {
 				req.IngestionJobID,
 				sql.NullString{String: req.FetcherJobID, Valid: req.FetcherJobID != ""},
 				tablesJSON,
+				sql.NullString{String: req.StartDate, Valid: req.StartDate != ""},
+				sql.NullString{String: req.EndDate, Valid: req.EndDate != ""},
 				filtersJSON,
 				req.Status.String(),
 				sql.NullString{String: req.ResultPath, Valid: req.ResultPath != ""},
@@ -410,7 +424,7 @@ func TestRepository_CreateWithTx_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	mock.ExpectExec("INSERT INTO extraction_requests").
-		WithArgs(req.ID, req.ConnectionID, req.IngestionJobID, req.FetcherJobID, tablesJSON, filtersJSON, req.Status.String(), req.ResultPath, sqlmock.AnyArg(), req.CreatedAt, req.UpdatedAt).
+		WithArgs(req.ID, req.ConnectionID, req.IngestionJobID, req.FetcherJobID, tablesJSON, sqlmock.AnyArg(), sqlmock.AnyArg(), filtersJSON, req.Status.String(), req.ResultPath, sqlmock.AnyArg(), req.CreatedAt, req.UpdatedAt).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectRollback()
 
@@ -451,7 +465,7 @@ func TestRepository_UpdateWithTx_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	mock.ExpectExec("UPDATE extraction_requests SET").
-		WithArgs(req.ConnectionID, req.IngestionJobID, req.FetcherJobID, tablesJSON, filtersJSON, req.Status.String(), req.ResultPath, sqlmock.AnyArg(), req.UpdatedAt, req.ID).
+		WithArgs(req.ConnectionID, req.IngestionJobID, req.FetcherJobID, tablesJSON, sqlmock.AnyArg(), sqlmock.AnyArg(), filtersJSON, req.Status.String(), req.ResultPath, sqlmock.AnyArg(), req.UpdatedAt, req.ID).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectRollback()
 
@@ -459,6 +473,83 @@ func TestRepository_UpdateWithTx_Success(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, tx.Rollback())
 	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestRepository_UpdateIfUnchanged(t *testing.T) {
+	t.Parallel()
+
+	t.Run("successful conditional update", func(t *testing.T) {
+		t.Parallel()
+
+		repo, mock, finish := setupMockRepository(t)
+		defer finish()
+
+		req := createTestExtraction()
+		expectedUpdatedAt := req.UpdatedAt
+		require.NoError(t, req.MarkSubmitted("job-abc"))
+
+		mock.ExpectBegin()
+		mock.ExpectExec("UPDATE extraction_requests SET").
+			WithArgs(
+				req.ConnectionID,
+				req.IngestionJobID,
+				req.FetcherJobID,
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				req.Status.String(),
+				nil,
+				nil,
+				req.UpdatedAt,
+				req.ID,
+				expectedUpdatedAt,
+			).
+			WillReturnResult(sqlmock.NewResult(0, 1))
+		mock.ExpectCommit()
+
+		err := repo.UpdateIfUnchanged(context.Background(), req, expectedUpdatedAt)
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("returns extraction conflict when row changed", func(t *testing.T) {
+		t.Parallel()
+
+		repo, mock, finish := setupMockRepository(t)
+		defer finish()
+
+		req := createTestExtraction()
+		expectedUpdatedAt := req.UpdatedAt
+
+		mock.ExpectBegin()
+		mock.ExpectExec("UPDATE extraction_requests SET").
+			WillReturnResult(sqlmock.NewResult(0, 0))
+		mock.ExpectRollback()
+
+		err := repo.UpdateIfUnchanged(context.Background(), req, expectedUpdatedAt)
+
+		assert.ErrorIs(t, err, repositories.ErrExtractionConflict)
+	})
+
+	t.Run("exec error", func(t *testing.T) {
+		t.Parallel()
+
+		repo, mock, finish := setupMockRepository(t)
+		defer finish()
+
+		req := createTestExtraction()
+
+		mock.ExpectBegin()
+		mock.ExpectExec("UPDATE extraction_requests SET").
+			WillReturnError(errTestExec)
+		mock.ExpectRollback()
+
+		err := repo.UpdateIfUnchanged(context.Background(), req, req.UpdatedAt)
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "update extraction request if unchanged")
+	})
 }
 
 func TestExtractionModel_ToDomain_Nil(t *testing.T) {

@@ -101,6 +101,14 @@ func (ep *ExtractionPoller) PollUntilComplete(
 	onComplete func(ctx context.Context, resultPath string) error,
 	onFailed func(ctx context.Context, errMsg string),
 ) {
+	if ep == nil {
+		if onFailed != nil {
+			onFailed(ctx, "extraction poller unavailable")
+		}
+
+		return
+	}
+
 	if extractionID == uuid.Nil {
 		if onFailed != nil {
 			onFailed(ctx, "extraction id is required")
@@ -295,6 +303,9 @@ func (ep *ExtractionPoller) handlePollStatus(
 	onFailed func(ctx context.Context, errMsg string),
 ) bool {
 	switch status.Status {
+	case "PENDING", "SUBMITTED":
+		return false
+
 	case "COMPLETE":
 		expectedUpdatedAt := extraction.UpdatedAt
 		previousStatus := extraction.Status

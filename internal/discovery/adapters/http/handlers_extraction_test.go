@@ -37,14 +37,14 @@ func TestStartExtraction_Success(t *testing.T) {
 
 	app := setupTestApp(t, fixture.handler)
 	body, err := json.Marshal(dto.StartExtractionRequest{
-		Tables: map[string]any{
-			"transactions": map[string]any{
-				"columns": []string{"id", "amount"},
+		Tables: map[string]dto.ExtractionTableRequest{
+			"transactions": {
+				Columns: []string{"id", "amount"},
 			},
 		},
 		StartDate: "2026-03-01",
 		EndDate:   "2026-03-08",
-		Filters:   map[string]any{"currency": "USD"},
+		Filters:   &sharedPorts.ExtractionFilters{Equals: map[string]string{"currency": "USD"}},
 	})
 	require.NoError(t, err)
 
@@ -58,9 +58,11 @@ func TestStartExtraction_Success(t *testing.T) {
 	var response dto.ExtractionRequestResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
 	assert.Equal(t, conn.ID, response.ConnectionID)
-	assert.Equal(t, "job-start-123", response.FetcherJobID)
+	assert.Equal(t, "2026-03-01", response.StartDate)
+	assert.Equal(t, "2026-03-08", response.EndDate)
 	assert.Equal(t, vo.ExtractionStatusSubmitted.String(), response.Status)
 	assert.Len(t, response.Tables, 1)
+	assert.Equal(t, []string{"id", "amount"}, response.Tables["transactions"].Columns)
 	assert.Equal(t, 1, fixture.extractionRepo.createCount)
 	assert.Equal(t, 1, fixture.extractionRepo.updateCount)
 }
@@ -73,7 +75,7 @@ func TestStartExtraction_ConnectionNotFound(t *testing.T) {
 	app := setupTestApp(t, fixture.handler)
 
 	body, err := json.Marshal(dto.StartExtractionRequest{
-		Tables: map[string]any{"transactions": map[string]any{"columns": []string{"id"}}},
+		Tables: map[string]dto.ExtractionTableRequest{"transactions": {Columns: []string{"id"}}},
 	})
 	require.NoError(t, err)
 
@@ -114,7 +116,7 @@ func TestStartExtraction_InvalidDateRange_ReturnsStructuredError(t *testing.T) {
 	app := setupTestApp(t, fixture.handler)
 
 	body, err := json.Marshal(dto.StartExtractionRequest{
-		Tables:    map[string]any{"transactions": map[string]any{"columns": []string{"id"}}},
+		Tables:    map[string]dto.ExtractionTableRequest{"transactions": {Columns: []string{"id"}}},
 		StartDate: "2026-03-10",
 		EndDate:   "2026-03-01",
 	})
@@ -145,7 +147,8 @@ func TestGetExtraction_Success(t *testing.T) {
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
 	assert.Equal(t, extraction.ID, response.ID)
 	assert.Equal(t, conn.ID, response.ConnectionID)
-	assert.Equal(t, extraction.FetcherJobID, response.FetcherJobID)
+	assert.Equal(t, extraction.StartDate, response.StartDate)
+	assert.Equal(t, extraction.EndDate, response.EndDate)
 	assert.Equal(t, extraction.Status.String(), response.Status)
 }
 
@@ -162,8 +165,7 @@ func TestPollExtraction_Success(t *testing.T) {
 	}
 
 	app := setupTestApp(t, fixture.handler)
-	req := httptest.NewRequest(http.MethodPost, "/v1/discovery/extractions/"+extraction.ID.String()+"/poll", bytes.NewReader([]byte(`{}`)))
-	req.Header.Set("Content-Type", "application/json")
+	req := httptest.NewRequest(http.MethodPost, "/v1/discovery/extractions/"+extraction.ID.String()+"/poll", nil)
 
 	resp, err := app.Test(req)
 	require.NoError(t, err)
@@ -188,8 +190,7 @@ func TestPollExtraction_FailedResponseSanitizesErrorMessage(t *testing.T) {
 	}
 
 	app := setupTestApp(t, fixture.handler)
-	req := httptest.NewRequest(http.MethodPost, "/v1/discovery/extractions/"+extraction.ID.String()+"/poll", bytes.NewReader([]byte(`{}`)))
-	req.Header.Set("Content-Type", "application/json")
+	req := httptest.NewRequest(http.MethodPost, "/v1/discovery/extractions/"+extraction.ID.String()+"/poll", nil)
 
 	resp, err := app.Test(req)
 	require.NoError(t, err)
@@ -208,8 +209,7 @@ func TestPollExtraction_InvalidID_ReturnsStructuredError(t *testing.T) {
 	fixture := newHandlerFixture(t)
 	app := setupTestApp(t, fixture.handler)
 
-	req := httptest.NewRequest(http.MethodPost, "/v1/discovery/extractions/not-a-uuid/poll", bytes.NewReader([]byte(`{}`)))
-	req.Header.Set("Content-Type", "application/json")
+	req := httptest.NewRequest(http.MethodPost, "/v1/discovery/extractions/not-a-uuid/poll", nil)
 
 	resp, err := app.Test(req)
 	require.NoError(t, err)
@@ -225,8 +225,7 @@ func TestPollExtraction_FetcherUnavailable_Returns503(t *testing.T) {
 	fixture.fetcherMock.jobStatusErr = sharedPorts.ErrFetcherUnavailable
 
 	app := setupTestApp(t, fixture.handler)
-	req := httptest.NewRequest(http.MethodPost, "/v1/discovery/extractions/"+extraction.ID.String()+"/poll", bytes.NewReader([]byte(`{}`)))
-	req.Header.Set("Content-Type", "application/json")
+	req := httptest.NewRequest(http.MethodPost, "/v1/discovery/extractions/"+extraction.ID.String()+"/poll", nil)
 
 	resp, err := app.Test(req)
 	require.NoError(t, err)

@@ -170,7 +170,7 @@ func TestDefaultConfig_FetcherDisabled(t *testing.T) {
 
 	assert.False(t, cfg.Fetcher.Enabled)
 	assert.Equal(t, "http://localhost:4006", cfg.Fetcher.URL)
-	assert.True(t, cfg.Fetcher.AllowPrivateIPs)
+	assert.False(t, cfg.Fetcher.AllowPrivateIPs)
 	assert.Equal(t, 5, cfg.Fetcher.HealthTimeoutSec)
 	assert.Equal(t, 30, cfg.Fetcher.RequestTimeoutSec)
 	assert.Equal(t, 60, cfg.Fetcher.DiscoveryIntervalSec)

@@ -1489,7 +1489,7 @@ func TestInitOptionalDiscoveryWorker(t *testing.T) {
 		expectedWorker := &discoveryWorker.DiscoveryWorker{}
 		called := false
 
-		worker := initOptionalDiscoveryWorker(
+		worker, err := initOptionalDiscoveryWorker(
 			context.Background(),
 			nil,
 			cfg,
@@ -1502,6 +1502,7 @@ func TestInitOptionalDiscoveryWorker(t *testing.T) {
 			},
 		)
 
+		require.NoError(t, err)
 		assert.True(t, called)
 		assert.Same(t, expectedWorker, worker)
 		assert.False(t, logger.hasEntry(libLog.LevelWarn, "discovery module failed to initialize"))
@@ -1515,7 +1516,7 @@ func TestInitOptionalDiscoveryWorker(t *testing.T) {
 		cfg.Fetcher.Enabled = false
 
 		called := false
-		worker := initOptionalDiscoveryWorker(
+		worker, err := initOptionalDiscoveryWorker(
 			context.Background(),
 			nil,
 			cfg,
@@ -1528,19 +1529,20 @@ func TestInitOptionalDiscoveryWorker(t *testing.T) {
 			},
 		)
 
+		require.NoError(t, err)
 		assert.Nil(t, worker)
 		assert.False(t, called)
 		assert.True(t, logger.hasEntry(libLog.LevelInfo, "discovery module disabled (FETCHER_ENABLED=false)"))
 	})
 
-	t.Run("degraded_startup_returns_nil_worker_without_failing_bootstrap", func(t *testing.T) {
+	t.Run("enabled_fetcher_failure_returns_error", func(t *testing.T) {
 		t.Parallel()
 
 		logger := &recordingInitLogger{}
 		cfg := defaultConfig()
 		cfg.Fetcher.Enabled = true
 
-		worker := initOptionalDiscoveryWorker(
+		worker, err := initOptionalDiscoveryWorker(
 			context.Background(),
 			nil,
 			cfg,
@@ -1553,7 +1555,8 @@ func TestInitOptionalDiscoveryWorker(t *testing.T) {
 		)
 
 		assert.Nil(t, worker)
-		assert.True(t, logger.hasEntry(libLog.LevelWarn, "discovery module failed to initialize (continuing without it): fetcher bootstrap failed"))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "initialize discovery module")
 	})
 }
 
