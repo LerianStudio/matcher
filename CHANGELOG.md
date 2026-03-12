@@ -1,3 +1,47 @@
+## [1.1.0-beta.12](https://github.com/LerianStudio/matcher/compare/v1.1.0-beta.11...v1.1.0-beta.12) (2026-03-12)
+
+
+### Features
+
+* **bootstrap:** add fetcher config defaults and validation ([eb6dced](https://github.com/LerianStudio/matcher/commit/eb6dced0309ccb45daec210bc764ab7d83c5f3e0))
+* **workers:** add UpdateRuntimeConfig and safe channel reset for hot-reload ([5a6d14e](https://github.com/LerianStudio/matcher/commit/5a6d14e481dc3dc4aec119afd06caccadf30c638))
+* **deps:** add viper for configuration management ([d3c8a06](https://github.com/LerianStudio/matcher/commit/d3c8a06f6a4b7daaba036c1218548ebe7725a799))
+* add YAML config support with hot-reload and runtime config API ([7fdc698](https://github.com/LerianStudio/matcher/commit/7fdc69849c249a49880bf0fa01aea6ba388b7053))
+* **bootstrap:** wire config manager and worker manager into service lifecycle ([bb21dec](https://github.com/LerianStudio/matcher/commit/bb21dece3d4e841df63a92a29947b3ab9663cbdc))
+* **bootstrap:** wire dynamic configGetter, config history API, and service lifecycle ([9e968f5](https://github.com/LerianStudio/matcher/commit/9e968f511f92b4c47b82403d0cd1fe6ce8493884))
+* **bootstrap:** wire hot worker config, dynamic rate-limit expiry, and auth-gated config API ([469e3dc](https://github.com/LerianStudio/matcher/commit/469e3dc2c162d836c75746cc5a3deaad6ac51f18))
+
+
+### Bug Fixes
+
+* **bootstrap:** add configurable health-check timeout and document shutdown ordering ([6ef8732](https://github.com/LerianStudio/matcher/commit/6ef8732785fdafff608419df3d8698a10eeaf306))
+* **bootstrap:** add HealthCheckTimeoutSec to defaultConfig and bindDefaults ([2e94aa9](https://github.com/LerianStudio/matcher/commit/2e94aa9ec4c0c65873031c9811f062134cf5b6a1))
+* **governance:** add normalizeArchivalWorkerConfig for defense-in-depth ([a667547](https://github.com/LerianStudio/matcher/commit/a6675475ffba014b69bf2e7912842e67ceb3fbdd))
+* **bootstrap:** always apply runtime config before worker restart ([5776d12](https://github.com/LerianStudio/matcher/commit/5776d1285e8bb6ce2c08c957e31af0e4a3c5f5d2))
+* **bootstrap:** compute field-level diffs in config change tracking ([5684537](https://github.com/LerianStudio/matcher/commit/568453768f2eb647661579878b9e5e1490bc32f0))
+* correct test indentation and add nosec annotations ([2336bf8](https://github.com/LerianStudio/matcher/commit/2336bf81dbfa3e9390adc0cd2a07f734bd247699))
+* **bootstrap:** derive SafeError production flag and forward validation errors ([312b9d1](https://github.com/LerianStudio/matcher/commit/312b9d1c522c3acfb960ea07a6bdc6512f0f5859))
+* **bootstrap:** enforce rate-limit bounds and remove dead fetcher durations ([a6c1b22](https://github.com/LerianStudio/matcher/commit/a6c1b220a3e73ff12821dd0d03e2f4769cda8cd1))
+* **bootstrap:** fix typo in fetcher extraction timeout constant name ([4741437](https://github.com/LerianStudio/matcher/commit/47414374727d7f6db0366a8b40553918449d06a0))
+* **bootstrap:** handle env-overridden updates and idempotent watcher startup ([0872082](https://github.com/LerianStudio/matcher/commit/08720826bf15751737f4913709f1f73b3f0563c1))
+* **bootstrap:** harden config API audit context and env override visibility ([6276538](https://github.com/LerianStudio/matcher/commit/6276538188f544c8726117d206050841a04cedbd))
+* **bootstrap:** harden config API auth, tracer fallback, and manager lifecycle ([bcfecc0](https://github.com/LerianStudio/matcher/commit/bcfecc0483f26ddd5ff587bc743ee96d01df17bc))
+* **bootstrap:** harden config API, audit, worker factories, and schema ([25e1709](https://github.com/LerianStudio/matcher/commit/25e17093e405dc616eb4271433dfe8915a432f5a))
+* **bootstrap:** harden config file path resolution against traversal ([fc4deaa](https://github.com/LerianStudio/matcher/commit/fc4deaa2ed76281fc1c1cd9855d58dfe2ff0f2c8))
+* **bootstrap:** harden config manager subscriber lifecycle and source tagging ([f0f5cba](https://github.com/LerianStudio/matcher/commit/f0f5cbac100df2d24fd0889284fe2b4930d66704))
+* **bootstrap:** harden config manager with nil guards and type validation ([2751348](https://github.com/LerianStudio/matcher/commit/275134899205b6dc85fc1627fcc8a4b484601f97))
+* **bootstrap:** harden config reload lifecycle and nil guards ([aa76163](https://github.com/LerianStudio/matcher/commit/aa761631166f91972ceceaa1ac88a3cf523cad97))
+* **bootstrap:** harden runtime config lifecycle ([bbd35b7](https://github.com/LerianStudio/matcher/commit/bbd35b70d1c312183c9d8e773823d60659de5ea7))
+* **bootstrap:** harden runtime config lifecycle ([c10c671](https://github.com/LerianStudio/matcher/commit/c10c67131ec28cee622b2392bfb32139483c4036))
+* **bootstrap:** harden runtime config updates ([f089042](https://github.com/LerianStudio/matcher/commit/f089042b145771066bda539b1eef4004b2b9a646))
+* **bootstrap:** harden subscriber lifecycle, path validation, and atomic write ([1f356ec](https://github.com/LerianStudio/matcher/commit/1f356ece2e41a5b02a09512fe8983110ada25fff))
+* **makefile:** isolate unit tests from host environment variables ([3c57128](https://github.com/LerianStudio/matcher/commit/3c571288ee75e084c2dcea4f4cd352ffde5e25fc))
+* **bootstrap:** make worker restarts rollback-safe and dynamic-aware ([a3f716f](https://github.com/LerianStudio/matcher/commit/a3f716f2f246bbf9274b2cfad1cd1a081b85574b))
+* **bootstrap:** preserve env-explicit zero overrides and redact URI credentials ([7874c6e](https://github.com/LerianStudio/matcher/commit/7874c6ecbc1655ab7b2ea44977823ac033f66b95))
+* **bootstrap:** redact sensitive values in config audit change maps ([f66d07f](https://github.com/LerianStudio/matcher/commit/f66d07f21885c5682e023cd9be09dec4c0e6fa49))
+* **bootstrap:** set proxy header when trusted proxies are configured ([dcfcf0c](https://github.com/LerianStudio/matcher/commit/dcfcf0c61a2592be2e4f7e9916a39957a0d9747a))
+* **bootstrap:** tighten runtime worker orchestration ([78f4c59](https://github.com/LerianStudio/matcher/commit/78f4c59ba35e50ee2813c49929feb9a15d5579c7))
+
 ## [1.1.0-beta.11](https://github.com/LerianStudio/matcher/compare/v1.1.0-beta.10...v1.1.0-beta.11) (2026-03-11)
 
 
