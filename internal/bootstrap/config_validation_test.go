@@ -106,29 +106,6 @@ func TestValidateAuthConfig_DisabledAllowsMissing(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestValidateFetcherConfig_EnabledButNoURL(t *testing.T) {
-	t.Parallel()
-
-	cfg := defaultConfig()
-	cfg.Fetcher.Enabled = true
-	cfg.Fetcher.URL = ""
-
-	err := cfg.Validate()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "FETCHER_URL")
-}
-
-func TestValidateFetcherConfig_DisabledAllowsMissing(t *testing.T) {
-	t.Parallel()
-
-	cfg := defaultConfig()
-	cfg.Fetcher.Enabled = false
-	cfg.Fetcher.URL = ""
-
-	err := cfg.Validate()
-	assert.NoError(t, err)
-}
-
 func TestValidateArchivalConfig_EnabledButNoStorageBucket(t *testing.T) {
 	t.Parallel()
 
@@ -177,6 +154,28 @@ func TestValidate_InvalidLogLevel(t *testing.T) {
 	err := cfg.Validate()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "LOG_LEVEL")
+}
+
+func TestValidate_TrustedProxiesRejectsUniversalTrust(t *testing.T) {
+	t.Parallel()
+
+	for _, trustedProxies := range []string{"*", "0.0.0.0/0", "::/0", "127.0.0.1,0.0.0.0/0"} {
+		cfg := defaultConfig()
+		cfg.Server.TrustedProxies = trustedProxies
+
+		err := cfg.Validate()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "TRUSTED_PROXIES")
+	}
+}
+
+func TestValidate_TrustedProxiesAllowsSpecificRanges(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cfg.Server.TrustedProxies = "127.0.0.1,10.0.0.0/8,192.168.1.10"
+
+	assert.NoError(t, cfg.Validate())
 }
 
 func TestValidate_TLSPartialConfig(t *testing.T) {

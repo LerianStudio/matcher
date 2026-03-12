@@ -6,13 +6,25 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"sort"
 	"time"
 
+	"github.com/spf13/viper"
+
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 )
+
+type configUpdateState struct {
+	config     *Config
+	version    uint64
+	reloadedAt time.Time
+	changes    []ConfigChange
+	source     string
+	oldValues  map[string]any
+}
 
 // Update applies programmatic changes to the config. Each key is validated:
 //   - Must be a known mutable key (in mutableConfigKeys)
@@ -22,8 +34,9 @@ import (
 // triggered to pick them up through the normal pipeline.
 func (cm *ConfigManager) Update(changes map[string]any) (*UpdateResult, error) {
 	var (
-		notifyCfg *Config
-		callbacks []func(*Config) error
+		notifyCfg         *Config
+		callbacks         []func(*Config) error
+		persistedSnapshot *viper.Viper
 	)
 
 	cm.mu.Lock()
@@ -42,46 +55,42 @@ func (cm *ConfigManager) Update(changes map[string]any) (*UpdateResult, error) {
 		return result, nil
 	}
 
-	// Phase 1: classify changes as applicable or rejected.
-	applicableChanges := classifyApplicableChanges(changes, result)
-
-	if len(applicableChanges) == 0 {
-		return result, nil
-	}
-
-	// Phase 1.5: validate value types against schema expectations.
-	rejectTypeErrors(applicableChanges, result)
-
+	applicableChanges := prepareApplicableChanges(changes, result)
 	if len(applicableChanges) == 0 {
 		return result, nil
 	}
 
 	// Phase 2: apply to viper and compute old values.
-	oldCfg := cm.config.Load()
-	if oldCfg == nil {
-		return nil, fmt.Errorf("config update: %w", errConfigNilAtomicLoad)
+	updateState, err := cm.snapshotUpdateState(applicableChanges)
+	if err != nil {
+		return nil, fmt.Errorf("config update: %w", err)
 	}
-
-	oldValues := make(map[string]any, len(applicableChanges))
 
 	for _, key := range sortedChangeKeys(applicableChanges) {
 		value := applicableChanges[key]
-		oldValues[key] = cm.viper.Get(key)
+		updateState.oldValues[key] = cm.viper.Get(key)
 		cm.viper.Set(key, value)
 	}
 
 	// Phase 3: build, overlay, and validate the candidate config.
-	candidateCfg, err := cm.buildCandidateConfig(oldCfg)
+	candidateCfg, err := cm.buildCandidateConfig(updateState.config)
 	if err != nil {
-		cm.rollbackViperKeysLocked(applicableChanges, oldValues)
+		cm.rollbackViperKeysLocked(applicableChanges, updateState.oldValues)
 
 		return nil, fmt.Errorf("config update: %w", err)
 	}
 
 	// Phase 4: write YAML via atomic rename (temp file + rename).
 	if cm.filePath != "" {
+		persistedSnapshot, err = cm.snapshotPersistedConfig()
+		if err != nil {
+			cm.rollbackViperKeysLocked(applicableChanges, updateState.oldValues)
+
+			return nil, fmt.Errorf("config update: snapshot persisted config: %w", err)
+		}
+
 		if err := cm.writePersistedConfigAtomically(applicableChanges); err != nil {
-			cm.rollbackViperKeysLocked(applicableChanges, oldValues)
+			cm.rollbackViperKeysLocked(applicableChanges, updateState.oldValues)
 
 			cm.logger.Log(ctx, libLog.LevelError, "config update: YAML write failed", libLog.Err(err))
 
@@ -97,7 +106,7 @@ func (cm *ConfigManager) Update(changes map[string]any) (*UpdateResult, error) {
 	cm.lastReload.Store(now)
 
 	// Build applied/rejected results and derive config changes for subscribers.
-	configChanges := buildUpdateResults(applicableChanges, oldValues, oldCfg, candidateCfg, result)
+	configChanges := buildUpdateResults(applicableChanges, updateState.oldValues, updateState.config, candidateCfg, result)
 
 	cm.logger.Log(ctx, libLog.LevelInfo, "config updated via API",
 		libLog.Int("version", safeUint64ToInt(newVersion)),
@@ -116,10 +125,68 @@ func (cm *ConfigManager) Update(changes map[string]any) (*UpdateResult, error) {
 	locked = false
 
 	if notifyErr := cm.notifySubscribers(notifyCfg, callbacks); notifyErr != nil {
+		rollbackErr := cm.rollbackAfterNotifyFailure(applicableChanges, updateState, persistedSnapshot)
+		if rollbackErr != nil {
+			return result, fmt.Errorf("config update: %w", errors.Join(notifyErr, fmt.Errorf("rollback persisted config: %w", rollbackErr)))
+		}
+
 		return result, fmt.Errorf("config update: %w", notifyErr)
 	}
 
 	return result, nil
+}
+
+func (cm *ConfigManager) snapshotUpdateState(applicableChanges map[string]any) (*configUpdateState, error) {
+	oldCfg := cm.config.Load()
+	if oldCfg == nil {
+		return nil, errConfigNilAtomicLoad
+	}
+
+	oldReloadAt, _ := cm.lastReload.Load().(time.Time)
+	oldChanges, _ := cm.lastChanges.Load().([]ConfigChange)
+	oldSource, _ := cm.lastUpdateSource.Load().(string)
+
+	return &configUpdateState{
+		config:     oldCfg,
+		version:    cm.version.Load(),
+		reloadedAt: oldReloadAt,
+		changes:    oldChanges,
+		source:     oldSource,
+		oldValues:  make(map[string]any, len(applicableChanges)),
+	}, nil
+}
+
+func (cm *ConfigManager) rollbackAfterNotifyFailure(
+	applicableChanges map[string]any,
+	state *configUpdateState,
+	persistedSnapshot *viper.Viper,
+) error {
+	cm.mu.Lock()
+	cm.rollbackViperKeysLocked(applicableChanges, state.oldValues)
+	cm.config.Store(state.config)
+	cm.version.Store(state.version)
+	cm.lastReload.Store(state.reloadedAt)
+	cm.lastChanges.Store(state.changes)
+	cm.lastUpdateSource.Store(state.source)
+
+	var rollbackErr error
+	if persistedSnapshot != nil {
+		rollbackErr = writeViperConfigAtomically(persistedSnapshot, cm.filePath)
+	}
+	cm.mu.Unlock()
+
+	return rollbackErr
+}
+
+func prepareApplicableChanges(changes map[string]any, result *UpdateResult) map[string]any {
+	applicableChanges := classifyApplicableChanges(changes, result)
+	if len(applicableChanges) == 0 {
+		return applicableChanges
+	}
+
+	rejectTypeErrors(applicableChanges, result)
+
+	return applicableChanges
 }
 
 // rejectTypeErrors validates value types against the config schema and rejects
@@ -238,6 +305,26 @@ func sortedChangeKeys(values map[string]any) []string {
 func (cm *ConfigManager) rollbackViperKeysLocked(keys, oldValues map[string]any) {
 	for key := range keys {
 		cm.viper.Set(key, oldValues[key])
+	}
+}
+
+func (cm *ConfigManager) rollbackViperToConfigLocked(cfg *Config, changes []ConfigChange) {
+	if cfg == nil {
+		return
+	}
+
+	for _, change := range changes {
+		if change.Key == "" {
+			continue
+		}
+
+		value, ok := resolveConfigValue(cfg, change.Key)
+		if !ok {
+			cm.viper.Set(change.Key, nil)
+			continue
+		}
+
+		cm.viper.Set(change.Key, value)
 	}
 }
 

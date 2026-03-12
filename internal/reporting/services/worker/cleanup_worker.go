@@ -117,11 +117,17 @@ func (worker *CleanupWorker) prepareRunState() {
 // NOTE: This does NOT affect a currently running worker's ticker. The WorkerManager
 // always performs a full stop→start cycle when config changes, ensuring the new
 // config is picked up when the worker's run() loop creates a fresh ticker.
-func (worker *CleanupWorker) UpdateRuntimeConfig(cfg CleanupWorkerConfig) {
+func (worker *CleanupWorker) UpdateRuntimeConfig(cfg CleanupWorkerConfig) error {
 	worker.mu.Lock()
 	defer worker.mu.Unlock()
 
+	if worker.running.Load() {
+		return ErrRuntimeConfigUpdateWhileRunning
+	}
+
 	worker.cfg = normalizeCleanupWorkerConfig(cfg)
+
+	return nil
 }
 
 // Start begins the cleanup worker.

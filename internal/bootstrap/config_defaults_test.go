@@ -164,21 +164,6 @@ func TestDefaultConfig_ExportWorkerEnabled(t *testing.T) {
 	assert.Equal(t, 3600, cfg.ExportWorker.PresignExpirySec)
 }
 
-func TestDefaultConfig_FetcherDisabled(t *testing.T) {
-	t.Parallel()
-
-	cfg := defaultConfig()
-
-	assert.False(t, cfg.Fetcher.Enabled)
-	assert.Equal(t, "http://localhost:4006", cfg.Fetcher.URL)
-	assert.Equal(t, 5, cfg.Fetcher.HealthTimeoutSec)
-	assert.Equal(t, 30, cfg.Fetcher.RequestTimeoutSec)
-	assert.Equal(t, 60, cfg.Fetcher.DiscoveryIntervalSec)
-	assert.Equal(t, 300, cfg.Fetcher.SchemaCacheTTLSec)
-	assert.Equal(t, 5, cfg.Fetcher.ExtractionPollSec)
-	assert.Equal(t, 600, cfg.Fetcher.ExtractionTimeoutSec)
-}
-
 func TestDefaultConfig_ArchivalDisabled(t *testing.T) {
 	t.Parallel()
 
@@ -305,18 +290,6 @@ func TestDefaultConfig_ValidatesSuccessfully(t *testing.T) {
 	assert.NoError(t, err, "default config must pass validation without env vars")
 }
 
-func TestDefaultConfig_FetcherValidationSkippedWhenDisabled(t *testing.T) {
-	t.Parallel()
-
-	cfg := defaultConfig()
-	// Fetcher is disabled by default, so even an empty URL should not cause errors.
-	cfg.Fetcher.URL = ""
-
-	err := cfg.Validate()
-
-	assert.NoError(t, err, "fetcher validation must be skipped when disabled")
-}
-
 // TestDefaultConfig_SyncWithBindDefaults verifies that defaultConfig() values match
 // bindDefaults() viper values for key fields. This catches drift between the two
 // sources of truth — a common bug when a default is updated in one place but not the
@@ -424,13 +397,6 @@ func TestDefaultConfig_SyncWithBindDefaults(t *testing.T) {
 		{"webhook.timeout_sec", cfg.Webhook.TimeoutSec, func(k string) any { return v.GetInt(k) }},
 		// CallbackRateLimit
 		{"callback_rate_limit.per_minute", cfg.CallbackRateLimit.PerMinute, func(k string) any { return v.GetInt(k) }},
-		// Fetcher
-		{"fetcher.health_timeout_sec", cfg.Fetcher.HealthTimeoutSec, func(k string) any { return v.GetInt(k) }},
-		{"fetcher.request_timeout_sec", cfg.Fetcher.RequestTimeoutSec, func(k string) any { return v.GetInt(k) }},
-		{"fetcher.discovery_interval_sec", cfg.Fetcher.DiscoveryIntervalSec, func(k string) any { return v.GetInt(k) }},
-		{"fetcher.schema_cache_ttl_sec", cfg.Fetcher.SchemaCacheTTLSec, func(k string) any { return v.GetInt(k) }},
-		{"fetcher.extraction_poll_sec", cfg.Fetcher.ExtractionPollSec, func(k string) any { return v.GetInt(k) }},
-		{"fetcher.extraction_timeout_sec", cfg.Fetcher.ExtractionTimeoutSec, func(k string) any { return v.GetInt(k) }},
 	}
 
 	for _, c := range checks {

@@ -130,7 +130,6 @@ type ConfigChangeRejection struct {
 // and will be rejected by Update(). This prevents operators from accidentally
 // changing database hosts or auth secrets through the config API.
 var mutableConfigKeys = map[string]bool{
-	"app.log_level":                    true,
 	"rate_limit.enabled":               true,
 	"rate_limit.max":                   true,
 	"rate_limit.expiry_sec":            true,
@@ -165,7 +164,7 @@ func NewConfigManager(cfg *Config, filePath string, logger libLog.Logger) (*Conf
 		return nil, ErrConfigNil
 	}
 
-	if logger == nil {
+	if isNilInterface(logger) {
 		logger = &libLog.NopLogger{}
 	}
 
@@ -189,6 +188,8 @@ func NewConfigManager(cfg *Config, filePath string, logger libLog.Logger) (*Conf
 
 	cm.config.Store(cfg)
 	cm.lastReload.Store(time.Now().UTC())
+	cm.lastChanges.Store([]ConfigChange{})
+	cm.lastUpdateSource.Store("")
 
 	// Create an isolated viper instance — no global state.
 	viperCfg := viper.New()

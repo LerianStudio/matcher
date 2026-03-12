@@ -22,6 +22,12 @@ func TestConfigSchemaMetadata_ContainsRepresentativeEntries(t *testing.T) {
 
 	assert.Equal(t, "Application log verbosity level", fieldDescriptions["app.log_level"])
 	assert.Equal(t, "Log Level", fieldLabels["app.log_level"])
+	assert.Contains(t, fieldConstraints["app.log_level"], "enum:debug,info,warn,error,fatal")
 	assert.Contains(t, fieldConstraints["rate_limit.max"], "min:1")
 	assert.Contains(t, fieldConstraints["rate_limit.max"], "max:1000000")
+	assert.Contains(t, fieldConstraints["rate_limit.expiry_sec"], "max:86400")
+	assert.Contains(t, fieldConstraints["rate_limit.export_expiry_sec"], "max:86400")
+	assert.Contains(t, fieldConstraints["rate_limit.dispatch_expiry_sec"], "max:86400")
+	assert.Contains(t, fieldConstraints["webhook.timeout_sec"], "min:0")
+	assert.Contains(t, fieldConstraints["webhook.timeout_sec"], "max:300")
 }

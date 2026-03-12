@@ -7,12 +7,9 @@
 package bootstrap
 
 import (
-	"context"
 	"sync"
 	"testing"
-	"time"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -29,11 +26,13 @@ type runtimeAwareCleanupWorker struct {
 	updates []reportingWorker.CleanupWorkerConfig
 }
 
-func (w *runtimeAwareCleanupWorker) UpdateRuntimeConfig(cfg reportingWorker.CleanupWorkerConfig) {
+func (w *runtimeAwareCleanupWorker) UpdateRuntimeConfig(cfg reportingWorker.CleanupWorkerConfig) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
 	w.updates = append(w.updates, cfg)
+
+	return nil
 }
 
 func (w *runtimeAwareCleanupWorker) lastUpdate() *reportingWorker.CleanupWorkerConfig {
@@ -55,11 +54,13 @@ type runtimeAwareArchivalWorker struct {
 	updates []governanceWorker.ArchivalWorkerConfig
 }
 
-func (w *runtimeAwareArchivalWorker) UpdateRuntimeConfig(cfg governanceWorker.ArchivalWorkerConfig) {
+func (w *runtimeAwareArchivalWorker) UpdateRuntimeConfig(cfg governanceWorker.ArchivalWorkerConfig) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
 	w.updates = append(w.updates, cfg)
+
+	return nil
 }
 
 func (w *runtimeAwareArchivalWorker) lastUpdate() *governanceWorker.ArchivalWorkerConfig {
@@ -81,11 +82,13 @@ type runtimeAwareSchedulerWorker struct {
 	updates []configWorker.SchedulerWorkerConfig
 }
 
-func (w *runtimeAwareSchedulerWorker) UpdateRuntimeConfig(cfg configWorker.SchedulerWorkerConfig) {
+func (w *runtimeAwareSchedulerWorker) UpdateRuntimeConfig(cfg configWorker.SchedulerWorkerConfig) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
 	w.updates = append(w.updates, cfg)
+
+	return nil
 }
 
 func (w *runtimeAwareSchedulerWorker) lastUpdate() *configWorker.SchedulerWorkerConfig {
@@ -113,9 +116,9 @@ func TestExtractWorkerConfig_AllNames(t *testing.T) {
 		wantNil  bool
 		expected any
 	}{
-		{"export", false, exportWorkerComparableConfig{Enabled: cfg.ExportWorker.Enabled, PollIntervalSec: cfg.ExportWorker.PollIntervalSec, PageSize: cfg.ExportWorker.PageSize}},
-		{"cleanup", false, cleanupWorkerComparableConfig{Enabled: cfg.CleanupWorker.Enabled, IntervalSec: cfg.CleanupWorker.IntervalSec, BatchSize: cfg.CleanupWorker.BatchSize, GracePeriodSec: cfg.CleanupWorker.GracePeriodSec}},
-		{"archival", false, archivalWorkerComparableConfig{Enabled: cfg.Archival.Enabled, IntervalHours: cfg.Archival.IntervalHours, HotRetentionDays: cfg.Archival.HotRetentionDays, WarmRetentionMonths: cfg.Archival.WarmRetentionMonths, ColdRetentionMonths: cfg.Archival.ColdRetentionMonths, BatchSize: cfg.Archival.BatchSize, StorageBucket: cfg.Archival.StorageBucket, StoragePrefix: cfg.Archival.StoragePrefix, StorageClass: cfg.Archival.StorageClass, PartitionLookahead: cfg.Archival.PartitionLookahead}},
+		{"export", false, exportWorkerComparableConfig{PollIntervalSec: cfg.ExportWorker.PollIntervalSec, PageSize: cfg.ExportWorker.PageSize}},
+		{"cleanup", false, cleanupWorkerComparableConfig{IntervalSec: cfg.CleanupWorker.IntervalSec, BatchSize: cfg.CleanupWorker.BatchSize, GracePeriodSec: cfg.CleanupWorker.GracePeriodSec}},
+		{"archival", false, archivalWorkerComparableConfig{IntervalHours: cfg.Archival.IntervalHours, HotRetentionDays: cfg.Archival.HotRetentionDays, WarmRetentionMonths: cfg.Archival.WarmRetentionMonths, ColdRetentionMonths: cfg.Archival.ColdRetentionMonths, BatchSize: cfg.Archival.BatchSize, StorageBucket: cfg.Archival.StorageBucket, StoragePrefix: cfg.Archival.StoragePrefix, StorageClass: cfg.Archival.StorageClass, PartitionLookahead: cfg.Archival.PartitionLookahead}},
 		{"scheduler", false, schedulerWorkerComparableConfig{IntervalSec: cfg.Scheduler.IntervalSec}},
 		{"unknown", true, nil},
 	}
@@ -204,7 +207,7 @@ func TestApplyWorkerRuntimeConfig_Export(t *testing.T) {
 	cfg.ExportWorker.PollIntervalSec = 10
 	cfg.ExportWorker.PageSize = 500
 
-	applyWorkerRuntimeConfig(context.Background(), "export", worker, cfg)
+	require.NoError(t, applyWorkerRuntimeConfig("export", worker, cfg))
 
 	updates := worker.lastUpdates()
 	require.Len(t, updates, 1)
@@ -220,7 +223,7 @@ func TestApplyWorkerRuntimeConfig_Cleanup(t *testing.T) {
 	cfg.CleanupWorker.IntervalSec = 7200
 	cfg.CleanupWorker.BatchSize = 50
 
-	applyWorkerRuntimeConfig(context.Background(), "cleanup", worker, cfg)
+	require.NoError(t, applyWorkerRuntimeConfig("cleanup", worker, cfg))
 
 	u := worker.lastUpdate()
 	require.NotNil(t, u)
@@ -236,7 +239,7 @@ func TestApplyWorkerRuntimeConfig_Archival(t *testing.T) {
 	cfg.Archival.HotRetentionDays = 30
 	cfg.Archival.BatchSize = 2000
 
-	applyWorkerRuntimeConfig(context.Background(), "archival", worker, cfg)
+	require.NoError(t, applyWorkerRuntimeConfig("archival", worker, cfg))
 
 	u := worker.lastUpdate()
 	require.NotNil(t, u)
@@ -251,7 +254,7 @@ func TestApplyWorkerRuntimeConfig_Scheduler(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.Scheduler.IntervalSec = 120
 
-	applyWorkerRuntimeConfig(context.Background(), "scheduler", worker, cfg)
+	require.NoError(t, applyWorkerRuntimeConfig("scheduler", worker, cfg))
 
 	u := worker.lastUpdate()
 	require.NotNil(t, u)
@@ -263,7 +266,7 @@ func TestApplyWorkerRuntimeConfig_NilConfig_IsNoop(t *testing.T) {
 
 	worker := &runtimeAwareExportWorker{}
 	assert.NotPanics(t, func() {
-		applyWorkerRuntimeConfig(context.Background(), "export", worker, nil)
+		require.NoError(t, applyWorkerRuntimeConfig("export", worker, nil))
 	})
 	assert.Empty(t, worker.lastUpdates())
 }
@@ -273,7 +276,7 @@ func TestApplyWorkerRuntimeConfig_NilWorker_IsNoop(t *testing.T) {
 
 	cfg := defaultConfig()
 	assert.NotPanics(t, func() {
-		applyWorkerRuntimeConfig(context.Background(), "export", nil, cfg)
+		require.NoError(t, applyWorkerRuntimeConfig("export", nil, cfg))
 	})
 }
 
@@ -285,46 +288,6 @@ func TestApplyWorkerRuntimeConfig_WrongInterface_IsNoop(t *testing.T) {
 	cfg := defaultConfig()
 
 	assert.NotPanics(t, func() {
-		applyWorkerRuntimeConfig(context.Background(), "export", worker, cfg)
+		require.NoError(t, applyWorkerRuntimeConfig("export", worker, cfg))
 	})
-}
-
-// --- archivalPresignExpiryWithContext ---
-
-func TestArchivalPresignExpiryWithContext_NilConfig(t *testing.T) {
-	t.Parallel()
-
-	got := archivalPresignExpiryWithContext(context.Background(), nil)
-	assert.Equal(t, time.Hour, got)
-}
-
-func TestArchivalPresignExpiryWithContext_Zero_DefaultsToOneHour(t *testing.T) {
-	t.Parallel()
-
-	cfg := defaultConfig()
-	cfg.Archival.PresignExpirySec = 0
-
-	got := archivalPresignExpiryWithContext(context.Background(), cfg)
-	assert.Equal(t, 3600*time.Second, got)
-}
-
-func TestArchivalPresignExpiryWithContext_ExceedsMax_CapsToMax(t *testing.T) {
-	t.Parallel()
-
-	cfg := defaultConfig()
-	cfg.Archival.PresignExpirySec = 999999
-	cfg.Logger = &libLog.NopLogger{}
-
-	got := archivalPresignExpiryWithContext(context.Background(), cfg)
-	assert.Equal(t, 604800*time.Second, got)
-}
-
-func TestArchivalPresignExpiryWithContext_ValidValue(t *testing.T) {
-	t.Parallel()
-
-	cfg := defaultConfig()
-	cfg.Archival.PresignExpirySec = 1800
-
-	got := archivalPresignExpiryWithContext(context.Background(), cfg)
-	assert.Equal(t, 1800*time.Second, got)
 }

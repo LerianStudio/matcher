@@ -127,7 +127,7 @@ func TestReadinessHandler_ProductionHidesChecks(t *testing.T) {
 
 	app := fiber.New()
 	cfg := &Config{App: AppConfig{EnvName: "production"}}
-	app.Get("/ready", readinessHandler(cfg, nil, nil, &libLog.NopLogger{}))
+	app.Get("/ready", readinessHandler(cfg, nil, nil, nil, &libLog.NopLogger{}))
 
 	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/ready", http.NoBody))
 	require.NoError(t, err)
@@ -146,7 +146,7 @@ func TestReadinessHandler_NonProductionIncludesChecks(t *testing.T) {
 
 	app := fiber.New()
 	cfg := &Config{App: AppConfig{EnvName: "development"}}
-	app.Get("/ready", readinessHandler(cfg, nil, nil, &libLog.NopLogger{}))
+	app.Get("/ready", readinessHandler(cfg, nil, nil, nil, &libLog.NopLogger{}))
 
 	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/ready", http.NoBody))
 	require.NoError(t, err)
@@ -177,7 +177,7 @@ func TestReadinessHandler_UsesCheckHooks(t *testing.T) {
 		PostgresReplicaOptional: true,
 		ObjectStorageOptional:   true,
 	}
-	app.Get("/ready", readinessHandler(cfg, nil, deps, &libLog.NopLogger{}))
+	app.Get("/ready", readinessHandler(cfg, nil, nil, deps, &libLog.NopLogger{}))
 
 	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/ready", http.NoBody))
 	require.NoError(t, err)
@@ -205,7 +205,7 @@ func TestReadinessHandler_AllChecksPass(t *testing.T) {
 		PostgresReplicaOptional: true,
 		ObjectStorageOptional:   true,
 	}
-	app.Get("/ready", readinessHandler(cfg, nil, deps, &libLog.NopLogger{}))
+	app.Get("/ready", readinessHandler(cfg, nil, nil, deps, &libLog.NopLogger{}))
 
 	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/ready", http.NoBody))
 	require.NoError(t, err)
@@ -230,7 +230,7 @@ func TestReadinessHandler_OptionalDependencyDoesNotDegrade(t *testing.T) {
 		PostgresReplicaOptional: true,
 		ObjectStorageOptional:   true,
 	}
-	app.Get("/ready", readinessHandler(cfg, nil, deps, &libLog.NopLogger{}))
+	app.Get("/ready", readinessHandler(cfg, nil, nil, deps, &libLog.NopLogger{}))
 
 	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/ready", http.NoBody))
 	require.NoError(t, err)
@@ -331,6 +331,8 @@ func TestShouldIncludeReadinessDetails(t *testing.T) {
 	require.False(t, shouldIncludeReadinessDetails(&Config{App: AppConfig{EnvName: envProduction}}))
 	require.False(t, shouldIncludeReadinessDetails(&Config{App: AppConfig{EnvName: " PrOdUcTiOn "}}))
 	require.True(t, shouldIncludeReadinessDetails(&Config{App: AppConfig{EnvName: "development"}}))
+	require.True(t, shouldIncludeReadinessDetails(&Config{App: AppConfig{EnvName: "test"}}))
+	require.False(t, shouldIncludeReadinessDetails(&Config{App: AppConfig{EnvName: "staging"}}))
 }
 
 func TestNewFiberAppDefaults(t *testing.T) {
@@ -2220,7 +2222,7 @@ func TestReadinessHandler_NilContext(t *testing.T) {
 		PostgresReplicaOptional: true,
 		ObjectStorageOptional:   true,
 	}
-	app.Get("/ready", readinessHandler(cfg, nil, deps, &libLog.NopLogger{}))
+	app.Get("/ready", readinessHandler(cfg, nil, nil, deps, &libLog.NopLogger{}))
 
 	req := httptest.NewRequest(http.MethodGet, "/ready", http.NoBody)
 	resp, err := app.Test(req)

@@ -70,6 +70,7 @@ type ExportJobHandlers struct {
 	querySvc        *query.ExportJobQueryService
 	storage         ports.ObjectStorageClient
 	contextVerifier libHTTP.TenantOwnershipVerifier
+	enabled         bool
 	presignExpiry   time.Duration
 	runtimeConfig   func() ExportJobRuntimeConfig
 }
@@ -111,8 +112,16 @@ func NewExportJobHandlers(
 		querySvc:        querySvc,
 		storage:         storage,
 		contextVerifier: verifier,
+		enabled:         true,
 		presignExpiry:   presignExpiry,
 	}, nil
+}
+
+// SetRuntimeEnabled configures the startup-time enabled state for async export creation.
+func (handler *ExportJobHandlers) SetRuntimeEnabled(enabled bool) {
+	if handler != nil {
+		handler.enabled = enabled
+	}
 }
 
 // SetRuntimeConfigGetter allows bootstrap to inject live runtime settings.
@@ -133,6 +142,9 @@ func (handler *ExportJobHandlers) currentRuntimeConfig() ExportJobRuntimeConfig 
 		return config
 	}
 
+	enabledValue := handler.enabled
+	config.Enabled = &enabledValue
+
 	if handler.presignExpiry > 0 {
 		config.PresignExpiry = handler.presignExpiry
 	}
@@ -142,9 +154,7 @@ func (handler *ExportJobHandlers) currentRuntimeConfig() ExportJobRuntimeConfig 
 	}
 
 	runtimeConfig := handler.runtimeConfig()
-	if runtimeConfig.Enabled == nil {
-		runtimeConfig.Enabled = config.Enabled
-	}
+	runtimeConfig.Enabled = config.Enabled
 
 	if runtimeConfig.PresignExpiry <= 0 {
 		runtimeConfig.PresignExpiry = config.PresignExpiry

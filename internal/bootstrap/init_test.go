@@ -923,11 +923,9 @@ func TestErrObjectStorageBucketRequired(t *testing.T) {
 }
 
 func TestBuildTenantExtractor(t *testing.T) {
-	t.Parallel()
+	// Not parallel: buildTenantExtractor mutates process-global auth defaults.
 
 	t.Run("creates extractor with valid config", func(t *testing.T) {
-		t.Parallel()
-
 		originalID := auth.GetDefaultTenantID()
 		originalSlug := auth.GetTenantSlug(context.Background())
 		t.Cleanup(func() {
@@ -953,7 +951,12 @@ func TestBuildTenantExtractor(t *testing.T) {
 	})
 
 	t.Run("creates extractor with auth enabled", func(t *testing.T) {
-		t.Parallel()
+		originalID := auth.GetDefaultTenantID()
+		originalSlug := auth.GetTenantSlug(context.Background())
+		t.Cleanup(func() {
+			require.NoError(t, auth.SetDefaultTenantID(originalID))
+			require.NoError(t, auth.SetDefaultTenantSlug(originalSlug))
+		})
 
 		cfg := &Config{
 			Auth: AuthConfig{Enabled: true, TokenSecret: "secret"},
@@ -971,7 +974,12 @@ func TestBuildTenantExtractor(t *testing.T) {
 	})
 
 	t.Run("returns error when auth enabled but secret missing", func(t *testing.T) {
-		t.Parallel()
+		originalID := auth.GetDefaultTenantID()
+		originalSlug := auth.GetTenantSlug(context.Background())
+		t.Cleanup(func() {
+			require.NoError(t, auth.SetDefaultTenantID(originalID))
+			require.NoError(t, auth.SetDefaultTenantSlug(originalSlug))
+		})
 
 		cfg := &Config{
 			Auth: AuthConfig{Enabled: true, TokenSecret: ""},
@@ -1488,6 +1496,15 @@ func TestCreateObjectStorage_CleanupEnabledWithoutBucket(t *testing.T) {
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, ErrObjectStorageBucketRequired)
 	assert.Nil(t, client)
+}
+
+func TestReportingStorageRequired(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, reportingStorageRequired(nil))
+	assert.False(t, reportingStorageRequired(&Config{}))
+	assert.True(t, reportingStorageRequired(&Config{ExportWorker: ExportWorkerConfig{Enabled: true}}))
+	assert.True(t, reportingStorageRequired(&Config{CleanupWorker: CleanupWorkerConfig{Enabled: true}}))
 }
 
 func TestCreateObjectStorageForHealth_EmptyEndpoint(t *testing.T) {

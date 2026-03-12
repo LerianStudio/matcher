@@ -155,17 +155,6 @@ var fieldDescriptions = map[string]string{ // #nosec G101 -- UI description labe
 
 	// webhook
 	"webhook.timeout_sec": "HTTP timeout for webhook dispatches in seconds",
-
-	// fetcher
-	"fetcher.enabled":                "Enable Fetcher service integration",
-	"fetcher.url":                    "Fetcher service base URL",
-	"fetcher.allow_private_ips":      "Allow Fetcher to connect to private IPs",
-	"fetcher.health_timeout_sec":     "Fetcher health check timeout in seconds",
-	"fetcher.request_timeout_sec":    "Fetcher HTTP request timeout in seconds",
-	"fetcher.discovery_interval_sec": "Fetcher schema discovery interval in seconds",
-	"fetcher.schema_cache_ttl_sec":   "Fetcher schema cache TTL in seconds",
-	"fetcher.extraction_poll_sec":    "Fetcher extraction poll interval in seconds",
-	"fetcher.extraction_timeout_sec": "Fetcher extraction timeout in seconds",
 }
 
 // fieldLabels maps mapstructure keys to human-readable labels.
@@ -280,15 +269,6 @@ var fieldLabels = map[string]string{
 	"archival.partition_lookahead":            "Partition Lookahead",
 	"archival.presign_expiry_sec":             "Presign Expiry (sec)",
 	"webhook.timeout_sec":                     "Webhook Timeout (sec)",
-	"fetcher.enabled":                         "Fetcher Enabled",
-	"fetcher.url":                             "Fetcher URL",
-	"fetcher.allow_private_ips":               "Allow Private IPs",
-	"fetcher.health_timeout_sec":              "Health Timeout (sec)",
-	"fetcher.request_timeout_sec":             "Request Timeout (sec)",
-	"fetcher.discovery_interval_sec":          "Discovery Interval (sec)",
-	"fetcher.schema_cache_ttl_sec":            "Schema Cache TTL (sec)",
-	"fetcher.extraction_poll_sec":             "Extraction Poll (sec)",
-	"fetcher.extraction_timeout_sec":          "Extraction Timeout (sec)",
 }
 
 // fieldConstraints maps mapstructure keys to validation constraints.
@@ -296,7 +276,7 @@ var fieldLabels = map[string]string{
 //
 //nolint:gochecknoglobals // package-level lookup table, read-only after init.
 var fieldConstraints = map[string][]string{
-	"app.log_level":                    {"enum:debug,info,warn,error"},
+	"app.log_level":                    {"enum:debug,info,warn,error,fatal"},
 	"server.body_limit_bytes":          {"min:1"},
 	"postgres.primary_ssl_mode":        {"enum:disable,require,verify-ca,verify-full"},
 	"postgres.max_open_connections":    {"min:1"},
@@ -305,11 +285,11 @@ var fieldConstraints = map[string][]string{
 	"redis.db":                         {"min:0"},
 	"redis.pool_size":                  {"min:1"},
 	"rate_limit.max":                   {"min:1", "max:1000000"},
-	"rate_limit.expiry_sec":            {"min:1"},
+	"rate_limit.expiry_sec":            {"min:1", "max:86400"},
 	"rate_limit.export_max":            {"min:1"},
-	"rate_limit.export_expiry_sec":     {"min:1"},
+	"rate_limit.export_expiry_sec":     {"min:1", "max:86400"},
 	"rate_limit.dispatch_max":          {"min:1"},
-	"rate_limit.dispatch_expiry_sec":   {"min:1"},
+	"rate_limit.dispatch_expiry_sec":   {"min:1", "max:86400"},
 	"export_worker.poll_interval_sec":  {"min:1"},
 	"export_worker.page_size":          {"min:1"},
 	"export_worker.presign_expiry_sec": {"min:60"},
@@ -317,17 +297,11 @@ var fieldConstraints = map[string][]string{
 	"cleanup_worker.batch_size":        {"min:1"},
 	"cleanup_worker.grace_period_sec":  {"min:60"},
 	"scheduler.interval_sec":           {"min:1"},
-	"webhook.timeout_sec":              {"min:1"},
+	"webhook.timeout_sec":              {"min:0", "max:300"},
 	"callback_rate_limit.per_minute":   {"min:1"},
 	"deduplication.ttl_sec":            {"min:1"},
 	"idempotency.retry_window_sec":     {"min:1"},
 	"idempotency.success_ttl_hours":    {"min:1"},
-	"fetcher.health_timeout_sec":       {"min:1"},
-	"fetcher.request_timeout_sec":      {"min:1"},
-	"fetcher.discovery_interval_sec":   {"min:1"},
-	"fetcher.schema_cache_ttl_sec":     {"min:1"},
-	"fetcher.extraction_poll_sec":      {"min:1"},
-	"fetcher.extraction_timeout_sec":   {"min:1"},
 	"archival.interval_hours":          {"min:1"},
 	"archival.batch_size":              {"min:1"},
 }

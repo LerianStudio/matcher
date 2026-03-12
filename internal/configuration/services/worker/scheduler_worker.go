@@ -40,11 +40,12 @@ var ErrNilScheduleRepository = configCommand.ErrNilScheduleRepository
 
 // Sentinel errors for scheduler worker.
 var (
-	ErrNilMatchTrigger      = errors.New("match trigger is required")
-	ErrNilInfraProvider     = errors.New("infrastructure provider is required")
-	ErrWorkerAlreadyRunning = errors.New("scheduler worker already running")
-	ErrWorkerNotRunning     = errors.New("scheduler worker not running")
-	ErrRedisClientNil       = errors.New("redis client is nil")
+	ErrNilMatchTrigger                 = errors.New("match trigger is required")
+	ErrNilInfraProvider                = errors.New("infrastructure provider is required")
+	ErrWorkerAlreadyRunning            = errors.New("scheduler worker already running")
+	ErrWorkerNotRunning                = errors.New("scheduler worker not running")
+	ErrRuntimeConfigUpdateWhileRunning = errors.New("worker runtime config update requires stopped worker")
+	ErrRedisClientNil                  = errors.New("redis client is nil")
 )
 
 // SchedulerWorkerConfig holds configuration for the scheduler worker.
@@ -138,11 +139,17 @@ func (worker *SchedulerWorker) prepareRunState() {
 // NOTE: This does NOT affect a currently running worker's ticker. The WorkerManager
 // always performs a full stop→start cycle when config changes, ensuring the new
 // config is picked up when the worker's run() loop creates a fresh ticker.
-func (worker *SchedulerWorker) UpdateRuntimeConfig(cfg SchedulerWorkerConfig) {
+func (worker *SchedulerWorker) UpdateRuntimeConfig(cfg SchedulerWorkerConfig) error {
 	worker.mu.Lock()
 	defer worker.mu.Unlock()
 
+	if worker.running.Load() {
+		return ErrRuntimeConfigUpdateWhileRunning
+	}
+
 	worker.cfg = normalizeSchedulerWorkerConfig(cfg)
+
+	return nil
 }
 
 // Start begins the scheduler worker.

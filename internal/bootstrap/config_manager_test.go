@@ -136,6 +136,18 @@ func TestNewConfigManager_NilLogger(t *testing.T) {
 	assert.NotNil(t, cm)
 }
 
+func TestNewConfigManager_TypedNilLogger(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	var typedNil *libLog.NopLogger
+
+	cm, err := NewConfigManager(cfg, "", typedNil)
+	require.NoError(t, err)
+	t.Cleanup(cm.Stop)
+	assert.NotNil(t, cm)
+}
+
 func TestNewConfigManager_NoFile(t *testing.T) {
 	t.Parallel()
 
@@ -659,7 +671,7 @@ rate_limit:
 
 func TestConfigManager_Update_RejectsEnvOverriddenRuntimeChange(t *testing.T) {
 	// Not parallel: t.Setenv mutates process environment.
-	t.Setenv("LOG_LEVEL", "warn")
+	t.Setenv("RATE_LIMIT_MAX", "111")
 
 	tmpDir := t.TempDir()
 	yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
@@ -669,23 +681,23 @@ func TestConfigManager_Update_RejectsEnvOverriddenRuntimeChange(t *testing.T) {
 
 	_, err := cm.Reload()
 	require.NoError(t, err)
-	assert.Equal(t, "warn", cm.Get().App.LogLevel)
+	assert.Equal(t, 111, cm.Get().RateLimit.Max)
 
-	result, err := cm.Update(map[string]any{"app.log_level": "debug"})
+	result, err := cm.Update(map[string]any{"rate_limit.max": 300})
 	require.NoError(t, err)
 
 	require.Len(t, result.Applied, 1)
-	assert.Equal(t, "app.log_level", result.Applied[0].Key)
-	assert.Equal(t, "info", result.Applied[0].OldValue)
-	assert.Equal(t, "debug", result.Applied[0].NewValue)
+	assert.Equal(t, "rate_limit.max", result.Applied[0].Key)
+	assert.Equal(t, 100, result.Applied[0].OldValue)
+	assert.Equal(t, 300, result.Applied[0].NewValue)
 	assert.False(t, result.Applied[0].HotReloaded)
 	assert.Empty(t, result.Rejected)
-	assert.Equal(t, "warn", cm.Get().App.LogLevel)
+	assert.Equal(t, 111, cm.Get().RateLimit.Max)
 
 	content, readErr := os.ReadFile(yamlPath)
 	require.NoError(t, readErr)
-	assert.Contains(t, string(content), "log_level: debug")
-	assert.NotContains(t, string(content), "log_level: warn")
+	assert.Contains(t, string(content), "max: 300")
+	assert.NotContains(t, string(content), "max: 111")
 }
 
 func TestConfigManager_Update_DoesNotPersistEnvSecretOverrides(t *testing.T) {
@@ -874,9 +886,9 @@ func TestConfigManager_Update_ValidationFailureRollsBack(t *testing.T) {
 
 	originalMax := cm.Get().RateLimit.Max
 
-	// Try to set an invalid log level — will fail validation.
+	// Try to set an invalid rate-limit value — will fail validation.
 	_, updateErr := cm.Update(map[string]any{
-		"app.log_level": "banana",
+		"rate_limit.max": 0,
 	})
 
 	require.Error(t, updateErr)
@@ -884,6 +896,12 @@ func TestConfigManager_Update_ValidationFailureRollsBack(t *testing.T) {
 
 	// Original config preserved.
 	assert.Equal(t, originalMax, cm.Get().RateLimit.Max)
+	assert.Equal(t, originalMax, cm.viper.GetInt("rate_limit.max"))
+
+	content, readErr := os.ReadFile(yamlPath)
+	require.NoError(t, readErr)
+	assert.Contains(t, string(content), "max: 100")
+	assert.NotContains(t, string(content), "max: 0")
 }
 
 func TestConfigManager_Update_IncrementsVersion(t *testing.T) {
@@ -941,6 +959,12 @@ func TestConfigManager_Update_PropagatesSubscriberFailure(t *testing.T) {
 	_, err := cm.Update(map[string]any{"rate_limit.max": 301})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrConfigSubscriberFailure)
+	assert.Equal(t, 100, cm.Get().RateLimit.Max)
+	assert.Equal(t, uint64(0), cm.Version())
+
+	content, readErr := os.ReadFile(yamlPath)
+	require.NoError(t, readErr)
+	assert.Contains(t, string(content), "max: 100")
 }
 
 func TestConfigManager_Update_PropagatesSubscriberPanicAsFailure(t *testing.T) {
@@ -958,6 +982,28 @@ func TestConfigManager_Update_PropagatesSubscriberPanicAsFailure(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrConfigSubscriberFailure)
 	assert.Contains(t, err.Error(), "subscriber panic")
+	assert.Equal(t, 100, cm.Get().RateLimit.Max)
+	assert.Equal(t, uint64(0), cm.Version())
+}
+
+func TestConfigManager_Reload_RollsBackStateOnSubscriberFailure(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
+
+	cm := newTestConfigManager(t, defaultConfig(), yamlPath, &testLogger{})
+	cm.SubscribeErr(func(_ *Config) error {
+		return assert.AnError
+	})
+
+	require.NoError(t, os.WriteFile(yamlPath, []byte(strings.Replace(validTestYAML, "max: 100", "max: 250", 1)), 0o600))
+
+	_, err := cm.Reload()
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrConfigSubscriberFailure)
+	assert.Equal(t, 100, cm.Get().RateLimit.Max)
+	assert.Equal(t, uint64(0), cm.Version())
 }
 
 func TestConfigManager_Update_WritesYAMLFile(t *testing.T) {

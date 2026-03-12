@@ -69,6 +69,27 @@ func (cm *ConfigManager) snapshotSubscribersLocked() []func(*Config) error {
 	return callbacks
 }
 
+func (cm *ConfigManager) snapshotPersistedConfig() (*viper.Viper, error) {
+	path := filepath.Clean(strings.TrimSpace(cm.filePath))
+	if path == "" {
+		return nil, nil
+	}
+
+	if err := validateAtomicWritePath(path); err != nil {
+		return nil, err
+	}
+
+	persisted := viper.New()
+	persisted.SetConfigType("yaml")
+	persisted.SetConfigFile(path)
+
+	if err := persisted.ReadInConfig(); err != nil && !isConfigFileNotFound(err) {
+		return nil, fmt.Errorf("read persisted config file: %w", err)
+	}
+
+	return persisted, nil
+}
+
 // writePersistedConfigAtomically writes only the file-backed config surface.
 //
 // This intentionally avoids dumping the manager's live viper state because that
@@ -77,17 +98,17 @@ func (cm *ConfigManager) snapshotSubscribersLocked() []func(*Config) error {
 // YAML file. Instead, we start from the current YAML file contents and apply
 // only the requested API changes.
 func (cm *ConfigManager) writePersistedConfigAtomically(changes map[string]any) error {
-	path := filepath.Clean(strings.TrimSpace(cm.filePath))
-	if err := validateAtomicWritePath(path); err != nil {
+	persisted, err := cm.snapshotPersistedConfig()
+	if err != nil {
 		return err
 	}
 
-	persisted := viper.New()
-	persisted.SetConfigType("yaml")
-	persisted.SetConfigFile(path)
+	path := filepath.Clean(strings.TrimSpace(cm.filePath))
 
-	if err := persisted.ReadInConfig(); err != nil && !isConfigFileNotFound(err) {
-		return fmt.Errorf("read persisted config file: %w", err)
+	if persisted == nil {
+		persisted = viper.New()
+		persisted.SetConfigType("yaml")
+		persisted.SetConfigFile(path)
 	}
 
 	for _, key := range sortedChangeKeys(changes) {

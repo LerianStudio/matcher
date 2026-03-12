@@ -41,6 +41,18 @@ func TestLoadConfigWithLogger_ExplicitLogger_Used(t *testing.T) {
 	assert.Equal(t, logger, cfg.Logger)
 }
 
+func TestLoadConfigWithLogger_TypedNilLogger_CreatesDefault(t *testing.T) {
+	// Not parallel: modifies env vars.
+	clearConfigEnvVars(t)
+
+	var typedNil *libLog.NopLogger
+
+	cfg, err := LoadConfigWithLogger(typedNil)
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+	assert.NotNil(t, cfg.Logger)
+}
+
 func TestEnforceProductionSecurityDefaults_Production_DisablesSwagger(t *testing.T) {
 	t.Parallel()
 

@@ -54,6 +54,10 @@ func newAPITestConfigManager(t *testing.T) *ConfigManager {
 func newTestApp(t *testing.T, handler *ConfigAPIHandler) *fiber.App {
 	t.Helper()
 
+	if handler != nil && handler.auditRepository == nil {
+		handler.SetAuditRepository(&historyAuditRepoMock{})
+	}
+
 	app := fiber.New()
 	app.Use(func(c *fiber.Ctx) error {
 		ctx := context.WithValue(c.UserContext(), auth.UserIDKey, "test-user")
@@ -88,6 +92,10 @@ func TestGetConfig_MissingAuthenticatedPrincipal_ReturnsUnauthorized(t *testing.
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	var response map[string]any
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
+	assert.Equal(t, "unauthorized", response["title"])
+	assert.Equal(t, "missing authenticated principal", response["message"])
 }
 
 func TestGetConfig_AuthDisabledAtStartup_ReturnsForbidden(t *testing.T) {
@@ -110,24 +118,38 @@ func TestGetConfig_AuthDisabledAtStartup_ReturnsForbidden(t *testing.T) {
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+	var response map[string]any
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
+	assert.Equal(t, "forbidden", response["title"])
+	assert.Equal(t, "config API requires authentication", response["message"])
 }
 
 type historyAuditRepoMock struct {
 	lastTenantID    string
+	createErr       error
+	createdLogs     []*sharedDomain.AuditLog
 	listByEntityErr error
 	logs            []*sharedDomain.AuditLog
 }
 
-func (mock *historyAuditRepoMock) Create(_ context.Context, _ *sharedDomain.AuditLog) (*sharedDomain.AuditLog, error) {
-	return nil, assert.AnError
+func (mock *historyAuditRepoMock) Create(_ context.Context, auditLog *sharedDomain.AuditLog) (*sharedDomain.AuditLog, error) {
+	if mock.createErr != nil {
+		return nil, mock.createErr
+	}
+
+	if auditLog != nil {
+		mock.createdLogs = append(mock.createdLogs, auditLog)
+	}
+
+	return auditLog, nil
 }
 
 func (mock *historyAuditRepoMock) CreateWithTx(
 	_ context.Context,
 	_ *sql.Tx,
-	_ *sharedDomain.AuditLog,
+	auditLog *sharedDomain.AuditLog,
 ) (*sharedDomain.AuditLog, error) {
-	return nil, assert.AnError
+	return mock.Create(context.Background(), auditLog)
 }
 
 func (mock *historyAuditRepoMock) GetByID(_ context.Context, _ uuid.UUID) (*sharedDomain.AuditLog, error) {
@@ -172,6 +194,18 @@ func TestNewConfigAPIHandler_NilLogger(t *testing.T) {
 
 	assert.NotNil(t, handler)
 	assert.NoError(t, err)
+}
+
+func TestConfigAPIHandler_SetAuditRepository_TypedNilNormalizesToNil(t *testing.T) {
+	t.Parallel()
+
+	handler, err := NewConfigAPIHandler(newAPITestConfigManager(t), &libLog.NopLogger{}, false)
+	require.NoError(t, err)
+
+	var typedNil *historyAuditRepoMock
+	handler.SetAuditRepository(typedNil)
+
+	assert.Nil(t, handler.auditRepository)
 }
 
 func TestGetConfig_ReturnsCurrentConfig(t *testing.T) {
@@ -249,7 +283,7 @@ func TestGetConfig_RedactsCredentialURIs(t *testing.T) {
 
 	cm := newAPITestConfigManager(t)
 	cfg := cm.Get()
-	cfg.Fetcher.URL = "https://user:pass@example.com/fetch"
+	cfg.Auth.Host = "https://user:pass@example.com/auth"
 
 	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
 	require.NoError(t, err)
@@ -264,7 +298,7 @@ func TestGetConfig_RedactsCredentialURIs(t *testing.T) {
 
 	var response GetConfigResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
-	assert.Equal(t, "https://%2A%2A%2AREDACTED%2A%2A%2A:%2A%2A%2AREDACTED%2A%2A%2A@example.com/fetch", response.Config["fetcher.url"])
+	assert.Equal(t, "https://%2A%2A%2AREDACTED%2A%2A%2A:%2A%2A%2AREDACTED%2A%2A%2A@example.com/auth", response.Config["auth.host"])
 }
 
 func TestGetSchema_ReturnsGroupedFields(t *testing.T) {
@@ -376,7 +410,7 @@ func TestGetSchema_IncludesCurrentValueEnvOverrideHotReloadableAndConstraints(t 
 	require.NotNil(t, logLevelField)
 	assert.Equal(t, "warn", logLevelField.CurrentValue)
 	assert.True(t, logLevelField.EnvOverride)
-	assert.True(t, logLevelField.HotReloadable)
+	assert.False(t, logLevelField.HotReloadable)
 
 	rateLimitField := findField("rate_limit", "rate_limit.max")
 	require.NotNil(t, rateLimitField)
@@ -392,7 +426,7 @@ func TestGetSchema_RedactsCredentialURICurrentValue(t *testing.T) {
 
 	cm := newAPITestConfigManager(t)
 	cfg := cm.Get()
-	cfg.Fetcher.URL = "https://user:pass@example.com/fetch"
+	cfg.Auth.Host = "https://user:pass@example.com/auth"
 
 	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
 	require.NoError(t, err)
@@ -409,15 +443,15 @@ func TestGetSchema_RedactsCredentialURICurrentValue(t *testing.T) {
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
 
 	var found *ConfigFieldSchema
-	for i := range response.Sections["fetcher"] {
-		field := &response.Sections["fetcher"][i]
-		if field.Key == "fetcher.url" {
+	for i := range response.Sections["auth"] {
+		field := &response.Sections["auth"][i]
+		if field.Key == "auth.host" {
 			found = field
 			break
 		}
 	}
 	require.NotNil(t, found)
-	assert.Equal(t, "https://%2A%2A%2AREDACTED%2A%2A%2A:%2A%2A%2AREDACTED%2A%2A%2A@example.com/fetch", found.CurrentValue)
+	assert.Equal(t, "https://%2A%2A%2AREDACTED%2A%2A%2A:%2A%2A%2AREDACTED%2A%2A%2A@example.com/auth", found.CurrentValue)
 }
 
 func TestUpdateConfig_ValidChange(t *testing.T) {
@@ -587,7 +621,7 @@ func TestUpdateConfig_ValidationFailure_ReturnsUnprocessableEntity(t *testing.T)
 
 	app := newTestApp(t, handler)
 	bodyBytes, err := json.Marshal(UpdateConfigRequest{
-		Changes: map[string]any{"app.log_level": "banana"},
+		Changes: map[string]any{"rate_limit.max": 0},
 	})
 	require.NoError(t, err)
 
@@ -599,12 +633,16 @@ func TestUpdateConfig_ValidationFailure_ReturnsUnprocessableEntity(t *testing.T)
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode)
+	var response map[string]any
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
+	assert.Equal(t, "validation_failed", response["title"])
 }
 
 func TestUpdateConfig_RuntimeApplyFailure_ReturnsInternalServerError(t *testing.T) {
 	t.Parallel()
 
 	cm := newAPITestConfigManager(t)
+	beforeMax := cm.Get().RateLimit.Max
 	cm.SubscribeErr(func(_ *Config) error { return assert.AnError })
 	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
 	require.NoError(t, err)
@@ -622,12 +660,16 @@ func TestUpdateConfig_RuntimeApplyFailure_ReturnsInternalServerError(t *testing.
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+	assert.Equal(t, beforeMax, cm.Get().RateLimit.Max)
+	var response map[string]any
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
+	assert.Equal(t, "runtime_apply_failed", response["title"])
 }
 
 func TestUpdateConfig_EnvOverriddenChange_IsPersistedButNotHotReloaded(t *testing.T) {
 	// Not parallel: modifies env vars.
 	clearConfigEnvVars(t)
-	t.Setenv("LOG_LEVEL", "warn")
+	t.Setenv("RATE_LIMIT_MAX", "111")
 
 	cm := newAPITestConfigManager(t)
 	_, err := cm.Reload()
@@ -638,7 +680,7 @@ func TestUpdateConfig_EnvOverriddenChange_IsPersistedButNotHotReloaded(t *testin
 
 	app := newTestApp(t, handler)
 	bodyBytes, err := json.Marshal(UpdateConfigRequest{
-		Changes: map[string]any{"app.log_level": "debug"},
+		Changes: map[string]any{"rate_limit.max": 300},
 	})
 	require.NoError(t, err)
 
@@ -654,12 +696,12 @@ func TestUpdateConfig_EnvOverriddenChange_IsPersistedButNotHotReloaded(t *testin
 	var response UpdateConfigResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
 	require.Len(t, response.Applied, 1)
-	assert.Equal(t, "app.log_level", response.Applied[0].Key)
-	assert.Equal(t, "info", response.Applied[0].OldValue)
-	assert.Equal(t, "debug", response.Applied[0].NewValue)
+	assert.Equal(t, "rate_limit.max", response.Applied[0].Key)
+	assert.Equal(t, float64(100), response.Applied[0].OldValue)
+	assert.Equal(t, float64(300), response.Applied[0].NewValue)
 	assert.False(t, response.Applied[0].HotReloaded)
 	assert.Empty(t, response.Rejected)
-	assert.Equal(t, "warn", cm.Get().App.LogLevel)
+	assert.Equal(t, 111, cm.Get().RateLimit.Max)
 }
 
 func TestUpdateConfig_InternalWriteFailure_ReturnsInternalServerError(t *testing.T) {
@@ -756,12 +798,16 @@ func TestReloadConfig_Failure_ReturnsInternalServerError(t *testing.T) {
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+	var response map[string]any
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
+	assert.Equal(t, "reload_failed", response["title"])
 }
 
 func TestReloadConfig_RuntimeApplyFailure_ReturnsInternalServerError(t *testing.T) {
 	t.Parallel()
 
 	cm := newAPITestConfigManager(t)
+	beforeMax := cm.Get().RateLimit.Max
 	cm.SubscribeErr(func(_ *Config) error { return assert.AnError })
 	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
 	require.NoError(t, err)
@@ -773,6 +819,10 @@ func TestReloadConfig_RuntimeApplyFailure_ReturnsInternalServerError(t *testing.
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+	assert.Equal(t, beforeMax, cm.Get().RateLimit.Max)
+	var response map[string]any
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
+	assert.Equal(t, "runtime_apply_failed", response["title"])
 }
 
 func TestGetConfigHistory_ReturnsEmptyList(t *testing.T) {
@@ -820,6 +870,9 @@ func TestGetConfigHistory_LoadFailure_ReturnsInternalServerError(t *testing.T) {
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+	var response map[string]any
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
+	assert.Equal(t, "history_load_failed", response["title"])
 }
 
 func TestRegisterConfigAPIRoutes_NilProtected(t *testing.T) {
@@ -917,6 +970,7 @@ func TestUpdateConfig_AuditUsesSystemTenantContext(t *testing.T) {
 	publisher, err := NewConfigAuditPublisher(createdEvents, &libLog.NopLogger{})
 	require.NoError(t, err)
 	handler.SetAuditPublisher(publisher)
+	handler.SetAuditRepository(&historyAuditRepoMock{})
 
 	app := fiber.New()
 	app.Use(func(c *fiber.Ctx) error {
@@ -1173,7 +1227,7 @@ func TestUpdateConfig_AuditPublisherCalledOnSuccess(t *testing.T) {
 func TestUpdateConfig_EnvOverriddenChange_IsAuditedAsPersistedChange(t *testing.T) {
 	// Not parallel: modifies env vars.
 	clearConfigEnvVars(t)
-	t.Setenv("LOG_LEVEL", "warn")
+	t.Setenv("RATE_LIMIT_MAX", "111")
 
 	cm := newAPITestConfigManager(t)
 	_, err := cm.Reload()
@@ -1189,7 +1243,7 @@ func TestUpdateConfig_EnvOverriddenChange_IsAuditedAsPersistedChange(t *testing.
 
 	app := newTestApp(t, handler)
 	bodyBytes, err := json.Marshal(UpdateConfigRequest{
-		Changes: map[string]any{"app.log_level": "debug"},
+		Changes: map[string]any{"rate_limit.max": 275},
 	})
 	require.NoError(t, err)
 
@@ -1212,9 +1266,9 @@ func TestUpdateConfig_EnvOverriddenChange_IsAuditedAsPersistedChange(t *testing.
 
 	change, ok := changes[0].(map[string]any)
 	require.True(t, ok)
-	assert.Equal(t, "app.log_level", change["key"])
-	assert.Equal(t, "info", change["old_value"])
-	assert.Equal(t, "debug", change["new_value"])
+	assert.Equal(t, "rate_limit.max", change["key"])
+	assert.Equal(t, float64(100), change["old_value"])
+	assert.Equal(t, float64(275), change["new_value"])
 }
 
 func TestUpdateConfig_AuditFailureDoesNotFailRequest(t *testing.T) {

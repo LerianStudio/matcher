@@ -190,7 +190,11 @@ func TestExportWorker_StartStop(t *testing.T) {
 		cfg := ExportWorkerConfig{PollInterval: 100 * time.Millisecond}
 		logger := &libLog.NopLogger{}
 
-		jobRepo.EXPECT().ClaimNextQueued(gomock.Any()).Return(nil, nil).AnyTimes()
+		var claimCount atomic.Int32
+		jobRepo.EXPECT().ClaimNextQueued(gomock.Any()).DoAndReturn(func(context.Context) (*entities.ExportJob, error) {
+			claimCount.Add(1)
+			return nil, nil
+		}).AnyTimes()
 
 		worker, err := NewExportWorker(jobRepo, reportRepo, storage, cfg, logger)
 		require.NoError(t, err)
@@ -217,7 +221,11 @@ func TestExportWorker_StartStop(t *testing.T) {
 		cfg := ExportWorkerConfig{PollInterval: 100 * time.Millisecond}
 		logger := &libLog.NopLogger{}
 
-		jobRepo.EXPECT().ClaimNextQueued(gomock.Any()).Return(nil, nil).AnyTimes()
+		var claimCount atomic.Int32
+		jobRepo.EXPECT().ClaimNextQueued(gomock.Any()).DoAndReturn(func(context.Context) (*entities.ExportJob, error) {
+			claimCount.Add(1)
+			return nil, nil
+		}).AnyTimes()
 
 		worker, err := NewExportWorker(jobRepo, reportRepo, storage, cfg, logger)
 		require.NoError(t, err)
@@ -260,14 +268,47 @@ func TestExportWorker_StartStop(t *testing.T) {
 		cfg := ExportWorkerConfig{PollInterval: 100 * time.Millisecond}
 		logger := &libLog.NopLogger{}
 
-		jobRepo.EXPECT().ClaimNextQueued(gomock.Any()).Return(nil, nil).AnyTimes()
+		var claimCount atomic.Int32
+		jobRepo.EXPECT().ClaimNextQueued(gomock.Any()).DoAndReturn(func(context.Context) (*entities.ExportJob, error) {
+			claimCount.Add(1)
+			return nil, nil
+		}).AnyTimes()
 
 		worker, err := NewExportWorker(jobRepo, reportRepo, storage, cfg, logger)
 		require.NoError(t, err)
 
 		require.NoError(t, worker.Start(context.Background()))
+		require.Eventually(t, func() bool {
+			return claimCount.Load() >= 1
+		}, 300*time.Millisecond, 10*time.Millisecond)
 		require.NoError(t, worker.Stop())
+
+		before := claimCount.Load()
 		require.NoError(t, worker.Start(context.Background()))
+		require.Eventually(t, func() bool {
+			return claimCount.Load() > before
+		}, 300*time.Millisecond, 10*time.Millisecond)
+		require.NoError(t, worker.Stop())
+	})
+
+	t.Run("rejects runtime config update while running", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		jobRepo := repomocks.NewMockExportJobRepository(ctrl)
+		reportRepo := &mockReportRepoForWorker{}
+		storage := portsmocks.NewMockObjectStorageClient(ctrl)
+		cfg := ExportWorkerConfig{PollInterval: 100 * time.Millisecond}
+		logger := &libLog.NopLogger{}
+
+		jobRepo.EXPECT().ClaimNextQueued(gomock.Any()).Return(nil, nil).AnyTimes()
+
+		worker, err := NewExportWorker(jobRepo, reportRepo, storage, cfg, logger)
+		require.NoError(t, err)
+		require.NoError(t, worker.Start(context.Background()))
+
+		err = worker.UpdateRuntimeConfig(ExportWorkerConfig{PollInterval: time.Second, PageSize: 42})
+		require.ErrorIs(t, err, ErrRuntimeConfigUpdateWhileRunning)
 		require.NoError(t, worker.Stop())
 	})
 }
@@ -361,9 +402,13 @@ func TestCleanupWorker_StartStop(t *testing.T) {
 		cfg := CleanupWorkerConfig{Interval: 100 * time.Millisecond}
 		logger := &libLog.NopLogger{}
 
+		var listExpiredCount atomic.Int32
 		jobRepo.EXPECT().
 			ListExpired(gomock.Any(), gomock.Any()).
-			Return([]*entities.ExportJob{}, nil).
+			DoAndReturn(func(context.Context, int) ([]*entities.ExportJob, error) {
+				listExpiredCount.Add(1)
+				return []*entities.ExportJob{}, nil
+			}).
 			AnyTimes()
 
 		worker, err := NewCleanupWorker(jobRepo, storage, cfg, logger)
@@ -390,9 +435,13 @@ func TestCleanupWorker_StartStop(t *testing.T) {
 		cfg := CleanupWorkerConfig{Interval: 100 * time.Millisecond}
 		logger := &libLog.NopLogger{}
 
+		var listExpiredCount atomic.Int32
 		jobRepo.EXPECT().
 			ListExpired(gomock.Any(), gomock.Any()).
-			Return([]*entities.ExportJob{}, nil).
+			DoAndReturn(func(context.Context, int) ([]*entities.ExportJob, error) {
+				listExpiredCount.Add(1)
+				return []*entities.ExportJob{}, nil
+			}).
 			AnyTimes()
 
 		worker, err := NewCleanupWorker(jobRepo, storage, cfg, logger)
@@ -418,6 +467,41 @@ func TestCleanupWorker_StartStop(t *testing.T) {
 		cfg := CleanupWorkerConfig{Interval: 100 * time.Millisecond}
 		logger := &libLog.NopLogger{}
 
+		var listExpiredCount atomic.Int32
+		jobRepo.EXPECT().
+			ListExpired(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(context.Context, int) ([]*entities.ExportJob, error) {
+				listExpiredCount.Add(1)
+				return []*entities.ExportJob{}, nil
+			}).
+			AnyTimes()
+
+		worker, err := NewCleanupWorker(jobRepo, storage, cfg, logger)
+		require.NoError(t, err)
+
+		require.NoError(t, worker.Start(context.Background()))
+		require.Eventually(t, func() bool {
+			return listExpiredCount.Load() >= 1
+		}, 300*time.Millisecond, 10*time.Millisecond)
+		require.NoError(t, worker.Stop())
+
+		before := listExpiredCount.Load()
+		require.NoError(t, worker.Start(context.Background()))
+		require.Eventually(t, func() bool {
+			return listExpiredCount.Load() > before
+		}, 300*time.Millisecond, 10*time.Millisecond)
+		require.NoError(t, worker.Stop())
+	})
+
+	t.Run("rejects runtime config update while running", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		jobRepo := repomocks.NewMockExportJobRepository(ctrl)
+		storage := portsmocks.NewMockObjectStorageClient(ctrl)
+		cfg := CleanupWorkerConfig{Interval: 100 * time.Millisecond}
+		logger := &libLog.NopLogger{}
+
 		jobRepo.EXPECT().
 			ListExpired(gomock.Any(), gomock.Any()).
 			Return([]*entities.ExportJob{}, nil).
@@ -425,10 +509,10 @@ func TestCleanupWorker_StartStop(t *testing.T) {
 
 		worker, err := NewCleanupWorker(jobRepo, storage, cfg, logger)
 		require.NoError(t, err)
+		require.NoError(t, worker.Start(context.Background()))
 
-		require.NoError(t, worker.Start(context.Background()))
-		require.NoError(t, worker.Stop())
-		require.NoError(t, worker.Start(context.Background()))
+		err = worker.UpdateRuntimeConfig(CleanupWorkerConfig{Interval: time.Second, BatchSize: 10})
+		require.ErrorIs(t, err, ErrRuntimeConfigUpdateWhileRunning)
 		require.NoError(t, worker.Stop())
 	})
 }

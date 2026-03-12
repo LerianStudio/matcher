@@ -62,6 +62,42 @@ func TestConfigEnvVarKeys_SyncWithStructTags(t *testing.T) {
 		stale)
 }
 
+func TestMatcherOverrideEnvVarKeys_SyncWithConfigSchema(t *testing.T) {
+	t.Parallel()
+
+	expectedKeys := make(map[string]bool)
+	for _, def := range buildConfigSchema() {
+		expectedKeys["MATCHER_"+strings.ToUpper(strings.ReplaceAll(def.Key, ".", "_"))] = true
+	}
+
+	actualKeys := make(map[string]bool, len(matcherOverrideEnvVarKeys))
+	for _, key := range matcherOverrideEnvVarKeys {
+		actualKeys[key] = true
+	}
+
+	var missing []string
+	for key := range expectedKeys {
+		if !actualKeys[key] {
+			missing = append(missing, key)
+		}
+	}
+
+	assert.Empty(t, missing,
+		"MATCHER override keys missing from matcherOverrideEnvVarKeys — add them to config_override_env_keys_test.go: %v",
+		missing)
+
+	var stale []string
+	for _, key := range matcherOverrideEnvVarKeys {
+		if !expectedKeys[key] {
+			stale = append(stale, key)
+		}
+	}
+
+	assert.Empty(t, stale,
+		"matcherOverrideEnvVarKeys contains stale keys not found in Config schema — remove them: %v",
+		stale)
+}
+
 // collectEnvTagKeys recursively walks a struct type and collects all env: tag values.
 func collectEnvTagKeys(t reflect.Type) []string {
 	for t.Kind() == reflect.Ptr {

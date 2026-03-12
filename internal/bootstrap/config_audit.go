@@ -43,6 +43,7 @@ var systemConfigEntityID = uuid.NewSHA1(systemConfigNamespace, []byte(systemConf
 // Sentinel errors for config audit publisher.
 var (
 	ErrNilOutboxRepoForConfigAudit = errors.New("outbox repository is required for config audit publisher")
+	ErrNilAuditRepoForConfigAudit  = errors.New("audit repository is required for config audit fallback")
 )
 
 // ConfigAuditPublisher publishes audit events for system configuration changes
@@ -150,6 +151,86 @@ func (publisher *ConfigAuditPublisher) PublishConfigChange(
 	return nil
 }
 
+func publishConfigChangeWithFallback(
+	ctx context.Context,
+	publisher *ConfigAuditPublisher,
+	auditRepo sharedPorts.AuditLogRepository,
+	actor string,
+	action string,
+	changes []ConfigChange,
+) error {
+	if len(changes) == 0 {
+		return nil
+	}
+
+	if publisher != nil {
+		publishErr := publisher.PublishConfigChange(ctx, actor, action, changes)
+		if publishErr == nil {
+			return nil
+		}
+
+		if auditRepo == nil {
+			return publishErr
+		}
+
+		if fallbackErr := persistConfigAuditFallback(ctx, auditRepo, actor, action, changes); fallbackErr != nil {
+			return errors.Join(publishErr, fallbackErr)
+		}
+
+		return nil
+	}
+
+	return persistConfigAuditFallback(ctx, auditRepo, actor, action, changes)
+}
+
+func persistConfigAuditFallback(
+	ctx context.Context,
+	auditRepo sharedPorts.AuditLogRepository,
+	actor string,
+	action string,
+	changes []ConfigChange,
+) error {
+	if auditRepo == nil {
+		return ErrNilAuditRepoForConfigAudit
+	}
+
+	tenantIDStr := auth.GetTenantID(ctx)
+
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		return fmt.Errorf("config audit fallback: parse tenant id: %w", err)
+	}
+
+	payload, err := json.Marshal(buildConfigChangesMap(changes))
+	if err != nil {
+		return fmt.Errorf("config audit fallback: marshal changes: %w", err)
+	}
+
+	var actorPtr *string
+	if actor != "" {
+		actorPtr = &actor
+	}
+
+	auditLog, err := sharedDomain.NewAuditLog(
+		ctx,
+		tenantID,
+		systemConfigEntityType,
+		systemConfigEntityID,
+		action,
+		actorPtr,
+		payload,
+	)
+	if err != nil {
+		return fmt.Errorf("config audit fallback: build audit log: %w", err)
+	}
+
+	if _, err := auditRepo.Create(ctx, auditLog); err != nil {
+		return fmt.Errorf("config audit fallback: persist audit log: %w", err)
+	}
+
+	return nil
+}
+
 // buildConfigChangesMap converts a slice of ConfigChange into the map[string]any
 // format expected by AuditLogCreatedEvent.Changes.
 func buildConfigChangesMap(changes []ConfigChange) map[string]any {
@@ -181,9 +262,10 @@ func buildConfigChangesMap(changes []ConfigChange) map[string]any {
 func SetAuditCallback(
 	cm *ConfigManager,
 	publisher *ConfigAuditPublisher,
+	auditRepo sharedPorts.AuditLogRepository,
 	logger libLog.Logger,
 ) {
-	if cm == nil || publisher == nil {
+	if cm == nil || (publisher == nil && auditRepo == nil) {
 		return
 	}
 
@@ -242,7 +324,7 @@ func SetAuditCallback(
 
 		ctx = context.WithValue(ctx, auth.TenantIDKey, stableTenantID)
 
-		if err := publisher.PublishConfigChange(ctx, "system", "reloaded", changes); err != nil {
+		if err := publishConfigChangeWithFallback(ctx, publisher, auditRepo, "system", "reloaded", changes); err != nil {
 			logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to publish config audit event from file watcher: %v", err))
 		}
 	})

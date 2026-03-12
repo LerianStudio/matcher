@@ -595,6 +595,23 @@ func TestServiceShutdown_WithNilLogger(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestServiceShutdown_MarksReadinessDraining(t *testing.T) {
+	t.Parallel()
+
+	state := &readinessState{}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	svc := &Service{
+		Logger:         &libLog.NopLogger{},
+		Config:         &Config{ShutdownGracePeriod: time.Millisecond},
+		readinessState: state,
+	}
+
+	require.NoError(t, svc.Shutdown(ctx))
+	assert.True(t, state.isDraining())
+}
+
 func TestShutdownServerAndConnections_ConnectionManagerError(t *testing.T) {
 	t.Parallel()
 

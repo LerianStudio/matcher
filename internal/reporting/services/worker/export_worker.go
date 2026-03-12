@@ -47,6 +47,8 @@ var (
 	ErrWorkerAlreadyRunning = errors.New("worker already running")
 	// ErrWorkerNotRunning indicates the worker is not started.
 	ErrWorkerNotRunning = errors.New("worker not running")
+	// ErrRuntimeConfigUpdateWhileRunning indicates runtime config can only change while stopped.
+	ErrRuntimeConfigUpdateWhileRunning = errors.New("worker runtime config update requires stopped worker")
 	// ErrNilJobRepository indicates job repository is nil.
 	ErrNilJobRepository = errors.New("job repository is required")
 	// ErrNilReportRepository indicates report repository is nil.
@@ -187,11 +189,17 @@ func (worker *ExportWorker) prepareRunState(ctx context.Context) context.Context
 // NOTE: This does NOT affect a currently running worker's ticker. The WorkerManager
 // always performs a full stop→start cycle when config changes, ensuring the new
 // config is picked up when the worker's run() loop creates a fresh ticker.
-func (worker *ExportWorker) UpdateRuntimeConfig(cfg ExportWorkerConfig) {
+func (worker *ExportWorker) UpdateRuntimeConfig(cfg ExportWorkerConfig) error {
 	worker.mu.Lock()
 	defer worker.mu.Unlock()
 
+	if worker.running.Load() {
+		return ErrRuntimeConfigUpdateWhileRunning
+	}
+
 	worker.cfg = normalizeExportWorkerConfig(cfg)
+
+	return nil
 }
 
 // Start begins processing export jobs.

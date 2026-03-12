@@ -70,7 +70,6 @@ type WorkerManager struct {
 	logger        libLog.Logger
 	configManager *ConfigManager
 	slots         []*workerSlot
-	lastCfg       *Config
 	parentCtx     context.Context
 	cancel        context.CancelFunc
 	running       bool
@@ -146,12 +145,11 @@ func (wm *WorkerManager) Start(ctx context.Context, cfg *Config) error {
 		}
 	}
 
-	wm.lastCfg = cfg
 	wm.mu.Unlock()
 
 	if err := wm.startEnabledWorkers(workerCtx, cfg); err != nil {
 		// On critical failure, stop any workers that did start.
-		_ = wm.stopAllWorkers(workerCtx)
+		_ = wm.stopAllWorkers()
 
 		wm.mu.Lock()
 
@@ -166,7 +164,6 @@ func (wm *WorkerManager) Start(ctx context.Context, cfg *Config) error {
 
 		wm.parentCtx = nil
 		wm.cancel = nil
-		wm.lastCfg = nil
 		wm.running = false
 		wm.mu.Unlock()
 
@@ -189,7 +186,7 @@ func (wm *WorkerManager) Stop() error {
 	}
 	wm.mu.Unlock()
 
-	stopErr := wm.stopAllWorkers(context.Background())
+	stopErr := wm.stopAllWorkers()
 
 	wm.mu.Lock()
 
@@ -208,23 +205,6 @@ func (wm *WorkerManager) Stop() error {
 	wm.mu.Unlock()
 
 	return stopErr
-}
-
-// RunningWorkers returns the names of currently running workers.
-// Useful for health checks and diagnostics.
-func (wm *WorkerManager) RunningWorkers() []string {
-	wm.mu.Lock()
-	defer wm.mu.Unlock()
-
-	names := make([]string, 0)
-
-	for _, slot := range wm.slots {
-		if !isNilWorkerLifecycle(slot.instance) {
-			names = append(names, slot.name)
-		}
-	}
-
-	return names
 }
 
 // onConfigChange is the subscriber callback invoked by ConfigManager after
@@ -251,7 +231,7 @@ func (wm *WorkerManager) onConfigChange(newCfg *Config) error {
 	// Use parentCtx for worker lifecycle operations (Start needs a cancellable ctx).
 	ctx := wm.parentCtx
 	if ctx == nil {
-		ctx = context.Background()
+		ctx = context.TODO()
 	}
 	wm.mu.Unlock()
 
@@ -262,10 +242,6 @@ func (wm *WorkerManager) onConfigChange(newCfg *Config) error {
 			reconcileErr = errors.Join(reconcileErr, err)
 		}
 	}
-
-	wm.mu.Lock()
-	wm.lastCfg = newCfg
-	wm.mu.Unlock()
 
 	return reconcileErr
 }
@@ -316,7 +292,9 @@ func (wm *WorkerManager) startSlotLocked(ctx context.Context, slot *workerSlot, 
 		return fmt.Errorf("worker %q: %w", slot.name, errWorkerDependencyUnavailable)
 	}
 
-	applyWorkerRuntimeConfig(ctx, slot.name, worker, cfg)
+	if err := applyWorkerRuntimeConfig(slot.name, worker, cfg); err != nil {
+		return fmt.Errorf("apply worker %q runtime config: %w", slot.name, err)
+	}
 
 	if err := startWorkerWithTimeout(ctx, worker); err != nil {
 		return fmt.Errorf("start worker %q: %w", slot.name, err)
@@ -334,7 +312,7 @@ func (wm *WorkerManager) startSlotLocked(ctx context.Context, slot *workerSlot, 
 }
 
 // stopSlotLocked stops a single worker slot. Caller must hold wm.mu.
-func (wm *WorkerManager) stopSlotLocked(ctx context.Context, slot *workerSlot) error {
+func (wm *WorkerManager) stopSlotLocked(slot *workerSlot) error {
 	wm.mu.Lock()
 	instance := slot.instance
 	wm.mu.Unlock()
@@ -348,12 +326,7 @@ func (wm *WorkerManager) stopSlotLocked(ctx context.Context, slot *workerSlot) e
 	}
 
 	if err := stopWorkerWithTimeout(instance); err != nil {
-		if errors.Is(err, errWorkerStopTimedOut) {
-			return fmt.Errorf("stop worker %q: %w", slot.name, err)
-		}
-
-		wm.logger.Log(ctx, libLog.LevelWarn,
-			fmt.Sprintf("worker %q stop error (non-fatal): %v", slot.name, err))
+		return fmt.Errorf("stop worker %q: %w", slot.name, err)
 	}
 
 	wm.mu.Lock()
@@ -366,11 +339,11 @@ func (wm *WorkerManager) stopSlotLocked(ctx context.Context, slot *workerSlot) e
 // stopAllWorkersLocked stops all running workers in reverse registration order.
 // Caller must hold wm.mu.
 
-func (wm *WorkerManager) stopAllWorkers(ctx context.Context) error {
+func (wm *WorkerManager) stopAllWorkers() error {
 	var stopErr error
 
 	for i := len(wm.slots) - 1; i >= 0; i-- {
-		if err := wm.stopSlotLocked(ctx, wm.slots[i]); err != nil {
+		if err := wm.stopSlotLocked(wm.slots[i]); err != nil {
 			stopErr = errors.Join(stopErr, err)
 		}
 	}
@@ -379,8 +352,10 @@ func (wm *WorkerManager) stopAllWorkers(ctx context.Context) error {
 }
 
 func startWorkerWithTimeout(ctx context.Context, worker WorkerLifecycle) error {
-	startCtx, cancel := context.WithTimeout(ctx, workerStartTimeout)
-	defer cancel()
+	ctx = fallbackContext(ctx)
+
+	timer := time.NewTimer(workerStartTimeout)
+	defer timer.Stop()
 
 	errCh := make(chan error, 1)
 
@@ -391,18 +366,28 @@ func startWorkerWithTimeout(ctx context.Context, worker WorkerLifecycle) error {
 			}
 		}()
 
-		errCh <- worker.Start(startCtx)
+		errCh <- worker.Start(ctx)
 	})
 
 	select {
 	case err := <-errCh:
 		return err
-	case <-startCtx.Done():
-		if errors.Is(startCtx.Err(), context.DeadlineExceeded) {
-			return errWorkerStartTimedOut
+	case <-ctx.Done():
+		select {
+		case err := <-errCh:
+			return err
+		default:
 		}
 
-		return fmt.Errorf("worker start canceled: %w", startCtx.Err())
+		return fmt.Errorf("worker start canceled: %w", ctx.Err())
+	case <-timer.C:
+		select {
+		case err := <-errCh:
+			return err
+		default:
+		}
+
+		return errWorkerStartTimedOut
 	}
 }
 
@@ -463,14 +448,5 @@ func sameWorkerInstance(a, other WorkerLifecycle) bool {
 }
 
 func isNilWorkerLifecycle(worker WorkerLifecycle) bool {
-	if worker == nil {
-		return true
-	}
-
-	value := reflect.ValueOf(worker)
-	if value.Kind() != reflect.Pointer {
-		return false
-	}
-
-	return value.IsNil()
+	return isNilInterface(worker)
 }

@@ -37,6 +37,7 @@ func RegisterRoutes(
 	app *fiber.App,
 	cfg *Config,
 	configGetter func() *Config,
+	readiness *readinessState,
 	deps *HealthDependencies,
 	logger libLog.Logger,
 	authClient *authMiddleware.AuthClient,
@@ -63,8 +64,13 @@ func RegisterRoutes(
 		return nil, fmt.Errorf("register routes: %w", err)
 	}
 
+	var drainingGetter func() bool
+	if readiness != nil {
+		drainingGetter = readiness.isDraining
+	}
+
 	app.Get("/health", healthHandler)
-	app.Get("/ready", readinessHandler(cfg, configGetter, deps, logger))
+	app.Get("/ready", readinessHandler(cfg, configGetter, drainingGetter, deps, logger))
 
 	if cfg.Swagger.Enabled && !IsProductionEnvironment(cfg.App.EnvName) {
 		// Override the generated spec host when SWAGGER_HOST is set.

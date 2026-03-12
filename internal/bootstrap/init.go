@@ -576,6 +576,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 	}
 
 	infraConnectionManager = connectionManager
+	readiness := &readinessState{}
 
 	var connCloser connectionCloser
 	if connectionManager != nil {
@@ -588,6 +589,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		app,
 		cfg,
 		configManager.Get,
+		readiness,
 		healthDeps,
 		logger,
 		authClient,
@@ -662,7 +664,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 
 	configAPIHandler.SetAuditPublisher(configAuditPublisher)
 	configAPIHandler.SetAuditRepository(governancePostgres.NewRepository(infraProvider))
-	SetAuditCallback(configManager, configAuditPublisher, logger)
+	SetAuditCallback(configManager, configAuditPublisher, governancePostgres.NewRepository(infraProvider), logger)
 
 	if shouldEnableConfigAPIRoutes(cfg) {
 		if err := RegisterConfigAPIRoutes(routes.Protected, configAPIHandler); err != nil {
@@ -700,6 +702,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		workerManager:      workerMgr,
 		connectionManager:  connCloser,
 		cleanupFuncs:       cleanups,
+		readinessState:     readiness,
 	}, nil
 }
 
@@ -1466,10 +1469,6 @@ func applySQLPoolSettings(dbs []*sql.DB, maxLifetime, maxIdle time.Duration) {
 	}
 }
 
-func boolPointer(value bool) *bool {
-	return &value
-}
-
 type modulesResult struct {
 	outboxDispatcher *outboxServices.Dispatcher
 	exportWorker     *reportingWorker.ExportWorker
@@ -1576,11 +1575,11 @@ func initModulesAndMessaging(
 
 	storage, err := createObjectStorage(cfg, logger)
 	if err != nil {
-		if cfg.ExportWorker.Enabled {
+		if reportingStorageRequired(cfg) {
 			return nil, fmt.Errorf("create object storage: %w", err)
 		}
 
-		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("Object storage not available, export jobs disabled: %v", err))
+		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("Object storage not available, reporting background workers disabled: %v", err))
 	}
 
 	exportWorker, cleanupWorker, err := initReportingModule(
@@ -1890,8 +1889,7 @@ func createObjectStorage(
 	cfg *Config,
 	_ libLog.Logger,
 ) (reportingPorts.ObjectStorageClient, error) {
-	needsReportingStorage := cfg.ExportWorker.Enabled || cfg.CleanupWorker.Enabled
-	if !needsReportingStorage {
+	if !reportingStorageRequired(cfg) {
 		return nil, nil
 	}
 
@@ -1914,6 +1912,14 @@ func createObjectStorage(
 	}
 
 	return client, nil
+}
+
+func reportingStorageRequired(cfg *Config) bool {
+	if cfg == nil {
+		return false
+	}
+
+	return cfg.ExportWorker.Enabled || cfg.CleanupWorker.Enabled
 }
 
 func initConfigurationModule(
@@ -2236,18 +2242,18 @@ func initExportWorkers(
 		return nil, nil, fmt.Errorf("create export job handler: %w", err)
 	}
 
+	exportJobHandler.SetRuntimeEnabled(cfg.ExportWorker.Enabled)
+
 	if configGetter != nil {
 		exportJobHandler.SetRuntimeConfigGetter(func() reportingHTTP.ExportJobRuntimeConfig {
 			runtimeCfg := configGetter()
 			if runtimeCfg == nil {
 				return reportingHTTP.ExportJobRuntimeConfig{
-					Enabled:       boolPointer(cfg.ExportWorker.Enabled),
 					PresignExpiry: cfg.ExportPresignExpiry(),
 				}
 			}
 
 			return reportingHTTP.ExportJobRuntimeConfig{
-				Enabled:       boolPointer(runtimeCfg.ExportWorker.Enabled),
 				PresignExpiry: runtimeCfg.ExportPresignExpiry(),
 			}
 		})
@@ -2733,8 +2739,8 @@ func formatWorkerStatus(enabled bool, interval time.Duration) string {
 
 // initArchivalComponents initializes the archival worker and archive retrieval routes.
 // Archive routes are registered when archival storage is available (even if the worker is disabled),
-// allowing users to query existing archives. When dependencies are available, the
-// worker is constructed regardless of enabled state so WorkerManager can hot-enable it later.
+// allowing users to query existing archives. The archival worker itself remains
+// startup-controlled: enabled changes require a process restart.
 //
 // A dedicated *sql.DB connection pool is created for archival operations because:
 // 1. lib-commons postgres.Client.Resolver() returns dbresolver.DB (not *sql.DB)
@@ -2809,7 +2815,6 @@ func initArchivalComponents(
 		StoragePrefix:       cfg.Archival.StoragePrefix,
 		StorageClass:        cfg.Archival.StorageClass,
 		PartitionLookahead:  cfg.Archival.PartitionLookahead,
-		PresignExpiry:       cfg.ArchivalPresignExpiry(),
 	}
 
 	worker, workerErr := governanceWorker.NewArchivalWorker(

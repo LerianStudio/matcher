@@ -2631,7 +2631,7 @@ definitions:
       checks:
         allOf:
         - $ref: '#/definitions/internal_bootstrap.DependencyChecks'
-        description: Checks contains individual dependency status (only in non-production
+        description: Checks contains individual dependency status (only in development/test
           environments)
       status:
         description: Status is "ok" when all required dependencies are available,
@@ -3174,7 +3174,7 @@ paths:
         Checks if the service is ready to accept traffic by verifying all required dependencies.
         Used by Kubernetes readiness probes to control traffic routing.
         Returns 200 OK when all required dependencies are healthy, 503 Service Unavailable otherwise.
-        Dependency check details are only included in non-production environments.
+        Dependency check details are only included in development/test environments.
       operationId: getReady
       produces:
       - application/json
@@ -9109,6 +9109,7 @@ paths:
       description: |-
         Returns the current effective configuration values with secrets redacted.
         Includes metadata: version, last reload timestamp, and env var overrides.
+        Route is only registered when AUTH_ENABLED=true at startup.
       operationId: getSystemConfig
       parameters:
       - description: Request ID for tracing
@@ -9145,6 +9146,8 @@ paths:
       description: |-
         Apply runtime configuration changes. Changes are validated, written to
         YAML, and hot-reloaded. Immutable keys (infrastructure-bound) are rejected.
+        Route is only registered when AUTH_ENABLED=true at startup.
+        Requires an initialized audit/history backend; failures can return runtime_apply_failed or audit_failed.
       operationId: updateSystemConfig
       parameters:
       - description: Request ID for tracing
@@ -9191,8 +9194,10 @@ paths:
       - System
   /v1/system/config/history:
     get:
-      description: Returns recent configuration changes with timestamps, actors, and
-        diffs.
+      description: |-
+        Returns recent configuration changes with timestamps, actors, and diffs.
+        Route is only registered when AUTH_ENABLED=true at startup.
+        Requires an initialized audit/history backend.
       operationId: getSystemConfigHistory
       parameters:
       - description: Request ID for tracing
@@ -9229,6 +9234,8 @@ paths:
         Re-reads the YAML configuration file, applies environment variable overlays,
         validates the result, and atomically swaps the active config. Returns a diff
         of detected changes.
+        Route is only registered when AUTH_ENABLED=true at startup.
+        Requires an initialized audit/history backend; failures can return runtime_apply_failed or audit_failed.
       operationId: reloadSystemConfig
       parameters:
       - description: Request ID for tracing
@@ -9265,6 +9272,7 @@ paths:
         Returns field metadata for all YAML-managed configuration fields,
         grouped by section for UI rendering. Includes key, type, default,
         current value, hot-reloadability, env override status, and constraints.
+        Route is only registered when AUTH_ENABLED=true at startup.
       operationId: getSystemConfigSchema
       parameters:
       - description: Request ID for tracing

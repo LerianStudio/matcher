@@ -5,6 +5,7 @@ package worker
 import (
 	"context"
 	"database/sql"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -346,18 +347,50 @@ func TestSchedulerWorker_Done_ClosedAfterStop(t *testing.T) {
 func TestSchedulerWorker_StartStopStartStop_Success(t *testing.T) {
 	t.Parallel()
 
+	var dueCalls atomic.Int32
+
 	worker, err := NewSchedulerWorker(
-		&stubScheduleRepo{},
+		&stubScheduleRepo{
+			findDueSchedulesFn: func(context.Context, time.Time) ([]*entities.ReconciliationSchedule, error) {
+				dueCalls.Add(1)
+				return nil, nil
+			},
+		},
 		&stubMatchTrigger{},
 		&stubInfraProvider{},
-		SchedulerWorkerConfig{Interval: time.Hour},
+		SchedulerWorkerConfig{Interval: 100 * time.Millisecond},
 		&stubLogger{},
 	)
 	require.NoError(t, err)
 
 	require.NoError(t, worker.Start(context.Background()))
+	require.Eventually(t, func() bool {
+		return dueCalls.Load() >= 1
+	}, 300*time.Millisecond, 10*time.Millisecond)
 	require.NoError(t, worker.Stop())
+	before := dueCalls.Load()
 	require.NoError(t, worker.Start(context.Background()))
+	require.Eventually(t, func() bool {
+		return dueCalls.Load() > before
+	}, 300*time.Millisecond, 10*time.Millisecond)
+	require.NoError(t, worker.Stop())
+}
+
+func TestSchedulerWorker_UpdateRuntimeConfig_WhileRunning_ReturnsError(t *testing.T) {
+	t.Parallel()
+
+	worker, err := NewSchedulerWorker(
+		&stubScheduleRepo{},
+		&stubMatchTrigger{},
+		&stubInfraProvider{},
+		SchedulerWorkerConfig{Interval: 100 * time.Millisecond},
+		&stubLogger{},
+	)
+	require.NoError(t, err)
+	require.NoError(t, worker.Start(context.Background()))
+
+	err = worker.UpdateRuntimeConfig(SchedulerWorkerConfig{Interval: time.Second})
+	require.ErrorIs(t, err, ErrRuntimeConfigUpdateWhileRunning)
 	require.NoError(t, worker.Stop())
 }
 

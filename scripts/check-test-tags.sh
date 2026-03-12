@@ -21,18 +21,24 @@ valid_tag_pattern='^//go:build (unit|integration|chaos|e2e)($|[[:space:]].*)'
 
 for file in "${test_files[@]}"; do
   [ -z "$file" ] && continue
-  
-  first_line=$(head -1 "$file")
+
+  build_tag=$(awk '
+    /^package[[:space:]]+/ { exit }
+    /^\/\/go:build / { print; exit }
+    /^[[:space:]]*$/ { next }
+    /^\/\// { next }
+    { exit }
+  ' "$file")
   
   if [[ "$file" == ./tests/* ]]; then
-    if ! echo "$first_line" | grep -qE "$valid_tag_pattern"; then
+    if ! echo "$build_tag" | grep -qE "$valid_tag_pattern"; then
       missing+=("$file")
     fi
     continue
   fi
 
-  if echo "$first_line" | grep -qE "^//go:build" && \
-    ! echo "$first_line" | grep -qE "$valid_tag_pattern"; then
+  if echo "$build_tag" | grep -qE "^//go:build" && \
+    ! echo "$build_tag" | grep -qE "$valid_tag_pattern"; then
     missing+=("$file")
   fi
 done

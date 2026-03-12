@@ -56,9 +56,6 @@ const (
 
 	// defaultPartitionLookahead is the default number of future monthly partitions to create.
 	defaultPartitionLookahead = 3
-
-	// defaultPresignExpiry is the default presigned URL expiry for archived downloads (1 hour).
-	defaultPresignExpiry = 1 * time.Hour
 )
 
 // ArchivalWorker orchestrates the full partition lifecycle for audit log archival.
@@ -85,11 +82,17 @@ type ArchivalWorker struct {
 // NOTE: This does NOT affect a currently running worker's ticker. The WorkerManager
 // always performs a full stop→start cycle when config changes, ensuring the new
 // config is picked up when the worker's run() loop creates a fresh ticker.
-func (aw *ArchivalWorker) UpdateRuntimeConfig(cfg ArchivalWorkerConfig) {
+func (aw *ArchivalWorker) UpdateRuntimeConfig(cfg ArchivalWorkerConfig) error {
 	aw.mu.Lock()
 	defer aw.mu.Unlock()
 
+	if aw.running.Load() {
+		return ErrRuntimeConfigUpdateWhileRunning
+	}
+
 	aw.cfg = normalizeArchivalWorkerConfig(cfg)
+
+	return nil
 }
 
 // prepareRunState reinitialises the worker's stop/done channels and sync.Once for
@@ -122,10 +125,6 @@ func normalizeArchivalWorkerConfig(cfg ArchivalWorkerConfig) ArchivalWorkerConfi
 
 	if cfg.PartitionLookahead <= 0 {
 		cfg.PartitionLookahead = defaultPartitionLookahead
-	}
-
-	if cfg.PresignExpiry <= 0 {
-		cfg.PresignExpiry = defaultPresignExpiry
 	}
 
 	return cfg

@@ -120,10 +120,6 @@ archival:
   enabled: true
   hot_retention_days: 180
   batch_size: 10000
-fetcher:
-  enabled: true
-  request_timeout_sec: 45
-  schema_cache_ttl_sec: 600
 `
 	tmpDir := t.TempDir()
 	yamlPath := filepath.Join(tmpDir, "matcher.yaml")
@@ -148,10 +144,6 @@ fetcher:
 	assert.Equal(t, 180, cfg.Archival.HotRetentionDays)
 	assert.Equal(t, 10000, cfg.Archival.BatchSize)
 
-	// Fetcher nested fields
-	assert.True(t, cfg.Fetcher.Enabled)
-	assert.Equal(t, 45, cfg.Fetcher.RequestTimeoutSec)
-	assert.Equal(t, 600, cfg.Fetcher.SchemaCacheTTLSec)
 }
 
 func TestLoadConfigFromYAML_NilConfig(t *testing.T) {
@@ -331,9 +323,6 @@ func TestBindDefaults_AllKeysRegistered(t *testing.T) {
 		"archival.storage_class",
 		"webhook.timeout_sec",
 		"callback_rate_limit.per_minute",
-		"fetcher.enabled",
-		"fetcher.url",
-		"fetcher.extraction_timeout_sec",
 	}
 
 	for _, key := range expectedKeys {

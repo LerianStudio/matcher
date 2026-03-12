@@ -47,7 +47,7 @@ const docTemplate = `{
         },
         "/ready": {
             "get": {
-                "description": "Checks if the service is ready to accept traffic by verifying all required dependencies.\nUsed by Kubernetes readiness probes to control traffic routing.\nReturns 200 OK when all required dependencies are healthy, 503 Service Unavailable otherwise.\nDependency check details are only included in non-production environments.",
+                "description": "Checks if the service is ready to accept traffic by verifying all required dependencies.\nUsed by Kubernetes readiness probes to control traffic routing.\nReturns 200 OK when all required dependencies are healthy, 503 Service Unavailable otherwise.\nDependency check details are only included in development/test environments.",
                 "produces": [
                     "application/json"
                 ],
@@ -8836,7 +8836,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns the current effective configuration values with secrets redacted.\nIncludes metadata: version, last reload timestamp, and env var overrides.",
+                "description": "Returns the current effective configuration values with secrets redacted.\nIncludes metadata: version, last reload timestamp, and env var overrides.\nRoute is only registered when AUTH_ENABLED=true at startup.",
                 "produces": [
                     "application/json"
                 ],
@@ -8886,7 +8886,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Apply runtime configuration changes. Changes are validated, written to\nYAML, and hot-reloaded. Immutable keys (infrastructure-bound) are rejected.",
+                "description": "Apply runtime configuration changes. Changes are validated, written to\nYAML, and hot-reloaded. Immutable keys (infrastructure-bound) are rejected.\nRoute is only registered when AUTH_ENABLED=true at startup.\nRequires an initialized audit/history backend; failures can return runtime_apply_failed or audit_failed.",
                 "consumes": [
                     "application/json"
                 ],
@@ -8962,7 +8962,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns recent configuration changes with timestamps, actors, and diffs.",
+                "description": "Returns recent configuration changes with timestamps, actors, and diffs.\nRoute is only registered when AUTH_ENABLED=true at startup.\nRequires an initialized audit/history backend.",
                 "produces": [
                     "application/json"
                 ],
@@ -9014,7 +9014,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Re-reads the YAML configuration file, applies environment variable overlays,\nvalidates the result, and atomically swaps the active config. Returns a diff\nof detected changes.",
+                "description": "Re-reads the YAML configuration file, applies environment variable overlays,\nvalidates the result, and atomically swaps the active config. Returns a diff\nof detected changes.\nRoute is only registered when AUTH_ENABLED=true at startup.\nRequires an initialized audit/history backend; failures can return runtime_apply_failed or audit_failed.",
                 "produces": [
                     "application/json"
                 ],
@@ -9066,7 +9066,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns field metadata for all YAML-managed configuration fields,\ngrouped by section for UI rendering. Includes key, type, default,\ncurrent value, hot-reloadability, env override status, and constraints.",
+                "description": "Returns field metadata for all YAML-managed configuration fields,\ngrouped by section for UI rendering. Includes key, type, default,\ncurrent value, hot-reloadability, env override status, and constraints.\nRoute is only registered when AUTH_ENABLED=true at startup.",
                 "produces": [
                     "application/json"
                 ],
@@ -12548,7 +12548,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "checks": {
-                    "description": "Checks contains individual dependency status (only in non-production environments)",
+                    "description": "Checks contains individual dependency status (only in development/test environments)",
                     "allOf": [
                         {
                             "$ref": "#/definitions/internal_bootstrap.DependencyChecks"

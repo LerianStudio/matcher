@@ -105,6 +105,11 @@ func (handler *ConfigAPIHandler) SetAuditPublisher(publisher *ConfigAuditPublish
 // SetAuditRepository attaches an audit repository for config history reads.
 func (handler *ConfigAPIHandler) SetAuditRepository(repository sharedPorts.AuditLogRepository) {
 	if handler != nil {
+		if isNilInterface(repository) {
+			handler.auditRepository = nil
+			return
+		}
+
 		handler.auditRepository = repository
 	}
 }
@@ -160,6 +165,7 @@ func logConfigSpanError(ctx context.Context, span trace.Span, logger libLog.Logg
 // @Summary      Get current configuration
 // @Description  Returns the current effective configuration values with secrets redacted.
 // @Description  Includes metadata: version, last reload timestamp, and env var overrides.
+// @Description  Route is only registered when AUTH_ENABLED=true at startup.
 // @ID           getSystemConfig
 // @Tags         System
 // @Produce      json
@@ -203,6 +209,7 @@ func (handler *ConfigAPIHandler) GetConfig(fiberCtx *fiber.Ctx) error {
 // @Description  Returns field metadata for all YAML-managed configuration fields,
 // @Description  grouped by section for UI rendering. Includes key, type, default,
 // @Description  current value, hot-reloadability, env override status, and constraints.
+// @Description  Route is only registered when AUTH_ENABLED=true at startup.
 // @ID           getSystemConfigSchema
 // @Tags         System
 // @Produce      json
@@ -240,6 +247,8 @@ func (handler *ConfigAPIHandler) GetSchema(fiberCtx *fiber.Ctx) error {
 // @Summary      Update configuration
 // @Description  Apply runtime configuration changes. Changes are validated, written to
 // @Description  YAML, and hot-reloaded. Immutable keys (infrastructure-bound) are rejected.
+// @Description  Route is only registered when AUTH_ENABLED=true at startup.
+// @Description  Requires an initialized audit/history backend; failures can return runtime_apply_failed or audit_failed.
 // @ID           updateSystemConfig
 // @Tags         System
 // @Accept       json
@@ -257,6 +266,10 @@ func (handler *ConfigAPIHandler) GetSchema(fiberCtx *fiber.Ctx) error {
 func (handler *ConfigAPIHandler) UpdateConfig(fiberCtx *fiber.Ctx) error {
 	if handler == nil || handler.configManager == nil {
 		return sharedhttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "handler_unavailable", "configuration handler is not initialized")
+	}
+
+	if handler.auditRepository == nil {
+		return sharedhttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "audit_unavailable", "configuration audit backend is not initialized")
 	}
 
 	if handler.requireConfigAuth(fiberCtx) {
@@ -288,6 +301,13 @@ func (handler *ConfigAPIHandler) UpdateConfig(fiberCtx *fiber.Ctx) error {
 
 	if auditErr := handler.publishConfigUpdateAudit(ctx, result); auditErr != nil {
 		logConfigSpanError(ctx, span, logger, "failed to publish config update audit event", auditErr, handler.production)
+
+		return sharedhttp.RespondError(
+			fiberCtx,
+			fiber.StatusInternalServerError,
+			"audit_failed",
+			"configuration update was applied but audit persistence failed",
+		)
 	}
 
 	response := UpdateConfigResponse{
@@ -321,8 +341,12 @@ func (handler *ConfigAPIHandler) publishConfigUpdateAudit(
 	ctx context.Context,
 	result *UpdateResult,
 ) error {
-	if handler == nil || handler.auditPublisher == nil || result == nil || len(result.Applied) == 0 {
+	if handler == nil || result == nil || len(result.Applied) == 0 {
 		return nil
+	}
+
+	if handler.auditRepository == nil {
+		return ErrNilAuditRepoForConfigAudit
 	}
 
 	actor := auth.GetUserID(ctx)
@@ -333,7 +357,7 @@ func (handler *ConfigAPIHandler) publishConfigUpdateAudit(
 	changes := appliedToConfigChanges(result.Applied)
 	auditCtx := handler.systemTenantContext(ctx)
 
-	return handler.auditPublisher.PublishConfigChange(auditCtx, actor, "updated", changes)
+	return publishConfigChangeWithFallback(auditCtx, handler.auditPublisher, handler.auditRepository, actor, "updated", changes)
 }
 
 // ReloadConfig forces a configuration reload from disk.
@@ -341,6 +365,8 @@ func (handler *ConfigAPIHandler) publishConfigUpdateAudit(
 // @Description  Re-reads the YAML configuration file, applies environment variable overlays,
 // @Description  validates the result, and atomically swaps the active config. Returns a diff
 // @Description  of detected changes.
+// @Description  Route is only registered when AUTH_ENABLED=true at startup.
+// @Description  Requires an initialized audit/history backend; failures can return runtime_apply_failed or audit_failed.
 // @ID           reloadSystemConfig
 // @Tags         System
 // @Produce      json
@@ -354,6 +380,10 @@ func (handler *ConfigAPIHandler) publishConfigUpdateAudit(
 func (handler *ConfigAPIHandler) ReloadConfig(fiberCtx *fiber.Ctx) error {
 	if handler == nil || handler.configManager == nil {
 		return sharedhttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "handler_unavailable", "configuration handler is not initialized")
+	}
+
+	if handler.auditRepository == nil {
+		return sharedhttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "audit_unavailable", "configuration audit backend is not initialized")
 	}
 
 	if handler.requireConfigAuth(fiberCtx) {
@@ -375,7 +405,7 @@ func (handler *ConfigAPIHandler) ReloadConfig(fiberCtx *fiber.Ctx) error {
 	}
 
 	// Publish audit event for manual reload (best-effort).
-	if handler.auditPublisher != nil && result.ChangesDetected > 0 {
+	if result.ChangesDetected > 0 {
 		actor := auth.GetUserID(fiberCtx.UserContext())
 		if actor == "" {
 			actor = "manual_reload"
@@ -383,8 +413,15 @@ func (handler *ConfigAPIHandler) ReloadConfig(fiberCtx *fiber.Ctx) error {
 
 		auditCtx := handler.systemTenantContext(ctx)
 
-		if auditErr := handler.auditPublisher.PublishConfigChange(auditCtx, actor, "reloaded", result.Changes); auditErr != nil {
+		if auditErr := publishConfigChangeWithFallback(auditCtx, handler.auditPublisher, handler.auditRepository, actor, "reloaded", result.Changes); auditErr != nil {
 			logConfigSpanError(ctx, span, logger, "failed to publish config reload audit event", auditErr, handler.production)
+
+			return sharedhttp.RespondError(
+				fiberCtx,
+				fiber.StatusInternalServerError,
+				"audit_failed",
+				"configuration reload was applied but audit persistence failed",
+			)
 		}
 	}
 
@@ -407,6 +444,8 @@ func (handler *ConfigAPIHandler) ReloadConfig(fiberCtx *fiber.Ctx) error {
 // GetConfigHistory returns recent configuration change history.
 // @Summary      Get configuration change history
 // @Description  Returns recent configuration changes with timestamps, actors, and diffs.
+// @Description  Route is only registered when AUTH_ENABLED=true at startup.
+// @Description  Requires an initialized audit/history backend.
 // @ID           getSystemConfigHistory
 // @Tags         System
 // @Produce      json
@@ -422,6 +461,10 @@ func (handler *ConfigAPIHandler) GetConfigHistory(fiberCtx *fiber.Ctx) error {
 		return sharedhttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "handler_unavailable", "configuration handler is not initialized")
 	}
 
+	if handler.auditRepository == nil {
+		return sharedhttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "history_unavailable", "configuration history backend is not initialized")
+	}
+
 	if handler.requireConfigAuth(fiberCtx) {
 		return nil
 	}
@@ -429,31 +472,27 @@ func (handler *ConfigAPIHandler) GetConfigHistory(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startConfigSpan(fiberCtx, "handler.system.get_config_history")
 	defer span.End()
 
-	items := make([]ConfigHistoryEntry, 0)
+	historyCtx := handler.systemTenantContext(ctx)
 
-	if handler.auditRepository != nil {
-		historyCtx := handler.systemTenantContext(ctx)
+	logs, _, err := handler.auditRepository.ListByEntity(historyCtx, systemConfigEntityType, systemConfigEntityID, nil, configHistoryLimit)
+	if err != nil {
+		logConfigSpanError(ctx, span, logger, "failed to load config history", err, handler.production)
 
-		logs, _, err := handler.auditRepository.ListByEntity(historyCtx, systemConfigEntityType, systemConfigEntityID, nil, configHistoryLimit)
-		if err != nil {
-			logConfigSpanError(ctx, span, logger, "failed to load config history", err, handler.production)
+		return sharedhttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "history_load_failed", "failed to load configuration history")
+	}
 
-			return sharedhttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "history_load_failed", "failed to load configuration history")
+	items := make([]ConfigHistoryEntry, 0, len(logs))
+	for _, auditLog := range logs {
+		if auditLog == nil {
+			continue
 		}
 
-		items = make([]ConfigHistoryEntry, 0, len(logs))
-		for _, auditLog := range logs {
-			if auditLog == nil {
-				continue
-			}
-
-			items = append(items, ConfigHistoryEntry{
-				Timestamp:  auditLog.CreatedAt,
-				Actor:      auditActor(auditLog.ActorID),
-				ChangeType: auditLog.Action,
-				Changes:    extractAuditConfigChanges(auditLog.Changes),
-			})
-		}
+		items = append(items, ConfigHistoryEntry{
+			Timestamp:  auditLog.CreatedAt,
+			Actor:      auditActor(auditLog.ActorID),
+			ChangeType: auditLog.Action,
+			Changes:    extractAuditConfigChanges(auditLog.Changes),
+		})
 	}
 
 	response := ConfigHistoryResponse{

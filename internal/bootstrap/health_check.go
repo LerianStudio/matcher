@@ -7,6 +7,7 @@ package bootstrap
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -26,7 +27,7 @@ type HealthCheckFunc func(ctx context.Context) error
 type ReadinessResponse struct {
 	// Status is "ok" when all required dependencies are available, "degraded" otherwise
 	Status string `json:"status"           example:"ok" enums:"ok,degraded"`
-	// Checks contains individual dependency status (only in non-production environments)
+	// Checks contains individual dependency status (only in development/test environments)
 	Checks *DependencyChecks `json:"checks,omitempty"`
 }
 
@@ -118,18 +119,30 @@ func healthHandler(c *fiber.Ctx) error {
 //	@Description	Checks if the service is ready to accept traffic by verifying all required dependencies.
 //	@Description	Used by Kubernetes readiness probes to control traffic routing.
 //	@Description	Returns 200 OK when all required dependencies are healthy, 503 Service Unavailable otherwise.
-//	@Description	Dependency check details are only included in non-production environments.
+//	@Description	Dependency check details are only included in development/test environments.
 //	@Tags			Health
 //	@Produce		json
 //	@Success		200	{object}	ReadinessResponse	"Service is ready to accept traffic"
 //	@Failure		503	{object}	ReadinessResponse	"Service is not ready (degraded state)"
 //	@Router			/ready [get]
 //	@ID				getReady
-func readinessHandler(initialCfg *Config, configGetter func() *Config, deps *HealthDependencies, logger libLog.Logger) fiber.Handler {
+func readinessHandler(
+	initialCfg *Config,
+	configGetter func() *Config,
+	drainingGetter func() bool,
+	deps *HealthDependencies,
+	logger libLog.Logger,
+) fiber.Handler {
 	return func(fiberCtx *fiber.Ctx) error {
 		ctx := fiberCtx.UserContext()
 		if ctx == nil {
 			ctx = context.Background()
+		}
+
+		if drainingGetter != nil && drainingGetter() {
+			return sharedhttp.Respond(fiberCtx, fiber.StatusServiceUnavailable, ReadinessResponse{
+				Status: "degraded",
+			})
 		}
 
 		cfg := initialCfg
@@ -328,5 +341,10 @@ func shouldIncludeReadinessDetails(cfg *Config) bool {
 		return false
 	}
 
-	return !IsProductionEnvironment(cfg.App.EnvName)
+	switch strings.ToLower(strings.TrimSpace(cfg.App.EnvName)) {
+	case "development", "test":
+		return true
+	default:
+		return false
+	}
 }

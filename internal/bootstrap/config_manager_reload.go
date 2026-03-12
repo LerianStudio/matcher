@@ -20,6 +20,7 @@ func (cm *ConfigManager) reload(source string) (*ReloadResult, error) {
 	var (
 		notifyCfg *Config
 		callbacks []func(*Config) error
+		oldCfg    *Config
 	)
 
 	cm.mu.Lock()
@@ -30,6 +31,16 @@ func (cm *ConfigManager) reload(source string) (*ReloadResult, error) {
 			cm.mu.Unlock()
 		}
 	}()
+
+	oldCfg = cm.config.Load()
+	if oldCfg == nil {
+		return nil, fmt.Errorf("config reload: %w", errConfigNilAtomicLoad)
+	}
+
+	oldVersion := cm.version.Load()
+	oldReloadAt, _ := cm.lastReload.Load().(time.Time)
+	oldChanges, _ := cm.lastChanges.Load().([]ConfigChange)
+	oldSource, _ := cm.lastUpdateSource.Load().(string)
 
 	result, err := cm.reloadLocked(source)
 	if err != nil {
@@ -43,6 +54,15 @@ func (cm *ConfigManager) reload(source string) (*ReloadResult, error) {
 	locked = false
 
 	if notifyErr := cm.notifySubscribers(notifyCfg, callbacks); notifyErr != nil {
+		cm.mu.Lock()
+		cm.rollbackViperToConfigLocked(oldCfg, result.Changes)
+		cm.config.Store(oldCfg)
+		cm.version.Store(oldVersion)
+		cm.lastReload.Store(oldReloadAt)
+		cm.lastChanges.Store(oldChanges)
+		cm.lastUpdateSource.Store(oldSource)
+		cm.mu.Unlock()
+
 		return result, fmt.Errorf("config reload: %w", notifyErr)
 	}
 

@@ -56,7 +56,7 @@ func LoadConfigWithLogger(logger libLog.Logger) (*Config, error) {
 	}
 
 	// Store logger for runtime warnings (e.g., capping invalid config values)
-	if logger == nil {
+	if isNilInterface(logger) {
 		var logErr error
 
 		logger, logErr = libZap.New(libZap.Config{
@@ -218,7 +218,6 @@ func loadConfigFromEnv(cfg *Config) error {
 	loadErr = errors.Join(loadErr, libCommons.SetConfigFromEnvVars(&cfg.Webhook))
 	loadErr = errors.Join(loadErr, libCommons.SetConfigFromEnvVars(&cfg.CallbackRateLimit))
 	loadErr = errors.Join(loadErr, libCommons.SetConfigFromEnvVars(&cfg.CleanupWorker))
-	loadErr = errors.Join(loadErr, libCommons.SetConfigFromEnvVars(&cfg.Fetcher))
 
 	return loadErr
 }

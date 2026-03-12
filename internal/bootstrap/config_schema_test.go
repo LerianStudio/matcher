@@ -66,7 +66,7 @@ func TestBuildConfigSchema_AllSectionsRepresented(t *testing.T) {
 	expectedSections := []string{
 		"app", "server", "postgres", "redis", "rabbitmq", "auth",
 		"rate_limit", "export_worker", "cleanup_worker", "scheduler",
-		"webhook", "fetcher", "archival",
+		"webhook", "archival",
 	}
 
 	for _, expected := range expectedSections {

@@ -126,14 +126,19 @@ func TestShouldIncludeReadinessDetailsTable(t *testing.T) {
 			expected: true,
 		},
 		{
-			name:     "staging_returns_true",
+			name:     "staging_returns_false",
 			cfg:      &Config{App: AppConfig{EnvName: "staging"}},
+			expected: false,
+		},
+		{
+			name:     "test_returns_true",
+			cfg:      &Config{App: AppConfig{EnvName: "test"}},
 			expected: true,
 		},
 		{
-			name:     "empty_env_returns_true",
+			name:     "empty_env_returns_false",
 			cfg:      &Config{App: AppConfig{EnvName: ""}},
-			expected: true,
+			expected: false,
 		},
 	}
 
@@ -153,7 +158,7 @@ func TestReadinessHandler_UsesRuntimeConfigGetter(t *testing.T) {
 	runtimeCfg := &Config{App: AppConfig{EnvName: "production"}}
 
 	app := fiber.New()
-	app.Get("/ready", readinessHandler(initialCfg, func() *Config { return runtimeCfg }, nil, nil))
+	app.Get("/ready", readinessHandler(initialCfg, func() *Config { return runtimeCfg }, nil, nil, nil))
 
 	req := httptest.NewRequest(http.MethodGet, "/ready", http.NoBody)
 	resp, err := app.Test(req)
@@ -181,7 +186,7 @@ func TestReadinessHandler_UsesRuntimeTimeoutFromConfigGetter(t *testing.T) {
 	}
 
 	app := fiber.New()
-	app.Get("/ready", readinessHandler(initialCfg, func() *Config { return runtimeCfg }, deps, nil))
+	app.Get("/ready", readinessHandler(initialCfg, func() *Config { return runtimeCfg }, nil, deps, nil))
 
 	started := time.Now()
 	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/ready", http.NoBody), 2000)
@@ -198,4 +203,27 @@ func TestReadinessHandler_UsesRuntimeTimeoutFromConfigGetter(t *testing.T) {
 	assert.Equal(t, "degraded", response.Status)
 	require.NotNil(t, response.Checks)
 	assert.Equal(t, "down", response.Checks.Database)
+}
+
+func TestReadinessHandler_WhenDraining_ReturnsServiceUnavailable(t *testing.T) {
+	t.Parallel()
+
+	state := &readinessState{}
+	state.beginDraining()
+
+	app := fiber.New()
+	app.Get("/ready", readinessHandler(&Config{App: AppConfig{EnvName: "development"}}, nil, state.isDraining, nil, nil))
+
+	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/ready", http.NoBody))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	var response ReadinessResponse
+	require.NoError(t, json.Unmarshal(body, &response))
+	assert.Equal(t, "degraded", response.Status)
+	assert.Nil(t, response.Checks)
 }

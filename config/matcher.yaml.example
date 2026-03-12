@@ -19,7 +19,7 @@
 # Application
 # --------------------------------------------------------------------------
 app:
-  # Log level: debug, info, warn, error, fatal [hot-reloadable]
+  # Log level: debug, info, warn, error, fatal [restart-required]
   log_level: "info"
 
 # --------------------------------------------------------------------------
@@ -52,8 +52,7 @@ postgres:
   conn_max_idle_time_mins: 5
   # Connection establishment timeout in seconds [restart-required]
   connect_timeout_sec: 10
-  # Query execution timeout in seconds [hot-reloadable]
-  # Affects new queries only, not in-flight ones
+  # Query execution timeout in seconds [restart-required]
   query_timeout_sec: 30
 
 # --------------------------------------------------------------------------
@@ -104,7 +103,7 @@ telemetry:
   # Deployment environment: development, staging, production [restart-required]
   deployment_env: "development"
 
-  # Database connection pool metrics collection interval in seconds [hot-reloadable]
+  # Database connection pool metrics collection interval in seconds [restart-required]
   # Lower values = more granular monitoring but increased overhead
   db_metrics_interval_sec: 15
 
@@ -131,7 +130,7 @@ rate_limit:
 # Infrastructure Health [restart-required]
 # --------------------------------------------------------------------------
 infrastructure:
-  # Per-dependency readiness timeout in seconds [restart-required]
+  # Per-dependency readiness timeout in seconds [hot-reloadable]
   health_check_timeout_sec: 5
 
 # --------------------------------------------------------------------------
@@ -152,10 +151,10 @@ idempotency:
   success_ttl_hours: 168  # 7 days
 
 # --------------------------------------------------------------------------
-# Deduplication [hot-reloadable]
+# Deduplication [restart-required]
 # --------------------------------------------------------------------------
 deduplication:
-  # TTL for deduplication keys in Redis [hot-reloadable]
+  # TTL for deduplication keys in Redis [restart-required]
   ttl_sec: 3600  # 1 hour
 
 # --------------------------------------------------------------------------
@@ -167,10 +166,10 @@ webhook:
   timeout_sec: 30
 
 # --------------------------------------------------------------------------
-# Export Worker (PDF/CSV generation) [hot-reloadable]
+# Export Worker (PDF/CSV generation) [mixed]
 # --------------------------------------------------------------------------
 export_worker:
-  # Enable the export worker [hot-reloadable]
+  # Enable the export worker [restart-required]
   enabled: true
   # Poll interval for pending export jobs in seconds [hot-reloadable]
   poll_interval_sec: 5
@@ -181,10 +180,10 @@ export_worker:
   presign_expiry_sec: 3600  # 1 hour
 
 # --------------------------------------------------------------------------
-# Cleanup Worker (expired file removal) [hot-reloadable]
+# Cleanup Worker (expired file removal) [mixed]
 # --------------------------------------------------------------------------
 cleanup_worker:
-  # Enable the cleanup worker [hot-reloadable]
+  # Enable the cleanup worker [restart-required]
   enabled: true
   # Run interval in seconds [hot-reloadable]
   interval_sec: 3600  # 1 hour
@@ -205,7 +204,7 @@ scheduler:
 # Archival Worker (audit log archival) [mixed]
 # --------------------------------------------------------------------------
 archival:
-  # Enable the archival worker [hot-reloadable]
+  # Enable the archival worker [restart-required]
   enabled: false
   # Run interval in hours [hot-reloadable]
   interval_hours: 24
@@ -226,26 +225,3 @@ archival:
   # Presigned download URL expiry for archived files in seconds [hot-reloadable]
   # Capped at 604800 (7 days, S3 maximum) at runtime
   presign_expiry_sec: 3600  # 1 hour
-
-# --------------------------------------------------------------------------
-# Fetcher Integration [restart-required]
-# --------------------------------------------------------------------------
-fetcher:
-  # Enable Fetcher service integration [restart-required]
-  enabled: false
-  # Base URL for the Fetcher service [restart-required]
-  url: "http://localhost:4006"
-  # Allow Fetcher to connect to private IPs [restart-required]
-  allow_private_ips: false
-  # Health check timeout in seconds [restart-required]
-  health_timeout_sec: 5
-  # HTTP request timeout in seconds [restart-required]
-  request_timeout_sec: 30
-  # Service discovery poll interval in seconds [restart-required]
-  discovery_interval_sec: 60
-  # Schema cache TTL in seconds [restart-required]
-  schema_cache_ttl_sec: 300  # 5 minutes
-  # Extraction job poll interval in seconds [restart-required]
-  extraction_poll_sec: 5
-  # Extraction job timeout in seconds [restart-required]
-  extraction_timeout_sec: 600  # 10 minutes

@@ -8,14 +8,67 @@ package bootstrap
 
 import (
 	"io"
+	"net/http"
 	"net/http/httptest"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type testRateLimitStorage struct {
+	mu   sync.Mutex
+	data map[string][]byte
+}
+
+func (s *testRateLimitStorage) Get(key string) ([]byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.data == nil {
+		return nil, nil
+	}
+	value := s.data[key]
+	if value == nil {
+		return nil, nil
+	}
+	copyValue := append([]byte(nil), value...)
+	return copyValue, nil
+}
+
+func (s *testRateLimitStorage) Set(key string, val []byte, _ time.Duration) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.data == nil {
+		s.data = make(map[string][]byte)
+	}
+	s.data[key] = append([]byte(nil), val...)
+	return nil
+}
+
+func (s *testRateLimitStorage) Delete(key string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.data, key)
+	return nil
+}
+
+func (s *testRateLimitStorage) Reset() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.data = make(map[string][]byte)
+	return nil
+}
+
+func (s *testRateLimitStorage) Close() error { return nil }
+
+func requestWithRemoteAddr(path, remoteAddr string) *http.Request {
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req.RemoteAddr = remoteAddr
+	return req
+}
 
 func TestNewDynamicRateLimiter_NilConfigGetter_ReturnsPassthrough(t *testing.T) {
 	t.Parallel()
@@ -208,4 +261,72 @@ func TestDynamicRateLimiter_ConcurrentRebuild(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	assert.Equal(t, "900", resp.Header.Get("X-RateLimit-Limit"))
+}
+
+func TestNewDynamicRateLimiter_DisableAndReenableWithDistributedStorage(t *testing.T) {
+	t.Parallel()
+
+	storage := &testRateLimitStorage{}
+	cfg := defaultConfig()
+	cfg.RateLimit.Enabled = true
+	cfg.RateLimit.Max = 1
+	cfg.RateLimit.ExpirySec = 60
+
+	handler := NewDynamicRateLimiter(func() *Config { return cfg }, storage)
+	app := fiber.New()
+	app.Get("/test", handler, func(c *fiber.Ctx) error { return c.SendString("ok") })
+
+	resp, err := app.Test(requestWithRemoteAddr("/test", "10.0.0.1:1234"))
+	require.NoError(t, err)
+	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+	require.NoError(t, storage.Reset())
+
+	cfg.RateLimit.Enabled = false
+	resp, err = app.Test(requestWithRemoteAddr("/test", "10.0.0.1:1234"))
+	require.NoError(t, err)
+	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+
+	cfg.RateLimit.Enabled = true
+	resp, err = app.Test(requestWithRemoteAddr("/test", "10.0.0.2:1234"))
+	require.NoError(t, err)
+	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+
+	resp, err = app.Test(requestWithRemoteAddr("/test", "10.0.0.2:1234"))
+	require.NoError(t, err)
+	assert.Equal(t, fiber.StatusTooManyRequests, resp.StatusCode)
+}
+
+func TestNewDynamicRateLimiter_ExpiryChangeRebuildsDistributedLimiter(t *testing.T) {
+	t.Parallel()
+
+	storage := &testRateLimitStorage{}
+	cfg := defaultConfig()
+	cfg.RateLimit.Enabled = true
+	cfg.RateLimit.Max = 1
+	cfg.RateLimit.ExpirySec = 1
+
+	handler := NewDynamicRateLimiter(func() *Config { return cfg }, storage)
+	app := fiber.New()
+	app.Get("/test", handler, func(c *fiber.Ctx) error { return c.SendString("ok") })
+
+	resp, err := app.Test(requestWithRemoteAddr("/test", "10.0.0.3:1234"))
+	require.NoError(t, err)
+	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+
+	resp, err = app.Test(requestWithRemoteAddr("/test", "10.0.0.3:1234"))
+	require.NoError(t, err)
+	assert.Equal(t, fiber.StatusTooManyRequests, resp.StatusCode)
+	assert.Equal(t, "1", resp.Header.Get("Retry-After"))
+
+	require.NoError(t, storage.Reset())
+	cfg.RateLimit.ExpirySec = 5
+
+	resp, err = app.Test(requestWithRemoteAddr("/test", "10.0.0.4:1234"))
+	require.NoError(t, err)
+	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+
+	resp, err = app.Test(requestWithRemoteAddr("/test", "10.0.0.4:1234"))
+	require.NoError(t, err)
+	assert.Equal(t, fiber.StatusTooManyRequests, resp.StatusCode)
+	assert.Equal(t, "5", resp.Header.Get("Retry-After"))
 }

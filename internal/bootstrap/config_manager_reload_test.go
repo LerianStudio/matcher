@@ -16,6 +16,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func configChangeKeys(changes []ConfigChange) map[string]bool {
+	keys := make(map[string]bool, len(changes))
+	for _, change := range changes {
+		keys[change.Key] = true
+	}
+
+	return keys
+}
+
 func TestReloadLocked_StoppedManager_ReturnsError(t *testing.T) {
 	t.Parallel()
 
@@ -157,12 +166,13 @@ archival:
 	require.NotNil(t, result)
 
 	got := cm.Get()
+	changeKeys := configChangeKeys(result.Changes)
 	assert.False(t, got.ExportWorker.Enabled)
 	assert.False(t, got.CleanupWorker.Enabled)
 	assert.False(t, got.Archival.Enabled)
-	assert.NotContains(t, result.Changes, "export_worker.enabled")
-	assert.NotContains(t, result.Changes, "cleanup_worker.enabled")
-	assert.NotContains(t, result.Changes, "archival.enabled")
+	assert.False(t, changeKeys["export_worker.enabled"])
+	assert.False(t, changeKeys["cleanup_worker.enabled"])
+	assert.False(t, changeKeys["archival.enabled"])
 }
 
 func TestReloadLocked_PreservesStartupBoundAuthAndTenantDefaults(t *testing.T) {
@@ -209,16 +219,17 @@ tenancy:
 	require.NotNil(t, result)
 
 	got := cm.Get()
+	changeKeys := configChangeKeys(result.Changes)
 	assert.True(t, got.Auth.Enabled)
 	assert.Equal(t, "http://auth-startup:8080", got.Auth.Host)
 	assert.Equal(t, "startup-secret", got.Auth.TokenSecret)
 	assert.Equal(t, "11111111-1111-1111-1111-111111111111", got.Tenancy.DefaultTenantID)
 	assert.Equal(t, "startup", got.Tenancy.DefaultTenantSlug)
-	assert.NotContains(t, result.Changes, "auth.enabled")
-	assert.NotContains(t, result.Changes, "auth.service_address")
-	assert.NotContains(t, result.Changes, "auth.token_secret")
-	assert.NotContains(t, result.Changes, "tenancy.default_tenant_id")
-	assert.NotContains(t, result.Changes, "tenancy.default_tenant_slug")
+	assert.False(t, changeKeys["auth.enabled"])
+	assert.False(t, changeKeys["auth.service_address"])
+	assert.False(t, changeKeys["auth.token_secret"])
+	assert.False(t, changeKeys["tenancy.default_tenant_id"])
+	assert.False(t, changeKeys["tenancy.default_tenant_slug"])
 }
 
 func TestReloadLocked_PreservesStartupBoundObjectStorageSettings(t *testing.T) {
@@ -277,6 +288,7 @@ archival:
 	require.NotNil(t, result)
 
 	got := cm.Get()
+	changeKeys := configChangeKeys(result.Changes)
 	assert.Equal(t, "http://object-storage-startup:8333", got.ObjectStorage.Endpoint)
 	assert.Equal(t, "us-east-1", got.ObjectStorage.Region)
 	assert.Equal(t, "startup-bucket", got.ObjectStorage.Bucket)
@@ -286,11 +298,11 @@ archival:
 	assert.Equal(t, "archival-startup", got.Archival.StorageBucket)
 	assert.Equal(t, "archives/startup", got.Archival.StoragePrefix)
 	assert.Equal(t, "GLACIER", got.Archival.StorageClass)
-	assert.NotContains(t, result.Changes, "object_storage.endpoint")
-	assert.NotContains(t, result.Changes, "object_storage.bucket")
-	assert.NotContains(t, result.Changes, "archival.storage_bucket")
-	assert.NotContains(t, result.Changes, "archival.storage_prefix")
-	assert.NotContains(t, result.Changes, "archival.storage_class")
+	assert.False(t, changeKeys["object_storage.endpoint"])
+	assert.False(t, changeKeys["object_storage.bucket"])
+	assert.False(t, changeKeys["archival.storage_bucket"])
+	assert.False(t, changeKeys["archival.storage_prefix"])
+	assert.False(t, changeKeys["archival.storage_class"])
 }
 
 func TestReloadLocked_PreservesStartupBoundDedupeTTL(t *testing.T) {
@@ -317,6 +329,7 @@ func TestReloadLocked_PreservesStartupBoundDedupeTTL(t *testing.T) {
 	require.NotNil(t, result)
 
 	got := cm.Get()
+	changeKeys := configChangeKeys(result.Changes)
 	assert.Equal(t, 3600, got.Dedupe.TTLSec)
-	assert.NotContains(t, result.Changes, "deduplication.ttl_sec")
+	assert.False(t, changeKeys["deduplication.ttl_sec"])
 }

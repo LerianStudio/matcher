@@ -229,14 +229,14 @@ func setupCreateExportJobHandlers(
 func TestExportJobHandlers_CurrentRuntimeConfig_PreservesDefaultEnabledOnPartialOverride(t *testing.T) {
 	t.Parallel()
 
-	handlers := &ExportJobHandlers{presignExpiry: time.Hour}
+	handlers := &ExportJobHandlers{enabled: false, presignExpiry: time.Hour}
 	handlers.SetRuntimeConfigGetter(func() ExportJobRuntimeConfig {
 		return ExportJobRuntimeConfig{PresignExpiry: 2 * time.Hour}
 	})
 
 	runtimeCfg := handlers.currentRuntimeConfig()
 	require.NotNil(t, runtimeCfg.Enabled)
-	assert.True(t, *runtimeCfg.Enabled)
+	assert.False(t, *runtimeCfg.Enabled)
 	assert.Equal(t, 2*time.Hour, runtimeCfg.PresignExpiry)
 }
 
@@ -305,10 +305,7 @@ func TestExportJobHandlers_CreateExportJob(t *testing.T) {
 		repo := newExportJobRepoMock(t)
 
 		handlers := setupCreateExportJobHandlers(t, contextID, repo)
-		handlers.SetRuntimeConfigGetter(func() ExportJobRuntimeConfig {
-			disabled := false
-			return ExportJobRuntimeConfig{Enabled: &disabled, PresignExpiry: time.Hour}
-		})
+		handlers.SetRuntimeEnabled(false)
 		app := setupExportJobTestAppWithContext(handlers.CreateExportJob, "create", contextID)
 
 		reqBody := CreateExportJobRequest{
@@ -331,10 +328,7 @@ func TestExportJobHandlers_CreateExportJob(t *testing.T) {
 		repo := newExportJobRepoMock(t)
 
 		handlers := setupCreateExportJobHandlers(t, contextID, repo)
-		handlers.SetRuntimeConfigGetter(func() ExportJobRuntimeConfig {
-			disabled := false
-			return ExportJobRuntimeConfig{Enabled: &disabled, PresignExpiry: time.Hour}
-		})
+		handlers.SetRuntimeEnabled(false)
 
 		app := fiber.New()
 		app.Use(func(c *fiber.Ctx) error {

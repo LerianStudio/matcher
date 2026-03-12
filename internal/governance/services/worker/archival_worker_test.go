@@ -90,7 +90,6 @@ func setupTestDeps(t *testing.T) *testDeps {
 		StoragePrefix:       "archives/audit-logs",
 		StorageClass:        "GLACIER",
 		PartitionLookahead:  3,
-		PresignExpiry:       1 * time.Hour,
 	}
 
 	return &testDeps{
@@ -291,6 +290,31 @@ func TestArchivalWorker_StartStopStartStop_Success(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return deps.sqlMock.ExpectationsWereMet() == nil
 	}, 2*time.Second, 10*time.Millisecond)
+	require.NoError(t, w.Stop())
+}
+
+func TestArchivalWorker_UpdateRuntimeConfig_WhileRunning_ReturnsError(t *testing.T) {
+	t.Parallel()
+
+	deps := setupTestDeps(t)
+	defer deps.ctrl.Finish()
+
+	deps.archiveRepo.EXPECT().ListIncomplete(gomock.Any()).Return(nil, nil).AnyTimes()
+
+	w, err := NewArchivalWorker(
+		deps.archiveRepo,
+		deps.partitionMgr,
+		deps.storage,
+		deps.db,
+		deps.provider,
+		deps.cfg,
+		deps.logger,
+	)
+	require.NoError(t, err)
+	require.NoError(t, w.Start(context.Background()))
+
+	err = w.UpdateRuntimeConfig(ArchivalWorkerConfig{Interval: time.Hour})
+	require.ErrorIs(t, err, ErrRuntimeConfigUpdateWhileRunning)
 	require.NoError(t, w.Stop())
 }
 

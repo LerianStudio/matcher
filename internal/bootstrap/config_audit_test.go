@@ -263,13 +263,13 @@ func TestSetAuditCallback_NilArgs(t *testing.T) {
 	t.Parallel()
 
 	// Should not panic with nil arguments.
-	SetAuditCallback(nil, nil, nil)
-	SetAuditCallback(nil, &ConfigAuditPublisher{}, nil)
+	SetAuditCallback(nil, nil, nil, nil)
+	SetAuditCallback(nil, &ConfigAuditPublisher{}, nil, nil)
 
 	cm, err := NewConfigManager(defaultConfig(), "", &libLog.NopLogger{})
 	require.NoError(t, err)
 
-	SetAuditCallback(cm, nil, nil)
+	SetAuditCallback(cm, nil, nil, nil)
 }
 
 func TestSetAuditCallback_SubscriberRegistered(t *testing.T) {
@@ -288,7 +288,7 @@ func TestSetAuditCallback_SubscriberRegistered(t *testing.T) {
 	beforeCount := len(cm.subscribers)
 	cm.mu.Unlock()
 
-	SetAuditCallback(cm, pub, &libLog.NopLogger{})
+	SetAuditCallback(cm, pub, nil, &libLog.NopLogger{})
 
 	cm.mu.Lock()
 	afterCount := len(cm.subscribers)
@@ -335,7 +335,7 @@ func TestSetAuditCallback_SkipsAPISourceUpdates(t *testing.T) {
 	pub, err := NewConfigAuditPublisher(repo, &libLog.NopLogger{})
 	require.NoError(t, err)
 
-	SetAuditCallback(cm, pub, &libLog.NopLogger{})
+	SetAuditCallback(cm, pub, nil, &libLog.NopLogger{})
 
 	_, err = cm.Update(map[string]any{"rate_limit.max": 111})
 	require.NoError(t, err)
@@ -386,7 +386,7 @@ rate_limit:
 	pub, err := NewConfigAuditPublisher(repo, &libLog.NopLogger{})
 	require.NoError(t, err)
 
-	SetAuditCallback(cm, pub, &libLog.NopLogger{})
+	SetAuditCallback(cm, pub, nil, &libLog.NopLogger{})
 
 	// First reload has no effective changes (YAML matches active config), so no event.
 	_, err = cm.Reload()
@@ -472,7 +472,7 @@ rate_limit:
 	pub, err := NewConfigAuditPublisher(repo, &libLog.NopLogger{})
 	require.NoError(t, err)
 
-	SetAuditCallback(cm, pub, &libLog.NopLogger{})
+	SetAuditCallback(cm, pub, nil, &libLog.NopLogger{})
 
 	changedTenantID := uuid.NewString()
 	require.NoError(t, os.WriteFile(yamlPath, []byte(fmt.Sprintf(`
@@ -526,7 +526,7 @@ tenancy:
 	pub, err := NewConfigAuditPublisher(repo, &libLog.NopLogger{})
 	require.NoError(t, err)
 
-	SetAuditCallback(cm, pub, &libLog.NopLogger{})
+	SetAuditCallback(cm, pub, nil, &libLog.NopLogger{})
 
 	require.NoError(t, os.WriteFile(yamlPath, []byte(`
 app:

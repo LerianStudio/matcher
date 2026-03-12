@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync/atomic"
 	"time"
 
 	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
@@ -36,6 +37,27 @@ type Service struct {
 	workerManager      *WorkerManager
 	connectionManager  connectionCloser
 	cleanupFuncs       []func()
+	readinessState     *readinessState
+}
+
+type readinessState struct {
+	draining atomic.Bool
+}
+
+func (state *readinessState) beginDraining() {
+	if state == nil {
+		return
+	}
+
+	state.draining.Store(true)
+}
+
+func (state *readinessState) isDraining() bool {
+	if state == nil {
+		return false
+	}
+
+	return state.draining.Load()
 }
 
 type connectionCloser interface {
@@ -133,10 +155,14 @@ func (svc *Service) Shutdown(ctx context.Context) error {
 		return nil
 	}
 
+	ctx = fallbackContext(ctx)
+
 	logger := svc.Logger
 	if logger == nil {
 		logger = &libLog.NopLogger{}
 	}
+
+	svc.readinessState.beginDraining()
 
 	svc.stopBackgroundWorkers(ctx, logger)
 
@@ -195,7 +221,7 @@ func (svc *Service) stopWorkerManager(ctx context.Context, logger libLog.Logger)
 		return false
 	}
 
-	if err := svc.workerManager.Stop(); err != nil { //nolint:contextcheck // Stop() is defined without ctx in worker package
+	if err := svc.workerManager.Stop(); err != nil {
 		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("failed to stop worker manager: %v", err))
 	}
 

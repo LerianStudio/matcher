@@ -78,8 +78,8 @@ func TestClassifyApplicableChanges_MixedKeys(t *testing.T) {
 
 	changes := map[string]any{
 		"rate_limit.max":        200,
+		"rate_limit.expiry_sec": 30,
 		"postgres.primary_host": "evil-host",
-		"app.log_level":         "debug",
 	}
 	result := &UpdateResult{}
 
@@ -87,7 +87,7 @@ func TestClassifyApplicableChanges_MixedKeys(t *testing.T) {
 
 	assert.Len(t, applicable, 2)
 	assert.Contains(t, applicable, "rate_limit.max")
-	assert.Contains(t, applicable, "app.log_level")
+	assert.Contains(t, applicable, "rate_limit.expiry_sec")
 	require.Len(t, result.Rejected, 1)
 }
 

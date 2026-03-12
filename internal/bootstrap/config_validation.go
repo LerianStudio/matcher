@@ -47,12 +47,6 @@ func (cfg *Config) Validate() error {
 		return err
 	}
 
-	if cfg.Fetcher.Enabled {
-		if err := cfg.validateFetcherConfig(asserter); err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
 
@@ -88,6 +82,10 @@ func (cfg *Config) validateServerConfig(asserter *assert.Asserter) error {
 		return fmt.Errorf("config validation: %w", err)
 	}
 
+	if err := validateTrustedProxies(ctx, asserter, cfg.Server.TrustedProxies); err != nil {
+		return err
+	}
+
 	if err := asserter.That(ctx, cfg.Infrastructure.ConnectTimeoutSec > 0, "InfraConnectTimeoutSec must be positive", "infra_connect_timeout_sec", cfg.Infrastructure.ConnectTimeoutSec); err != nil {
 		return fmt.Errorf("config validation: %w", err)
 	}
@@ -114,6 +112,26 @@ func (cfg *Config) validateServerConfig(asserter *assert.Asserter) error {
 		_, validOtelEnv := validOtelEnvs[otelEnv]
 
 		if err := asserter.That(ctx, validOtelEnv, "OTEL_RESOURCE_DEPLOYMENT_ENVIRONMENT must be one of: development, staging, production", "otel_env", cfg.Telemetry.DeploymentEnv); err != nil {
+			return fmt.Errorf("config validation: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func validateTrustedProxies(ctx context.Context, asserter *assert.Asserter, trustedProxies string) error {
+	for _, candidate := range strings.Split(trustedProxies, ",") {
+		proxy := strings.TrimSpace(candidate)
+		if proxy == "" {
+			continue
+		}
+
+		if err := asserter.That(
+			ctx,
+			proxy != "*" && proxy != "0.0.0.0/0" && proxy != "::/0",
+			"TRUSTED_PROXIES must not trust all addresses",
+			"trusted_proxy", proxy,
+		); err != nil {
 			return fmt.Errorf("config validation: %w", err)
 		}
 	}
@@ -318,22 +336,6 @@ func (cfg *Config) validateArchivalConfig(asserter *assert.Asserter) error {
 	}
 
 	if err := asserter.That(ctx, cfg.Archival.ColdRetentionMonths >= cfg.Archival.WarmRetentionMonths, "ARCHIVAL_COLD_RETENTION_MONTHS must be >= ARCHIVAL_WARM_RETENTION_MONTHS", "cold_months", cfg.Archival.ColdRetentionMonths, "warm_months", cfg.Archival.WarmRetentionMonths); err != nil {
-		return fmt.Errorf("config validation: %w", err)
-	}
-
-	return nil
-}
-
-// validateFetcherConfig validates fetcher-related configuration.
-// Validation is skipped when the fetcher is disabled.
-func (cfg *Config) validateFetcherConfig(asserter *assert.Asserter) error {
-	if !cfg.Fetcher.Enabled {
-		return nil
-	}
-
-	ctx := context.Background()
-
-	if err := asserter.NotEmpty(ctx, strings.TrimSpace(cfg.Fetcher.URL), "FETCHER_URL is required when FETCHER_ENABLED=true"); err != nil {
 		return fmt.Errorf("config validation: %w", err)
 	}
 
