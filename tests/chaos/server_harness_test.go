@@ -1,4 +1,4 @@
-//go:build chaos
+//go:build unit
 
 package chaos
 
@@ -6,6 +6,7 @@ import (
 	"encoding/csv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -41,24 +42,24 @@ func TestBuildCSVContent_MultipleRows(t *testing.T) {
 	assert.Equal(t, []string{"CHAOS-00002", "2025-01-15", "300.00", "USD"}, records[3])
 }
 
-func TestChaosServer_DispatchOutbox_NilDispatcher(t *testing.T) {
+func TestDispatchOutboxUntilEmpty_StopsAtZero(t *testing.T) {
 	t.Parallel()
 
-	cs := &ChaosServer{
-		Dispatcher: nil,
-	}
+	sequence := []int{3, 2, 0, 99}
+	index := 0
+	total := dispatchOutboxUntilEmpty(5, func(time.Duration) {}, func() int {
+		value := sequence[index]
+		index++
+		return value
+	})
 
-	result := cs.DispatchOutbox(t)
-	assert.Equal(t, 0, result)
+	assert.Equal(t, 5, total)
+	assert.Equal(t, 3, index)
 }
 
-func TestChaosServer_DispatchOutboxUntilEmpty_NilDispatcher(t *testing.T) {
+func TestDispatchOutboxUntilEmpty_NilEquivalentDispatcher(t *testing.T) {
 	t.Parallel()
 
-	cs := &ChaosServer{
-		Dispatcher: nil,
-	}
-
-	total := cs.DispatchOutboxUntilEmpty(t, 5)
+	total := dispatchOutboxUntilEmpty(5, nil, func() int { return 0 })
 	assert.Equal(t, 0, total)
 }

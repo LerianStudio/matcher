@@ -95,6 +95,19 @@ func TestContainerHostWithRetry_NilContainer(t *testing.T) {
 	assert.Contains(t, err.Error(), "container is nil")
 }
 
+func TestContainerHostWithRetry_TypedNilContainer(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var typedNil *fakeRabbitMQStartupContainer
+
+	_, err := containerHostWithRetry(ctx, typedNil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "container is nil")
+}
+
 func TestMappedPortWithRetry_NilContainer(t *testing.T) {
 	t.Parallel()
 
@@ -106,11 +119,33 @@ func TestMappedPortWithRetry_NilContainer(t *testing.T) {
 	assert.Contains(t, err.Error(), "container is nil")
 }
 
+func TestStartRabbitMQContainer_TypedNilContainerRejected(t *testing.T) {
+	// Not parallel: overrides package-level container factory seam.
+
+	originalFactory := rabbitMQContainerFactory
+	rabbitMQContainerFactory = func(context.Context, testcontainers.GenericContainerRequest) (testcontainers.Container, error) {
+		var typedNil *fakeStartedContainer
+		return typedNil, nil
+	}
+	t.Cleanup(func() { rabbitMQContainerFactory = originalFactory })
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err := startRabbitMQContainer(ctx)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "nil container")
+}
+
 func TestContainerHostWithRetry_RetriesUntilSuccess(t *testing.T) {
 	// Not parallel: overrides package-level retry wait seam.
 
 	originalWait := rabbitMQRetryWait
-	rabbitMQRetryWait = func(context.Context, time.Duration) error { return nil }
+	var waits []time.Duration
+	rabbitMQRetryWait = func(_ context.Context, d time.Duration) error {
+		waits = append(waits, d)
+		return nil
+	}
 	t.Cleanup(func() { rabbitMQRetryWait = originalWait })
 
 	fake := &fakeRabbitMQStartupContainer{
@@ -128,6 +163,7 @@ func TestContainerHostWithRetry_RetriesUntilSuccess(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "127.0.0.1", host)
 	assert.Equal(t, 3, fake.hostCalls)
+	assert.Equal(t, []time.Duration{rabbitMQRetryDelay, rabbitMQRetryDelay}, waits)
 }
 
 func TestContainerHostWithRetry_EmptyHostExhaustsRetries(t *testing.T) {
@@ -252,12 +288,16 @@ func TestStartRabbitMQContainer_RetriesUntilSuccess(t *testing.T) {
 	originalWait := rabbitMQRetryWait
 	results := []fakeGenericContainerResult{{err: errors.New("fail-1")}, {err: errors.New("fail-2")}, {container: &fakeStartedContainer{}}}
 	callCount := 0
+	var waits []time.Duration
 	rabbitMQContainerFactory = func(_ context.Context, _ testcontainers.GenericContainerRequest) (testcontainers.Container, error) {
 		result := results[callCount]
 		callCount++
 		return result.container, result.err
 	}
-	rabbitMQRetryWait = func(context.Context, time.Duration) error { return nil }
+	rabbitMQRetryWait = func(_ context.Context, d time.Duration) error {
+		waits = append(waits, d)
+		return nil
+	}
 	t.Cleanup(func() {
 		rabbitMQContainerFactory = originalFactory
 		rabbitMQRetryWait = originalWait
@@ -267,6 +307,7 @@ func TestStartRabbitMQContainer_RetriesUntilSuccess(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, container)
 	assert.Equal(t, 3, callCount)
+	assert.Equal(t, []time.Duration{2 * time.Second, 4 * time.Second}, waits)
 }
 
 func TestStartRabbitMQContainer_FailsAfterMaxAttempts(t *testing.T) {
@@ -291,6 +332,21 @@ func TestStartRabbitMQContainer_FailsAfterMaxAttempts(t *testing.T) {
 	assert.Equal(t, rabbitMQStartAttempts, callCount)
 }
 
+func TestStartRabbitMQContainer_ReportsCleanupFailure(t *testing.T) {
+	// Not parallel: overrides package-level container factory seam.
+
+	originalFactory := rabbitMQContainerFactory
+	rabbitMQContainerFactory = func(_ context.Context, _ testcontainers.GenericContainerRequest) (testcontainers.Container, error) {
+		return &fakeStartedContainer{terminateErr: errors.New("terminate failed")}, errors.New("start failed")
+	}
+	t.Cleanup(func() { rabbitMQContainerFactory = originalFactory })
+
+	_, err := startRabbitMQContainer(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cleanup failed after rabbitmq startup error")
+	assert.Contains(t, err.Error(), "terminate failed")
+}
+
 func TestStartRabbitMQContainer_AbortsWhenRetryWaitIsCancelled(t *testing.T) {
 	// Not parallel: overrides package-level container factory and retry wait seams.
 
@@ -308,6 +364,40 @@ func TestStartRabbitMQContainer_AbortsWhenRetryWaitIsCancelled(t *testing.T) {
 	_, err := startRabbitMQContainer(context.Background())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "wait before retrying rabbitmq startup")
+	assert.ErrorIs(t, err, context.Canceled)
+}
+
+func TestContainerHostWithRetry_AbortsWhenRetryWaitIsCancelled(t *testing.T) {
+	// Not parallel: overrides package-level retry wait seam.
+	originalWait := rabbitMQRetryWait
+	rabbitMQRetryWait = func(_ context.Context, _ time.Duration) error { return context.Canceled }
+	t.Cleanup(func() { rabbitMQRetryWait = originalWait })
+
+	fake := &fakeRabbitMQStartupContainer{
+		hostResults: []hostResult{{err: errors.New("temporary host failure")}},
+	}
+
+	_, err := containerHostWithRetry(context.Background(), fake)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "wait before retrying rabbitmq host lookup")
+	assert.ErrorIs(t, err, context.Canceled)
+}
+
+func TestMappedPortWithRetry_AbortsWhenRetryWaitIsCancelled(t *testing.T) {
+	// Not parallel: overrides package-level retry wait seam.
+	originalWait := rabbitMQRetryWait
+	rabbitMQRetryWait = func(_ context.Context, _ time.Duration) error { return context.Canceled }
+	t.Cleanup(func() { rabbitMQRetryWait = originalWait })
+
+	fake := &fakeRabbitMQStartupContainer{
+		mappedPorts: map[string][]portResult{
+			"5672/tcp": {{err: errors.New("temporary mapped port failure")}},
+		},
+	}
+
+	_, err := mappedPortWithRetry(context.Background(), fake, "5672/tcp")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "wait before retrying mapped port lookup")
 	assert.ErrorIs(t, err, context.Canceled)
 }
 
@@ -329,7 +419,7 @@ func TestWaitWithContext_CancelledContext(t *testing.T) {
 	assert.ErrorIs(t, err, context.Canceled)
 }
 
-type fakeStartedContainer struct{}
+type fakeStartedContainer struct{ terminateErr error }
 
 func (*fakeStartedContainer) GetContainerID() string                           { return "" }
 func (*fakeStartedContainer) Endpoint(context.Context, string) (string, error) { return "", nil }
@@ -346,8 +436,8 @@ func (*fakeStartedContainer) SessionID() string                                 
 func (*fakeStartedContainer) IsRunning() bool                                        { return true }
 func (*fakeStartedContainer) Start(context.Context) error                            { return nil }
 func (*fakeStartedContainer) Stop(context.Context, *time.Duration) error             { return nil }
-func (*fakeStartedContainer) Terminate(context.Context, ...testcontainers.TerminateOption) error {
-	return nil
+func (container *fakeStartedContainer) Terminate(context.Context, ...testcontainers.TerminateOption) error {
+	return container.terminateErr
 }
 func (*fakeStartedContainer) Logs(context.Context) (io.ReadCloser, error) { return nil, nil }
 func (*fakeStartedContainer) FollowOutput(testcontainers.LogConsumer)     {}

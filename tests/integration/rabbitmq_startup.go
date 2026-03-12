@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
@@ -27,6 +28,20 @@ var (
 	rabbitMQRetryWait        = waitWithContext
 )
 
+func isNilRabbitMQContainer(container any) bool {
+	if container == nil {
+		return true
+	}
+
+	rv := reflect.ValueOf(container)
+	switch rv.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return rv.IsNil()
+	default:
+		return false
+	}
+}
+
 func startRabbitMQContainer(ctx context.Context) (testcontainers.Container, error) {
 	var lastErr error
 
@@ -39,11 +54,17 @@ func startRabbitMQContainer(ctx context.Context) (testcontainers.Container, erro
 			},
 		)
 		if err == nil {
+			if isNilRabbitMQContainer(container) {
+				return nil, errors.New("rabbitmq container factory returned nil container")
+			}
+
 			return container, nil
 		}
 
-		if container != nil {
-			_ = container.Terminate(ctx)
+		if !isNilRabbitMQContainer(container) {
+			if terminateErr := container.Terminate(ctx); terminateErr != nil {
+				return nil, fmt.Errorf("cleanup failed after rabbitmq startup error: %w", errors.Join(err, terminateErr))
+			}
 		}
 
 		lastErr = err
@@ -76,7 +97,7 @@ type rabbitMQStartupContainer interface {
 }
 
 func containerHostWithRetry(ctx context.Context, container rabbitMQStartupContainer) (string, error) {
-	if container == nil {
+	if isNilRabbitMQContainer(container) {
 		return "", errors.New("container is nil")
 	}
 
@@ -111,7 +132,7 @@ func mappedPortWithRetry(
 	container rabbitMQStartupContainer,
 	containerPort string,
 ) (string, error) {
-	if container == nil {
+	if isNilRabbitMQContainer(container) {
 		return "", errors.New("container is nil")
 	}
 

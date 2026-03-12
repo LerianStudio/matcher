@@ -12,8 +12,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -220,15 +218,6 @@ func (sh *serverHarnessBase) setEnvFromContainers(t *testing.T) error {
 	}
 	redisHost := redisURL.Host
 
-	// Compute absolute path to migrations folder
-	_, currentFile, _, ok := runtime.Caller(0)
-	if !ok {
-		return fmt.Errorf("failed to get current file path for migrations")
-	}
-	migrationsPath := filepath.Clean(
-		filepath.Join(filepath.Dir(currentFile), "../../../migrations"),
-	)
-
 	// Set environment variables
 	envVars := map[string]string{
 		// Postgres
@@ -239,8 +228,8 @@ func (sh *serverHarnessBase) setEnvFromContainers(t *testing.T) error {
 		"POSTGRES_DB":       pgDB,
 		"POSTGRES_SSLMODE":  "disable",
 
-		// Migrations path (absolute)
-		"MIGRATIONS_PATH": migrationsPath,
+		// Non-empty value enables embedded migrations during bootstrap.
+		"MIGRATIONS_PATH": "migrations",
 
 		// Redis
 		"REDIS_HOST":     redisHost,

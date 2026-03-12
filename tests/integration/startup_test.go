@@ -22,12 +22,6 @@ func TestServiceStartup_Integration(t *testing.T) {
 		postgresHost, postgresPort := extractHostPort(t, h.PostgresDSN)
 		redisAddr := extractRedisAddress(t, h.RedisAddr)
 
-		_, currentFile, _, ok := runtime.Caller(0)
-		require.True(t, ok, "failed to get current file path")
-		migrationsPath := filepath.Clean(
-			filepath.Join(filepath.Dir(currentFile), "../../migrations"),
-		)
-
 		t.Setenv("ENV_NAME", "test")
 		t.Setenv("SERVER_ADDRESS", ":18080")
 		t.Setenv("INFRA_CONNECT_TIMEOUT_SEC", "30")
@@ -39,7 +33,7 @@ func TestServiceStartup_Integration(t *testing.T) {
 		t.Setenv("POSTGRES_PASSWORD", "matcher_test")
 		t.Setenv("POSTGRES_DB", "matcher_test")
 		t.Setenv("POSTGRES_SSLMODE", "disable")
-		t.Setenv("MIGRATIONS_PATH", migrationsPath)
+		t.Setenv("MIGRATIONS_PATH", "migrations")
 		t.Setenv("REDIS_HOST", redisAddr)
 		t.Setenv("RABBITMQ_URI", "amqp")
 		t.Setenv("RABBITMQ_HOST", h.RabbitMQHost)
@@ -184,12 +178,6 @@ func TestServiceStartupAndShutdown_Integration(t *testing.T) {
 		postgresHost, postgresPort := extractHostPort(t, h.PostgresDSN)
 		redisAddr := extractRedisAddress(t, h.RedisAddr)
 
-		_, currentFile, _, ok := runtime.Caller(0)
-		require.True(t, ok, "failed to get current file path")
-		migrationsPath := filepath.Clean(
-			filepath.Join(filepath.Dir(currentFile), "../../migrations"),
-		)
-
 		t.Setenv("ENV_NAME", "test")
 		t.Setenv("SERVER_ADDRESS", ":18081")
 		t.Setenv("INFRA_CONNECT_TIMEOUT_SEC", "30")
@@ -201,7 +189,7 @@ func TestServiceStartupAndShutdown_Integration(t *testing.T) {
 		t.Setenv("POSTGRES_PASSWORD", "matcher_test")
 		t.Setenv("POSTGRES_DB", "matcher_test")
 		t.Setenv("POSTGRES_SSLMODE", "disable")
-		t.Setenv("MIGRATIONS_PATH", migrationsPath)
+		t.Setenv("MIGRATIONS_PATH", "migrations")
 		t.Setenv("REDIS_HOST", redisAddr)
 		t.Setenv("RABBITMQ_URI", "amqp")
 		t.Setenv("RABBITMQ_HOST", h.RabbitMQHost)

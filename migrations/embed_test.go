@@ -4,6 +4,7 @@ package migrations
 
 import (
 	"io"
+	"io/fs"
 	"strings"
 	"testing"
 
@@ -85,6 +86,7 @@ func TestFS_CanWalkMigrationVersionsInOrder(t *testing.T) {
 	for {
 		nextVersion, nextErr := driver.Next(version)
 		if nextErr != nil {
+			require.ErrorIs(t, nextErr, fs.ErrNotExist)
 			break
 		}
 

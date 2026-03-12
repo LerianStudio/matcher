@@ -7,9 +7,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"net/url"
-	"path/filepath"
-	"runtime"
 	"testing"
 	"time"
 
@@ -17,7 +14,7 @@ import (
 	"github.com/bxcodec/dbresolver/v2"
 	"github.com/golang-migrate/migrate/v4"
 	migratePostgres "github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/stretchr/testify/require"
@@ -35,6 +32,7 @@ import (
 	tenantAdapters "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant/adapters"
 	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
+	embeddedmigrations "github.com/LerianStudio/matcher/migrations"
 )
 
 // SeedData contains pre-created entities for integration tests.
@@ -222,14 +220,7 @@ func NewTestHarness(ctx context.Context, t *testing.T) (*TestHarness, error) {
 func (h *TestHarness) InitDatabase(t *testing.T) error {
 	t.Helper()
 
-	_, currentFile, _, ok := runtime.Caller(0)
-	if !ok {
-		return fmt.Errorf("failed to get current file path")
-	}
-
-	migrationsPath := filepath.Clean(filepath.Join(filepath.Dir(currentFile), "../../migrations"))
-
-	connection, closeDBs, err := initializeTestConnection(t, h.PostgresDSN, migrationsPath)
+	connection, closeDBs, err := initializeTestConnection(t, h.PostgresDSN, "migrations")
 	if err != nil {
 		return fmt.Errorf("failed to initialize database connection: %w", err)
 	}
@@ -351,7 +342,7 @@ func terminateContainer(ctx context.Context, container testcontainers.Container)
 
 func initializeTestConnection(
 	t *testing.T,
-	connectionString, migrationsPath string,
+	connectionString, _ string,
 ) (*libPostgres.Client, func() error, error) {
 	t.Helper()
 
@@ -383,15 +374,13 @@ func initializeTestConnection(
 		dbresolver.WithLoadBalancer(dbresolver.RoundRobinLB),
 	)
 
-	migrationURL, err := url.Parse(filepath.ToSlash(migrationsPath))
+	source, err := iofs.New(embeddedmigrations.FS, ".")
 	if err != nil {
 		_ = primaryDB.Close()
 		_ = replicaDB.Close()
 
-		return nil, nil, fmt.Errorf("failed to parse migrations path: %w", err)
+		return nil, nil, fmt.Errorf("failed to create embedded migration source: %w", err)
 	}
-
-	migrationURL.Scheme = "file"
 
 	driver, err := migratePostgres.WithInstance(primaryDB, &migratePostgres.Config{
 		MultiStatementEnabled: true,
@@ -405,7 +394,7 @@ func initializeTestConnection(
 		return nil, nil, fmt.Errorf("failed to create migration driver: %w", err)
 	}
 
-	migrator, err := migrate.NewWithDatabaseInstance(migrationURL.String(), "matcher_test", driver)
+	migrator, err := migrate.NewWithInstance("iofs", source, "matcher_test", driver)
 	if err != nil {
 		_ = primaryDB.Close()
 		_ = replicaDB.Close()

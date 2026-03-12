@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -144,15 +142,6 @@ func setSharedEnvFromContainers(t *testing.T, sh *SharedServerHarness) error {
 	}
 	redisHost := redisURL.Host
 
-	// Compute absolute path to migrations folder
-	_, currentFile, _, ok := runtime.Caller(0)
-	if !ok {
-		return fmt.Errorf("failed to get current file path for migrations")
-	}
-	migrationsPath := filepath.Clean(
-		filepath.Join(filepath.Dir(currentFile), "../../../migrations"),
-	)
-
 	// Set environment variables using os.Setenv (not t.Setenv) since this is shared
 	envVars := map[string]string{
 		// Postgres
@@ -163,8 +152,8 @@ func setSharedEnvFromContainers(t *testing.T, sh *SharedServerHarness) error {
 		"POSTGRES_DB":       pgDB,
 		"POSTGRES_SSLMODE":  "disable",
 
-		// Migrations path (absolute)
-		"MIGRATIONS_PATH": migrationsPath,
+		// Non-empty value enables embedded migrations during bootstrap.
+		"MIGRATIONS_PATH": "migrations",
 
 		// Redis
 		"REDIS_HOST":     redisHost,

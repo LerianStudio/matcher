@@ -9,8 +9,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"path/filepath"
-	"runtime"
 	"testing"
 	"time"
 
@@ -25,13 +23,6 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 		postgresHost, postgresPort := extractHostPort(t, h.PostgresDSN)
 		redisAddr := extractRedisAddress(t, h.RedisAddr)
 
-		// Compute absolute path to migrations folder
-		_, currentFile, _, ok := runtime.Caller(0)
-		require.True(t, ok, "failed to get current file path")
-		migrationsPath := filepath.Clean(
-			filepath.Join(filepath.Dir(currentFile), "../../migrations"),
-		)
-
 		// Setup environment for testing
 		t.Setenv("ENV_NAME", "test")
 		t.Setenv("SERVER_ADDRESS", ":18081") // Use a different port than startup test
@@ -44,7 +35,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 		t.Setenv("POSTGRES_PASSWORD", "matcher_test")
 		t.Setenv("POSTGRES_DB", "matcher_test")
 		t.Setenv("POSTGRES_SSLMODE", "disable")
-		t.Setenv("MIGRATIONS_PATH", migrationsPath)
+		t.Setenv("MIGRATIONS_PATH", "migrations")
 		t.Setenv("REDIS_HOST", redisAddr)
 		t.Setenv("RABBITMQ_URI", "amqp")
 		t.Setenv("RABBITMQ_HOST", h.RabbitMQHost)

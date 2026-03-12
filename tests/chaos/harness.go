@@ -26,7 +26,7 @@ import (
 	"github.com/bxcodec/dbresolver/v2"
 	"github.com/golang-migrate/migrate/v4"
 	migratePostgres "github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/stretchr/testify/require"
@@ -45,6 +45,7 @@ import (
 	tenantAdapters "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant/adapters"
 	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
+	embeddedmigrations "github.com/LerianStudio/matcher/migrations"
 )
 
 // Proxy port constants — Toxiproxy listens on these inside the container.
@@ -62,58 +63,6 @@ const (
 	toxiNetworkAlias   = "chaos-toxiproxy"
 )
 
-// SeedData contains pre-created entities for chaos tests.
-type SeedData struct {
-	TenantID  uuid.UUID
-	ContextID uuid.UUID
-	SourceID  uuid.UUID
-}
-
-// ChaosHarness provides the complete chaos testing infrastructure:
-// real containers for PostgreSQL/Redis/RabbitMQ routed through Toxiproxy proxies,
-// with programmatic toxic injection/removal per test.
-type ChaosHarness struct {
-	// Containers — all on the same Docker network.
-	Network           *testcontainers.DockerNetwork
-	PostgresContainer testcontainers.Container
-	RedisContainer    testcontainers.Container
-	RabbitMQContainer testcontainers.Container
-	ToxiContainer     testcontainers.Container
-
-	// Toxiproxy client and proxies (one per infrastructure service).
-	ToxiClient  *toxiproxy.Client
-	PGProxy     *toxiproxy.Proxy
-	RedisProxy  *toxiproxy.Proxy
-	RabbitProxy *toxiproxy.Proxy
-
-	// Proxied addresses — tests connect through these.
-	ProxiedPostgresDSN string
-	ProxiedRedisAddr   string
-	ProxiedRabbitHost  string
-	ProxiedRabbitPort  string
-
-	// Direct addresses — for health verification bypassing proxies.
-	DirectPostgresDSN string
-	DirectRedisAddr   string
-	DirectRabbitHost  string
-	DirectRabbitPort  string
-	RabbitMQHealthURL string
-
-	// Database connection (through proxy) + seed data.
-	Connection *libPostgres.Client
-	Seed       SeedData
-	closeDBs   func() error
-
-	// Synchronization.
-	testMu sync.Mutex
-}
-
-var (
-	sharedChaos     *ChaosHarness
-	sharedChaosOnce sync.Once
-	sharedChaosErr  error
-)
-
 // InitSharedChaos initializes the shared chaos infrastructure (containers + proxies).
 // Call from TestMain. Safe to call multiple times via sync.Once.
 func InitSharedChaos(ctx context.Context) (*ChaosHarness, error) {
@@ -122,21 +71,6 @@ func InitSharedChaos(ctx context.Context) (*ChaosHarness, error) {
 	})
 
 	return sharedChaos, sharedChaosErr
-}
-
-// GetSharedChaos returns the initialized shared chaos harness.
-// Returns nil if InitSharedChaos was not called or failed.
-func GetSharedChaos() *ChaosHarness {
-	return sharedChaos
-}
-
-// CleanupSharedChaos terminates all containers and the network.
-func CleanupSharedChaos(ctx context.Context) error {
-	if sharedChaos == nil {
-		return nil
-	}
-
-	return sharedChaos.Cleanup(ctx)
 }
 
 // newChaosHarness creates the complete chaos infrastructure:
@@ -442,49 +376,6 @@ func (h *ChaosHarness) initDatabase() error {
 	return nil
 }
 
-// Cleanup terminates all containers and removes the network.
-func (h *ChaosHarness) Cleanup(ctx context.Context) error {
-	var errs []error
-
-	if h.closeDBs != nil {
-		if err := h.closeDBs(); err != nil {
-			errs = append(errs, fmt.Errorf("database: %w", err))
-		}
-	}
-
-	if h.ToxiContainer != nil {
-		if err := h.ToxiContainer.Terminate(ctx); err != nil {
-			errs = append(errs, fmt.Errorf("toxiproxy: %w", err))
-		}
-	}
-
-	if h.RabbitMQContainer != nil {
-		if err := h.RabbitMQContainer.Terminate(ctx); err != nil {
-			errs = append(errs, fmt.Errorf("rabbitmq: %w", err))
-		}
-	}
-
-	if h.RedisContainer != nil {
-		if err := h.RedisContainer.Terminate(ctx); err != nil {
-			errs = append(errs, fmt.Errorf("redis: %w", err))
-		}
-	}
-
-	if h.PostgresContainer != nil {
-		if err := h.PostgresContainer.Terminate(ctx); err != nil {
-			errs = append(errs, fmt.Errorf("postgres: %w", err))
-		}
-	}
-
-	if h.Network != nil {
-		if err := h.Network.Remove(ctx); err != nil {
-			errs = append(errs, fmt.Errorf("network: %w", err))
-		}
-	}
-
-	return errors.Join(errs...)
-}
-
 // Ctx returns a context with the tenant ID set for repository operations.
 func (h *ChaosHarness) Ctx() context.Context {
 	return context.WithValue(context.Background(), auth.TenantIDKey, h.Seed.TenantID.String())
@@ -535,7 +426,7 @@ func (h *ChaosHarness) DirectDB(t *testing.T) *sql.DB {
 // --------------------------------------------------------------------------
 
 func initChaosDBConnection(
-	connectionString, migrationsPath string,
+	connectionString, _ string,
 ) (*libPostgres.Client, func() error, error) {
 	primaryDB, err := sql.Open("pgx", connectionString)
 	if err != nil {
@@ -565,15 +456,13 @@ func initChaosDBConnection(
 		dbresolver.WithLoadBalancer(dbresolver.RoundRobinLB),
 	)
 
-	migrationURL, err := url.Parse(filepath.ToSlash(migrationsPath))
+	source, err := iofs.New(embeddedmigrations.FS, ".")
 	if err != nil {
 		_ = primaryDB.Close()
 		_ = replicaDB.Close()
 
-		return nil, nil, fmt.Errorf("parse migrations path: %w", err)
+		return nil, nil, fmt.Errorf("create embedded migration source: %w", err)
 	}
-
-	migrationURL.Scheme = "file"
 
 	driver, err := migratePostgres.WithInstance(primaryDB, &migratePostgres.Config{
 		MultiStatementEnabled: true,
@@ -587,7 +476,7 @@ func initChaosDBConnection(
 		return nil, nil, fmt.Errorf("create migration driver: %w", err)
 	}
 
-	migrator, err := migrate.NewWithDatabaseInstance(migrationURL.String(), "matcher_chaos", driver)
+	migrator, err := migrate.NewWithInstance("iofs", source, "matcher_chaos", driver)
 	if err != nil {
 		_ = primaryDB.Close()
 		_ = replicaDB.Close()

@@ -7,9 +7,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"net/url"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -19,7 +16,7 @@ import (
 	"github.com/bxcodec/dbresolver/v2"
 	"github.com/golang-migrate/migrate/v4"
 	migratePostgres "github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/stretchr/testify/require"
@@ -36,6 +33,7 @@ import (
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 	tenantAdapters "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant/adapters"
 	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
+	embeddedmigrations "github.com/LerianStudio/matcher/migrations"
 )
 
 // SharedInfra holds containers that are shared across all tests in a package.
@@ -217,13 +215,7 @@ func (si *SharedInfra) GetOrCreateConnection(
 		return si.sharedConnection, nil
 	}
 
-	_, currentFile, _, ok := runtime.Caller(0)
-	if !ok {
-		return nil, fmt.Errorf("failed to get current file path")
-	}
-	migrationsPath := filepath.Clean(filepath.Join(filepath.Dir(currentFile), "../../migrations"))
-
-	connection, closeDBs, err := initSharedDBConnection(t, si.PostgresDSN, migrationsPath)
+	connection, closeDBs, err := initSharedDBConnection(t, si.PostgresDSN, "migrations")
 	if err != nil {
 		return nil, err
 	}
@@ -471,7 +463,7 @@ func RunWithSharedDatabase(t *testing.T, testFn func(t *testing.T, h *TestHarnes
 // Uses larger pool sizes since it's shared.
 func initSharedDBConnection(
 	t *testing.T,
-	connectionString, migrationsPath string,
+	connectionString, _ string,
 ) (*libPostgres.Client, func() error, error) {
 	t.Helper()
 
@@ -507,13 +499,12 @@ func initSharedDBConnection(
 		dbresolver.WithLoadBalancer(dbresolver.RoundRobinLB),
 	)
 
-	migrationURL, err := url.Parse(filepath.ToSlash(migrationsPath))
+	source, err := iofs.New(embeddedmigrations.FS, ".")
 	if err != nil {
 		_ = primaryDB.Close()
 		_ = replicaDB.Close()
-		return nil, nil, fmt.Errorf("failed to parse migrations path: %w", err)
+		return nil, nil, fmt.Errorf("failed to create embedded migration source: %w", err)
 	}
-	migrationURL.Scheme = "file"
 
 	driver, err := migratePostgres.WithInstance(primaryDB, &migratePostgres.Config{
 		MultiStatementEnabled: true,
@@ -526,7 +517,7 @@ func initSharedDBConnection(
 		return nil, nil, fmt.Errorf("failed to create migration driver: %w", err)
 	}
 
-	migrator, err := migrate.NewWithDatabaseInstance(migrationURL.String(), "matcher_test", driver)
+	migrator, err := migrate.NewWithInstance("iofs", source, "matcher_test", driver)
 	if err != nil {
 		_ = primaryDB.Close()
 		_ = replicaDB.Close()
