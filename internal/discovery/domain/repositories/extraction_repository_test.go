@@ -60,9 +60,24 @@ func (m *mockExtractionRepository) Update(
 func (m *mockExtractionRepository) UpdateIfUnchanged(
 	ctx context.Context,
 	req *entities.ExtractionRequest,
+	expectedUpdatedAt time.Time,
+) error {
+	return m.UpdateIfUnchangedWithTx(ctx, nil, req, expectedUpdatedAt)
+}
+
+func (m *mockExtractionRepository) UpdateIfUnchangedWithTx(
+	_ context.Context,
+	_ *sql.Tx,
+	req *entities.ExtractionRequest,
 	_ time.Time,
 ) error {
-	return m.Update(ctx, req)
+	if m.extractions == nil {
+		m.extractions = make(map[uuid.UUID]*entities.ExtractionRequest)
+	}
+
+	m.extractions[req.ID] = req
+
+	return nil
 }
 
 func (m *mockExtractionRepository) UpdateWithTx(

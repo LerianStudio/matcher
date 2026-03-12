@@ -204,6 +204,49 @@ func (repo *Repository) UpdateIfUnchanged(ctx context.Context, req *entities.Ext
 	return nil
 }
 
+// UpdateIfUnchangedWithTx persists changes only if the row still matches the
+// expected updated_at value within an existing transaction.
+func (repo *Repository) UpdateIfUnchangedWithTx(
+	ctx context.Context,
+	tx *sql.Tx,
+	req *entities.ExtractionRequest,
+	expectedUpdatedAt time.Time,
+) error {
+	if repo == nil || repo.provider == nil {
+		return ErrRepoNotInitialized
+	}
+
+	if req == nil {
+		return ErrEntityRequired
+	}
+
+	if tx == nil {
+		return ErrTransactionRequired
+	}
+
+	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
+
+	ctx, span := tracer.Start(ctx, "postgres.update_extraction_request_if_unchanged_with_tx")
+	defer span.End()
+
+	_, err := pgcommon.WithTenantTxOrExistingProvider(ctx, repo.provider, tx, func(innerTx *sql.Tx) (bool, error) {
+		if execErr := repo.executeConditionalUpdate(ctx, innerTx, req, expectedUpdatedAt); execErr != nil {
+			return false, execErr
+		}
+
+		return true, nil
+	})
+	if err != nil {
+		wrappedErr := fmt.Errorf("update extraction request if unchanged with tx: %w", err)
+		libOpentelemetry.HandleSpanError(span, "failed to update extraction request if unchanged", wrappedErr)
+		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to update extraction request if unchanged")
+
+		return wrappedErr
+	}
+
+	return nil
+}
+
 // UpdateWithTx persists changes within an existing transaction.
 func (repo *Repository) UpdateWithTx(ctx context.Context, tx *sql.Tx, req *entities.ExtractionRequest) error {
 	if repo == nil || repo.provider == nil {

@@ -552,6 +552,59 @@ func TestRepository_UpdateIfUnchanged(t *testing.T) {
 	})
 }
 
+func TestRepository_UpdateIfUnchangedWithTx_NilTransaction(t *testing.T) {
+	t.Parallel()
+
+	repo, _, finish := setupMockRepository(t)
+	defer finish()
+
+	err := repo.UpdateIfUnchangedWithTx(context.Background(), nil, createTestExtraction(), time.Now().UTC())
+
+	assert.ErrorIs(t, err, ErrTransactionRequired)
+}
+
+func TestRepository_UpdateIfUnchangedWithTx_Success(t *testing.T) {
+	t.Parallel()
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	provider := testutil.NewMockProviderFromDB(t, db)
+	repo := NewRepository(provider)
+	req := createTestExtraction()
+	expectedUpdatedAt := req.UpdatedAt
+	require.NoError(t, req.MarkSubmitted("job-abc"))
+
+	mock.ExpectBegin()
+	tx, err := db.Begin()
+	require.NoError(t, err)
+
+	mock.ExpectExec("UPDATE extraction_requests SET").
+		WithArgs(
+			req.ConnectionID,
+			req.IngestionJobID,
+			req.FetcherJobID,
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			req.Status.String(),
+			nil,
+			nil,
+			req.UpdatedAt,
+			req.ID,
+			expectedUpdatedAt,
+		).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectRollback()
+
+	err = repo.UpdateIfUnchangedWithTx(context.Background(), tx, req, expectedUpdatedAt)
+	require.NoError(t, err)
+	require.NoError(t, tx.Rollback())
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestExtractionModel_ToDomain_Nil(t *testing.T) {
 	t.Parallel()
 

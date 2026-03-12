@@ -28,6 +28,9 @@ type ExtractionRepository interface {
 	// UpdateIfUnchanged persists changes only if the stored row still has the
 	// expected updated_at value, preventing stale writers from overwriting newer state.
 	UpdateIfUnchanged(ctx context.Context, req *entities.ExtractionRequest, expectedUpdatedAt time.Time) error
+	// UpdateIfUnchangedWithTx persists changes conditionally within an existing
+	// transaction, preventing stale writers from overwriting newer state.
+	UpdateIfUnchangedWithTx(ctx context.Context, tx sharedPorts.Tx, req *entities.ExtractionRequest, expectedUpdatedAt time.Time) error
 	// UpdateWithTx persists changes within an existing transaction.
 	UpdateWithTx(ctx context.Context, tx sharedPorts.Tx, req *entities.ExtractionRequest) error
 	// FindByID retrieves an ExtractionRequest by its internal ID.
