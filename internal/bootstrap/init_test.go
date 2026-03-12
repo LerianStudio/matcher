@@ -935,13 +935,6 @@ func TestBuildTenantExtractor(t *testing.T) {
 			require.NoError(t, auth.SetDefaultTenantSlug(originalSlug))
 		})
 
-		originalID := auth.GetDefaultTenantID()
-		originalSlug := auth.GetTenantSlug(context.Background())
-		t.Cleanup(func() {
-			require.NoError(t, auth.SetDefaultTenantID(originalID))
-			require.NoError(t, auth.SetDefaultTenantSlug(originalSlug))
-		})
-
 		cfg := &Config{
 			Auth: AuthConfig{Enabled: false, TokenSecret: ""},
 			Tenancy: TenancyConfig{

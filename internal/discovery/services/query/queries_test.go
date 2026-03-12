@@ -129,6 +129,10 @@ func (m *mockExtractionRepo) UpdateIfUnchanged(_ context.Context, _ *entities.Ex
 	return nil
 }
 
+func (m *mockExtractionRepo) UpdateIfUnchangedWithTx(_ context.Context, _ *sql.Tx, _ *entities.ExtractionRequest, _ time.Time) error {
+	return nil
+}
+
 func (m *mockExtractionRepo) UpdateWithTx(_ context.Context, _ *sql.Tx, _ *entities.ExtractionRequest) error {
 	return nil
 }

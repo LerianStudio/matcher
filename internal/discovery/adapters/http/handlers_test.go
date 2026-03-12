@@ -194,6 +194,12 @@ func (r *mockExtractionRepo) UpdateIfUnchanged(_ context.Context, req *entities.
 	return r.updateErr
 }
 
+func (r *mockExtractionRepo) UpdateIfUnchangedWithTx(_ context.Context, _ *sql.Tx, req *entities.ExtractionRequest, _ time.Time) error {
+	r.updateCount++
+	r.findByIDReq = req
+	return r.updateErr
+}
+
 func (r *mockExtractionRepo) UpdateWithTx(_ context.Context, _ *sql.Tx, _ *entities.ExtractionRequest) error {
 	return r.updateErr
 }

@@ -205,6 +205,15 @@ func (m *mockExtractionRepo) UpdateIfUnchanged(ctx context.Context, req *entitie
 	return m.updateErr
 }
 
+func (m *mockExtractionRepo) UpdateIfUnchangedWithTx(
+	ctx context.Context,
+	_ *sql.Tx,
+	req *entities.ExtractionRequest,
+	expectedUpdatedAt time.Time,
+) error {
+	return m.UpdateIfUnchanged(ctx, req, expectedUpdatedAt)
+}
+
 func (m *mockExtractionRepo) UpdateWithTx(_ context.Context, _ *sql.Tx, _ *entities.ExtractionRequest) error {
 	return m.updateErr
 }

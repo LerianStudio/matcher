@@ -72,6 +72,15 @@ func (m *stubExtractionRepo) UpdateIfUnchanged(ctx context.Context, req *entitie
 	return m.Update(ctx, req)
 }
 
+func (m *stubExtractionRepo) UpdateIfUnchangedWithTx(
+	ctx context.Context,
+	_ *sql.Tx,
+	req *entities.ExtractionRequest,
+	expectedUpdatedAt time.Time,
+) error {
+	return m.UpdateIfUnchanged(ctx, req, expectedUpdatedAt)
+}
+
 func (m *stubExtractionRepo) UpdateWithTx(ctx context.Context, tx *sql.Tx, req *entities.ExtractionRequest) error {
 	if m.updateWithTxFn != nil {
 		return m.updateWithTxFn(ctx, tx, req)

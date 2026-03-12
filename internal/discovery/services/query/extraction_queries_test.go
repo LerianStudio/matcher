@@ -45,6 +45,10 @@ func (m *mockExtractionRepoForQuery) UpdateIfUnchanged(_ context.Context, _ *ent
 	return nil
 }
 
+func (m *mockExtractionRepoForQuery) UpdateIfUnchangedWithTx(_ context.Context, _ sharedPorts.Tx, _ *entities.ExtractionRequest, _ time.Time) error {
+	return nil
+}
+
 func (m *mockExtractionRepoForQuery) UpdateWithTx(_ context.Context, _ sharedPorts.Tx, _ *entities.ExtractionRequest) error {
 	return nil
 }
