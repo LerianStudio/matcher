@@ -1,3 +1,28 @@
+## [1.1.0-beta.13](https://github.com/LerianStudio/matcher/compare/v1.1.0-beta.12...v1.1.0-beta.13) (2026-03-12)
+
+
+### Features
+
+* **bootstrap:** add fetcher config defaults and validation ([fe3a02b](https://github.com/LerianStudio/matcher/commit/fe3a02b364fe341a2c7c2545d45b0d4b881fde5b))
+* add fetcher integration and discovery bounded context ([5daf5ce](https://github.com/LerianStudio/matcher/commit/5daf5ce1b9f3f1af25ebaa3a021f98e9e1325212))
+* **discovery:** add transactional conditional update for extraction ([c61d200](https://github.com/LerianStudio/matcher/commit/c61d2008750123592a792712a7b1d9bbf52db7a7))
+* **discovery:** ship extraction workflow and harden discovery sync ([a2784f5](https://github.com/LerianStudio/matcher/commit/a2784f5a3791c424ff5b6933de76b2069f9f3c74))
+* **bootstrap:** wire config manager and worker manager into service lifecycle ([66e1f17](https://github.com/LerianStudio/matcher/commit/66e1f17b79611a1c7561283e94fffb0b3c175108))
+
+
+### Bug Fixes
+
+* **bootstrap:** harden config API, audit, worker factories, and schema ([211b327](https://github.com/LerianStudio/matcher/commit/211b32777d32ff482e01e401b2641eefea28c630))
+* **discovery:** harden fetcher lifecycle and migration safety ([79f9662](https://github.com/LerianStudio/matcher/commit/79f9662746c8879d83ff7bbbccbb2a687010b8c0))
+* **discovery:** harden fetcher lifecycle and startup safety ([7db31bc](https://github.com/LerianStudio/matcher/commit/7db31bc3d9fff369ade400542e7dd522217cf313))
+* **bootstrap:** harden runtime config lifecycle ([0efe6b1](https://github.com/LerianStudio/matcher/commit/0efe6b1e24375ef82af2044d9755e2da9fec2ee2))
+* **bootstrap:** harden runtime config lifecycle ([f2d01d8](https://github.com/LerianStudio/matcher/commit/f2d01d8c7b8389c5294cb83acdf922052e6df748))
+* **bootstrap:** harden runtime config updates ([b5dca5b](https://github.com/LerianStudio/matcher/commit/b5dca5bc6addaaf40574a472bbb75dfb9e3cfefc))
+* **bootstrap:** remove stale mutable config keys and align test signature ([2e428ea](https://github.com/LerianStudio/matcher/commit/2e428ea8acd6846132fbda4eb020be128b3af999))
+* **bootstrap:** resolve runtime config merge conflicts ([80564f7](https://github.com/LerianStudio/matcher/commit/80564f7e9b6cdae80b0403cbb63de4fe252f0222))
+* **swagger:** restore API error schemas for generated docs ([a991db9](https://github.com/LerianStudio/matcher/commit/a991db943d4762b6dc0b400313aa658e33db7112))
+* **bootstrap:** tighten runtime worker orchestration ([729d1a2](https://github.com/LerianStudio/matcher/commit/729d1a2d2a6ed820bdbf920f0e037416cf02f076))
+
 ## [1.1.0-beta.12](https://github.com/LerianStudio/matcher/compare/v1.1.0-beta.11...v1.1.0-beta.12) (2026-03-12)
 
 
