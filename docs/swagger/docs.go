@@ -2877,6 +2877,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
+                    },
+                    "503": {
+                        "description": "Export worker disabled",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                        }
                     }
                 }
             }
@@ -3500,12 +3506,6 @@ const docTemplate = `{
                         "description": "Internal server error",
                         "schema": {
                             "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "503": {
-                        "description": "Export worker disabled",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
                         }
                     }
                 }
