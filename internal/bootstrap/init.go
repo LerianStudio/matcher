@@ -864,7 +864,6 @@ func buildWorkerStatus(cfg *Config, modules *modulesResult) (export, cleanup, ar
 		modules.discoveryWorker != nil && cfg.Fetcher.Enabled
 }
 
-//nolint:cyclop // composition root status builder — complexity inherent from checking all infrastructure components.
 func buildInfraStatus(
 	cfg *Config,
 	postgres *libPostgres.Client,
