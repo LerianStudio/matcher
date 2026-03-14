@@ -1,3 +1,12 @@
+## [1.1.0-beta.15](https://github.com/LerianStudio/matcher/compare/v1.1.0-beta.14...v1.1.0-beta.15) (2026-03-14)
+
+
+### Features
+
+* **auth:** add LookupTenantID and local JWT claim pre-validation ([b45cf7b](https://github.com/LerianStudio/matcher/commit/b45cf7b09338fd2bbd9fafbf7a490fbf321383ed))
+* **bootstrap:** expand multi-tenant config with URL, API key, circuit-breaker and pool settings ([43b4256](https://github.com/LerianStudio/matcher/commit/43b4256e280fa380308db121c94f55b04d482df6))
+* **rabbitmq:** propagate X-Tenant-ID header in ingestion and matching event publishers ([7642584](https://github.com/LerianStudio/matcher/commit/76425849a586524d987f376904f4add384076c8a))
+
 ## [1.1.0-beta.14](https://github.com/LerianStudio/matcher/compare/v1.1.0-beta.13...v1.1.0-beta.14) (2026-03-13)
 
 ## [1.1.0-beta.13](https://github.com/LerianStudio/matcher/compare/v1.1.0-beta.12...v1.1.0-beta.13) (2026-03-12)
