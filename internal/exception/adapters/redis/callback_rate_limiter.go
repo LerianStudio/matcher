@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel/trace/noop"
@@ -15,11 +14,12 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/exception/ports"
+	tenantinfra "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 const (
-	callbackRateLimitKeyPrefix = "matcher:callback:ratelimit:"
+	callbackRateLimitKeyPrefix = "matcher:callback:ratelimit"
 )
 
 // DefaultCallbackRateLimitPerMin is the default maximum number of callbacks
@@ -91,12 +91,14 @@ func (rl *CallbackRateLimiter) Allow(ctx context.Context, key string) (bool, err
 	ctx, span := tracer.Start(ctx, "redis.callback_rate_limiter.allow")
 	defer span.End()
 
-	conn, err := rl.provider.GetRedisConnection(ctx)
+	connLease, err := rl.provider.GetRedisConnection(ctx)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to get redis connection", err)
 		return false, fmt.Errorf("rate limiter get redis connection: %w", err)
 	}
+	defer connLease.Release()
 
+	conn := connLease.Connection()
 	if conn == nil {
 		return false, ErrRateLimiterRedisClientNil
 	}
@@ -107,7 +109,7 @@ func (rl *CallbackRateLimiter) Allow(ctx context.Context, key string) (bool, err
 		return false, fmt.Errorf("%w: %w", ErrRateLimiterRedisClientNil, err)
 	}
 
-	redisKey := callbackRateLimitKeyPrefix + scopedRateLimitKey(ctx, key)
+	redisKey := scopedRateLimitRedisKey(ctx, key)
 
 	// Lua script atomically increments counter and sets TTL on first request.
 	// This avoids race conditions between INCR and EXPIRE.
@@ -154,14 +156,19 @@ return 1
 	return allowed == 1, nil
 }
 
-func scopedRateLimitKey(ctx context.Context, key string) string {
-	tenantID := strings.TrimSpace(auth.GetTenantID(ctx))
-	if tenantID == "" {
-		tenantID = auth.DefaultTenantID
-	}
-
-	return tenantID + ":" + key
-}
-
 // Ensure CallbackRateLimiter implements the port interface.
 var _ ports.CallbackRateLimiter = (*CallbackRateLimiter)(nil)
+
+//nolint:contextcheck // This helper derives a scoped context exclusively for redis key namespacing.
+func scopedRateLimitRedisKey(ctx context.Context, key string) string {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	return tenantinfra.ScopedRedisSegments(
+		context.WithValue(ctx, auth.TenantIDKey, auth.GetTenantID(ctx)),
+		true,
+		callbackRateLimitKeyPrefix,
+		key,
+	)
+}

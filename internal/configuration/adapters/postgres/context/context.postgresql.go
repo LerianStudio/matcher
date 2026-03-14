@@ -182,10 +182,11 @@ func (repo *Repository) FindByID(
 		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
 		return nil, fmt.Errorf("get postgres connection: %w", err)
 	}
+	defer connection.Release()
 
 	result, err := common.WithTenantTx(
 		ctx,
-		connection,
+		connection.Connection(),
 		func(tx *sql.Tx) (*entities.ReconciliationContext, error) {
 			row := tx.QueryRowContext(
 				ctx,
@@ -231,10 +232,11 @@ func (repo *Repository) FindByName(
 		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
 		return nil, fmt.Errorf("get postgres connection: %w", err)
 	}
+	defer connection.Release()
 
 	result, err := common.WithTenantTx(
 		ctx,
-		connection,
+		connection.Connection(),
 		func(tx *sql.Tx) (*entities.ReconciliationContext, error) {
 			row := tx.QueryRowContext(
 				ctx,
@@ -289,6 +291,7 @@ func (repo *Repository) FindAll(
 		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
 		return nil, libHTTP.CursorPagination{}, fmt.Errorf("get postgres connection: %w", err)
 	}
+	defer connection.Release()
 
 	limit = libHTTP.ValidateLimit(limit, constants.DefaultPaginationLimit, constants.MaximumPaginationLimit)
 
@@ -301,7 +304,7 @@ func (repo *Repository) FindAll(
 
 	result, err := common.WithTenantTx(
 		ctx,
-		connection,
+		connection.Connection(),
 		func(tx *sql.Tx) (contexts []*entities.ReconciliationContext, err error) {
 			findAll := buildContextQuery(tenantID, contextType, status)
 
@@ -609,8 +612,9 @@ func (repo *Repository) Count(ctx stdctx.Context) (int64, error) {
 		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
 		return 0, fmt.Errorf("get postgres connection: %w", err)
 	}
+	defer connection.Release()
 
-	result, err := common.WithTenantTx(ctx, connection, func(tx *sql.Tx) (int64, error) {
+	result, err := common.WithTenantTx(ctx, connection.Connection(), func(tx *sql.Tx) (int64, error) {
 		row := tx.QueryRowContext(
 			ctx,
 			"SELECT COUNT(1) FROM reconciliation_contexts WHERE tenant_id = $1",

@@ -14,8 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
-	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
@@ -209,19 +207,19 @@ type stubInfraProvider struct{}
 
 var _ sharedPorts.InfrastructureProvider = (*stubInfraProvider)(nil)
 
-func (m *stubInfraProvider) GetPostgresConnection(_ context.Context) (*libPostgres.Client, error) {
+func (m *stubInfraProvider) GetPostgresConnection(_ context.Context) (*sharedPorts.PostgresConnectionLease, error) {
 	return nil, nil
 }
 
-func (m *stubInfraProvider) GetRedisConnection(_ context.Context) (*libRedis.Client, error) {
+func (m *stubInfraProvider) GetRedisConnection(_ context.Context) (*sharedPorts.RedisConnectionLease, error) {
 	return nil, nil
 }
 
-func (m *stubInfraProvider) BeginTx(_ context.Context) (*sql.Tx, error) {
+func (m *stubInfraProvider) BeginTx(_ context.Context) (*sharedPorts.TxLease, error) {
 	return nil, nil
 }
 
-func (m *stubInfraProvider) GetReplicaDB(_ context.Context) (*sql.DB, error) {
+func (m *stubInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.ReplicaDBLease, error) {
 	return nil, nil
 }
 

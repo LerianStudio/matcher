@@ -12,6 +12,7 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
+	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/ingestion/ports"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 )
@@ -71,7 +72,7 @@ func TestDedupeServiceIsDuplicate(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, isDuplicate)
 
-	key := service.buildKey(contextID, hash)
+	key := service.buildKey(ctx, contextID, hash)
 	require.NoError(t, client.Set(ctx, key, "1", 0).Err())
 
 	isDuplicate, err = service.IsDuplicate(ctx, contextID, hash)
@@ -102,8 +103,56 @@ func TestDedupeServiceMarkSeenSetsKey(t *testing.T) {
 	hash := service.CalculateHash(sourceID, "ext")
 
 	require.NoError(t, service.MarkSeen(ctx, contextID, hash, time.Minute))
-	key := service.buildKey(contextID, hash)
+	key := service.buildKey(ctx, contextID, hash)
 	require.Positive(t, client.Exists(ctx, key).Val())
+}
+
+func TestDedupeServiceBuildKey_TenantAwareWhenTenantPresent(t *testing.T) {
+	t.Parallel()
+
+	service := NewDedupeService(nil)
+	contextID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	hash := "hash"
+	ctx := context.WithValue(context.Background(), auth.TenantIDKey, "tenant-a")
+
+	require.Equal(t, "matcher:dedupe:tenant-a:00000000-0000-0000-0000-000000000001:hash", service.buildKey(ctx, contextID, hash))
+	require.Equal(t, "matcher:dedupe:00000000-0000-0000-0000-000000000001:hash", service.buildKey(context.Background(), contextID, hash))
+}
+
+func TestDedupeService_TenantAwareOperationsStayIsolated(t *testing.T) {
+	t.Parallel()
+
+	_, client := setupRedis(t)
+	conn := testutil.NewRedisClientWithMock(client)
+	provider := &testutil.MockInfrastructureProvider{RedisConn: conn}
+	service := NewDedupeService(provider)
+
+	contextID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	sourceID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
+	hash := service.CalculateHash(sourceID, "tenant-aware")
+
+	tenantACtx := context.WithValue(context.Background(), auth.TenantIDKey, "tenant-a")
+	tenantBCtx := context.WithValue(context.Background(), auth.TenantIDKey, "tenant-b")
+
+	require.NoError(t, service.MarkSeen(tenantACtx, contextID, hash, time.Minute))
+
+	isDup, err := service.IsDuplicate(tenantACtx, contextID, hash)
+	require.NoError(t, err)
+	require.True(t, isDup)
+
+	isDup, err = service.IsDuplicate(tenantBCtx, contextID, hash)
+	require.NoError(t, err)
+	require.False(t, isDup)
+
+	isDup, err = service.IsDuplicate(context.Background(), contextID, hash)
+	require.NoError(t, err)
+	require.False(t, isDup)
+
+	require.NoError(t, service.ClearBatch(tenantACtx, contextID, []string{hash}))
+
+	isDup, err = service.IsDuplicate(tenantACtx, contextID, hash)
+	require.NoError(t, err)
+	require.False(t, isDup)
 }
 
 func TestDedupeServiceMarkSeenWithRetryReturnsDuplicate(t *testing.T) {

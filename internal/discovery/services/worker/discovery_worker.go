@@ -456,11 +456,13 @@ func (dw *DiscoveryWorker) markStaleConnections(ctx context.Context, seenFetcher
 
 // acquireLock attempts to acquire a Redis distributed lock.
 func (dw *DiscoveryWorker) acquireLock(ctx context.Context, key string) (bool, string, error) {
-	conn, err := dw.infraProvider.GetRedisConnection(ctx)
+	connLease, err := dw.infraProvider.GetRedisConnection(ctx)
 	if err != nil {
 		return false, "", fmt.Errorf("get redis connection: %w", err)
 	}
+	defer connLease.Release()
 
+	conn := connLease.Connection()
 	if conn == nil {
 		return false, "", ErrRedisClientNil
 	}
@@ -483,11 +485,13 @@ func (dw *DiscoveryWorker) acquireLock(ctx context.Context, key string) (bool, s
 
 // releaseLock releases a Redis distributed lock using an atomic Lua script.
 func (dw *DiscoveryWorker) releaseLock(ctx context.Context, key, token string) {
-	conn, err := dw.infraProvider.GetRedisConnection(ctx)
+	connLease, err := dw.infraProvider.GetRedisConnection(ctx)
 	if err != nil {
 		return
 	}
+	defer connLease.Release()
 
+	conn := connLease.Connection()
 	if conn == nil {
 		return
 	}

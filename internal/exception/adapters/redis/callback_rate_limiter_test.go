@@ -126,6 +126,42 @@ func TestCallbackRateLimiter_SameExternalKeyDifferentTenants(t *testing.T) {
 	require.False(t, allowed)
 }
 
+func TestScopedRateLimitRedisKey(t *testing.T) {
+	t.Parallel()
+
+	t.Run("missing tenant preserves legacy default-tenant scope", func(t *testing.T) {
+		t.Parallel()
+
+		assert.Equal(
+			t,
+			"matcher:callback:ratelimit:"+auth.DefaultTenantID+":JIRA",
+			scopedRateLimitRedisKey(context.Background(), "JIRA"),
+		)
+	})
+
+	t.Run("explicit default tenant preserves legacy format", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.WithValue(context.Background(), auth.TenantIDKey, auth.DefaultTenantID)
+		assert.Equal(
+			t,
+			"matcher:callback:ratelimit:"+auth.DefaultTenantID+":JIRA",
+			scopedRateLimitRedisKey(ctx, "JIRA"),
+		)
+	})
+
+	t.Run("explicit custom tenant is scoped without double colon", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.WithValue(context.Background(), auth.TenantIDKey, "tenant-a")
+		assert.Equal(
+			t,
+			"matcher:callback:ratelimit:tenant-a:JIRA",
+			scopedRateLimitRedisKey(ctx, "JIRA"),
+		)
+	})
+}
+
 func TestCallbackRateLimiter_WindowExpiry(t *testing.T) {
 	t.Parallel()
 
@@ -273,7 +309,7 @@ func TestNewCallbackRateLimiter_DefaultValues(t *testing.T) {
 func TestCallbackRateLimiter_Constants(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, "matcher:callback:ratelimit:", callbackRateLimitKeyPrefix)
+	assert.Equal(t, "matcher:callback:ratelimit", callbackRateLimitKeyPrefix)
 	assert.Equal(t, 60, DefaultCallbackRateLimitPerMin)
 }
 

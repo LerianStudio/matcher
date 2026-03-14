@@ -64,10 +64,11 @@ func (repo *Repository) Create(
 		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
 		return nil, fmt.Errorf("get postgres connection: %w", err)
 	}
+	defer connection.Release()
 
 	result, err := common.WithTenantTx(
 		ctx,
-		connection,
+		connection.Connection(),
 		func(tx *sql.Tx) (*entities.ReconciliationSource, error) {
 			return repo.executeCreate(ctx, tx, entity)
 		},
@@ -112,10 +113,11 @@ func (repo *Repository) CreateWithTx(
 		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
 		return nil, fmt.Errorf("get postgres connection: %w", err)
 	}
+	defer connection.Release()
 
 	result, err := common.WithTenantTxOrExisting(
 		ctx,
-		connection,
+		connection.Connection(),
 		tx,
 		func(innerTx *sql.Tx) (*entities.ReconciliationSource, error) {
 			return repo.executeCreate(ctx, innerTx, entity)
@@ -182,10 +184,11 @@ func (repo *Repository) FindByID(
 		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
 		return nil, fmt.Errorf("get postgres connection: %w", err)
 	}
+	defer connection.Release()
 
 	result, err := common.WithTenantTx(
 		ctx,
-		connection,
+		connection.Connection(),
 		func(tx *sql.Tx) (*entities.ReconciliationSource, error) {
 			row := tx.QueryRowContext(
 				ctx,
@@ -235,6 +238,7 @@ func (repo *Repository) FindByContextID(
 		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
 		return nil, libHTTP.CursorPagination{}, fmt.Errorf("get postgres connection: %w", err)
 	}
+	defer connection.Release()
 
 	limit = libHTTP.ValidateLimit(limit, constants.DefaultPaginationLimit, constants.MaximumPaginationLimit)
 
@@ -248,7 +252,7 @@ func (repo *Repository) FindByContextID(
 		Where(squirrel.Eq{"context_id": contextID.String()}).
 		PlaceholderFormat(squirrel.Dollar)
 
-	sources, pagination, err := executeSourceQuery(ctx, connection, baseQuery, cursor, decodedCursor, limit)
+	sources, pagination, err := executeSourceQuery(ctx, connection.Connection(), baseQuery, cursor, decodedCursor, limit)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to list reconciliation sources", err)
 
@@ -282,6 +286,7 @@ func (repo *Repository) FindByContextIDAndType(
 		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
 		return nil, libHTTP.CursorPagination{}, fmt.Errorf("get postgres connection: %w", err)
 	}
+	defer connection.Release()
 
 	limit = libHTTP.ValidateLimit(limit, constants.DefaultPaginationLimit, constants.MaximumPaginationLimit)
 
@@ -296,7 +301,7 @@ func (repo *Repository) FindByContextIDAndType(
 		Where(squirrel.Eq{"type": sourceType.String()}).
 		PlaceholderFormat(squirrel.Dollar)
 
-	sources, pagination, err := executeSourceQuery(ctx, connection, baseQuery, cursor, decodedCursor, limit)
+	sources, pagination, err := executeSourceQuery(ctx, connection.Connection(), baseQuery, cursor, decodedCursor, limit)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to list reconciliation sources", err)
 
@@ -333,10 +338,11 @@ func (repo *Repository) Update(
 		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
 		return nil, fmt.Errorf("get postgres connection: %w", err)
 	}
+	defer connection.Release()
 
 	result, err := common.WithTenantTx(
 		ctx,
-		connection,
+		connection.Connection(),
 		func(tx *sql.Tx) (*entities.ReconciliationSource, error) {
 			return repo.executeUpdate(ctx, tx, entity)
 		},
@@ -385,10 +391,11 @@ func (repo *Repository) UpdateWithTx(
 		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
 		return nil, fmt.Errorf("get postgres connection: %w", err)
 	}
+	defer connection.Release()
 
 	result, err := common.WithTenantTxOrExisting(
 		ctx,
-		connection,
+		connection.Connection(),
 		tx,
 		func(innerTx *sql.Tx) (*entities.ReconciliationSource, error) {
 			return repo.executeUpdate(ctx, innerTx, entity)
@@ -462,8 +469,9 @@ func (repo *Repository) Delete(ctx stdctx.Context, contextID, id uuid.UUID) erro
 		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
 		return fmt.Errorf("get postgres connection: %w", err)
 	}
+	defer connection.Release()
 
-	_, err = common.WithTenantTx(ctx, connection, func(tx *sql.Tx) (bool, error) {
+	_, err = common.WithTenantTx(ctx, connection.Connection(), func(tx *sql.Tx) (bool, error) {
 		return repo.executeDelete(ctx, tx, contextID, id)
 	})
 	if err != nil {
@@ -504,10 +512,11 @@ func (repo *Repository) DeleteWithTx(
 		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
 		return fmt.Errorf("get postgres connection: %w", err)
 	}
+	defer connection.Release()
 
 	_, err = common.WithTenantTxOrExisting(
 		ctx,
-		connection,
+		connection.Connection(),
 		tx,
 		func(innerTx *sql.Tx) (bool, error) {
 			return repo.executeDelete(ctx, innerTx, contextID, id)
@@ -575,10 +584,11 @@ func (repo *Repository) GetContextIDBySourceID(
 		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
 		return uuid.Nil, fmt.Errorf("get postgres connection: %w", err)
 	}
+	defer connection.Release()
 
 	result, err := common.WithTenantTx(
 		ctx,
-		connection,
+		connection.Connection(),
 		func(tx *sql.Tx) (uuid.UUID, error) {
 			var contextIDStr string
 

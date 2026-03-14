@@ -30,6 +30,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
 	"github.com/LerianStudio/matcher/internal/governance/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/governance/services/command"
+	tenantinfra "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 	"github.com/LerianStudio/matcher/pkg/chanutil"
 	"github.com/LerianStudio/matcher/pkg/storageopt"
@@ -524,10 +525,14 @@ func (aw *ArchivalWorker) handleUploadingState(
 		}
 	}
 
-	archiveKey := aw.archiveKey(metadata)
+	archiveKey, err := aw.archiveKey(metadata)
+	if err != nil {
+		return aw.handlePartitionError(ctx, metadata, "build archive key", err)
+	}
+
 	compressedSize := int64(exportBuf.Len())
 
-	_, err := aw.storage.UploadWithOptions(
+	_, err = aw.storage.UploadWithOptions(
 		ctx,
 		archiveKey,
 		exportBuf,
@@ -882,16 +887,22 @@ func (aw *ArchivalWorker) handlePartitionError(
 // The archive_id UUID segment prevents path enumeration attacks: even if a
 // presigned URL for one archive leaks, an attacker cannot guess paths for
 // other tenants' or months' archives without knowing the per-archive UUID.
-func (aw *ArchivalWorker) archiveKey(metadata *entities.ArchiveMetadata) string {
+func (aw *ArchivalWorker) archiveKey(metadata *entities.ArchiveMetadata) (string, error) {
 	year, month, _ := metadata.DateRangeStart.Date()
 
-	return fmt.Sprintf("%s/%s/%04d/%02d/%s/audit_logs_%04d_%02d.jsonl.gz",
+	key, err := tenantinfra.ScopedObjectStorageKey(
 		aw.cfg.StoragePrefix,
 		metadata.TenantID.String(),
-		year, month,
+		fmt.Sprintf("%04d", year),
+		fmt.Sprintf("%02d", month),
 		metadata.ID.String(),
-		year, month,
+		fmt.Sprintf("audit_logs_%04d_%02d.jsonl.gz", year, month),
 	)
+	if err != nil {
+		return "", fmt.Errorf("build scoped archive storage key: %w", err)
+	}
+
+	return key, nil
 }
 
 // resumeIncomplete queries for archives not yet COMPLETE and processes each.
@@ -960,11 +971,13 @@ func (aw *ArchivalWorker) listTenants(ctx context.Context) ([]string, error) {
 // acquireLock attempts to acquire the distributed archival lock via Redis SET NX EX.
 // Returns (acquired, token, error).
 func (aw *ArchivalWorker) acquireLock(ctx context.Context) (bool, string, error) {
-	conn, err := aw.infraProvider.GetRedisConnection(ctx)
+	connLease, err := aw.infraProvider.GetRedisConnection(ctx)
 	if err != nil {
 		return false, "", fmt.Errorf("get redis connection: %w", err)
 	}
+	defer connLease.Release()
 
+	conn := connLease.Connection()
 	if conn == nil {
 		return false, "", ErrNilRedisClient
 	}
@@ -989,13 +1002,15 @@ func (aw *ArchivalWorker) acquireLock(ctx context.Context) (bool, string, error)
 // releaseLock releases the distributed archival lock using a Lua script
 // that only deletes the key if the token matches (safe release).
 func (aw *ArchivalWorker) releaseLock(ctx context.Context, token string) {
-	conn, err := aw.infraProvider.GetRedisConnection(ctx)
+	connLease, err := aw.infraProvider.GetRedisConnection(ctx)
 	if err != nil {
 		aw.logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelWarn, "failed to get redis connection for lock release")
 
 		return
 	}
+	defer connLease.Release()
 
+	conn := connLease.Connection()
 	if conn == nil {
 		return
 	}

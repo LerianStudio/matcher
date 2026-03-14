@@ -174,10 +174,11 @@ func (repo *Repository) FindByID(
 		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
 		return nil, fmt.Errorf("get postgres connection: %w", err)
 	}
+	defer connection.Release()
 
 	result, err := common.WithTenantTx(
 		ctx,
-		connection,
+		connection.Connection(),
 		func(tx *sql.Tx) (*entities.MatchRule, error) {
 			row := tx.QueryRowContext(
 				ctx,
@@ -227,6 +228,7 @@ func (repo *Repository) FindByContextID(
 		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
 		return nil, libHTTP.CursorPagination{}, fmt.Errorf("get postgres connection: %w", err)
 	}
+	defer connection.Release()
 
 	limit = libHTTP.ValidateLimit(limit, constants.DefaultPaginationLimit, constants.MaximumPaginationLimit)
 
@@ -239,7 +241,7 @@ func (repo *Repository) FindByContextID(
 
 	result, err := common.WithTenantTx(
 		ctx,
-		connection,
+		connection.Connection(),
 		func(tx *sql.Tx) (rules entities.MatchRules, err error) {
 			builder := squirrel.Select(strings.Split(matchRuleColumns, ", ")...).
 				From("match_rules").
@@ -320,6 +322,7 @@ func (repo *Repository) FindByContextIDAndType(
 		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
 		return nil, libHTTP.CursorPagination{}, fmt.Errorf("get postgres connection: %w", err)
 	}
+	defer connection.Release()
 
 	limit = libHTTP.ValidateLimit(limit, constants.DefaultPaginationLimit, constants.MaximumPaginationLimit)
 
@@ -332,7 +335,7 @@ func (repo *Repository) FindByContextIDAndType(
 
 	result, err := common.WithTenantTx(
 		ctx,
-		connection,
+		connection.Connection(),
 		func(tx *sql.Tx) (rules entities.MatchRules, err error) {
 			builder := squirrel.Select(strings.Split(matchRuleColumns, ", ")...).
 				From("match_rules").
@@ -413,10 +416,11 @@ func (repo *Repository) FindByPriority(
 		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
 		return nil, fmt.Errorf("get postgres connection: %w", err)
 	}
+	defer connection.Release()
 
 	result, err := common.WithTenantTx(
 		ctx,
-		connection,
+		connection.Connection(),
 		func(tx *sql.Tx) (*entities.MatchRule, error) {
 			row := tx.QueryRowContext(
 				ctx,
@@ -702,8 +706,9 @@ func (repo *Repository) ReorderPriorities(
 		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
 		return fmt.Errorf("get postgres connection: %w", err)
 	}
+	defer connection.Release()
 
-	_, err = common.WithTenantTx(ctx, connection, func(tx *sql.Tx) (bool, error) {
+	_, err = common.WithTenantTx(ctx, connection.Connection(), func(tx *sql.Tx) (bool, error) {
 		// Offset priorities to avoid unique constraint collisions during reorder.
 		offset := len(ruleIDs) + reorderPriorityOffset
 

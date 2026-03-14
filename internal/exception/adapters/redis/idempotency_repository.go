@@ -128,12 +128,14 @@ func (repo *IdempotencyRepository) TryAcquire(
 
 	defer span.End()
 
-	conn, err := repo.provider.GetRedisConnection(ctx)
+	connLease, err := repo.provider.GetRedisConnection(ctx)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to get redis connection", err)
 		return false, fmt.Errorf("get redis connection: %w", err)
 	}
+	defer connLease.Release()
 
+	conn := connLease.Connection()
 	if conn == nil {
 		return false, ErrRedisClientNil
 	}
@@ -179,12 +181,14 @@ func (repo *IdempotencyRepository) TryReacquireFromFailed(
 
 	defer span.End()
 
-	conn, err := repo.provider.GetRedisConnection(ctx)
+	connLease, err := repo.provider.GetRedisConnection(ctx)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to get redis connection", err)
 		return false, fmt.Errorf("get redis connection: %w", err)
 	}
+	defer connLease.Release()
 
+	conn := connLease.Connection()
 	if conn == nil {
 		return false, ErrRedisClientNil
 	}
@@ -257,12 +261,14 @@ func (repo *IdempotencyRepository) MarkComplete(
 
 	defer span.End()
 
-	conn, err := repo.provider.GetRedisConnection(ctx)
+	connLease, err := repo.provider.GetRedisConnection(ctx)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to get redis connection", err)
 		return fmt.Errorf("get redis connection: %w", err)
 	}
+	defer connLease.Release()
 
+	conn := connLease.Connection()
 	if conn == nil {
 		return ErrRedisClientNil
 	}
@@ -313,12 +319,14 @@ func (repo *IdempotencyRepository) MarkFailed(
 
 	defer span.End()
 
-	conn, err := repo.provider.GetRedisConnection(ctx)
+	connLease, err := repo.provider.GetRedisConnection(ctx)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to get redis connection", err)
 		return fmt.Errorf("get redis connection: %w", err)
 	}
+	defer connLease.Release()
 
+	conn := connLease.Connection()
 	if conn == nil {
 		return ErrRedisClientNil
 	}
@@ -368,12 +376,14 @@ func (repo *IdempotencyRepository) GetCachedResult(
 
 	defer span.End()
 
-	conn, err := repo.provider.GetRedisConnection(ctx)
+	connLease, err := repo.provider.GetRedisConnection(ctx)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to get redis connection", err)
 		return nil, fmt.Errorf("get redis connection: %w", err)
 	}
+	defer connLease.Release()
 
+	conn := connLease.Connection()
 	if conn == nil {
 		return nil, ErrRedisClientNil
 	}

@@ -17,13 +17,14 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // matchedRowIterator wraps sql.Rows for streaming matched items.
 // Implements repositories.MatchedRowIterator.
 type matchedRowIterator struct {
 	rows *sql.Rows
-	tx   *sql.Tx
+	tx   *sharedPorts.TxLease
 	span trace.Span
 }
 
@@ -73,7 +74,7 @@ func (m *matchedRowIterator) Scan() (*entities.MatchedItem, error) { //nolint:re
 // Implements repositories.UnmatchedRowIterator.
 type unmatchedRowIterator struct {
 	rows *sql.Rows
-	tx   *sql.Tx
+	tx   *sharedPorts.TxLease
 	span trace.Span
 }
 
@@ -125,7 +126,7 @@ func (u *unmatchedRowIterator) Scan() (*entities.UnmatchedItem, error) { //nolin
 // Implements repositories.VarianceRowIterator.
 type varianceRowIterator struct {
 	rows *sql.Rows
-	tx   *sql.Tx
+	tx   *sharedPorts.TxLease
 	span trace.Span
 }
 
@@ -247,7 +248,7 @@ func (repo *Repository) StreamMatchedForExport(
 	}
 
 	//nolint:rowserrcheck // Iterator.Err() is called by the caller after iteration
-	rows, err := tx.QueryContext(ctx, sqlQuery, args...)
+	rows, err := tx.SQLTx().QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
 		span.End()
 
@@ -325,7 +326,7 @@ func (repo *Repository) StreamUnmatchedForExport(
 	}
 
 	//nolint:rowserrcheck // Iterator.Err() is called by the caller after iteration
-	rows, err := tx.QueryContext(ctx, sqlQuery, args...)
+	rows, err := tx.SQLTx().QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
 		span.End()
 
@@ -387,7 +388,7 @@ func (repo *Repository) StreamVarianceForExport(
 	args = append(args, safeExportLimit(maxRecords))
 
 	//nolint:rowserrcheck // Iterator.Err() is called by the caller after iteration
-	rows, err := tx.QueryContext(ctx, queryStr, args...)
+	rows, err := tx.SQLTx().QueryContext(ctx, queryStr, args...)
 	if err != nil {
 		span.End()
 

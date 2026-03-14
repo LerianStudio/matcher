@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -28,6 +27,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/reporting/ports"
 	"github.com/LerianStudio/matcher/internal/reporting/services/query/exports"
+	tenantinfra "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant"
 	"github.com/LerianStudio/matcher/pkg/chanutil"
 )
 
@@ -343,7 +343,13 @@ func (worker *ExportWorker) processJob(ctx context.Context, job *entities.Export
 		return
 	}
 
-	fileKey := worker.generateFileKey(job)
+	fileKey, err := worker.generateFileKey(job)
+	if err != nil {
+		worker.failJob(ctx, job, fmt.Errorf("build export storage key: %w", err))
+
+		return
+	}
+
 	fileName := entities.GenerateFileName(
 		job.ReportType,
 		job.Format,
@@ -1071,8 +1077,8 @@ func (worker *ExportWorker) calculateBackoff(attempt int) time.Duration {
 	return time.Duration(backoff)
 }
 
-func (worker *ExportWorker) generateFileKey(job *entities.ExportJob) string {
-	return filepath.Join(
+func (worker *ExportWorker) generateFileKey(job *entities.ExportJob) (string, error) {
+	return tenantinfra.ScopedObjectStorageKey(
 		"exports",
 		job.TenantID.String(),
 		job.ContextID.String(),

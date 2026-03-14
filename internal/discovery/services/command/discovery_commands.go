@@ -104,11 +104,14 @@ func (uc *UseCase) acquireDiscoveryRefreshLock(ctx context.Context) (string, err
 		return "", nil
 	}
 
-	redisConn, err := uc.refreshLockProvider.GetRedisConnection(ctx)
+	redisLease, err := uc.refreshLockProvider.GetRedisConnection(ctx)
 	if err != nil {
 		return "", fmt.Errorf("get redis connection for discovery refresh lock: %w", err)
 	}
 
+	defer redisLease.Release()
+
+	redisConn := redisLease.Connection()
 	if redisConn == nil {
 		return "", nil
 	}
@@ -142,8 +145,14 @@ func (uc *UseCase) releaseDiscoveryRefreshLock(ctx context.Context, token string
 		return
 	}
 
-	redisConn, err := uc.refreshLockProvider.GetRedisConnection(ctx)
-	if err != nil || redisConn == nil {
+	redisLease, err := uc.refreshLockProvider.GetRedisConnection(ctx)
+	if err != nil || redisLease == nil {
+		return
+	}
+	defer redisLease.Release()
+
+	redisConn := redisLease.Connection()
+	if redisConn == nil {
 		return
 	}
 

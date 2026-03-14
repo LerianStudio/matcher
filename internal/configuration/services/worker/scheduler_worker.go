@@ -300,11 +300,13 @@ func (worker *SchedulerWorker) processSchedule(
 
 // acquireLock attempts to acquire a Redis distributed lock.
 func (worker *SchedulerWorker) acquireLock(ctx context.Context, key string) (bool, string, error) {
-	conn, err := worker.infraProvider.GetRedisConnection(ctx)
+	connLease, err := worker.infraProvider.GetRedisConnection(ctx)
 	if err != nil {
 		return false, "", fmt.Errorf("get redis connection: %w", err)
 	}
+	defer connLease.Release()
 
+	conn := connLease.Connection()
 	if conn == nil {
 		return false, "", ErrRedisClientNil
 	}
@@ -327,11 +329,13 @@ func (worker *SchedulerWorker) acquireLock(ctx context.Context, key string) (boo
 
 // releaseLock releases a Redis distributed lock.
 func (worker *SchedulerWorker) releaseLock(ctx context.Context, key, token string) {
-	conn, err := worker.infraProvider.GetRedisConnection(ctx)
+	connLease, err := worker.infraProvider.GetRedisConnection(ctx)
 	if err != nil {
 		return
 	}
+	defer connLease.Release()
 
+	conn := connLease.Connection()
 	if conn == nil {
 		return
 	}

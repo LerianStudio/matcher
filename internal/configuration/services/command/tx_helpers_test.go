@@ -4,11 +4,8 @@ package command
 
 import (
 	"context"
-	"database/sql"
 	"testing"
 
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
-	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -20,19 +17,19 @@ type mockNilConnProvider struct{}
 
 var _ sharedPorts.InfrastructureProvider = (*mockNilConnProvider)(nil)
 
-func (m *mockNilConnProvider) GetPostgresConnection(_ context.Context) (*libPostgres.Client, error) {
+func (m *mockNilConnProvider) GetPostgresConnection(_ context.Context) (*sharedPorts.PostgresConnectionLease, error) {
 	return nil, nil
 }
 
-func (m *mockNilConnProvider) GetRedisConnection(_ context.Context) (*libRedis.Client, error) {
+func (m *mockNilConnProvider) GetRedisConnection(_ context.Context) (*sharedPorts.RedisConnectionLease, error) {
 	return nil, nil
 }
 
-func (m *mockNilConnProvider) BeginTx(_ context.Context) (*sql.Tx, error) {
+func (m *mockNilConnProvider) BeginTx(_ context.Context) (*sharedPorts.TxLease, error) {
 	return nil, nil
 }
 
-func (m *mockNilConnProvider) GetReplicaDB(_ context.Context) (*sql.DB, error) {
+func (m *mockNilConnProvider) GetReplicaDB(_ context.Context) (*sharedPorts.ReplicaDBLease, error) {
 	return nil, nil
 }
 
@@ -43,19 +40,19 @@ type mockErrProvider struct {
 
 var _ sharedPorts.InfrastructureProvider = (*mockErrProvider)(nil)
 
-func (m *mockErrProvider) GetPostgresConnection(_ context.Context) (*libPostgres.Client, error) {
+func (m *mockErrProvider) GetPostgresConnection(_ context.Context) (*sharedPorts.PostgresConnectionLease, error) {
 	return nil, m.err
 }
 
-func (m *mockErrProvider) GetRedisConnection(_ context.Context) (*libRedis.Client, error) {
+func (m *mockErrProvider) GetRedisConnection(_ context.Context) (*sharedPorts.RedisConnectionLease, error) {
 	return nil, nil
 }
 
-func (m *mockErrProvider) BeginTx(_ context.Context) (*sql.Tx, error) {
-	return nil, nil
+func (m *mockErrProvider) BeginTx(_ context.Context) (*sharedPorts.TxLease, error) {
+	return nil, m.err
 }
 
-func (m *mockErrProvider) GetReplicaDB(_ context.Context) (*sql.DB, error) {
+func (m *mockErrProvider) GetReplicaDB(_ context.Context) (*sharedPorts.ReplicaDBLease, error) {
 	return nil, nil
 }
 
@@ -93,19 +90,7 @@ func TestBeginTenantTx_ProviderReturnsError(t *testing.T) {
 	assert.Nil(t, tx)
 	assert.NotNil(t, cancel)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "get postgres connection")
+	assert.Contains(t, err.Error(), "begin tenant transaction")
 
 	cancel()
-}
-
-func TestErrNoPrimaryDatabase(t *testing.T) {
-	t.Parallel()
-
-	assert.Equal(t, "no primary database configured for tenant transaction", errNoPrimaryDatabase.Error())
-}
-
-func TestDefaultBeginTxTimeout(t *testing.T) {
-	t.Parallel()
-
-	assert.Equal(t, 30.0, defaultBeginTxTimeout.Seconds())
 }

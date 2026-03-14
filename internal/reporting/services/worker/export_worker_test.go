@@ -903,7 +903,8 @@ func TestExportWorker_GenerateFileKey(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := worker.generateFileKey(tt.job)
+			result, err := worker.generateFileKey(tt.job)
+			require.NoError(t, err)
 			for _, substr := range tt.contains {
 				assert.Contains(t, result, substr)
 			}
@@ -925,6 +926,27 @@ func TestExportWorker_DefaultTempDir(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.NotEmpty(t, worker.cfg.TempDir)
+}
+
+func TestExportWorker_GenerateFileKey_ExactFormat(t *testing.T) {
+	t.Parallel()
+
+	worker := &ExportWorker{}
+	jobID := uuid.MustParse("aabbccdd-0011-2233-4455-667788990011")
+	tenantID := uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
+	contextID := uuid.MustParse("660e8400-e29b-41d4-a716-446655440000")
+
+	job := &entities.ExportJob{
+		ID:         jobID,
+		TenantID:   tenantID,
+		ContextID:  contextID,
+		ReportType: entities.ExportReportTypeMatched,
+		Format:     entities.ExportFormatCSV,
+	}
+
+	result, err := worker.generateFileKey(job)
+	require.NoError(t, err)
+	assert.Equal(t, "exports/550e8400-e29b-41d4-a716-446655440000/660e8400-e29b-41d4-a716-446655440000/aabbccdd-0011-2233-4455-667788990011-MATCHED.csv", result)
 }
 
 func TestExportWorker_NegativeConfigValues(t *testing.T) {
