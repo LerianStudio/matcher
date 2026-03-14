@@ -309,6 +309,52 @@ func (te *TenantExtractor) ExtractTenant() fiber.Handler {
 	}
 }
 
+func (te *TenantExtractor) validateTenantClaims() fiber.Handler {
+	if te == nil {
+		return func(c *fiber.Ctx) error {
+			return fiber.NewError(
+				fiber.StatusInternalServerError,
+				"tenant extractor not initialized",
+			)
+		}
+	}
+
+	return func(fiberCtx *fiber.Ctx) error {
+		if !te.authEnabled {
+			return fiberCtx.Next()
+		}
+
+		if len(te.tokenSecret) == 0 {
+			return fiber.NewError(
+				fiber.StatusInternalServerError,
+				"authentication service unavailable",
+			)
+		}
+
+		token := libHTTP.ExtractTokenFromHeader(fiberCtx)
+		if token == "" {
+			return fiber.NewError(fiber.StatusUnauthorized, ErrMissingToken.Error())
+		}
+
+		_, _, _, err := extractClaimsFromToken(
+			token,
+			te.defaultTenantID,
+			te.defaultTenantSlug,
+			te.tokenSecret,
+			te.requireTenantClaims,
+		)
+		if err != nil {
+			if errors.Is(err, ErrMissingTenantClaim) {
+				return fiber.NewError(fiber.StatusForbidden, "tenant claim required")
+			}
+
+			return fiber.NewError(fiber.StatusUnauthorized, ErrInvalidToken.Error())
+		}
+
+		return fiberCtx.Next()
+	}
+}
+
 func claimString(claims jwt.MapClaims, keys ...string) (string, bool, error) {
 	for _, key := range keys {
 		value, ok := claims[key]
@@ -531,6 +577,26 @@ func GetTenantID(ctx context.Context) string {
 	}
 
 	return getDefaultTenantID()
+}
+
+// LookupTenantID retrieves the tenant ID only when it is explicitly present in
+// context. Unlike GetTenantID, it does not fall back to the configured default.
+func LookupTenantID(ctx context.Context) (string, bool) {
+	if ctx == nil {
+		return "", false
+	}
+
+	tid, ok := ctx.Value(TenantIDKey).(string)
+	if !ok {
+		return "", false
+	}
+
+	tid = strings.TrimSpace(tid)
+	if tid == "" {
+		return "", false
+	}
+
+	return tid, true
 }
 
 // GetTenantSlug retrieves the tenant slug from context, returning the default if not set.

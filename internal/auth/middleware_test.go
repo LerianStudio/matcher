@@ -263,6 +263,44 @@ func TestGetUserID(t *testing.T) {
 	}
 }
 
+func TestLookupTenantID(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns explicit tenant from context", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.WithValue(context.Background(), TenantIDKey, "tenant-a")
+		tenantID, ok := LookupTenantID(ctx)
+		require.True(t, ok)
+		assert.Equal(t, "tenant-a", tenantID)
+	})
+
+	t.Run("does not fall back to default tenant", func(t *testing.T) {
+		t.Parallel()
+
+		tenantID, ok := LookupTenantID(context.Background())
+		require.False(t, ok)
+		assert.Empty(t, tenantID)
+	})
+
+	t.Run("nil context returns no tenant", func(t *testing.T) {
+		t.Parallel()
+
+		tenantID, ok := LookupTenantID(nil)
+		require.False(t, ok)
+		assert.Empty(t, tenantID)
+	})
+
+	t.Run("whitespace tenant is rejected", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.WithValue(context.Background(), TenantIDKey, "   ")
+		tenantID, ok := LookupTenantID(ctx)
+		require.False(t, ok)
+		assert.Empty(t, tenantID)
+	})
+}
+
 func TestExtractClaimsFromToken(t *testing.T) {
 	t.Parallel()
 
@@ -773,7 +811,7 @@ func TestProtectedGroup_NilExtractor(t *testing.T) {
 	app := fiber.New()
 	client := authMiddleware.NewAuthClient("", false, nil)
 
-	protected := ProtectedGroup(app, client, nil, "resource", "read")
+	protected := ProtectedGroupWithMiddleware(app, client, nil, "resource", "read")
 	protected.Get("/secure", func(c *fiber.Ctx) error {
 		return c.SendStatus(http.StatusOK)
 	})
