@@ -5,14 +5,10 @@ package ports
 
 import (
 	"context"
-	"database/sql"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
-	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
 )
 
 var (
@@ -33,21 +29,21 @@ type mockInfrastructureProvider struct{}
 
 func (m *mockInfrastructureProvider) GetPostgresConnection(
 	_ context.Context,
-) (*libPostgres.Client, error) {
+) (*PostgresConnectionLease, error) {
 	return nil, nil
 }
 
 func (m *mockInfrastructureProvider) GetRedisConnection(
 	_ context.Context,
-) (*libRedis.Client, error) {
+) (*RedisConnectionLease, error) {
 	return nil, nil
 }
 
-func (m *mockInfrastructureProvider) BeginTx(_ context.Context) (*sql.Tx, error) {
+func (m *mockInfrastructureProvider) BeginTx(_ context.Context) (*TxLease, error) {
 	return nil, nil
 }
 
-func (m *mockInfrastructureProvider) GetReplicaDB(_ context.Context) (*sql.DB, error) {
+func (m *mockInfrastructureProvider) GetReplicaDB(_ context.Context) (*ReplicaDBLease, error) {
 	return nil, nil
 }
 

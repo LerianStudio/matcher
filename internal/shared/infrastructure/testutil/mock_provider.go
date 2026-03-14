@@ -10,13 +10,13 @@ import (
 	"testing"
 	"unsafe"
 
-	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/bxcodec/dbresolver/v2"
 	"github.com/redis/go-redis/v9"
 
 	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
 	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
 
+	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -46,50 +46,49 @@ type MockInfrastructureProvider struct {
 // GetPostgresConnection returns the mocked postgres connection or error.
 func (provider *MockInfrastructureProvider) GetPostgresConnection(
 	_ context.Context,
-) (*libPostgres.Client, error) {
+) (*ports.PostgresConnectionLease, error) {
 	if provider.PostgresErr != nil {
 		return nil, provider.PostgresErr
 	}
 
-	return provider.PostgresConn, nil
+	return ports.NewPostgresConnectionLease(provider.PostgresConn, nil), nil
 }
 
 // GetRedisConnection returns the mocked redis connection or error.
 func (provider *MockInfrastructureProvider) GetRedisConnection(
 	_ context.Context,
-) (*libRedis.Client, error) {
+) (*ports.RedisConnectionLease, error) {
 	if provider.RedisErr != nil {
 		return nil, provider.RedisErr
 	}
 
-	return provider.RedisConn, nil
+	return ports.NewRedisConnectionLease(provider.RedisConn, nil), nil
 }
 
 // tryBeginPostgresTx attempts to begin a transaction from the configured PostgresConn.
-// Returns (tx, true) if successful, (nil, false) if PostgresConn is not configured.
 func (provider *MockInfrastructureProvider) tryBeginPostgresTx(
 	ctx context.Context,
-) (*sql.Tx, bool) {
+) (*sql.Tx, error) {
 	if provider.PostgresConn == nil {
-		return nil, false
+		return nil, ErrNoPostgresConnection
 	}
 
 	resolver, err := provider.PostgresConn.Resolver(ctx)
 	if err != nil {
-		return nil, false
+		return nil, fmt.Errorf("resolve postgres connection: %w", err)
 	}
 
 	primaryDBs := resolver.PrimaryDBs()
 	if len(primaryDBs) == 0 {
-		return nil, false
+		return nil, ErrNoDatabase
 	}
 
 	tx, err := primaryDBs[0].BeginTx(ctx, nil)
 	if err != nil {
-		return nil, false
+		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 
-	return tx, true
+	return tx, nil
 }
 
 // BeginTx returns a mock transaction for testing.
@@ -97,51 +96,50 @@ func (provider *MockInfrastructureProvider) tryBeginPostgresTx(
 // If Tx is set, returns it.
 // If PostgresConn is set with a configured database, uses that to begin transaction.
 // Otherwise creates a new mock transaction using sqlmock.
-func (provider *MockInfrastructureProvider) BeginTx(ctx context.Context) (*sql.Tx, error) {
+func (provider *MockInfrastructureProvider) BeginTx(ctx context.Context) (*ports.TxLease, error) {
 	if provider.TxErr != nil {
 		return nil, provider.TxErr
 	}
 
 	if provider.Tx != nil {
-		return provider.Tx, nil
+		return ports.NewTxLease(provider.Tx, nil), nil
+	}
+
+	if provider.PostgresErr != nil {
+		return nil, provider.PostgresErr
+	}
+
+	if provider.PostgresConn == nil {
+		return nil, ErrNoPostgresConnection
 	}
 
 	// If PostgresConn is configured, use it to begin transaction
 	// This allows existing tests with sqlmock expectations to work
-	tx, ok := provider.tryBeginPostgresTx(ctx)
-	if ok {
-		return tx, nil
-	}
-
-	// Create a mock transaction that handles Commit/Rollback without panicking
-	db, mock, err := sqlmock.New()
+	tx, err := provider.tryBeginPostgresTx(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("create sqlmock: %w", err)
+		return nil, err
 	}
 
-	mock.ExpectBegin()
-	mock.ExpectCommit()
-	mock.ExpectRollback()
+	if err := auth.ApplyTenantSchema(ctx, tx); err != nil {
+		_ = tx.Rollback()
 
-	tx, err = db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("begin mock transaction: %w", err)
+		return nil, fmt.Errorf("apply tenant schema: %w", err)
 	}
 
-	return tx, nil
+	return ports.NewTxLease(tx, nil), nil
 }
 
 // GetReplicaDB returns the mocked replica database or error.
 // If ReplicaDB is set, returns it.
 // If PostgresConn is set, attempts to get the replica from it.
 // Falls back to primary if no replica is configured.
-func (provider *MockInfrastructureProvider) GetReplicaDB(ctx context.Context) (*sql.DB, error) {
+func (provider *MockInfrastructureProvider) GetReplicaDB(ctx context.Context) (*ports.ReplicaDBLease, error) {
 	if provider.ReplicaDBErr != nil {
 		return nil, provider.ReplicaDBErr
 	}
 
 	if provider.ReplicaDB != nil {
-		return provider.ReplicaDB, nil
+		return ports.NewReplicaDBLease(provider.ReplicaDB, nil), nil
 	}
 
 	if provider.PostgresConn == nil {
@@ -155,7 +153,7 @@ func (provider *MockInfrastructureProvider) GetReplicaDB(ctx context.Context) (*
 
 	replicaDBs := resolver.ReplicaDBs()
 	if len(replicaDBs) > 0 {
-		return replicaDBs[0], nil
+		return ports.NewReplicaDBLease(replicaDBs[0], nil), nil
 	}
 
 	primaryDBs := resolver.PrimaryDBs()
@@ -163,7 +161,7 @@ func (provider *MockInfrastructureProvider) GetReplicaDB(ctx context.Context) (*
 		return nil, ErrNoDatabase
 	}
 
-	return primaryDBs[0], nil
+	return ports.NewReplicaDBLease(primaryDBs[0], nil), nil
 }
 
 // NewClientWithResolver creates a *libPostgres.Client with a pre-injected resolver

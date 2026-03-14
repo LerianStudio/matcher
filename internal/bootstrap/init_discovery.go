@@ -168,14 +168,16 @@ func wireDiscoverySchemaCacheFromRedis(
 ) {
 	ctx := context.Background()
 
-	redisConn, redisErr := provider.GetRedisConnection(ctx)
+	redisLease, redisErr := provider.GetRedisConnection(ctx)
 	if redisErr != nil {
 		logger.Log(ctx, libLog.LevelWarn,
 			fmt.Sprintf("discovery: failed to get redis connection for schema cache: %v", redisErr))
 
 		return
 	}
+	defer redisLease.Release()
 
+	redisConn := redisLease.Connection()
 	if redisConn == nil {
 		return
 	}

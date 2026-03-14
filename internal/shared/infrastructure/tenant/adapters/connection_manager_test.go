@@ -32,6 +32,10 @@ type mockConfigurationPort struct {
 	err    error
 }
 
+type mapConfigurationPort struct {
+	configs map[string]*ports.TenantConfig
+}
+
 type libRedisConnectionOptionsExpectation struct {
 	PoolSize     int
 	MinIdleConns int
@@ -51,6 +55,14 @@ func (m *mockConfigurationPort) GetTenantConfig(
 	}
 
 	return m.config, nil
+}
+
+func (m *mapConfigurationPort) GetTenantConfig(_ context.Context, tenantID string) (*ports.TenantConfig, error) {
+	if cfg, ok := m.configs[tenantID]; ok {
+		return cfg, nil
+	}
+
+	return nil, errConfigFetchFailed
 }
 
 func defaultTestConfig() *ports.TenantConfig {
@@ -237,8 +249,8 @@ func TestClose_NilConnections(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.True(t, manager.closed)
-	assert.Nil(t, manager.postgresCache)
-	assert.Nil(t, manager.redisCache)
+	assert.Empty(t, manager.postgresCache)
+	assert.Empty(t, manager.redisCache)
 }
 
 func TestPostgresInfraKey_Deterministic(t *testing.T) {
@@ -534,6 +546,135 @@ func TestConcurrentGetRedisConnection_ClosedState(t *testing.T) {
 
 	assert.True(t, manager.closed)
 	assert.Equal(t, int32(100), errorCount.Load(), "all goroutines should get closed error")
+}
+
+func TestTenantConnectionManager_EvictsIdleEntriesAtSoftLimit(t *testing.T) {
+	t.Parallel()
+
+	configPort := &mapConfigurationPort{configs: map[string]*ports.TenantConfig{
+		"tenant-a": {PostgresPrimaryDSN: "postgres://tenant-a", RedisAddresses: []string{"redis-a:6379"}},
+		"tenant-b": {PostgresPrimaryDSN: "postgres://tenant-b", RedisAddresses: []string{"redis-b:6379"}},
+	}}
+
+	manager, err := NewTenantConnectionManager(configPort, 25, 5, 30, 5, WithCachePolicy(1, time.Second))
+	require.NoError(t, err)
+
+	manager.postgresClientFactory = func(cfg libPostgres.Config) (*libPostgres.Client, error) { return &libPostgres.Client{}, nil }
+	manager.postgresConnector = func(context.Context, *libPostgres.Client) error { return nil }
+
+	ctxA := context.WithValue(context.Background(), auth.TenantIDKey, "tenant-a")
+	ctxB := context.WithValue(context.Background(), auth.TenantIDKey, "tenant-b")
+
+	leaseA, err := manager.GetPostgresConnection(ctxA)
+	require.NoError(t, err)
+	require.Len(t, manager.postgresCache, 1)
+	leaseA.Release()
+
+	for _, entry := range manager.postgresCache {
+		entry.idleSince = time.Now().Add(-2 * time.Second)
+	}
+
+	leaseB, err := manager.GetPostgresConnection(ctxB)
+	require.NoError(t, err)
+	leaseB.Release()
+	require.Len(t, manager.postgresCache, 1)
+
+	keyB := postgresInfraKey(configPort.configs["tenant-b"])
+	_, ok := manager.postgresCache[keyB]
+	assert.True(t, ok)
+}
+
+func TestTenantConnectionManager_RejectsNewPoolWhenCapReachedAndEntryStillLeased(t *testing.T) {
+	t.Parallel()
+
+	configPort := &mapConfigurationPort{configs: map[string]*ports.TenantConfig{
+		"tenant-a": {PostgresPrimaryDSN: "postgres://tenant-a", RedisAddresses: []string{"redis-a:6379"}},
+		"tenant-b": {PostgresPrimaryDSN: "postgres://tenant-b", RedisAddresses: []string{"redis-b:6379"}},
+	}}
+
+	manager, err := NewTenantConnectionManager(configPort, 25, 5, 30, 5, WithCachePolicy(1, time.Hour))
+	require.NoError(t, err)
+
+	manager.postgresClientFactory = func(cfg libPostgres.Config) (*libPostgres.Client, error) { return &libPostgres.Client{}, nil }
+	manager.postgresConnector = func(context.Context, *libPostgres.Client) error { return nil }
+
+	ctxA := context.WithValue(context.Background(), auth.TenantIDKey, "tenant-a")
+	ctxB := context.WithValue(context.Background(), auth.TenantIDKey, "tenant-b")
+
+	leaseA, err := manager.GetPostgresConnection(ctxA)
+	require.NoError(t, err)
+	defer leaseA.Release()
+
+	_, err = manager.GetPostgresConnection(ctxB)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrTenantPoolLimitReached)
+
+	require.Len(t, manager.postgresCache, 1)
+}
+
+func TestTenantConnectionManager_RejectsNewRedisPoolWhenCapReachedAndEntryStillLeased(t *testing.T) {
+	t.Parallel()
+
+	configPort := &mapConfigurationPort{configs: map[string]*ports.TenantConfig{
+		"tenant-a": {PostgresPrimaryDSN: "postgres://tenant-a", RedisAddresses: []string{"redis-a:6379"}},
+		"tenant-b": {PostgresPrimaryDSN: "postgres://tenant-b", RedisAddresses: []string{"redis-b:6379"}},
+	}}
+
+	manager, err := NewTenantConnectionManager(configPort, 25, 5, 30, 5, WithCachePolicy(1, time.Hour))
+	require.NoError(t, err)
+
+	manager.redisClientFactory = func(_ context.Context, _ libRedis.Config) (*libRedis.Client, error) {
+		return testutil.NewRedisClientWithMock(redis.NewClient(&redis.Options{Addr: "127.0.0.1:6379"})), nil
+	}
+
+	ctxA := context.WithValue(context.Background(), auth.TenantIDKey, "tenant-a")
+	ctxB := context.WithValue(context.Background(), auth.TenantIDKey, "tenant-b")
+
+	leaseA, err := manager.GetRedisConnection(ctxA)
+	require.NoError(t, err)
+	defer leaseA.Release()
+
+	_, err = manager.GetRedisConnection(ctxB)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrTenantPoolLimitReached)
+	require.Len(t, manager.redisCache, 1)
+}
+
+func TestTenantConnectionManager_EvictsReleasedIdleRedisEntryAtHardCap(t *testing.T) {
+	t.Parallel()
+
+	configPort := &mapConfigurationPort{configs: map[string]*ports.TenantConfig{
+		"tenant-a": {PostgresPrimaryDSN: "postgres://tenant-a", RedisAddresses: []string{"redis-a:6379"}},
+		"tenant-b": {PostgresPrimaryDSN: "postgres://tenant-b", RedisAddresses: []string{"redis-b:6379"}},
+	}}
+
+	manager, err := NewTenantConnectionManager(configPort, 25, 5, 30, 5, WithCachePolicy(1, time.Second))
+	require.NoError(t, err)
+
+	manager.redisClientFactory = func(_ context.Context, _ libRedis.Config) (*libRedis.Client, error) {
+		return testutil.NewRedisClientWithMock(redis.NewClient(&redis.Options{Addr: "127.0.0.1:6379"})), nil
+	}
+
+	ctxA := context.WithValue(context.Background(), auth.TenantIDKey, "tenant-a")
+	ctxB := context.WithValue(context.Background(), auth.TenantIDKey, "tenant-b")
+
+	leaseA, err := manager.GetRedisConnection(ctxA)
+	require.NoError(t, err)
+	require.Len(t, manager.redisCache, 1)
+	leaseA.Release()
+
+	for _, entry := range manager.redisCache {
+		entry.idleSince = time.Now().Add(-2 * time.Second)
+	}
+
+	leaseB, err := manager.GetRedisConnection(ctxB)
+	require.NoError(t, err)
+	leaseB.Release()
+	require.Len(t, manager.redisCache, 1)
+
+	keyB := redisInfraKey(configPort.configs["tenant-b"])
+	_, ok := manager.redisCache[keyB]
+	assert.True(t, ok)
 }
 
 func TestConcurrentClose(t *testing.T) {
@@ -1097,8 +1238,8 @@ func TestClose_ClearsAllMaps(t *testing.T) {
 	err = manager.Close()
 	require.NoError(t, err)
 
-	assert.Nil(t, manager.postgresCache)
-	assert.Nil(t, manager.redisCache)
+	assert.Empty(t, manager.postgresCache)
+	assert.Empty(t, manager.redisCache)
 }
 
 func TestErrorWrapping_ConnectionManager(t *testing.T) {
@@ -1550,8 +1691,8 @@ func TestClose_AfterPartialCachePopulation(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.True(t, manager.closed)
-	assert.Nil(t, manager.postgresCache)
-	assert.Nil(t, manager.redisCache)
+	assert.Empty(t, manager.postgresCache)
+	assert.Empty(t, manager.redisCache)
 }
 
 func TestGetPostgresConnection_CacheHitAfterPopulation(t *testing.T) {
@@ -1576,7 +1717,8 @@ func TestGetPostgresConnection_CacheHitAfterPopulation(t *testing.T) {
 	conn, getErr := manager.GetPostgresConnection(context.Background())
 
 	require.NoError(t, getErr)
-	assert.Same(t, postgresClient, conn)
+	require.NotNil(t, conn)
+	assert.Same(t, postgresClient, conn.Connection())
 	assert.Equal(t, int32(0), created.Load(), "cache hit should skip connection creation")
 }
 
@@ -1602,7 +1744,8 @@ func TestGetRedisConnection_CacheHitAfterPopulation(t *testing.T) {
 	conn, getErr := manager.GetRedisConnection(context.Background())
 
 	require.NoError(t, getErr)
-	assert.Same(t, redisClient, conn)
+	require.NotNil(t, conn)
+	assert.Same(t, redisClient, conn.Connection())
 	assert.Equal(t, int32(0), created.Load(), "cache hit should skip connection creation")
 }
 
@@ -1970,8 +2113,10 @@ func TestGetPostgresConnection_SuccessCachesConnection(t *testing.T) {
 
 	require.NoError(t, err1)
 	require.NoError(t, err2)
-	assert.Same(t, expectedClient, conn1)
-	assert.Same(t, conn1, conn2)
+	require.NotNil(t, conn1)
+	require.NotNil(t, conn2)
+	assert.Same(t, expectedClient, conn1.Connection())
+	assert.Same(t, conn1.Connection(), conn2.Connection())
 	assert.Equal(t, int32(1), factoryCalls.Load())
 }
 
@@ -1999,8 +2144,10 @@ func TestGetRedisConnection_SuccessCachesConnection(t *testing.T) {
 
 	require.NoError(t, err1)
 	require.NoError(t, err2)
-	assert.Same(t, expectedClient, conn1)
-	assert.Same(t, conn1, conn2)
+	require.NotNil(t, conn1)
+	require.NotNil(t, conn2)
+	assert.Same(t, expectedClient, conn1.Connection())
+	assert.Same(t, conn1.Connection(), conn2.Connection())
 	assert.Equal(t, int32(1), factoryCalls.Load())
 }
 
@@ -2036,7 +2183,8 @@ func TestGetPostgresConnection_CanceledRequestContext_DoesNotCancelConnectionSet
 	conn, err := manager.GetPostgresConnection(requestCtx)
 
 	require.NoError(t, err)
-	assert.Same(t, expectedClient, conn)
+	require.NotNil(t, conn)
+	assert.Same(t, expectedClient, conn.Connection())
 }
 
 func TestGetPostgresConnection_ConcurrentRequests_SingleCreation(t *testing.T) {
@@ -2081,8 +2229,9 @@ func TestGetPostgresConnection_ConcurrentRequests_SingleCreation(t *testing.T) {
 				errCount.Add(1)
 				return
 			}
+			defer conn.Release()
 
-			if conn != expectedClient {
+			if conn.Connection() != expectedClient {
 				mismatch.Add(1)
 			}
 		}()
@@ -2132,8 +2281,9 @@ func TestGetRedisConnection_ConcurrentRequests_SingleCreation(t *testing.T) {
 				errCount.Add(1)
 				return
 			}
+			defer conn.Release()
 
-			if conn != expectedClient {
+			if conn.Connection() != expectedClient {
 				mismatch.Add(1)
 			}
 		}()
@@ -2186,8 +2336,8 @@ func TestClose_AggregatesConnectionCloseErrors(t *testing.T) {
 	assert.ErrorIs(t, err, ErrCloseConnections)
 	assert.ErrorIs(t, err, errPostgresClose)
 	assert.ErrorIs(t, err, errRedisClose)
-	assert.Contains(t, err.Error(), "close postgres [pg]")
-	assert.Contains(t, err.Error(), "close redis [redis]")
+	assert.Contains(t, err.Error(), "close postgres")
+	assert.Contains(t, err.Error(), "close redis")
 }
 
 func TestIntOrDefault(t *testing.T) {

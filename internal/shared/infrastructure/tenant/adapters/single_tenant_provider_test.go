@@ -4,6 +4,7 @@ package adapters
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"regexp"
 	"sync"
@@ -24,6 +25,30 @@ import (
 type tenantContextKey struct{}
 
 var errTestGetDB = errors.New("test get db error")
+
+func postgresLeaseConn(lease *ports.PostgresConnectionLease) *libPostgres.Client {
+	if lease == nil {
+		return nil
+	}
+
+	return lease.Connection()
+}
+
+func redisLeaseConn(lease *ports.RedisConnectionLease) any {
+	if lease == nil {
+		return nil
+	}
+
+	return lease.Connection()
+}
+
+func replicaLeaseDB(lease *ports.ReplicaDBLease) *sql.DB {
+	if lease == nil {
+		return nil
+	}
+
+	return lease.DB()
+}
 
 func TestNewSingleTenantInfrastructureProvider(t *testing.T) {
 	t.Parallel()
@@ -48,7 +73,7 @@ func TestGetPostgresConnection_ReturnsStored(t *testing.T) {
 	result, err := provider.GetPostgresConnection(context.Background())
 
 	require.NoError(t, err)
-	assert.Same(t, postgres, result)
+	assert.Same(t, postgres, postgresLeaseConn(result))
 }
 
 func TestGetRedisConnection_ReturnsStored(t *testing.T) {
@@ -61,7 +86,7 @@ func TestGetRedisConnection_ReturnsStored(t *testing.T) {
 	result, err := provider.GetRedisConnection(context.Background())
 
 	require.NoError(t, err)
-	assert.Same(t, redis, result)
+	assert.Same(t, redis, redisLeaseConn(result))
 }
 
 func TestGetPostgresConnection_NilConnection(t *testing.T) {
@@ -113,8 +138,8 @@ func TestGetPostgresConnection_IgnoresContext(t *testing.T) {
 	require.NoError(t, err2)
 	require.NoError(t, err3)
 
-	assert.Same(t, result1, result2)
-	assert.Same(t, result2, result3)
+	assert.Same(t, postgresLeaseConn(result1), postgresLeaseConn(result2))
+	assert.Same(t, postgresLeaseConn(result2), postgresLeaseConn(result3))
 }
 
 func TestGetRedisConnection_IgnoresContext(t *testing.T) {
@@ -136,8 +161,8 @@ func TestGetRedisConnection_IgnoresContext(t *testing.T) {
 	require.NoError(t, err2)
 	require.NoError(t, err3)
 
-	assert.Same(t, result1, result2)
-	assert.Same(t, result2, result3)
+	assert.Same(t, redisLeaseConn(result1), redisLeaseConn(result2))
+	assert.Same(t, redisLeaseConn(result2), redisLeaseConn(result3))
 }
 
 func TestBeginTx_NilPostgresConnection(t *testing.T) {
@@ -226,9 +251,9 @@ func TestGetPostgresConnection_MultipleCallsSameConnection(t *testing.T) {
 	require.NoError(t, err1)
 	require.NoError(t, err2)
 	require.NoError(t, err3)
-	assert.Same(t, result1, result2)
-	assert.Same(t, result2, result3)
-	assert.Same(t, postgres, result1)
+	assert.Same(t, postgresLeaseConn(result1), postgresLeaseConn(result2))
+	assert.Same(t, postgresLeaseConn(result2), postgresLeaseConn(result3))
+	assert.Same(t, postgres, postgresLeaseConn(result1))
 }
 
 func TestGetRedisConnection_MultipleCallsSameConnection(t *testing.T) {
@@ -244,9 +269,9 @@ func TestGetRedisConnection_MultipleCallsSameConnection(t *testing.T) {
 	require.NoError(t, err1)
 	require.NoError(t, err2)
 	require.NoError(t, err3)
-	assert.Same(t, result1, result2)
-	assert.Same(t, result2, result3)
-	assert.Same(t, redis, result1)
+	assert.Same(t, redisLeaseConn(result1), redisLeaseConn(result2))
+	assert.Same(t, redisLeaseConn(result2), redisLeaseConn(result3))
+	assert.Same(t, redis, redisLeaseConn(result1))
 }
 
 func TestGetPostgresConnection_WithCanceledContext(t *testing.T) {
@@ -261,7 +286,7 @@ func TestGetPostgresConnection_WithCanceledContext(t *testing.T) {
 	result, err := provider.GetPostgresConnection(ctx)
 
 	require.NoError(t, err)
-	assert.Same(t, postgres, result)
+	assert.Same(t, postgres, postgresLeaseConn(result))
 }
 
 func TestGetRedisConnection_WithCanceledContext(t *testing.T) {
@@ -276,7 +301,7 @@ func TestGetRedisConnection_WithCanceledContext(t *testing.T) {
 	result, err := provider.GetRedisConnection(ctx)
 
 	require.NoError(t, err)
-	assert.Same(t, redis, result)
+	assert.Same(t, redis, redisLeaseConn(result))
 }
 
 func TestSingleTenantProvider_SentinelErrors(t *testing.T) {
@@ -432,7 +457,7 @@ func TestGetReplicaDB_WithSqlmock_ReplicaAvailable(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	assert.Same(t, replicaDB, result)
+	assert.Same(t, replicaDB, replicaLeaseDB(result))
 
 	require.NoError(t, primaryMock.ExpectationsWereMet())
 	require.NoError(t, replicaMock.ExpectationsWereMet())
@@ -453,7 +478,7 @@ func TestGetReplicaDB_WithSqlmock_FallbackToPrimary(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	assert.Same(t, primaryDB, result)
+	assert.Same(t, primaryDB, replicaLeaseDB(result))
 
 	require.NoError(t, primaryMock.ExpectationsWereMet())
 }
@@ -473,7 +498,7 @@ func TestGetReplicaDB_OnlyPrimaryConfigured(t *testing.T) {
 
 	require.NoError(t, dbErr)
 	require.NotNil(t, result)
-	assert.Same(t, db, result)
+	assert.Same(t, db, replicaLeaseDB(result))
 
 	require.NoError(t, mock.ExpectationsWereMet())
 }
@@ -584,7 +609,7 @@ func TestGetReplicaDB_MultipleReplicas(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	assert.Same(t, replica1, result)
+	assert.Same(t, replica1, replicaLeaseDB(result))
 
 	require.NoError(t, primaryMock.ExpectationsWereMet())
 	require.NoError(t, replica1Mock.ExpectationsWereMet())
@@ -606,11 +631,11 @@ func TestProviderWithBothConnections(t *testing.T) {
 
 	pgConn, err := provider.GetPostgresConnection(context.Background())
 	require.NoError(t, err)
-	assert.Same(t, postgres, pgConn)
+	assert.Same(t, postgres, postgresLeaseConn(pgConn))
 
 	redisConn, err := provider.GetRedisConnection(context.Background())
 	require.NoError(t, err)
-	assert.Same(t, redis, redisConn)
+	assert.Same(t, redis, redisLeaseConn(redisConn))
 
 	require.NoError(t, mock.ExpectationsWereMet())
 }
@@ -666,7 +691,7 @@ func TestGetReplicaDB_ConcurrentAccess(t *testing.T) {
 			result, err := provider.GetReplicaDB(context.Background())
 			assert.NoError(t, err)
 			assert.NotNil(t, result)
-			assert.Same(t, db, result)
+			assert.Same(t, db, replicaLeaseDB(result))
 		}()
 	}
 
@@ -720,7 +745,7 @@ func TestGetPostgresConnection_ThreadSafety(t *testing.T) {
 
 			result, err := provider.GetPostgresConnection(context.Background())
 			assert.NoError(t, err)
-			assert.Same(t, postgres, result)
+			assert.Same(t, postgres, postgresLeaseConn(result))
 		}()
 	}
 
@@ -743,7 +768,7 @@ func TestGetRedisConnection_ThreadSafety(t *testing.T) {
 
 			result, err := provider.GetRedisConnection(context.Background())
 			assert.NoError(t, err)
-			assert.Same(t, redis, result)
+			assert.Same(t, redis, redisLeaseConn(result))
 		}()
 	}
 

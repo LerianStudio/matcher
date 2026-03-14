@@ -2,7 +2,6 @@ package adapters
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 
@@ -53,29 +52,29 @@ func NewSingleTenantInfrastructureProvider(
 // Returns ErrPostgresConnectionNotConfigured if no connection was provided at construction time.
 func (provider *SingleTenantInfrastructureProvider) GetPostgresConnection(
 	_ context.Context,
-) (*libPostgres.Client, error) {
+) (*ports.PostgresConnectionLease, error) {
 	if provider.postgres == nil {
 		return nil, ErrPostgresConnectionNotConfigured
 	}
 
-	return provider.postgres, nil
+	return ports.NewPostgresConnectionLease(provider.postgres, nil), nil
 }
 
 // GetRedisConnection returns the singleton redis connection.
 // Returns ErrRedisConnectionNotConfigured if no connection was provided at construction time.
 func (provider *SingleTenantInfrastructureProvider) GetRedisConnection(
 	_ context.Context,
-) (*libRedis.Client, error) {
+) (*ports.RedisConnectionLease, error) {
 	if provider.redis == nil {
 		return nil, ErrRedisConnectionNotConfigured
 	}
 
-	return provider.redis, nil
+	return ports.NewRedisConnectionLease(provider.redis, nil), nil
 }
 
 // BeginTx starts a tenant-scoped database transaction.
 // The caller is responsible for calling Commit() or Rollback() on the returned transaction.
-func (provider *SingleTenantInfrastructureProvider) BeginTx(ctx context.Context) (*sql.Tx, error) {
+func (provider *SingleTenantInfrastructureProvider) BeginTx(ctx context.Context) (*ports.TxLease, error) {
 	if provider.postgres == nil {
 		return nil, ErrPostgresConnectionNotConfigured
 	}
@@ -120,7 +119,7 @@ func (provider *SingleTenantInfrastructureProvider) BeginTx(ctx context.Context)
 		return nil, fmt.Errorf("failed to apply tenant schema: %w", err)
 	}
 
-	return tx, nil
+	return ports.NewTxLease(tx, nil), nil
 }
 
 // GetReplicaDB returns the replica database for read-only queries.
@@ -131,7 +130,7 @@ func (provider *SingleTenantInfrastructureProvider) BeginTx(ctx context.Context)
 // to ensure tenant-scoped reads, or manually apply the schema via
 // SET search_path before executing queries. Direct use without schema scoping
 // in multi-tenant mode will cause cross-tenant data leakage.
-func (provider *SingleTenantInfrastructureProvider) GetReplicaDB(ctx context.Context) (*sql.DB, error) {
+func (provider *SingleTenantInfrastructureProvider) GetReplicaDB(ctx context.Context) (*ports.ReplicaDBLease, error) {
 	if provider.postgres == nil {
 		return nil, ErrPostgresConnectionNotConfigured
 	}
@@ -146,7 +145,7 @@ func (provider *SingleTenantInfrastructureProvider) GetReplicaDB(ctx context.Con
 
 	replicaDBs := resolver.ReplicaDBs()
 	if len(replicaDBs) > 0 {
-		return replicaDBs[0], nil
+		return ports.NewReplicaDBLease(replicaDBs[0], nil), nil
 	}
 
 	primaryDBs := resolver.PrimaryDBs()
@@ -154,5 +153,5 @@ func (provider *SingleTenantInfrastructureProvider) GetReplicaDB(ctx context.Con
 		return nil, ErrNoDatabaseForRead
 	}
 
-	return primaryDBs[0], nil
+	return ports.NewReplicaDBLease(primaryDBs[0], nil), nil
 }

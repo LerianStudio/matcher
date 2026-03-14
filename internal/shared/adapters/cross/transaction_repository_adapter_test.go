@@ -13,12 +13,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
-	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
-
 	ingestionTxRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/transaction"
 	matchingRepos "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 var errTxDBError = errors.New("transaction db error")
@@ -30,24 +28,30 @@ type mockInfraProvider struct {
 
 func (m *mockInfraProvider) GetPostgresConnection(
 	_ context.Context,
-) (*libPostgres.Client, error) {
+) (*sharedPorts.PostgresConnectionLease, error) {
 	return nil, nil
 }
 
 func (m *mockInfraProvider) GetRedisConnection(
 	_ context.Context,
-) (*libRedis.Client, error) {
+) (*sharedPorts.RedisConnectionLease, error) {
 	return nil, nil
 }
 
-func (m *mockInfraProvider) BeginTx(ctx context.Context) (*sql.Tx, error) {
+func (m *mockInfraProvider) BeginTx(ctx context.Context) (*sharedPorts.TxLease, error) {
 	if m.beginTxFn != nil {
-		return m.beginTxFn(ctx)
+		tx, err := m.beginTxFn(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		return sharedPorts.NewTxLease(tx, nil), nil
 	}
+
 	return nil, m.beginTxErr
 }
 
-func (m *mockInfraProvider) GetReplicaDB(_ context.Context) (*sql.DB, error) {
+func (m *mockInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.ReplicaDBLease, error) {
 	return nil, nil
 }
 

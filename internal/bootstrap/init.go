@@ -33,6 +33,7 @@ import (
 	authLog "github.com/LerianStudio/lib-commons/v2/commons/log"
 	authZap "github.com/LerianStudio/lib-commons/v2/commons/zap"
 	"github.com/LerianStudio/lib-commons/v4/commons/assert"
+	"github.com/LerianStudio/lib-commons/v4/commons/circuitbreaker"
 	"github.com/LerianStudio/lib-commons/v4/commons/errgroup"
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	"github.com/LerianStudio/lib-commons/v4/commons/net/http/ratelimit"
@@ -1047,30 +1048,31 @@ func createInfraProvider(
 	postgres *libPostgres.Client,
 	redis *libRedis.Client,
 ) (sharedPorts.InfrastructureProvider, *tenantAdapters.TenantConnectionManager, error) {
-	if !cfg.Tenancy.MultiTenantInfraEnabled {
+	if !cfg.Tenancy.MultiTenantEnabled {
 		return tenantAdapters.NewSingleTenantInfrastructureProvider(postgres, redis), nil, nil
 	}
 
-	staticConfig := sharedPorts.TenantConfig{
-		PostgresPrimaryDSN: cfg.PrimaryDSN(),
-		PostgresReplicaDSN: cfg.ReplicaDSN(),
-		PostgresPrimaryDB:  cfg.Postgres.PrimaryDB,
-		PostgresReplicaDB:  cfg.Postgres.ReplicaDB,
-		RedisAddresses:     strings.Split(cfg.Redis.Host, ","),
-		RedisPassword:      cfg.Redis.Password,
-		RedisDB:            cfg.Redis.DB,
-		RedisMasterName:    cfg.Redis.MasterName,
-		RedisProtocol:      cfg.Redis.Protocol,
-		RedisUseTLS:        cfg.Redis.TLS,
-		RedisCACert:        cfg.Redis.CACert,
-		RedisReadTimeout:   cfg.RedisReadTimeout(),
-		RedisWriteTimeout:  cfg.RedisWriteTimeout(),
-		RedisDialTimeout:   cfg.RedisDialTimeout(),
-		RedisPoolSize:      cfg.Redis.PoolSize,
-		RedisMinIdleConns:  cfg.Redis.MinIdleConn,
+	remoteConfigTimeout := time.Duration(cfg.Tenancy.MultiTenantCircuitBreakerTimeoutSec) * time.Second
+	if remoteConfigTimeout < minPerServiceTimeout {
+		remoteConfigTimeout = minPerServiceTimeout
 	}
 
-	configAdapter := tenantAdapters.NewStaticConfigurationAdapter(staticConfig)
+	configAdapter, err := tenantAdapters.NewRemoteConfigurationAdapter(tenantAdapters.RemoteConfigurationConfig{
+		BaseURL:            cfg.Tenancy.MultiTenantURL,
+		ServiceName:        constants.ApplicationName,
+		ServiceAPIKey:      cfg.Tenancy.MultiTenantServiceAPIKey,
+		RequestTimeout:     remoteConfigTimeout,
+		EnvironmentName:    cfg.effectiveMultiTenantEnvironment(),
+		RuntimeEnvironment: cfg.App.EnvName,
+		BreakerConfig: circuitbreaker.Config{
+			ConsecutiveFailures: safePositiveUint32(cfg.Tenancy.MultiTenantCircuitBreakerThreshold),
+			Timeout:             remoteConfigTimeout,
+		},
+		Logger: cfg.Logger,
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("create tenant configuration adapter: %w", err)
+	}
 
 	connectionManager, err := tenantAdapters.NewTenantConnectionManager(
 		configAdapter,
@@ -1078,12 +1080,30 @@ func createInfraProvider(
 		cfg.Postgres.MaxIdleConnections,
 		cfg.Postgres.ConnMaxLifetimeMins,
 		cfg.Postgres.ConnMaxIdleTimeMins,
+		tenantAdapters.WithCachePolicy(
+			cfg.Tenancy.MultiTenantMaxTenantPools,
+			time.Duration(cfg.Tenancy.MultiTenantIdleTimeoutSec)*time.Second,
+		),
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("create tenant connection manager: %w", err)
 	}
 
 	return connectionManager, connectionManager, nil
+}
+
+func safePositiveUint32(value int) uint32 {
+	const maxInt32Value = int(^uint32(0) >> 1)
+
+	if value <= 0 {
+		return 0
+	}
+
+	if value > maxInt32Value {
+		return uint32(maxInt32Value)
+	}
+
+	return uint32(value)
 }
 
 func buildRedisConfig(cfg *Config, logger libLog.Logger) libRedis.Config {

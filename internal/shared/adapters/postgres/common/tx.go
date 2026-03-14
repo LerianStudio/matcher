@@ -146,20 +146,41 @@ func WithTenantTxOrExistingProvider[Result any](
 		return zero, ErrConnectionRequired
 	}
 
+	if fn == nil {
+		return zero, ErrNilCallback
+	}
+
 	if isNilInterface(provider) {
 		return zero, ErrConnectionRequired
 	}
 
-	conn, err := provider.GetPostgresConnection(ctx)
+	if tx != nil {
+		if err := auth.ApplyTenantSchema(ctx, tx); err != nil {
+			return zero, fmt.Errorf("failed to apply tenant schema: %w", err)
+		}
+
+		return fn(tx)
+	}
+
+	txLease, err := provider.BeginTx(ctx)
 	if err != nil {
-		return zero, fmt.Errorf("failed to get postgres connection: %w", err)
+		return zero, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 
-	if conn == nil {
-		return zero, ErrConnectionRequired
+	defer func() {
+		_ = txLease.Rollback()
+	}()
+
+	result, err := fn(txLease.SQLTx())
+	if err != nil {
+		return zero, err
 	}
 
-	return WithTenantTxOrExisting(ctx, conn, tx, fn)
+	if err := txLease.Commit(); err != nil {
+		return zero, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return result, nil
 }
 
 // BeginTenantTx begins a tenant-scoped transaction that the caller must manage.
@@ -181,52 +202,14 @@ func BeginTenantTx(ctx context.Context, provider ports.InfrastructureProvider) (
 		return nil, noop, ErrConnectionRequired
 	}
 
-	conn, err := provider.GetPostgresConnection(ctx)
+	txLease, err := provider.BeginTx(ctx)
 	if err != nil {
-		return nil, noop, fmt.Errorf("failed to get postgres connection: %w", err)
-	}
-
-	if conn == nil {
-		return nil, noop, ErrConnectionRequired
-	}
-
-	db, err := conn.Resolver(ctx)
-	if err != nil {
-		return nil, noop, fmt.Errorf("failed to get database connection: %w", err)
-	}
-
-	primaryDBs := db.PrimaryDBs()
-	if len(primaryDBs) == 0 {
-		return nil, noop, ErrNoPrimaryDB
-	}
-
-	// Apply a default timeout when the context has no deadline.
-	// The cancel function is returned to the caller instead of deferred,
-	// because the transaction outlives this function call. The caller must
-	// invoke cancel after commit/rollback to release context resources.
-	txCtx := ctx
-	cancel := noop
-
-	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
-		txCtx, cancel = context.WithTimeout(ctx, defaultTxTimeout)
-	}
-
-	tx, err := primaryDBs[0].BeginTx(txCtx, nil)
-	if err != nil {
-		cancel()
-
 		return nil, noop, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 
-	if err := auth.ApplyTenantSchema(txCtx, tx); err != nil {
-		_ = tx.Rollback()
-
-		cancel()
-
-		return nil, noop, fmt.Errorf("failed to apply tenant schema: %w", err)
-	}
-
-	return tx, cancel, nil
+	return txLease.SQLTx(), func() {
+		_ = txLease.Rollback()
+	}, nil
 }
 
 func isNilInterface(value any) bool {
