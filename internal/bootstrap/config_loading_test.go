@@ -8,6 +8,7 @@ package bootstrap
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
@@ -51,6 +52,27 @@ func TestLoadConfigWithLogger_TypedNilLogger_CreatesDefault(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, cfg)
 	assert.NotNil(t, cfg.Logger)
+}
+
+func TestLoadConfigWithLogger_TenancyAliasConflictUsesPrimaryEnv(t *testing.T) {
+	clearConfigEnvVars(t)
+
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+
+	yamlPath := filepath.Join(wd, "matcher-tenancy-alias-test.yaml")
+	t.Cleanup(func() {
+		require.NoError(t, os.Remove(yamlPath))
+	})
+	require.NoError(t, os.WriteFile(yamlPath, []byte("tenancy:\n  multi_tenant_infra_enabled: true\n"), 0o600))
+	t.Setenv(configFilePathEnv, yamlPath)
+	t.Setenv("MULTI_TENANT_ENABLED", "false")
+	t.Setenv("MULTI_TENANT_INFRA_ENABLED", "true")
+
+	cfg, err := LoadConfigWithLogger(&libLog.NopLogger{})
+	require.NoError(t, err)
+	assert.False(t, cfg.Tenancy.MultiTenantEnabled)
+	assert.False(t, cfg.Tenancy.MultiTenantInfraEnabled)
 }
 
 func TestEnforceProductionSecurityDefaults_Production_DisablesSwagger(t *testing.T) {

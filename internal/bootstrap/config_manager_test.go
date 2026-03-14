@@ -1312,6 +1312,7 @@ func TestIsSensitiveKey_MatchesExpectedPatterns(t *testing.T) {
 		{name: "auth token secret", key: "auth.token_secret", expected: true},
 		{name: "idempotency hmac secret", key: "idempotency.hmac_secret", expected: true},
 		{name: "object storage access key", key: "object_storage.access_key_id", expected: true},
+		{name: "multi-tenant service api key", key: "tenancy.multi_tenant_service_api_key", expected: true},
 		{name: "normal key", key: "rate_limit.max", expected: false},
 		{name: "host key", key: "postgres.primary_host", expected: false},
 		{name: "rabbitmq uri", key: "rabbitmq.uri", expected: false},

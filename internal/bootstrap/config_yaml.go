@@ -142,6 +142,14 @@ func bindDefaults(viperCfg *viper.Viper) {
 	// --- Tenancy ---
 	viperCfg.SetDefault("tenancy.default_tenant_id", "11111111-1111-1111-1111-111111111111")
 	viperCfg.SetDefault("tenancy.default_tenant_slug", "default")
+	viperCfg.SetDefault("tenancy.multi_tenant_enabled", false)
+	viperCfg.SetDefault("tenancy.multi_tenant_url", "")
+	viperCfg.SetDefault("tenancy.multi_tenant_environment", "")
+	viperCfg.SetDefault("tenancy.multi_tenant_max_tenant_pools", 100)           //nolint:mnd // tenant pool default
+	viperCfg.SetDefault("tenancy.multi_tenant_idle_timeout_sec", 300)           //nolint:mnd // 5 minutes
+	viperCfg.SetDefault("tenancy.multi_tenant_circuit_breaker_threshold", 5)    //nolint:mnd // breaker threshold default
+	viperCfg.SetDefault("tenancy.multi_tenant_circuit_breaker_timeout_sec", 30) //nolint:mnd // 30 seconds
+	viperCfg.SetDefault("tenancy.multi_tenant_service_api_key", "")
 	viperCfg.SetDefault("tenancy.multi_tenant_infra_enabled", false)
 
 	// --- Postgres ---

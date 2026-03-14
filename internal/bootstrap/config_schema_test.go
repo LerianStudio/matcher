@@ -92,6 +92,7 @@ func TestBuildConfigSchema_SecretFieldsAreMarked(t *testing.T) {
 		"rabbitmq.password",
 		"auth.token_secret",
 		"idempotency.hmac_secret",
+		"tenancy.multi_tenant_service_api_key",
 	}
 
 	for _, key := range expectedSecrets {
@@ -179,6 +180,7 @@ func TestSecretFields_ContainsExpectedKeys(t *testing.T) {
 		"redis.password",
 		"rabbitmq.password",
 		"auth.token_secret",
+		"tenancy.multi_tenant_service_api_key",
 	}
 
 	for _, key := range expected {

@@ -141,6 +141,7 @@ func TestIsSensitiveKeyTable(t *testing.T) {
 		{name: "postgres_password", key: "postgres.primary_password", sensitive: true},
 		{name: "auth_token_secret", key: "auth.token_secret", sensitive: true},
 		{name: "object_storage_access_key", key: "object_storage.access_key_id", sensitive: true},
+		{name: "multi_tenant_service_api_key", key: "tenancy.multi_tenant_service_api_key", sensitive: true},
 		{name: "rabbitmq_uri_not_sensitive", key: "rabbitmq.uri", sensitive: false},
 		{name: "tls_cert_file_not_sensitive", key: "server.tls_cert_file", sensitive: false},
 		{name: "host_not_sensitive", key: "primary_host", sensitive: false},
@@ -179,6 +180,13 @@ func TestRedactIfSensitiveTable(t *testing.T) {
 		t.Parallel()
 
 		result := redactIfSensitive("auth.token_secret", "abc123")
+		assert.Equal(t, "***REDACTED***", result)
+	})
+
+	t.Run("redacts_multi_tenant_service_api_key", func(t *testing.T) {
+		t.Parallel()
+
+		result := redactIfSensitive("tenancy.multi_tenant_service_api_key", "tenant-service-secret")
 		assert.Equal(t, "***REDACTED***", result)
 	})
 

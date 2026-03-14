@@ -54,11 +54,24 @@ type ServerConfig struct {
 	TrustedProxies        string `env:"TRUSTED_PROXIES"                                                                             mapstructure:"trusted_proxies"`
 }
 
-// TenancyConfig configures tenant defaults and infra mode.
+// TenancyConfig configures tenant defaults and multi-tenant infrastructure.
 type TenancyConfig struct {
-	DefaultTenantID         string `env:"DEFAULT_TENANT_ID"          envDefault:"11111111-1111-1111-1111-111111111111" mapstructure:"default_tenant_id"`
-	DefaultTenantSlug       string `env:"DEFAULT_TENANT_SLUG"        envDefault:"default"                             mapstructure:"default_tenant_slug"`
-	MultiTenantInfraEnabled bool   `env:"MULTI_TENANT_INFRA_ENABLED" envDefault:"false"                               mapstructure:"multi_tenant_infra_enabled"`
+	DefaultTenantID   string `env:"DEFAULT_TENANT_ID"   envDefault:"11111111-1111-1111-1111-111111111111" mapstructure:"default_tenant_id"`
+	DefaultTenantSlug string `env:"DEFAULT_TENANT_SLUG" envDefault:"default"                             mapstructure:"default_tenant_slug"`
+
+	MultiTenantEnabled                  bool   `env:"MULTI_TENANT_ENABLED"                         envDefault:"false"   mapstructure:"multi_tenant_enabled"`
+	MultiTenantURL                      string `env:"MULTI_TENANT_URL"                                                     mapstructure:"multi_tenant_url"`
+	MultiTenantEnvironment              string `env:"MULTI_TENANT_ENVIRONMENT"                                             mapstructure:"multi_tenant_environment"`
+	MultiTenantMaxTenantPools           int    `env:"MULTI_TENANT_MAX_TENANT_POOLS"                envDefault:"100"     mapstructure:"multi_tenant_max_tenant_pools"`
+	MultiTenantIdleTimeoutSec           int    `env:"MULTI_TENANT_IDLE_TIMEOUT_SEC"                envDefault:"300"     mapstructure:"multi_tenant_idle_timeout_sec"`
+	MultiTenantCircuitBreakerThreshold  int    `env:"MULTI_TENANT_CIRCUIT_BREAKER_THRESHOLD"       envDefault:"5"       mapstructure:"multi_tenant_circuit_breaker_threshold"`
+	MultiTenantCircuitBreakerTimeoutSec int    `env:"MULTI_TENANT_CIRCUIT_BREAKER_TIMEOUT_SEC"     envDefault:"30"      mapstructure:"multi_tenant_circuit_breaker_timeout_sec"`
+	MultiTenantServiceAPIKey            string `env:"MULTI_TENANT_SERVICE_API_KEY"                                         mapstructure:"multi_tenant_service_api_key"`
+
+	// MultiTenantInfraEnabled is a deprecated backward-compatible alias for the
+	// previous matcher-specific flag. The primary control surface is now
+	// MultiTenantEnabled. Keep this field until callers fully migrate.
+	MultiTenantInfraEnabled bool `env:"MULTI_TENANT_INFRA_ENABLED" envDefault:"false" mapstructure:"multi_tenant_infra_enabled"`
 }
 
 // PostgresConfig configures primary/replica connections and pooling.

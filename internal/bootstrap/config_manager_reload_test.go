@@ -308,6 +308,82 @@ tenancy:
 	assert.False(t, changeKeys["tenancy.default_tenant_slug"])
 }
 
+func TestReloadLocked_PreservesStartupBoundMultiTenantInfrastructureSettings(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	yamlPath := filepath.Join(tmpDir, "matcher.yaml")
+
+	initialYAML := `tenancy:
+  multi_tenant_enabled: true
+  multi_tenant_url: https://tenant-manager-startup:4003
+  multi_tenant_environment: production
+  multi_tenant_max_tenant_pools: 25
+  multi_tenant_idle_timeout_sec: 120
+  multi_tenant_circuit_breaker_threshold: 6
+  multi_tenant_circuit_breaker_timeout_sec: 45
+  multi_tenant_service_api_key: startup-key
+  multi_tenant_infra_enabled: true
+`
+	require.NoError(t, os.WriteFile(yamlPath, []byte(initialYAML), 0o600))
+
+	cfg := defaultConfig()
+	cfg.App.EnvName = "production"
+	cfg.Tenancy.MultiTenantEnabled = true
+	cfg.Tenancy.MultiTenantInfraEnabled = true
+	cfg.Tenancy.MultiTenantURL = "https://tenant-manager-startup:4003"
+	cfg.Tenancy.MultiTenantEnvironment = "production"
+	cfg.Tenancy.MultiTenantMaxTenantPools = 25
+	cfg.Tenancy.MultiTenantIdleTimeoutSec = 120
+	cfg.Tenancy.MultiTenantCircuitBreakerThreshold = 6
+	cfg.Tenancy.MultiTenantCircuitBreakerTimeoutSec = 45
+	cfg.Tenancy.MultiTenantServiceAPIKey = "startup-key"
+
+	cm, err := NewConfigManager(cfg, yamlPath, &libLog.NopLogger{})
+	require.NoError(t, err)
+
+	updatedYAML := `tenancy:
+  multi_tenant_enabled: false
+  multi_tenant_url: https://tenant-manager-reload:5000
+  multi_tenant_environment: staging
+  multi_tenant_max_tenant_pools: 10
+  multi_tenant_idle_timeout_sec: 60
+  multi_tenant_circuit_breaker_threshold: 2
+  multi_tenant_circuit_breaker_timeout_sec: 15
+  multi_tenant_service_api_key: reloaded-key
+  multi_tenant_infra_enabled: false
+`
+	require.NoError(t, os.WriteFile(yamlPath, []byte(updatedYAML), 0o600))
+
+	cm.mu.Lock()
+	result, reloadErr := cm.reloadLocked("test")
+	cm.mu.Unlock()
+
+	require.NoError(t, reloadErr)
+	require.NotNil(t, result)
+
+	got := cm.Get()
+	changeKeys := configChangeKeys(result.Changes)
+	assert.True(t, got.Tenancy.MultiTenantEnabled)
+	assert.True(t, got.Tenancy.MultiTenantInfraEnabled)
+	assert.Equal(t, "https://tenant-manager-startup:4003", got.Tenancy.MultiTenantURL)
+	assert.Equal(t, "production", got.Tenancy.MultiTenantEnvironment)
+	assert.Equal(t, 25, got.Tenancy.MultiTenantMaxTenantPools)
+	assert.Equal(t, 120, got.Tenancy.MultiTenantIdleTimeoutSec)
+	assert.Equal(t, 6, got.Tenancy.MultiTenantCircuitBreakerThreshold)
+	assert.Equal(t, 45, got.Tenancy.MultiTenantCircuitBreakerTimeoutSec)
+	assert.Equal(t, "startup-key", got.Tenancy.MultiTenantServiceAPIKey)
+	assert.False(t, changeKeys["tenancy.multi_tenant_enabled"])
+	assert.False(t, changeKeys["tenancy.multi_tenant_infra_enabled"])
+	assert.False(t, changeKeys["tenancy.multi_tenant_url"])
+	assert.False(t, changeKeys["tenancy.multi_tenant_environment"])
+	assert.False(t, changeKeys["tenancy.multi_tenant_max_tenant_pools"])
+	assert.False(t, changeKeys["tenancy.multi_tenant_idle_timeout_sec"])
+	assert.False(t, changeKeys["tenancy.multi_tenant_circuit_breaker_threshold"])
+	assert.False(t, changeKeys["tenancy.multi_tenant_circuit_breaker_timeout_sec"])
+	assert.False(t, changeKeys["tenancy.multi_tenant_service_api_key"])
+}
+
 func TestReloadLocked_PreservesStartupBoundObjectStorageSettings(t *testing.T) {
 	t.Parallel()
 

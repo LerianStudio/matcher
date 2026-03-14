@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 
 	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
@@ -49,7 +50,10 @@ func LoadConfigWithLogger(logger libLog.Logger) (*Config, error) {
 		return nil, fmt.Errorf("load config: %w", err)
 	}
 
+	cfg.normalizeTenancyConfig()
+
 	restoreZeroedFields(cfg, &yamlSnapshot)
+	cfg.normalizeTenancyConfig()
 
 	if cfg.Server.BodyLimitBytes <= 0 {
 		cfg.Server.BodyLimitBytes = defaultHTTPBodyLimitBytes
@@ -219,5 +223,33 @@ func loadConfigFromEnv(cfg *Config) error {
 	loadErr = errors.Join(loadErr, libCommons.SetConfigFromEnvVars(&cfg.CallbackRateLimit))
 	loadErr = errors.Join(loadErr, libCommons.SetConfigFromEnvVars(&cfg.CleanupWorker))
 
+	applyDeprecatedTenancyEnvAlias(cfg)
+
 	return loadErr
+}
+
+func applyDeprecatedTenancyEnvAlias(cfg *Config) {
+	if cfg == nil {
+		return
+	}
+
+	legacyRaw, legacySet := os.LookupEnv("MULTI_TENANT_INFRA_ENABLED")
+	_, primarySet := os.LookupEnv("MULTI_TENANT_ENABLED")
+
+	if primarySet {
+		cfg.Tenancy.MultiTenantInfraEnabled = cfg.Tenancy.MultiTenantEnabled
+		cfg.normalizeTenancyConfig()
+
+		return
+	}
+
+	if legacySet {
+		legacyEnabled, err := strconv.ParseBool(strings.TrimSpace(legacyRaw))
+		if err == nil {
+			cfg.Tenancy.MultiTenantInfraEnabled = legacyEnabled
+			cfg.Tenancy.MultiTenantEnabled = legacyEnabled
+		}
+	}
+
+	cfg.normalizeTenancyConfig()
 }

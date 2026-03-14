@@ -122,6 +122,7 @@ func (cm *ConfigManager) reloadLocked(source string) (*ReloadResult, error) {
 	}
 
 	restoreZeroedFields(newCfg, &viperSnapshot)
+	newCfg.normalizeTenancyConfig()
 
 	// Carry forward the logger from the current config (it's not YAML-managed).
 	oldCfg := cm.config.Load()
@@ -228,6 +229,7 @@ func (cm *ConfigManager) buildCandidateConfig(oldCfg *Config) (*Config, error) {
 	}
 
 	restoreZeroedFields(candidateCfg, &candidateSnapshot)
+	candidateCfg.normalizeTenancyConfig()
 	preserveStartupOnlyRuntimeSettings(candidateCfg, oldCfg)
 
 	candidateCfg.enforceProductionSecurityDefaults(cm.logger)
@@ -254,6 +256,15 @@ func preserveStartupOnlyRuntimeSettings(candidateCfg, oldCfg *Config) {
 	candidateCfg.Auth = oldCfg.Auth
 	candidateCfg.Tenancy.DefaultTenantID = oldCfg.Tenancy.DefaultTenantID
 	candidateCfg.Tenancy.DefaultTenantSlug = oldCfg.Tenancy.DefaultTenantSlug
+	candidateCfg.Tenancy.MultiTenantEnabled = oldCfg.Tenancy.MultiTenantEnabled
+	candidateCfg.Tenancy.MultiTenantURL = oldCfg.Tenancy.MultiTenantURL
+	candidateCfg.Tenancy.MultiTenantEnvironment = oldCfg.Tenancy.MultiTenantEnvironment
+	candidateCfg.Tenancy.MultiTenantMaxTenantPools = oldCfg.Tenancy.MultiTenantMaxTenantPools
+	candidateCfg.Tenancy.MultiTenantIdleTimeoutSec = oldCfg.Tenancy.MultiTenantIdleTimeoutSec
+	candidateCfg.Tenancy.MultiTenantCircuitBreakerThreshold = oldCfg.Tenancy.MultiTenantCircuitBreakerThreshold
+	candidateCfg.Tenancy.MultiTenantCircuitBreakerTimeoutSec = oldCfg.Tenancy.MultiTenantCircuitBreakerTimeoutSec
+	candidateCfg.Tenancy.MultiTenantServiceAPIKey = oldCfg.Tenancy.MultiTenantServiceAPIKey
+	candidateCfg.Tenancy.MultiTenantInfraEnabled = oldCfg.Tenancy.MultiTenantInfraEnabled
 	candidateCfg.ObjectStorage = oldCfg.ObjectStorage
 	candidateCfg.Archival.StorageBucket = oldCfg.Archival.StorageBucket
 	candidateCfg.Archival.StoragePrefix = oldCfg.Archival.StoragePrefix

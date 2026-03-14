@@ -271,6 +271,7 @@ func TestGetConfig_RedactsSecrets(t *testing.T) {
 		"redis.password",
 		"rabbitmq.password",
 		"auth.token_secret",
+		"tenancy.multi_tenant_service_api_key",
 	} {
 		val, exists := response.Config[secretKey]
 		require.True(t, exists, "secret key %q should exist in response (redacted, not removed)", secretKey)

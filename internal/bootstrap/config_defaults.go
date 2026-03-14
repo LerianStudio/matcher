@@ -30,9 +30,15 @@ func defaultConfig() *Config {
 			TLSTerminatedUpstream: false,
 		},
 		Tenancy: TenancyConfig{
-			DefaultTenantID:         "11111111-1111-1111-1111-111111111111",
-			DefaultTenantSlug:       "default",
-			MultiTenantInfraEnabled: false,
+			DefaultTenantID:                     "11111111-1111-1111-1111-111111111111",
+			DefaultTenantSlug:                   "default",
+			MultiTenantEnabled:                  false,
+			MultiTenantEnvironment:              "",
+			MultiTenantMaxTenantPools:           100,
+			MultiTenantIdleTimeoutSec:           300,
+			MultiTenantCircuitBreakerThreshold:  5,
+			MultiTenantCircuitBreakerTimeoutSec: 30,
+			MultiTenantInfraEnabled:             false,
 		},
 		Postgres: PostgresConfig{
 			PrimaryHost:         "localhost",

@@ -20,6 +20,8 @@ type flatConfig struct {
 	LogLevel                    string
 	DefaultTenantID             string
 	DefaultTenantSlug           string
+	MultiTenantEnabled          bool
+	MultiTenantURL              string
 	BodyLimitBytes              int
 	CORSAllowedOrigins          string
 	TLSTerminatedUpstream       bool
@@ -104,6 +106,8 @@ func buildConfig(fc flatConfig) Config {
 	cfg.App.LogLevel = fc.LogLevel
 	cfg.Tenancy.DefaultTenantID = fc.DefaultTenantID
 	cfg.Tenancy.DefaultTenantSlug = fc.DefaultTenantSlug
+	cfg.Tenancy.MultiTenantEnabled = fc.MultiTenantEnabled
+	cfg.Tenancy.MultiTenantURL = fc.MultiTenantURL
 	cfg.Tenancy.MultiTenantInfraEnabled = fc.MultiTenantInfraEnabled
 	cfg.Server.BodyLimitBytes = fc.BodyLimitBytes
 	cfg.Server.CORSAllowedOrigins = fc.CORSAllowedOrigins

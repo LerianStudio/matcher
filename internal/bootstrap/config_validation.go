@@ -7,6 +7,7 @@ package bootstrap
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 
 	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
@@ -66,6 +67,10 @@ func (cfg *Config) validateServerConfig(asserter *assert.Asserter) error {
 		return fmt.Errorf("config validation: %w", err)
 	}
 
+	if err := cfg.validateTenancyConfig(asserter); err != nil {
+		return err
+	}
+
 	if err := asserter.That(ctx, cfg.Server.BodyLimitBytes > 0, "HTTP_BODY_LIMIT_BYTES must be positive", "body_limit", cfg.Server.BodyLimitBytes); err != nil {
 		return fmt.Errorf("config validation: %w", err)
 	}
@@ -90,6 +95,20 @@ func (cfg *Config) validateServerConfig(asserter *assert.Asserter) error {
 		return fmt.Errorf("config validation: %w", err)
 	}
 
+	if err := cfg.validateLogLevel(asserter); err != nil {
+		return err
+	}
+
+	if err := cfg.validateTelemetryConfig(asserter); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (cfg *Config) validateLogLevel(asserter *assert.Asserter) error {
+	ctx := context.Background()
+
 	validLogLevels := map[string]bool{
 		"debug": true,
 		"info":  true,
@@ -105,15 +124,91 @@ func (cfg *Config) validateServerConfig(asserter *assert.Asserter) error {
 		return fmt.Errorf("config validation: %w", err)
 	}
 
-	if cfg.Telemetry.Enabled {
-		validOtelEnvs := map[string]bool{"development": true, "staging": true, "production": true}
+	return nil
+}
 
-		otelEnv := strings.ToLower(strings.TrimSpace(cfg.Telemetry.DeploymentEnv))
-		_, validOtelEnv := validOtelEnvs[otelEnv]
+func (cfg *Config) validateTelemetryConfig(asserter *assert.Asserter) error {
+	if !cfg.Telemetry.Enabled {
+		return nil
+	}
 
-		if err := asserter.That(ctx, validOtelEnv, "OTEL_RESOURCE_DEPLOYMENT_ENVIRONMENT must be one of: development, staging, production", "otel_env", cfg.Telemetry.DeploymentEnv); err != nil {
-			return fmt.Errorf("config validation: %w", err)
-		}
+	ctx := context.Background()
+	validOtelEnvs := map[string]bool{"development": true, "staging": true, "production": true}
+
+	otelEnv := strings.ToLower(strings.TrimSpace(cfg.Telemetry.DeploymentEnv))
+	_, validOtelEnv := validOtelEnvs[otelEnv]
+
+	if err := asserter.That(ctx, validOtelEnv, "OTEL_RESOURCE_DEPLOYMENT_ENVIRONMENT must be one of: development, staging, production", "otel_env", cfg.Telemetry.DeploymentEnv); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+
+	return nil
+}
+
+func (cfg *Config) validateTenancyConfig(asserter *assert.Asserter) error {
+	ctx := context.Background()
+
+	if !cfg.Tenancy.MultiTenantEnabled {
+		return nil
+	}
+
+	if err := validateMultiTenantURL(ctx, asserter, cfg.Tenancy.MultiTenantURL); err != nil {
+		return err
+	}
+
+	if err := asserter.NotEmpty(ctx, strings.TrimSpace(cfg.Tenancy.MultiTenantServiceAPIKey), "MULTI_TENANT_SERVICE_API_KEY is required when multi-tenant mode is enabled"); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+
+	if err := asserter.That(ctx, cfg.Tenancy.MultiTenantMaxTenantPools > 0, "MULTI_TENANT_MAX_TENANT_POOLS must be positive", "multi_tenant_max_tenant_pools", cfg.Tenancy.MultiTenantMaxTenantPools); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+
+	if err := asserter.That(ctx, cfg.Tenancy.MultiTenantIdleTimeoutSec > 0, "MULTI_TENANT_IDLE_TIMEOUT_SEC must be positive", "multi_tenant_idle_timeout_sec", cfg.Tenancy.MultiTenantIdleTimeoutSec); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+
+	if err := asserter.That(ctx, cfg.Tenancy.MultiTenantCircuitBreakerThreshold > 0, "MULTI_TENANT_CIRCUIT_BREAKER_THRESHOLD must be positive", "multi_tenant_circuit_breaker_threshold", cfg.Tenancy.MultiTenantCircuitBreakerThreshold); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+
+	if err := asserter.That(ctx, cfg.Tenancy.MultiTenantCircuitBreakerTimeoutSec > 0, "MULTI_TENANT_CIRCUIT_BREAKER_TIMEOUT_SEC must be positive", "multi_tenant_circuit_breaker_timeout_sec", cfg.Tenancy.MultiTenantCircuitBreakerTimeoutSec); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+
+	if err := asserter.NotEmpty(ctx, cfg.effectiveMultiTenantEnvironment(), "MULTI_TENANT_ENVIRONMENT is required when multi-tenant mode is enabled"); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+
+	return nil
+}
+
+func validateMultiTenantURL(ctx context.Context, asserter *assert.Asserter, rawURL string) error {
+	if err := asserter.NotEmpty(ctx, strings.TrimSpace(rawURL), "MULTI_TENANT_URL is required when multi-tenant mode is enabled"); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+
+	parsedTenantURL, parseErr := url.Parse(strings.TrimSpace(rawURL))
+	if err := asserter.NoError(ctx, parseErr, "MULTI_TENANT_URL must be a valid absolute URL"); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+
+	if err := asserter.That(
+		ctx,
+		parsedTenantURL != nil && parsedTenantURL.IsAbs() && parsedTenantURL.Host != "",
+		"MULTI_TENANT_URL must be an absolute URL with scheme and host",
+		"multi_tenant_url", rawURL,
+	); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+
+	if err := asserter.That(
+		ctx,
+		strings.EqualFold(parsedTenantURL.Scheme, "http") || strings.EqualFold(parsedTenantURL.Scheme, "https"),
+		"MULTI_TENANT_URL must use http or https",
+		"multi_tenant_url", rawURL,
+	); err != nil {
+		return fmt.Errorf("config validation: %w", err)
 	}
 
 	return nil

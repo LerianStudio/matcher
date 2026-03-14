@@ -31,6 +31,37 @@ func (cfg *Config) logConfigWarn(ctx context.Context, msg string) {
 	}
 }
 
+func (cfg *Config) normalizeTenancyConfig() {
+	if cfg == nil {
+		return
+	}
+
+	if cfg.Tenancy.MultiTenantEnvironment == "" {
+		cfg.Tenancy.MultiTenantEnvironment = cfg.effectiveMultiTenantEnvironment()
+	}
+
+	if cfg.Tenancy.MultiTenantEnabled {
+		cfg.Tenancy.MultiTenantInfraEnabled = true
+		return
+	}
+
+	if cfg.Tenancy.MultiTenantInfraEnabled {
+		cfg.Tenancy.MultiTenantEnabled = true
+	}
+}
+
+func (cfg *Config) effectiveMultiTenantEnvironment() string {
+	if cfg == nil {
+		return ""
+	}
+
+	if configured := strings.TrimSpace(cfg.Tenancy.MultiTenantEnvironment); configured != "" {
+		return configured
+	}
+
+	return strings.TrimSpace(cfg.App.EnvName)
+}
+
 // PrimaryDSN returns the PostgreSQL connection string for the primary database.
 func (cfg *Config) PrimaryDSN() string {
 	return fmt.Sprintf(

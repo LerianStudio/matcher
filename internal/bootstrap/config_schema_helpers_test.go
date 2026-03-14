@@ -9,15 +9,16 @@ package bootstrap
 // secretFields lists YAML keys whose values must be redacted.
 // This is a test-only helper used to verify redaction behavior.
 var secretFields = map[string]bool{
-	"postgres.primary_password":        true,
-	"postgres.replica_password":        true,
-	"redis.password":                   true,
-	"rabbitmq.password":                true,
-	"auth.token_secret":                true,
-	"idempotency.hmac_secret":          true,
-	"object_storage.access_key_id":     true,
-	"object_storage.secret_access_key": true,
-	"redis.ca_cert":                    true,
+	"postgres.primary_password":            true,
+	"postgres.replica_password":            true,
+	"redis.password":                       true,
+	"rabbitmq.password":                    true,
+	"auth.token_secret":                    true,
+	"idempotency.hmac_secret":              true,
+	"object_storage.access_key_id":         true,
+	"object_storage.secret_access_key":     true,
+	"redis.ca_cert":                        true,
+	"tenancy.multi_tenant_service_api_key": true,
 }
 
 // sectionNames returns the ordered list of unique section names.

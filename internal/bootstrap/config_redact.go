@@ -20,15 +20,16 @@ import (
 // (`rabbitmq.uri`, `server.tls_key_file`). URI-shaped values still receive
 // credential redaction via redactCredentialURI.
 var sensitiveConfigKeys = map[string]bool{
-	"postgres.primary_password":        true,
-	"postgres.replica_password":        true,
-	"redis.password":                   true,
-	"redis.ca_cert":                    true,
-	"rabbitmq.password":                true,
-	"auth.token_secret":                true,
-	"idempotency.hmac_secret":          true,
-	"object_storage.access_key_id":     true,
-	"object_storage.secret_access_key": true,
+	"postgres.primary_password":            true,
+	"postgres.replica_password":            true,
+	"redis.password":                       true,
+	"redis.ca_cert":                        true,
+	"rabbitmq.password":                    true,
+	"auth.token_secret":                    true,
+	"idempotency.hmac_secret":              true,
+	"object_storage.access_key_id":         true,
+	"object_storage.secret_access_key":     true,
+	"tenancy.multi_tenant_service_api_key": true,
 }
 
 // diffConfigs computes field-level changes between two configs.

@@ -55,6 +55,12 @@ func TestDefaultConfig_Tenancy(t *testing.T) {
 
 	assert.Equal(t, "11111111-1111-1111-1111-111111111111", cfg.Tenancy.DefaultTenantID)
 	assert.Equal(t, "default", cfg.Tenancy.DefaultTenantSlug)
+	assert.False(t, cfg.Tenancy.MultiTenantEnabled)
+	assert.Empty(t, cfg.Tenancy.MultiTenantEnvironment)
+	assert.Equal(t, 100, cfg.Tenancy.MultiTenantMaxTenantPools)
+	assert.Equal(t, 300, cfg.Tenancy.MultiTenantIdleTimeoutSec)
+	assert.Equal(t, 5, cfg.Tenancy.MultiTenantCircuitBreakerThreshold)
+	assert.Equal(t, 30, cfg.Tenancy.MultiTenantCircuitBreakerTimeoutSec)
 	assert.False(t, cfg.Tenancy.MultiTenantInfraEnabled)
 }
 
