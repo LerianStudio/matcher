@@ -184,7 +184,7 @@ func (uc *DispatchUseCase) processDispatch(
 	// Wrap audit event in a transaction to ensure reliable audit trail.
 	// The external dispatch has already been sent and cannot be undone,
 	// but the audit record must be persisted atomically.
-	tx, err := uc.infraProvider.BeginTx(ctx)
+	txLease, err := uc.infraProvider.BeginTx(ctx)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to begin audit transaction", err)
 
@@ -192,11 +192,11 @@ func (uc *DispatchUseCase) processDispatch(
 	}
 
 	defer func() {
-		_ = tx.Rollback() // No-op if already committed
+		_ = txLease.Rollback() // No-op if already committed
 	}()
 
 	targetStr := string(params.target)
-	if err := uc.auditPublisher.PublishExceptionEventWithTx(ctx, tx, ports.AuditEvent{
+	if err := uc.auditPublisher.PublishExceptionEventWithTx(ctx, txLease.SQLTx(), ports.AuditEvent{
 		ExceptionID: cmd.ExceptionID,
 		Action:      "DISPATCH",
 		Actor:       params.actor,
@@ -213,7 +213,7 @@ func (uc *DispatchUseCase) processDispatch(
 		return nil, fmt.Errorf("publish audit: %w", err)
 	}
 
-	if err := tx.Commit(); err != nil {
+	if err := txLease.Commit(); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to commit audit transaction", err)
 
 		return nil, fmt.Errorf("commit audit transaction: %w", err)

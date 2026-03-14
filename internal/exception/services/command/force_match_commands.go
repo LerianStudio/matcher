@@ -144,7 +144,7 @@ func (uc *UseCase) processForceMatch(
 
 	// Atomic transaction: update exception state AND create audit log in same transaction.
 	// This ensures SOX compliance - if either fails, both are rolled back.
-	tx, err := uc.infraProvider.BeginTx(ctx)
+	txLease, err := uc.infraProvider.BeginTx(ctx)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to begin transaction", err)
 
@@ -152,10 +152,10 @@ func (uc *UseCase) processForceMatch(
 	}
 
 	defer func() {
-		_ = tx.Rollback() // No-op if already committed
+		_ = txLease.Rollback() // No-op if already committed
 	}()
 
-	updated, err := uc.exceptionRepo.UpdateWithTx(ctx, tx, exception)
+	updated, err := uc.exceptionRepo.UpdateWithTx(ctx, txLease.SQLTx(), exception)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to update exception", err)
 
@@ -163,7 +163,7 @@ func (uc *UseCase) processForceMatch(
 	}
 
 	reasonValue := string(params.overrideReason)
-	if err := uc.auditPublisher.PublishExceptionEventWithTx(ctx, tx, ports.AuditEvent{
+	if err := uc.auditPublisher.PublishExceptionEventWithTx(ctx, txLease.SQLTx(), ports.AuditEvent{
 		ExceptionID: updated.ID,
 		Action:      "FORCE_MATCH",
 		Actor:       params.actor,
@@ -182,7 +182,7 @@ func (uc *UseCase) processForceMatch(
 		return nil, fmt.Errorf("publish audit: %w", err)
 	}
 
-	if err := tx.Commit(); err != nil {
+	if err := txLease.Commit(); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to commit transaction", err)
 
 		return nil, fmt.Errorf("commit transaction: %w", err)

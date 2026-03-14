@@ -22,6 +22,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/exception/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/exception/ports"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // newMockTx creates a mock sql.Tx using sqlmock.
@@ -240,40 +241,45 @@ type stubInfraProvider struct {
 
 func (provider *stubInfraProvider) GetPostgresConnection(
 	_ context.Context,
-) (*libPostgres.Client, error) {
+) (*sharedPorts.PostgresConnectionLease, error) {
 	if provider.postgresErr != nil {
 		return nil, provider.postgresErr
 	}
 
-	return provider.postgresConn, nil
+	return sharedPorts.NewPostgresConnectionLease(provider.postgresConn, nil), nil
 }
 
 func (provider *stubInfraProvider) GetRedisConnection(
 	_ context.Context,
-) (*libRedis.Client, error) {
+) (*sharedPorts.RedisConnectionLease, error) {
 	if provider.redisErr != nil {
 		return nil, provider.redisErr
 	}
 
-	return provider.redisConn, nil
+	return sharedPorts.NewRedisConnectionLease(provider.redisConn, nil), nil
 }
 
 // BeginTx returns a mock transaction for testing.
 // Uses sqlmock to create a valid *sql.Tx that supports Commit and Rollback.
-func (provider *stubInfraProvider) BeginTx(ctx context.Context) (*sql.Tx, error) {
+func (provider *stubInfraProvider) BeginTx(ctx context.Context) (*sharedPorts.TxLease, error) {
 	if provider.txErr != nil {
 		return nil, provider.txErr
 	}
 
 	if provider.tx != nil {
-		return provider.tx, nil
+		return sharedPorts.NewTxLease(provider.tx, nil), nil
 	}
 
-	return newMockTxWithCommit(ctx)
+	tx, err := newMockTxWithCommit(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return sharedPorts.NewTxLease(tx, nil), nil
 }
 
 // GetReplicaDB returns nil for tests (read replica not used in these tests).
-func (provider *stubInfraProvider) GetReplicaDB(_ context.Context) (*sql.DB, error) {
+func (provider *stubInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.ReplicaDBLease, error) {
 	return nil, nil
 }
 
