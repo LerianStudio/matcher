@@ -13,9 +13,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
-	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
-
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
@@ -27,21 +24,21 @@ type fakeInfraProvider struct{}
 
 func (f *fakeInfraProvider) GetPostgresConnection(
 	_ context.Context,
-) (*libPostgres.Client, error) {
+) (*ports.PostgresConnectionLease, error) {
 	return nil, nil
 }
 
 func (f *fakeInfraProvider) GetRedisConnection(
 	_ context.Context,
-) (*libRedis.Client, error) {
+) (*ports.RedisConnectionLease, error) {
 	return nil, nil
 }
 
-func (f *fakeInfraProvider) BeginTx(_ context.Context) (*sql.Tx, error) {
+func (f *fakeInfraProvider) BeginTx(_ context.Context) (*ports.TxLease, error) {
 	return nil, nil
 }
 
-func (f *fakeInfraProvider) GetReplicaDB(_ context.Context) (*sql.DB, error) {
+func (f *fakeInfraProvider) GetReplicaDB(_ context.Context) (*ports.ReplicaDBLease, error) {
 	return nil, nil
 }
 

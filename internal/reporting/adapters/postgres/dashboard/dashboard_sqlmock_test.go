@@ -4,7 +4,6 @@ package dashboard
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"regexp"
 	"testing"
@@ -15,9 +14,6 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
-	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
@@ -33,21 +29,21 @@ type fakeDashboardInfraProvider struct{}
 
 func (f *fakeDashboardInfraProvider) GetPostgresConnection(
 	_ context.Context,
-) (*libPostgres.Client, error) {
+) (*ports.PostgresConnectionLease, error) {
 	return nil, nil
 }
 
 func (f *fakeDashboardInfraProvider) GetRedisConnection(
 	_ context.Context,
-) (*libRedis.Client, error) {
+) (*ports.RedisConnectionLease, error) {
 	return nil, nil
 }
 
-func (f *fakeDashboardInfraProvider) BeginTx(_ context.Context) (*sql.Tx, error) {
+func (f *fakeDashboardInfraProvider) BeginTx(_ context.Context) (*ports.TxLease, error) {
 	return nil, errTestTransactionsUnsupported
 }
 
-func (f *fakeDashboardInfraProvider) GetReplicaDB(_ context.Context) (*sql.DB, error) {
+func (f *fakeDashboardInfraProvider) GetReplicaDB(_ context.Context) (*ports.ReplicaDBLease, error) {
 	return nil, nil
 }
 

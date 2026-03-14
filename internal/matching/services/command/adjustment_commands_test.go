@@ -17,9 +17,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
-	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
-
 	sharedhttp "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 	governanceEntities "github.com/LerianStudio/matcher/internal/governance/domain/entities"
 	governanceRepositories "github.com/LerianStudio/matcher/internal/governance/domain/repositories"
@@ -28,6 +25,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/matching/ports"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 var (
@@ -50,7 +48,7 @@ func (s *stubInfraProvider) Close() {
 
 func (s *stubInfraProvider) GetPostgresConnection(
 	_ context.Context,
-) (*libPostgres.Client, error) {
+) (*sharedPorts.PostgresConnectionLease, error) {
 	if s.connErr != nil {
 		return nil, s.connErr
 	}
@@ -73,20 +71,20 @@ func (s *stubInfraProvider) GetPostgresConnection(
 	resolver := dbresolver.New(dbresolver.WithPrimaryDBs(db))
 	conn := testutil.NewClientWithResolver(resolver)
 
-	return conn, nil
+	return sharedPorts.NewPostgresConnectionLease(conn, nil), nil
 }
 
 func (s *stubInfraProvider) GetRedisConnection(
 	_ context.Context,
-) (*libRedis.Client, error) {
+) (*sharedPorts.RedisConnectionLease, error) {
 	return nil, nil
 }
 
-func (s *stubInfraProvider) BeginTx(_ context.Context) (*sql.Tx, error) {
+func (s *stubInfraProvider) BeginTx(_ context.Context) (*sharedPorts.TxLease, error) {
 	return nil, nil
 }
 
-func (s *stubInfraProvider) GetReplicaDB(_ context.Context) (*sql.DB, error) {
+func (s *stubInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.ReplicaDBLease, error) {
 	return nil, nil
 }
 

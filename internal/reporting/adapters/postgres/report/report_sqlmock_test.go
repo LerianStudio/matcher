@@ -4,7 +4,6 @@ package report
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"regexp"
@@ -19,11 +18,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
-	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
+	"github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 var (
@@ -208,21 +206,21 @@ type mockInfrastructureProvider struct{}
 
 func (m *mockInfrastructureProvider) GetPostgresConnection(
 	_ context.Context,
-) (*libPostgres.Client, error) {
+) (*ports.PostgresConnectionLease, error) {
 	return nil, nil
 }
 
 func (m *mockInfrastructureProvider) GetRedisConnection(
 	_ context.Context,
-) (*libRedis.Client, error) {
+) (*ports.RedisConnectionLease, error) {
 	return nil, nil
 }
 
-func (m *mockInfrastructureProvider) BeginTx(_ context.Context) (*sql.Tx, error) {
+func (m *mockInfrastructureProvider) BeginTx(_ context.Context) (*ports.TxLease, error) {
 	return nil, nil
 }
 
-func (m *mockInfrastructureProvider) GetReplicaDB(_ context.Context) (*sql.DB, error) {
+func (m *mockInfrastructureProvider) GetReplicaDB(_ context.Context) (*ports.ReplicaDBLease, error) {
 	return nil, nil
 }
 

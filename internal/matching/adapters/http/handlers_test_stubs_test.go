@@ -14,8 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
-	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
 
 	governanceEntities "github.com/LerianStudio/matcher/internal/governance/domain/entities"
 	governanceRepositories "github.com/LerianStudio/matcher/internal/governance/domain/repositories"
@@ -28,6 +26,7 @@ import (
 	outboxRepositories "github.com/LerianStudio/matcher/internal/outbox/domain/repositories"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	matchingFee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 var (
@@ -626,21 +625,21 @@ type runMatchInfraProvider struct{}
 
 func (r *runMatchInfraProvider) GetPostgresConnection(
 	_ context.Context,
-) (*libPostgres.Client, error) {
+) (*sharedPorts.PostgresConnectionLease, error) {
 	return nil, nil
 }
 
 func (r *runMatchInfraProvider) GetRedisConnection(
 	_ context.Context,
-) (*libRedis.Client, error) {
+) (*sharedPorts.RedisConnectionLease, error) {
 	return nil, nil
 }
 
-func (r *runMatchInfraProvider) BeginTx(_ context.Context) (*sql.Tx, error) {
+func (r *runMatchInfraProvider) BeginTx(_ context.Context) (*sharedPorts.TxLease, error) {
 	return nil, nil
 }
 
-func (r *runMatchInfraProvider) GetReplicaDB(_ context.Context) (*sql.DB, error) {
+func (r *runMatchInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.ReplicaDBLease, error) {
 	return nil, nil
 }
 

@@ -18,9 +18,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
-	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
-
 	sharedhttp "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
@@ -51,17 +48,17 @@ type fakeInfrastructureProvider struct{}
 
 func (f *fakeInfrastructureProvider) GetPostgresConnection(
 	_ context.Context,
-) (*libPostgres.Client, error) {
+) (*ports.PostgresConnectionLease, error) {
 	return nil, nil
 }
 
 func (f *fakeInfrastructureProvider) GetRedisConnection(
 	_ context.Context,
-) (*libRedis.Client, error) {
+) (*ports.RedisConnectionLease, error) {
 	return nil, nil
 }
 
-func (f *fakeInfrastructureProvider) BeginTx(ctx context.Context) (*sql.Tx, error) {
+func (f *fakeInfrastructureProvider) BeginTx(ctx context.Context) (*ports.TxLease, error) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create sqlmock: %w", err)
@@ -74,10 +71,10 @@ func (f *fakeInfrastructureProvider) BeginTx(ctx context.Context) (*sql.Tx, erro
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 
-	return tx, nil
+	return ports.NewTxLease(tx, nil), nil
 }
 
-func (f *fakeInfrastructureProvider) GetReplicaDB(_ context.Context) (*sql.DB, error) {
+func (f *fakeInfrastructureProvider) GetReplicaDB(_ context.Context) (*ports.ReplicaDBLease, error) {
 	return nil, nil
 }
 

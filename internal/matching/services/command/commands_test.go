@@ -14,8 +14,6 @@ import (
 	"go.uber.org/mock/gomock"
 
 	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
-	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
 
 	governanceEntities "github.com/LerianStudio/matcher/internal/governance/domain/entities"
 	governanceRepositories "github.com/LerianStudio/matcher/internal/governance/domain/repositories"
@@ -26,6 +24,7 @@ import (
 	outboxmocks "github.com/LerianStudio/matcher/internal/outbox/domain/repositories/mocks"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 func TestSentinelErrors(t *testing.T) {
@@ -492,25 +491,25 @@ type mockInfraProvider struct {
 
 func (m *mockInfraProvider) GetPostgresConnection(
 	_ context.Context,
-) (*libPostgres.Client, error) {
+) (*sharedPorts.PostgresConnectionLease, error) {
 	return nil, nil
 }
 
 func (m *mockInfraProvider) GetRedisConnection(
 	_ context.Context,
-) (*libRedis.Client, error) {
+) (*sharedPorts.RedisConnectionLease, error) {
 	return nil, nil
 }
 
-func (m *mockInfraProvider) BeginTx(_ context.Context) (*sql.Tx, error) {
+func (m *mockInfraProvider) BeginTx(_ context.Context) (*sharedPorts.TxLease, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
 
-	return m.tx, nil
+	return sharedPorts.NewTxLease(m.tx, nil), nil
 }
 
-func (m *mockInfraProvider) GetReplicaDB(_ context.Context) (*sql.DB, error) {
+func (m *mockInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.ReplicaDBLease, error) {
 	return nil, nil
 }
 

@@ -88,11 +88,12 @@ func TestReplicaFallbackToPrimary(t *testing.T) {
 		provider := h.Provider()
 
 		t.Run("GetReplicaDB returns connection when no replica configured", func(t *testing.T) {
-			db, err := provider.GetReplicaDB(ctx)
+			dbLease, err := provider.GetReplicaDB(ctx)
 			require.NoError(t, err)
-			require.NotNil(t, db)
+			require.NotNil(t, dbLease)
+			defer dbLease.Release()
 
-			err = db.PingContext(ctx)
+			err = dbLease.DB().PingContext(ctx)
 			require.NoError(t, err)
 		})
 

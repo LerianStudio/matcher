@@ -4,16 +4,13 @@ package comment
 
 import (
 	"context"
-	"database/sql"
 	"testing"
 
 	"github.com/google/uuid"
 
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
-	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
-
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/repositories"
+	"github.com/LerianStudio/matcher/internal/shared/ports"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -22,19 +19,19 @@ import (
 // so that the nil-comment guard (which sits behind the provider check) can be reached.
 type stubProvider struct{}
 
-func (p *stubProvider) GetPostgresConnection(_ context.Context) (*libPostgres.Client, error) {
+func (p *stubProvider) GetPostgresConnection(_ context.Context) (*ports.PostgresConnectionLease, error) {
 	return nil, nil
 }
 
-func (p *stubProvider) GetRedisConnection(_ context.Context) (*libRedis.Client, error) {
+func (p *stubProvider) GetRedisConnection(_ context.Context) (*ports.RedisConnectionLease, error) {
 	return nil, nil
 }
 
-func (p *stubProvider) BeginTx(_ context.Context) (*sql.Tx, error) {
+func (p *stubProvider) BeginTx(_ context.Context) (*ports.TxLease, error) {
 	return nil, nil
 }
 
-func (p *stubProvider) GetReplicaDB(_ context.Context) (*sql.DB, error) {
+func (p *stubProvider) GetReplicaDB(_ context.Context) (*ports.ReplicaDBLease, error) {
 	return nil, nil
 }
 

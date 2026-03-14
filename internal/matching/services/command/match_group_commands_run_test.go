@@ -18,8 +18,6 @@ import (
 	"go.uber.org/mock/gomock"
 
 	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
-	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	governanceEntities "github.com/LerianStudio/matcher/internal/governance/domain/entities"
@@ -2243,25 +2241,25 @@ type stubInfraProviderForRun struct {
 
 func (s *stubInfraProviderForRun) GetPostgresConnection(
 	_ context.Context,
-) (*libPostgres.Client, error) {
+) (*sharedPorts.PostgresConnectionLease, error) {
 	return nil, nil
 }
 
 func (s *stubInfraProviderForRun) GetRedisConnection(
 	_ context.Context,
-) (*libRedis.Client, error) {
+) (*sharedPorts.RedisConnectionLease, error) {
 	return nil, nil
 }
 
-func (s *stubInfraProviderForRun) BeginTx(_ context.Context) (*sql.Tx, error) {
+func (s *stubInfraProviderForRun) BeginTx(_ context.Context) (*sharedPorts.TxLease, error) {
 	if s.err != nil {
 		return nil, s.err
 	}
 
-	return s.tx, nil
+	return sharedPorts.NewTxLease(s.tx, nil), nil
 }
 
-func (s *stubInfraProviderForRun) GetReplicaDB(_ context.Context) (*sql.DB, error) {
+func (s *stubInfraProviderForRun) GetReplicaDB(_ context.Context) (*sharedPorts.ReplicaDBLease, error) {
 	return nil, nil
 }
 
