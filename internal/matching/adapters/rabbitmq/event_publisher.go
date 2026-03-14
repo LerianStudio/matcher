@@ -99,6 +99,7 @@ import (
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 	libRabbitmq "github.com/LerianStudio/lib-commons/v4/commons/rabbitmq"
 
+	"github.com/LerianStudio/matcher/internal/auth"
 	matchingPorts "github.com/LerianStudio/matcher/internal/matching/ports"
 	sharedRabbitmq "github.com/LerianStudio/matcher/internal/shared/adapters/rabbitmq"
 	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
@@ -232,6 +233,10 @@ func (publisher *EventPublisher) PublishMatchConfirmed(
 		"idempotency_key": idempotencyKey.String(),
 	}
 
+	if tenantID, ok := auth.LookupTenantID(ctx); ok {
+		headers["X-Tenant-ID"] = tenantID
+	}
+
 	carrier := propagation.MapCarrier{}
 	publisher.propagator.Inject(ctx, carrier)
 
@@ -294,6 +299,10 @@ func (publisher *EventPublisher) PublishMatchUnmatched(
 
 	headers := amqp.Table{
 		"idempotency_key": idempotencyKey.String(),
+	}
+
+	if tenantID, ok := auth.LookupTenantID(ctx); ok {
+		headers["X-Tenant-ID"] = tenantID
 	}
 
 	carrier := propagation.MapCarrier{}

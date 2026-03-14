@@ -55,6 +55,7 @@ import (
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
+	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
 	sharedRabbitmq "github.com/LerianStudio/matcher/internal/shared/adapters/rabbitmq"
 )
@@ -173,6 +174,10 @@ func (publisher *EventPublisher) publish(
 
 	headers := amqp.Table{
 		"idempotency_key": idempotencyKey.String(),
+	}
+
+	if tenantID, ok := auth.LookupTenantID(ctx); ok {
+		headers["X-Tenant-ID"] = tenantID
 	}
 
 	carrier := propagation.MapCarrier{}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
@@ -18,6 +19,7 @@ import (
 
 	libRabbitmq "github.com/LerianStudio/lib-commons/v4/commons/rabbitmq"
 
+	"github.com/LerianStudio/matcher/internal/auth"
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	sharedRabbitmq "github.com/LerianStudio/matcher/internal/shared/adapters/rabbitmq"
 )
@@ -230,6 +232,7 @@ func TestEventPublisher_PublishMatchConfirmed_SetsIdempotencyHeadersAndTrace(t *
 		trace.SpanContextConfig{TraceID: traceID, SpanID: spanID, TraceFlags: trace.FlagsSampled},
 	)
 	ctx := trace.ContextWithSpanContext(context.Background(), sc)
+	ctx = context.WithValue(ctx, auth.TenantIDKey, "tenant-a")
 
 	require.NoError(t, pub.PublishMatchConfirmed(ctx, event))
 	require.True(t, mockCh.published)
@@ -241,10 +244,57 @@ func TestEventPublisher_PublishMatchConfirmed_SetsIdempotencyHeadersAndTrace(t *
 	idempotencyKey, ok := mockCh.publishMsg.Headers["idempotency_key"].(string)
 	require.True(t, ok, "idempotency_key header should be a string")
 	require.Equal(t, event.MatchID.String(), idempotencyKey)
+	require.Equal(t, "tenant-a", mockCh.publishMsg.Headers["X-Tenant-ID"])
 
 	rawTraceparent, ok := mockCh.publishMsg.Headers["traceparent"].(string)
 	require.True(t, ok)
 	require.NotEmpty(t, rawTraceparent)
+}
+
+func TestEventPublisher_PublishMatchConfirmed_DoesNotSetTenantHeaderWithoutExplicitTenant(t *testing.T) {
+	t.Parallel()
+
+	ch := &fakeChannel{}
+	confirmPub, mockCh := createTestConfirmablePublisher(t)
+	pub, err := newEventPublisher(&libRabbitmq.RabbitMQConnection{}, ch, otel.GetTextMapPropagator(), confirmPub)
+	require.NoError(t, err)
+
+	event := &matchingEntities.MatchConfirmedEvent{MatchID: uuid.New()}
+
+	ctx := trace.ContextWithSpanContext(context.Background(), trace.NewSpanContext(trace.SpanContextConfig{TraceID: trace.TraceID{1}, SpanID: trace.SpanID{2}, TraceFlags: trace.FlagsSampled}))
+	require.NoError(t, pub.PublishMatchConfirmed(ctx, event))
+	_, exists := mockCh.publishMsg.Headers["X-Tenant-ID"]
+	assert.False(t, exists)
+}
+
+func TestEventPublisher_PublishMatchUnmatched_SetsTenantHeaderWhenExplicitTenantPresent(t *testing.T) {
+	t.Parallel()
+
+	ch := &fakeChannel{}
+	confirmPub, mockCh := createTestConfirmablePublisher(t)
+	pub, err := newEventPublisher(&libRabbitmq.RabbitMQConnection{}, ch, otel.GetTextMapPropagator(), confirmPub)
+	require.NoError(t, err)
+
+	event := &matchingEntities.MatchUnmatchedEvent{RunID: uuid.New(), ContextID: uuid.New(), MatchID: uuid.New(), Timestamp: time.Now().UTC()}
+	ctx := context.WithValue(context.Background(), auth.TenantIDKey, "tenant-a")
+
+	require.NoError(t, pub.PublishMatchUnmatched(ctx, event))
+	require.Equal(t, "tenant-a", mockCh.publishMsg.Headers["X-Tenant-ID"])
+}
+
+func TestEventPublisher_PublishMatchUnmatched_DoesNotSetTenantHeaderWithoutExplicitTenant(t *testing.T) {
+	t.Parallel()
+
+	ch := &fakeChannel{}
+	confirmPub, mockCh := createTestConfirmablePublisher(t)
+	pub, err := newEventPublisher(&libRabbitmq.RabbitMQConnection{}, ch, otel.GetTextMapPropagator(), confirmPub)
+	require.NoError(t, err)
+
+	event := &matchingEntities.MatchUnmatchedEvent{RunID: uuid.New(), ContextID: uuid.New(), MatchID: uuid.New(), Timestamp: time.Now().UTC()}
+
+	require.NoError(t, pub.PublishMatchUnmatched(context.Background(), event))
+	_, exists := mockCh.publishMsg.Headers["X-Tenant-ID"]
+	assert.False(t, exists)
 }
 
 type fakeChannelWithPublishError struct {
