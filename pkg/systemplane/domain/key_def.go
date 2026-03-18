@@ -79,31 +79,31 @@ type KeyDef struct {
 
 // Validate checks that the KeyDef itself is well-formed. It does not validate
 // any particular value; use the Validator field for that.
-func (d KeyDef) Validate() error {
-	if d.Key == "" {
+func (keyDef KeyDef) Validate() error {
+	if keyDef.Key == "" {
 		return fmt.Errorf("key def: key must not be empty: %w", ErrKeyUnknown)
 	}
 
-	if !d.Kind.IsValid() {
-		return fmt.Errorf("key def %q kind %q: %w", d.Key, d.Kind, ErrInvalidKind)
+	if !keyDef.Kind.IsValid() {
+		return fmt.Errorf("key def %q kind %q: %w", keyDef.Key, keyDef.Kind, ErrInvalidKind)
 	}
 
-	if len(d.AllowedScopes) == 0 {
-		return fmt.Errorf("key def %q: at least one allowed scope required: %w", d.Key, ErrScopeInvalid)
+	if len(keyDef.AllowedScopes) == 0 {
+		return fmt.Errorf("key def %q: at least one allowed scope required: %w", keyDef.Key, ErrScopeInvalid)
 	}
 
-	for _, s := range d.AllowedScopes {
+	for _, s := range keyDef.AllowedScopes {
 		if !s.IsValid() {
-			return fmt.Errorf("key def %q scope %q: %w", d.Key, s, ErrInvalidScope)
+			return fmt.Errorf("key def %q scope %q: %w", keyDef.Key, s, ErrInvalidScope)
 		}
 	}
 
-	if !d.ValueType.IsValid() {
-		return fmt.Errorf("key def %q value type %q: %w", d.Key, d.ValueType, ErrInvalidValueType)
+	if !keyDef.ValueType.IsValid() {
+		return fmt.Errorf("key def %q value type %q: %w", keyDef.Key, keyDef.ValueType, ErrInvalidValueType)
 	}
 
-	if !d.ApplyBehavior.IsValid() {
-		return fmt.Errorf("key def %q apply behavior %q: %w", d.Key, d.ApplyBehavior, ErrInvalidApplyBehavior)
+	if !keyDef.ApplyBehavior.IsValid() {
+		return fmt.Errorf("key def %q apply behavior %q: %w", keyDef.Key, keyDef.ApplyBehavior, ErrInvalidApplyBehavior)
 	}
 
 	return nil

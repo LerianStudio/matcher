@@ -1,5 +1,6 @@
 // Copyright 2025 Lerian Studio.
 
+// Package service orchestrates systemplane runtime operations.
 package service
 
 import (

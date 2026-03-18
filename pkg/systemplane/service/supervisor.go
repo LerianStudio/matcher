@@ -4,14 +4,20 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"reflect"
 	"sort"
 	"sync"
 	"sync/atomic"
 
 	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
 	"github.com/LerianStudio/matcher/pkg/systemplane/ports"
+)
+
+var (
+	errSupervisorBuilderRequired = errors.New("new supervisor: snapshot builder is required")
+	errSupervisorFactoryRequired = errors.New("new supervisor: bundle factory is required")
+	errSupervisorNilReconciler   = errors.New("new supervisor: reconciler is nil")
 )
 
 // Supervisor manages the runtime bundle lifecycle with atomic snapshot/bundle swaps.
@@ -34,14 +40,16 @@ type SupervisorConfig struct {
 // NewSupervisor creates a new supervisor.
 func NewSupervisor(cfg SupervisorConfig) (Supervisor, error) {
 	if cfg.Builder == nil {
-		return nil, fmt.Errorf("new supervisor: snapshot builder is required")
+		return nil, fmt.Errorf("%w", errSupervisorBuilderRequired)
 	}
+
 	if cfg.Factory == nil {
-		return nil, fmt.Errorf("new supervisor: bundle factory is required")
+		return nil, fmt.Errorf("%w", errSupervisorFactoryRequired)
 	}
+
 	for i, reconciler := range cfg.Reconcilers {
 		if isNilReconciler(reconciler) {
-			return nil, fmt.Errorf("new supervisor: reconciler %d is nil", i)
+			return nil, fmt.Errorf("%w: index %d", errSupervisorNilReconciler, i)
 		}
 	}
 
@@ -68,8 +76,9 @@ type defaultSupervisor struct {
 	stopOnce    sync.Once
 }
 
-func (s *defaultSupervisor) Current() domain.RuntimeBundle {
-	holder := s.bundle.Load()
+// Current returns the currently active runtime bundle.
+func (supervisor *defaultSupervisor) Current() domain.RuntimeBundle {
+	holder := supervisor.bundle.Load()
 	if holder == nil || isNilRuntimeBundle(holder.bundle) {
 		return nil
 	}
@@ -77,8 +86,9 @@ func (s *defaultSupervisor) Current() domain.RuntimeBundle {
 	return holder.bundle
 }
 
-func (s *defaultSupervisor) Snapshot() domain.Snapshot {
-	snap := s.snapshot.Load()
+// Snapshot returns the latest published snapshot.
+func (supervisor *defaultSupervisor) Snapshot() domain.Snapshot {
+	snap := supervisor.snapshot.Load()
 	if snap == nil {
 		return domain.Snapshot{}
 	}
@@ -86,40 +96,42 @@ func (s *defaultSupervisor) Snapshot() domain.Snapshot {
 	return *snap
 }
 
-func (s *defaultSupervisor) PublishSnapshot(_ context.Context, snap domain.Snapshot, _ string) error {
-	if s.isStopped() {
+// PublishSnapshot publishes a snapshot without rebuilding bundles.
+func (supervisor *defaultSupervisor) PublishSnapshot(_ context.Context, snap domain.Snapshot, _ string) error {
+	if supervisor.isStopped() {
 		return domain.ErrSupervisorStopped
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	supervisor.mu.Lock()
+	defer supervisor.mu.Unlock()
 
-	s.snapshot.Store(&snap)
+	supervisor.snapshot.Store(&snap)
 
 	return nil
 }
 
-func (s *defaultSupervisor) ReconcileCurrent(ctx context.Context, snap domain.Snapshot, _ string) error {
-	if s.isStopped() {
+// ReconcileCurrent reconciles the current bundle against a provided snapshot.
+func (supervisor *defaultSupervisor) ReconcileCurrent(ctx context.Context, snap domain.Snapshot, _ string) error {
+	if supervisor.isStopped() {
 		return domain.ErrSupervisorStopped
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	supervisor.mu.Lock()
+	defer supervisor.mu.Unlock()
 
-	holder := s.bundle.Load()
+	holder := supervisor.bundle.Load()
 	if holder == nil || isNilRuntimeBundle(holder.bundle) {
 		return domain.ErrNoCurrentBundle
 	}
 
-	previous := s.snapshot.Load()
-	s.snapshot.Store(&snap)
+	previous := supervisor.snapshot.Load()
+	supervisor.snapshot.Store(&snap)
 
 	currentBundle := holder.bundle
-	for _, reconciler := range s.reconcilers {
+	for _, reconciler := range supervisor.reconcilers {
 		if err := reconciler.Reconcile(ctx, currentBundle, currentBundle, snap); err != nil {
 			if previous != nil {
-				s.snapshot.Store(previous)
+				supervisor.snapshot.Store(previous)
 			}
 
 			return fmt.Errorf("%s: %w: %w", reconciler.Name(), domain.ErrReconcileFailed, err)
@@ -129,48 +141,52 @@ func (s *defaultSupervisor) ReconcileCurrent(ctx context.Context, snap domain.Sn
 	return nil
 }
 
-func (s *defaultSupervisor) Reload(ctx context.Context, _ string) error {
-	if s.isStopped() {
+// Reload rebuilds the snapshot and runtime bundle, then reconciles consumers.
+func (supervisor *defaultSupervisor) Reload(ctx context.Context, _ string) error {
+	if supervisor.isStopped() {
 		return domain.ErrSupervisorStopped
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	supervisor.mu.Lock()
+	defer supervisor.mu.Unlock()
 
-	tenantIDs := cachedTenantIDs(s.snapshot.Load())
-	snap, err := s.builder.BuildFull(ctx, tenantIDs...)
+	tenantIDs := cachedTenantIDs(supervisor.snapshot.Load())
+
+	snap, err := supervisor.builder.BuildFull(ctx, tenantIDs...)
 	if err != nil {
 		return fmt.Errorf("reload: %w: %w", domain.ErrSnapshotBuildFailed, err)
 	}
 
-	candidate, err := s.factory.Build(ctx, snap)
+	candidate, err := supervisor.factory.Build(ctx, snap)
 	if err != nil {
 		return fmt.Errorf("reload: %w: %w", domain.ErrBundleBuildFailed, err)
 	}
+
 	if isNilRuntimeBundle(candidate) {
 		return fmt.Errorf("reload: %w: nil runtime bundle", domain.ErrBundleBuildFailed)
 	}
 
-	prevSnap := s.snapshot.Load()
-	prevHolder := s.bundle.Load()
+	prevSnap := supervisor.snapshot.Load()
+	prevHolder := supervisor.bundle.Load()
 
 	var previousBundle domain.RuntimeBundle
 	if prevHolder != nil {
 		previousBundle = prevHolder.bundle
 	}
 
-	s.snapshot.Store(&snap)
-	s.bundle.Store(&bundleHolder{bundle: candidate})
+	supervisor.snapshot.Store(&snap)
+	supervisor.bundle.Store(&bundleHolder{bundle: candidate})
 
-	for _, reconciler := range s.reconcilers {
+	for _, reconciler := range supervisor.reconcilers {
 		if err := reconciler.Reconcile(ctx, previousBundle, candidate, snap); err != nil {
 			if prevSnap != nil {
-				s.snapshot.Store(prevSnap)
+				supervisor.snapshot.Store(prevSnap)
 			}
+
 			if prevHolder != nil {
-				s.bundle.Store(prevHolder)
+				supervisor.bundle.Store(prevHolder)
 			} else {
-				s.bundle.Store(nil)
+				supervisor.bundle.Store(nil)
 			}
 
 			_ = candidate.Close(ctx)
@@ -186,25 +202,28 @@ func (s *defaultSupervisor) Reload(ctx context.Context, _ string) error {
 	return nil
 }
 
-func (s *defaultSupervisor) Stop(ctx context.Context) error {
-	s.stopOnce.Do(func() {
-		close(s.stopCh)
+// Stop terminates supervisor operations and closes the active bundle.
+func (supervisor *defaultSupervisor) Stop(ctx context.Context) error {
+	supervisor.stopOnce.Do(func() {
+		close(supervisor.stopCh)
 	})
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	supervisor.mu.Lock()
+	defer supervisor.mu.Unlock()
 
-	holder := s.bundle.Load()
+	holder := supervisor.bundle.Load()
 	if holder != nil && !isNilRuntimeBundle(holder.bundle) {
-		return holder.bundle.Close(ctx)
+		if err := holder.bundle.Close(ctx); err != nil {
+			return fmt.Errorf("stop close current bundle: %w", err)
+		}
 	}
 
 	return nil
 }
 
-func (s *defaultSupervisor) isStopped() bool {
+func (supervisor *defaultSupervisor) isStopped() bool {
 	select {
-	case <-s.stopCh:
+	case <-supervisor.stopCh:
 		return true
 	default:
 		return false
@@ -212,39 +231,11 @@ func (s *defaultSupervisor) isStopped() bool {
 }
 
 func isNilRuntimeBundle(bundle domain.RuntimeBundle) bool {
-	if bundle == nil {
-		return true
-	}
-
-	value := reflect.ValueOf(bundle)
-	if !value.IsValid() {
-		return true
-	}
-
-	switch value.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
-		return value.IsNil()
-	default:
-		return false
-	}
+	return domain.IsNilValue(bundle)
 }
 
 func isNilReconciler(reconciler ports.BundleReconciler) bool {
-	if reconciler == nil {
-		return true
-	}
-
-	value := reflect.ValueOf(reconciler)
-	if !value.IsValid() {
-		return true
-	}
-
-	switch value.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
-		return value.IsNil()
-	default:
-		return false
-	}
+	return domain.IsNilValue(reconciler)
 }
 
 func cachedTenantIDs(snapshot *domain.Snapshot) []string {
@@ -253,9 +244,11 @@ func cachedTenantIDs(snapshot *domain.Snapshot) []string {
 	}
 
 	tenantIDs := make([]string, 0, len(snapshot.TenantSettings))
+
 	for tenantID := range snapshot.TenantSettings {
 		tenantIDs = append(tenantIDs, tenantID)
 	}
+
 	sort.Strings(tenantIDs)
 
 	return tenantIDs

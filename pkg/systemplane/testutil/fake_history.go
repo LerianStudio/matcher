@@ -1,5 +1,6 @@
 // Copyright 2025 Lerian Studio.
 
+// Package testutil provides test doubles for systemplane components.
 package testutil
 
 import (
@@ -18,7 +19,12 @@ var _ ports.HistoryStore = (*FakeHistoryStore)(nil)
 // ListHistory.
 type FakeHistoryStore struct {
 	mu      sync.Mutex
-	entries []ports.HistoryEntry
+	entries []fakeHistoryRecord
+}
+
+type fakeHistoryRecord struct {
+	kind  domain.Kind
+	entry ports.HistoryEntry
 }
 
 // NewFakeHistoryStore creates an empty FakeHistoryStore.
@@ -26,57 +32,50 @@ func NewFakeHistoryStore() *FakeHistoryStore {
 	return &FakeHistoryStore{}
 }
 
-// Append adds a history entry. This is a test-setup helper for pre-populating
-// history or for recording writes from an external caller.
-func (h *FakeHistoryStore) Append(entry ports.HistoryEntry) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+// Append adds a history entry using scope-based kind inference.
+//
+// WARNING: This heuristic maps ScopeTenant → KindSetting and everything else
+// → KindConfig. Global-scoped settings will be misclassified as KindConfig.
+// Prefer AppendForKind when the caller knows the entry's kind.
+func (store *FakeHistoryStore) Append(entry ports.HistoryEntry) {
+	store.AppendForKind(inferHistoryKind(entry), entry)
+}
 
-	h.entries = append(h.entries, entry)
+// AppendForKind adds a history entry with an explicit kind. Prefer this helper
+// when the caller knows whether the record is for configs or settings.
+func (store *FakeHistoryStore) AppendForKind(kind domain.Kind, entry ports.HistoryEntry) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+
+	store.entries = append(store.entries, fakeHistoryRecord{kind: kind, entry: entry})
 }
 
 // ListHistory retrieves history entries matching the given filter. Results are
 // returned in reverse chronological order (newest first). Filtering is applied
 // for Target (if non-nil) and Before (if non-nil), and the result is capped
 // at filter.Limit when Limit > 0.
-func (h *FakeHistoryStore) ListHistory(_ context.Context, filter ports.HistoryFilter) ([]ports.HistoryEntry, error) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+func (store *FakeHistoryStore) ListHistory(_ context.Context, filter ports.HistoryFilter) ([]ports.HistoryEntry, error) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
 
 	// Iterate in reverse to produce newest-first ordering.
-	result := make([]ports.HistoryEntry, 0, len(h.entries))
+	result := make([]ports.HistoryEntry, 0, len(store.entries))
 
-	for i := len(h.entries) - 1; i >= 0; i-- {
-		e := h.entries[i]
+	for index := len(store.entries) - 1; index >= 0; index-- {
+		record := store.entries[index]
 
-		if filter.Kind != "" {
-			if filter.Kind == domain.KindConfig && e.Scope != domain.ScopeGlobal {
-				continue
-			}
-			if filter.Kind == domain.KindSetting && filter.Scope == domain.ScopeGlobal && e.Scope != domain.ScopeGlobal {
-				continue
-			}
-		}
-
-		if filter.Scope != "" && e.Scope != filter.Scope {
+		if !matchesHistoryFilter(filter, record) {
 			continue
 		}
 
-		if filter.SubjectID != "" && e.SubjectID != filter.SubjectID {
-			continue
-		}
-
-		if filter.Key != "" && e.Key != filter.Key {
-			continue
-		}
-
-		result = append(result, e)
+		result = append(result, record.entry)
 	}
 
 	if filter.Offset > 0 {
 		if filter.Offset >= len(result) {
 			return []ports.HistoryEntry{}, nil
 		}
+
 		result = result[filter.Offset:]
 	}
 
@@ -85,4 +84,42 @@ func (h *FakeHistoryStore) ListHistory(_ context.Context, filter ports.HistoryFi
 	}
 
 	return result, nil
+}
+
+func matchesHistoryFilter(filter ports.HistoryFilter, record fakeHistoryRecord) bool {
+	if !matchesKindFilter(filter, record) {
+		return false
+	}
+
+	entry := record.entry
+
+	if filter.Scope != "" && entry.Scope != filter.Scope {
+		return false
+	}
+
+	if filter.SubjectID != "" && entry.SubjectID != filter.SubjectID {
+		return false
+	}
+
+	if filter.Key != "" && entry.Key != filter.Key {
+		return false
+	}
+
+	return true
+}
+
+func matchesKindFilter(filter ports.HistoryFilter, record fakeHistoryRecord) bool {
+	if filter.Kind == "" {
+		return true
+	}
+
+	return record.kind == filter.Kind
+}
+
+func inferHistoryKind(entry ports.HistoryEntry) domain.Kind {
+	if entry.Scope == domain.ScopeTenant {
+		return domain.KindSetting
+	}
+
+	return domain.KindConfig
 }

@@ -49,7 +49,8 @@ func testSupervisorDeps(t *testing.T) (*SnapshotBuilder, *testutil.FakeStore, *t
 
 	store := testutil.NewFakeStore()
 	factory := testutil.NewFakeBundleFactory()
-	builder := NewSnapshotBuilder(reg, store)
+	builder, err := NewSnapshotBuilder(reg, store)
+	require.NoError(t, err)
 
 	return builder, store, factory
 }

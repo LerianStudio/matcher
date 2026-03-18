@@ -4,6 +4,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"time"
@@ -11,6 +12,11 @@ import (
 	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
 	"github.com/LerianStudio/matcher/pkg/systemplane/ports"
 	"github.com/LerianStudio/matcher/pkg/systemplane/registry"
+)
+
+var (
+	errBuilderRegistryRequired = errors.New("new snapshot builder: registry is required")
+	errBuilderStoreRequired    = errors.New("new snapshot builder: store is required")
 )
 
 // SnapshotBuilder merges registry defaults with store overrides to produce
@@ -21,16 +27,25 @@ type SnapshotBuilder struct {
 }
 
 // NewSnapshotBuilder creates a new SnapshotBuilder with the given registry and
-// store dependencies.
-func NewSnapshotBuilder(reg registry.Registry, store ports.Store) *SnapshotBuilder {
-	return &SnapshotBuilder{registry: reg, store: store}
+// store dependencies. Both are required; a nil dependency causes a
+// construction-time error rather than a runtime panic on first use.
+func NewSnapshotBuilder(reg registry.Registry, store ports.Store) (*SnapshotBuilder, error) {
+	if reg == nil {
+		return nil, errBuilderRegistryRequired
+	}
+
+	if store == nil {
+		return nil, errBuilderStoreRequired
+	}
+
+	return &SnapshotBuilder{registry: reg, store: store}, nil
 }
 
 // BuildConfigs builds the config portion of a snapshot by starting with all
 // KindConfig defaults from the registry and then overlaying global overrides
 // from the store.
-func (b *SnapshotBuilder) BuildConfigs(ctx context.Context) (map[string]domain.EffectiveValue, domain.Revision, error) {
-	defs := b.registry.List(domain.KindConfig)
+func (builder *SnapshotBuilder) BuildConfigs(ctx context.Context) (map[string]domain.EffectiveValue, domain.Revision, error) {
+	defs := builder.registry.List(domain.KindConfig)
 	effective := initDefaults(defs)
 
 	target, err := domain.NewTarget(domain.KindConfig, domain.ScopeGlobal, "")
@@ -38,7 +53,7 @@ func (b *SnapshotBuilder) BuildConfigs(ctx context.Context) (map[string]domain.E
 		return nil, domain.RevisionZero, fmt.Errorf("build config target: %w", err)
 	}
 
-	result, err := b.store.Get(ctx, target)
+	result, err := builder.store.Get(ctx, target)
 	if err != nil {
 		return nil, domain.RevisionZero, fmt.Errorf("get config overrides: %w", err)
 	}
@@ -51,8 +66,8 @@ func (b *SnapshotBuilder) BuildConfigs(ctx context.Context) (map[string]domain.E
 
 // BuildGlobalSettings builds global settings using defaults plus global
 // overrides only.
-func (b *SnapshotBuilder) BuildGlobalSettings(ctx context.Context) (map[string]domain.EffectiveValue, domain.Revision, error) {
-	defs := filterDefsByScope(b.registry.List(domain.KindSetting), domain.ScopeGlobal)
+func (builder *SnapshotBuilder) BuildGlobalSettings(ctx context.Context) (map[string]domain.EffectiveValue, domain.Revision, error) {
+	defs := filterDefsByScope(builder.registry.List(domain.KindSetting), domain.ScopeGlobal)
 	effective := initDefaults(defs)
 
 	target, err := domain.NewTarget(domain.KindSetting, domain.ScopeGlobal, "")
@@ -60,7 +75,7 @@ func (b *SnapshotBuilder) BuildGlobalSettings(ctx context.Context) (map[string]d
 		return nil, domain.RevisionZero, fmt.Errorf("build global setting target: %w", err)
 	}
 
-	result, err := b.store.Get(ctx, target)
+	result, err := builder.store.Get(ctx, target)
 	if err != nil {
 		return nil, domain.RevisionZero, fmt.Errorf("get global setting overrides: %w", err)
 	}
@@ -72,19 +87,19 @@ func (b *SnapshotBuilder) BuildGlobalSettings(ctx context.Context) (map[string]d
 }
 
 // BuildSettings builds effective settings for the requested subject.
-func (b *SnapshotBuilder) BuildSettings(ctx context.Context, subject Subject) (map[string]domain.EffectiveValue, domain.Revision, error) {
+func (builder *SnapshotBuilder) BuildSettings(ctx context.Context, subject Subject) (map[string]domain.EffectiveValue, domain.Revision, error) {
 	switch subject.Scope {
 	case domain.ScopeGlobal:
-		return b.BuildGlobalSettings(ctx)
+		return builder.BuildGlobalSettings(ctx)
 	case domain.ScopeTenant:
-		return b.buildTenantSettings(ctx, subject.SubjectID)
+		return builder.buildTenantSettings(ctx, subject.SubjectID)
 	default:
 		return nil, domain.RevisionZero, fmt.Errorf("build settings scope %q: %w", subject.Scope, domain.ErrScopeInvalid)
 	}
 }
 
-func (b *SnapshotBuilder) buildTenantSettings(ctx context.Context, tenantID string) (map[string]domain.EffectiveValue, domain.Revision, error) {
-	defs := filterDefsByScope(b.registry.List(domain.KindSetting), domain.ScopeTenant)
+func (builder *SnapshotBuilder) buildTenantSettings(ctx context.Context, tenantID string) (map[string]domain.EffectiveValue, domain.Revision, error) {
+	defs := filterDefsByScope(builder.registry.List(domain.KindSetting), domain.ScopeTenant)
 	effective := initDefaults(defs)
 
 	globalTarget, err := domain.NewTarget(domain.KindSetting, domain.ScopeGlobal, "")
@@ -92,7 +107,7 @@ func (b *SnapshotBuilder) buildTenantSettings(ctx context.Context, tenantID stri
 		return nil, domain.RevisionZero, fmt.Errorf("build global setting target: %w", err)
 	}
 
-	globalResult, err := b.store.Get(ctx, globalTarget)
+	globalResult, err := builder.store.Get(ctx, globalTarget)
 	if err != nil {
 		return nil, domain.RevisionZero, fmt.Errorf("get global setting overrides: %w", err)
 	}
@@ -104,7 +119,7 @@ func (b *SnapshotBuilder) buildTenantSettings(ctx context.Context, tenantID stri
 		return nil, domain.RevisionZero, fmt.Errorf("build tenant setting target: %w", err)
 	}
 
-	tenantResult, err := b.store.Get(ctx, tenantTarget)
+	tenantResult, err := builder.store.Get(ctx, tenantTarget)
 	if err != nil {
 		return nil, domain.RevisionZero, fmt.Errorf("get tenant setting overrides: %w", err)
 	}
@@ -117,13 +132,13 @@ func (b *SnapshotBuilder) buildTenantSettings(ctx context.Context, tenantID stri
 
 // BuildFull builds a complete snapshot with configs, global settings, and any
 // requested tenant settings.
-func (b *SnapshotBuilder) BuildFull(ctx context.Context, tenantIDs ...string) (domain.Snapshot, error) {
-	configs, configRev, err := b.BuildConfigs(ctx)
+func (builder *SnapshotBuilder) BuildFull(ctx context.Context, tenantIDs ...string) (domain.Snapshot, error) {
+	configs, configRev, err := builder.BuildConfigs(ctx)
 	if err != nil {
 		return domain.Snapshot{}, fmt.Errorf("build configs: %w", err)
 	}
 
-	globalSettings, globalRev, err := b.BuildGlobalSettings(ctx)
+	globalSettings, globalRev, err := builder.BuildGlobalSettings(ctx)
 	if err != nil {
 		return domain.Snapshot{}, fmt.Errorf("build global settings: %w", err)
 	}
@@ -132,7 +147,7 @@ func (b *SnapshotBuilder) BuildFull(ctx context.Context, tenantIDs ...string) (d
 	maxRevision := maxRevisions(configRev, globalRev)
 
 	for _, tenantID := range uniqueTenantIDs(tenantIDs) {
-		settings, rev, buildErr := b.BuildSettings(ctx, Subject{Scope: domain.ScopeTenant, SubjectID: tenantID})
+		settings, rev, buildErr := builder.BuildSettings(ctx, Subject{Scope: domain.ScopeTenant, SubjectID: tenantID})
 		if buildErr != nil {
 			return domain.Snapshot{}, fmt.Errorf("build tenant settings %q: %w", tenantID, buildErr)
 		}
@@ -153,10 +168,10 @@ func (b *SnapshotBuilder) BuildFull(ctx context.Context, tenantIDs ...string) (d
 // initDefaults initializes an EffectiveValue map from a list of KeyDefs,
 // populating each entry with its default value and redaction metadata.
 func initDefaults(defs []domain.KeyDef) map[string]domain.EffectiveValue {
-	m := make(map[string]domain.EffectiveValue, len(defs))
+	valuesByKey := make(map[string]domain.EffectiveValue, len(defs))
 
 	for _, def := range defs {
-		m[def.Key] = domain.EffectiveValue{
+		valuesByKey[def.Key] = domain.EffectiveValue{
 			Key:      def.Key,
 			Value:    def.DefaultValue,
 			Default:  def.DefaultValue,
@@ -167,7 +182,7 @@ func initDefaults(defs []domain.KeyDef) map[string]domain.EffectiveValue {
 		}
 	}
 
-	return m
+	return valuesByKey
 }
 
 // applyOverrides merges store entries into the effective map. Only entries
@@ -215,28 +230,33 @@ func uniqueTenantIDs(tenantIDs []string) []string {
 
 	seen := make(map[string]struct{}, len(tenantIDs))
 	unique := make([]string, 0, len(tenantIDs))
+
 	for _, tenantID := range tenantIDs {
 		if tenantID == "" {
 			continue
 		}
+
 		if _, ok := seen[tenantID]; ok {
 			continue
 		}
+
 		seen[tenantID] = struct{}{}
 		unique = append(unique, tenantID)
 	}
+
 	sort.Strings(unique)
 
 	return unique
 }
 
 func maxRevisions(values ...domain.Revision) domain.Revision {
-	max := domain.RevisionZero
+	maxRevision := domain.RevisionZero
+
 	for _, value := range values {
-		if value > max {
-			max = value
+		if value > maxRevision {
+			maxRevision = value
 		}
 	}
 
-	return max
+	return maxRevision
 }

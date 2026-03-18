@@ -23,6 +23,15 @@ const (
 // ErrInvalidApplyBehavior indicates an invalid apply behavior value.
 var ErrInvalidApplyBehavior = errors.New("invalid apply behavior")
 
+const (
+	applyBehaviorStrengthBootstrapOnly = iota
+	applyBehaviorStrengthLiveRead
+	applyBehaviorStrengthWorkerReconcile
+	applyBehaviorStrengthBundleRebuild
+	applyBehaviorStrengthBundleRebuildAndReconcile
+	applyBehaviorStrengthUnknown = -1
+)
+
 // IsValid reports whether the apply behavior is supported.
 func (ab ApplyBehavior) IsValid() bool {
 	switch ab {
@@ -50,17 +59,17 @@ func (ab ApplyBehavior) String() string {
 func (ab ApplyBehavior) Strength() int {
 	switch ab {
 	case ApplyBootstrapOnly:
-		return 0
+		return applyBehaviorStrengthBootstrapOnly
 	case ApplyLiveRead:
-		return 1
+		return applyBehaviorStrengthLiveRead
 	case ApplyWorkerReconcile:
-		return 2
+		return applyBehaviorStrengthWorkerReconcile
 	case ApplyBundleRebuild:
-		return 3
+		return applyBehaviorStrengthBundleRebuild
 	case ApplyBundleRebuildAndReconcile:
-		return 4
+		return applyBehaviorStrengthBundleRebuildAndReconcile
 	default:
-		return -1
+		return applyBehaviorStrengthUnknown
 	}
 }
 

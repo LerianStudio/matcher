@@ -36,29 +36,29 @@ func NewFakeStore() *FakeStore {
 
 // Seed pre-populates entries for a target at the given revision.
 // This is a test-setup helper; it overwrites any existing state for the target.
-func (s *FakeStore) Seed(target domain.Target, entries []domain.Entry, revision domain.Revision) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (store *FakeStore) Seed(target domain.Target, entries []domain.Entry, revision domain.Revision) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
 
 	state := &targetState{
 		entries:  make(map[string]domain.Entry, len(entries)),
 		revision: revision,
 	}
 
-	for _, e := range entries {
-		state.entries[e.Key] = e
+	for _, entry := range entries {
+		state.entries[entry.Key] = entry
 	}
 
-	s.targets[target.String()] = state
+	store.targets[target.String()] = state
 }
 
 // Get retrieves all entries for a target at its current revision.
 // If the target has never been written, it returns an empty slice and RevisionZero.
-func (s *FakeStore) Get(_ context.Context, target domain.Target) (ports.ReadResult, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (store *FakeStore) Get(_ context.Context, target domain.Target) (ports.ReadResult, error) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
 
-	state, ok := s.targets[target.String()]
+	state, ok := store.targets[target.String()]
 	if !ok {
 		return ports.ReadResult{
 			Entries:  nil,
@@ -67,8 +67,8 @@ func (s *FakeStore) Get(_ context.Context, target domain.Target) (ports.ReadResu
 	}
 
 	entries := make([]domain.Entry, 0, len(state.entries))
-	for _, e := range state.entries {
-		entries = append(entries, e)
+	for _, entry := range state.entries {
+		entries = append(entries, entry)
 	}
 
 	return ports.ReadResult{
@@ -81,31 +81,35 @@ func (s *FakeStore) Get(_ context.Context, target domain.Target) (ports.ReadResu
 // It returns domain.ErrRevisionMismatch when the expected revision does not
 // match the current revision. For Reset ops or nil-Value ops, the entry is
 // deleted from the map. Otherwise the entry is upserted with fresh metadata.
-func (s *FakeStore) Put(_ context.Context, target domain.Target, ops []ports.WriteOp,
+func (store *FakeStore) Put(_ context.Context, target domain.Target, ops []ports.WriteOp,
 	expected domain.Revision, actor domain.Actor, source string,
 ) (domain.Revision, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	store.mu.Lock()
+	defer store.mu.Unlock()
 
 	key := target.String()
 
-	state, ok := s.targets[key]
+	state, ok := store.targets[key]
 	if !ok {
 		state = &targetState{
 			entries:  make(map[string]domain.Entry),
 			revision: domain.RevisionZero,
 		}
-		s.targets[key] = state
+		store.targets[key] = state
 	}
 
 	if expected != state.revision {
 		return state.revision, domain.ErrRevisionMismatch
 	}
 
+	if len(ops) == 0 {
+		return state.revision, nil
+	}
+
 	now := time.Now().UTC()
 
 	for _, op := range ops {
-		if op.Reset || op.Value == nil {
+		if op.Reset || domain.IsNilValue(op.Value) {
 			delete(state.entries, op.Key)
 
 			continue

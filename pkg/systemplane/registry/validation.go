@@ -40,46 +40,84 @@ func checkValueType(value any, expected domain.ValueType) error {
 
 	switch expected {
 	case domain.ValueTypeString:
-		if _, ok := value.(string); !ok {
-			return fmt.Errorf("expected %s, got %T: %w", expected, value, domain.ErrValueInvalid)
-		}
+		return ensureStringCompatible(value, expected)
 	case domain.ValueTypeInt:
-		if !isIntCompatible(value) {
-			return fmt.Errorf("expected %s, got %T: %w", expected, value, domain.ErrValueInvalid)
-		}
+		return ensureIntCompatible(value, expected)
 	case domain.ValueTypeBool:
-		if _, ok := value.(bool); !ok {
-			return fmt.Errorf("expected %s, got %T: %w", expected, value, domain.ErrValueInvalid)
-		}
+		return ensureBoolCompatible(value, expected)
 	case domain.ValueTypeFloat:
-		if !isFloatCompatible(value) {
-			return fmt.Errorf("expected %s, got %T: %w", expected, value, domain.ErrValueInvalid)
-		}
+		return ensureFloatCompatible(value, expected)
 	case domain.ValueTypeObject:
-		if !isObjectCompatible(value) {
-			return fmt.Errorf("expected %s, got %T: %w", expected, value, domain.ErrValueInvalid)
-		}
+		return ensureObjectCompatible(value, expected)
 	case domain.ValueTypeArray:
-		if !isArrayCompatible(value) {
-			return fmt.Errorf("expected %s, got %T: %w", expected, value, domain.ErrValueInvalid)
-		}
+		return ensureArrayCompatible(value, expected)
 	default:
 		return fmt.Errorf("unsupported value type %q: %w", expected, domain.ErrValueInvalid)
 	}
+}
 
-	return nil
+func ensureStringCompatible(value any, expected domain.ValueType) error {
+	if _, ok := value.(string); ok {
+		return nil
+	}
+
+	return typeMismatchError(expected, value)
+}
+
+func ensureIntCompatible(value any, expected domain.ValueType) error {
+	if isIntCompatible(value) {
+		return nil
+	}
+
+	return typeMismatchError(expected, value)
+}
+
+func ensureBoolCompatible(value any, expected domain.ValueType) error {
+	if _, ok := value.(bool); ok {
+		return nil
+	}
+
+	return typeMismatchError(expected, value)
+}
+
+func ensureFloatCompatible(value any, expected domain.ValueType) error {
+	if isFloatCompatible(value) {
+		return nil
+	}
+
+	return typeMismatchError(expected, value)
+}
+
+func ensureObjectCompatible(value any, expected domain.ValueType) error {
+	if isObjectCompatible(value) {
+		return nil
+	}
+
+	return typeMismatchError(expected, value)
+}
+
+func ensureArrayCompatible(value any, expected domain.ValueType) error {
+	if isArrayCompatible(value) {
+		return nil
+	}
+
+	return typeMismatchError(expected, value)
+}
+
+func typeMismatchError(expected domain.ValueType, value any) error {
+	return fmt.Errorf("expected %s, got %T: %w", expected, value, domain.ErrValueInvalid)
 }
 
 // isIntCompatible reports whether value can be treated as an integer.
 // Accepts int, int64, and float64 without a fractional part (JSON coercion).
 func isIntCompatible(value any) bool {
-	switch v := value.(type) {
+	switch typedValue := value.(type) {
 	case int:
 		return true
 	case int64:
 		return true
 	case float64:
-		return math.Trunc(v) == v && !math.IsInf(v, 0) && !math.IsNaN(v)
+		return math.Trunc(typedValue) == typedValue && !math.IsInf(typedValue, 0) && !math.IsNaN(typedValue)
 	default:
 		return false
 	}

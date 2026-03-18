@@ -38,43 +38,43 @@ func NewFakeReconciler(name string) *FakeReconciler {
 }
 
 // Name returns the human-readable identifier for this reconciler.
-func (r *FakeReconciler) Name() string {
-	return r.name
+func (reconciler *FakeReconciler) Name() string {
+	return reconciler.name
 }
 
 // Reconcile records the call and returns ReconcileErr.
-func (r *FakeReconciler) Reconcile(_ context.Context, previous domain.RuntimeBundle,
+func (reconciler *FakeReconciler) Reconcile(_ context.Context, previous domain.RuntimeBundle,
 	candidate domain.RuntimeBundle, snap domain.Snapshot,
 ) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	reconciler.mu.Lock()
+	defer reconciler.mu.Unlock()
 
-	r.Calls = append(r.Calls, ReconcileCall{
+	reconciler.Calls = append(reconciler.Calls, ReconcileCall{
 		Previous:  previous,
 		Candidate: candidate,
 		Snapshot:  snap,
 	})
 
-	return r.ReconcileErr
+	return reconciler.ReconcileErr
 }
 
 // CallCount returns the number of Reconcile invocations observed so far.
-func (r *FakeReconciler) CallCount() int {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+func (reconciler *FakeReconciler) CallCount() int {
+	reconciler.mu.Lock()
+	defer reconciler.mu.Unlock()
 
-	return len(r.Calls)
+	return len(reconciler.Calls)
 }
 
 // LastCall returns the most recent ReconcileCall, or the zero value if no
 // calls have been recorded.
-func (r *FakeReconciler) LastCall() ReconcileCall {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+func (reconciler *FakeReconciler) LastCall() ReconcileCall {
+	reconciler.mu.Lock()
+	defer reconciler.mu.Unlock()
 
-	if len(r.Calls) == 0 {
+	if len(reconciler.Calls) == 0 {
 		return ReconcileCall{}
 	}
 
-	return r.Calls[len(r.Calls)-1]
+	return reconciler.Calls[len(reconciler.Calls)-1]
 }

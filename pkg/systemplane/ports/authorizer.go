@@ -1,5 +1,6 @@
 // Copyright 2025 Lerian Studio.
 
+// Package ports defines systemplane application boundary contracts.
 package ports
 
 import "context"

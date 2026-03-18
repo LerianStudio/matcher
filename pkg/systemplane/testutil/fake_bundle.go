@@ -1,5 +1,6 @@
 // Copyright 2025 Lerian Studio.
 
+// Package testutil provides test doubles for systemplane components.
 package testutil
 
 import (

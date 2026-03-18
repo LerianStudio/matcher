@@ -67,7 +67,8 @@ func TestBuildConfigs_ReturnsDefaultsAndOverrides(t *testing.T) {
 	require.NoError(t, err)
 	store.Seed(target, []domain.Entry{{Key: "worker.interval", Value: 30}}, domain.Revision(5))
 
-	builder := NewSnapshotBuilder(reg, store)
+	builder, builderErr := NewSnapshotBuilder(reg, store)
+	require.NoError(t, builderErr)
 	configs, rev, err := builder.BuildConfigs(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, domain.Revision(5), rev)
@@ -93,7 +94,8 @@ func TestBuildSettings_GlobalAndTenantScopes(t *testing.T) {
 	require.NoError(t, err)
 	store.Seed(tenantTarget, []domain.Entry{{Key: "ui.theme", Value: "solarized"}}, domain.Revision(7))
 
-	builder := NewSnapshotBuilder(reg, store)
+	builder, builderErr := NewSnapshotBuilder(reg, store)
+	require.NoError(t, builderErr)
 
 	globalSettings, globalRev, err := builder.BuildSettings(context.Background(), Subject{Scope: domain.ScopeGlobal})
 	require.NoError(t, err)
@@ -121,7 +123,8 @@ func TestBuildSettings_TenantFallsBackToGlobalOverride(t *testing.T) {
 	require.NoError(t, err)
 	store.Seed(globalTarget, []domain.Entry{{Key: "ui.page_size", Value: 50}}, domain.Revision(3))
 
-	builder := NewSnapshotBuilder(reg, store)
+	builder, builderErr := NewSnapshotBuilder(reg, store)
+	require.NoError(t, builderErr)
 	settings, rev, err := builder.BuildSettings(context.Background(), Subject{Scope: domain.ScopeTenant, SubjectID: "tenant-001"})
 	require.NoError(t, err)
 	assert.Equal(t, domain.RevisionZero, rev)
@@ -149,7 +152,8 @@ func TestBuildFull_BuildsConfigsGlobalAndTenantSettings(t *testing.T) {
 	require.NoError(t, err)
 	store.Seed(tenantTarget, []domain.Entry{{Key: "ui.theme", Value: "solarized"}}, domain.Revision(8))
 
-	builder := NewSnapshotBuilder(reg, store)
+	builder, builderErr := NewSnapshotBuilder(reg, store)
+	require.NoError(t, builderErr)
 	snap, err := builder.BuildFull(context.Background(), "tenant-abc")
 	require.NoError(t, err)
 	assert.Equal(t, 45, snap.Configs["worker.interval"].Value)
@@ -164,7 +168,8 @@ func TestBuildConfigs_StoreError_Propagated(t *testing.T) {
 
 	reg := registry.New()
 	reg.MustRegister(configKeyDef("app.name", "matcher", domain.ValueTypeString))
-	builder := NewSnapshotBuilder(reg, failingStore{})
+	builder, builderErr := NewSnapshotBuilder(reg, failingStore{})
+	require.NoError(t, builderErr)
 
 	_, _, err := builder.BuildConfigs(context.Background())
 	require.Error(t, err)
@@ -176,7 +181,8 @@ func TestBuildSettings_StoreError_Propagated(t *testing.T) {
 
 	reg := registry.New()
 	reg.MustRegister(settingKeyDef("ui.theme", "light", domain.ValueTypeString))
-	builder := NewSnapshotBuilder(reg, failingStore{})
+	builder, builderErr := NewSnapshotBuilder(reg, failingStore{})
+	require.NoError(t, builderErr)
 
 	_, _, err := builder.BuildSettings(context.Background(), Subject{Scope: domain.ScopeGlobal})
 	require.Error(t, err)
@@ -199,7 +205,8 @@ func TestBuildSettings_RetainsRawSecretValuesInSnapshot(t *testing.T) {
 		MutableAtRuntime: true,
 	}))
 
-	builder := NewSnapshotBuilder(reg, testutil.NewFakeStore())
+	builder, builderErr := NewSnapshotBuilder(reg, testutil.NewFakeStore())
+	require.NoError(t, builderErr)
 	settings, _, err := builder.BuildSettings(context.Background(), Subject{Scope: domain.ScopeTenant, SubjectID: "tenant-001"})
 	require.NoError(t, err)
 	assert.Equal(t, "changeme", settings["db.password"].Value)

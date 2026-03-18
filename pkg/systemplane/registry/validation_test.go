@@ -161,6 +161,48 @@ func TestCheckValueType_Float_RejectsBool(t *testing.T) {
 	assert.ErrorIs(t, err, domain.ErrValueInvalid)
 }
 
+func TestCheckValueType_Object_WithMap(t *testing.T) {
+	t.Parallel()
+
+	err := checkValueType(map[string]any{"enabled": true}, domain.ValueTypeObject)
+
+	require.NoError(t, err)
+}
+
+func TestCheckValueType_Object_RejectsScalar(t *testing.T) {
+	t.Parallel()
+
+	err := checkValueType("not-an-object", domain.ValueTypeObject)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, domain.ErrValueInvalid)
+}
+
+func TestCheckValueType_Array_WithSlice(t *testing.T) {
+	t.Parallel()
+
+	err := checkValueType([]any{"a", 1, true}, domain.ValueTypeArray)
+
+	require.NoError(t, err)
+}
+
+func TestCheckValueType_Array_WithTypedArray(t *testing.T) {
+	t.Parallel()
+
+	err := checkValueType([2]int{1, 2}, domain.ValueTypeArray)
+
+	require.NoError(t, err)
+}
+
+func TestCheckValueType_Array_RejectsScalar(t *testing.T) {
+	t.Parallel()
+
+	err := checkValueType(42, domain.ValueTypeArray)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, domain.ErrValueInvalid)
+}
+
 func TestCheckValueType_Nil_AlwaysValid(t *testing.T) {
 	t.Parallel()
 

@@ -36,7 +36,7 @@ func (s *Snapshot) GetConfig(key string) (EffectiveValue, bool) {
 	return v, ok
 }
 
-// GetSetting retrieves an effective setting value by key.
+// GetGlobalSetting retrieves an effective setting value by key.
 func (s *Snapshot) GetGlobalSetting(key string) (EffectiveValue, bool) {
 	if s == nil || s.GlobalSettings == nil {
 		return EffectiveValue{}, false
@@ -73,7 +73,7 @@ func (s *Snapshot) ConfigValue(key string, fallback any) any {
 	return fallback
 }
 
-// SettingValue returns the setting value for the given key, or the fallback
+// GlobalSettingValue returns the setting value for the given key, or the fallback
 // if the key is not present.
 func (s *Snapshot) GlobalSettingValue(key string, fallback any) any {
 	if v, ok := s.GetGlobalSetting(key); ok {

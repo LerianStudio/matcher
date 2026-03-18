@@ -1,8 +1,10 @@
 // Copyright 2025 Lerian Studio.
 
+// Package registry provides key definition registration and validation.
 package registry
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"sync"
@@ -42,22 +44,24 @@ type inMemoryRegistry struct {
 	defs map[string]domain.KeyDef
 }
 
+var errKeyAlreadyRegistered = errors.New("already registered")
+
 // Register adds a key definition to the registry after validating it. It
 // returns an error if the definition is invalid or if a key with the same
 // name is already registered.
-func (r *inMemoryRegistry) Register(def domain.KeyDef) error {
+func (registry *inMemoryRegistry) Register(def domain.KeyDef) error {
 	if err := def.Validate(); err != nil {
 		return fmt.Errorf("register key %q: %w", def.Key, err)
 	}
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	registry.mu.Lock()
+	defer registry.mu.Unlock()
 
-	if _, exists := r.defs[def.Key]; exists {
-		return fmt.Errorf("register key %q: already registered", def.Key)
+	if _, exists := registry.defs[def.Key]; exists {
+		return fmt.Errorf("register key %q: %w", def.Key, errKeyAlreadyRegistered)
 	}
 
-	r.defs[def.Key] = def
+	registry.defs[def.Key] = def
 
 	return nil
 }
@@ -65,32 +69,33 @@ func (r *inMemoryRegistry) Register(def domain.KeyDef) error {
 // MustRegister adds a key definition and panics on error. It is intended for
 // use in init() functions or startup wiring where registration failure is
 // unrecoverable.
-func (r *inMemoryRegistry) MustRegister(def domain.KeyDef) {
-	if err := r.Register(def); err != nil {
+func (registry *inMemoryRegistry) MustRegister(def domain.KeyDef) {
+	if err := registry.Register(def); err != nil {
+		//nolint:forbidigo // MustRegister intentionally fails fast during startup wiring.
 		panic(fmt.Sprintf("must register: %v", err))
 	}
 }
 
 // Get retrieves a key definition by its unique key name. The second return
 // value indicates whether the key was found.
-func (r *inMemoryRegistry) Get(key string) (domain.KeyDef, bool) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+func (registry *inMemoryRegistry) Get(key string) (domain.KeyDef, bool) {
+	registry.mu.RLock()
+	defer registry.mu.RUnlock()
 
-	def, ok := r.defs[key]
+	def, ok := registry.defs[key]
 
 	return def, ok
 }
 
 // List returns all registered key definitions whose Kind matches the supplied
 // filter. Results are sorted by key name for deterministic output.
-func (r *inMemoryRegistry) List(kind domain.Kind) []domain.KeyDef {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+func (registry *inMemoryRegistry) List(kind domain.Kind) []domain.KeyDef {
+	registry.mu.RLock()
+	defer registry.mu.RUnlock()
 
-	result := make([]domain.KeyDef, 0, len(r.defs))
+	result := make([]domain.KeyDef, 0, len(registry.defs))
 
-	for _, def := range r.defs {
+	for _, def := range registry.defs {
 		if def.Kind == kind {
 			result = append(result, def)
 		}
@@ -106,8 +111,8 @@ func (r *inMemoryRegistry) List(kind domain.Kind) []domain.KeyDef {
 // Validate checks that a value is valid for the given key. It verifies
 // that the key is registered, then delegates to type and custom validation.
 // A nil value (reset to default) is always considered valid.
-func (r *inMemoryRegistry) Validate(key string, value any) error {
-	def, ok := r.Get(key)
+func (registry *inMemoryRegistry) Validate(key string, value any) error {
+	def, ok := registry.Get(key)
 	if !ok {
 		return fmt.Errorf("key %q: %w", key, domain.ErrKeyUnknown)
 	}
