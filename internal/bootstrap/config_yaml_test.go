@@ -7,6 +7,7 @@
 package bootstrap
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -497,6 +498,16 @@ func TestIsConfigFileNotFound(t *testing.T) {
 		{
 			name:     "viper not found error",
 			err:      viper.ConfigFileNotFoundError{},
+			expected: true,
+		},
+		{
+			name:     "permission denied error",
+			err:      os.ErrPermission,
+			expected: true,
+		},
+		{
+			name:     "wrapped permission denied error",
+			err:      fmt.Errorf("read config: %w", os.ErrPermission),
 			expected: true,
 		},
 		{

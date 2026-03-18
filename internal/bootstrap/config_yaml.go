@@ -342,13 +342,15 @@ func loadConfigFromYAML(cfg *Config, filePath string) error {
 	return nil
 }
 
-// isConfigFileNotFound returns true if the error indicates the config file does not exist.
-// Handles both viper's ConfigFileNotFoundError and OS-level file-not-found errors.
+// isConfigFileNotFound returns true if the error indicates the config file cannot be read
+// due to absence or restrictive permissions. In distroless containers, attempting to open
+// a file under a root-owned directory may return EACCES instead of ENOENT. Both cases
+// should fall back gracefully to env-only configuration.
 func isConfigFileNotFound(err error) bool {
 	var notFoundErr viper.ConfigFileNotFoundError
 	if errors.As(err, &notFoundErr) {
 		return true
 	}
 
-	return os.IsNotExist(err)
+	return os.IsNotExist(err) || os.IsPermission(err) || errors.Is(err, os.ErrPermission)
 }
