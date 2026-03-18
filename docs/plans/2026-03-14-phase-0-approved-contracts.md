@@ -680,6 +680,7 @@ Required when `SYSTEMPLANE_BACKEND=postgres`.
 | `SYSTEMPLANE_POSTGRES_SCHEMA` | No | `system` | PostgreSQL schema for runtime tables. |
 | `SYSTEMPLANE_POSTGRES_ENTRIES_TABLE` | No | `runtime_entries` | Table name for active override entries. |
 | `SYSTEMPLANE_POSTGRES_HISTORY_TABLE` | No | `runtime_history` | Table name for mutation history records. |
+| `SYSTEMPLANE_POSTGRES_REVISION_TABLE` | No | `runtime_revisions` | Table name for per-target revision state used for optimistic concurrency and feed resync. |
 | `SYSTEMPLANE_POSTGRES_NOTIFY_CHANNEL` | No | `systemplane_changes` | PostgreSQL LISTEN/NOTIFY channel name for invalidation signals. |
 
 ### MongoDB backend variables
@@ -711,6 +712,7 @@ type PostgresBootstrapConfig struct {
     Schema        string
     EntriesTable  string
     HistoryTable  string
+    RevisionTable string
     NotifyChannel string
 }
 
