@@ -386,6 +386,37 @@ func TestReportingModuleActions(t *testing.T) {
 	}
 }
 
+func TestSystemModuleActions(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		constant string
+		expected string
+	}{
+		{name: "ActionConfigRead", constant: ActionConfigRead, expected: "config:read"},
+		{name: "ActionConfigWrite", constant: ActionConfigWrite, expected: "config:write"},
+		{name: "ActionConfigSchemaRead", constant: ActionConfigSchemaRead, expected: "config/schema:read"},
+		{name: "ActionConfigHistoryRead", constant: ActionConfigHistoryRead, expected: "config/history:read"},
+		{name: "ActionConfigReloadWrite", constant: ActionConfigReloadWrite, expected: "config/reload:write"},
+		{name: "ActionSettingsRead", constant: ActionSettingsRead, expected: "settings:read"},
+		{name: "ActionSettingsWrite", constant: ActionSettingsWrite, expected: "settings:write"},
+		{name: "ActionSettingsSchemaRead", constant: ActionSettingsSchemaRead, expected: "settings/schema:read"},
+		{name: "ActionSettingsHistoryRead", constant: ActionSettingsHistoryRead, expected: "settings/history:read"},
+		{name: "ActionSettingsGlobalRead", constant: ActionSettingsGlobalRead, expected: "settings/global:read"},
+		{name: "ActionSettingsGlobalWrite", constant: ActionSettingsGlobalWrite, expected: "settings/global:write"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tt.expected, tt.constant)
+			assert.Contains(t, tt.constant, ":")
+		})
+	}
+}
+
 func TestExceptionModuleActions(t *testing.T) {
 	t.Parallel()
 
@@ -590,7 +621,18 @@ func TestActionsAreNotEmpty(t *testing.T) {
 		"ActionCallbackProcess":    ActionCallbackProcess,
 		"ActionDisputeRead":        ActionDisputeRead,
 		"ActionDisputeWrite":       ActionDisputeWrite,
-		"ActionCommentWrite":       ActionCommentWrite,
+		"ActionCommentWrite":         ActionCommentWrite,
+		"ActionConfigRead":           ActionConfigRead,
+		"ActionConfigWrite":          ActionConfigWrite,
+		"ActionConfigSchemaRead":     ActionConfigSchemaRead,
+		"ActionConfigHistoryRead":    ActionConfigHistoryRead,
+		"ActionConfigReloadWrite":    ActionConfigReloadWrite,
+		"ActionSettingsRead":         ActionSettingsRead,
+		"ActionSettingsWrite":        ActionSettingsWrite,
+		"ActionSettingsSchemaRead":   ActionSettingsSchemaRead,
+		"ActionSettingsHistoryRead":  ActionSettingsHistoryRead,
+		"ActionSettingsGlobalRead":   ActionSettingsGlobalRead,
+		"ActionSettingsGlobalWrite":  ActionSettingsGlobalWrite,
 	}
 
 	for name, value := range actions {

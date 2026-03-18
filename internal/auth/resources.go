@@ -123,8 +123,17 @@ const (
 
 // System module actions.
 const (
-	ActionConfigRead  = "config:read"
-	ActionConfigWrite = "config:write"
+	ActionConfigRead          = "config:read"
+	ActionConfigWrite         = "config:write"
+	ActionConfigSchemaRead    = "config/schema:read"
+	ActionConfigHistoryRead   = "config/history:read"
+	ActionConfigReloadWrite   = "config/reload:write"
+	ActionSettingsRead        = "settings:read"
+	ActionSettingsWrite       = "settings:write"
+	ActionSettingsSchemaRead  = "settings/schema:read"
+	ActionSettingsHistoryRead = "settings/history:read"
+	ActionSettingsGlobalRead  = "settings/global:read"
+	ActionSettingsGlobalWrite = "settings/global:write"
 )
 
 // Exception module actions.
