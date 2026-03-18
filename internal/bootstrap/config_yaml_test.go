@@ -481,6 +481,37 @@ func TestResolveConfigFilePath_NullByteDetection(t *testing.T) {
 		"clean path should not contain null byte")
 }
 
+func TestLoadConfigFromYAML_PermissionDenied(t *testing.T) {
+	t.Parallel()
+
+	// Create a YAML file inside a directory with no read permission.
+	// The OS returns EACCES, which should be treated like file-not-found.
+	tmpDir := t.TempDir()
+	restrictedDir := filepath.Join(tmpDir, "noaccess")
+	require.NoError(t, os.Mkdir(restrictedDir, 0o700))
+
+	yamlPath := filepath.Join(restrictedDir, "matcher.yaml")
+	require.NoError(t, os.WriteFile(yamlPath, []byte("app:\n  log_level: warn\n"), 0o600))
+
+	// Remove all permissions from the directory so the file cannot be read.
+	require.NoError(t, os.Chmod(restrictedDir, 0o000))
+	t.Cleanup(func() {
+		// Restore permissions so t.TempDir() cleanup can remove the directory.
+		_ = os.Chmod(restrictedDir, 0o700)
+	})
+
+	cfg := defaultConfig()
+	err := loadConfigFromYAML(cfg, yamlPath)
+
+	// Permission denied is NOT an error — graceful fallback, same as file-not-found.
+	require.NoError(t, err)
+
+	// Defaults should still be populated (from bindDefaults + Unmarshal).
+	assert.Equal(t, "info", cfg.App.LogLevel)
+	assert.Equal(t, "development", cfg.App.EnvName)
+	assert.Equal(t, 100, cfg.RateLimit.Max)
+}
+
 func TestIsConfigFileNotFound(t *testing.T) {
 	t.Parallel()
 
@@ -497,6 +528,11 @@ func TestIsConfigFileNotFound(t *testing.T) {
 		{
 			name:     "viper not found error",
 			err:      viper.ConfigFileNotFoundError{},
+			expected: true,
+		},
+		{
+			name:     "os permission denied error",
+			err:      os.ErrPermission,
 			expected: true,
 		},
 		{

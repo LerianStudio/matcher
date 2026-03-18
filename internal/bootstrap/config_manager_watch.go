@@ -109,8 +109,13 @@ func (cm *ConfigManager) startWatcher() {
 
 // reloadDebounced coalesces rapid file change events into a single reload.
 // Each call resets the debounce timer. When the timer fires (no events for
-// debounceDuration), Reload() is called.
+// debounceDuration), Reload() is called. In seed mode, the call is a no-op
+// since the systemplane Supervisor owns runtime configuration.
 func (cm *ConfigManager) reloadDebounced() {
+	if cm.InSeedMode() {
+		return // Superseded by systemplane
+	}
+
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 

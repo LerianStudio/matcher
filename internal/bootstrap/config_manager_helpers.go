@@ -69,56 +69,7 @@ func (cm *ConfigManager) snapshotSubscribersLocked() []func(*Config) error {
 	return callbacks
 }
 
-func (cm *ConfigManager) snapshotPersistedConfig() (*viper.Viper, error) {
-	path := filepath.Clean(strings.TrimSpace(cm.filePath))
-	if path == "" {
-		return nil, nil
-	}
-
-	if err := validateAtomicWritePath(path); err != nil {
-		return nil, err
-	}
-
-	persisted := viper.New()
-	persisted.SetConfigType("yaml")
-	persisted.SetConfigFile(path)
-
-	if err := persisted.ReadInConfig(); err != nil && !isConfigFileNotFound(err) {
-		return nil, fmt.Errorf("read persisted config file: %w", err)
-	}
-
-	return persisted, nil
-}
-
-// writePersistedConfigAtomically writes only the file-backed config surface.
-//
-// This intentionally avoids dumping the manager's live viper state because that
-// state also reflects MATCHER_* environment overrides. Persisting that merged
-// state would write env-backed secrets and other deploy-time overrides into the
-// YAML file. Instead, we start from the current YAML file contents and apply
-// only the requested API changes.
-func (cm *ConfigManager) writePersistedConfigAtomically(changes map[string]any) error {
-	persisted, err := cm.snapshotPersistedConfig()
-	if err != nil {
-		return err
-	}
-
-	path := filepath.Clean(strings.TrimSpace(cm.filePath))
-
-	if persisted == nil {
-		persisted = viper.New()
-		persisted.SetConfigType("yaml")
-		persisted.SetConfigFile(path)
-	}
-
-	for _, key := range sortedChangeKeys(changes) {
-		persisted.Set(key, changes[key])
-	}
-
-	return writeViperConfigAtomically(persisted, path)
-}
-
-func writeViperConfigAtomically(viperCfg *viper.Viper, filePath string) error {
+func writeViperConfigAtomically(viperCfg *viper.Viper, filePath string) error { //nolint:unused // Called from unit tests (build tag: unit).
 	if viperCfg == nil {
 		return errUnsafeConfigFilePath
 	}
@@ -193,9 +144,9 @@ func writeViperConfigAtomically(viperCfg *viper.Viper, filePath string) error {
 
 // floatEqualityTolerance is the maximum absolute difference for two floating-point
 // numbers to be considered equivalent in config value comparisons.
-const floatEqualityTolerance = 1e-9
+const floatEqualityTolerance = 1e-9 //nolint:unused // Used by valuesEquivalent (reachable only from unit tests with build tag: unit).
 
-func valuesEquivalent(left, right any) bool {
+func valuesEquivalent(left, right any) bool { //nolint:unused // Called from unit tests (build tag: unit).
 	leftNumber, leftIsNumber := toFloat64(left)
 	rightNumber, rightIsNumber := toFloat64(right)
 
@@ -246,7 +197,7 @@ func validateManagerConfigPath(filePath string) error {
 	return nil
 }
 
-func validateAtomicWritePath(path string) error {
+func validateAtomicWritePath(path string) error { //nolint:unused // Called from writeViperConfigAtomically (reachable only from unit tests with build tag: unit).
 	if path == "" || strings.ContainsRune(path, '\x00') {
 		return errUnsafeConfigFilePath
 	}
@@ -255,7 +206,7 @@ func validateAtomicWritePath(path string) error {
 		return errUnsafeConfigFileExtension
 	}
 
-	// writePersistedConfigAtomically only receives file paths already accepted by
+	// writeViperConfigAtomically only receives file paths already accepted by
 	// ConfigManager construction. Relative paths must still stay inside the working
 	// directory; absolute paths remain an explicit trusted-input escape hatch.
 	if !filepath.IsAbs(path) && !isPathContained(path) {

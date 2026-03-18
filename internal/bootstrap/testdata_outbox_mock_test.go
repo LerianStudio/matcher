@@ -18,8 +18,8 @@ import (
 )
 
 // testOutboxMock is a shared mock for sharedPorts.OutboxRepository.
-// It captures Create calls and supports error injection. Both config_api_test.go
-// and config_audit_test.go use this type to avoid duplication (M17).
+// It captures Create calls and supports error injection. Used by
+// config_audit_test.go to avoid duplication (M17).
 //
 // Only Create is exercised by ConfigAuditPublisher; remaining methods are stubs
 // returning zero values.

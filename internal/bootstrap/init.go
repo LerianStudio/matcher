@@ -130,6 +130,10 @@ const (
 	// infraConnectTimeoutDivisor splits the total infra connect timeout evenly between
 	// the two parallel infrastructure goroutines (Postgres and RabbitMQ).
 	infraConnectTimeoutDivisor = 2
+
+	// statusSuccess and statusError are metric attribute values for cleanup recording.
+	statusSuccess = "success"
+	statusError   = "error"
 )
 
 var (
@@ -353,9 +357,9 @@ func recordCleanup(ctx context.Context, resource string, success bool, duration 
 		ctx = context.Background()
 	}
 
-	status := "success"
+	status := statusSuccess
 	if !success {
-		status = "error"
+		status = statusError
 	}
 
 	attrs := []attribute.KeyValue{
@@ -639,30 +643,66 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 
 	done = timer.track("runtime_config_wiring")
 
-	configAPIHandler, err := NewConfigAPIHandler(configManager, logger, IsProductionEnvironment(cfg.App.EnvName))
-	if err != nil {
-		return nil, fmt.Errorf("initialize config API handler: %w", err)
-	}
-
+	// Wire config audit callback for file watcher changes (independent of systemplane).
 	configAuditPublisher, err := NewConfigAuditPublisher(outboxPgRepo.NewRepository(infraProvider), logger)
 	if err != nil {
 		return nil, fmt.Errorf("initialize config audit publisher: %w", err)
 	}
 
-	configAPIHandler.SetAuditPublisher(configAuditPublisher)
-	configAPIHandler.SetAuditRepository(governancePostgres.NewRepository(infraProvider))
 	SetAuditCallback(configManager, configAuditPublisher, governancePostgres.NewRepository(infraProvider), logger)
 
-	if shouldEnableConfigAPIRoutes(cfg) {
-		if err := RegisterConfigAPIRoutes(routes.Protected, configAPIHandler); err != nil {
-			return nil, fmt.Errorf("register config API routes: %w", err)
+	done()
+
+	// Build WorkerManager before systemplane — the worker reconciler needs it.
+	wm := buildWorkerManager(modules, configManager, logger)
+
+	done = timer.track("systemplane")
+
+	// Initialize systemplane — the centralized runtime configuration plane.
+	// If systemplane init fails, the service continues without it (graceful degradation).
+	var snapshotReader *SnapshotReader
+
+	var cancelChangeFeed context.CancelFunc
+
+	spComponents, spErr := InitSystemplane(ctx, cfg, wm)
+	if spErr != nil {
+		logger.Log(ctx, libLog.LevelWarn, "systemplane initialization failed, continuing without systemplane",
+			libLog.String("error", spErr.Error()))
+	}
+
+	if spErr == nil { //nolint:nestif // Bootstrap initialization has inherent sequential dependency nesting.
+		// Seed the systemplane store with non-default values from the current config.
+		// This is a one-time migration that bridges file-based config to the systemplane store.
+		if configManager != nil && spComponents.Store != nil {
+			seedErr := configManager.SeedStore(ctx, spComponents.Store, spComponents.Registry)
+			if seedErr != nil {
+				logger.Log(ctx, libLog.LevelWarn, "systemplane seed failed",
+					libLog.String("error", seedErr.Error()))
+			}
 		}
 
-		logger.Log(context.Background(), libLog.LevelWarn,
-			"system config API routes enabled; ensure auth policies grant system/config:read and system/config:write where appropriate")
-	} else {
-		logger.Log(context.Background(), libLog.LevelWarn,
-			"system config API routes are disabled because AUTH_ENABLED=false")
+		// Create snapshot reader for live-read config keys (rate limits, health check timeouts).
+		snapshotReader, err = NewSnapshotReader(spComponents.Supervisor)
+		if err != nil {
+			logger.Log(ctx, libLog.LevelWarn, "systemplane snapshot reader creation failed",
+				libLog.String("error", err.Error()))
+		}
+
+		// Start change feed subscriber that triggers supervisor reloads on store changes.
+		cancelChangeFeed, err = StartChangeFeed(ctx, spComponents.ChangeFeed, spComponents.Supervisor)
+		if err != nil {
+			logger.Log(ctx, libLog.LevelWarn, "systemplane change feed start failed",
+				libLog.String("error", err.Error()))
+		}
+
+		// Mount systemplane HTTP API (replaces the old config API routes).
+		// Pass routes.Protected so systemplane routes go through the same auth
+		// middleware chain (JWT validation, tenant extraction, permission check)
+		// as all other Matcher API routes.
+		if mountErr := MountSystemplaneAPI(app, routes.Protected, spComponents.Manager, cfg.Auth.Enabled, logger); mountErr != nil {
+			logger.Log(ctx, libLog.LevelWarn, "systemplane API mount failed",
+				libLog.String("error", mountErr.Error()))
+		}
 	}
 
 	done()
@@ -681,8 +721,6 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		cleanups = append(cleanups, configManager.Stop)
 	}
 
-	wm := buildWorkerManager(modules, configManager, logger)
-
 	success = true
 
 	return &Service{
@@ -697,11 +735,10 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		connectionManager:  connCloser,
 		cleanupFuncs:       cleanups,
 		readinessState:     readiness,
+		spComponents:       spComponents,
+		snapshotReader:     snapshotReader,
+		cancelChangeFeed:   cancelChangeFeed,
 	}, nil
-}
-
-func shouldEnableConfigAPIRoutes(cfg *Config) bool {
-	return cfg != nil && cfg.Auth.Enabled
 }
 
 // IMPORTANT: Worker re-entrancy contract

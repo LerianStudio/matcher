@@ -25,6 +25,15 @@ var blockedFileReloadKeys = map[string]bool{
 }
 
 func (cm *ConfigManager) reload(source string) (*ReloadResult, error) {
+	if cm.InSeedMode() {
+		return &ReloadResult{
+			Version:    cm.version.Load(),
+			ReloadedAt: cm.LastReloadAt(),
+			Skipped:    true,
+			Reason:     "superseded by systemplane",
+		}, nil
+	}
+
 	var (
 		notifyCfg *Config
 		callbacks []func(*Config) error
@@ -201,46 +210,6 @@ func rejectImmutableReloadChanges(changes []ConfigChange) error {
 	return fmt.Errorf("%w: %s", errImmutableReloadKeysChanged, strings.Join(immutableKeys, ", "))
 }
 
-// buildCandidateConfig unmarshals the current viper state into a new Config,
-// applies env overlay + production security defaults, and validates. Returns
-// the validated config or an error (caller should roll back viper keys on error).
-func (cm *ConfigManager) buildCandidateConfig(oldCfg *Config) (*Config, error) {
-	if oldCfg == nil {
-		return nil, fmt.Errorf("buildCandidateConfig: %w", errConfigNilAtomicLoad)
-	}
-
-	candidateCfg := defaultConfig()
-	if err := cm.viper.Unmarshal(candidateCfg); err != nil {
-		return nil, fmt.Errorf("unmarshal: %w", err)
-	}
-
-	candidateCfg.Logger = oldCfg.Logger
-	candidateCfg.ShutdownGracePeriod = oldCfg.ShutdownGracePeriod
-
-	if candidateCfg.Server.BodyLimitBytes <= 0 {
-		candidateCfg.Server.BodyLimitBytes = defaultHTTPBodyLimitBytes
-	}
-
-	// Apply env overlay for backward compatibility. See reloadLocked comment
-	// for why we snapshot and restore.
-	candidateSnapshot := *candidateCfg
-	if err := loadConfigFromEnv(candidateCfg); err != nil {
-		return nil, fmt.Errorf("env overlay: %w", err)
-	}
-
-	restoreZeroedFields(candidateCfg, &candidateSnapshot)
-	candidateCfg.normalizeTenancyConfig()
-	preserveStartupOnlyRuntimeSettings(candidateCfg, oldCfg)
-
-	candidateCfg.enforceProductionSecurityDefaults(cm.logger)
-
-	if err := candidateCfg.Validate(); err != nil {
-		return nil, fmt.Errorf("validation failed: %w: %w", ErrConfigValidationFailure, err)
-	}
-
-	return candidateCfg, nil
-}
-
 // preserveStartupOnlyRuntimeSettings keeps settings that still require bootstrap-time
 // construction stable across reload/update cycles. These values can change in YAML
 // and take effect on the next process start, but they must not change the active
@@ -270,4 +239,28 @@ func preserveStartupOnlyRuntimeSettings(candidateCfg, oldCfg *Config) {
 	candidateCfg.Archival.StoragePrefix = oldCfg.Archival.StoragePrefix
 	candidateCfg.Archival.StorageClass = oldCfg.Archival.StorageClass
 	candidateCfg.Dedupe = oldCfg.Dedupe
+}
+
+// rollbackViperToConfigLocked restores viper keys to their values from the given
+// config, using the change list to identify which keys to revert. Used by the
+// reload path to undo config changes when subscriber notification fails.
+// Caller MUST hold cm.mu.
+func (cm *ConfigManager) rollbackViperToConfigLocked(cfg *Config, changes []ConfigChange) {
+	if cfg == nil {
+		return
+	}
+
+	for _, change := range changes {
+		if change.Key == "" {
+			continue
+		}
+
+		value, ok := resolveConfigValue(cfg, change.Key)
+		if !ok {
+			cm.viper.Set(change.Key, nil)
+			continue
+		}
+
+		cm.viper.Set(change.Key, value)
+	}
 }

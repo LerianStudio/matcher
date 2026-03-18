@@ -7,7 +7,6 @@
 package bootstrap
 
 import (
-	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -89,40 +88,6 @@ func TestWriteConfigAtomically_PreservesPermissions(t *testing.T) {
 
 	assert.Equal(t, wantPerm, info.Mode().Perm(),
 		"file permissions should be preserved after atomic write")
-}
-
-// --- Test #28: isValueTypeCompatible tests ---
-
-func TestIsValueTypeCompatible(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name         string
-		value        any
-		expectedType string
-		want         bool
-	}{
-		{"string_match", "hello", "string", true},
-		{"int_from_float64", float64(42), "int", true},
-		{"int_from_fractional_float64", float64(42.5), "int", false},
-		{"int_from_nan_float64", math.NaN(), "int", false},
-		{"int_from_int", 42, "int", true},
-		{"int_from_int64", int64(42), "int", true},
-		{"bool_match", true, "bool", true},
-		{"nil_value", nil, "string", false},
-		{"string_for_int", "hello", "int", false},
-		{"int_for_bool", 1, "bool", false},
-		{"unknown_type_passes", "x", "custom", true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			got := isValueTypeCompatible(tt.value, tt.expectedType)
-			assert.Equal(t, tt.want, got)
-		})
-	}
 }
 
 // --- Test #29: valuesEquivalent and toFloat64 tests ---

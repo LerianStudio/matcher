@@ -207,6 +207,14 @@ func (wm *WorkerManager) Stop() error {
 	return stopErr
 }
 
+// ApplyConfig is the public entry point for applying a config change to all
+// managed workers. It is called by the systemplane WorkerReconciler when the
+// Supervisor detects a configuration change, replacing the ConfigManager
+// subscription path. Delegates to onConfigChange for the actual reconciliation.
+func (wm *WorkerManager) ApplyConfig(cfg *Config) error {
+	return wm.onConfigChange(cfg)
+}
+
 // onConfigChange is the subscriber callback invoked by ConfigManager after
 // every successful config reload. It compares the worker-relevant config
 // sections and restarts workers whose config actually changed.

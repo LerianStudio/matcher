@@ -298,8 +298,8 @@ func bindDefaults(viperCfg *viper.Viper) {
 //   - Graceful handling of missing files (returns nil, not error)
 //
 // This function is called BEFORE the application logger is available. It returns errors
-// for actionable failures (malformed YAML, permission denied) and returns nil for
-// expected conditions (file not found). The caller logs the error if needed.
+// for actionable failures (malformed YAML) and returns nil for expected conditions
+// (file not found, permission denied). The caller logs the error if needed.
 func loadConfigFromYAML(cfg *Config, filePath string) error {
 	if cfg == nil {
 		return ErrConfigNil
@@ -330,7 +330,7 @@ func loadConfigFromYAML(cfg *Config, filePath string) error {
 			return nil
 		}
 
-		// Real error (parse failure, permission denied, etc.)
+		// Real error (parse failure, etc.)
 		return fmt.Errorf("read YAML config %s: %w", filePath, err)
 	}
 
@@ -342,13 +342,15 @@ func loadConfigFromYAML(cfg *Config, filePath string) error {
 	return nil
 }
 
-// isConfigFileNotFound returns true if the error indicates the config file does not exist.
-// Handles both viper's ConfigFileNotFoundError and OS-level file-not-found errors.
+// isConfigFileNotFound returns true if the error indicates the config file
+// cannot be accessed for benign reasons: it does not exist, or the process
+// lacks permission to read it (common in distroless / non-root containers).
+// Handles viper's ConfigFileNotFoundError and OS-level ENOENT / EACCES errors.
 func isConfigFileNotFound(err error) bool {
 	var notFoundErr viper.ConfigFileNotFoundError
 	if errors.As(err, &notFoundErr) {
 		return true
 	}
 
-	return os.IsNotExist(err)
+	return os.IsNotExist(err) || os.IsPermission(err)
 }

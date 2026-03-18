@@ -1,0 +1,568 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
+//go:build unit
+
+package bootstrap
+
+import (
+	"context"
+	"fmt"
+	"testing"
+
+	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
+	"github.com/LerianStudio/matcher/pkg/systemplane/ports"
+	"github.com/LerianStudio/matcher/pkg/systemplane/registry"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// mockStore is a minimal Store implementation for seed tests. It records all
+// Put calls so tests can inspect what was written.
+type mockStore struct {
+	putCalls []mockPutCall
+	putErr   error
+}
+
+type mockPutCall struct {
+	Target   domain.Target
+	Ops      []ports.WriteOp
+	Expected domain.Revision
+	Actor    domain.Actor
+	Source   string
+}
+
+func (m *mockStore) Get(_ context.Context, _ domain.Target) (ports.ReadResult, error) {
+	return ports.ReadResult{}, nil
+}
+
+func (m *mockStore) Put(_ context.Context, target domain.Target, ops []ports.WriteOp,
+	expected domain.Revision, actor domain.Actor, source string,
+) (domain.Revision, error) {
+	m.putCalls = append(m.putCalls, mockPutCall{
+		Target:   target,
+		Ops:      ops,
+		Expected: expected,
+		Actor:    actor,
+		Source:   source,
+	})
+
+	if m.putErr != nil {
+		return domain.RevisionZero, m.putErr
+	}
+
+	return expected.Next(), nil
+}
+
+func TestConfigManager_SeedMode_DefaultOff(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cm, err := NewConfigManager(cfg, "", nil)
+	require.NoError(t, err)
+
+	assert.False(t, cm.InSeedMode(), "new ConfigManager should not be in seed mode")
+}
+
+func TestConfigManager_EnterSeedMode(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cm, err := NewConfigManager(cfg, "", nil)
+	require.NoError(t, err)
+
+	cm.enterSeedMode()
+
+	assert.True(t, cm.InSeedMode(), "after enterSeedMode(), InSeedMode() should return true")
+}
+
+func TestConfigManager_EnterSeedMode_Idempotent(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cm, err := NewConfigManager(cfg, "", nil)
+	require.NoError(t, err)
+
+	cm.enterSeedMode()
+	cm.enterSeedMode() // Should not panic or misbehave
+
+	assert.True(t, cm.InSeedMode())
+}
+
+func TestConfigManager_Reload_InSeedMode(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cm, err := NewConfigManager(cfg, "", &testLogger{})
+	require.NoError(t, err)
+
+	cm.enterSeedMode()
+
+	result, err := cm.Reload()
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.True(t, result.Skipped, "reload in seed mode should be skipped")
+	assert.Equal(t, "superseded by systemplane", result.Reason)
+	assert.Zero(t, result.ChangesDetected)
+}
+
+func TestConfigManager_Subscribe_InSeedMode(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cm, err := NewConfigManager(cfg, "", &testLogger{})
+	require.NoError(t, err)
+
+	cm.enterSeedMode()
+
+	called := false
+	unsubscribe := cm.SubscribeWithUnsubscribeErr(func(_ *Config) error {
+		called = true
+		return nil
+	})
+
+	// Should return a no-op unsubscribe (safe to call).
+	assert.NotNil(t, unsubscribe)
+	unsubscribe()
+	assert.False(t, called, "subscriber should not be registered in seed mode")
+}
+
+func TestConfigManager_SubscribeWithUnsubscribe_InSeedMode(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cm, err := NewConfigManager(cfg, "", &testLogger{})
+	require.NoError(t, err)
+
+	cm.enterSeedMode()
+
+	called := false
+	unsubscribe := cm.SubscribeWithUnsubscribe(func(_ *Config) {
+		called = true
+	})
+
+	assert.NotNil(t, unsubscribe)
+	unsubscribe()
+	assert.False(t, called)
+}
+
+func TestConfigManager_Get_StillWorksInSeedMode(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cfg.App.LogLevel = "debug"
+
+	cm, err := NewConfigManager(cfg, "", nil)
+	require.NoError(t, err)
+
+	cm.enterSeedMode()
+
+	got := cm.Get()
+	require.NotNil(t, got, "Get() should still work in seed mode")
+	assert.Equal(t, "debug", got.App.LogLevel)
+}
+
+func TestExtractConfigValue_AppLogLevel(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cfg.App.LogLevel = "warn"
+
+	val := extractConfigValue(cfg, "app.log_level")
+	assert.Equal(t, "warn", val)
+}
+
+func TestExtractConfigValue_ServerBodyLimit(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cfg.Server.BodyLimitBytes = 42
+
+	val := extractConfigValue(cfg, "server.body_limit_bytes")
+	assert.Equal(t, 42, val)
+}
+
+func TestExtractConfigValue_PostgresHost(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cfg.Postgres.PrimaryHost = "db.prod.example.com"
+
+	val := extractConfigValue(cfg, "postgres.primary_host")
+	assert.Equal(t, "db.prod.example.com", val)
+}
+
+func TestExtractConfigValue_BoolValue(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cfg.RateLimit.Enabled = true
+
+	val := extractConfigValue(cfg, "rate_limit.enabled")
+	assert.Equal(t, true, val)
+}
+
+func TestExtractConfigValue_UnknownKey(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+
+	val := extractConfigValue(cfg, "nonexistent.key")
+	assert.Nil(t, val)
+}
+
+func TestExtractConfigValue_NilConfig(t *testing.T) {
+	t.Parallel()
+
+	val := extractConfigValue(nil, "app.log_level")
+	assert.Nil(t, val)
+}
+
+func TestExtractConfigValue_EmptyKey(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+
+	val := extractConfigValue(cfg, "")
+	assert.Nil(t, val)
+}
+
+func TestIsEqualValue_SameInt(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, isEqualValue(100, 100))
+}
+
+func TestIsEqualValue_DifferentInt(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, isEqualValue(100, 200))
+}
+
+func TestIsEqualValue_SameString(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, isEqualValue("hello", "hello"))
+}
+
+func TestIsEqualValue_DifferentString(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, isEqualValue("hello", "world"))
+}
+
+func TestIsEqualValue_SameBool(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, isEqualValue(true, true))
+}
+
+func TestIsEqualValue_DifferentBool(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, isEqualValue(true, false))
+}
+
+func TestIsEqualValue_IntVsDefault(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, isEqualValue(200, 100))
+	assert.True(t, isEqualValue(100, 100))
+}
+
+func TestIsEqualValue_NilVsNil(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, isEqualValue(nil, nil))
+}
+
+func TestIsEqualValue_NilVsValue(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, isEqualValue(nil, 100))
+	assert.False(t, isEqualValue(100, nil))
+}
+
+func TestIsEqualValue_CrossTypeNumeric(t *testing.T) {
+	t.Parallel()
+
+	// int vs int64
+	assert.True(t, isEqualValue(42, int64(42)))
+	// int vs float64 (whole number)
+	assert.True(t, isEqualValue(42, float64(42)))
+}
+
+func TestBuildSeedOps_AllDefaults(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+
+	// Create defs that match the defaults.
+	defs := []domain.KeyDef{
+		{
+			Key:              "app.log_level",
+			Kind:             domain.KindConfig,
+			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+			DefaultValue:     cfg.App.LogLevel,
+			ValueType:        domain.ValueTypeString,
+			MutableAtRuntime: true,
+		},
+		{
+			Key:              "rate_limit.max",
+			Kind:             domain.KindConfig,
+			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+			DefaultValue:     cfg.RateLimit.Max,
+			ValueType:        domain.ValueTypeInt,
+			MutableAtRuntime: true,
+		},
+	}
+
+	ops := buildSeedOps(cfg, defs)
+	assert.Empty(t, ops, "no ops should be generated when all values match defaults")
+}
+
+func TestBuildSeedOps_NonDefaultValues(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cfg.App.LogLevel = "debug" // Changed from default "info"
+	cfg.RateLimit.Max = 500    // Changed from default 100
+
+	defs := []domain.KeyDef{
+		{
+			Key:              "app.log_level",
+			Kind:             domain.KindConfig,
+			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+			DefaultValue:     "info",
+			ValueType:        domain.ValueTypeString,
+			MutableAtRuntime: true,
+		},
+		{
+			Key:              "rate_limit.max",
+			Kind:             domain.KindConfig,
+			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+			DefaultValue:     100,
+			ValueType:        domain.ValueTypeInt,
+			MutableAtRuntime: true,
+		},
+	}
+
+	ops := buildSeedOps(cfg, defs)
+	require.Len(t, ops, 2)
+
+	// Ops should be in def iteration order.
+	assert.Equal(t, "app.log_level", ops[0].Key)
+	assert.Equal(t, "debug", ops[0].Value)
+
+	assert.Equal(t, "rate_limit.max", ops[1].Key)
+	assert.Equal(t, 500, ops[1].Value)
+}
+
+func TestBuildSeedOps_SkipsBootstrapOnly(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cfg.App.EnvName = "staging" // Changed but bootstrap-only
+
+	defs := []domain.KeyDef{
+		{
+			Key:              "app.env_name",
+			Kind:             domain.KindConfig,
+			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+			DefaultValue:     "development",
+			ValueType:        domain.ValueTypeString,
+			MutableAtRuntime: false, // Bootstrap-only
+		},
+	}
+
+	ops := buildSeedOps(cfg, defs)
+	assert.Empty(t, ops, "bootstrap-only keys should be skipped")
+}
+
+func TestSeedStore_NoNonDefaultValues(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cm, err := NewConfigManager(cfg, "", &testLogger{})
+	require.NoError(t, err)
+
+	store := &mockStore{}
+	reg := registry.New()
+
+	// Register a single mutable key with matching default value.
+	require.NoError(t, reg.Register(domain.KeyDef{
+		Key:              "app.log_level",
+		Kind:             domain.KindConfig,
+		AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+		DefaultValue:     "info", // Matches cfg.App.LogLevel
+		ValueType:        domain.ValueTypeString,
+		ApplyBehavior:    domain.ApplyBundleRebuild,
+		MutableAtRuntime: true,
+	}))
+
+	err = cm.SeedStore(context.Background(), store, reg)
+	require.NoError(t, err)
+
+	assert.Empty(t, store.putCalls, "no Put should be called when all values are default")
+	assert.True(t, cm.InSeedMode(), "should enter seed mode even with no writes")
+}
+
+func TestSeedStore_WithNonDefaultValues(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cfg.App.LogLevel = "debug"    // Non-default
+	cfg.RateLimit.Max = 500       // Non-default
+	cfg.RateLimit.Enabled = false // Non-default (default is true)
+
+	cm, err := NewConfigManager(cfg, "", &testLogger{})
+	require.NoError(t, err)
+
+	store := &mockStore{}
+	reg := registry.New()
+
+	require.NoError(t, reg.Register(domain.KeyDef{
+		Key:              "app.log_level",
+		Kind:             domain.KindConfig,
+		AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+		DefaultValue:     "info",
+		ValueType:        domain.ValueTypeString,
+		ApplyBehavior:    domain.ApplyBundleRebuild,
+		MutableAtRuntime: true,
+	}))
+	require.NoError(t, reg.Register(domain.KeyDef{
+		Key:              "rate_limit.max",
+		Kind:             domain.KindConfig,
+		AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+		DefaultValue:     100,
+		ValueType:        domain.ValueTypeInt,
+		ApplyBehavior:    domain.ApplyLiveRead,
+		MutableAtRuntime: true,
+	}))
+	require.NoError(t, reg.Register(domain.KeyDef{
+		Key:              "rate_limit.enabled",
+		Kind:             domain.KindConfig,
+		AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+		DefaultValue:     true,
+		ValueType:        domain.ValueTypeBool,
+		ApplyBehavior:    domain.ApplyLiveRead,
+		MutableAtRuntime: true,
+	}))
+
+	err = cm.SeedStore(context.Background(), store, reg)
+	require.NoError(t, err)
+
+	require.Len(t, store.putCalls, 1, "should make exactly one Put call")
+
+	call := store.putCalls[0]
+	assert.Equal(t, domain.KindConfig, call.Target.Kind)
+	assert.Equal(t, domain.ScopeGlobal, call.Target.Scope)
+	assert.Equal(t, domain.RevisionZero, call.Expected)
+	assert.Equal(t, domain.Actor{ID: "seed-migration"}, call.Actor)
+	assert.Equal(t, "seed", call.Source)
+	assert.Len(t, call.Ops, 3)
+
+	assert.True(t, cm.InSeedMode())
+}
+
+func TestSeedStore_StoreError(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cfg.App.LogLevel = "debug" // Non-default
+
+	cm, err := NewConfigManager(cfg, "", &testLogger{})
+	require.NoError(t, err)
+
+	store := &mockStore{putErr: fmt.Errorf("connection refused")}
+	reg := registry.New()
+
+	require.NoError(t, reg.Register(domain.KeyDef{
+		Key:              "app.log_level",
+		Kind:             domain.KindConfig,
+		AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+		DefaultValue:     "info",
+		ValueType:        domain.ValueTypeString,
+		ApplyBehavior:    domain.ApplyBundleRebuild,
+		MutableAtRuntime: true,
+	}))
+
+	err = cm.SeedStore(context.Background(), store, reg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "connection refused")
+
+	// Should NOT enter seed mode on failure.
+	assert.False(t, cm.InSeedMode(), "should not enter seed mode when store.Put fails")
+}
+
+func TestSeedStore_StoreAlreadyHasData(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cfg.App.LogLevel = "debug" // Non-default, will generate a seed op
+
+	cm, err := NewConfigManager(cfg, "", &testLogger{})
+	require.NoError(t, err)
+
+	// Simulate pre-existing data: the store returns a revision mismatch error
+	// when Put is called with RevisionZero (expects empty store).
+	store := &mockStore{putErr: domain.ErrRevisionMismatch}
+	reg := registry.New()
+
+	require.NoError(t, reg.Register(domain.KeyDef{
+		Key:              "app.log_level",
+		Kind:             domain.KindConfig,
+		AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+		DefaultValue:     "info",
+		ValueType:        domain.ValueTypeString,
+		ApplyBehavior:    domain.ApplyBundleRebuild,
+		MutableAtRuntime: true,
+	}))
+
+	err = cm.SeedStore(context.Background(), store, reg)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, domain.ErrRevisionMismatch)
+
+	// Should NOT enter seed mode when the store rejects the write.
+	assert.False(t, cm.InSeedMode(), "should not enter seed mode when store has pre-existing data")
+}
+
+func TestSeedStore_NilConfig(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cm, err := NewConfigManager(cfg, "", &testLogger{})
+	require.NoError(t, err)
+
+	// Force nil config for this edge case.
+	cm.config.Store(nil)
+
+	store := &mockStore{}
+	reg := registry.New()
+
+	err = cm.SeedStore(context.Background(), store, reg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "config is nil")
+}
+
+func TestReloadDebounced_InSeedMode(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cm, err := NewConfigManager(cfg, "", &testLogger{})
+	require.NoError(t, err)
+
+	cm.enterSeedMode()
+
+	// Should not panic or set a debounce timer.
+	cm.reloadDebounced()
+
+	cm.mu.Lock()
+	timer := cm.debounceTimer
+	cm.mu.Unlock()
+
+	assert.Nil(t, timer, "debounce timer should not be set in seed mode")
+}

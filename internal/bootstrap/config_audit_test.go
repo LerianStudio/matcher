@@ -232,33 +232,6 @@ func TestSystemConfigEntityID_IsDeterministic(t *testing.T) {
 	assert.NotEqual(t, uuid.Nil, systemConfigEntityID)
 }
 
-func TestAppliedToConfigChanges(t *testing.T) {
-	t.Parallel()
-
-	applied := []ConfigChangeResult{
-		{Key: "rate_limit.max", OldValue: 100, NewValue: 200, HotReloaded: true},
-		{Key: "app.log_level", OldValue: "info", NewValue: "debug", HotReloaded: true},
-	}
-
-	changes := appliedToConfigChanges(applied)
-
-	require.Len(t, changes, 2)
-	assert.Equal(t, "rate_limit.max", changes[0].Key)
-	assert.Equal(t, 100, changes[0].OldValue)
-	assert.Equal(t, 200, changes[0].NewValue)
-	assert.Equal(t, "app.log_level", changes[1].Key)
-}
-
-func TestAppliedToConfigChanges_Empty(t *testing.T) {
-	t.Parallel()
-
-	changes := appliedToConfigChanges(nil)
-	assert.Empty(t, changes)
-
-	changes = appliedToConfigChanges([]ConfigChangeResult{})
-	assert.Empty(t, changes)
-}
-
 func TestSetAuditCallback_NilArgs(t *testing.T) {
 	t.Parallel()
 
@@ -295,55 +268,6 @@ func TestSetAuditCallback_SubscriberRegistered(t *testing.T) {
 	cm.mu.Unlock()
 
 	assert.Equal(t, beforeCount+1, afterCount, "SetAuditCallback should register one subscriber")
-}
-
-func TestConfigAPIHandler_SetAuditPublisher(t *testing.T) {
-	t.Parallel()
-
-	cm, err := NewConfigManager(defaultConfig(), "", &libLog.NopLogger{})
-	require.NoError(t, err)
-
-	handler, err := NewConfigAPIHandler(cm, &libLog.NopLogger{}, false)
-	require.NoError(t, err)
-
-	assert.Nil(t, handler.auditPublisher)
-
-	repo := &testOutboxMock{}
-	pub, pubErr := NewConfigAuditPublisher(repo, &libLog.NopLogger{})
-	require.NoError(t, pubErr)
-
-	handler.SetAuditPublisher(pub)
-	assert.NotNil(t, handler.auditPublisher)
-}
-
-func TestConfigAPIHandler_SetAuditPublisher_NilHandler(t *testing.T) {
-	t.Parallel()
-
-	var handler *ConfigAPIHandler
-
-	// Should not panic.
-	handler.SetAuditPublisher(&ConfigAuditPublisher{})
-}
-
-func TestSetAuditCallback_SkipsAPISourceUpdates(t *testing.T) {
-	t.Parallel()
-
-	cm, err := NewConfigManager(defaultConfig(), "", &libLog.NopLogger{})
-	require.NoError(t, err)
-
-	repo := &testOutboxMock{}
-	pub, err := NewConfigAuditPublisher(repo, &libLog.NopLogger{})
-	require.NoError(t, err)
-
-	SetAuditCallback(cm, pub, nil, &libLog.NopLogger{})
-
-	_, err = cm.Update(map[string]any{"rate_limit.max": 111})
-	require.NoError(t, err)
-
-	_, err = cm.Update(map[string]any{"rate_limit.max": 222})
-	require.NoError(t, err)
-
-	assert.Empty(t, repo.createdEvents, "API updates should not be double-audited by subscriber callback")
 }
 
 func TestSetAuditCallback_FileWatcherReloadPublishesAuditEvent(t *testing.T) {
@@ -499,50 +423,4 @@ rate_limit:
 	require.NoError(t, json.Unmarshal(repo.createdEvents[0].Payload, &auditEvent))
 	assert.Equal(t, auth.GetDefaultTenantID(), auditEvent.TenantID.String())
 	assert.NotEqual(t, changedTenantID, auditEvent.TenantID.String())
-}
-
-func TestSetAuditCallback_SkipsAPIReloadSource(t *testing.T) {
-	// Not parallel: manipulates process env.
-
-	tmpDir := t.TempDir()
-	yamlPath := filepath.Join(tmpDir, "matcher.yaml")
-	require.NoError(t, os.WriteFile(yamlPath, []byte(`
-app:
-  env_name: "development"
-  log_level: "info"
-server:
-  address: ":4018"
-  body_limit_bytes: 104857600
-tenancy:
-  default_tenant_id: "11111111-1111-1111-1111-111111111111"
-  default_tenant_slug: "default"
-`), 0o600))
-
-	cm, err := NewConfigManager(defaultConfig(), yamlPath, &libLog.NopLogger{})
-	require.NoError(t, err)
-	t.Cleanup(cm.Stop)
-
-	repo := &testOutboxMock{}
-	pub, err := NewConfigAuditPublisher(repo, &libLog.NopLogger{})
-	require.NoError(t, err)
-
-	SetAuditCallback(cm, pub, nil, &libLog.NopLogger{})
-
-	require.NoError(t, os.WriteFile(yamlPath, []byte(`
-app:
-  env_name: "development"
-  log_level: "debug"
-server:
-  address: ":4018"
-  body_limit_bytes: 104857600
-tenancy:
-  default_tenant_id: "11111111-1111-1111-1111-111111111111"
-  default_tenant_slug: "default"
-`), 0o600))
-
-	result, err := cm.ReloadFromAPI()
-	require.NoError(t, err)
-	assert.Greater(t, result.ChangesDetected, 0)
-
-	assert.Empty(t, repo.createdEvents, "API-triggered reload should be audited by API handler only")
 }

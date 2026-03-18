@@ -8,7 +8,7 @@ package bootstrap
 // This is the single place to maintain descriptions - reflection derives everything else.
 //
 //nolint:gochecknoglobals // package-level lookup table, read-only after init.
-var fieldDescriptions = map[string]string{ // #nosec G101 -- UI description labels, not credentials
+var fieldDescriptions = map[string]string{ //nolint:unused,gosec // Used by collectSchemaFields (reachable only from unit tests with build tag: unit). G101: UI description labels, not credentials.
 	// app
 	"app.env_name":  "Deployment environment (development, staging, production)",
 	"app.log_level": "Application log verbosity level",
@@ -180,7 +180,7 @@ var fieldDescriptions = map[string]string{ // #nosec G101 -- UI description labe
 // When absent, a label is auto-generated from the field name.
 //
 //nolint:gochecknoglobals // package-level lookup table, read-only after init.
-var fieldLabels = map[string]string{
+var fieldLabels = map[string]string{ //nolint:unused // Used by collectSchemaFields (reachable only from unit tests with build tag: unit).
 	"app.env_name":                                     "Environment Name",
 	"app.log_level":                                    "Log Level",
 	"server.address":                                   "Listen Address",
@@ -311,7 +311,7 @@ var fieldLabels = map[string]string{
 // Domain-specific constraints cannot be derived from struct tags.
 //
 //nolint:gochecknoglobals // package-level lookup table, read-only after init.
-var fieldConstraints = map[string][]string{
+var fieldConstraints = map[string][]string{ //nolint:unused // Used by collectSchemaFields (reachable only from unit tests with build tag: unit).
 	"app.log_level":                    {"enum:debug,info,warn,error,fatal"},
 	"server.body_limit_bytes":          {"min:1"},
 	"postgres.primary_ssl_mode":        {"enum:disable,require,verify-ca,verify-full"},

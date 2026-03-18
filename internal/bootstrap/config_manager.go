@@ -27,8 +27,8 @@ var (
 	errConfigManagerInvalidPath        = errors.New("config manager: invalid config path")
 	errConfigManagerInvalidExtension   = errors.New("config manager: config file must use .yaml or .yml extension")
 	errConfigManagerPathOutsideWorkdir = errors.New("config manager: config path must be contained within working directory")
-	errUnsafeConfigFilePath            = errors.New("unsafe config file path")
-	errUnsafeConfigFileExtension       = errors.New("unsafe config file extension")
+	errUnsafeConfigFilePath            = errors.New("unsafe config file path")      //nolint:unused // Used by writeViperConfigAtomically and validateAtomicWritePath (reachable only from unit tests with build tag: unit).
+	errUnsafeConfigFileExtension       = errors.New("unsafe config file extension") //nolint:unused // Used by validateAtomicWritePath (reachable only from unit tests with build tag: unit).
 	// ErrConfigValidationFailure identifies validation failures returned from reload/update flows.
 	ErrConfigValidationFailure = errors.New("config validation failure")
 	// ErrConfigSubscriberFailure is returned when a config subscriber callback fails.
@@ -53,12 +53,18 @@ const debounceDuration = 500 * time.Millisecond
 //
 // Thread-safety model:
 //   - Readers call Get() which uses atomic.Pointer — lock-free, zero contention.
-//   - Writers (Reload, Update) are serialized via mu to prevent concurrent YAML
+//   - Writers (Reload) are serialized via mu to prevent concurrent YAML
 //     reads/writes. The atomic swap happens inside the critical section, so readers
 //     never block on the mutex.
 //   - Subscribers are append-only under mu and invoked after the atomic swap.
 //
-// Lifecycle: NewConfigManager() → Get()/Subscribe()/Reload()/Update() → Stop().
+// Lifecycle: NewConfigManager() → Get()/Subscribe()/Reload() → Stop().
+//
+// Seed mode: When the systemplane Supervisor takes over as runtime authority,
+// the ConfigManager enters seed mode (inert). In this mode, file watching and
+// subscriber callbacks are disabled, and Reload() returns a skipped result. The
+// Get() method continues to work in seed mode (the config is still used during
+// bootstrap).
 type ConfigManager struct {
 	config      atomic.Pointer[Config]
 	mu          sync.Mutex // serializes writes (reload, update)
@@ -73,10 +79,13 @@ type ConfigManager struct {
 	watcherOnce sync.Once
 	stopCh      chan struct{}
 
+	// seedMode is set to true when the systemplane Supervisor has assumed
+	// runtime authority. In seed mode, hot-reload (file watcher, subscribers)
+	// is disabled and Update/Reload are rejected or no-oped. Get() still works.
+	seedMode atomic.Bool
+
 	// lastUpdateSource stores the origin of the most recent config change
-	// ("api", "reload", "reload_api", "reload_watcher") so subscribers can discriminate. The API
-	// handler publishes its own audit events, so the audit subscriber skips
-	// when source == "api" or "reload_api" to prevent duplicates.
+	// ("reload", "reload_watcher") so subscribers can discriminate.
 	lastUpdateSource atomic.Value // stores string
 
 	// lastChanges stores the []ConfigChange from the most recent reload so
@@ -95,12 +104,8 @@ type ReloadResult struct {
 	ReloadedAt      time.Time      `json:"reloadedAt"`
 	ChangesDetected int            `json:"changesDetected"`
 	Changes         []ConfigChange `json:"changes,omitempty"`
-}
-
-// UpdateResult describes the outcome of a programmatic configuration update.
-type UpdateResult struct {
-	Applied  []ConfigChangeResult    `json:"applied,omitempty"`
-	Rejected []ConfigChangeRejection `json:"rejected,omitempty"`
+	Skipped         bool           `json:"skipped,omitempty"`
+	Reason          string         `json:"reason,omitempty"`
 }
 
 // ConfigChange captures a single key that changed between reloads.
@@ -110,26 +115,9 @@ type ConfigChange struct {
 	NewValue any    `json:"newValue"`
 }
 
-// ConfigChangeResult reports a successfully applied programmatic change.
-type ConfigChangeResult struct {
-	Key         string `json:"key"`
-	OldValue    any    `json:"oldValue"`
-	NewValue    any    `json:"newValue"`
-	HotReloaded bool   `json:"hotReloaded"`
-}
-
-// ConfigChangeRejection reports a change that was not applied.
-type ConfigChangeRejection struct {
-	Key    string `json:"key"`
-	Value  any    `json:"value"`
-	Reason string `json:"reason"`
-}
-
-// mutableConfigKeys lists the YAML keys that may be changed via the Update API.
-// Keys NOT in this set are considered immutable (env-only or infrastructure-bound)
-// and will be rejected by Update(). This prevents operators from accidentally
-// changing database hosts or auth secrets through the config API.
-var mutableConfigKeys = map[string]bool{
+// mutableConfigKeys lists the YAML keys that are safe to change at runtime.
+// Used by the config schema to mark fields as hot-reloadable.
+var mutableConfigKeys = map[string]bool{ //nolint:unused // Used by buildConfigSchema (reachable only from unit tests with build tag: unit). Source of truth for runtime-mutable keys.
 	"rate_limit.enabled":               true,
 	"rate_limit.max":                   true,
 	"rate_limit.expiry_sec":            true,
@@ -257,9 +245,15 @@ func (cm *ConfigManager) SubscribeWithUnsubscribe(fn func(*Config)) func() {
 
 // SubscribeWithUnsubscribeErr registers an error-returning callback and returns
 // a function that removes the subscription. The returned function is idempotent.
+// In seed mode, returns a no-op unsubscribe function without registering the
+// callback — the systemplane Supervisor handles change propagation instead.
 func (cm *ConfigManager) SubscribeWithUnsubscribeErr(fn func(*Config) error) func() {
 	if fn == nil {
 		return func() {}
+	}
+
+	if cm.InSeedMode() {
+		return func() {} // No-op: systemplane handles change propagation
 	}
 
 	cm.mu.Lock()
@@ -293,15 +287,8 @@ func (cm *ConfigManager) Reload() (*ReloadResult, error) {
 	return cm.reload(configUpdateSourceReload)
 }
 
-// ReloadFromAPI force-reloads the configuration from disk, marking the source
-// as an API-triggered reload so subscriber-based audit publishers can avoid
-// duplicate event emission when handlers publish explicit audit entries.
-func (cm *ConfigManager) ReloadFromAPI() (*ReloadResult, error) {
-	return cm.reload(configUpdateSourceReloadAPI)
-}
-
 // Version returns the current config version. Starts at 0 and increments on
-// each successful Reload() or Update(). Useful for cache invalidation and
+// each successful Reload(). Useful for cache invalidation and
 // change detection by consumers.
 func (cm *ConfigManager) Version() uint64 {
 	return cm.version.Load()
@@ -318,7 +305,7 @@ func (cm *ConfigManager) LastReloadAt() time.Time {
 
 // Stop halts the file watcher and cleans up resources. Idempotent — safe to
 // call multiple times. After Stop(), automatic file-driven reloads stop and
-// Reload()/Update() reject further calls.
+// Reload() rejects further calls.
 func (cm *ConfigManager) Stop() {
 	cm.stopOnce.Do(func() {
 		close(cm.stopCh)
@@ -330,4 +317,24 @@ func (cm *ConfigManager) Stop() {
 		}
 		cm.mu.Unlock()
 	})
+}
+
+// InSeedMode reports whether the ConfigManager has been superseded by the
+// systemplane Supervisor. In seed mode, hot-reload is disabled and callers
+// should use the systemplane API for runtime configuration changes.
+func (cm *ConfigManager) InSeedMode() bool {
+	return cm.seedMode.Load()
+}
+
+// enterSeedMode transitions the ConfigManager to seed mode. This disables file
+// watching and subscriber callbacks. The debounce timer is stopped to prevent
+// any pending file-change reload from firing. Safe to call multiple times.
+func (cm *ConfigManager) enterSeedMode() {
+	cm.seedMode.Store(true)
+
+	cm.mu.Lock()
+	if cm.debounceTimer != nil {
+		cm.debounceTimer.Stop()
+	}
+	cm.mu.Unlock()
 }

@@ -294,10 +294,14 @@ func SetAuditCallback(
 
 		lastVersion.Store(currentVersion)
 
-		// Skip API-driven updates/reloads — the API handler in config_api.go
-		// already publishes its own audit event with actor and changes.
-		if source, ok := cm.lastUpdateSource.Load().(string); ok && (source == configUpdateSourceAPI || source == configUpdateSourceReloadAPI) {
-			return
+		// Skip API-driven updates/reloads — the systemplane transport handler
+		// already publishes its own audit event with the real actor and granular
+		// changes. Publishing here as well would create duplicate audit entries.
+		if source, ok := cm.lastUpdateSource.Load().(string); ok {
+			switch source {
+			case configUpdateSourceAPI, configUpdateSourceReloadAPI:
+				return
+			}
 		}
 
 		// Retrieve the field-level changes stored by reloadLocked() before
