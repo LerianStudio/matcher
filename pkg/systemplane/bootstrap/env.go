@@ -20,6 +20,7 @@ const (
 	EnvPostgresSchema        = "SYSTEMPLANE_POSTGRES_SCHEMA"
 	EnvPostgresEntriesTable  = "SYSTEMPLANE_POSTGRES_ENTRIES_TABLE"
 	EnvPostgresHistoryTable  = "SYSTEMPLANE_POSTGRES_HISTORY_TABLE"
+	EnvPostgresRevisionTable = "SYSTEMPLANE_POSTGRES_REVISION_TABLE"
 	EnvPostgresNotifyChannel = "SYSTEMPLANE_POSTGRES_NOTIFY_CHANNEL"
 
 	EnvMongoURI               = "SYSTEMPLANE_MONGODB_URI"
@@ -47,18 +48,19 @@ func LoadFromEnv() (*BootstrapConfig, error) {
 	switch backend {
 	case domain.BackendPostgres:
 		cfg.Postgres = &PostgresBootstrapConfig{
-			DSN:           os.Getenv(EnvPostgresDSN),
-			Schema:        os.Getenv(EnvPostgresSchema),
-			EntriesTable:  os.Getenv(EnvPostgresEntriesTable),
-			HistoryTable:  os.Getenv(EnvPostgresHistoryTable),
-			NotifyChannel: os.Getenv(EnvPostgresNotifyChannel),
+			DSN:           strings.TrimSpace(os.Getenv(EnvPostgresDSN)),
+			Schema:        strings.TrimSpace(os.Getenv(EnvPostgresSchema)),
+			EntriesTable:  strings.TrimSpace(os.Getenv(EnvPostgresEntriesTable)),
+			HistoryTable:  strings.TrimSpace(os.Getenv(EnvPostgresHistoryTable)),
+			RevisionTable: strings.TrimSpace(os.Getenv(EnvPostgresRevisionTable)),
+			NotifyChannel: strings.TrimSpace(os.Getenv(EnvPostgresNotifyChannel)),
 		}
 	case domain.BackendMongoDB:
 		cfg.MongoDB = &MongoBootstrapConfig{
-			URI:               os.Getenv(EnvMongoURI),
-			Database:          os.Getenv(EnvMongoDatabase),
-			EntriesCollection: os.Getenv(EnvMongoEntriesCollection),
-			HistoryCollection: os.Getenv(EnvMongoHistoryCollection),
+			URI:               strings.TrimSpace(os.Getenv(EnvMongoURI)),
+			Database:          strings.TrimSpace(os.Getenv(EnvMongoDatabase)),
+			EntriesCollection: strings.TrimSpace(os.Getenv(EnvMongoEntriesCollection)),
+			HistoryCollection: strings.TrimSpace(os.Getenv(EnvMongoHistoryCollection)),
 			WatchMode:         strings.TrimSpace(os.Getenv(EnvMongoWatchMode)),
 		}
 
@@ -67,11 +69,17 @@ func LoadFromEnv() (*BootstrapConfig, error) {
 			if convErr != nil {
 				return nil, fmt.Errorf("parse %s: %w", EnvMongoPollIntervalSec, convErr)
 			}
+
+			if seconds <= 0 {
+				return nil, fmt.Errorf("%w: %s", ErrInvalidPollInterval, EnvMongoPollIntervalSec)
+			}
+
 			cfg.MongoDB.PollInterval = time.Duration(seconds) * time.Second
 		}
 	}
 
 	cfg.ApplyDefaults()
+
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}

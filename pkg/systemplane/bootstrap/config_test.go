@@ -95,6 +95,41 @@ func TestBootstrapConfig_Validate_PostgresWithoutDSN(t *testing.T) {
 	assert.ErrorIs(t, err, ErrMissingPostgresDSN)
 }
 
+func TestBootstrapConfig_Validate_PostgresWhitespaceOnlyDSN(t *testing.T) {
+	t.Parallel()
+
+	cfg := &BootstrapConfig{
+		Backend: domain.BackendPostgres,
+		Postgres: &PostgresBootstrapConfig{
+			DSN: "   ",
+		},
+	}
+
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrMissingPostgresDSN)
+}
+
+func TestBootstrapConfig_Validate_InvalidPostgresIdentifier(t *testing.T) {
+	t.Parallel()
+
+	cfg := &BootstrapConfig{
+		Backend: domain.BackendPostgres,
+		Postgres: &PostgresBootstrapConfig{
+			DSN:           "postgres://user:pass@localhost:5432/db",
+			Schema:        "bad-schema",
+			EntriesTable:  DefaultPostgresEntriesTable,
+			HistoryTable:  DefaultPostgresHistoryTable,
+			RevisionTable: DefaultPostgresRevisionTable,
+			NotifyChannel: DefaultPostgresNotifyChannel,
+		},
+	}
+
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrInvalidPostgresIdentifier)
+}
+
 func TestBootstrapConfig_Validate_MongoDBWithoutConfigStruct(t *testing.T) {
 	t.Parallel()
 
@@ -122,6 +157,39 @@ func TestBootstrapConfig_Validate_MongoDBWithoutURI(t *testing.T) {
 	err := cfg.Validate()
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrMissingMongoURI)
+}
+
+func TestBootstrapConfig_Validate_MongoDBWhitespaceOnlyURI(t *testing.T) {
+	t.Parallel()
+
+	cfg := &BootstrapConfig{
+		Backend: domain.BackendMongoDB,
+		MongoDB: &MongoBootstrapConfig{
+			URI:      "   ",
+			Database: "testdb",
+		},
+	}
+
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrMissingMongoURI)
+}
+
+func TestBootstrapConfig_Validate_MongoDBPollModeWithoutPositiveInterval(t *testing.T) {
+	t.Parallel()
+
+	cfg := &BootstrapConfig{
+		Backend: domain.BackendMongoDB,
+		MongoDB: &MongoBootstrapConfig{
+			URI:          "mongodb://localhost:27017",
+			WatchMode:    "poll",
+			PollInterval: 0,
+		},
+	}
+
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrInvalidPollInterval)
 }
 
 func TestBootstrapConfig_Validate_MongoDBWithoutDatabase_Allowed(t *testing.T) {
@@ -154,6 +222,7 @@ func TestBootstrapConfig_ApplyDefaults_Postgres(t *testing.T) {
 	assert.Equal(t, "system", cfg.Postgres.Schema)
 	assert.Equal(t, "runtime_entries", cfg.Postgres.EntriesTable)
 	assert.Equal(t, "runtime_history", cfg.Postgres.HistoryTable)
+	assert.Equal(t, "runtime_revisions", cfg.Postgres.RevisionTable)
 	assert.Equal(t, "systemplane_changes", cfg.Postgres.NotifyChannel)
 }
 
@@ -173,7 +242,7 @@ func TestBootstrapConfig_ApplyDefaults_MongoDB(t *testing.T) {
 	assert.Equal(t, "runtime_entries", cfg.MongoDB.EntriesCollection)
 	assert.Equal(t, "runtime_history", cfg.MongoDB.HistoryCollection)
 	assert.Equal(t, "change_stream", cfg.MongoDB.WatchMode)
-	assert.Equal(t, 5*time.Second, cfg.MongoDB.PollInterval)
+	assert.Equal(t, DefaultMongoPollInterval, cfg.MongoDB.PollInterval)
 }
 
 func TestBootstrapConfig_ApplyDefaults_DoesNotOverwriteSetValues(t *testing.T) {
@@ -186,6 +255,7 @@ func TestBootstrapConfig_ApplyDefaults_DoesNotOverwriteSetValues(t *testing.T) {
 			Schema:        "custom_schema",
 			EntriesTable:  "custom_entries",
 			HistoryTable:  "custom_history",
+			RevisionTable: "custom_revisions",
 			NotifyChannel: "custom_channel",
 		},
 	}
@@ -195,6 +265,7 @@ func TestBootstrapConfig_ApplyDefaults_DoesNotOverwriteSetValues(t *testing.T) {
 	assert.Equal(t, "custom_schema", cfg.Postgres.Schema)
 	assert.Equal(t, "custom_entries", cfg.Postgres.EntriesTable)
 	assert.Equal(t, "custom_history", cfg.Postgres.HistoryTable)
+	assert.Equal(t, "custom_revisions", cfg.Postgres.RevisionTable)
 	assert.Equal(t, "custom_channel", cfg.Postgres.NotifyChannel)
 }
 

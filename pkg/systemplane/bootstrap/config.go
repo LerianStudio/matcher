@@ -5,6 +5,7 @@ package bootstrap
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
@@ -12,13 +13,15 @@ import (
 
 // Sentinel errors for bootstrap configuration validation.
 var (
-	ErrMissingBackend        = errors.New("systemplane: backend is required")
-	ErrMissingPostgresConfig = errors.New("systemplane: postgres config is required when backend is postgres")
-	ErrMissingMongoConfig    = errors.New("systemplane: mongodb config is required when backend is mongodb")
-	ErrMissingPostgresDSN    = errors.New("systemplane: postgres DSN is required")
-	ErrMissingMongoURI       = errors.New("systemplane: mongodb URI is required")
-	ErrInvalidWatchMode      = errors.New("systemplane: mongodb watch mode must be change_stream or poll")
-	ErrInvalidPollInterval   = errors.New("systemplane: mongodb poll interval must be greater than zero when watch mode is poll")
+	ErrMissingBackend            = errors.New("systemplane: backend is required")
+	ErrMissingPostgresConfig     = errors.New("systemplane: postgres config is required when backend is postgres")
+	ErrMissingMongoConfig        = errors.New("systemplane: mongodb config is required when backend is mongodb")
+	ErrMissingPostgresDSN        = errors.New("systemplane: postgres DSN is required")
+	ErrMissingMongoURI           = errors.New("systemplane: mongodb URI is required")
+	ErrInvalidPostgresIdentifier = errors.New("systemplane: invalid postgres identifier")
+	ErrInvalidWatchMode          = errors.New("systemplane: mongodb watch mode must be change_stream or poll")
+	ErrInvalidPollInterval       = errors.New("systemplane: mongodb poll interval must be greater than zero when watch mode is poll")
+	ErrInvalidMongoIdentifier    = errors.New("systemplane: invalid mongodb identifier")
 )
 
 // BootstrapConfig holds the initial configuration needed to connect to the
@@ -35,6 +38,7 @@ type PostgresBootstrapConfig struct {
 	Schema        string
 	EntriesTable  string
 	HistoryTable  string
+	RevisionTable string
 	NotifyChannel string
 }
 
@@ -49,74 +53,163 @@ type MongoBootstrapConfig struct {
 }
 
 // Validate checks that the bootstrap configuration is well-formed.
-func (c *BootstrapConfig) Validate() error {
-	if c == nil || !c.Backend.IsValid() {
-		return fmt.Errorf("%w: %q", ErrMissingBackend, backendString(c))
+func (cfg *BootstrapConfig) Validate() error {
+	if cfg == nil || !cfg.Backend.IsValid() {
+		return fmt.Errorf("%w: %q", ErrMissingBackend, backendString(cfg))
 	}
 
-	switch c.Backend {
+	switch cfg.Backend {
 	case domain.BackendPostgres:
-		if c.Postgres == nil {
-			return ErrMissingPostgresConfig
-		}
-		if c.Postgres.DSN == "" {
-			return ErrMissingPostgresDSN
-		}
+		return validatePostgresBootstrap(cfg.Postgres)
 	case domain.BackendMongoDB:
-		if c.MongoDB == nil {
-			return ErrMissingMongoConfig
-		}
-		if c.MongoDB.URI == "" {
-			return ErrMissingMongoURI
-		}
-		if c.MongoDB.WatchMode != "" && c.MongoDB.WatchMode != "change_stream" && c.MongoDB.WatchMode != "poll" {
-			return ErrInvalidWatchMode
-		}
-		if c.MongoDB.WatchMode == "poll" && c.MongoDB.PollInterval <= 0 {
-			return ErrInvalidPollInterval
-		}
+		return validateMongoBootstrap(cfg.MongoDB)
 	}
 
 	return nil
 }
 
 // ApplyDefaults fills in zero-value fields with sensible defaults.
-func (c *BootstrapConfig) ApplyDefaults() {
-	if c == nil {
+func (cfg *BootstrapConfig) ApplyDefaults() {
+	if cfg == nil {
 		return
 	}
 
-	if c.Postgres != nil {
-		if c.Postgres.Schema == "" {
-			c.Postgres.Schema = "system"
-		}
-		if c.Postgres.EntriesTable == "" {
-			c.Postgres.EntriesTable = "runtime_entries"
-		}
-		if c.Postgres.HistoryTable == "" {
-			c.Postgres.HistoryTable = "runtime_history"
-		}
-		if c.Postgres.NotifyChannel == "" {
-			c.Postgres.NotifyChannel = "systemplane_changes"
-		}
+	if cfg.Postgres != nil {
+		applyPostgresDefaults(cfg.Postgres)
 	}
 
-	if c.MongoDB != nil {
-		if c.MongoDB.Database == "" {
-			c.MongoDB.Database = "systemplane"
-		}
-		if c.MongoDB.EntriesCollection == "" {
-			c.MongoDB.EntriesCollection = "runtime_entries"
-		}
-		if c.MongoDB.HistoryCollection == "" {
-			c.MongoDB.HistoryCollection = "runtime_history"
-		}
-		if c.MongoDB.WatchMode == "" {
-			c.MongoDB.WatchMode = "change_stream"
-		}
-		if c.MongoDB.PollInterval == 0 {
-			c.MongoDB.PollInterval = 5 * time.Second
-		}
+	if cfg.MongoDB != nil {
+		applyMongoDefaults(cfg.MongoDB)
+	}
+}
+
+func validatePostgresBootstrap(postgresConfig *PostgresBootstrapConfig) error {
+	if postgresConfig == nil {
+		return ErrMissingPostgresConfig
+	}
+
+	if strings.TrimSpace(postgresConfig.DSN) == "" {
+		return ErrMissingPostgresDSN
+	}
+
+	if err := ValidatePostgresObjectNames(
+		defaultString(postgresConfig.Schema, DefaultPostgresSchema),
+		defaultString(postgresConfig.EntriesTable, DefaultPostgresEntriesTable),
+		defaultString(postgresConfig.HistoryTable, DefaultPostgresHistoryTable),
+		defaultString(postgresConfig.RevisionTable, DefaultPostgresRevisionTable),
+		defaultString(postgresConfig.NotifyChannel, DefaultPostgresNotifyChannel),
+	); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func validateMongoBootstrap(mongoConfig *MongoBootstrapConfig) error {
+	if mongoConfig == nil {
+		return ErrMissingMongoConfig
+	}
+
+	if strings.TrimSpace(mongoConfig.URI) == "" {
+		return ErrMissingMongoURI
+	}
+
+	if err := validateMongoIdentifier("database", defaultString(mongoConfig.Database, DefaultMongoDatabase)); err != nil {
+		return err
+	}
+
+	if err := validateMongoIdentifier("entries collection", defaultString(mongoConfig.EntriesCollection, DefaultMongoEntriesCollection)); err != nil {
+		return err
+	}
+
+	if err := validateMongoIdentifier("history collection", defaultString(mongoConfig.HistoryCollection, DefaultMongoHistoryCollection)); err != nil {
+		return err
+	}
+
+	if mongoConfig.WatchMode != "" && mongoConfig.WatchMode != "change_stream" && mongoConfig.WatchMode != "poll" {
+		return ErrInvalidWatchMode
+	}
+
+	if mongoConfig.WatchMode == "poll" && mongoConfig.PollInterval <= 0 {
+		return ErrInvalidPollInterval
+	}
+
+	return nil
+}
+
+// validateMongoIdentifier checks that a MongoDB database or collection name
+// does not contain forbidden characters (null bytes, $, empty).
+func validateMongoIdentifier(kind, value string) error {
+	trimmedValue := strings.TrimSpace(value)
+	if trimmedValue == "" {
+		return fmt.Errorf("%w %s: must not be empty", ErrInvalidMongoIdentifier, kind)
+	}
+
+	if strings.ContainsRune(trimmedValue, '$') {
+		return fmt.Errorf("%w %s %q: must not contain '$'", ErrInvalidMongoIdentifier, kind, value)
+	}
+
+	if strings.ContainsRune(trimmedValue, 0) {
+		return fmt.Errorf("%w %s: must not contain null bytes", ErrInvalidMongoIdentifier, kind)
+	}
+
+	return nil
+}
+
+func applyPostgresDefaults(postgresConfig *PostgresBootstrapConfig) {
+	postgresConfig.DSN = strings.TrimSpace(postgresConfig.DSN)
+	postgresConfig.Schema = strings.TrimSpace(postgresConfig.Schema)
+	postgresConfig.EntriesTable = strings.TrimSpace(postgresConfig.EntriesTable)
+	postgresConfig.HistoryTable = strings.TrimSpace(postgresConfig.HistoryTable)
+	postgresConfig.RevisionTable = strings.TrimSpace(postgresConfig.RevisionTable)
+	postgresConfig.NotifyChannel = strings.TrimSpace(postgresConfig.NotifyChannel)
+
+	if postgresConfig.Schema == "" {
+		postgresConfig.Schema = DefaultPostgresSchema
+	}
+
+	if postgresConfig.EntriesTable == "" {
+		postgresConfig.EntriesTable = DefaultPostgresEntriesTable
+	}
+
+	if postgresConfig.HistoryTable == "" {
+		postgresConfig.HistoryTable = DefaultPostgresHistoryTable
+	}
+
+	if postgresConfig.RevisionTable == "" {
+		postgresConfig.RevisionTable = DefaultPostgresRevisionTable
+	}
+
+	if postgresConfig.NotifyChannel == "" {
+		postgresConfig.NotifyChannel = DefaultPostgresNotifyChannel
+	}
+}
+
+func applyMongoDefaults(mongoConfig *MongoBootstrapConfig) {
+	mongoConfig.URI = strings.TrimSpace(mongoConfig.URI)
+	mongoConfig.Database = strings.TrimSpace(mongoConfig.Database)
+	mongoConfig.EntriesCollection = strings.TrimSpace(mongoConfig.EntriesCollection)
+	mongoConfig.HistoryCollection = strings.TrimSpace(mongoConfig.HistoryCollection)
+	mongoConfig.WatchMode = strings.TrimSpace(mongoConfig.WatchMode)
+
+	if mongoConfig.Database == "" {
+		mongoConfig.Database = DefaultMongoDatabase
+	}
+
+	if mongoConfig.EntriesCollection == "" {
+		mongoConfig.EntriesCollection = DefaultMongoEntriesCollection
+	}
+
+	if mongoConfig.HistoryCollection == "" {
+		mongoConfig.HistoryCollection = DefaultMongoHistoryCollection
+	}
+
+	if mongoConfig.WatchMode == "" {
+		mongoConfig.WatchMode = DefaultMongoWatchMode
+	}
+
+	if mongoConfig.PollInterval == 0 {
+		mongoConfig.PollInterval = DefaultMongoPollInterval
 	}
 }
 
@@ -126,4 +219,13 @@ func backendString(c *BootstrapConfig) string {
 	}
 
 	return string(c.Backend)
+}
+
+func defaultString(value, fallback string) string {
+	trimmedValue := strings.TrimSpace(value)
+	if trimmedValue == "" {
+		return fallback
+	}
+
+	return trimmedValue
 }
