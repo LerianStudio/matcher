@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -30,11 +31,36 @@ type Supervisor interface {
 	Stop(ctx context.Context) error
 }
 
+// BuildStrategy describes which build path the Supervisor took during a reload.
+type BuildStrategy string
+
+const (
+	// BuildStrategyFull indicates all bundle components were built from scratch.
+	BuildStrategyFull BuildStrategy = "full"
+
+	// BuildStrategyIncremental indicates only changed components were rebuilt;
+	// unchanged components were reused from the previous bundle.
+	BuildStrategyIncremental BuildStrategy = "incremental"
+)
+
+// ReloadEvent carries structured information about a completed reload cycle.
+// Passed to the optional Observer callback on SupervisorConfig.
+type ReloadEvent struct {
+	Strategy BuildStrategy // which build path was taken
+	Reason   string        // caller-supplied reason (e.g., "changefeed-signal")
+}
+
 // SupervisorConfig holds the dependencies needed to construct a supervisor.
 type SupervisorConfig struct {
 	Builder     *SnapshotBuilder
 	Factory     ports.BundleFactory
 	Reconcilers []ports.BundleReconciler
+
+	// Observer is an optional callback invoked after each successful reload
+	// with structured information about the build strategy used. This
+	// provides observability without coupling the Supervisor to a logger.
+	// Nil means no observation.
+	Observer func(ReloadEvent)
 }
 
 // NewSupervisor creates a new supervisor.
@@ -53,10 +79,13 @@ func NewSupervisor(cfg SupervisorConfig) (Supervisor, error) {
 		}
 	}
 
+	sorted := sortReconcilersByPhase(cfg.Reconcilers)
+
 	return &defaultSupervisor{
 		builder:     cfg.Builder,
 		factory:     cfg.Factory,
-		reconcilers: cfg.Reconcilers,
+		reconcilers: sorted,
+		observer:    cfg.Observer,
 		stopCh:      make(chan struct{}),
 	}, nil
 }
@@ -72,6 +101,7 @@ type defaultSupervisor struct {
 	builder     *SnapshotBuilder
 	factory     ports.BundleFactory
 	reconcilers []ports.BundleReconciler
+	observer    func(ReloadEvent)
 	stopCh      chan struct{}
 	stopOnce    sync.Once
 }
@@ -142,7 +172,7 @@ func (supervisor *defaultSupervisor) ReconcileCurrent(ctx context.Context, snap 
 }
 
 // Reload rebuilds the snapshot and runtime bundle, then reconciles consumers.
-func (supervisor *defaultSupervisor) Reload(ctx context.Context, _ string) error {
+func (supervisor *defaultSupervisor) Reload(ctx context.Context, reason string) error {
 	if supervisor.isStopped() {
 		return domain.ErrSupervisorStopped
 	}
@@ -157,15 +187,6 @@ func (supervisor *defaultSupervisor) Reload(ctx context.Context, _ string) error
 		return fmt.Errorf("reload: %w: %w", domain.ErrSnapshotBuildFailed, err)
 	}
 
-	candidate, err := supervisor.factory.Build(ctx, snap)
-	if err != nil {
-		return fmt.Errorf("reload: %w: %w", domain.ErrBundleBuildFailed, err)
-	}
-
-	if isNilRuntimeBundle(candidate) {
-		return fmt.Errorf("reload: %w: nil runtime bundle", domain.ErrBundleBuildFailed)
-	}
-
 	prevSnap := supervisor.snapshot.Load()
 	prevHolder := supervisor.bundle.Load()
 
@@ -174,29 +195,44 @@ func (supervisor *defaultSupervisor) Reload(ctx context.Context, _ string) error
 		previousBundle = prevHolder.bundle
 	}
 
-	supervisor.snapshot.Store(&snap)
-	supervisor.bundle.Store(&bundleHolder{bundle: candidate})
+	// Try incremental build first if the factory supports it and we have a
+	// previous snapshot+bundle. This reuses unchanged infrastructure components
+	// (Postgres, Redis, etc.) instead of rebuilding everything.
+	// Falls back to full build on failure or when incremental is not available.
+	candidate, strategy, err := supervisor.buildBundle(ctx, snap, previousBundle, prevSnap)
+	if err != nil {
+		return fmt.Errorf("reload: %w: %w", domain.ErrBundleBuildFailed, err)
+	}
 
+	if isNilRuntimeBundle(candidate) {
+		return fmt.Errorf("reload: %w: nil runtime bundle", domain.ErrBundleBuildFailed)
+	}
+
+	// Reconcile BEFORE committing: run all reconcilers against the candidate
+	// bundle while the previous bundle is still the active one. This prevents
+	// state corruption when incremental builds nil-out transferred pointers in
+	// the previous bundle — if we stored the candidate first and a reconciler
+	// failed, the "rollback" would restore a gutted previous bundle.
 	for _, reconciler := range supervisor.reconcilers {
 		if err := reconciler.Reconcile(ctx, previousBundle, candidate, snap); err != nil {
-			if prevSnap != nil {
-				supervisor.snapshot.Store(prevSnap)
-			}
-
-			if prevHolder != nil {
-				supervisor.bundle.Store(prevHolder)
-			} else {
-				supervisor.bundle.Store(nil)
-			}
-
 			_ = candidate.Close(ctx)
 
 			return fmt.Errorf("reload: %s: %w: %w", reconciler.Name(), domain.ErrReconcileFailed, err)
 		}
 	}
 
+	// All reconcilers passed — commit atomically.
+	supervisor.snapshot.Store(&snap)
+	supervisor.bundle.Store(&bundleHolder{bundle: candidate})
+
+	// Close previous AFTER commit so transferred components are not torn down
+	// while still referenced by the now-active candidate bundle.
 	if !isNilRuntimeBundle(previousBundle) {
 		_ = previousBundle.Close(ctx)
+	}
+
+	if supervisor.observer != nil {
+		supervisor.observer(ReloadEvent{Strategy: strategy, Reason: reason})
 	}
 
 	return nil
@@ -236,6 +272,45 @@ func isNilRuntimeBundle(bundle domain.RuntimeBundle) bool {
 
 func isNilReconciler(reconciler ports.BundleReconciler) bool {
 	return domain.IsNilValue(reconciler)
+}
+
+// buildBundle attempts an incremental build first (if the factory supports it
+// and a previous bundle exists), falling back to a full build. Returns the
+// build strategy used for observability.
+func (supervisor *defaultSupervisor) buildBundle(
+	ctx context.Context,
+	snap domain.Snapshot,
+	previousBundle domain.RuntimeBundle,
+	prevSnap *domain.Snapshot,
+) (domain.RuntimeBundle, BuildStrategy, error) {
+	// Incremental path: reuse unchanged components from the previous bundle.
+	if incFactory, ok := supervisor.factory.(ports.IncrementalBundleFactory); ok &&
+		prevSnap != nil && !isNilRuntimeBundle(previousBundle) {
+		candidate, err := incFactory.BuildIncremental(ctx, snap, previousBundle, *prevSnap)
+		if err == nil && !isNilRuntimeBundle(candidate) {
+			return candidate, BuildStrategyIncremental, nil
+		}
+		// Incremental build failed — fall through to full build.
+	}
+
+	// Full build: construct everything from scratch.
+	bundle, err := supervisor.factory.Build(ctx, snap)
+
+	return bundle, BuildStrategyFull, err
+}
+
+// sortReconcilersByPhase returns a copy of the reconciler slice sorted by
+// phase in ascending order (StateSync → Validation → SideEffect). Reconcilers
+// within the same phase retain their original relative order (stable sort).
+func sortReconcilersByPhase(reconcilers []ports.BundleReconciler) []ports.BundleReconciler {
+	sorted := make([]ports.BundleReconciler, len(reconcilers))
+	copy(sorted, reconcilers)
+
+	slices.SortStableFunc(sorted, func(a, b ports.BundleReconciler) int {
+		return int(a.Phase()) - int(b.Phase())
+	})
+
+	return sorted
 }
 
 func cachedTenantIDs(snapshot *domain.Snapshot) []string {
