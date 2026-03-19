@@ -168,6 +168,7 @@ func TestDefaultConfig_ExportWorkerEnabled(t *testing.T) {
 	assert.Equal(t, 1000, cfg.ExportWorker.PageSize)
 	assert.Equal(t, 3600, cfg.ExportWorker.PresignExpirySec)
 }
+
 func TestDefaultConfig_FetcherDisabled(t *testing.T) {
 	t.Parallel()
 

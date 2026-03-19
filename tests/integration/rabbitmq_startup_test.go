@@ -451,6 +451,7 @@ func (*fakeStartedContainer) Networks(context.Context) ([]string, error)        
 func (*fakeStartedContainer) NetworkAliases(context.Context) (map[string][]string, error) {
 	return nil, nil
 }
+
 func (*fakeStartedContainer) Exec(context.Context, []string, ...tcexec.ProcessOption) (int, io.Reader, error) {
 	return 0, nil, nil
 }
@@ -459,15 +460,19 @@ func (*fakeStartedContainer) ContainerIPs(context.Context) ([]string, error) { r
 func (*fakeStartedContainer) CopyToContainer(context.Context, []byte, string, int64) error {
 	return nil
 }
+
 func (*fakeStartedContainer) CopyDirToContainer(context.Context, string, string, int64) error {
 	return nil
 }
+
 func (*fakeStartedContainer) CopyFileToContainer(context.Context, string, string, int64) error {
 	return nil
 }
+
 func (*fakeStartedContainer) CopyFileFromContainer(context.Context, string) (io.ReadCloser, error) {
 	return nil, nil
 }
+
 func (*fakeStartedContainer) CopyDirFromContainer(context.Context, string) (io.ReadCloser, error) {
 	return nil, nil
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/fiber/v2/middleware/requestid"
 	"github.com/google/uuid"
+
 	// Direct OTel imports required for HTTP telemetry middleware instrumentation.
 	// lib-commons abstracts application-level tracing via NewTrackingFromContext,
 	// but middleware needs lower-level access to span kinds, semantic conventions,

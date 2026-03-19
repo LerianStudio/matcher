@@ -829,7 +829,7 @@ func TestDiscoveryWorker_SyncTenantConnections_IgnoresNilFetcherConnectionEntrie
 		listConnectionsFn: func(_ context.Context, _ string) ([]*sharedPorts.FetcherConnection, error) {
 			return []*sharedPorts.FetcherConnection{
 				nil,
-				&sharedPorts.FetcherConnection{ID: "fetcher-conn-1", ConfigName: "db", DatabaseType: "postgresql", Status: "AVAILABLE"},
+				{ID: "fetcher-conn-1", ConfigName: "db", DatabaseType: "postgresql", Status: "AVAILABLE"},
 			}, nil
 		},
 		getSchemaFn: func(_ context.Context, _ string) (*sharedPorts.FetcherSchema, error) {
@@ -875,7 +875,7 @@ func TestDiscoveryWorker_MarkStaleConnections_IgnoresNilRepositoryEntries(t *tes
 		findAllFn: func(_ context.Context) ([]*entities.FetcherConnection, error) {
 			return []*entities.FetcherConnection{
 				nil,
-				&entities.FetcherConnection{ID: uuid.New(), FetcherConnID: "stale-conn", Status: "AVAILABLE"},
+				{ID: uuid.New(), FetcherConnID: "stale-conn", Status: "AVAILABLE"},
 			}, nil
 		},
 		upsertFn: func(_ context.Context, _ *entities.FetcherConnection) error {

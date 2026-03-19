@@ -15,8 +15,8 @@ import (
 
 // File/directory permission constants.
 const (
-	fuzzDirPermissions  = 0750
-	fuzzFilePermissions = 0640
+	fuzzDirPermissions  = 0o750
+	fuzzFilePermissions = 0o640
 	maxSanitizedNameLen = 50
 )
 

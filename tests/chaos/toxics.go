@@ -3,8 +3,6 @@
 package chaos
 
 import (
-	"errors"
-	"fmt"
 	"testing"
 
 	toxiproxy "github.com/Shopify/toxiproxy/v2/client"

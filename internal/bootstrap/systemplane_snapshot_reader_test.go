@@ -32,6 +32,7 @@ func (m *mockSupervisor) Snapshot() domain.Snapshot     { return m.snapshot }
 func (m *mockSupervisor) PublishSnapshot(_ context.Context, _ domain.Snapshot, _ string) error {
 	return nil
 }
+
 func (m *mockSupervisor) ReconcileCurrent(_ context.Context, _ domain.Snapshot, _ string) error {
 	return nil
 }

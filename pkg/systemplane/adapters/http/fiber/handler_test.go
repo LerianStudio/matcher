@@ -23,15 +23,15 @@ import (
 // --- Test mocks ---
 
 type mockManager struct {
-	getConfigsFn       func(ctx context.Context) (service.ResolvedSet, error)
-	getSettingsFn      func(ctx context.Context, subject service.Subject) (service.ResolvedSet, error)
-	patchConfigsFn     func(ctx context.Context, req service.PatchRequest) (service.WriteResult, error)
-	patchSettingsFn    func(ctx context.Context, subject service.Subject, req service.PatchRequest) (service.WriteResult, error)
-	getConfigSchemaFn  func(ctx context.Context) ([]service.SchemaEntry, error)
-	getSettingSchemaFn func(ctx context.Context) ([]service.SchemaEntry, error)
-	getConfigHistoryFn func(ctx context.Context, filter ports.HistoryFilter) ([]ports.HistoryEntry, error)
+	getConfigsFn        func(ctx context.Context) (service.ResolvedSet, error)
+	getSettingsFn       func(ctx context.Context, subject service.Subject) (service.ResolvedSet, error)
+	patchConfigsFn      func(ctx context.Context, req service.PatchRequest) (service.WriteResult, error)
+	patchSettingsFn     func(ctx context.Context, subject service.Subject, req service.PatchRequest) (service.WriteResult, error)
+	getConfigSchemaFn   func(ctx context.Context) ([]service.SchemaEntry, error)
+	getSettingSchemaFn  func(ctx context.Context) ([]service.SchemaEntry, error)
+	getConfigHistoryFn  func(ctx context.Context, filter ports.HistoryFilter) ([]ports.HistoryEntry, error)
 	getSettingHistoryFn func(ctx context.Context, filter ports.HistoryFilter) ([]ports.HistoryEntry, error)
-	resyncFn           func(ctx context.Context) error
+	resyncFn            func(ctx context.Context) error
 }
 
 func (m *mockManager) GetConfigs(ctx context.Context) (service.ResolvedSet, error) {
@@ -257,10 +257,10 @@ func TestHandler_Mount_RegistersRoutes(t *testing.T) {
 	// GET /v1/system/settings/history
 	// Plus HEAD routes for each GET (Fiber adds them automatically)
 	expectedPaths := map[string][]string{
-		"/v1/system/configs/":        {"GET", "PATCH"},
-		"/v1/system/configs/schema":  {"GET"},
-		"/v1/system/configs/history": {"GET"},
-		"/v1/system/configs/reload":  {"POST"},
+		"/v1/system/configs/":         {"GET", "PATCH"},
+		"/v1/system/configs/schema":   {"GET"},
+		"/v1/system/configs/history":  {"GET"},
+		"/v1/system/configs/reload":   {"POST"},
 		"/v1/system/settings/":        {"GET", "PATCH"},
 		"/v1/system/settings/schema":  {"GET"},
 		"/v1/system/settings/history": {"GET"},

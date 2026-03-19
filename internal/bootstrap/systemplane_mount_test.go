@@ -140,4 +140,3 @@ func TestMountSystemplaneAPI_RoutesRegistered(t *testing.T) {
 			"expected route %q to be registered; registered routes: %v", routeKey, registeredRoutes)
 	}
 }
-
