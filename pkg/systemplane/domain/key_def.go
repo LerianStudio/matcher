@@ -60,6 +60,13 @@ const (
 // a non-nil error when the value is invalid.
 type ValidatorFunc func(value any) error
 
+// ComponentNone is a sentinel value for keys that do not require any
+// infrastructure component rebuild when changed. Use this for pure
+// business-logic keys (rate limits, worker intervals, archival settings)
+// whose changes are picked up through the config snapshot without
+// reconnecting infrastructure.
+const ComponentNone = "_none"
+
 // KeyDef carries all registry metadata for a configuration key. It describes
 // the key's type, visibility, constraints, and runtime behavior.
 type KeyDef struct {
@@ -75,6 +82,18 @@ type KeyDef struct {
 	MutableAtRuntime bool
 	Description      string
 	Group            string
+
+	// Component declares which infrastructure component this key affects
+	// (e.g., "postgres", "redis", "rabbitmq", "s3", "http", "logger").
+	// Use ComponentNone ("_none") for pure business-logic keys that require
+	// no infrastructure rebuild when changed. An empty string means the key
+	// is not yet classified — the diff function treats unclassified keys as
+	// cross-cutting and forces a full rebuild for safety.
+	//
+	// This field is used by BundleFactory implementations to determine which
+	// runtime resources need rebuilding when a key changes, enabling
+	// component-granular bundle rebuilds instead of all-or-nothing swaps.
+	Component string
 }
 
 // Validate checks that the KeyDef itself is well-formed. It does not validate

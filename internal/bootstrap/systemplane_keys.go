@@ -195,6 +195,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: false,
 			Description:      "Application environment name (e.g., development, staging, production)",
 			Group:            "app",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -208,6 +209,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Application log level (debug, info, warn, error)",
 			Group:            "app",
+			Component:        "logger",
 			RedactPolicy:     domain.RedactNone,
 		},
 
@@ -222,6 +224,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: false,
 			Description:      "HTTP server listen address (e.g., :4018)",
 			Group:            "server",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -235,6 +238,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Maximum HTTP request body size in bytes",
 			Group:            "server",
+			Component:        "http",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -247,6 +251,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Comma-separated list of allowed CORS origins",
 			Group:            "server",
+			Component:        "http",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -259,6 +264,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Comma-separated list of allowed CORS methods",
 			Group:            "server",
+			Component:        "http",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -271,6 +277,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Comma-separated list of allowed CORS headers",
 			Group:            "server",
+			Component:        "http",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -283,6 +290,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: false,
 			Description:      "Path to TLS certificate file",
 			Group:            "server",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -295,6 +303,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: false,
 			Description:      "Path to TLS private key file",
 			Group:            "server",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -307,6 +316,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: false,
 			Description:      "Whether TLS is terminated by an upstream proxy",
 			Group:            "server",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -319,6 +329,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: false,
 			Description:      "Comma-separated list of trusted proxy CIDRs",
 			Group:            "server",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 
@@ -333,6 +344,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Default tenant UUID for single-tenant mode",
 			Group:            "tenancy",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -345,6 +357,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Default tenant slug for single-tenant mode",
 			Group:            "tenancy",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -357,6 +370,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Enable multi-tenant infrastructure (tenant manager, per-tenant pools)",
 			Group:            "tenancy",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -369,6 +383,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Tenant management service URL",
 			Group:            "tenancy",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -381,6 +396,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Tenant management environment identifier",
 			Group:            "tenancy",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -394,6 +410,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Maximum number of concurrent per-tenant connection pools",
 			Group:            "tenancy",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -407,6 +424,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Idle timeout (seconds) before evicting a tenant connection pool",
 			Group:            "tenancy",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -420,6 +438,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Failure threshold before circuit breaker opens for a tenant pool",
 			Group:            "tenancy",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -433,6 +452,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Circuit breaker open duration (seconds) before half-open retry",
 			Group:            "tenancy",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -446,6 +466,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			Secret:           true,
 			Description:      "API key for authenticating with the tenant management service",
 			Group:            "tenancy",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactFull,
 		},
 		{
@@ -458,6 +479,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Deprecated: backward-compatible alias for multi_tenant_enabled",
 			Group:            "tenancy",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 
@@ -473,6 +495,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "PostgreSQL primary host address",
 			Group:            "postgres",
+			Component:        "postgres",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -485,6 +508,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "PostgreSQL primary port",
 			Group:            "postgres",
+			Component:        "postgres",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -498,6 +522,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "PostgreSQL primary connection user",
 			Group:            "postgres",
+			Component:        "postgres",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -511,6 +536,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			Secret:           true,
 			Description:      "PostgreSQL primary connection password",
 			Group:            "postgres",
+			Component:        "postgres",
 			RedactPolicy:     domain.RedactFull,
 		},
 		{
@@ -524,6 +550,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "PostgreSQL primary database name",
 			Group:            "postgres",
+			Component:        "postgres",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -537,6 +564,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "PostgreSQL primary SSL mode (disable, require, verify-ca, verify-full)",
 			Group:            "postgres",
+			Component:        "postgres",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -549,6 +577,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "PostgreSQL replica host address",
 			Group:            "postgres",
+			Component:        "postgres",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -561,6 +590,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "PostgreSQL replica port",
 			Group:            "postgres",
+			Component:        "postgres",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -573,6 +603,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "PostgreSQL replica connection user",
 			Group:            "postgres",
+			Component:        "postgres",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -586,6 +617,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			Secret:           true,
 			Description:      "PostgreSQL replica connection password",
 			Group:            "postgres",
+			Component:        "postgres",
 			RedactPolicy:     domain.RedactFull,
 		},
 		{
@@ -598,6 +630,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "PostgreSQL replica database name",
 			Group:            "postgres",
+			Component:        "postgres",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -611,6 +644,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "PostgreSQL replica SSL mode (disable, require, verify-ca, verify-full)",
 			Group:            "postgres",
+			Component:        "postgres",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -624,6 +658,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Maximum number of open PostgreSQL connections",
 			Group:            "postgres",
+			Component:        "postgres",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -637,6 +672,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Maximum number of idle PostgreSQL connections",
 			Group:            "postgres",
+			Component:        "postgres",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -650,6 +686,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Maximum connection lifetime in minutes",
 			Group:            "postgres",
+			Component:        "postgres",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -663,6 +700,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Maximum idle connection time in minutes",
 			Group:            "postgres",
+			Component:        "postgres",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -676,6 +714,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "PostgreSQL connection timeout in seconds",
 			Group:            "postgres",
+			Component:        "postgres",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -689,6 +728,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "PostgreSQL query timeout in seconds",
 			Group:            "postgres",
+			Component:        "postgres",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -701,6 +741,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Path to database migration files",
 			Group:            "postgres",
+			Component:        "postgres",
 			RedactPolicy:     domain.RedactNone,
 		},
 
@@ -715,6 +756,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Redis host address(es), comma-separated for sentinel mode",
 			Group:            "redis",
+			Component:        "redis",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -727,6 +769,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Redis sentinel master name (enables sentinel mode when set)",
 			Group:            "redis",
+			Component:        "redis",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -740,6 +783,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			Secret:           true,
 			Description:      "Redis connection password",
 			Group:            "redis",
+			Component:        "redis",
 			RedactPolicy:     domain.RedactFull,
 		},
 		{
@@ -753,6 +797,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Redis database number",
 			Group:            "redis",
+			Component:        "redis",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -765,6 +810,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Redis protocol version (2 or 3)",
 			Group:            "redis",
+			Component:        "redis",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -777,6 +823,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Enable TLS for Redis connections",
 			Group:            "redis",
+			Component:        "redis",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -790,6 +837,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			Secret:           true,
 			Description:      "Redis TLS CA certificate content",
 			Group:            "redis",
+			Component:        "redis",
 			RedactPolicy:     domain.RedactFull,
 		},
 		{
@@ -803,6 +851,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Redis connection pool size",
 			Group:            "redis",
+			Component:        "redis",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -816,6 +865,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Minimum number of idle Redis connections",
 			Group:            "redis",
+			Component:        "redis",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -829,6 +879,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Redis read timeout in milliseconds",
 			Group:            "redis",
+			Component:        "redis",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -842,6 +893,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Redis write timeout in milliseconds",
 			Group:            "redis",
+			Component:        "redis",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -855,6 +907,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Redis dial timeout in milliseconds",
 			Group:            "redis",
+			Component:        "redis",
 			RedactPolicy:     domain.RedactNone,
 		},
 
@@ -869,6 +922,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "RabbitMQ connection URI scheme",
 			Group:            "rabbitmq",
+			Component:        "rabbitmq",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -881,6 +935,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "RabbitMQ host address",
 			Group:            "rabbitmq",
+			Component:        "rabbitmq",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -893,6 +948,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "RabbitMQ port number",
 			Group:            "rabbitmq",
+			Component:        "rabbitmq",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -905,6 +961,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "RabbitMQ connection user",
 			Group:            "rabbitmq",
+			Component:        "rabbitmq",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -918,6 +975,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			Secret:           true,
 			Description:      "RabbitMQ connection password",
 			Group:            "rabbitmq",
+			Component:        "rabbitmq",
 			RedactPolicy:     domain.RedactFull,
 		},
 		{
@@ -930,6 +988,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "RabbitMQ virtual host",
 			Group:            "rabbitmq",
+			Component:        "rabbitmq",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -942,6 +1001,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "RabbitMQ management API health endpoint URL",
 			Group:            "rabbitmq",
+			Component:        "rabbitmq",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -954,6 +1014,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Allow insecure TLS for RabbitMQ health checks",
 			Group:            "rabbitmq",
+			Component:        "rabbitmq",
 			RedactPolicy:     domain.RedactNone,
 		},
 
@@ -968,6 +1029,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: false,
 			Description:      "Enable authentication and authorization middleware",
 			Group:            "auth",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -980,6 +1042,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: false,
 			Description:      "Authentication service address",
 			Group:            "auth",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -993,6 +1056,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			Secret:           true,
 			Description:      "JWT token signing secret",
 			Group:            "auth",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactFull,
 		},
 
@@ -1007,6 +1071,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Enable Swagger UI endpoint",
 			Group:            "swagger",
+			Component:        "http",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1019,6 +1084,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Override the Swagger spec host field (empty uses request host)",
 			Group:            "swagger",
+			Component:        "http",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1031,6 +1097,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Comma-separated list of Swagger spec schemes (e.g., https or http,https)",
 			Group:            "swagger",
+			Component:        "http",
 			RedactPolicy:     domain.RedactNone,
 		},
 
@@ -1045,6 +1112,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: false,
 			Description:      "Enable OpenTelemetry telemetry exporter",
 			Group:            "telemetry",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1057,6 +1125,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: false,
 			Description:      "OpenTelemetry resource service name",
 			Group:            "telemetry",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1069,6 +1138,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: false,
 			Description:      "OpenTelemetry instrumentation library name",
 			Group:            "telemetry",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1081,6 +1151,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: false,
 			Description:      "OpenTelemetry resource service version",
 			Group:            "telemetry",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1093,6 +1164,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: false,
 			Description:      "OpenTelemetry resource deployment environment",
 			Group:            "telemetry",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1105,6 +1177,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: false,
 			Description:      "OpenTelemetry collector OTLP endpoint",
 			Group:            "telemetry",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1118,6 +1191,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: false,
 			Description:      "Database metrics collection interval in seconds",
 			Group:            "telemetry",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 
@@ -1132,6 +1206,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Enable global rate limiting",
 			Group:            "rate_limit",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1145,6 +1220,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Maximum requests per rate limit window",
 			Group:            "rate_limit",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1158,6 +1234,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Rate limit window expiry in seconds",
 			Group:            "rate_limit",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1171,6 +1248,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Maximum export requests per rate limit window",
 			Group:            "rate_limit",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1184,6 +1262,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Export rate limit window expiry in seconds",
 			Group:            "rate_limit",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1197,6 +1276,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Maximum dispatch requests per rate limit window",
 			Group:            "rate_limit",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1210,6 +1290,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Dispatch rate limit window expiry in seconds",
 			Group:            "rate_limit",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 
@@ -1225,6 +1306,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Infrastructure connection timeout in seconds",
 			Group:            "infrastructure",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1238,6 +1320,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Health check probe timeout in seconds",
 			Group:            "infrastructure",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 
@@ -1253,6 +1336,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Failed idempotency key retry window in seconds",
 			Group:            "idempotency",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1266,6 +1350,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Completed idempotency key cache TTL in hours",
 			Group:            "idempotency",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1279,6 +1364,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			Secret:           true,
 			Description:      "HMAC secret for signing idempotency keys before storage",
 			Group:            "idempotency",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactFull,
 		},
 
@@ -1294,6 +1380,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Maximum callbacks per external system per minute",
 			Group:            "callback_rate_limit",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 
@@ -1308,6 +1395,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Enable Fetcher-backed source discovery module",
 			Group:            "fetcher",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1320,6 +1408,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Fetcher service base URL",
 			Group:            "fetcher",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1332,6 +1421,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Allow Fetcher to connect to private IP addresses",
 			Group:            "fetcher",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1345,6 +1435,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Fetcher health check timeout in seconds",
 			Group:            "fetcher",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1358,6 +1449,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Fetcher HTTP request timeout in seconds",
 			Group:            "fetcher",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1371,6 +1463,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Fetcher source discovery polling interval in seconds",
 			Group:            "fetcher",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1384,6 +1477,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Fetcher schema cache TTL in seconds",
 			Group:            "fetcher",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1397,6 +1491,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Fetcher extraction job polling interval in seconds",
 			Group:            "fetcher",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1410,6 +1505,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Fetcher extraction job timeout in seconds",
 			Group:            "fetcher",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 
@@ -1425,6 +1521,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Deduplication key TTL in seconds",
 			Group:            "deduplication",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 
@@ -1439,6 +1536,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "S3-compatible object storage endpoint URL",
 			Group:            "object_storage",
+			Component:        "s3",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1451,6 +1549,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Object storage region",
 			Group:            "object_storage",
+			Component:        "s3",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1463,6 +1562,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Object storage bucket name for exports",
 			Group:            "object_storage",
+			Component:        "s3",
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1476,6 +1576,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			Secret:           true,
 			Description:      "Object storage access key ID",
 			Group:            "object_storage",
+			Component:        "s3",
 			RedactPolicy:     domain.RedactFull,
 		},
 		{
@@ -1489,6 +1590,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			Secret:           true,
 			Description:      "Object storage secret access key",
 			Group:            "object_storage",
+			Component:        "s3",
 			RedactPolicy:     domain.RedactFull,
 		},
 		{
@@ -1501,6 +1603,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Use path-style addressing for object storage requests",
 			Group:            "object_storage",
+			Component:        "s3",
 			RedactPolicy:     domain.RedactNone,
 		},
 
@@ -1515,6 +1618,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Enable the export worker background processor",
 			Group:            "export_worker",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1528,6 +1632,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Export worker polling interval in seconds",
 			Group:            "export_worker",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1541,6 +1646,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Number of rows per page in export queries",
 			Group:            "export_worker",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1554,6 +1660,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Pre-signed URL expiry for export downloads in seconds",
 			Group:            "export_worker",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 
@@ -1569,6 +1676,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Default HTTP timeout for webhook dispatches in seconds",
 			Group:            "webhook",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 
@@ -1583,6 +1691,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Enable the cleanup worker background processor",
 			Group:            "cleanup_worker",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1596,6 +1705,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Cleanup worker execution interval in seconds",
 			Group:            "cleanup_worker",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1609,6 +1719,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Number of items per cleanup batch",
 			Group:            "cleanup_worker",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1622,6 +1733,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Grace period before cleanup of expired items in seconds",
 			Group:            "cleanup_worker",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 
@@ -1637,6 +1749,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Scheduler tick interval in seconds",
 			Group:            "scheduler",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 
@@ -1651,6 +1764,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Enable the audit log archival worker",
 			Group:            "archival",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1664,6 +1778,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Archival worker execution interval in hours",
 			Group:            "archival",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1677,6 +1792,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Days to retain audit logs in hot storage before archival",
 			Group:            "archival",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1690,6 +1806,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Months to retain audit logs in warm storage",
 			Group:            "archival",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1703,6 +1820,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Months to retain audit logs in cold storage",
 			Group:            "archival",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1716,6 +1834,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Number of audit log records per archival batch",
 			Group:            "archival",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1728,6 +1847,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Object storage bucket for archived audit logs",
 			Group:            "archival",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1740,6 +1860,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Object storage key prefix for archived audit logs",
 			Group:            "archival",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1752,6 +1873,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Object storage class for archived audit logs",
 			Group:            "archival",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1765,6 +1887,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Number of future partitions to pre-create for audit log tables",
 			Group:            "archival",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
@@ -1778,6 +1901,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Pre-signed URL expiry for archive downloads in seconds",
 			Group:            "archival",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 	}
