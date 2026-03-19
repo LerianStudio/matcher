@@ -4,164 +4,48 @@
 
 package bootstrap
 
-// defaultConfig returns a Config populated with sensible defaults. These defaults
-// MUST stay in sync with the envDefault struct tags on Config fields and the
-// systemplane key definitions in systemplane_keys.go — all three sources must
-// produce equivalent baseline values.
+import (
+	"time"
+
+	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
+)
+
+// defaultConfig returns a Config populated with sensible defaults derived from
+// the systemplane key definitions in matcherKeyDefs(). The KeyDef slice is the
+// SINGLE SOURCE OF TRUTH for all default values — this function builds a
+// synthetic snapshot from those definitions and hydrates a *Config through the
+// same configFromSnapshot path used at runtime.
 //
-// Dev-mode passwords (e.g., matcher_dev_password) are included for zero-config
-// local development. In production, these are rejected by validateProductionConfig
-// and must be overridden via environment variables.
+// This eliminates the former triple-source-of-truth problem where defaults
+// had to be kept in sync between defaultConfig(), matcherKeyDefs(), and
+// envDefault struct tags. Now matcherKeyDefs() is the canonical source.
 //
-// Logger and ShutdownGracePeriod are left as zero values; they are set during bootstrap.
-//
-//nolint:mnd,funlen // This function defines configuration defaults — numeric literals and length are inherent.
+// Logger and ShutdownGracePeriod are left as zero values; they are set
+// during bootstrap.
 func defaultConfig() *Config {
-	return &Config{
-		App: AppConfig{
-			EnvName:  "development",
-			LogLevel: "info",
-		},
-		Server: ServerConfig{
-			Address:               ":4018",
-			BodyLimitBytes:        104857600,
-			CORSAllowedOrigins:    "http://localhost:3000",
-			CORSAllowedMethods:    "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-			CORSAllowedHeaders:    "Origin,Content-Type,Accept,Authorization,X-Request-ID",
-			TLSTerminatedUpstream: false,
-		},
-		Tenancy: TenancyConfig{
-			DefaultTenantID:                     "11111111-1111-1111-1111-111111111111",
-			DefaultTenantSlug:                   "default",
-			MultiTenantEnabled:                  false,
-			MultiTenantEnvironment:              "",
-			MultiTenantMaxTenantPools:           100,
-			MultiTenantIdleTimeoutSec:           300,
-			MultiTenantCircuitBreakerThreshold:  5,
-			MultiTenantCircuitBreakerTimeoutSec: 30,
-			MultiTenantInfraEnabled:             false,
-		},
-		Postgres: PostgresConfig{ //nolint:gosec // G101: Dev-mode defaults for zero-config local development; rejected by validateProductionConfig in production.
-			PrimaryHost:         "localhost",
-			PrimaryPort:         "5432",
-			PrimaryUser:         "matcher",
-			PrimaryPassword:     "matcher_dev_password",
-			PrimaryDB:           "matcher",
-			PrimarySSLMode:      "disable",
-			MaxOpenConnections:  25,
-			MaxIdleConnections:  5,
-			ConnMaxLifetimeMins: 30,
-			ConnMaxIdleTimeMins: 5,
-			ConnectTimeoutSec:   10,
-			QueryTimeoutSec:     30,
-			MigrationsPath:      "migrations",
-		},
-		Redis: RedisConfig{
-			Host:           "localhost:6379",
-			DB:             0,
-			Protocol:       3,
-			TLS:            false,
-			PoolSize:       10,
-			MinIdleConn:    2,
-			ReadTimeoutMs:  3000,
-			WriteTimeoutMs: 3000,
-			DialTimeoutMs:  5000,
-		},
-		RabbitMQ: RabbitMQConfig{ //nolint:gosec // G101: Dev-mode defaults for zero-config local development; rejected by validateProductionConfig in production.
-			URI:                      "amqp",
-			Host:                     "localhost",
-			Port:                     "5672",
-			User:                     "matcher_admin",
-			Password:                 "matcher_dev_password",
-			VHost:                    "/",
-			HealthURL:                "http://localhost:15672",
-			AllowInsecureHealthCheck: false,
-		},
-		Auth: AuthConfig{
-			Enabled: false,
-		},
-		Swagger: SwaggerConfig{
-			Enabled: false,
-			Schemes: "https",
-		},
-		Telemetry: TelemetryConfig{
-			Enabled:              false,
-			ServiceName:          "matcher",
-			LibraryName:          "github.com/LerianStudio/matcher",
-			ServiceVersion:       "1.0.0",
-			DeploymentEnv:        "development",
-			CollectorEndpoint:    "localhost:4317",
-			DBMetricsIntervalSec: 15,
-		},
-		RateLimit: RateLimitConfig{
-			Enabled:           true,
-			Max:               100,
-			ExpirySec:         60,
-			ExportMax:         10,
-			ExportExpirySec:   60,
-			DispatchMax:       50,
-			DispatchExpirySec: 60,
-		},
-		Infrastructure: InfrastructureConfig{
-			ConnectTimeoutSec:     30,
-			HealthCheckTimeoutSec: 5,
-		},
-		Idempotency: IdempotencyConfig{
-			RetryWindowSec:  300,
-			SuccessTTLHours: 168,
-		},
-		Dedupe: DedupeConfig{
-			TTLSec: 3600,
-		},
-		ObjectStorage: ObjectStorageConfig{
-			Endpoint:     "http://localhost:8333",
-			Region:       "us-east-1",
-			Bucket:       "matcher-exports",
-			UsePathStyle: true,
-		},
-		ExportWorker: ExportWorkerConfig{
-			Enabled:          true,
-			PollIntervalSec:  5,
-			PageSize:         1000,
-			PresignExpirySec: 3600,
-		},
-		CleanupWorker: CleanupWorkerConfig{
-			Enabled:        true,
-			IntervalSec:    3600,
-			BatchSize:      100,
-			GracePeriodSec: 3600,
-		},
-		Scheduler: SchedulerConfig{
-			IntervalSec: 60,
-		},
-		Archival: ArchivalConfig{
-			Enabled:             false,
-			IntervalHours:       24,
-			HotRetentionDays:    90,
-			WarmRetentionMonths: 24,
-			ColdRetentionMonths: 84,
-			BatchSize:           5000,
-			StoragePrefix:       "archives/audit-logs",
-			StorageClass:        "GLACIER",
-			PartitionLookahead:  3,
-			PresignExpirySec:    3600,
-		},
-		Webhook: WebhookConfig{
-			TimeoutSec: 30,
-		},
-		CallbackRateLimit: CallbackRateLimitConfig{
-			PerMinute: 60,
-		},
-		Fetcher: FetcherConfig{
-			Enabled:              false,
-			URL:                  "http://localhost:4006",
-			AllowPrivateIPs:      false,
-			HealthTimeoutSec:     5,
-			RequestTimeoutSec:    30,
-			DiscoveryIntervalSec: 60,
-			SchemaCacheTTLSec:    300,
-			ExtractionPollSec:    5,
-			ExtractionTimeoutSec: 600,
-		},
+	return configFromSnapshot(defaultSnapshotFromKeyDefs(matcherKeyDefs()))
+}
+
+// defaultSnapshotFromKeyDefs builds a synthetic Snapshot containing only
+// registry default values. This snapshot is used to derive the initial
+// *Config through snapshotToFullConfig, ensuring the default config is
+// computed from the same key definitions used at runtime.
+func defaultSnapshotFromKeyDefs(defs []domain.KeyDef) domain.Snapshot {
+	configs := make(map[string]domain.EffectiveValue, len(defs))
+
+	for _, def := range defs {
+		// Include all keys regardless of Kind — snapshotToFullConfig reads
+		// from snap.Configs for all runtime-managed fields.
+		configs[def.Key] = domain.EffectiveValue{
+			Key:     def.Key,
+			Value:   def.DefaultValue,
+			Default: def.DefaultValue,
+			Source:  "registry-default",
+		}
+	}
+
+	return domain.Snapshot{
+		Configs: configs,
+		BuiltAt: time.Now().UTC(),
 	}
 }

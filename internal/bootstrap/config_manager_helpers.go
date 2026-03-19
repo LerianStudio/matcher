@@ -11,9 +11,12 @@ import (
 
 // floatEqualityTolerance is the maximum absolute difference for two floating-point
 // numbers to be considered equivalent in config value comparisons.
-const floatEqualityTolerance = 1e-9 //nolint:unused // Used by valuesEquivalent (reachable only from unit tests with build tag: unit).
+const floatEqualityTolerance = 1e-9
 
-func valuesEquivalent(left, right any) bool { //nolint:unused // Called from unit tests (build tag: unit).
+// valuesEquivalent compares two any-typed values for semantic equality,
+// handling numeric type coercion (int vs float64 from JSON deserialization)
+// and falling back to reflect.DeepEqual for all other types.
+func valuesEquivalent(left, right any) bool {
 	leftNumber, leftIsNumber := toFloat64(left)
 	rightNumber, rightIsNumber := toFloat64(right)
 

@@ -6,43 +6,45 @@ package bootstrap
 
 import "github.com/LerianStudio/matcher/pkg/systemplane/domain"
 
-// snapshotToFullConfig builds a complete *Config from a systemplane snapshot,
-// copying bootstrap-only fields from oldCfg and populating all runtime-managed
-// fields from the snapshot. This is the reverse of the seed migration:
-// SeedStore() writes Config → Store; snapshotToFullConfig reads Store → Config.
-//
-// Uses snapString/snapInt/snapBool from systemplane_factory.go (same package).
+// configFromSnapshot hydrates every Config field from the snapshot alone, with
+// no dependency on a previous Config. This is the pure hydration path — used by
+// defaultConfig() to derive defaults from KeyDefs and by snapshotToFullConfig
+// as the first step before overlaying bootstrap-only values.
 //
 //nolint:funlen // Full config hydration is inherently large; splitting would hurt auditability.
-func snapshotToFullConfig(snap domain.Snapshot, oldCfg *Config) *Config {
-	if oldCfg == nil {
-		oldCfg = defaultConfig()
-	}
-
+func configFromSnapshot(snap domain.Snapshot) *Config {
 	cfg := &Config{}
 
-	// --- Bootstrap-only fields (copied from previous config). ---
-	cfg.App.EnvName = oldCfg.App.EnvName
-	cfg.Server.Address = oldCfg.Server.Address
-	cfg.Server.TLSCertFile = oldCfg.Server.TLSCertFile
-	cfg.Server.TLSKeyFile = oldCfg.Server.TLSKeyFile
-	cfg.Server.TLSTerminatedUpstream = oldCfg.Server.TLSTerminatedUpstream
-	cfg.Server.TrustedProxies = oldCfg.Server.TrustedProxies
-	cfg.Auth = oldCfg.Auth
-	cfg.Telemetry = oldCfg.Telemetry
-	cfg.Logger = oldCfg.Logger
-	cfg.ShutdownGracePeriod = oldCfg.ShutdownGracePeriod
-
-	// --- Runtime-managed fields from snapshot. ---
+	// --- All fields from snapshot. ---
 
 	// App.
+	cfg.App.EnvName = snapString(snap, "app.env_name", "")
 	cfg.App.LogLevel = snapString(snap, "app.log_level", defaultLogLevel)
 
 	// Server.
+	cfg.Server.Address = snapString(snap, "server.address", "")
+	cfg.Server.TLSCertFile = snapString(snap, "server.tls_cert_file", "")
+	cfg.Server.TLSKeyFile = snapString(snap, "server.tls_key_file", "")
+	cfg.Server.TLSTerminatedUpstream = snapBool(snap, "server.tls_terminated_upstream", false)
+	cfg.Server.TrustedProxies = snapString(snap, "server.trusted_proxies", "")
 	cfg.Server.BodyLimitBytes = snapInt(snap, "server.body_limit_bytes", defaultKeyBodyLimitBytes)
 	cfg.Server.CORSAllowedOrigins = snapString(snap, "server.cors_allowed_origins", defaultCORSAllowedOrigins)
 	cfg.Server.CORSAllowedMethods = snapString(snap, "server.cors_allowed_methods", defaultCORSAllowedMethods)
 	cfg.Server.CORSAllowedHeaders = snapString(snap, "server.cors_allowed_headers", defaultCORSAllowedHeaders)
+
+	// Auth (bootstrap-only in practice, but hydrated from snapshot for defaults).
+	cfg.Auth.Enabled = snapBool(snap, "auth.enabled", false)
+	cfg.Auth.Host = snapString(snap, "auth.host", "")
+	cfg.Auth.TokenSecret = snapString(snap, "auth.token_secret", "")
+
+	// Telemetry (bootstrap-only in practice, but hydrated from snapshot for defaults).
+	cfg.Telemetry.Enabled = snapBool(snap, "telemetry.enabled", false)
+	cfg.Telemetry.ServiceName = snapString(snap, "telemetry.service_name", "")
+	cfg.Telemetry.LibraryName = snapString(snap, "telemetry.library_name", "")
+	cfg.Telemetry.ServiceVersion = snapString(snap, "telemetry.service_version", "")
+	cfg.Telemetry.DeploymentEnv = snapString(snap, "telemetry.deployment_env", "")
+	cfg.Telemetry.CollectorEndpoint = snapString(snap, "telemetry.collector_endpoint", "")
+	cfg.Telemetry.DBMetricsIntervalSec = snapInt(snap, "telemetry.db_metrics_interval_sec", 0)
 
 	// Tenancy.
 	cfg.Tenancy.DefaultTenantID = snapString(snap, "tenancy.default_tenant_id", defaultTenantID)
@@ -180,6 +182,40 @@ func snapshotToFullConfig(snap domain.Snapshot, oldCfg *Config) *Config {
 	cfg.Archival.StoragePrefix = snapString(snap, "archival.storage_prefix", defaultArchivalStoragePrefix)
 	cfg.Archival.StorageClass = snapString(snap, "archival.storage_class", defaultArchivalStorageClass)
 	cfg.Archival.PresignExpirySec = snapInt(snap, "archival.presign_expiry_sec", defaultArchivalPresignExpiry)
+
+	return cfg
+}
+
+// snapshotToFullConfig builds a complete *Config from a systemplane snapshot,
+// hydrating all fields from the snapshot and then overlaying bootstrap-only
+// fields from oldCfg (which are immutable after startup).
+//
+// This two-step composition:
+//  1. configFromSnapshot(snap) — hydrates every field from snapshot values
+//  2. overlay bootstrap-only fields from oldCfg — they never change at runtime
+//
+// cleanly separates the default-derivation path (where configFromSnapshot is
+// called standalone) from the runtime-hydration path (where bootstrap-only
+// fields must be preserved from the running config).
+func snapshotToFullConfig(snap domain.Snapshot, oldCfg *Config) *Config {
+	// Step 1: hydrate everything from the snapshot.
+	cfg := configFromSnapshot(snap)
+
+	// Step 2: overlay bootstrap-only fields from the running config.
+	if oldCfg == nil {
+		return cfg
+	}
+
+	cfg.App.EnvName = oldCfg.App.EnvName
+	cfg.Server.Address = oldCfg.Server.Address
+	cfg.Server.TLSCertFile = oldCfg.Server.TLSCertFile
+	cfg.Server.TLSKeyFile = oldCfg.Server.TLSKeyFile
+	cfg.Server.TLSTerminatedUpstream = oldCfg.Server.TLSTerminatedUpstream
+	cfg.Server.TrustedProxies = oldCfg.Server.TrustedProxies
+	cfg.Auth = oldCfg.Auth
+	cfg.Telemetry = oldCfg.Telemetry
+	cfg.Logger = oldCfg.Logger
+	cfg.ShutdownGracePeriod = oldCfg.ShutdownGracePeriod
 
 	return cfg
 }

@@ -13,6 +13,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
 )
 
 func TestDefaultConfig_NotNil(t *testing.T) {
@@ -330,6 +332,90 @@ func TestDefaultConfig_SyncWithEnvDefaultTags(t *testing.T) {
 	cfg := defaultConfig()
 
 	walkAndCompare(t, "", reflect.TypeOf(*cfg), reflect.ValueOf(*cfg))
+}
+
+// ---------------------------------------------------------------------------
+// defaultSnapshotFromKeyDefs tests
+// ---------------------------------------------------------------------------
+
+func TestDefaultSnapshotFromKeyDefs_AllKeysPresent(t *testing.T) {
+	t.Parallel()
+
+	defs := matcherKeyDefs()
+	snap := defaultSnapshotFromKeyDefs(defs)
+
+	assert.Equal(t, len(defs), len(snap.Configs),
+		"snapshot should contain one config entry per key definition")
+
+	for _, def := range defs {
+		ev, exists := snap.Configs[def.Key]
+		require.True(t, exists, "snapshot missing key %q", def.Key)
+		assert.Equal(t, def.DefaultValue, ev.Default,
+			"key %q: Default should match KeyDef.DefaultValue", def.Key)
+		assert.Equal(t, def.DefaultValue, ev.Value,
+			"key %q: Value should match KeyDef.DefaultValue", def.Key)
+	}
+}
+
+func TestDefaultSnapshotFromKeyDefs_SourceIsRegistryDefault(t *testing.T) {
+	t.Parallel()
+
+	defs := matcherKeyDefs()
+	snap := defaultSnapshotFromKeyDefs(defs)
+
+	for key, ev := range snap.Configs {
+		assert.Equal(t, "registry-default", ev.Source,
+			"key %q: Source should be 'registry-default', got %q", key, ev.Source)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// configFromSnapshot tests
+// ---------------------------------------------------------------------------
+
+func TestConfigFromSnapshot_EmptySnapshot(t *testing.T) {
+	t.Parallel()
+
+	snap := domain.Snapshot{Configs: map[string]domain.EffectiveValue{}}
+
+	cfg := configFromSnapshot(snap)
+
+	require.NotNil(t, cfg, "configFromSnapshot should return non-nil Config even for empty snapshot")
+
+	// Empty snapshot → bootstrap fields should be zero-value (no snapshot entries).
+	assert.Empty(t, cfg.App.EnvName, "EnvName should be empty with empty snapshot")
+	assert.Empty(t, cfg.Server.Address, "Server.Address should be empty with empty snapshot")
+
+	// Runtime fields with hardcoded fallbacks should have those fallbacks.
+	assert.Equal(t, defaultCORSAllowedOrigins, cfg.Server.CORSAllowedOrigins,
+		"CORSAllowedOrigins should fall back to default")
+	assert.Equal(t, defaultPGHost, cfg.Postgres.PrimaryHost,
+		"Postgres.PrimaryHost should fall back to default")
+}
+
+func TestConfigFromSnapshot_PopulatedSnapshot(t *testing.T) {
+	t.Parallel()
+
+	snap := domain.Snapshot{
+		Configs: map[string]domain.EffectiveValue{
+			"app.env_name":            {Key: "app.env_name", Value: "staging"},
+			"app.log_level":           {Key: "app.log_level", Value: "warn"},
+			"postgres.primary_host":   {Key: "postgres.primary_host", Value: "db.staging.example.com"},
+			"redis.host":              {Key: "redis.host", Value: "redis.staging:6380"},
+			"rate_limit.max":          {Key: "rate_limit.max", Value: 500},
+			"server.body_limit_bytes": {Key: "server.body_limit_bytes", Value: 2048},
+		},
+	}
+
+	cfg := configFromSnapshot(snap)
+
+	require.NotNil(t, cfg)
+	assert.Equal(t, "staging", cfg.App.EnvName)
+	assert.Equal(t, "warn", cfg.App.LogLevel)
+	assert.Equal(t, "db.staging.example.com", cfg.Postgres.PrimaryHost)
+	assert.Equal(t, "redis.staging:6380", cfg.Redis.Host)
+	assert.Equal(t, 500, cfg.RateLimit.Max)
+	assert.Equal(t, 2048, cfg.Server.BodyLimitBytes)
 }
 
 // walkAndCompare recursively walks a struct type, and for each field with an envDefault
