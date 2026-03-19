@@ -11,6 +11,7 @@ import (
 	"errors"
 	"testing"
 
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -371,7 +372,7 @@ func TestStartChangeFeed_NilFeed(t *testing.T) {
 func TestInitSystemplane_NilConfig(t *testing.T) {
 	t.Parallel()
 
-	result, err := InitSystemplane(context.Background(), nil, nil, nil)
+	result, err := InitSystemplane(context.Background(), nil, nil, nil, nil)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrConfigNil)
@@ -425,6 +426,30 @@ func TestSeedStoreForInitialReload_UnexpectedSeedError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "seed store")
 	assert.False(t, cm.InSeedMode())
+}
+
+// ---------------------------------------------------------------------------
+// reloadObserver
+// ---------------------------------------------------------------------------
+
+func TestReloadObserver_NilLogger_ReturnsNil(t *testing.T) {
+	t.Parallel()
+
+	obs := reloadObserver(context.Background(), nil)
+
+	assert.Nil(t, obs, "reloadObserver should return nil when logger is nil")
+}
+
+func TestReloadObserver_WithLogger_ReturnsCallback(t *testing.T) {
+	t.Parallel()
+
+	obs := reloadObserver(context.Background(), &libLog.NopLogger{})
+
+	require.NotNil(t, obs, "reloadObserver should return a non-nil callback when logger is present")
+
+	// Should not panic when called.
+	obs(service.ReloadEvent{Strategy: service.BuildStrategyFull, Reason: "test"})
+	obs(service.ReloadEvent{Strategy: service.BuildStrategyIncremental, Reason: "config-change"})
 }
 
 // ---------------------------------------------------------------------------

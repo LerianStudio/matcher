@@ -650,7 +650,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 
 	var cancelChangeFeed context.CancelFunc
 
-	spComponents, spErr := InitSystemplane(ctx, cfg, configManager, wm)
+	spComponents, spErr := InitSystemplane(ctx, cfg, configManager, wm, logger)
 	if spErr != nil {
 		logger.Log(ctx, libLog.LevelWarn, "systemplane initialization failed, continuing without systemplane",
 			libLog.String("error", spErr.Error()))

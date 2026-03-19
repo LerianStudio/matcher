@@ -12,6 +12,7 @@ import (
 	"net"
 	"os"
 
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
 
 	spBootstrap "github.com/LerianStudio/matcher/pkg/systemplane/bootstrap"
@@ -171,7 +172,7 @@ func loadSystemplaneMongoConfig() *spBootstrap.MongoBootstrapConfig {
 //
 // On any error the function cleans up partially-created resources before
 // returning so the caller does not need to track intermediate state.
-func InitSystemplane(ctx context.Context, cfg *Config, configManager *ConfigManager, workerManager *WorkerManager) (*SystemplaneComponents, error) {
+func InitSystemplane(ctx context.Context, cfg *Config, configManager *ConfigManager, workerManager *WorkerManager, logger libLog.Logger) (*SystemplaneComponents, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("init systemplane: %w", ErrConfigNil)
 	}
@@ -239,6 +240,7 @@ func InitSystemplane(ctx context.Context, cfg *Config, configManager *ConfigMana
 		Builder:     builder,
 		Factory:     factory,
 		Reconcilers: reconcilers,
+		Observer:    reloadObserver(ctx, logger),
 	})
 	if err != nil {
 		_ = backend.Closer.Close()
@@ -308,16 +310,31 @@ func seedStoreForInitialReload(
 	return fmt.Errorf("seed store: %w", seedErr)
 }
 
+// reloadObserver returns a callback that logs each reload event with the build
+// strategy used. Returns nil if the logger is nil (observer is optional).
+// The callback uses context.Background() rather than capturing the startup ctx,
+// which may be cancelled before subsequent reloads occur.
+func reloadObserver(_ context.Context, logger libLog.Logger) func(service.ReloadEvent) {
+	if logger == nil {
+		return nil
+	}
+
+	return func(event service.ReloadEvent) {
+		logger.Log(context.Background(), libLog.LevelInfo, "systemplane reload completed",
+			libLog.String("strategy", string(event.Strategy)),
+			libLog.String("reason", event.Reason))
+	}
+}
+
 // buildReconcilers creates the set of BundleReconcilers that the supervisor
-// uses on each reload. The config bridge reconciler runs first so
-// configManager.Get() is up-to-date for any downstream reconciler that reads
-// it. The HTTP policy reconciler is always present; the worker reconciler is
-// added only when a WorkerManager is available.
+// uses on each reload. Execution order is determined by each reconciler's
+// Phase() — StateSync runs first, then Validation, then SideEffect.
+// Registration order within the same phase is preserved (stable sort).
 func buildReconcilers(configManager *ConfigManager, workerManager *WorkerManager) ([]ports.BundleReconciler, error) {
 	var reconcilers []ports.BundleReconciler
 
-	// Config bridge runs first so configManager.Get() is up-to-date
-	// for any downstream reconciler that reads it.
+	// Config bridge (PhaseStateSync) — must be present so configManager.Get()
+	// is up-to-date before downstream reconcilers run.
 	if configManager != nil {
 		configBridge, err := NewConfigBridgeReconciler(configManager)
 		if err != nil {
