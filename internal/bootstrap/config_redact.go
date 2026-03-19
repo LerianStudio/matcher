@@ -19,7 +19,7 @@ import (
 // contain terms like "uri" or "key" without being secrets themselves
 // (`rabbitmq.uri`, `server.tls_key_file`). URI-shaped values still receive
 // credential redaction via redactCredentialURI.
-var sensitiveConfigKeys = map[string]bool{
+var sensitiveConfigKeys = map[string]bool{ //nolint:unused // Used by isSensitiveKey; reachable from config_schema.go (test-only) and diffConfigs (test-only).
 	"postgres.primary_password":            true,
 	"postgres.replica_password":            true,
 	"redis.password":                       true,
@@ -39,7 +39,7 @@ var sensitiveConfigKeys = map[string]bool{
 //
 // Secret fields (passwords, tokens, secrets) are redacted in the diff output
 // to prevent credential leakage in API responses and audit logs.
-func diffConfigs(oldCfg, newCfg *Config) []ConfigChange {
+func diffConfigs(oldCfg, newCfg *Config) []ConfigChange { //nolint:unused // Called from config_manager_test.go and config_redact_test.go.
 	if oldCfg == nil || newCfg == nil {
 		return []ConfigChange{}
 	}
@@ -56,7 +56,7 @@ func diffConfigs(oldCfg, newCfg *Config) []ConfigChange {
 //
 // maxDiffDepth guards against hypothetical pointer cycles; Config has none today
 // but the guard is cheap insurance against future struct evolution.
-func diffConfigsRecursive(oldVal, newVal reflect.Value, prefix string, changes *[]ConfigChange) {
+func diffConfigsRecursive(oldVal, newVal reflect.Value, prefix string, changes *[]ConfigChange) { //nolint:unused // Called from diffConfigs (test-only).
 	const maxDiffDepth = 10
 
 	if depthFromPrefix(prefix) > maxDiffDepth {
@@ -104,7 +104,7 @@ func diffConfigsRecursive(oldVal, newVal reflect.Value, prefix string, changes *
 
 // depthFromPrefix counts the nesting depth by counting dots in the key prefix.
 // An empty prefix is depth 0, "rate_limit" is depth 1, "a.b.c" is depth 3.
-func depthFromPrefix(prefix string) int {
+func depthFromPrefix(prefix string) int { //nolint:unused // Called from diffConfigsRecursive (test-only).
 	if prefix == "" {
 		return 0
 	}
@@ -116,12 +116,12 @@ func depthFromPrefix(prefix string) int {
 //
 // loadConfigFromEnv() uses SetConfigFromEnvVars which sets EVERY field from its
 // env tag, even when the env var is absent (resulting in the zero value). This
-// obliterates values from YAML/defaults. This function walks the nested structs
+// obliterates values from defaultConfig(). This function walks the nested structs
 // and restores any field that was non-zero in snapshot but became zero in dst.
 //
 // When an env var is explicitly present (even as an empty string), restore is
-// skipped for that field so operators can intentionally override YAML/default
-// values to zero values ("", 0, false).
+// skipped for that field so operators can intentionally override default values
+// to zero values ("", 0, false).
 func restoreZeroedFields(dst, snapshot *Config) {
 	if dst == nil || snapshot == nil {
 		return
@@ -166,7 +166,7 @@ func restoreZeroedFieldsRecursive(dst, snapshot reflect.Value, depth int) {
 
 		// Interaction with envDefault tags: lib-commons' SetConfigFromEnvVars may
 		// set fields to zero when the corresponding env var is absent. The snapshot
-		// comparison here restores YAML-defined values that were incorrectly zeroed.
+		// comparison here restores default values that were incorrectly zeroed.
 		// This relies on envDefault values in struct tags being aligned with
 		// defaultConfig() values — misalignment would cause surprising behavior.
 		//
@@ -197,7 +197,7 @@ func hasExplicitEnvOverride(field reflect.StructField) bool {
 
 // redactIfSensitive returns "***REDACTED***" if the key matches a sensitive
 // field pattern, otherwise returns the value unchanged.
-func redactIfSensitive(key string, value any) any {
+func redactIfSensitive(key string, value any) any { //nolint:unused // Called from diffConfigsRecursive (test-only) and directly from tests.
 	if isSensitiveKey(key) {
 		return "***REDACTED***"
 	}
@@ -210,7 +210,7 @@ func redactIfSensitive(key string, value any) any {
 // pass atomic version counters to structured logger fields that expect int.
 // Config version counters will never reach this limit in practice, but gosec
 // requires the bounds check.
-func safeUint64ToInt(version uint64) int {
+func safeUint64ToInt(version uint64) int { //nolint:unused // Called from config_manager_test.go.
 	if version > uint64(math.MaxInt) {
 		return math.MaxInt
 	}
@@ -220,11 +220,11 @@ func safeUint64ToInt(version uint64) int {
 
 // isSensitiveKey returns true if the given mapstructure key contains a
 // sensitive fragment (password, secret, token).
-func isSensitiveKey(key string) bool {
+func isSensitiveKey(key string) bool { //nolint:unused // Called from config_schema.go (test-only) and redactIfSensitive.
 	return sensitiveConfigKeys[strings.ToLower(key)]
 }
 
-func redactCredentialURI(value any) any {
+func redactCredentialURI(value any) any { //nolint:unused // Called from redactIfSensitive and directly from tests.
 	str, ok := value.(string)
 	if !ok || str == "" {
 		return value

@@ -60,7 +60,7 @@ func TestConfigManager_SeedMode_DefaultOff(t *testing.T) {
 	t.Parallel()
 
 	cfg := defaultConfig()
-	cm, err := NewConfigManager(cfg, "", nil)
+	cm, err := NewConfigManager(cfg, nil)
 	require.NoError(t, err)
 
 	assert.False(t, cm.InSeedMode(), "new ConfigManager should not be in seed mode")
@@ -70,7 +70,7 @@ func TestConfigManager_EnterSeedMode(t *testing.T) {
 	t.Parallel()
 
 	cfg := defaultConfig()
-	cm, err := NewConfigManager(cfg, "", nil)
+	cm, err := NewConfigManager(cfg, nil)
 	require.NoError(t, err)
 
 	cm.enterSeedMode()
@@ -82,7 +82,7 @@ func TestConfigManager_EnterSeedMode_Idempotent(t *testing.T) {
 	t.Parallel()
 
 	cfg := defaultConfig()
-	cm, err := NewConfigManager(cfg, "", nil)
+	cm, err := NewConfigManager(cfg, nil)
 	require.NoError(t, err)
 
 	cm.enterSeedMode()
@@ -95,7 +95,7 @@ func TestConfigManager_Reload_InSeedMode(t *testing.T) {
 	t.Parallel()
 
 	cfg := defaultConfig()
-	cm, err := NewConfigManager(cfg, "", &testLogger{})
+	cm, err := NewConfigManager(cfg, &testLogger{})
 	require.NoError(t, err)
 
 	cm.enterSeedMode()
@@ -109,53 +109,13 @@ func TestConfigManager_Reload_InSeedMode(t *testing.T) {
 	assert.Zero(t, result.ChangesDetected)
 }
 
-func TestConfigManager_Subscribe_InSeedMode(t *testing.T) {
-	t.Parallel()
-
-	cfg := defaultConfig()
-	cm, err := NewConfigManager(cfg, "", &testLogger{})
-	require.NoError(t, err)
-
-	cm.enterSeedMode()
-
-	called := false
-	unsubscribe := cm.SubscribeWithUnsubscribeErr(func(_ *Config) error {
-		called = true
-		return nil
-	})
-
-	// Should return a no-op unsubscribe (safe to call).
-	assert.NotNil(t, unsubscribe)
-	unsubscribe()
-	assert.False(t, called, "subscriber should not be registered in seed mode")
-}
-
-func TestConfigManager_SubscribeWithUnsubscribe_InSeedMode(t *testing.T) {
-	t.Parallel()
-
-	cfg := defaultConfig()
-	cm, err := NewConfigManager(cfg, "", &testLogger{})
-	require.NoError(t, err)
-
-	cm.enterSeedMode()
-
-	called := false
-	unsubscribe := cm.SubscribeWithUnsubscribe(func(_ *Config) {
-		called = true
-	})
-
-	assert.NotNil(t, unsubscribe)
-	unsubscribe()
-	assert.False(t, called)
-}
-
 func TestConfigManager_Get_StillWorksInSeedMode(t *testing.T) {
 	t.Parallel()
 
 	cfg := defaultConfig()
 	cfg.App.LogLevel = "debug"
 
-	cm, err := NewConfigManager(cfg, "", nil)
+	cm, err := NewConfigManager(cfg, nil)
 	require.NoError(t, err)
 
 	cm.enterSeedMode()
@@ -386,7 +346,7 @@ func TestSeedStore_NoNonDefaultValues(t *testing.T) {
 	t.Parallel()
 
 	cfg := defaultConfig()
-	cm, err := NewConfigManager(cfg, "", &testLogger{})
+	cm, err := NewConfigManager(cfg, &testLogger{})
 	require.NoError(t, err)
 
 	store := &mockStore{}
@@ -418,7 +378,7 @@ func TestSeedStore_WithNonDefaultValues(t *testing.T) {
 	cfg.RateLimit.Max = 500       // Non-default
 	cfg.RateLimit.Enabled = false // Non-default (default is true)
 
-	cm, err := NewConfigManager(cfg, "", &testLogger{})
+	cm, err := NewConfigManager(cfg, &testLogger{})
 	require.NoError(t, err)
 
 	store := &mockStore{}
@@ -474,7 +434,7 @@ func TestSeedStore_StoreError(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.App.LogLevel = "debug" // Non-default
 
-	cm, err := NewConfigManager(cfg, "", &testLogger{})
+	cm, err := NewConfigManager(cfg, &testLogger{})
 	require.NoError(t, err)
 
 	store := &mockStore{putErr: fmt.Errorf("connection refused")}
@@ -504,7 +464,7 @@ func TestSeedStore_StoreAlreadyHasData(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.App.LogLevel = "debug" // Non-default, will generate a seed op
 
-	cm, err := NewConfigManager(cfg, "", &testLogger{})
+	cm, err := NewConfigManager(cfg, &testLogger{})
 	require.NoError(t, err)
 
 	// Simulate pre-existing data: the store returns a revision mismatch error
@@ -534,7 +494,7 @@ func TestSeedStore_NilConfig(t *testing.T) {
 	t.Parallel()
 
 	cfg := defaultConfig()
-	cm, err := NewConfigManager(cfg, "", &testLogger{})
+	cm, err := NewConfigManager(cfg, &testLogger{})
 	require.NoError(t, err)
 
 	// Force nil config for this edge case.
@@ -546,23 +506,4 @@ func TestSeedStore_NilConfig(t *testing.T) {
 	err = cm.SeedStore(context.Background(), store, reg)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "config is nil")
-}
-
-func TestReloadDebounced_InSeedMode(t *testing.T) {
-	t.Parallel()
-
-	cfg := defaultConfig()
-	cm, err := NewConfigManager(cfg, "", &testLogger{})
-	require.NoError(t, err)
-
-	cm.enterSeedMode()
-
-	// Should not panic or set a debounce timer.
-	cm.reloadDebounced()
-
-	cm.mu.Lock()
-	timer := cm.debounceTimer
-	cm.mu.Unlock()
-
-	assert.Nil(t, timer, "debounce timer should not be set in seed mode")
 }

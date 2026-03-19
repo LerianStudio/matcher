@@ -7,7 +7,7 @@
 package bootstrap
 
 // matcherOverrideEnvVarKeys lists every MATCHER_* environment variable that can
-// override YAML-managed config keys via Viper's AutomaticEnv path. The Makefile
+// override config keys via MATCHER_-prefixed environment variables. The Makefile
 // uses this list to scrub the full MATCHER_* override surface before unit tests.
 var matcherOverrideEnvVarKeys = []string{
 	"MATCHER_APP_ENV_NAME",

@@ -1277,31 +1277,8 @@ func TestWorkerManager_RegisterNilEnabledPredicate_DoesNotPanicOnNilConfig(t *te
 	})
 }
 
-func TestWorkerManager_ConfigManagerSubscriptionLifecycle(t *testing.T) {
-	// Not parallel: uses t.Setenv for config manager validation prerequisites.
-
-	cfg := defaultConfig()
-	t.Setenv("DEFAULT_TENANT_ID", cfg.Tenancy.DefaultTenantID)
-	t.Setenv("DEFAULT_TENANT_SLUG", cfg.Tenancy.DefaultTenantSlug)
-	cm, err := NewConfigManager(cfg, "", &libLog.NopLogger{})
-	require.NoError(t, err)
-	t.Cleanup(cm.Stop)
-
-	wm := NewWorkerManager(&libLog.NopLogger{}, cm)
-	wm.Register("export", func(_ *Config) (WorkerLifecycle, error) {
-		return &mockWorker{}, nil
-	}, alwaysEnabled, neverCritical)
-
-	beforeCount := len(cm.subscribers)
-	require.NoError(t, wm.Start(context.Background(), cfg))
-	assert.Len(t, cm.subscribers, beforeCount+1)
-
-	require.NoError(t, wm.Stop())
-	assert.Len(t, cm.subscribers, beforeCount)
-}
-
 // newWorkerMgrTestConfigManager creates a ConfigManager suitable for worker
-// manager tests without file watcher or YAML I/O.
+// manager tests without file I/O.
 func newWorkerMgrTestConfigManager(t *testing.T, cfg *Config) *ConfigManager {
 	t.Helper()
 

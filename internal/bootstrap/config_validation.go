@@ -21,6 +21,29 @@ const (
 	maxRateLimitWindowSeconds     = 86_400
 )
 
+// wellKnownDevCredentials lists passwords that are known development defaults.
+// These pass the not-empty and not-guest checks but must NEVER be used in production.
+// This list is intentionally kept in source code as a safety net — if a credential
+// appears here, production validation will reject it.
+var wellKnownDevCredentials = []string{
+	"matcher_dev_password",
+	"password",
+	"changeme",
+	"secret",
+}
+
+// isWellKnownDevCredential returns true if the given value matches a known development default.
+func isWellKnownDevCredential(value string) bool {
+	lower := strings.ToLower(strings.TrimSpace(value))
+	for _, blocked := range wellKnownDevCredentials {
+		if lower == blocked {
+			return true
+		}
+	}
+
+	return false
+}
+
 // Validate checks the configuration for required fields and production constraints.
 func (cfg *Config) Validate() error {
 	ctx := context.Background()
@@ -366,6 +389,12 @@ func (cfg *Config) validateProductionCoreConfig(asserter *assert.Asserter) error
 		return fmt.Errorf("production config validation: %w", err)
 	}
 
+	if err := asserter.That(ctx, !isWellKnownDevCredential(cfg.Postgres.PrimaryPassword),
+		"POSTGRES_PASSWORD must not use a well-known development default in production",
+		"password_hint", "set a strong, unique password via POSTGRES_PASSWORD env var"); err != nil {
+		return fmt.Errorf("production config validation: %w", err)
+	}
+
 	if err := asserter.That(ctx, strings.TrimSpace(cfg.Server.CORSAllowedOrigins) != "" && !strings.Contains(cfg.Server.CORSAllowedOrigins, "*"), "CORS_ALLOWED_ORIGINS must be restricted in production", "cors_origins", cfg.Server.CORSAllowedOrigins); err != nil {
 		return fmt.Errorf("production config validation: %w", err)
 	}
@@ -377,6 +406,12 @@ func (cfg *Config) validateProductionSecurityConfig(asserter *assert.Asserter) e
 	ctx := context.Background()
 
 	if err := asserter.That(ctx, !strings.EqualFold(strings.TrimSpace(cfg.RabbitMQ.User), "guest") && !strings.EqualFold(strings.TrimSpace(cfg.RabbitMQ.Password), "guest"), "RABBITMQ credentials must be set to non-default values in production"); err != nil {
+		return fmt.Errorf("production config validation: %w", err)
+	}
+
+	if err := asserter.That(ctx, !isWellKnownDevCredential(cfg.RabbitMQ.Password),
+		"RABBITMQ_PASSWORD must not use a well-known development default in production",
+		"password_hint", "set a strong, unique password via RABBITMQ_PASSWORD env var"); err != nil {
 		return fmt.Errorf("production config validation: %w", err)
 	}
 

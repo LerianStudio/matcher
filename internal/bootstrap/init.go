@@ -437,9 +437,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		return nil, fmt.Errorf("failed to load configuration: %w", err)
 	}
 
-	configFilePath := resolveConfigFilePath()
-
-	configManager, err := NewConfigManager(cfg, configFilePath, logger)
+	configManager, err := NewConfigManager(cfg, logger)
 	if err != nil {
 		return nil, fmt.Errorf("initialize config manager: %w", err)
 	}
@@ -641,18 +639,6 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 
 	done()
 
-	done = timer.track("runtime_config_wiring")
-
-	// Wire config audit callback for file watcher changes (independent of systemplane).
-	configAuditPublisher, err := NewConfigAuditPublisher(outboxPgRepo.NewRepository(infraProvider), logger)
-	if err != nil {
-		return nil, fmt.Errorf("initialize config audit publisher: %w", err)
-	}
-
-	SetAuditCallback(configManager, configAuditPublisher, governancePostgres.NewRepository(infraProvider), logger)
-
-	done()
-
 	// Build WorkerManager before systemplane — the worker reconciler needs it.
 	wm := buildWorkerManager(modules, configManager, logger)
 
@@ -664,23 +650,13 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 
 	var cancelChangeFeed context.CancelFunc
 
-	spComponents, spErr := InitSystemplane(ctx, cfg, wm)
+	spComponents, spErr := InitSystemplane(ctx, cfg, configManager, wm)
 	if spErr != nil {
 		logger.Log(ctx, libLog.LevelWarn, "systemplane initialization failed, continuing without systemplane",
 			libLog.String("error", spErr.Error()))
 	}
 
-	if spErr == nil { //nolint:nestif // Bootstrap initialization has inherent sequential dependency nesting.
-		// Seed the systemplane store with non-default values from the current config.
-		// This is a one-time migration that bridges file-based config to the systemplane store.
-		if configManager != nil && spComponents.Store != nil {
-			seedErr := configManager.SeedStore(ctx, spComponents.Store, spComponents.Registry)
-			if seedErr != nil {
-				logger.Log(ctx, libLog.LevelWarn, "systemplane seed failed",
-					libLog.String("error", seedErr.Error()))
-			}
-		}
-
+	if spErr == nil {
 		// Create snapshot reader for live-read config keys (rate limits, health check timeouts).
 		snapshotReader, err = NewSnapshotReader(spComponents.Supervisor)
 		if err != nil {
@@ -711,13 +687,8 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 	logStartupInfo(logger, cfg, infraStatus)
 	logStartupTiming(logger, timer)
 
-	// Start the ConfigManager file watcher AFTER all infrastructure connections
-	// are established and modules are initialized. This ordering guarantees that
-	// a bad YAML edit mid-init cannot trigger a reload before the service is ready.
-	// Register Stop() in cleanups so the watcher goroutine is torn down on shutdown.
+	// Register ConfigManager Stop() in cleanups so resources are torn down on shutdown.
 	if configManager != nil {
-		configManager.StartWatcher()
-
 		cleanups = append(cleanups, configManager.Stop)
 	}
 

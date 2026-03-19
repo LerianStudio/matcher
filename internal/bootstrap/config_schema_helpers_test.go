@@ -6,7 +6,7 @@
 
 package bootstrap
 
-// secretFields lists YAML keys whose values must be redacted.
+// secretFields lists config keys whose values must be redacted.
 // This is a test-only helper used to verify redaction behavior.
 var secretFields = map[string]bool{
 	"postgres.primary_password":            true,

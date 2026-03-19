@@ -45,6 +45,7 @@ const (
 	defaultPGHost            = "localhost"
 	defaultPGPort            = "5432"
 	defaultPGUser            = "matcher"
+	defaultPGPassword        = "matcher_dev_password" //nolint:gosec // G101: Dev-mode default; rejected by validateProductionConfig in production.
 	defaultPGDB              = "matcher"
 	defaultPGSSLMode         = "disable"
 	defaultPGMaxOpenConns    = 25
@@ -70,8 +71,8 @@ const (
 	defaultRabbitURI                 = "amqp"
 	defaultRabbitHost                = "localhost"
 	defaultRabbitPort                = "5672"
-	defaultRabbitUser                = "guest"
-	defaultRabbitPassword            = "guest"
+	defaultRabbitUser                = "matcher_admin"
+	defaultRabbitPassword            = "matcher_dev_password" //nolint:gosec // G101: Dev-mode default; rejected by validateProductionConfig in production.
 	defaultRabbitVHost               = "/"
 	defaultRabbitHealthURL           = "http://localhost:15672"
 	defaultRabbitAllowInsecureHealth = false
@@ -503,7 +504,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			Key:              "postgres.primary_password",
 			Kind:             domain.KindConfig,
 			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
-			DefaultValue:     "",
+			DefaultValue:     defaultPGPassword,
 			ValueType:        domain.ValueTypeString,
 			ApplyBehavior:    domain.ApplyBundleRebuild,
 			MutableAtRuntime: true,

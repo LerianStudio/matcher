@@ -268,7 +268,7 @@ func TestServiceResolveActiveConfig_UsesConfigManagerSnapshot(t *testing.T) {
 	managedCfg := defaultConfig()
 	managedCfg.App.LogLevel = "debug"
 
-	cm, err := NewConfigManager(managedCfg, "", &libLog.NopLogger{})
+	cm, err := NewConfigManager(managedCfg, &libLog.NopLogger{})
 	require.NoError(t, err)
 	t.Cleanup(cm.Stop)
 
@@ -306,7 +306,7 @@ func TestServiceRun_PropagatesWorkerManagerStartFailure(t *testing.T) {
 func TestServiceStopBackgroundWorkers_StopsConfigManagerBeforeWorkers(t *testing.T) {
 	t.Parallel()
 
-	cm, err := NewConfigManager(defaultConfig(), "", &libLog.NopLogger{})
+	cm, err := NewConfigManager(defaultConfig(), &libLog.NopLogger{})
 	require.NoError(t, err)
 	t.Cleanup(cm.Stop)
 

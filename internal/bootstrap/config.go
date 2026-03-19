@@ -79,7 +79,7 @@ type PostgresConfig struct {
 	PrimaryHost     string `env:"POSTGRES_HOST"     envDefault:"localhost" mapstructure:"primary_host"`
 	PrimaryPort     string `env:"POSTGRES_PORT"     envDefault:"5432"      mapstructure:"primary_port"`
 	PrimaryUser     string `env:"POSTGRES_USER"     envDefault:"matcher"   mapstructure:"primary_user"`
-	PrimaryPassword string `env:"POSTGRES_PASSWORD"                        mapstructure:"primary_password"`
+	PrimaryPassword string `env:"POSTGRES_PASSWORD" envDefault:"matcher_dev_password" mapstructure:"primary_password"`
 	PrimaryDB       string `env:"POSTGRES_DB"       envDefault:"matcher"   mapstructure:"primary_db"`
 	PrimarySSLMode  string `env:"POSTGRES_SSLMODE"  envDefault:"disable"   mapstructure:"primary_ssl_mode"`
 
@@ -120,8 +120,8 @@ type RabbitMQConfig struct {
 	URI                      string `env:"RABBITMQ_URI"                         envDefault:"amqp"                mapstructure:"uri"`
 	Host                     string `env:"RABBITMQ_HOST"                        envDefault:"localhost"           mapstructure:"host"`
 	Port                     string `env:"RABBITMQ_PORT"                        envDefault:"5672"                mapstructure:"port"`
-	User                     string `env:"RABBITMQ_USER"                        envDefault:"guest"               mapstructure:"user"`
-	Password                 string `env:"RABBITMQ_PASSWORD"                    envDefault:"guest" json:"-"      mapstructure:"password"`
+	User                     string `env:"RABBITMQ_USER"                        envDefault:"matcher_admin"       mapstructure:"user"`
+	Password                 string `env:"RABBITMQ_PASSWORD"                    envDefault:"matcher_dev_password" json:"-" mapstructure:"password"`
 	VHost                    string `env:"RABBITMQ_VHOST"                       envDefault:"/"                   mapstructure:"vhost"`
 	HealthURL                string `env:"RABBITMQ_HEALTH_URL"                  envDefault:"http://localhost:15672" mapstructure:"health_url"`
 	AllowInsecureHealthCheck bool   `env:"RABBITMQ_ALLOW_INSECURE_HEALTH_CHECK" envDefault:"false"               mapstructure:"allow_insecure_health_check"`

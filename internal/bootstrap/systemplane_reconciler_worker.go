@@ -74,7 +74,7 @@ func (r *WorkerReconciler) Reconcile(_ context.Context, _, _ domain.RuntimeBundl
 // the envDefault from the corresponding Config struct tag.
 //
 // Uses snapInt/snapBool/snapString from systemplane_factory.go which provide
-// more robust type coercion (e.g., string→bool, string→int from JSON/YAML).
+// more robust type coercion (e.g., string→bool, string→int from JSON).
 func snapshotToWorkerConfig(snap domain.Snapshot) *Config {
 	return &Config{
 		Fetcher: FetcherConfig{

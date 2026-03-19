@@ -23,7 +23,7 @@ var snakeCaseRegexp = regexp.MustCompile(`^[a-z][a-z0-9]*(_[a-z0-9]+)*$`)
 // TestConfigMapstructureTags_AllExportedFieldsTagged verifies every exported
 // field across Config and all its sub-structs carries a `mapstructure` tag.
 // This prevents silent regressions where new fields are added without the
-// tag required for viper YAML unmarshalling.
+// tag required for config field mapping.
 func TestConfigMapstructureTags_AllExportedFieldsTagged(t *testing.T) {
 	t.Parallel()
 
@@ -37,7 +37,7 @@ func TestConfigMapstructureTags_AllExportedFieldsTagged(t *testing.T) {
 	})
 
 	assert.Empty(t, missing,
-		"exported fields missing mapstructure tag — every field must be tagged for viper YAML unmarshalling:\n  %s",
+		"exported fields missing mapstructure tag — every field must have a mapstructure tag for config field mapping:\n  %s",
 		strings.Join(missing, "\n  "))
 }
 
@@ -70,7 +70,7 @@ func TestConfigMapstructureTags_ValuesAreSnakeCase(t *testing.T) {
 
 // TestConfigMapstructureTags_NoDuplicatesPerStruct verifies no two fields
 // within the same struct level share the same mapstructure tag value.
-// Duplicates would cause viper to silently overwrite one field during
+// Duplicates would cause silent field mapping collisions during
 // unmarshalling.
 func TestConfigMapstructureTags_NoDuplicatesPerStruct(t *testing.T) {
 	t.Parallel()

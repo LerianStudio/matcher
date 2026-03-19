@@ -200,7 +200,7 @@ func (svc *Service) Shutdown(ctx context.Context) error {
 // stopBackgroundWorkers stops all background workers and the outbox runner.
 //
 // Shutdown ordering contract:
-// 1. ConfigManager.Stop() — prevents file watcher from triggering reloads
+// 1. ConfigManager.Stop() — prevents config mutations during shutdown
 // 2. Systemplane change feed — stop change feed before supervisor
 // 3. Systemplane supervisor — stop config supervisory loop
 // 4. WorkerManager.Stop() — stops all managed workers
@@ -210,7 +210,7 @@ func (svc *Service) Shutdown(ctx context.Context) error {
 // Systemplane change feed stops before the supervisor to prevent reload triggers
 // during shutdown.
 func (svc *Service) stopBackgroundWorkers(ctx context.Context, logger libLog.Logger) {
-	// Step 1: Stop config file watcher first (see ordering contract above).
+	// Step 1: Stop ConfigManager first (see ordering contract above).
 	if svc.ConfigManager != nil {
 		svc.ConfigManager.Stop()
 	}

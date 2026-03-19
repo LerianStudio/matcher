@@ -171,7 +171,7 @@ func loadSystemplaneMongoConfig() *spBootstrap.MongoBootstrapConfig {
 //
 // On any error the function cleans up partially-created resources before
 // returning so the caller does not need to track intermediate state.
-func InitSystemplane(ctx context.Context, cfg *Config, workerManager *WorkerManager) (*SystemplaneComponents, error) {
+func InitSystemplane(ctx context.Context, cfg *Config, configManager *ConfigManager, workerManager *WorkerManager) (*SystemplaneComponents, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("init systemplane: %w", ErrConfigNil)
 	}
@@ -218,15 +218,23 @@ func InitSystemplane(ctx context.Context, cfg *Config, workerManager *WorkerMana
 		return nil, fmt.Errorf("init systemplane: %w", err)
 	}
 
-	// 7. Create reconcilers.
-	reconcilers, err := buildReconcilers(workerManager)
+	// 7. Seed the store before the first reload so initial snapshot + bundle
+	// include persisted/env overrides, not just registry defaults.
+	if err := seedStoreForInitialReload(ctx, configManager, backend.Store, reg); err != nil {
+		_ = backend.Closer.Close()
+
+		return nil, fmt.Errorf("init systemplane: %w", err)
+	}
+
+	// 8. Create reconcilers.
+	reconcilers, err := buildReconcilers(configManager, workerManager)
 	if err != nil {
 		_ = backend.Closer.Close()
 
 		return nil, fmt.Errorf("init systemplane: %w", err)
 	}
 
-	// 8. Create supervisor.
+	// 9. Create supervisor.
 	supervisor, err := service.NewSupervisor(service.SupervisorConfig{
 		Builder:     builder,
 		Factory:     factory,
@@ -238,7 +246,7 @@ func InitSystemplane(ctx context.Context, cfg *Config, workerManager *WorkerMana
 		return nil, fmt.Errorf("init systemplane: %w", err)
 	}
 
-	// 9. Initial reload (builds first snapshot + bundle from defaults).
+	// 10. Initial reload (builds first snapshot + bundle).
 	if err := supervisor.Reload(ctx, "initial-bootstrap"); err != nil {
 		_ = supervisor.Stop(ctx)
 		_ = backend.Closer.Close()
@@ -246,7 +254,7 @@ func InitSystemplane(ctx context.Context, cfg *Config, workerManager *WorkerMana
 		return nil, fmt.Errorf("init systemplane: initial reload: %w", err)
 	}
 
-	// 10. Create manager.
+	// 11. Create manager.
 	manager, err := service.NewManager(service.ManagerConfig{
 		Registry:   reg,
 		Store:      backend.Store,
@@ -273,13 +281,53 @@ func InitSystemplane(ctx context.Context, cfg *Config, workerManager *WorkerMana
 	}, nil
 }
 
-// buildReconcilers creates the set of BundleReconcilers that the supervisor
-// uses on each reload. The HTTP policy reconciler is always present; the
-// worker reconciler is added only when a WorkerManager is available.
-func buildReconcilers(workerManager *WorkerManager) ([]ports.BundleReconciler, error) {
-	reconcilers := []ports.BundleReconciler{
-		NewHTTPPolicyReconciler(),
+func seedStoreForInitialReload(
+	ctx context.Context,
+	configManager *ConfigManager,
+	store ports.Store,
+	reg registry.Registry,
+) error {
+	if configManager == nil {
+		return nil
 	}
+
+	seedErr := configManager.SeedStore(ctx, store, reg)
+	if seedErr == nil {
+		return nil
+	}
+
+	// Revision mismatch means data already exists in store (common restart path).
+	// Keep going and force seed mode so config bridge reconciler can apply
+	// snapshots during reload.
+	if errors.Is(seedErr, domain.ErrRevisionMismatch) {
+		configManager.enterSeedMode()
+
+		return nil
+	}
+
+	return fmt.Errorf("seed store: %w", seedErr)
+}
+
+// buildReconcilers creates the set of BundleReconcilers that the supervisor
+// uses on each reload. The config bridge reconciler runs first so
+// configManager.Get() is up-to-date for any downstream reconciler that reads
+// it. The HTTP policy reconciler is always present; the worker reconciler is
+// added only when a WorkerManager is available.
+func buildReconcilers(configManager *ConfigManager, workerManager *WorkerManager) ([]ports.BundleReconciler, error) {
+	var reconcilers []ports.BundleReconciler
+
+	// Config bridge runs first so configManager.Get() is up-to-date
+	// for any downstream reconciler that reads it.
+	if configManager != nil {
+		configBridge, err := NewConfigBridgeReconciler(configManager)
+		if err != nil {
+			return nil, fmt.Errorf("create config bridge reconciler: %w", err)
+		}
+
+		reconcilers = append(reconcilers, configBridge)
+	}
+
+	reconcilers = append(reconcilers, NewHTTPPolicyReconciler())
 
 	if workerManager != nil {
 		workerReconciler, err := NewWorkerReconciler(workerManager)

@@ -9,15 +9,13 @@ package bootstrap
 import (
 	"context"
 	"math"
-	"os"
-	"path/filepath"
-	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+
+	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -51,47 +49,11 @@ func (l *testLogger) getMessages() []string {
 	return out
 }
 
-// writeTestYAML writes YAML content to a temp dir and returns the file path.
-func writeTestYAML(t *testing.T, dir, content string) string {
+// newTestConfigManager creates a ConfigManager for tests.
+func newTestConfigManager(t *testing.T, cfg *Config, logger libLog.Logger) *ConfigManager {
 	t.Helper()
 
-	yamlPath := filepath.Join(dir, "matcher.yaml")
-	require.NoError(t, os.WriteFile(yamlPath, []byte(content), 0o600))
-
-	return yamlPath
-}
-
-// validTestYAML returns minimal YAML that passes Validate().
-// Must include tenancy.default_tenant_id because loadConfigFromEnv() zeroes
-// fields whose env vars are absent, overwriting viper defaults.
-const validTestYAML = `
-app:
-  env_name: "development"
-  log_level: "info"
-server:
-  address: ":4018"
-  body_limit_bytes: 104857600
-tenancy:
-  default_tenant_id: "11111111-1111-1111-1111-111111111111"
-  default_tenant_slug: "default"
-infrastructure:
-  connect_timeout_sec: 30
-rate_limit:
-  enabled: true
-  max: 100
-  expiry_sec: 60
-  export_max: 10
-  export_expiry_sec: 60
-  dispatch_max: 50
-  dispatch_expiry_sec: 60
-`
-
-// newTestConfigManager creates a ConfigManager for tests without starting the
-// file watcher (which would race with manual Reload calls via viper internals).
-func newTestConfigManager(t *testing.T, cfg *Config, filePath string, logger libLog.Logger) *ConfigManager {
-	t.Helper()
-
-	cm, err := NewConfigManager(cfg, filePath, logger)
+	cm, err := NewConfigManager(cfg, logger)
 	require.NoError(t, err)
 
 	t.Cleanup(cm.Stop)
@@ -102,12 +64,10 @@ func newTestConfigManager(t *testing.T, cfg *Config, filePath string, logger lib
 func TestNewConfigManager_Success(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
 	logger := &testLogger{}
 
 	cfg := defaultConfig()
-	cm := newTestConfigManager(t, cfg, yamlPath, logger)
+	cm := newTestConfigManager(t, cfg, logger)
 
 	assert.NotNil(t, cm)
 	assert.Equal(t, cfg, cm.Get())
@@ -118,7 +78,7 @@ func TestNewConfigManager_Success(t *testing.T) {
 func TestNewConfigManager_NilConfig(t *testing.T) {
 	t.Parallel()
 
-	_, err := NewConfigManager(nil, "", nil)
+	_, err := NewConfigManager(nil, nil)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrConfigNil)
 }
@@ -127,7 +87,7 @@ func TestNewConfigManager_NilLogger(t *testing.T) {
 	t.Parallel()
 
 	cfg := defaultConfig()
-	cm, err := NewConfigManager(cfg, "", nil)
+	cm, err := NewConfigManager(cfg, nil)
 	require.NoError(t, err)
 
 	t.Cleanup(cm.Stop)
@@ -142,7 +102,7 @@ func TestNewConfigManager_TypedNilLogger(t *testing.T) {
 	cfg := defaultConfig()
 	var typedNil *libLog.NopLogger
 
-	cm, err := NewConfigManager(cfg, "", typedNil)
+	cm, err := NewConfigManager(cfg, typedNil)
 	require.NoError(t, err)
 	t.Cleanup(cm.Stop)
 	assert.NotNil(t, cm)
@@ -152,7 +112,7 @@ func TestNewConfigManager_NoFile(t *testing.T) {
 	t.Parallel()
 
 	cfg := defaultConfig()
-	cm := newTestConfigManager(t, cfg, "", &testLogger{})
+	cm := newTestConfigManager(t, cfg, &testLogger{})
 
 	// Manager still works in env-only mode.
 	assert.Equal(t, cfg, cm.Get())
@@ -162,7 +122,7 @@ func TestNewConfigManager_MissingFile(t *testing.T) {
 	t.Parallel()
 
 	cfg := defaultConfig()
-	cm, err := NewConfigManager(cfg, "config/does-not-exist.yaml", &testLogger{})
+	cm, err := NewConfigManager(cfg, &testLogger{})
 	require.NoError(t, err)
 
 	t.Cleanup(cm.Stop)
@@ -171,28 +131,14 @@ func TestNewConfigManager_MissingFile(t *testing.T) {
 	assert.NotNil(t, cm)
 }
 
-func TestNewConfigManager_AbsoluteMissingFile_GracefulFallback(t *testing.T) {
+func TestNewConfigManager_EnvOnly_Works(t *testing.T) {
 	t.Parallel()
 
 	cfg := defaultConfig()
-	cm, err := NewConfigManager(cfg, "/nonexistent/matcher.yaml", &testLogger{})
+	cm, err := NewConfigManager(cfg, &testLogger{})
 	require.NoError(t, err)
-
 	t.Cleanup(cm.Stop)
-
 	assert.NotNil(t, cm)
-}
-
-func TestNewConfigManager_MalformedYAML(t *testing.T) {
-	t.Parallel()
-
-	tmpDir := t.TempDir()
-	yamlPath := writeTestYAML(t, tmpDir, `this is: [[[invalid yaml`)
-
-	cfg := defaultConfig()
-	_, err := NewConfigManager(cfg, yamlPath, &testLogger{})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "read initial YAML")
 }
 
 func TestConfigManager_Get_ReturnsCurrentConfig(t *testing.T) {
@@ -201,7 +147,7 @@ func TestConfigManager_Get_ReturnsCurrentConfig(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.App.LogLevel = "debug"
 
-	cm := newTestConfigManager(t, cfg, "", &testLogger{})
+	cm := newTestConfigManager(t, cfg, &testLogger{})
 
 	got := cm.Get()
 	assert.Equal(t, "debug", got.App.LogLevel)
@@ -213,7 +159,7 @@ func TestConfigManager_Get_Concurrent(t *testing.T) {
 
 	cfg := defaultConfig()
 
-	cm := newTestConfigManager(t, cfg, "", &testLogger{})
+	cm := newTestConfigManager(t, cfg, &testLogger{})
 
 	const goroutines = 100
 
@@ -234,336 +180,103 @@ func TestConfigManager_Get_Concurrent(t *testing.T) {
 	wg.Wait()
 }
 
-func TestConfigManager_Reload_ValidYAML(t *testing.T) {
-	// Not parallel: clearConfigEnvVars uses t.Setenv.
-	clearConfigEnvVars(t)
-
-	tmpDir := t.TempDir()
-	yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
-	logger := &testLogger{}
+func TestConfigManager_Reload_ReturnsSkipped(t *testing.T) {
+	t.Parallel()
 
 	cfg := defaultConfig()
-	cm := newTestConfigManager(t, cfg, yamlPath, logger)
+	cm := newTestConfigManager(t, cfg, &testLogger{})
 
-	// Verify initial state.
+	// Reload always returns skipped now that Viper is removed from the runtime path.
+	result, err := cm.Reload()
+	require.NoError(t, err)
+
+	assert.True(t, result.Skipped)
+	assert.Contains(t, result.Reason, "file reload not supported")
+	assert.Equal(t, uint64(0), result.Version, "version should not increment on skipped reload")
+
+	// Config should remain unchanged.
 	assert.Equal(t, "info", cm.Get().App.LogLevel)
+}
 
-	// Write new YAML with changed log level.
-	updatedYAML := `
-app:
-  env_name: "development"
-  log_level: "debug"
-server:
-  address: ":4018"
-  body_limit_bytes: 104857600
-tenancy:
-  default_tenant_id: "11111111-1111-1111-1111-111111111111"
-  default_tenant_slug: "default"
-infrastructure:
-  connect_timeout_sec: 30
-rate_limit:
-  enabled: true
-  max: 200
-  expiry_sec: 60
-  export_max: 10
-  export_expiry_sec: 60
-  dispatch_max: 50
-  dispatch_expiry_sec: 60
-`
-	require.NoError(t, os.WriteFile(yamlPath, []byte(updatedYAML), 0o600))
+func TestConfigManager_Reload_InSeedMode_ReturnsSuperseded(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cm := newTestConfigManager(t, cfg, &testLogger{})
+	cm.enterSeedMode()
 
 	result, err := cm.Reload()
 	require.NoError(t, err)
 
-	assert.Equal(t, uint64(1), result.Version)
-	assert.False(t, result.ReloadedAt.IsZero())
-	assert.Greater(t, result.ChangesDetected, 0)
-
-	// Verify the config was actually updated.
-	newCfg := cm.Get()
-	assert.Equal(t, "debug", newCfg.App.LogLevel)
-	assert.Equal(t, 200, newCfg.RateLimit.Max)
+	assert.True(t, result.Skipped)
+	assert.Equal(t, "superseded by systemplane", result.Reason)
 }
 
-func TestConfigManager_Reload_InvalidYAML(t *testing.T) {
+func TestConfigManager_Reload_PreservesConfig(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
 	logger := &testLogger{}
-
-	cfg := defaultConfig()
-	cm := newTestConfigManager(t, cfg, yamlPath, logger)
-
-	// Corrupt the YAML file.
-	require.NoError(t, os.WriteFile(yamlPath, []byte(`invalid: [[[yaml`), 0o600))
-
-	_, reloadErr := cm.Reload()
-	require.Error(t, reloadErr)
-
-	// Original config preserved.
-	assert.Equal(t, "info", cm.Get().App.LogLevel)
-	assert.Equal(t, uint64(0), cm.Version())
-}
-
-func TestConfigManager_Reload_ValidationFailure(t *testing.T) {
-	// Not parallel: clearConfigEnvVars uses t.Setenv.
-	clearConfigEnvVars(t)
-
-	tmpDir := t.TempDir()
-	yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
-	logger := &testLogger{}
-
-	cfg := defaultConfig()
-	cm := newTestConfigManager(t, cfg, yamlPath, logger)
-
-	// Write YAML that will fail validation (invalid log_level).
-	invalidYAML := `
-app:
-  env_name: "development"
-  log_level: "banana"
-server:
-  address: ":4018"
-  body_limit_bytes: 104857600
-tenancy:
-  default_tenant_id: "11111111-1111-1111-1111-111111111111"
-  default_tenant_slug: "default"
-infrastructure:
-  connect_timeout_sec: 30
-rate_limit:
-  enabled: true
-  max: 100
-  expiry_sec: 60
-  export_max: 10
-  export_expiry_sec: 60
-  dispatch_max: 50
-  dispatch_expiry_sec: 60
-`
-	require.NoError(t, os.WriteFile(yamlPath, []byte(invalidYAML), 0o600))
-
-	_, reloadErr := cm.Reload()
-	require.Error(t, reloadErr)
-	assert.Contains(t, reloadErr.Error(), "validation")
-
-	// Original config preserved.
-	assert.Equal(t, "info", cm.Get().App.LogLevel)
-	assert.Equal(t, uint64(0), cm.Version())
-}
-
-func TestConfigManager_Reload_PreservesLoggerAndGracePeriod(t *testing.T) {
-	t.Parallel()
-
-	tmpDir := t.TempDir()
-	yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
-	logger := &testLogger{}
-
 	cfg := defaultConfig()
 	cfg.Logger = logger
 	cfg.ShutdownGracePeriod = 10 * time.Second
 
-	cm := newTestConfigManager(t, cfg, yamlPath, logger)
+	cm := newTestConfigManager(t, cfg, logger)
 
-	result, err := cm.Reload()
+	_, err := cm.Reload()
 	require.NoError(t, err)
-	assert.Equal(t, uint64(1), result.Version)
 
-	// Logger and ShutdownGracePeriod must carry forward.
+	// Config should be identical — reload is a no-op.
 	newCfg := cm.Get()
 	assert.Equal(t, logger, newCfg.Logger)
 	assert.Equal(t, 10*time.Second, newCfg.ShutdownGracePeriod)
 }
 
-func TestConfigManager_Subscribe_CalledOnReload(t *testing.T) {
+func TestConfigManager_Version_DoesNotIncrementOnSkippedReload(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
-	logger := &testLogger{}
-
 	cfg := defaultConfig()
-	cm := newTestConfigManager(t, cfg, yamlPath, logger)
-
-	var called atomic.Bool
-
-	var receivedCfg atomic.Pointer[Config]
-
-	cm.Subscribe(func(c *Config) {
-		called.Store(true)
-		receivedCfg.Store(c)
-	})
-
-	_, err := cm.Reload()
-	require.NoError(t, err)
-
-	assert.True(t, called.Load(), "subscriber should have been called")
-	assert.NotNil(t, receivedCfg.Load(), "subscriber should receive the new config")
-	assert.Equal(t, cm.Get(), receivedCfg.Load(), "subscriber config should match current config")
-}
-
-func TestConfigManager_Subscribe_NotCalledOnFailedReload(t *testing.T) {
-	t.Parallel()
-
-	tmpDir := t.TempDir()
-	yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
-	logger := &testLogger{}
-
-	cfg := defaultConfig()
-	cm := newTestConfigManager(t, cfg, yamlPath, logger)
-
-	var called atomic.Bool
-
-	cm.Subscribe(func(_ *Config) {
-		called.Store(true)
-	})
-
-	// Corrupt the file to cause reload failure.
-	require.NoError(t, os.WriteFile(yamlPath, []byte(`broken: [[[yaml`), 0o600))
-
-	_, reloadErr := cm.Reload()
-	require.Error(t, reloadErr)
-
-	assert.False(t, called.Load(), "subscriber should NOT be called on failed reload")
-}
-
-func TestConfigManager_Subscribe_MultipleSubscribers(t *testing.T) {
-	t.Parallel()
-
-	tmpDir := t.TempDir()
-	yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
-
-	cfg := defaultConfig()
-	cm := newTestConfigManager(t, cfg, yamlPath, &testLogger{})
-
-	var count atomic.Int32
-
-	for range 5 {
-		cm.Subscribe(func(_ *Config) {
-			count.Add(1)
-		})
-	}
-
-	_, err := cm.Reload()
-	require.NoError(t, err)
-
-	assert.Equal(t, int32(5), count.Load(), "all 5 subscribers should have been called")
-}
-
-func TestConfigManager_Subscribe_PanicRecovery(t *testing.T) {
-	t.Parallel()
-
-	tmpDir := t.TempDir()
-	yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
-	logger := &testLogger{}
-
-	cfg := defaultConfig()
-	cm := newTestConfigManager(t, cfg, yamlPath, logger)
-
-	var secondCalled atomic.Bool
-
-	// First subscriber panics.
-	cm.Subscribe(func(_ *Config) {
-		panic("test panic in subscriber")
-	})
-
-	// Second subscriber should still run.
-	cm.Subscribe(func(_ *Config) {
-		secondCalled.Store(true)
-	})
-
-	_, err := cm.Reload()
-	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrConfigSubscriberFailure)
-
-	assert.True(t, secondCalled.Load(), "second subscriber should run even after first panics")
-
-	// Logger should record the panic.
-	msgs := logger.getMessages()
-	foundPanicMsg := false
-
-	for _, msg := range msgs {
-		if strings.Contains(msg, "panicked") {
-			foundPanicMsg = true
-
-			break
-		}
-	}
-
-	assert.True(t, foundPanicMsg, "logger should record subscriber panic, got: %v", msgs)
-}
-
-func TestConfigManager_Version_Increments(t *testing.T) {
-	t.Parallel()
-
-	tmpDir := t.TempDir()
-	yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
-
-	cfg := defaultConfig()
-	cm := newTestConfigManager(t, cfg, yamlPath, &testLogger{})
+	cm := newTestConfigManager(t, cfg, &testLogger{})
 
 	assert.Equal(t, uint64(0), cm.Version())
 
+	// Reload is now skipped — version should NOT increment.
 	_, err := cm.Reload()
 	require.NoError(t, err)
-	assert.Equal(t, uint64(1), cm.Version())
-
-	_, err = cm.Reload()
-	require.NoError(t, err)
-	assert.Equal(t, uint64(2), cm.Version())
-
-	_, err = cm.Reload()
-	require.NoError(t, err)
-	assert.Equal(t, uint64(3), cm.Version())
+	assert.Equal(t, uint64(0), cm.Version())
 }
 
-func TestConfigManager_Version_DoesNotIncrementOnFailure(t *testing.T) {
+func TestConfigManager_Version_IncrementedByUpdateFromSystemplane(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
-
 	cfg := defaultConfig()
-	cm := newTestConfigManager(t, cfg, yamlPath, &testLogger{})
+	cm := newTestConfigManager(t, cfg, &testLogger{})
+	cm.enterSeedMode()
 
-	// Successful reload.
-	_, err := cm.Reload()
+	assert.Equal(t, uint64(0), cm.Version())
+
+	// UpdateFromSystemplane increments the version.
+	snap := domain.Snapshot{}
+
+	err := cm.UpdateFromSystemplane(snap)
 	require.NoError(t, err)
 	assert.Equal(t, uint64(1), cm.Version())
-
-	// Corrupt file.
-	require.NoError(t, os.WriteFile(yamlPath, []byte(`bad: [[[`), 0o600))
-
-	_, err = cm.Reload()
-	require.Error(t, err)
-	assert.Equal(t, uint64(1), cm.Version(), "version should NOT increment on failure")
 }
 
-func TestConfigManager_LastReloadAt_Updates(t *testing.T) {
+func TestConfigManager_LastReloadAt_SetAtConstruction(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
-
 	cfg := defaultConfig()
-	cm := newTestConfigManager(t, cfg, yamlPath, &testLogger{})
+	cm := newTestConfigManager(t, cfg, &testLogger{})
 
 	initialTime := cm.LastReloadAt()
-	assert.False(t, initialTime.IsZero())
-
-	// Small sleep to ensure time difference.
-	time.Sleep(10 * time.Millisecond)
-
-	_, err := cm.Reload()
-	require.NoError(t, err)
-
-	afterReload := cm.LastReloadAt()
-	assert.True(t, afterReload.After(initialTime), "LastReloadAt should update after reload")
+	assert.False(t, initialTime.IsZero(), "LastReloadAt should be set at construction")
 }
 
 func TestConfigManager_Stop_Idempotent(t *testing.T) {
 	t.Parallel()
 
 	cfg := defaultConfig()
-	cm, err := NewConfigManager(cfg, "", &testLogger{})
+	cm, err := NewConfigManager(cfg, &testLogger{})
 	require.NoError(t, err)
 
 	// Call Stop() multiple times — should not panic.
@@ -575,128 +288,25 @@ func TestConfigManager_Stop_Idempotent(t *testing.T) {
 	assert.NotNil(t, cm.Get())
 }
 
-func TestConfigManager_Stop_StopsDebounceTimer(t *testing.T) {
+func TestConfigManager_Reload_ReturnsSkippedWhenNotInSeedMode(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
-
 	cfg := defaultConfig()
-	cm := newTestConfigManager(t, cfg, yamlPath, &testLogger{})
+	cm := newTestConfigManager(t, cfg, &testLogger{})
 
-	// Trigger a debounced reload.
-	cm.reloadDebounced()
-
-	// Stop should clean up the timer.
-	cm.Stop()
-
-	assert.Never(t, func() bool {
-		return cm.Version() > 0
-	}, debounceDuration+300*time.Millisecond, 20*time.Millisecond,
-		"debounced reload should not run after Stop")
-}
-
-func TestConfigManager_Debounce_CoalescesEvents(t *testing.T) {
-	// NOTE: This test uses real-time delays for debounce verification.
-	// If it becomes flaky on heavily-loaded CI machines, consider increasing
-	// the sleep durations or switching to a channel-based synchronization pattern.
-	t.Parallel()
-
-	tmpDir := t.TempDir()
-	yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
-
-	cfg := defaultConfig()
-	cm := newTestConfigManager(t, cfg, yamlPath, &testLogger{})
-
-	// NOTE: This test depends on real-time timing. The 50ms sleep is well within
-	// the 500ms debounce window (10x margin). On heavily loaded CI machines,
-	// individual iterations could occasionally exceed 50ms, but all 10 iterations
-	// (500ms total) should still fall within a single debounce window.
-
-	// Simulate rapid file events — each resets the debounce timer.
-	for range 10 {
-		cm.reloadDebounced()
-		time.Sleep(50 * time.Millisecond) // Well within the 500ms debounce window.
-	}
-
-	require.Eventually(t, func() bool {
-		return cm.Version() == 1
-	}, debounceDuration+400*time.Millisecond, 20*time.Millisecond,
-		"debounce should coalesce 10 events into 1 reload")
-}
-
-func TestConfigManager_StartWatcher_Idempotent(t *testing.T) {
-	t.Parallel()
-
-	tmpDir := t.TempDir()
-	yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
-
-	cfg := defaultConfig()
-	cm, err := NewConfigManager(cfg, yamlPath, &testLogger{})
+	// Reload outside seed mode returns skipped (file reload not supported).
+	result, err := cm.Reload()
 	require.NoError(t, err)
-	t.Cleanup(cm.Stop)
-
-	cm.StartWatcher()
-	cm.StartWatcher()
-
-	updatedYAML := `
-app:
-  env_name: "development"
-  log_level: "debug"
-server:
-  address: ":4018"
-  body_limit_bytes: 104857600
-tenancy:
-  default_tenant_id: "11111111-1111-1111-1111-111111111111"
-  default_tenant_slug: "default"
-infrastructure:
-  connect_timeout_sec: 30
-rate_limit:
-  enabled: true
-  max: 100
-  expiry_sec: 60
-  export_max: 10
-  export_expiry_sec: 60
-  dispatch_max: 50
-  dispatch_expiry_sec: 60
-`
-	require.NoError(t, os.WriteFile(yamlPath, []byte(updatedYAML), 0o600))
-
-	require.Eventually(t, func() bool {
-		return cm.Version() == 1
-	}, 2*time.Second, 20*time.Millisecond)
-
-	assert.Equal(t, uint64(1), cm.Version(), "single file change should produce one reload even if StartWatcher is called twice")
-}
-
-func TestConfigManager_Reload_RollsBackStateOnSubscriberFailure(t *testing.T) {
-	t.Parallel()
-
-	tmpDir := t.TempDir()
-	yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
-
-	cm := newTestConfigManager(t, defaultConfig(), yamlPath, &testLogger{})
-	cm.SubscribeErr(func(_ *Config) error {
-		return assert.AnError
-	})
-
-	require.NoError(t, os.WriteFile(yamlPath, []byte(strings.Replace(validTestYAML, "max: 100", "max: 250", 1)), 0o600))
-
-	_, err := cm.Reload()
-	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrConfigSubscriberFailure)
-	assert.Equal(t, 100, cm.Get().RateLimit.Max)
-	assert.Equal(t, uint64(0), cm.Version())
+	assert.True(t, result.Skipped)
+	assert.Contains(t, result.Reason, "file reload not supported")
+	assert.Equal(t, uint64(0), cm.Version(), "version should not increment on skipped reload")
 }
 
 func TestConfigManager_Reload_ConcurrentSafety(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
-
 	cfg := defaultConfig()
-	cm := newTestConfigManager(t, cfg, yamlPath, &testLogger{})
+	cm := newTestConfigManager(t, cfg, &testLogger{})
 
 	const goroutines = 20
 
@@ -782,38 +392,13 @@ func TestConfigManager_Reload_NoFile(t *testing.T) {
 	t.Parallel()
 
 	cfg := defaultConfig()
-	cm := newTestConfigManager(t, cfg, "", &testLogger{})
+	cm := newTestConfigManager(t, cfg, &testLogger{})
 
-	// Reload without a file should still work (env-only mode).
+	// Reload without a file returns skipped (file reload not supported).
 	result, err := cm.Reload()
 	require.NoError(t, err)
-	assert.Equal(t, uint64(1), result.Version)
-}
-
-func TestConfigManager_StartWatcher_NoFile(t *testing.T) {
-	t.Parallel()
-
-	cfg := defaultConfig()
-	cm := newTestConfigManager(t, cfg, "", &testLogger{})
-
-	// StartWatcher with empty path is a no-op — should not panic.
-	cm.StartWatcher()
-}
-
-func TestConfigManager_StartWatcher_AfterStop(t *testing.T) {
-	t.Parallel()
-
-	tmpDir := t.TempDir()
-	yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
-
-	cfg := defaultConfig()
-	cm, err := NewConfigManager(cfg, yamlPath, &testLogger{})
-	require.NoError(t, err)
-
-	cm.Stop()
-
-	// StartWatcher after Stop is a no-op — should not panic.
-	cm.StartWatcher()
+	assert.True(t, result.Skipped)
+	assert.Contains(t, result.Reason, "file reload not supported")
 }
 
 func TestConfigManager_BootstrapWiring(t *testing.T) {
@@ -825,7 +410,7 @@ func TestConfigManager_BootstrapWiring(t *testing.T) {
 		cfg := defaultConfig()
 		cfg.App.LogLevel = "warn"
 
-		cm := newTestConfigManager(t, cfg, "", &testLogger{})
+		cm := newTestConfigManager(t, cfg, &testLogger{})
 
 		// Simulate what InitServersWithOptions does:
 		// Store both cfg and cm on the Service struct.
@@ -843,18 +428,15 @@ func TestConfigManager_BootstrapWiring(t *testing.T) {
 	t.Run("ConfigManager survives reload while Config stays static", func(t *testing.T) {
 		t.Parallel()
 
-		tmpDir := t.TempDir()
-		yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
-
 		cfg := defaultConfig()
-		cm := newTestConfigManager(t, cfg, yamlPath, &testLogger{})
+		cm := newTestConfigManager(t, cfg, &testLogger{})
 
 		svc := &Service{
 			Config:        cfg,
 			ConfigManager: cm,
 		}
 
-		// Simulate a config reload (e.g., from file watcher).
+		// Simulate a config reload (now a no-op; systemplane handles runtime changes).
 		_, err := svc.ConfigManager.Reload()
 		require.NoError(t, err)
 
@@ -867,11 +449,11 @@ func TestConfigManager_BootstrapWiring(t *testing.T) {
 			"static Config snapshot must not change after ConfigManager reload")
 	})
 
-	t.Run("cleanup stops ConfigManager file watcher", func(t *testing.T) {
+	t.Run("cleanup stops ConfigManager cleanly", func(t *testing.T) {
 		t.Parallel()
 
 		cfg := defaultConfig()
-		cm, err := NewConfigManager(cfg, "", &testLogger{})
+		cm, err := NewConfigManager(cfg, &testLogger{})
 		require.NoError(t, err)
 
 		// Simulate the cleanup function that InitServersWithOptions registers.
@@ -1042,35 +624,6 @@ func TestRestoreZeroedFields_BothZero(t *testing.T) {
 
 	assert.Empty(t, dst.Postgres.PrimaryPassword,
 		"both-zero field should remain zero")
-}
-
-func TestConfigManager_SubscribeWithUnsubscribe_RemovesSubscriber(t *testing.T) {
-	t.Parallel()
-
-	tmpDir := t.TempDir()
-	yamlPath := writeTestYAML(t, tmpDir, validTestYAML)
-
-	cfg := defaultConfig()
-	cm := newTestConfigManager(t, cfg, yamlPath, &testLogger{})
-
-	var callCount atomic.Int32
-
-	unsubscribe := cm.SubscribeWithUnsubscribe(func(_ *Config) {
-		callCount.Add(1)
-	})
-
-	// First reload — subscriber should fire.
-	_, err := cm.Reload()
-	require.NoError(t, err)
-	assert.Equal(t, int32(1), callCount.Load(), "subscriber should be called after first reload")
-
-	// Unsubscribe.
-	unsubscribe()
-
-	// Second reload — subscriber must NOT fire.
-	_, err = cm.Reload()
-	require.NoError(t, err)
-	assert.Equal(t, int32(1), callCount.Load(), "subscriber should NOT be called after unsubscribe")
 }
 
 func TestRestoreZeroedFields_RestoresBool(t *testing.T) {

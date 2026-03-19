@@ -13,16 +13,15 @@ import (
 // configFieldDef is the static definition of a config field.
 // CurrentValue is populated at runtime from the live config.
 type configFieldDef struct { //nolint:unused // Used by buildConfigSchema (reachable only from unit tests with build tag: unit).
-	Key           string
-	Label         string
-	Type          string // "string", "int", "bool"
-	DefaultValue  any
-	HotReloadable bool
-	EnvVar        string
-	Constraints   []string
-	Description   string
-	Section       string
-	Secret        bool // if true, value is redacted in API responses
+	Key          string
+	Label        string
+	Type         string // "string", "int", "bool"
+	DefaultValue any
+	EnvVar       string
+	Constraints  []string
+	Description  string
+	Section      string
+	Secret       bool // if true, value is redacted in API responses
 }
 
 // buildConfigSchema returns the schema definitions for all config fields,
@@ -73,16 +72,15 @@ func collectSchemaFields(defs *[]configFieldDef, t reflect.Type, section string)
 		key := section + "." + tag
 
 		def := configFieldDef{
-			Key:           key,
-			Type:          goKindToSchemaType(field.Type.Kind()),
-			DefaultValue:  parseDefaultValue(field),
-			EnvVar:        extractEnvVar(field),
-			Section:       section,
-			Secret:        isSensitiveKey(key),
-			HotReloadable: mutableConfigKeys[key],
-			Description:   fieldDescriptions[key],
-			Label:         fieldLabels[key],
-			Constraints:   fieldConstraints[key],
+			Key:          key,
+			Type:         goKindToSchemaType(field.Type.Kind()),
+			DefaultValue: parseDefaultValue(field),
+			EnvVar:       extractEnvVar(field),
+			Section:      section,
+			Secret:       isSensitiveKey(key),
+			Description:  fieldDescriptions[key],
+			Label:        fieldLabels[key],
+			Constraints:  fieldConstraints[key],
 		}
 
 		// Fallback: generate label from the mapstructure tag if none is registered.

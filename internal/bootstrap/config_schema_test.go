@@ -100,50 +100,6 @@ func TestBuildConfigSchema_SecretFieldsAreMarked(t *testing.T) {
 	}
 }
 
-func TestBuildConfigSchema_MutableKeysAreHotReloadable(t *testing.T) {
-	t.Parallel()
-
-	schema := buildConfigSchema()
-	schemaMap := make(map[string]configFieldDef, len(schema))
-
-	for _, field := range schema {
-		schemaMap[field.Key] = field
-	}
-
-	// Every mutable key (from config_manager.go) should be hot-reloadable in schema.
-	for key := range mutableConfigKeys {
-		field, exists := schemaMap[key]
-		if !exists {
-			// Some mutable keys might not be in schema yet — that's OK,
-			// but if they are, they should be hot-reloadable.
-			continue
-		}
-
-		assert.True(t, field.HotReloadable, "mutable key %q should be marked hot-reloadable in schema", key)
-	}
-}
-
-func TestBuildConfigSchema_StartupOnlyWorkerEnableFlagsAreNotHotReloadable(t *testing.T) {
-	t.Parallel()
-
-	schema := buildConfigSchema()
-	schemaMap := make(map[string]configFieldDef, len(schema))
-
-	for _, field := range schema {
-		schemaMap[field.Key] = field
-	}
-
-	for _, key := range []string{
-		"export_worker.enabled",
-		"cleanup_worker.enabled",
-		"archival.enabled",
-	} {
-		field, exists := schemaMap[key]
-		require.True(t, exists, "schema should include %s", key)
-		assert.False(t, field.HotReloadable, "%s should remain startup-only", key)
-	}
-}
-
 func TestSchemaKeySet_ReturnsAllKeys(t *testing.T) {
 	t.Parallel()
 

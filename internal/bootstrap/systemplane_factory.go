@@ -529,7 +529,7 @@ func snapString(snap domain.Snapshot, key, fallback string) string {
 }
 
 // snapInt extracts an int from the snapshot, handling the type coercions that
-// can arise from JSON/YAML deserialization (float64, int64, string).
+// can arise from JSON deserialization (float64, int64, string).
 func snapInt(snap domain.Snapshot, key string, fallback int) int {
 	v := snap.ConfigValue(key, fallback)
 

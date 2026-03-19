@@ -8,14 +8,36 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
+	"github.com/LerianStudio/matcher/pkg/systemplane/ports"
+	"github.com/LerianStudio/matcher/pkg/systemplane/registry"
 	"github.com/LerianStudio/matcher/pkg/systemplane/service"
 )
+
+type seedInitStoreMock struct {
+	putErr error
+}
+
+func (m *seedInitStoreMock) Get(_ context.Context, _ domain.Target) (ports.ReadResult, error) {
+	return ports.ReadResult{}, nil
+}
+
+func (m *seedInitStoreMock) Put(
+	_ context.Context,
+	_ domain.Target,
+	_ []ports.WriteOp,
+	_ domain.Revision,
+	_ domain.Actor,
+	_ string,
+) (domain.Revision, error) {
+	return domain.RevisionZero, m.putErr
+}
 
 // ---------------------------------------------------------------------------
 // ExtractBootstrapOnlyConfig
@@ -349,11 +371,60 @@ func TestStartChangeFeed_NilFeed(t *testing.T) {
 func TestInitSystemplane_NilConfig(t *testing.T) {
 	t.Parallel()
 
-	result, err := InitSystemplane(context.Background(), nil, nil)
+	result, err := InitSystemplane(context.Background(), nil, nil, nil)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrConfigNil)
 	assert.Nil(t, result)
+}
+
+func TestSeedStoreForInitialReload_NoConfigManager(t *testing.T) {
+	t.Parallel()
+
+	err := seedStoreForInitialReload(context.Background(), nil, nil, nil)
+
+	require.NoError(t, err)
+}
+
+func TestSeedStoreForInitialReload_RevisionMismatch_EntersSeedMode(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cfg.RateLimit.Max = 999 // non-default forces SeedStore Put path
+
+	cm, err := NewConfigManager(cfg, nil)
+	require.NoError(t, err)
+
+	reg := registry.New()
+	require.NoError(t, RegisterMatcherKeys(reg))
+
+	store := &seedInitStoreMock{putErr: domain.ErrRevisionMismatch}
+
+	err = seedStoreForInitialReload(context.Background(), cm, store, reg)
+
+	require.NoError(t, err)
+	assert.True(t, cm.InSeedMode())
+}
+
+func TestSeedStoreForInitialReload_UnexpectedSeedError(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cfg.RateLimit.Max = 999 // non-default forces SeedStore Put path
+
+	cm, err := NewConfigManager(cfg, nil)
+	require.NoError(t, err)
+
+	reg := registry.New()
+	require.NoError(t, RegisterMatcherKeys(reg))
+
+	store := &seedInitStoreMock{putErr: errors.New("boom")}
+
+	err = seedStoreForInitialReload(context.Background(), cm, store, reg)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "seed store")
+	assert.False(t, cm.InSeedMode())
 }
 
 // ---------------------------------------------------------------------------
@@ -390,10 +461,10 @@ func TestSystemplaneComponents_AllFieldsAccessible(t *testing.T) {
 // buildReconcilers (internal helper)
 // ---------------------------------------------------------------------------
 
-func TestBuildReconcilers_NilWorkerManager(t *testing.T) {
+func TestBuildReconcilers_NilBothManagers(t *testing.T) {
 	t.Parallel()
 
-	reconcilers, err := buildReconcilers(nil)
+	reconcilers, err := buildReconcilers(nil, nil)
 
 	require.NoError(t, err)
 	require.Len(t, reconcilers, 1)
@@ -405,7 +476,7 @@ func TestBuildReconcilers_WithWorkerManager(t *testing.T) {
 
 	wm := NewWorkerManager(nil, nil)
 
-	reconcilers, err := buildReconcilers(wm)
+	reconcilers, err := buildReconcilers(nil, wm)
 
 	require.NoError(t, err)
 	require.Len(t, reconcilers, 2)
