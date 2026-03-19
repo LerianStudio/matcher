@@ -903,3 +903,277 @@ func TestMatcherBundleFactory_BuildObjectStorageClient_EmptyBucket(t *testing.T)
 	require.NoError(t, err)
 	assert.Nil(t, client)
 }
+
+// ---------------------------------------------------------------------------
+// diffAffectedComponents tests
+// ---------------------------------------------------------------------------
+
+// testSnapshotWithOverride creates a Snapshot where each EffectiveValue also
+// carries an Override (used to test effectiveValuesEqual with overrides).
+func testSnapshotWithOverride(configs map[string]any, overrides map[string]any) domain.Snapshot {
+	effective := make(map[string]domain.EffectiveValue, len(configs))
+	for key, val := range configs {
+		ev := domain.EffectiveValue{
+			Key:    key,
+			Value:  val,
+			Source: "test",
+		}
+
+		if ov, ok := overrides[key]; ok {
+			ev.Override = ov
+		}
+
+		effective[key] = ev
+	}
+
+	return domain.Snapshot{Configs: effective}
+}
+
+func TestDiffAffectedComponents_SingleComponentChange(t *testing.T) {
+	t.Parallel()
+
+	factory := &MatcherBundleFactory{}
+
+	prevSnap := testSnapshot(map[string]any{
+		"redis.host": "localhost:6379",
+	})
+
+	newSnap := testSnapshot(map[string]any{
+		"redis.host": "redis.example.com:6380",
+	})
+
+	affected := factory.diffAffectedComponents(newSnap, prevSnap)
+
+	assert.Contains(t, affected, "redis", "redis component should be affected when redis.host changes")
+	// Ensure we did NOT trigger a full rebuild: no postgres, rabbitmq, etc.
+	assert.NotContains(t, affected, "postgres")
+	assert.NotContains(t, affected, "rabbitmq")
+}
+
+func TestDiffAffectedComponents_NoChanges(t *testing.T) {
+	t.Parallel()
+
+	factory := &MatcherBundleFactory{}
+
+	snap := testSnapshot(map[string]any{
+		"redis.host":            "localhost:6379",
+		"postgres.primary_host": "localhost",
+	})
+
+	affected := factory.diffAffectedComponents(snap, snap)
+
+	assert.Empty(t, affected, "identical snapshots should produce empty affected set")
+}
+
+func TestDiffAffectedComponents_CrossCuttingKeyForcesFullRebuild(t *testing.T) {
+	t.Parallel()
+
+	factory := &MatcherBundleFactory{}
+
+	// Use a key that is NOT in keyComponentMap at all → forces full rebuild.
+	prevSnap := domain.Snapshot{
+		Configs: map[string]domain.EffectiveValue{
+			"totally.unknown.key": {Key: "totally.unknown.key", Value: "old"},
+		},
+	}
+
+	newSnap := domain.Snapshot{
+		Configs: map[string]domain.EffectiveValue{
+			"totally.unknown.key": {Key: "totally.unknown.key", Value: "new"},
+		},
+	}
+
+	affected := factory.diffAffectedComponents(newSnap, prevSnap)
+
+	// Should return all components (full rebuild).
+	assert.GreaterOrEqual(t, len(affected), managedComponentCount(),
+		"unknown key change should force full rebuild")
+}
+
+func TestDiffAffectedComponents_RemovedKeyAffectsComponent(t *testing.T) {
+	t.Parallel()
+
+	factory := &MatcherBundleFactory{}
+
+	prevSnap := testSnapshot(map[string]any{
+		"redis.host":     "localhost:6379",
+		"redis.password": "secret",
+	})
+
+	// New snapshot is missing redis.password.
+	newSnap := testSnapshot(map[string]any{
+		"redis.host": "localhost:6379",
+	})
+
+	affected := factory.diffAffectedComponents(newSnap, prevSnap)
+
+	assert.Contains(t, affected, "redis",
+		"removed redis key should affect the redis component")
+}
+
+func TestDiffAffectedComponents_ComponentNoneSkipped(t *testing.T) {
+	t.Parallel()
+
+	factory := &MatcherBundleFactory{}
+
+	// "rate_limit.max" has Component = domain.ComponentNone.
+	prevSnap := testSnapshot(map[string]any{
+		"rate_limit.max": 100,
+	})
+
+	newSnap := testSnapshot(map[string]any{
+		"rate_limit.max": 200,
+	})
+
+	affected := factory.diffAffectedComponents(newSnap, prevSnap)
+
+	assert.NotContains(t, affected, domain.ComponentNone,
+		"ComponentNone keys should not appear in affected set")
+	assert.Empty(t, affected,
+		"changing a ComponentNone key should not trigger any component rebuild")
+}
+
+func TestDiffAffectedComponents_AllComponentsChanged(t *testing.T) {
+	t.Parallel()
+
+	factory := &MatcherBundleFactory{}
+
+	prevSnap := testSnapshot(map[string]any{
+		"postgres.primary_host":   "old-pg",
+		"redis.host":              "old-redis",
+		"rabbitmq.host":           "old-rmq",
+		"object_storage.bucket":   "old-bucket",
+		"server.body_limit_bytes": 100,
+		"app.log_level":           "info",
+	})
+
+	newSnap := testSnapshot(map[string]any{
+		"postgres.primary_host":   "new-pg",
+		"redis.host":              "new-redis",
+		"rabbitmq.host":           "new-rmq",
+		"object_storage.bucket":   "new-bucket",
+		"server.body_limit_bytes": 200,
+		"app.log_level":           "debug",
+	})
+
+	affected := factory.diffAffectedComponents(newSnap, prevSnap)
+
+	assert.Contains(t, affected, "postgres")
+	assert.Contains(t, affected, "redis")
+	assert.Contains(t, affected, "rabbitmq")
+	assert.Contains(t, affected, "s3")
+	assert.Contains(t, affected, "http")
+	assert.Contains(t, affected, "logger")
+}
+
+func TestDiffAffectedComponents_NilSnapshots(t *testing.T) {
+	t.Parallel()
+
+	factory := &MatcherBundleFactory{}
+
+	// Nil Configs in either snapshot → full rebuild.
+	affected := factory.diffAffectedComponents(
+		domain.Snapshot{Configs: nil},
+		domain.Snapshot{Configs: map[string]domain.EffectiveValue{}},
+	)
+
+	assert.GreaterOrEqual(t, len(affected), managedComponentCount(),
+		"nil Configs should force full rebuild")
+}
+
+// ---------------------------------------------------------------------------
+// effectiveValuesEqual tests
+// ---------------------------------------------------------------------------
+
+func TestEffectiveValuesEqual_SameValueAndOverride(t *testing.T) {
+	t.Parallel()
+
+	a := domain.EffectiveValue{Key: "k", Value: "hello", Override: "world", Source: "env"}
+	b := domain.EffectiveValue{Key: "k", Value: "hello", Override: "world", Source: "env"}
+
+	assert.True(t, effectiveValuesEqual(a, b))
+}
+
+func TestEffectiveValuesEqual_DifferentValue(t *testing.T) {
+	t.Parallel()
+
+	a := domain.EffectiveValue{Key: "k", Value: "hello"}
+	b := domain.EffectiveValue{Key: "k", Value: "world"}
+
+	assert.False(t, effectiveValuesEqual(a, b))
+}
+
+func TestEffectiveValuesEqual_DifferentOverride(t *testing.T) {
+	t.Parallel()
+
+	a := domain.EffectiveValue{Key: "k", Value: "same", Override: "override-a"}
+	b := domain.EffectiveValue{Key: "k", Value: "same", Override: "override-b"}
+
+	assert.False(t, effectiveValuesEqual(a, b))
+}
+
+func TestEffectiveValuesEqual_NumericCoercion(t *testing.T) {
+	t.Parallel()
+
+	// int 100 vs float64(100) should be treated as equal (JSON deserialization).
+	a := domain.EffectiveValue{Key: "k", Value: 100}
+	b := domain.EffectiveValue{Key: "k", Value: float64(100)}
+
+	assert.True(t, effectiveValuesEqual(a, b),
+		"int 100 and float64(100) should be considered equal via numeric coercion")
+}
+
+func TestEffectiveValuesEqual_DifferentSourceSameValue(t *testing.T) {
+	t.Parallel()
+
+	// Source differs but values same → still equal (Source is metadata-only).
+	a := domain.EffectiveValue{Key: "k", Value: "val", Override: nil, Source: "env"}
+	b := domain.EffectiveValue{Key: "k", Value: "val", Override: nil, Source: "store"}
+
+	assert.True(t, effectiveValuesEqual(a, b),
+		"different Source with same Value and Override should be equal")
+}
+
+func TestEffectiveValuesEqual_NilOverrides(t *testing.T) {
+	t.Parallel()
+
+	a := domain.EffectiveValue{Key: "k", Value: "val", Override: nil}
+	b := domain.EffectiveValue{Key: "k", Value: "val", Override: nil}
+
+	assert.True(t, effectiveValuesEqual(a, b),
+		"nil overrides should be considered equal")
+}
+
+func TestEffectiveValuesEqual_NilVsNonNilOverride(t *testing.T) {
+	t.Parallel()
+
+	a := domain.EffectiveValue{Key: "k", Value: "val", Override: nil}
+	b := domain.EffectiveValue{Key: "k", Value: "val", Override: "something"}
+
+	assert.False(t, effectiveValuesEqual(a, b),
+		"nil override vs non-nil override should not be equal")
+}
+
+// ---------------------------------------------------------------------------
+// Component validation tests
+// ---------------------------------------------------------------------------
+
+func TestMatcherKeyDefs_AllComponentsAreValid(t *testing.T) {
+	t.Parallel()
+
+	for _, def := range matcherKeyDefs() {
+		if def.Component != "" {
+			_, ok := allComponents[def.Component]
+			assert.True(t, ok, "key %s has unknown component %q", def.Key, def.Component)
+		}
+	}
+}
+
+func TestMatcherKeyDefs_NoEmptyComponent(t *testing.T) {
+	t.Parallel()
+
+	for _, def := range matcherKeyDefs() {
+		assert.NotEmpty(t, def.Component,
+			"key %s has empty Component; use domain.ComponentNone for business-logic keys", def.Key)
+	}
+}

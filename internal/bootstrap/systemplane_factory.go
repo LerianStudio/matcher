@@ -8,26 +8,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
-	"net/url"
-	"strconv"
-	"strings"
-	"time"
+	"sort"
 
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
-	libRabbitmq "github.com/LerianStudio/lib-commons/v4/commons/rabbitmq"
-	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
 	libZap "github.com/LerianStudio/lib-commons/v4/commons/zap"
 
-	"github.com/LerianStudio/matcher/internal/reporting/adapters/storage"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
 	"github.com/LerianStudio/matcher/pkg/systemplane/ports"
 )
 
-// Compile-time interface check.
-var _ ports.BundleFactory = (*MatcherBundleFactory)(nil)
+// Compile-time interface checks.
+var (
+	_ ports.BundleFactory            = (*MatcherBundleFactory)(nil)
+	_ ports.IncrementalBundleFactory = (*MatcherBundleFactory)(nil)
+)
 
 // MatcherBundleFactory creates MatcherBundle instances from snapshot configuration.
 // It holds references to long-lived dependencies that remain constant across config
@@ -106,6 +101,306 @@ func (factory *MatcherBundleFactory) Build(ctx context.Context, snap domain.Snap
 	}, nil
 }
 
+// allComponents enumerates every infrastructure component the factory manages,
+// plus the ComponentNone sentinel for keys that require no rebuild.
+// Used by BuildIncremental to detect full-rebuild fallback.
+// Immutable after init — do not modify at runtime.
+var allComponents = map[string]struct{}{
+	"postgres":           {},
+	"redis":              {},
+	"rabbitmq":           {},
+	"s3":                 {},
+	"http":               {},
+	"logger":             {},
+	domain.ComponentNone: {},
+}
+
+// keyComponentMap is computed once from matcherKeyDefs(). It maps each config
+// key that has a non-empty Component field to its component name.
+// Immutable after init — do not modify at runtime.
+var keyComponentMap = buildKeyComponentMap()
+
+// buildKeyComponentMap iterates matcherKeyDefs() and returns a map from config
+// key to its declared Component. Keys with empty Component are omitted — they
+// are cross-cutting and do not affect incremental rebuilds.
+func buildKeyComponentMap() map[string]string {
+	defs := matcherKeyDefs()
+	keyToComponent := make(map[string]string, len(defs))
+
+	for _, def := range defs {
+		if def.Component != "" {
+			if _, known := allComponents[def.Component]; !known {
+				// Crash at init time rather than silently degrading at runtime.
+				// A typo here would cause the key to be treated as cross-cutting,
+				// forcing unnecessary full rebuilds on every config change.
+				panic(fmt.Sprintf("systemplane: key %q declares unknown Component %q; valid components: %v",
+					def.Key, def.Component, allComponentNames()))
+			}
+
+			keyToComponent[def.Key] = def.Component
+		}
+	}
+
+	return keyToComponent
+}
+
+// allComponentNames returns sorted component names for error messages.
+func allComponentNames() []string {
+	names := make([]string, 0, len(allComponents))
+	for name := range allComponents {
+		names = append(names, name)
+	}
+
+	sort.Strings(names)
+
+	return names
+}
+
+// BuildIncremental creates a new MatcherBundle, reusing unchanged components
+// from previous. It diffs prevSnap.Configs vs snap.Configs to identify which
+// keys changed, maps those keys to infrastructure components via
+// keyComponentMap, and only rebuilds affected components.
+//
+// The factory nil-outs transferred component pointers in previous so that
+// previous.Close() only tears down replaced components.
+//
+// If the diff reveals that ALL components are affected, or if the previous
+// bundle is not a *MatcherBundle, it falls back to a full Build.
+//
+//nolint:gocyclo,cyclop // Sequential per-component build/transfer is inherently branchy; splitting hurts readability.
+func (factory *MatcherBundleFactory) BuildIncremental(
+	ctx context.Context,
+	snap domain.Snapshot,
+	previous domain.RuntimeBundle,
+	prevSnap domain.Snapshot,
+) (domain.RuntimeBundle, error) {
+	prev, ok := previous.(*MatcherBundle)
+	if !ok || prev.Infra == nil || prev.Logger == nil {
+		// Structurally incomplete previous bundle — fall back to a safe full
+		// build rather than risk nil dereferences during component transfer.
+		return factory.Build(ctx, snap)
+	}
+
+	// Diff: find set of affected component names.
+	affected := factory.diffAffectedComponents(snap, prevSnap)
+
+	// If every managed infrastructure component is affected, the full Build
+	// path is simpler and avoids partial-transfer bookkeeping.
+	// managedComponentCount excludes ComponentNone from the threshold since
+	// ComponentNone keys don't trigger any rebuild.
+	if len(affected) >= managedComponentCount() {
+		return factory.Build(ctx, snap)
+	}
+
+	newBundle := &MatcherBundle{}
+
+	// Track which fresh components we built so we can close them on rollback.
+	var freshClosers []func() error
+
+	rollback := func() {
+		for i := len(freshClosers) - 1; i >= 0; i-- {
+			_ = freshClosers[i]()
+		}
+	}
+
+	// --- Logger ---
+	if _, changed := affected["logger"]; changed {
+		loggerBundle, err := factory.buildLogger(snap)
+		if err != nil {
+			rollback()
+			return nil, fmt.Errorf("incremental build logger: %w", err)
+		}
+
+		newBundle.Logger = loggerBundle
+
+		freshClosers = append(freshClosers, func() error {
+			if loggerBundle.Logger != nil {
+				return loggerBundle.Logger.Sync(ctx)
+			}
+
+			return nil
+		})
+	} else {
+		// Transfer ownership from previous.
+		newBundle.Logger = prev.Logger
+		prev.Logger = nil
+	}
+
+	// We need a logger for infra builds. Use whichever we have.
+	// Guard against a nil LoggerBundle — while the entry guard above ensures
+	// prev.Logger is non-nil for the transfer path, and buildLogger returns
+	// non-nil on success, this is a belt-and-suspenders safety net.
+	var logger libLog.Logger
+	if newBundle.Logger != nil {
+		logger = newBundle.Logger.Logger
+	}
+
+	// --- Infrastructure components ---
+	newBundle.Infra = &InfraBundle{}
+
+	// Postgres
+	if _, changed := affected["postgres"]; changed {
+		pgClient, err := factory.buildPostgresClient(snap, logger)
+		if err != nil {
+			rollback()
+			return nil, fmt.Errorf("incremental build postgres: %w", err)
+		}
+
+		newBundle.Infra.Postgres = pgClient
+
+		if pgClient != nil {
+			freshClosers = append(freshClosers, pgClient.Close)
+		}
+	} else {
+		newBundle.Infra.Postgres = prev.Infra.Postgres
+		prev.Infra.Postgres = nil
+	}
+
+	// Redis
+	if _, changed := affected["redis"]; changed {
+		redisClient, err := factory.buildRedisClient(ctx, snap, logger)
+		if err != nil {
+			rollback()
+			return nil, fmt.Errorf("incremental build redis: %w", err)
+		}
+
+		newBundle.Infra.Redis = redisClient
+
+		if redisClient != nil {
+			freshClosers = append(freshClosers, redisClient.Close)
+		}
+	} else {
+		newBundle.Infra.Redis = prev.Infra.Redis
+		prev.Infra.Redis = nil
+	}
+
+	// RabbitMQ
+	if _, changed := affected["rabbitmq"]; changed {
+		rmqConn := factory.buildRabbitMQConnection(snap, logger)
+		newBundle.Infra.RabbitMQ = rmqConn
+
+		freshClosers = append(freshClosers, func() error {
+			return closeRabbitMQ(rmqConn)
+		})
+	} else {
+		newBundle.Infra.RabbitMQ = prev.Infra.RabbitMQ
+		prev.Infra.RabbitMQ = nil
+	}
+
+	// S3 / Object Storage
+	if _, changed := affected["s3"]; changed {
+		s3Client, err := factory.buildObjectStorageClient(ctx, snap)
+		if err != nil {
+			rollback()
+			return nil, fmt.Errorf("incremental build object storage: %w", err)
+		}
+
+		newBundle.Infra.ObjectStorage = s3Client
+
+		if s3Client != nil {
+			freshClosers = append(freshClosers, s3Client.Close)
+		}
+	} else {
+		newBundle.Infra.ObjectStorage = prev.Infra.ObjectStorage
+		prev.Infra.ObjectStorage = nil
+	}
+
+	// --- HTTP Policy ---
+	if _, changed := affected["http"]; changed {
+		newBundle.HTTP = factory.buildHTTPPolicy(snap)
+	} else {
+		newBundle.HTTP = prev.HTTP
+		prev.HTTP = nil
+	}
+
+	return newBundle, nil
+}
+
+// diffAffectedComponents diffs snap.Configs against prevSnap.Configs and
+// returns the set of component names whose config keys changed.
+//
+// Semantics:
+//   - Keys mapped to a real component (postgres, redis, …) add that component.
+//   - Keys mapped to ComponentNone are skipped — they require no rebuild.
+//   - Unknown keys (not in keyComponentMap at all) force a full rebuild for safety.
+func (factory *MatcherBundleFactory) diffAffectedComponents(
+	snap domain.Snapshot,
+	prevSnap domain.Snapshot,
+) map[string]struct{} {
+	// Nil maps mean no config data — treat as full rebuild for safety.
+	if snap.Configs == nil || prevSnap.Configs == nil {
+		return copyAllComponents()
+	}
+
+	affected := make(map[string]struct{})
+
+	// Check keys present in new snapshot.
+	for key, newEV := range snap.Configs {
+		oldEV, existed := prevSnap.Configs[key]
+		if !existed || !effectiveValuesEqual(oldEV, newEV) {
+			comp, known := keyComponentMap[key]
+			if !known {
+				// Unknown key changed — force full rebuild for safety.
+				return copyAllComponents()
+			}
+
+			if comp != domain.ComponentNone {
+				affected[comp] = struct{}{}
+			}
+		}
+	}
+
+	// Check keys removed in the new snapshot (present in prev, absent in new).
+	for key := range prevSnap.Configs {
+		if _, stillExists := snap.Configs[key]; !stillExists {
+			comp, known := keyComponentMap[key]
+			if !known {
+				return copyAllComponents()
+			}
+
+			if comp != domain.ComponentNone {
+				affected[comp] = struct{}{}
+			}
+		}
+	}
+
+	return affected
+}
+
+// effectiveValuesEqual compares two EffectiveValue instances for equality on
+// the fields that determine whether infrastructure needs rebuilding: Value and
+// Override. Source, Default, and Key metadata are intentionally excluded — a
+// change in config source (e.g., env-var → store) with the same effective value
+// does not warrant an infrastructure rebuild.
+// Uses valuesEquivalent for type-safe comparison that handles numeric coercion
+// (e.g., int vs float64 from JSON deserialization) and falls back to
+// reflect.DeepEqual for all other types.
+func effectiveValuesEqual(a, b domain.EffectiveValue) bool {
+	return valuesEquivalent(a.Value, b.Value) && valuesEquivalent(a.Override, b.Override)
+}
+
+// copyAllComponents returns a fresh copy of allComponents for use as the
+// affected set, signaling that every component needs rebuilding.
+func copyAllComponents() map[string]struct{} {
+	cp := make(map[string]struct{}, len(allComponents))
+	for k, v := range allComponents {
+		cp[k] = v
+	}
+
+	return cp
+}
+
+// managedComponentCount returns the number of infrastructure components
+// that require actual rebuilding (excludes ComponentNone).
+func managedComponentCount() int {
+	count := len(allComponents)
+	if _, hasNone := allComponents[domain.ComponentNone]; hasNone {
+		count--
+	}
+
+	return count
+}
+
 // buildHTTPPolicy extracts HTTP policy values from the snapshot with defaults.
 func (factory *MatcherBundleFactory) buildHTTPPolicy(snap domain.Snapshot) *HTTPPolicyBundle {
 	return &HTTPPolicyBundle{
@@ -177,402 +472,4 @@ func (factory *MatcherBundleFactory) buildInfra(
 		RabbitMQ:      rmqConn,
 		ObjectStorage: s3Client,
 	}, nil
-}
-
-// buildPostgresClient creates a PostgreSQL client from snapshot values.
-// It mirrors the DSN construction from Config.PrimaryDSN/ReplicaDSN and
-// reuses the same libPostgres.New call pattern as init.go's
-// createPostgresConnection.
-func (factory *MatcherBundleFactory) buildPostgresClient(
-	snap domain.Snapshot,
-	logger libLog.Logger,
-) (*libPostgres.Client, error) {
-	cfg := factory.extractPostgresConfig(snap)
-
-	primaryDSN := buildPostgresDSN(
-		cfg.PrimaryHost, cfg.PrimaryPort, cfg.PrimaryUser,
-		cfg.PrimaryPassword, cfg.PrimaryDB, cfg.PrimarySSLMode,
-		cfg.ConnectTimeoutSec,
-	)
-
-	replicaDSN := primaryDSN
-	if cfg.ReplicaHost != "" {
-		replicaDSN = buildPostgresDSN(
-			coalesce(cfg.ReplicaHost, cfg.PrimaryHost),
-			coalesce(cfg.ReplicaPort, cfg.PrimaryPort),
-			coalesce(cfg.ReplicaUser, cfg.PrimaryUser),
-			coalesce(cfg.ReplicaPassword, cfg.PrimaryPassword),
-			coalesce(cfg.ReplicaDB, cfg.PrimaryDB),
-			coalesce(cfg.ReplicaSSLMode, cfg.PrimarySSLMode),
-			cfg.ConnectTimeoutSec,
-		)
-	}
-
-	conn, err := libPostgres.New(libPostgres.Config{
-		PrimaryDSN:         primaryDSN,
-		ReplicaDSN:         replicaDSN,
-		Logger:             logger,
-		MaxOpenConnections: cfg.MaxOpenConnections,
-		MaxIdleConnections: cfg.MaxIdleConnections,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create postgres client: %w", err)
-	}
-
-	return conn, nil
-}
-
-// buildRedisClient creates a Redis client from snapshot values. It replicates
-// the topology detection logic from init.go's buildRedisConfig.
-func (factory *MatcherBundleFactory) buildRedisClient(
-	ctx context.Context,
-	snap domain.Snapshot,
-	logger libLog.Logger,
-) (*libRedis.Client, error) {
-	cfg := factory.extractRedisConfig(snap)
-	redisCfg := buildLibRedisConfig(cfg, factory.bootstrapCfg.EnvName, logger)
-
-	conn, err := libRedis.New(ctx, redisCfg)
-	if err != nil {
-		return nil, fmt.Errorf("create redis client: %w", err)
-	}
-
-	return conn, nil
-}
-
-// buildRabbitMQConnection creates a RabbitMQ connection struct from snapshot
-// values. This mirrors init.go's createRabbitMQConnection but without the
-// insecure health check policy evaluation (the factory delegates that to
-// the connection itself).
-func (factory *MatcherBundleFactory) buildRabbitMQConnection(
-	snap domain.Snapshot,
-	logger libLog.Logger,
-) *libRabbitmq.RabbitMQConnection {
-	cfg := factory.extractRabbitMQConfig(snap)
-
-	allowInsecure := cfg.AllowInsecureHealthCheck
-	if IsProductionEnvironment(factory.bootstrapCfg.EnvName) {
-		allowInsecure = false
-	}
-
-	return &libRabbitmq.RabbitMQConnection{
-		ConnectionStringSource:   buildRabbitMQDSN(cfg),
-		HealthCheckURL:           cfg.HealthURL,
-		Host:                     cfg.Host,
-		Port:                     cfg.Port,
-		User:                     cfg.User,
-		Pass:                     cfg.Password,
-		Logger:                   logger,
-		AllowInsecureHealthCheck: allowInsecure,
-	}
-}
-
-// objectStorageCloser wraps an S3Client (which has no Close method) in an
-// io.Closer-compatible adapter. The AWS S3 SDK client is stateless over HTTP,
-// so Close is a no-op.
-type objectStorageCloser struct {
-	client *storage.S3Client
-}
-
-// Close is a no-op for the stateless S3 SDK client.
-func (c *objectStorageCloser) Close() error { return nil }
-
-// buildObjectStorageClient creates an S3-compatible storage client from snapshot
-// values. Returns (nil, nil) if endpoint or bucket is empty. The returned
-// io.Closer wraps the stateless S3Client with a no-op Close.
-func (factory *MatcherBundleFactory) buildObjectStorageClient(
-	ctx context.Context,
-	snap domain.Snapshot,
-) (*objectStorageCloser, error) {
-	endpoint := snapString(snap, "object_storage.endpoint", "")
-	bucket := snapString(snap, "object_storage.bucket", "")
-
-	if endpoint == "" || bucket == "" {
-		// Not configured — endpoint or bucket is empty. Returns (nil, nil)
-		// which callers must handle. MatcherBundle.Close() and InfraBundle
-		// consumers guard with nil checks before accessing ObjectStorage.
-		return nil, nil
-	}
-
-	s3Cfg := storage.S3Config{
-		Endpoint:        endpoint,
-		Region:          snapString(snap, "object_storage.region", "us-east-1"),
-		Bucket:          bucket,
-		AccessKeyID:     snapString(snap, "object_storage.access_key_id", ""),
-		SecretAccessKey: snapString(snap, "object_storage.secret_access_key", ""),
-		UsePathStyle:    snapBool(snap, "object_storage.use_path_style", true),
-	}
-
-	client, err := storage.NewS3Client(ctx, s3Cfg)
-	if err != nil {
-		return nil, fmt.Errorf("create S3 client: %w", err)
-	}
-
-	return &objectStorageCloser{client: client}, nil
-}
-
-// extractPostgresConfig reads all postgres-related keys from the snapshot.
-func (factory *MatcherBundleFactory) extractPostgresConfig(snap domain.Snapshot) PostgresConfig {
-	return PostgresConfig{
-		PrimaryHost:         snapString(snap, "postgres.primary_host", "localhost"),
-		PrimaryPort:         snapString(snap, "postgres.primary_port", "5432"),
-		PrimaryUser:         snapString(snap, "postgres.primary_user", "matcher"),
-		PrimaryPassword:     snapString(snap, "postgres.primary_password", ""),
-		PrimaryDB:           snapString(snap, "postgres.primary_db", "matcher"),
-		PrimarySSLMode:      snapString(snap, "postgres.primary_ssl_mode", "disable"),
-		ReplicaHost:         snapString(snap, "postgres.replica_host", ""),
-		ReplicaPort:         snapString(snap, "postgres.replica_port", ""),
-		ReplicaUser:         snapString(snap, "postgres.replica_user", ""),
-		ReplicaPassword:     snapString(snap, "postgres.replica_password", ""),
-		ReplicaDB:           snapString(snap, "postgres.replica_db", ""),
-		ReplicaSSLMode:      snapString(snap, "postgres.replica_ssl_mode", ""),
-		MaxOpenConnections:  snapInt(snap, "postgres.max_open_connections", defaultPGMaxOpenConns),
-		MaxIdleConnections:  snapInt(snap, "postgres.max_idle_connections", defaultPGMaxIdleConns),
-		ConnMaxLifetimeMins: snapInt(snap, "postgres.conn_max_lifetime_mins", defaultPGConnMaxLifeMins),
-		ConnMaxIdleTimeMins: snapInt(snap, "postgres.conn_max_idle_time_mins", defaultPGConnMaxIdleMins),
-		ConnectTimeoutSec:   snapInt(snap, "postgres.connect_timeout_sec", defaultPGConnectTimeout),
-		QueryTimeoutSec:     snapInt(snap, "postgres.query_timeout_sec", defaultPGQueryTimeout),
-		MigrationsPath:      snapString(snap, "postgres.migrations_path", "migrations"),
-	}
-}
-
-// redisConfigSnapshot is a snapshot-local Redis config holder, separate from the
-// env-based RedisConfig to avoid confusion.
-type redisConfigSnapshot struct {
-	Host           string
-	MasterName     string
-	Password       string
-	DB             int
-	Protocol       int
-	TLS            bool
-	CACert         string
-	PoolSize       int
-	MinIdleConn    int
-	ReadTimeoutMs  int
-	WriteTimeoutMs int
-	DialTimeoutMs  int
-}
-
-// extractRedisConfig reads all redis-related keys from the snapshot.
-func (factory *MatcherBundleFactory) extractRedisConfig(snap domain.Snapshot) redisConfigSnapshot {
-	return redisConfigSnapshot{
-		Host:           snapString(snap, "redis.host", "localhost:6379"),
-		MasterName:     snapString(snap, "redis.master_name", ""),
-		Password:       snapString(snap, "redis.password", ""),
-		DB:             snapInt(snap, "redis.db", 0),
-		Protocol:       snapInt(snap, "redis.protocol", defaultRedisProtocol),
-		TLS:            snapBool(snap, "redis.tls", false),
-		CACert:         snapString(snap, "redis.ca_cert", ""),
-		PoolSize:       snapInt(snap, "redis.pool_size", defaultRedisPoolSize),
-		MinIdleConn:    snapInt(snap, "redis.min_idle_conn", defaultRedisMinIdleConn),
-		ReadTimeoutMs:  snapInt(snap, "redis.read_timeout_ms", defaultRedisReadTimeout),
-		WriteTimeoutMs: snapInt(snap, "redis.write_timeout_ms", defaultRedisWriteTimeout),
-		DialTimeoutMs:  snapInt(snap, "redis.dial_timeout_ms", defaultRedisDialTimeout),
-	}
-}
-
-// rabbitMQConfigSnapshot is a snapshot-local RabbitMQ config holder.
-type rabbitMQConfigSnapshot struct {
-	URI                      string
-	Host                     string
-	Port                     string
-	User                     string
-	Password                 string
-	VHost                    string
-	HealthURL                string
-	AllowInsecureHealthCheck bool
-}
-
-// extractRabbitMQConfig reads all rabbitmq-related keys from the snapshot.
-func (factory *MatcherBundleFactory) extractRabbitMQConfig(snap domain.Snapshot) rabbitMQConfigSnapshot {
-	return rabbitMQConfigSnapshot{
-		URI:  snapString(snap, "rabbitmq.uri", "amqp"),
-		Host: snapString(snap, "rabbitmq.host", "localhost"),
-		Port: snapString(snap, "rabbitmq.port", "5672"),
-		// Default guest/guest credentials are standard for local development.
-		// Production environments must provide explicit credentials via the
-		// systemplane store — the config validation layer rejects empty
-		// credentials in production mode.
-		User:                     snapString(snap, "rabbitmq.user", "guest"),
-		Password:                 snapString(snap, "rabbitmq.password", "guest"),
-		VHost:                    snapString(snap, "rabbitmq.vhost", "/"),
-		HealthURL:                snapString(snap, "rabbitmq.health_url", "http://localhost:15672"),
-		AllowInsecureHealthCheck: snapBool(snap, "rabbitmq.allow_insecure_health_check", false),
-	}
-}
-
-// buildPostgresDSN constructs a PostgreSQL connection string. This is the same
-// format used by Config.PrimaryDSN() in config_env.go. The password is
-// single-quoted and escaped following libpq quoting rules.
-func buildPostgresDSN(host, port, user, password, dbname, sslmode string, connectTimeoutSec int) string {
-	return fmt.Sprintf(
-		"host=%s port=%s user=%s password='%s' dbname=%s sslmode=%s connect_timeout=%d",
-		host, port, user, escapePGValue(password), dbname, sslmode, connectTimeoutSec,
-	)
-}
-
-// escapePGValue escapes single quotes and backslashes in a PostgreSQL
-// connection string value, following libpq's quoting rules.
-func escapePGValue(v string) string {
-	v = strings.ReplaceAll(v, `\`, `\\`)
-	v = strings.ReplaceAll(v, `'`, `\'`)
-
-	return v
-}
-
-// buildLibRedisConfig constructs a libRedis.Config from the snapshot-extracted
-// redis config. This mirrors init.go's buildRedisConfig function.
-func buildLibRedisConfig(cfg redisConfigSnapshot, envName string, logger libLog.Logger) libRedis.Config {
-	redisCfg := libRedis.Config{
-		Auth: libRedis.Auth{
-			StaticPassword: &libRedis.StaticPasswordAuth{
-				Password: cfg.Password,
-			},
-		},
-		Options: libRedis.ConnectionOptions{
-			DB:           cfg.DB,
-			Protocol:     cfg.Protocol,
-			PoolSize:     cfg.PoolSize,
-			MinIdleConns: cfg.MinIdleConn,
-			ReadTimeout:  time.Duration(cfg.ReadTimeoutMs) * time.Millisecond,
-			WriteTimeout: time.Duration(cfg.WriteTimeoutMs) * time.Millisecond,
-			DialTimeout:  time.Duration(cfg.DialTimeoutMs) * time.Millisecond,
-		},
-		Logger: logger,
-	}
-
-	if cfg.TLS {
-		redisCfg.TLS = &libRedis.TLSConfig{
-			CACertBase64: cfg.CACert,
-		}
-	}
-
-	rawAddresses := strings.Split(cfg.Host, ",")
-	addresses := make([]string, 0, len(rawAddresses))
-
-	for _, addr := range rawAddresses {
-		trimmed := strings.TrimSpace(addr)
-		if trimmed != "" {
-			addresses = append(addresses, trimmed)
-		}
-	}
-
-	switch {
-	case cfg.MasterName != "":
-		redisCfg.Topology = libRedis.Topology{
-			Sentinel: &libRedis.SentinelTopology{
-				Addresses:  addresses,
-				MasterName: cfg.MasterName,
-			},
-		}
-	case len(addresses) > 1:
-		redisCfg.Topology = libRedis.Topology{
-			Cluster: &libRedis.ClusterTopology{
-				Addresses: addresses,
-			},
-		}
-	default:
-		addr := strings.TrimSpace(cfg.Host)
-		if addr == "" && !IsProductionEnvironment(envName) {
-			addr = "localhost:6379"
-		}
-
-		redisCfg.Topology = libRedis.Topology{
-			Standalone: &libRedis.StandaloneTopology{
-				Address: addr,
-			},
-		}
-	}
-
-	return redisCfg
-}
-
-// buildRabbitMQDSN constructs an AMQP connection URI from the RabbitMQ config.
-// This mirrors Config.RabbitMQDSN() in config_env.go.
-func buildRabbitMQDSN(cfg rabbitMQConfigSnapshot) string {
-	var userinfo *url.Userinfo
-	if cfg.Password == "" {
-		userinfo = url.User(cfg.User)
-	} else {
-		userinfo = url.UserPassword(cfg.User, cfg.Password)
-	}
-
-	connURL := url.URL{
-		Scheme: cfg.URI,
-		User:   userinfo,
-		Host:   net.JoinHostPort(cfg.Host, cfg.Port),
-	}
-
-	vhostRaw := strings.TrimSpace(cfg.VHost)
-	if vhostRaw != "" {
-		if strings.Trim(vhostRaw, "/") == "" {
-			connURL.Path = "//"
-			connURL.RawPath = "/%2F"
-		} else {
-			vhost := strings.TrimPrefix(vhostRaw, "/")
-			connURL.Path = "/" + vhost
-			connURL.RawPath = "/" + url.PathEscape(vhost)
-		}
-	}
-
-	return connURL.String()
-}
-
-// snapString extracts a string from the snapshot, or returns the fallback.
-func snapString(snap domain.Snapshot, key, fallback string) string {
-	v := snap.ConfigValue(key, fallback)
-	if s, ok := v.(string); ok {
-		return s
-	}
-
-	return fmt.Sprintf("%v", v)
-}
-
-// snapInt extracts an int from the snapshot, handling the type coercions that
-// can arise from JSON deserialization (float64, int64, string).
-func snapInt(snap domain.Snapshot, key string, fallback int) int {
-	v := snap.ConfigValue(key, fallback)
-
-	switch val := v.(type) {
-	case int:
-		return val
-	case int64:
-		return int(val)
-	case float64:
-		return int(val)
-	case string:
-		n, err := strconv.Atoi(val)
-		if err != nil {
-			return fallback
-		}
-
-		return n
-	default:
-		return fallback
-	}
-}
-
-// snapBool extracts a bool from the snapshot, handling string representations.
-func snapBool(snap domain.Snapshot, key string, fallback bool) bool {
-	v := snap.ConfigValue(key, fallback)
-
-	switch val := v.(type) {
-	case bool:
-		return val
-	case string:
-		return strings.EqualFold(val, "true") || val == "1"
-	default:
-		return fallback
-	}
-}
-
-// coalesce returns the first non-empty string from the arguments.
-func coalesce(values ...string) string {
-	for _, v := range values {
-		if v != "" {
-			return v
-		}
-	}
-
-	return ""
 }
