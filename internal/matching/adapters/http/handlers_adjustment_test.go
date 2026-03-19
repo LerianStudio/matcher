@@ -113,6 +113,7 @@ func newAdjustmentUseCase(
 	auditLogRepo := &runMatchAuditLogRepo{}
 
 	feeScheduleRepo := &runMatchFeeScheduleRepo{}
+	feeRuleProvider := &runMatchFeeRuleProvider{}
 
 	uc, err := command.New(command.UseCaseDeps{
 		ContextProvider:  ctxProvider,
@@ -131,6 +132,7 @@ func newAdjustmentUseCase(
 		InfraProvider:    infraProvider,
 		AuditLogRepo:     auditLogRepo,
 		FeeScheduleRepo:  feeScheduleRepo,
+		FeeRuleProvider:  feeRuleProvider,
 	})
 	require.NoError(t, err)
 

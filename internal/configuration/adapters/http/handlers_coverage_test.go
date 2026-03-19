@@ -283,11 +283,8 @@ func TestCloneContext_Success(t *testing.T) {
 
 	app.Post("/v1/contexts/:contextId/clone", fixture.handler.CloneContext)
 
-	// Disable fee schedule cloning since no fee schedule repo is wired
-	noFeeSchedules := false
 	payload := dto.CloneContextRequest{
-		Name:                "Cloned Context",
-		IncludeFeeSchedules: &noFeeSchedules,
+		Name: "Cloned Context",
 	}
 
 	requestPath := replacePathParams(
@@ -407,10 +404,9 @@ func TestCloneContext_WithBoolDefaults(t *testing.T) {
 
 	falseVal := false
 	payload := dto.CloneContextRequest{
-		Name:                "Cloned NoSources",
-		IncludeSources:      &falseVal,
-		IncludeRules:        &falseVal,
-		IncludeFeeSchedules: &falseVal,
+		Name:           "Cloned NoSources",
+		IncludeSources: &falseVal,
+		IncludeRules:   &falseVal,
 	}
 
 	requestPath := replacePathParams(

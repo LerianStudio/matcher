@@ -24,6 +24,7 @@ import (
 	configFieldMapRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/field_map"
 	configMatchRuleRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/match_rule"
 	configSourceRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/source"
+	configFeeRuleRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/fee_rule"
 	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	configVO "github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
@@ -268,6 +269,11 @@ func wireServices(t *testing.T, h *integration.TestHarness) wiredServices {
 	adjustment := adjustmentRepo.NewRepository(provider, auditLogRepo)
 	feeSchedule := feeScheduleRepo.NewRepository(provider)
 
+	feeRuleProvider, err := sharedCross.NewFeeRuleProviderAdapter(
+		configFeeRuleRepo.NewRepository(provider),
+	)
+	require.NoError(t, err)
+
 	matchingUC, err := matchingCommand.New(matchingCommand.UseCaseDeps{
 		ContextProvider:  ctxProvider,
 		SourceProvider:   srcProvider,
@@ -285,6 +291,7 @@ func wireServices(t *testing.T, h *integration.TestHarness) wiredServices {
 		InfraProvider:    provider,
 		AuditLogRepo:     auditLogRepo,
 		FeeScheduleRepo:  feeSchedule,
+		FeeRuleProvider:  feeRuleProvider,
 	})
 	require.NoError(t, err)
 

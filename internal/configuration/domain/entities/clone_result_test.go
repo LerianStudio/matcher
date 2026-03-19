@@ -23,7 +23,6 @@ func TestNewCloneResult(t *testing.T) {
 	assert.Zero(t, result.SourcesCloned)
 	assert.Zero(t, result.RulesCloned)
 	assert.Zero(t, result.FieldMapsCloned)
-	assert.Zero(t, result.FeeSchedulesCloned)
 }
 
 func TestNewCloneResult_NilContext(t *testing.T) {

@@ -94,8 +94,9 @@ type matchRunContext struct {
 	rightCandidates []*shared.Transaction
 	unmatchedIDs    []uuid.UUID
 	stats           map[string]int
-	leftSchedules   map[uuid.UUID]*fee.FeeSchedule // sourceID -> schedule
-	rightSchedules  map[uuid.UUID]*fee.FeeSchedule // sourceID -> schedule
+	leftRules       []*fee.FeeRule
+	rightRules      []*fee.FeeRule
+	allSchedules    map[uuid.UUID]*fee.FeeSchedule
 }
 
 // RunMatch executes the matching engine for a given context.
@@ -323,8 +324,8 @@ func (uc *UseCase) prepareMatchRun(
 
 	sourceTypeByID := buildSourceTypeMap(sources)
 
-	// Load fee schedules for sources that have them
-	leftSchedules, rightSchedules := uc.loadFeeSchedules(ctx, sources, leftSourceIDs, rightSourceIDs)
+	// Load fee rules and their associated schedules for the context
+	leftRules, rightRules, allSchedules := uc.loadFeeRulesAndSchedules(ctx, in.ContextID)
 
 	leftCandidates, rightCandidates, unmatchedIDs, err := uc.loadAndClassifyCandidates(
 		ctx,
@@ -369,8 +370,9 @@ func (uc *UseCase) prepareMatchRun(
 		rightCandidates: rightCandidates,
 		unmatchedIDs:    unmatchedIDs,
 		stats:           stats,
-		leftSchedules:   leftSchedules,
-		rightSchedules:  rightSchedules,
+		leftRules:       leftRules,
+		rightRules:      rightRules,
+		allSchedules:    allSchedules,
 	}, nil
 }
 
@@ -478,7 +480,7 @@ func classifySources(
 		// Symmetric mode: first source in the slice becomes left, rest become right.
 		// The ordering is determined by the upstream query (FindByContextID) and is
 		// deterministic but semantically arbitrary. Fee normalization is not affected
-		// because fee schedules are applied per-source based on FeeScheduleID, not
+		// because fee rules evaluate transaction metadata to resolve schedules, not
 		// left/right assignment.
 		leftSourceIDs[nonNil[0].ID] = struct{}{}
 
@@ -595,8 +597,9 @@ func (uc *UseCase) executeMatchRules(
 		ContextType:      mrc.ctxInfo.Type,
 		Left:             mrc.leftCandidates,
 		Right:            mrc.rightCandidates,
-		LeftSchedules:    mrc.leftSchedules,
-		RightSchedules:   mrc.rightSchedules,
+		LeftRules:        mrc.leftRules,
+		RightRules:       mrc.rightRules,
+		AllSchedules:     mrc.allSchedules,
 		FeeNormalization: feeNorm,
 	})
 	if err != nil {
@@ -2112,63 +2115,70 @@ func buildExceptionInputFromTx(
 	}
 }
 
-func (uc *UseCase) loadFeeSchedules(
+func (uc *UseCase) loadFeeRulesAndSchedules(
 	ctx context.Context,
-	sources []*ports.SourceInfo,
-	leftSourceIDs, rightSourceIDs map[uuid.UUID]struct{},
-) (map[uuid.UUID]*fee.FeeSchedule, map[uuid.UUID]*fee.FeeSchedule) {
-	// Collect unique fee schedule IDs from sources
-	scheduleIDs := make([]uuid.UUID, 0)
-	sourceToSchedule := make(map[uuid.UUID]uuid.UUID) // sourceID -> scheduleID
+	contextID uuid.UUID,
+) ([]*fee.FeeRule, []*fee.FeeRule, map[uuid.UUID]*fee.FeeSchedule) {
+	span := trace.SpanFromContext(ctx)
 
-	for _, src := range sources {
-		if src == nil {
-			continue
-		}
+	if uc.feeRuleProvider == nil {
+		span.SetAttributes(attribute.Bool("fee_rules_configured", false))
 
-		if src.FeeScheduleID != nil && *src.FeeScheduleID != uuid.Nil {
-			scheduleIDs = append(scheduleIDs, *src.FeeScheduleID)
-			sourceToSchedule[src.ID] = *src.FeeScheduleID
+		return nil, nil, nil
+	}
+
+	logger, _, _, _ := libCommons.NewTrackingFromContext(ctx) //nolint:dogsled // only logger needed here
+
+	rules, err := uc.feeRuleProvider.FindByContextID(ctx, contextID)
+	if err != nil {
+		span.SetAttributes(attribute.Bool("fee_rules_load_error", true))
+		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelWarn, "failed to load fee rules (proceeding without normalization)")
+
+		return nil, nil, nil
+	}
+
+	if len(rules) == 0 {
+		span.SetAttributes(attribute.Bool("fee_rules_configured", false))
+
+		return nil, nil, nil
+	}
+
+	// Collect distinct schedule IDs from rules
+	scheduleIDSet := make(map[uuid.UUID]struct{})
+
+	for _, rule := range rules {
+		if rule != nil {
+			scheduleIDSet[rule.FeeScheduleID] = struct{}{}
 		}
 	}
 
-	if len(scheduleIDs) == 0 {
-		return nil, nil
+	scheduleIDs := make([]uuid.UUID, 0, len(scheduleIDSet))
+	for id := range scheduleIDSet {
+		scheduleIDs = append(scheduleIDs, id)
 	}
 
-	// Batch load all schedules
-	if uc.feeScheduleRepo == nil {
-		return nil, nil
+	if uc.feeScheduleRepo == nil || len(scheduleIDs) == 0 {
+		span.SetAttributes(attribute.Bool("fee_rules_configured", false))
+
+		return nil, nil, nil
 	}
 
 	schedules, err := uc.feeScheduleRepo.GetByIDs(ctx, scheduleIDs)
 	if err != nil {
-		logger, _, _, _ := libCommons.NewTrackingFromContext(ctx)
+		span.SetAttributes(attribute.Bool("fee_rules_load_error", true))
 		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelWarn, "failed to load fee schedules (proceeding without normalization)")
 
-		return nil, nil
+		return nil, nil, nil
 	}
 
-	// Build per-source maps
-	leftSchedules := make(map[uuid.UUID]*fee.FeeSchedule)
-	rightSchedules := make(map[uuid.UUID]*fee.FeeSchedule)
+	span.SetAttributes(
+		attribute.Bool("fee_rules_configured", true),
+		attribute.Int("fee_rules_count", len(rules)),
+	)
 
-	for sourceID, scheduleID := range sourceToSchedule {
-		sched, ok := schedules[scheduleID]
-		if !ok {
-			continue
-		}
+	leftRules, rightRules := fee.SplitRulesBySide(rules)
 
-		if _, isLeft := leftSourceIDs[sourceID]; isLeft {
-			leftSchedules[sourceID] = sched
-		}
-
-		if _, isRight := rightSourceIDs[sourceID]; isRight {
-			rightSchedules[sourceID] = sched
-		}
-	}
-
-	return leftSchedules, rightSchedules
+	return leftRules, rightRules, schedules
 }
 
 func buildSourceTypeMap(sources []*ports.SourceInfo) map[uuid.UUID]string {

@@ -31,11 +31,10 @@ type CreateContextRequest struct {
 
 // CreateContextInlineSourceRequest is an inline source payload for context creation.
 type CreateContextInlineSourceRequest struct {
-	Name          string         `json:"name"`
-	Type          string         `json:"type"`
-	Config        map[string]any `json:"config,omitempty"`
-	FeeScheduleID *string        `json:"feeScheduleId,omitempty"`
-	Mapping       map[string]any `json:"mapping,omitempty"`
+	Name    string         `json:"name"`
+	Type    string         `json:"type"`
+	Config  map[string]any `json:"config,omitempty"`
+	Mapping map[string]any `json:"mapping,omitempty"`
 }
 
 // CreateContextInlineRuleRequest is an inline rule payload for context creation.
@@ -55,22 +54,20 @@ type UpdateContextRequest struct {
 
 // Source represents a reconciliation source.
 type Source struct {
-	ID            string         `json:"id"`
-	ContextID     string         `json:"contextId"`
-	Name          string         `json:"name"`
-	Type          string         `json:"type"`
-	Config        map[string]any `json:"config,omitempty"`
-	FeeScheduleID string         `json:"feeScheduleId,omitempty"`
-	CreatedAt     time.Time      `json:"createdAt"`
-	UpdatedAt     time.Time      `json:"updatedAt"`
+	ID        string         `json:"id"`
+	ContextID string         `json:"contextId"`
+	Name      string         `json:"name"`
+	Type      string         `json:"type"`
+	Config    map[string]any `json:"config,omitempty"`
+	CreatedAt time.Time      `json:"createdAt"`
+	UpdatedAt time.Time      `json:"updatedAt"`
 }
 
 // CreateSourceRequest is the payload for creating a source.
 type CreateSourceRequest struct {
-	Name          string         `json:"name"`
-	Type          string         `json:"type"`
-	Config        map[string]any `json:"config,omitempty"`
-	FeeScheduleID string         `json:"feeScheduleId,omitempty"`
+	Name   string         `json:"name"`
+	Type   string         `json:"type"`
+	Config map[string]any `json:"config,omitempty"`
 }
 
 // UpdateSourceRequest is the payload for updating a source.

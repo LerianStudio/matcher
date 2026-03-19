@@ -274,10 +274,9 @@ func createInlineSources(
 ) error {
 	for _, srcInput := range sources {
 		srcEntity, srcErr := entities.NewReconciliationSource(ctx, contextID, entities.CreateReconciliationSourceInput{
-			Name:          srcInput.Name,
-			Type:          srcInput.Type,
-			Config:        srcInput.Config,
-			FeeScheduleID: srcInput.FeeScheduleID,
+			Name:   srcInput.Name,
+			Type:   srcInput.Type,
+			Config: srcInput.Config,
 		})
 		if srcErr != nil {
 			return fmt.Errorf("invalid source input: %w", srcErr)

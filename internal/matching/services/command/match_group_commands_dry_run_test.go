@@ -94,6 +94,7 @@ func TestRunMatch_DryRun_DoesNotPersistOrMarkTransactions(t *testing.T) {
 		InfraProvider:    &stubInfraProviderForRun{},
 		AuditLogRepo:     &stubAuditLogRepoForRun{},
 		FeeScheduleRepo:  &mockFeeScheduleRepo{},
+		FeeRuleProvider:  &mockFeeRuleProvider{},
 	})
 	require.NoError(t, err)
 

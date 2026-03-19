@@ -1123,9 +1123,9 @@ func TestScanSource_Success(t *testing.T) {
 	configJSON := []byte(`{"key":"value"}`)
 
 	rows := sqlmock.NewRows([]string{
-		"id", "context_id", "name", "type", "config", "fee_schedule_id", "created_at", "updated_at",
+		"id", "context_id", "name", "type", "config", "created_at", "updated_at",
 	}).AddRow(
-		id.String(), contextID.String(), "Test Source", "LEDGER", configJSON, nil, now, now,
+		id.String(), contextID.String(), "Test Source", "LEDGER", configJSON, now, now,
 	)
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
 
@@ -1159,9 +1159,9 @@ func TestScanSource_InvalidID(t *testing.T) {
 	configJSON := []byte(`{}`)
 
 	rows := sqlmock.NewRows([]string{
-		"id", "context_id", "name", "type", "config", "fee_schedule_id", "created_at", "updated_at",
+		"id", "context_id", "name", "type", "config", "created_at", "updated_at",
 	}).AddRow(
-		"invalid-uuid", uuid.New().String(), "Test Source", "LEDGER", configJSON, nil, now, now,
+		"invalid-uuid", uuid.New().String(), "Test Source", "LEDGER", configJSON, now, now,
 	)
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
 
@@ -1191,9 +1191,9 @@ func TestScanSource_InvalidContextID(t *testing.T) {
 	configJSON := []byte(`{}`)
 
 	rows := sqlmock.NewRows([]string{
-		"id", "context_id", "name", "type", "config", "fee_schedule_id", "created_at", "updated_at",
+		"id", "context_id", "name", "type", "config", "created_at", "updated_at",
 	}).AddRow(
-		uuid.New().String(), "invalid-uuid", "Test Source", "LEDGER", configJSON, nil, now, now,
+		uuid.New().String(), "invalid-uuid", "Test Source", "LEDGER", configJSON, now, now,
 	)
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
 
@@ -1223,11 +1223,11 @@ func TestScanSource_InvalidType(t *testing.T) {
 	configJSON := []byte(`{}`)
 
 	rows := sqlmock.NewRows([]string{
-		"id", "context_id", "name", "type", "config", "fee_schedule_id", "created_at", "updated_at",
+		"id", "context_id", "name", "type", "config", "created_at", "updated_at",
 	}).AddRow(
 		uuid.New().
 			String(),
-		uuid.New().String(), "Test Source", "INVALID_TYPE", configJSON, nil, now, now,
+		uuid.New().String(), "Test Source", "INVALID_TYPE", configJSON, now, now,
 	)
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
 
@@ -1257,11 +1257,11 @@ func TestScanSource_InvalidConfig(t *testing.T) {
 	invalidConfigJSON := []byte(`{invalid json}`)
 
 	rows := sqlmock.NewRows([]string{
-		"id", "context_id", "name", "type", "config", "fee_schedule_id", "created_at", "updated_at",
+		"id", "context_id", "name", "type", "config", "created_at", "updated_at",
 	}).AddRow(
 		uuid.New().
 			String(),
-		uuid.New().String(), "Test Source", "LEDGER", invalidConfigJSON, nil, now, now,
+		uuid.New().String(), "Test Source", "LEDGER", invalidConfigJSON, now, now,
 	)
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
 
@@ -1288,9 +1288,9 @@ func TestScanSource_ScanError(t *testing.T) {
 	defer db.Close()
 
 	rows := sqlmock.NewRows([]string{
-		"id", "context_id", "name", "type", "config", "fee_schedule_id", "created_at", "updated_at",
+		"id", "context_id", "name", "type", "config", "created_at", "updated_at",
 	}).AddRow(
-		nil, nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil,
 	)
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
 
@@ -1334,11 +1334,11 @@ func TestScanSource_AllSourceTypes(t *testing.T) {
 			configJSON := []byte(`{}`)
 
 			rows := sqlmock.NewRows([]string{
-				"id", "context_id", "name", "type", "config", "fee_schedule_id", "created_at", "updated_at",
+				"id", "context_id", "name", "type", "config", "created_at", "updated_at",
 			}).AddRow(
 				uuid.New().
 					String(),
-				uuid.New().String(), "Test Source", tc.typeStr, configJSON, nil, now, now,
+				uuid.New().String(), "Test Source", tc.typeStr, configJSON, now, now,
 			)
 			mock.ExpectQuery("SELECT").WillReturnRows(rows)
 
@@ -1370,11 +1370,11 @@ func TestScanSource_EmptyConfig(t *testing.T) {
 	emptyConfigJSON := []byte(`{}`)
 
 	rows := sqlmock.NewRows([]string{
-		"id", "context_id", "name", "type", "config", "fee_schedule_id", "created_at", "updated_at",
+		"id", "context_id", "name", "type", "config", "created_at", "updated_at",
 	}).AddRow(
 		uuid.New().
 			String(),
-		uuid.New().String(), "Test Source", "LEDGER", emptyConfigJSON, nil, now, now,
+		uuid.New().String(), "Test Source", "LEDGER", emptyConfigJSON, now, now,
 	)
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
 
@@ -1492,9 +1492,9 @@ func TestRepository_FindByID_SuccessWithMock(t *testing.T) {
 	configJSON := []byte(`{"key":"value"}`)
 
 	rows := sqlmock.NewRows([]string{
-		"id", "context_id", "name", "type", "config", "fee_schedule_id", "created_at", "updated_at",
+		"id", "context_id", "name", "type", "config", "created_at", "updated_at",
 	}).AddRow(
-		id.String(), contextID.String(), "Test Source", "LEDGER", configJSON, nil, now, now,
+		id.String(), contextID.String(), "Test Source", "LEDGER", configJSON, now, now,
 	)
 
 	mock.ExpectBegin()
@@ -1567,10 +1567,10 @@ func TestRepository_FindByContextID_SuccessWithMock(t *testing.T) {
 	configJSON := []byte(`{}`)
 
 	rows := sqlmock.NewRows([]string{
-		"id", "context_id", "name", "type", "config", "fee_schedule_id", "created_at", "updated_at",
+		"id", "context_id", "name", "type", "config", "created_at", "updated_at",
 	}).
-		AddRow(id1.String(), contextID.String(), "Source 1", "LEDGER", configJSON, nil, now, now).
-		AddRow(id2.String(), contextID.String(), "Source 2", "GATEWAY", configJSON, nil, now, now)
+		AddRow(id1.String(), contextID.String(), "Source 1", "LEDGER", configJSON, now, now).
+		AddRow(id2.String(), contextID.String(), "Source 2", "GATEWAY", configJSON, now, now)
 
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT .+ FROM reconciliation_sources WHERE context_id").WillReturnRows(rows)
@@ -1597,8 +1597,8 @@ func TestRepository_FindByContextID_WithCursorWithMock(t *testing.T) {
 	configJSON := []byte(`{}`)
 
 	rows := sqlmock.NewRows([]string{
-		"id", "context_id", "name", "type", "config", "fee_schedule_id", "created_at", "updated_at",
-	}).AddRow(id.String(), contextID.String(), "Source", "BANK", configJSON, nil, now, now)
+		"id", "context_id", "name", "type", "config", "created_at", "updated_at",
+	}).AddRow(id.String(), contextID.String(), "Source", "BANK", configJSON, now, now)
 
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT .+ FROM reconciliation_sources WHERE context_id").WillReturnRows(rows)
@@ -1622,7 +1622,7 @@ func TestRepository_FindByContextID_EmptyWithMock(t *testing.T) {
 	contextID := uuid.New()
 
 	rows := sqlmock.NewRows([]string{
-		"id", "context_id", "name", "type", "config", "fee_schedule_id", "created_at", "updated_at",
+		"id", "context_id", "name", "type", "config", "created_at", "updated_at",
 	})
 
 	mock.ExpectBegin()
@@ -1670,8 +1670,8 @@ func TestRepository_FindByContextIDAndType_SuccessWithMock(t *testing.T) {
 	configJSON := []byte(`{}`)
 
 	rows := sqlmock.NewRows([]string{
-		"id", "context_id", "name", "type", "config", "fee_schedule_id", "created_at", "updated_at",
-	}).AddRow(id.String(), contextID.String(), "Source", "LEDGER", configJSON, nil, now, now)
+		"id", "context_id", "name", "type", "config", "created_at", "updated_at",
+	}).AddRow(id.String(), contextID.String(), "Source", "LEDGER", configJSON, now, now)
 
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT .+ FROM reconciliation_sources WHERE context_id").WillReturnRows(rows)
@@ -1705,8 +1705,8 @@ func TestRepository_FindByContextIDAndType_WithCursorWithMock(t *testing.T) {
 	configJSON := []byte(`{}`)
 
 	rows := sqlmock.NewRows([]string{
-		"id", "context_id", "name", "type", "config", "fee_schedule_id", "created_at", "updated_at",
-	}).AddRow(id.String(), contextID.String(), "Source", "GATEWAY", configJSON, nil, now, now)
+		"id", "context_id", "name", "type", "config", "created_at", "updated_at",
+	}).AddRow(id.String(), contextID.String(), "Source", "GATEWAY", configJSON, now, now)
 
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT .+ FROM reconciliation_sources WHERE context_id").WillReturnRows(rows)

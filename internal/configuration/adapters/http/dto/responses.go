@@ -44,8 +44,6 @@ type ReconciliationSourceResponse struct {
 	Type string `json:"type"      example:"BANK"                                 enums:"LEDGER,BANK,GATEWAY,CUSTOM"`
 	// Source configuration
 	Config map[string]any `json:"config"`
-	// Fee schedule ID associated with this source
-	FeeScheduleID string `json:"feeScheduleId,omitempty" example:"550e8400-e29b-41d4-a716-446655440000"`
 	// Creation timestamp in RFC3339 format
 	CreatedAt string `json:"createdAt" example:"2025-01-15T10:30:00Z"`
 	// Last update timestamp in RFC3339 format

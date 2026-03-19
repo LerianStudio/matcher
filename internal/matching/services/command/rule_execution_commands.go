@@ -32,8 +32,9 @@ type ExecuteRulesInput struct {
 	ContextType      shared.ContextType
 	Left             []*shared.Transaction
 	Right            []*shared.Transaction
-	LeftSchedules    map[uuid.UUID]*fee.FeeSchedule // sourceID → schedule
-	RightSchedules   map[uuid.UUID]*fee.FeeSchedule // sourceID → schedule
+	LeftRules        []*fee.FeeRule
+	RightRules       []*fee.FeeRule
+	AllSchedules     map[uuid.UUID]*fee.FeeSchedule
 	FeeNormalization fee.NormalizationMode
 }
 
@@ -75,9 +76,9 @@ func (uc *UseCase) ExecuteRulesDetailed(
 
 	var left, right []matching.CandidateTransaction
 
-	if in.FeeNormalization != fee.NormalizationModeNone && (in.LeftSchedules != nil || in.RightSchedules != nil) {
-		left = mapTransactionsWithFees(ctx, in.Left, in.LeftSchedules, in.FeeNormalization, logger)
-		right = mapTransactionsWithFees(ctx, in.Right, in.RightSchedules, in.FeeNormalization, logger)
+	if in.FeeNormalization != fee.NormalizationModeNone && (len(in.LeftRules) > 0 || len(in.RightRules) > 0) {
+		left = mapTransactionsWithFeeRules(ctx, in.Left, in.LeftRules, in.AllSchedules, in.FeeNormalization, logger)
+		right = mapTransactionsWithFeeRules(ctx, in.Right, in.RightRules, in.AllSchedules, in.FeeNormalization, logger)
 	} else {
 		left = mapTransactions(in.Left)
 		right = mapTransactions(in.Right)
@@ -328,10 +329,11 @@ func mapTransactions(in []*shared.Transaction) []matching.CandidateTransaction {
 	return out
 }
 
-func mapTransactionsWithFees(
+func mapTransactionsWithFeeRules(
 	ctx context.Context,
 	in []*shared.Transaction,
-	scheduleBySourceID map[uuid.UUID]*fee.FeeSchedule,
+	rules []*fee.FeeRule,
+	schedules map[uuid.UUID]*fee.FeeSchedule,
 	mode fee.NormalizationMode,
 	logger libLog.Logger,
 ) []matching.CandidateTransaction {
@@ -359,10 +361,10 @@ func mapTransactionsWithFees(
 			OriginalAmount: txn.Amount,
 		}
 
-		if scheduleBySourceID != nil {
-			if schedule, ok := scheduleBySourceID[txn.SourceID]; ok {
-				applyFeeNormalization(ctx, &candidate, txn, schedule, mode, logger)
-			}
+		// Resolve schedule per-transaction based on metadata matching against rules
+		schedule := fee.ResolveFeeSchedule(txn.Metadata, rules, schedules)
+		if schedule != nil {
+			applyFeeNormalization(ctx, &candidate, txn, schedule, mode, logger)
 		}
 
 		out = append(out, candidate)

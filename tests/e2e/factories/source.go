@@ -83,12 +83,6 @@ func (b *SourceBuilder) AsGateway() *SourceBuilder {
 	return b.WithType("GATEWAY")
 }
 
-// WithFeeScheduleID sets the fee schedule ID for the source.
-func (b *SourceBuilder) WithFeeScheduleID(id string) *SourceBuilder {
-	b.req.FeeScheduleID = id
-	return b
-}
-
 // WithConfig sets the source configuration.
 func (b *SourceBuilder) WithConfig(config map[string]any) *SourceBuilder {
 	b.req.Config = config

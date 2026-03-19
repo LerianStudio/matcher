@@ -109,6 +109,7 @@ func TestRunMatch_OrchestrationCommit(t *testing.T) {
 		InfraProvider:    &stubInfraProviderForRun{},
 		AuditLogRepo:     &stubAuditLogRepoForRun{},
 		FeeScheduleRepo:  &mockFeeScheduleRepo{},
+		FeeRuleProvider:  &mockFeeRuleProvider{},
 	})
 	require.NoError(t, err)
 
@@ -222,6 +223,7 @@ func TestRunMatch_OutboxEventContent(t *testing.T) {
 		InfraProvider:    &stubInfraProviderForRun{},
 		AuditLogRepo:     &stubAuditLogRepoForRun{},
 		FeeScheduleRepo:  &mockFeeScheduleRepo{},
+		FeeRuleProvider:  &mockFeeRuleProvider{},
 	})
 	require.NoError(t, err)
 
@@ -344,6 +346,7 @@ func TestRunMatch_PersistFailureRunsFinalize(t *testing.T) {
 		InfraProvider:    &stubInfraProviderForRun{},
 		AuditLogRepo:     &stubAuditLogRepoForRun{},
 		FeeScheduleRepo:  &mockFeeScheduleRepo{},
+		FeeRuleProvider:  &mockFeeRuleProvider{},
 	})
 	require.NoError(t, err)
 
@@ -436,6 +439,7 @@ func TestRunMatch_Locking(t *testing.T) {
 		InfraProvider:    &stubInfraProviderForRun{},
 		AuditLogRepo:     &stubAuditLogRepoForRun{},
 		FeeScheduleRepo:  &mockFeeScheduleRepo{},
+		FeeRuleProvider:  &mockFeeRuleProvider{},
 	})
 	require.NoError(t, err)
 
@@ -543,6 +547,7 @@ func TestRunMatch_UsesBaseAmountForExpected(t *testing.T) {
 		InfraProvider:    &stubInfraProviderForRun{},
 		AuditLogRepo:     &stubAuditLogRepoForRun{},
 		FeeScheduleRepo:  &mockFeeScheduleRepo{},
+		FeeRuleProvider:  &mockFeeRuleProvider{},
 	})
 	require.NoError(t, err)
 
@@ -641,6 +646,7 @@ func TestRunMatch_InvalidProposalIsSkipped(t *testing.T) {
 		InfraProvider:    &stubInfraProviderForRun{},
 		AuditLogRepo:     &stubAuditLogRepoForRun{},
 		FeeScheduleRepo:  &mockFeeScheduleRepo{},
+		FeeRuleProvider:  &mockFeeRuleProvider{},
 	})
 	require.NoError(t, err)
 
@@ -758,6 +764,7 @@ func TestRunMatch_LockFailure(t *testing.T) {
 		InfraProvider:    &stubInfraProviderForRun{},
 		AuditLogRepo:     &stubAuditLogRepoForRun{},
 		FeeScheduleRepo:  &mockFeeScheduleRepo{},
+		FeeRuleProvider:  &mockFeeRuleProvider{},
 	})
 	require.NoError(t, err)
 
@@ -854,6 +861,7 @@ func TestRunMatch_SkipsProposalWithMissingTransaction(t *testing.T) {
 		InfraProvider:    &stubInfraProviderForRun{},
 		AuditLogRepo:     &stubAuditLogRepoForRun{},
 		FeeScheduleRepo:  &mockFeeScheduleRepo{},
+		FeeRuleProvider:  &mockFeeRuleProvider{},
 	})
 	require.NoError(t, err)
 
@@ -982,6 +990,7 @@ func TestRunMatch_SkipsProposalWithMissingBaseCurrency(t *testing.T) {
 		InfraProvider:    &stubInfraProviderForRun{},
 		AuditLogRepo:     &stubAuditLogRepoForRun{},
 		FeeScheduleRepo:  &mockFeeScheduleRepo{},
+		FeeRuleProvider:  &mockFeeRuleProvider{},
 	})
 	require.NoError(t, err)
 
@@ -1089,6 +1098,7 @@ func TestRunMatch_NoTransactions(t *testing.T) {
 		InfraProvider:    &stubInfraProviderForRun{},
 		AuditLogRepo:     &stubAuditLogRepoForRun{},
 		FeeScheduleRepo:  &mockFeeScheduleRepo{},
+		FeeRuleProvider:  &mockFeeRuleProvider{},
 	})
 	require.NoError(t, err)
 
@@ -1195,6 +1205,7 @@ func TestRunMatch_NoTransactionsCommitCreatesExceptions(t *testing.T) {
 		InfraProvider:    &stubInfraProviderForRun{},
 		AuditLogRepo:     &stubAuditLogRepoForRun{},
 		FeeScheduleRepo:  &mockFeeScheduleRepo{},
+		FeeRuleProvider:  &mockFeeRuleProvider{},
 	})
 	require.NoError(t, err)
 
@@ -1458,6 +1469,7 @@ func TestRunMatch_CallOrderCommit(t *testing.T) {
 		InfraProvider:    &stubInfraProviderForRun{},
 		AuditLogRepo:     &stubAuditLogRepoForRun{},
 		FeeScheduleRepo:  &mockFeeScheduleRepo{},
+		FeeRuleProvider:  &mockFeeRuleProvider{},
 	})
 	require.NoError(t, err)
 
@@ -1569,6 +1581,7 @@ func TestRunMatch_LockingArgs_IDsAndTTL(t *testing.T) {
 		InfraProvider:    &stubInfraProviderForRun{},
 		AuditLogRepo:     &stubAuditLogRepoForRun{},
 		FeeScheduleRepo:  &mockFeeScheduleRepo{},
+		FeeRuleProvider:  &mockFeeRuleProvider{},
 	})
 	require.NoError(t, err)
 
@@ -2409,6 +2422,7 @@ func TestRunMatch_ContextCancelled(t *testing.T) {
 		InfraProvider:    &stubInfraProviderForRun{},
 		AuditLogRepo:     &stubAuditLogRepoForRun{},
 		FeeScheduleRepo:  &mockFeeScheduleRepo{},
+		FeeRuleProvider:  &mockFeeRuleProvider{},
 	})
 	require.NoError(t, err)
 

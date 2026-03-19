@@ -17,7 +17,6 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
-	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -55,12 +54,11 @@ func WithInfrastructureProvider(provider sharedPorts.InfrastructureProvider) Use
 
 // CloneContextInput holds the parameters required to clone a reconciliation context.
 type CloneContextInput struct {
-	SourceContextID     uuid.UUID
-	NewName             string
-	IncludeSources      bool
-	IncludeRules        bool
-	IncludeFeeSchedules bool
-	AutoMatchOnUpload   *bool
+	SourceContextID   uuid.UUID
+	NewName           string
+	IncludeSources    bool
+	IncludeRules      bool
+	AutoMatchOnUpload *bool
 }
 
 // CloneResult is an alias for entities.CloneResult for backward compatibility.
@@ -145,7 +143,7 @@ func (uc *UseCase) cloneContextTransactional(ctx context.Context, input CloneCon
 	}
 
 	if input.IncludeSources {
-		if cloneErr := uc.cloneSourcesIntoResultWithTx(ctx, tx, input, created.ID, sourceContext.TenantID, result); cloneErr != nil {
+		if cloneErr := uc.cloneSourcesIntoResultWithTx(ctx, tx, input, created.ID, result); cloneErr != nil {
 			return nil, fmt.Errorf("cloning sources: %w", cloneErr)
 		}
 	}
@@ -178,7 +176,7 @@ func (uc *UseCase) cloneContextNonTransactional(ctx context.Context, input Clone
 	}
 
 	if input.IncludeSources {
-		if cloneErr := uc.cloneSourcesIntoResult(ctx, input, created.ID, sourceContext.TenantID, result); cloneErr != nil {
+		if cloneErr := uc.cloneSourcesIntoResult(ctx, input, created.ID, result); cloneErr != nil {
 			return nil, fmt.Errorf("cloning sources: %w", cloneErr)
 		}
 	}
@@ -199,7 +197,7 @@ func (uc *UseCase) publishCloneAudit(ctx context.Context, input CloneContextInpu
 	uc.publishAudit(ctx, "context", result.Context.ID, "clone", map[string]any{
 		"source_context_id": input.SourceContextID.String(), "name": result.Context.Name,
 		"sources_cloned": result.SourcesCloned, "rules_cloned": result.RulesCloned,
-		"field_maps_cloned": result.FieldMapsCloned, "fee_schedules_cloned": result.FeeSchedulesCloned,
+		"field_maps_cloned": result.FieldMapsCloned,
 	})
 }
 
@@ -218,10 +216,6 @@ func (uc *UseCase) validateCloneDependencies(input CloneContextInput) error {
 
 	if input.IncludeRules && uc.matchRuleRepo == nil {
 		return ErrNilMatchRuleRepository
-	}
-
-	if input.IncludeFeeSchedules && uc.feeScheduleRepo == nil {
-		return ErrNilFeeScheduleRepository
 	}
 
 	if input.NewName == "" {
@@ -270,50 +264,38 @@ func (uc *UseCase) createClonedContext(ctx context.Context, input CloneContextIn
 	return created, nil
 }
 
-func (uc *UseCase) cloneSourcesIntoResult(ctx context.Context, input CloneContextInput, newContextID, tenantID uuid.UUID, result *CloneResult) error {
-	sources, fieldMaps, feeSchedules, err := uc.cloneSourcesAndFieldMaps(ctx, nil, input.SourceContextID, newContextID, tenantID, input.IncludeFeeSchedules)
+func (uc *UseCase) cloneSourcesIntoResult(ctx context.Context, input CloneContextInput, newContextID uuid.UUID, result *CloneResult) error {
+	sources, fieldMaps, err := uc.cloneSourcesAndFieldMaps(ctx, nil, input.SourceContextID, newContextID)
 	if err != nil {
 		return err
 	}
 
 	result.SourcesCloned = sources
 	result.FieldMapsCloned = fieldMaps
-	result.FeeSchedulesCloned = feeSchedules
 
 	return nil
 }
 
-func (uc *UseCase) cloneSourcesIntoResultWithTx(ctx context.Context, tx *sql.Tx, input CloneContextInput, newContextID, tenantID uuid.UUID, result *CloneResult) error {
-	sources, fieldMaps, feeSchedules, err := uc.cloneSourcesAndFieldMaps(ctx, tx, input.SourceContextID, newContextID, tenantID, input.IncludeFeeSchedules)
+func (uc *UseCase) cloneSourcesIntoResultWithTx(ctx context.Context, tx *sql.Tx, input CloneContextInput, newContextID uuid.UUID, result *CloneResult) error {
+	sources, fieldMaps, err := uc.cloneSourcesAndFieldMaps(ctx, tx, input.SourceContextID, newContextID)
 	if err != nil {
 		return err
 	}
 
 	result.SourcesCloned = sources
 	result.FieldMapsCloned = fieldMaps
-	result.FeeSchedulesCloned = feeSchedules
 
 	return nil
 }
 
-//nolint:cyclop
-func (uc *UseCase) cloneSourcesAndFieldMaps(ctx context.Context, tx *sql.Tx, sourceContextID, newContextID, tenantID uuid.UUID, includeFeeSchedules bool) (sourcesCloned, fieldMapsCloned, feeSchedulesCloned int, err error) {
+func (uc *UseCase) cloneSourcesAndFieldMaps(ctx context.Context, tx *sql.Tx, sourceContextID, newContextID uuid.UUID) (sourcesCloned, fieldMapsCloned int, err error) {
 	sources, err := uc.fetchAllSources(ctx, sourceContextID)
 	if err != nil {
-		return 0, 0, 0, err
+		return 0, 0, err
 	}
 
 	if len(sources) == 0 {
-		return 0, 0, 0, nil
-	}
-
-	feeScheduleMapping := make(map[uuid.UUID]uuid.UUID)
-
-	if includeFeeSchedules && uc.feeScheduleRepo != nil {
-		feeScheduleMapping, feeSchedulesCloned, err = uc.cloneReferencedFeeSchedules(ctx, sources, tenantID)
-		if err != nil {
-			return 0, 0, 0, fmt.Errorf("cloning fee schedules: %w", err)
-		}
+		return 0, 0, nil
 	}
 
 	sourceIDs := make([]uuid.UUID, len(sources))
@@ -324,7 +306,7 @@ func (uc *UseCase) cloneSourcesAndFieldMaps(ctx context.Context, tx *sql.Tx, sou
 
 	fieldMapsExist, err := uc.fieldMapRepo.ExistsBySourceIDs(ctx, sourceIDs)
 	if err != nil {
-		return 0, 0, 0, fmt.Errorf("checking field maps existence: %w", err)
+		return 0, 0, fmt.Errorf("checking field maps existence: %w", err)
 	}
 
 	now := time.Now().UTC()
@@ -332,24 +314,13 @@ func (uc *UseCase) cloneSourcesAndFieldMaps(ctx context.Context, tx *sql.Tx, sou
 	for _, src := range sources {
 		newSourceID := uuid.New()
 
-		var feeScheduleID *uuid.UUID
-
-		if src.FeeScheduleID != nil {
-			if newID, ok := feeScheduleMapping[*src.FeeScheduleID]; ok {
-				feeScheduleID = &newID
-			} else {
-				copyID := *src.FeeScheduleID
-				feeScheduleID = &copyID
-			}
-		}
-
 		newSource := &entities.ReconciliationSource{
 			ID: newSourceID, ContextID: newContextID, Name: src.Name, Type: src.Type,
-			Config: cloneMap(ctx, src.Config), FeeScheduleID: feeScheduleID, CreatedAt: now, UpdatedAt: now,
+			Config: cloneMap(ctx, src.Config), CreatedAt: now, UpdatedAt: now,
 		}
 
 		if createErr := uc.createSourceWithOptionalTx(ctx, tx, newSource); createErr != nil {
-			return sourcesCloned, fieldMapsCloned, feeSchedulesCloned, fmt.Errorf("creating cloned source %q: %w", src.Name, createErr)
+			return sourcesCloned, fieldMapsCloned, fmt.Errorf("creating cloned source %q: %w", src.Name, createErr)
 		}
 
 		sourcesCloned++
@@ -357,7 +328,7 @@ func (uc *UseCase) cloneSourcesAndFieldMaps(ctx context.Context, tx *sql.Tx, sou
 		if fieldMapsExist[src.ID] {
 			cloned, cloneErr := uc.cloneFieldMap(ctx, tx, src.ID, newContextID, newSourceID, now)
 			if cloneErr != nil {
-				return sourcesCloned, fieldMapsCloned, feeSchedulesCloned, cloneErr
+				return sourcesCloned, fieldMapsCloned, cloneErr
 			}
 
 			if cloned {
@@ -366,7 +337,7 @@ func (uc *UseCase) cloneSourcesAndFieldMaps(ctx context.Context, tx *sql.Tx, sou
 		}
 	}
 
-	return sourcesCloned, fieldMapsCloned, feeSchedulesCloned, nil
+	return sourcesCloned, fieldMapsCloned, nil
 }
 
 func (uc *UseCase) createSourceWithOptionalTx(ctx context.Context, tx *sql.Tx, source *entities.ReconciliationSource) error {
@@ -419,62 +390,6 @@ func (uc *UseCase) cloneFieldMap(ctx context.Context, tx *sql.Tx, oldSourceID, n
 	}
 
 	return true, nil
-}
-
-func (uc *UseCase) cloneReferencedFeeSchedules(ctx context.Context, sources []*entities.ReconciliationSource, tenantID uuid.UUID) (map[uuid.UUID]uuid.UUID, int, error) {
-	uniqueIDs := make(map[uuid.UUID]struct{})
-
-	for _, src := range sources {
-		if src.FeeScheduleID != nil && *src.FeeScheduleID != uuid.Nil {
-			uniqueIDs[*src.FeeScheduleID] = struct{}{}
-		}
-	}
-
-	if len(uniqueIDs) == 0 {
-		return make(map[uuid.UUID]uuid.UUID), 0, nil
-	}
-
-	ids := make([]uuid.UUID, 0, len(uniqueIDs))
-
-	for id := range uniqueIDs {
-		ids = append(ids, id)
-	}
-
-	schedules, err := uc.feeScheduleRepo.GetByIDs(ctx, ids)
-	if err != nil {
-		return nil, 0, fmt.Errorf("fetching fee schedules: %w", err)
-	}
-
-	mapping := make(map[uuid.UUID]uuid.UUID, len(schedules))
-	cloned := 0
-	now := time.Now().UTC()
-
-	for oldID, schedule := range schedules {
-		if schedule == nil {
-			continue
-		}
-
-		newItems := make([]fee.FeeScheduleItem, len(schedule.Items))
-
-		for i, item := range schedule.Items {
-			newItems[i] = fee.FeeScheduleItem{ID: uuid.New(), Name: item.Name, Priority: item.Priority, Structure: item.Structure, CreatedAt: now, UpdatedAt: now}
-		}
-
-		newSchedule := &fee.FeeSchedule{
-			ID: uuid.New(), TenantID: tenantID, Name: schedule.Name + " (Clone)", Currency: schedule.Currency,
-			ApplicationOrder: schedule.ApplicationOrder, RoundingScale: schedule.RoundingScale,
-			RoundingMode: schedule.RoundingMode, Items: newItems, CreatedAt: now, UpdatedAt: now,
-		}
-
-		if _, err := uc.feeScheduleRepo.Create(ctx, newSchedule); err != nil {
-			return mapping, cloned, fmt.Errorf("creating cloned fee schedule %q: %w", schedule.Name, err)
-		}
-
-		mapping[oldID] = newSchedule.ID
-		cloned++
-	}
-
-	return mapping, cloned, nil
 }
 
 func (uc *UseCase) cloneMatchRules(ctx context.Context, sourceContextID, newContextID uuid.UUID) (int, error) {

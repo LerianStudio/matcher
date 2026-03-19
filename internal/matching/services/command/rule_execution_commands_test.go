@@ -74,6 +74,7 @@ func TestExecuteRules_Success(t *testing.T) {
 		InfraProvider:    &stubInfraProviderForRun{},
 		AuditLogRepo:     &stubAuditLogRepoForRun{},
 		FeeScheduleRepo:  &mockFeeScheduleRepo{},
+		FeeRuleProvider:  &mockFeeRuleProvider{},
 	})
 	require.NoError(t, err)
 
@@ -117,6 +118,7 @@ func TestExecuteRules_InvalidContext(t *testing.T) {
 		InfraProvider:    &stubInfraProviderForRun{},
 		AuditLogRepo:     &stubAuditLogRepoForRun{},
 		FeeScheduleRepo:  &mockFeeScheduleRepo{},
+		FeeRuleProvider:  &mockFeeRuleProvider{},
 	})
 
 	require.NoError(t, err)
@@ -159,6 +161,7 @@ func TestExecuteRules_DecodeError(t *testing.T) {
 		InfraProvider:    &stubInfraProviderForRun{},
 		AuditLogRepo:     &stubAuditLogRepoForRun{},
 		FeeScheduleRepo:  &mockFeeScheduleRepo{},
+		FeeRuleProvider:  &mockFeeRuleProvider{},
 	})
 	require.NoError(t, err)
 
@@ -193,6 +196,7 @@ func TestExecuteRules_ProviderError(t *testing.T) {
 		InfraProvider:    &stubInfraProviderForRun{},
 		AuditLogRepo:     &stubAuditLogRepoForRun{},
 		FeeScheduleRepo:  &mockFeeScheduleRepo{},
+		FeeRuleProvider:  &mockFeeRuleProvider{},
 	})
 	require.NoError(t, err)
 

@@ -41,10 +41,9 @@ func TestCloneResultToResponse_WithData(t *testing.T) {
 			CreatedAt:       now,
 			UpdatedAt:       now,
 		},
-		SourcesCloned:      3,
-		RulesCloned:        5,
-		FieldMapsCloned:    2,
-		FeeSchedulesCloned: 1,
+		SourcesCloned:   3,
+		RulesCloned:     5,
+		FieldMapsCloned: 2,
 	}
 
 	resp := CloneResultToResponse(result)
@@ -53,5 +52,4 @@ func TestCloneResultToResponse_WithData(t *testing.T) {
 	assert.Equal(t, 3, resp.SourcesCloned)
 	assert.Equal(t, 5, resp.RulesCloned)
 	assert.Equal(t, 2, resp.FieldMapsCloned)
-	assert.Equal(t, 1, resp.FeeSchedulesCloned)
 }

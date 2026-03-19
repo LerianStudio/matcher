@@ -730,6 +730,16 @@ func (r *runMatchFeeScheduleRepo) GetByIDs(
 	return nil, nil
 }
 
+// runMatchFeeRuleProvider is a minimal stub for fee rule provider in tests.
+type runMatchFeeRuleProvider struct{}
+
+func (r *runMatchFeeRuleProvider) FindByContextID(
+	_ context.Context,
+	_ uuid.UUID,
+) ([]*matchingFee.FeeRule, error) {
+	return nil, nil
+}
+
 // stubMatchItemRepo is a minimal stub for match item repository in tests.
 type stubMatchItemRepo struct{}
 
@@ -799,6 +809,7 @@ func newRunMatchUseCase(
 	infraProvider := &runMatchInfraProvider{}
 	auditLogRepo := &runMatchAuditLogRepo{}
 	feeScheduleRepo := &runMatchFeeScheduleRepo{}
+	feeRuleProvider := &runMatchFeeRuleProvider{}
 
 	uc, err := command.New(command.UseCaseDeps{
 		ContextProvider:  ctxProvider,
@@ -817,6 +828,7 @@ func newRunMatchUseCase(
 		InfraProvider:    infraProvider,
 		AuditLogRepo:     auditLogRepo,
 		FeeScheduleRepo:  feeScheduleRepo,
+		FeeRuleProvider:  feeRuleProvider,
 	})
 	require.NoError(t, err)
 
