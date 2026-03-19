@@ -79,6 +79,11 @@ const (
 	ActionScheduleRead   = "schedule:read"
 	ActionScheduleUpdate = "schedule:update"
 	ActionScheduleDelete = "schedule:delete"
+
+	ActionFeeRuleCreate = "fee-rule:create"
+	ActionFeeRuleRead   = "fee-rule:read"
+	ActionFeeRuleUpdate = "fee-rule:update"
+	ActionFeeRuleDelete = "fee-rule:delete"
 )
 
 // Ingestion module actions.

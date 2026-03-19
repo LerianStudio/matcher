@@ -224,6 +224,26 @@ func TestConfigurationModuleActions(t *testing.T) {
 			constant: ActionScheduleDelete,
 			expected: "schedule:delete",
 		},
+		{
+			name:     "ActionFeeRuleCreate",
+			constant: ActionFeeRuleCreate,
+			expected: "fee-rule:create",
+		},
+		{
+			name:     "ActionFeeRuleRead",
+			constant: ActionFeeRuleRead,
+			expected: "fee-rule:read",
+		},
+		{
+			name:     "ActionFeeRuleUpdate",
+			constant: ActionFeeRuleUpdate,
+			expected: "fee-rule:update",
+		},
+		{
+			name:     "ActionFeeRuleDelete",
+			constant: ActionFeeRuleDelete,
+			expected: "fee-rule:delete",
+		},
 	}
 
 	for _, tt := range tests {
@@ -454,6 +474,7 @@ func TestActionPatternConsistency(t *testing.T) {
 			ActionRuleCreate, ActionRuleRead, ActionRuleUpdate, ActionRuleDelete,
 			ActionFeeScheduleCreate, ActionFeeScheduleRead, ActionFeeScheduleUpdate, ActionFeeScheduleDelete,
 			ActionScheduleCreate, ActionScheduleRead, ActionScheduleUpdate, ActionScheduleDelete,
+			ActionFeeRuleCreate, ActionFeeRuleRead, ActionFeeRuleUpdate, ActionFeeRuleDelete,
 			ActionImportCreate, ActionJobRead, ActionTransactionIgnore, ActionTransactionSearch,
 			ActionMatchRun, ActionMatchRead, ActionMatchDelete, ActionManualMatch, ActionAdjustmentCreate,
 			ActionAuditRead, ActionArchiveRead,
@@ -566,6 +587,10 @@ func TestActionsAreNotEmpty(t *testing.T) {
 		"ActionScheduleRead":       ActionScheduleRead,
 		"ActionScheduleUpdate":     ActionScheduleUpdate,
 		"ActionScheduleDelete":     ActionScheduleDelete,
+		"ActionFeeRuleCreate":      ActionFeeRuleCreate,
+		"ActionFeeRuleRead":        ActionFeeRuleRead,
+		"ActionFeeRuleUpdate":      ActionFeeRuleUpdate,
+		"ActionFeeRuleDelete":      ActionFeeRuleDelete,
 		"ActionImportCreate":       ActionImportCreate,
 		"ActionJobRead":            ActionJobRead,
 		"ActionTransactionIgnore":  ActionTransactionIgnore,
