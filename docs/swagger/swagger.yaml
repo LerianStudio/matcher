@@ -160,10 +160,6 @@ definitions:
       config:
         additionalProperties: {}
         type: object
-      feeScheduleId:
-        example: 550e8400-e29b-41d4-a716-446655440000
-        format: uuid
-        type: string
       mapping:
         type: object
       name:
@@ -183,6 +179,36 @@ definitions:
     required:
     - name
     - type
+    type: object
+  github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateFeeRuleRequest:
+    properties:
+      feeScheduleId:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+      name:
+        example: BB Right-Side Rule
+        maxLength: 100
+        minLength: 1
+        type: string
+      predicates:
+        items:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldPredicateRequest'
+        type: array
+      priority:
+        example: 0
+        minimum: 0
+        type: integer
+      side:
+        enum:
+        - LEFT
+        - RIGHT
+        - ANY
+        example: RIGHT
+        type: string
+    required:
+    - feeScheduleId
+    - name
+    - side
     type: object
   github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateFeeScheduleItemRequest:
     properties:
@@ -298,10 +324,6 @@ definitions:
       config:
         additionalProperties: {}
         type: object
-      feeScheduleId:
-        example: 550e8400-e29b-41d4-a716-446655440000
-        format: uuid
-        type: string
       name:
         example: Primary Bank Account
         maxLength: 50
@@ -319,6 +341,41 @@ definitions:
     required:
     - name
     - type
+    type: object
+  github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeRuleResponse:
+    properties:
+      contextId:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+      createdAt:
+        example: "2025-01-15T10:30:00Z"
+        type: string
+      feeScheduleId:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+      id:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+      name:
+        example: BB Right-Side Rule
+        type: string
+      predicates:
+        items:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldPredicateResponse'
+        type: array
+      priority:
+        example: 0
+        type: integer
+      side:
+        enum:
+        - LEFT
+        - RIGHT
+        - ANY
+        example: RIGHT
+        type: string
+      updatedAt:
+        example: "2025-01-15T10:30:00Z"
+        type: string
     type: object
   github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeScheduleItemResponse:
     properties:
@@ -423,6 +480,49 @@ definitions:
         description: Version number for optimistic locking
         example: 1
         type: integer
+    type: object
+  github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldPredicateRequest:
+    properties:
+      field:
+        example: institution
+        type: string
+      operator:
+        enum:
+        - EQUALS
+        - IN
+        - EXISTS
+        example: EQUALS
+        type: string
+      value:
+        example: Banco do Brasil
+        type: string
+      values:
+        items:
+          type: string
+        type: array
+    required:
+    - field
+    - operator
+    type: object
+  github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldPredicateResponse:
+    properties:
+      field:
+        example: institution
+        type: string
+      operator:
+        enum:
+        - EQUALS
+        - IN
+        - EXISTS
+        example: EQUALS
+        type: string
+      value:
+        example: Banco do Brasil
+        type: string
+      values:
+        items:
+          type: string
+        type: array
     type: object
   github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.MatchRuleResponse:
     description: Matching rule within a reconciliation context
@@ -545,10 +645,6 @@ definitions:
         description: Creation timestamp in RFC3339 format
         example: "2025-01-15T10:30:00Z"
         type: string
-      feeScheduleId:
-        description: Fee schedule ID associated with this source
-        example: 550e8400-e29b-41d4-a716-446655440000
-        type: string
       id:
         description: Unique identifier for the source
         example: 550e8400-e29b-41d4-a716-446655440000
@@ -666,10 +762,6 @@ definitions:
         description: Creation timestamp in RFC3339 format
         example: "2025-01-15T10:30:00Z"
         type: string
-      feeScheduleId:
-        description: Fee schedule ID associated with this source
-        example: 550e8400-e29b-41d4-a716-446655440000
-        type: string
       hasFieldMaps:
         description: Indicates if field maps are configured for this source
         example: true
@@ -741,6 +833,29 @@ definitions:
         example: 1:N
         type: string
     type: object
+  github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.UpdateFeeRuleRequest:
+    properties:
+      feeScheduleId:
+        type: string
+      name:
+        example: Updated Rule
+        maxLength: 100
+        type: string
+      predicates:
+        items:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldPredicateRequest'
+        type: array
+      priority:
+        minimum: 0
+        type: integer
+      side:
+        enum:
+        - LEFT
+        - RIGHT
+        - ANY
+        example: LEFT
+        type: string
+    type: object
   github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.UpdateFeeScheduleRequest:
     properties:
       applicationOrder:
@@ -807,10 +922,6 @@ definitions:
       config:
         additionalProperties: {}
         type: object
-      feeScheduleId:
-        example: 550e8400-e29b-41d4-a716-446655440000
-        format: uuid
-        type: string
       name:
         example: Secondary Bank Account
         maxLength: 50
@@ -3690,6 +3801,119 @@ paths:
       summary: Clone a reconciliation context
       tags:
       - Configuration Contexts
+  /v1/config/contexts/{contextId}/fee-rules:
+    get:
+      description: Returns all fee rules for a reconciliation context, ordered by
+        priority.
+      operationId: listFeeRules
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Context ID
+        format: uuid
+        in: path
+        name: contextId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of fee rules
+          schema:
+            items:
+              $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeRuleResponse'
+            type: array
+        "400":
+          description: Invalid context ID format
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "404":
+          description: Context not found
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List fee rules
+      tags:
+      - Configuration Fee Rules
+    post:
+      consumes:
+      - application/json
+      description: Creates a new fee rule that maps transaction metadata to a fee
+        schedule within a context.
+      operationId: createFeeRule
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Idempotency key for safe retries
+        in: header
+        name: X-Idempotency-Key
+        type: string
+      - description: Context ID
+        format: uuid
+        in: path
+        name: contextId
+        required: true
+        type: string
+      - description: Fee rule creation payload
+        in: body
+        name: feeRule
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateFeeRuleRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Successfully created fee rule
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeRuleResponse'
+        "400":
+          description: Invalid request payload
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "404":
+          description: Context not found
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "409":
+          description: 'Conflict: duplicate priority or name'
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a fee rule
+      tags:
+      - Configuration Fee Rules
   /v1/config/contexts/{contextId}/rules:
     get:
       description: Returns a cursor-paginated list of match rules under a context,
@@ -4714,6 +4938,157 @@ paths:
       summary: Create a field map
       tags:
       - Configuration Field Maps
+  /v1/config/fee-rules/{feeRuleId}:
+    delete:
+      description: Removes a fee rule by ID.
+      operationId: deleteFeeRule
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Fee Rule ID
+        format: uuid
+        in: path
+        name: feeRuleId
+        required: true
+        type: string
+      responses:
+        "204":
+          description: Fee rule successfully deleted
+        "400":
+          description: Invalid fee rule ID format
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "404":
+          description: Fee rule not found
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a fee rule
+      tags:
+      - Configuration Fee Rules
+    get:
+      description: Returns a fee rule by ID.
+      operationId: getFeeRule
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Fee Rule ID
+        format: uuid
+        in: path
+        name: feeRuleId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully retrieved fee rule
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeRuleResponse'
+        "400":
+          description: Invalid fee rule ID format
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "404":
+          description: Fee rule not found
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a fee rule
+      tags:
+      - Configuration Fee Rules
+    patch:
+      consumes:
+      - application/json
+      description: Updates fields on a fee rule by ID.
+      operationId: updateFeeRule
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Idempotency key for safe retries
+        in: header
+        name: X-Idempotency-Key
+        type: string
+      - description: Fee Rule ID
+        format: uuid
+        in: path
+        name: feeRuleId
+        required: true
+        type: string
+      - description: Fee rule updates
+        in: body
+        name: feeRule
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.UpdateFeeRuleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully updated fee rule
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeRuleResponse'
+        "400":
+          description: Invalid request payload
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "404":
+          description: Fee rule not found
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "409":
+          description: 'Conflict: duplicate priority or name'
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a fee rule
+      tags:
+      - Configuration Fee Rules
   /v1/config/fee-schedules:
     get:
       description: Returns fee schedules for the tenant. Results may be capped by

@@ -556,6 +556,175 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/config/contexts/{contextId}/fee-rules": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns all fee rules for a reconciliation context, ordered by priority.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Configuration Fee Rules"
+                ],
+                "summary": "List fee rules",
+                "operationId": "listFeeRules",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Context ID",
+                        "name": "contextId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of fee rules",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeRuleResponse"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid context ID format",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Context not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Creates a new fee rule that maps transaction metadata to a fee schedule within a context.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Configuration Fee Rules"
+                ],
+                "summary": "Create a fee rule",
+                "operationId": "createFeeRule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Idempotency key for safe retries",
+                        "name": "X-Idempotency-Key",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Context ID",
+                        "name": "contextId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Fee rule creation payload",
+                        "name": "feeRule",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateFeeRuleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Successfully created fee rule",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeRuleResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request payload",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Context not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict: duplicate priority or name",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/config/contexts/{contextId}/rules": {
             "get": {
                 "security": [
@@ -2081,6 +2250,236 @@ const docTemplate = `{
                     },
                     "409": {
                         "description": "Conflict: duplicate resource or idempotency key in progress",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/config/fee-rules/{feeRuleId}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns a fee rule by ID.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Configuration Fee Rules"
+                ],
+                "summary": "Get a fee rule",
+                "operationId": "getFeeRule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Fee Rule ID",
+                        "name": "feeRuleId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully retrieved fee rule",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeRuleResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid fee rule ID format",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Fee rule not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Removes a fee rule by ID.",
+                "tags": [
+                    "Configuration Fee Rules"
+                ],
+                "summary": "Delete a fee rule",
+                "operationId": "deleteFeeRule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Fee Rule ID",
+                        "name": "feeRuleId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Fee rule successfully deleted"
+                    },
+                    "400": {
+                        "description": "Invalid fee rule ID format",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Fee rule not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Updates fields on a fee rule by ID.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Configuration Fee Rules"
+                ],
+                "summary": "Update a fee rule",
+                "operationId": "updateFeeRule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Idempotency key for safe retries",
+                        "name": "X-Idempotency-Key",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Fee Rule ID",
+                        "name": "feeRuleId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Fee rule updates",
+                        "name": "feeRule",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.UpdateFeeRuleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully updated fee rule",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeRuleResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request payload",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Fee rule not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict: duplicate priority or name",
                         "schema": {
                             "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
@@ -9917,11 +10316,6 @@ const docTemplate = `{
                     "type": "object",
                     "additionalProperties": {}
                 },
-                "feeScheduleId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "example": "550e8400-e29b-41d4-a716-446655440000"
-                },
                 "mapping": {
                     "type": "object"
                 },
@@ -9941,6 +10335,46 @@ const docTemplate = `{
                         "FETCHER"
                     ],
                     "example": "BANK"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateFeeRuleRequest": {
+            "type": "object",
+            "required": [
+                "feeScheduleId",
+                "name",
+                "side"
+            ],
+            "properties": {
+                "feeScheduleId": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "example": "BB Right-Side Rule"
+                },
+                "predicates": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldPredicateRequest"
+                    }
+                },
+                "priority": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "example": 0
+                },
+                "side": {
+                    "type": "string",
+                    "enum": [
+                        "LEFT",
+                        "RIGHT",
+                        "ANY"
+                    ],
+                    "example": "RIGHT"
                 }
             }
         },
@@ -10100,11 +10534,6 @@ const docTemplate = `{
                     "type": "object",
                     "additionalProperties": {}
                 },
-                "feeScheduleId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "example": "550e8400-e29b-41d4-a716-446655440000"
-                },
                 "name": {
                     "type": "string",
                     "maxLength": 50,
@@ -10121,6 +10550,54 @@ const docTemplate = `{
                         "FETCHER"
                     ],
                     "example": "BANK"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeRuleResponse": {
+            "type": "object",
+            "properties": {
+                "contextId": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                "createdAt": {
+                    "type": "string",
+                    "example": "2025-01-15T10:30:00Z"
+                },
+                "feeScheduleId": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                "id": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "BB Right-Side Rule"
+                },
+                "predicates": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldPredicateResponse"
+                    }
+                },
+                "priority": {
+                    "type": "integer",
+                    "example": 0
+                },
+                "side": {
+                    "type": "string",
+                    "enum": [
+                        "LEFT",
+                        "RIGHT",
+                        "ANY"
+                    ],
+                    "example": "RIGHT"
+                },
+                "updatedAt": {
+                    "type": "string",
+                    "example": "2025-01-15T10:30:00Z"
                 }
             }
         },
@@ -10259,6 +10736,66 @@ const docTemplate = `{
                     "description": "Version number for optimistic locking",
                     "type": "integer",
                     "example": 1
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldPredicateRequest": {
+            "type": "object",
+            "required": [
+                "field",
+                "operator"
+            ],
+            "properties": {
+                "field": {
+                    "type": "string",
+                    "example": "institution"
+                },
+                "operator": {
+                    "type": "string",
+                    "enum": [
+                        "EQUALS",
+                        "IN",
+                        "EXISTS"
+                    ],
+                    "example": "EQUALS"
+                },
+                "value": {
+                    "type": "string",
+                    "example": "Banco do Brasil"
+                },
+                "values": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldPredicateResponse": {
+            "type": "object",
+            "properties": {
+                "field": {
+                    "type": "string",
+                    "example": "institution"
+                },
+                "operator": {
+                    "type": "string",
+                    "enum": [
+                        "EQUALS",
+                        "IN",
+                        "EXISTS"
+                    ],
+                    "example": "EQUALS"
+                },
+                "value": {
+                    "type": "string",
+                    "example": "Banco do Brasil"
+                },
+                "values": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -10415,11 +10952,6 @@ const docTemplate = `{
                     "type": "string",
                     "example": "2025-01-15T10:30:00Z"
                 },
-                "feeScheduleId": {
-                    "description": "Fee schedule ID associated with this source",
-                    "type": "string",
-                    "example": "550e8400-e29b-41d4-a716-446655440000"
-                },
                 "id": {
                     "description": "Unique identifier for the source",
                     "type": "string",
@@ -10575,11 +11107,6 @@ const docTemplate = `{
                     "type": "string",
                     "example": "2025-01-15T10:30:00Z"
                 },
-                "feeScheduleId": {
-                    "description": "Fee schedule ID associated with this source",
-                    "type": "string",
-                    "example": "550e8400-e29b-41d4-a716-446655440000"
-                },
                 "hasFieldMaps": {
                     "description": "Indicates if field maps are configured for this source",
                     "type": "boolean",
@@ -10672,6 +11199,38 @@ const docTemplate = `{
                 }
             }
         },
+        "github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.UpdateFeeRuleRequest": {
+            "type": "object",
+            "properties": {
+                "feeScheduleId": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 100,
+                    "example": "Updated Rule"
+                },
+                "predicates": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldPredicateRequest"
+                    }
+                },
+                "priority": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "side": {
+                    "type": "string",
+                    "enum": [
+                        "LEFT",
+                        "RIGHT",
+                        "ANY"
+                    ],
+                    "example": "LEFT"
+                }
+            }
+        },
         "github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.UpdateFeeScheduleRequest": {
             "type": "object",
             "properties": {
@@ -10760,11 +11319,6 @@ const docTemplate = `{
                 "config": {
                     "type": "object",
                     "additionalProperties": {}
-                },
-                "feeScheduleId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "example": "550e8400-e29b-41d4-a716-446655440000"
                 },
                 "name": {
                     "type": "string",
