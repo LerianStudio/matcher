@@ -3,8 +3,6 @@ services:
     image: postgres:17
     container_name: matcher-postgres
     restart: unless-stopped
-    env_file:
-      - ./config/.env
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-matcher}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-matcher_dev_password}
@@ -32,8 +30,6 @@ services:
     image: postgres:17
     container_name: matcher-postgres-replica
     restart: unless-stopped
-    env_file:
-      - ./config/.env
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-matcher}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-matcher_dev_password}
@@ -75,8 +71,6 @@ services:
     image: rabbitmq:4.1.3-management-alpine
     container_name: matcher-rabbitmq
     restart: unless-stopped
-    env_file:
-      - ./config/.env
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-matcher_admin}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-matcher_dev_password}
@@ -136,15 +130,16 @@ services:
         condition: service_healthy
       seaweedfs:
         condition: service_healthy
-    env_file:
-      - ./config/.env
     environment:
       # Override hosts to use Docker service names
       POSTGRES_HOST: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-matcher_dev_password}
       POSTGRES_REPLICA_HOST: postgres-replica
       POSTGRES_REPLICA_PORT: 5432
       REDIS_HOST: redis:6379
       RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: ${RABBITMQ_USER:-matcher_admin}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-matcher_dev_password}
       RABBITMQ_HEALTH_URL: http://rabbitmq:15672
       # Keep insecure HTTP health checks opt-in to avoid accidental reuse in shared envs.
       RABBITMQ_ALLOW_INSECURE_HEALTH_CHECK: ${RABBITMQ_ALLOW_INSECURE_HEALTH_CHECK:-false}
