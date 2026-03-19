@@ -722,35 +722,30 @@ func TestCollectFeeFindings_SkipsNonConfirmedGroups(t *testing.T) {
 	assert.Empty(t, findings.exceptionInputs)
 }
 
-// --- loadFeeSchedules tests ---
+// --- loadFeeRulesAndSchedules tests ---
 
-func TestLoadFeeSchedules_NoScheduleIDs(t *testing.T) {
+func TestLoadFeeRulesAndSchedules_NilProvider(t *testing.T) {
 	t.Parallel()
 
-	uc := &UseCase{}
-	sources := []*ports.SourceInfo{
-		{ID: uuid.New(), Type: ports.SourceTypeLedger},
-	}
-	leftIDs := map[uuid.UUID]struct{}{sources[0].ID: {}}
+	uc := &UseCase{feeRuleProvider: nil}
 
-	left, right := uc.loadFeeSchedules(context.Background(), sources, leftIDs, map[uuid.UUID]struct{}{})
-	assert.Nil(t, left)
-	assert.Nil(t, right)
+	leftRules, rightRules, schedules := uc.loadFeeRulesAndSchedules(context.Background(), uuid.New())
+	assert.Nil(t, leftRules)
+	assert.Nil(t, rightRules)
+	assert.Nil(t, schedules)
 }
 
-func TestLoadFeeSchedules_NilFeeScheduleRepo(t *testing.T) {
+func TestLoadFeeRulesAndSchedules_NoRules(t *testing.T) {
 	t.Parallel()
 
-	uc := &UseCase{feeScheduleRepo: nil}
-	scheduleID := uuid.New()
-	sources := []*ports.SourceInfo{
-		{ID: uuid.New(), Type: ports.SourceTypeLedger, FeeScheduleID: &scheduleID},
+	uc := &UseCase{
+		feeRuleProvider: &stubFeeRuleProviderWithResult{rules: nil},
 	}
-	leftIDs := map[uuid.UUID]struct{}{sources[0].ID: {}}
 
-	left, right := uc.loadFeeSchedules(context.Background(), sources, leftIDs, map[uuid.UUID]struct{}{})
-	assert.Nil(t, left)
-	assert.Nil(t, right)
+	leftRules, rightRules, schedules := uc.loadFeeRulesAndSchedules(context.Background(), uuid.New())
+	assert.Nil(t, leftRules)
+	assert.Nil(t, rightRules)
+	assert.Nil(t, schedules)
 }
 
 // --- recordGroupResults tests ---
@@ -1257,61 +1252,141 @@ func TestEnqueueMatchConfirmedEvents_SkipsNonConfirmedGroups(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// --- loadFeeSchedules with actual schedules ---
+// --- loadFeeRulesAndSchedules with actual rules and schedules ---
 
-func TestLoadFeeSchedules_WithSchedulesLoaded(t *testing.T) {
+func TestLoadFeeRulesAndSchedules_WithRulesAndSchedules(t *testing.T) {
 	t.Parallel()
 
 	scheduleID := uuid.MustParse("00000000-0000-0000-0000-000000100800")
-	sourceIDLeft := uuid.MustParse("00000000-0000-0000-0000-000000100801")
-	sourceIDRight := uuid.MustParse("00000000-0000-0000-0000-000000100802")
+	contextID := uuid.MustParse("00000000-0000-0000-0000-000000100803")
 
 	schedule := &fee.FeeSchedule{
 		ID:       scheduleID,
 		Currency: "USD",
 	}
 
+	rules := []*fee.FeeRule{
+		{
+			ID:            uuid.MustParse("00000000-0000-0000-0000-000000100804"),
+			ContextID:     contextID,
+			Side:          fee.MatchingSideLeft,
+			FeeScheduleID: scheduleID,
+			Name:          "Left rule",
+			Priority:      1,
+		},
+		{
+			ID:            uuid.MustParse("00000000-0000-0000-0000-000000100805"),
+			ContextID:     contextID,
+			Side:          fee.MatchingSideRight,
+			FeeScheduleID: scheduleID,
+			Name:          "Right rule",
+			Priority:      1,
+		},
+	}
+
 	uc := &UseCase{
+		feeRuleProvider: &stubFeeRuleProviderWithResult{rules: rules},
 		feeScheduleRepo: &stubFeeScheduleRepoWithResult{
 			schedules: map[uuid.UUID]*fee.FeeSchedule{scheduleID: schedule},
 		},
 	}
 
-	sources := []*ports.SourceInfo{
-		{ID: sourceIDLeft, Type: ports.SourceTypeLedger, FeeScheduleID: &scheduleID},
-		{ID: sourceIDRight, Type: ports.SourceTypeFile, FeeScheduleID: &scheduleID},
-	}
-
-	leftIDs := map[uuid.UUID]struct{}{sourceIDLeft: {}}
-	rightIDs := map[uuid.UUID]struct{}{sourceIDRight: {}}
-
-	left, right := uc.loadFeeSchedules(context.Background(), sources, leftIDs, rightIDs)
-	require.NotNil(t, left)
-	require.NotNil(t, right)
-	assert.Equal(t, schedule, left[sourceIDLeft])
-	assert.Equal(t, schedule, right[sourceIDRight])
+	leftRules, rightRules, allSchedules := uc.loadFeeRulesAndSchedules(context.Background(), contextID)
+	require.NotNil(t, leftRules)
+	require.NotNil(t, rightRules)
+	require.NotNil(t, allSchedules)
+	assert.Len(t, leftRules, 1)
+	assert.Len(t, rightRules, 1)
+	assert.Equal(t, schedule, allSchedules[scheduleID])
 }
 
-func TestLoadFeeSchedules_GetByIDsError(t *testing.T) {
+func TestLoadFeeRulesAndSchedules_GetByIDsError(t *testing.T) {
 	t.Parallel()
 
 	scheduleID := uuid.MustParse("00000000-0000-0000-0000-000000100810")
-	sourceID := uuid.MustParse("00000000-0000-0000-0000-000000100811")
+	contextID := uuid.MustParse("00000000-0000-0000-0000-000000100812")
+
+	rules := []*fee.FeeRule{
+		{
+			ID:            uuid.MustParse("00000000-0000-0000-0000-000000100813"),
+			ContextID:     contextID,
+			Side:          fee.MatchingSideLeft,
+			FeeScheduleID: scheduleID,
+			Name:          "Test rule",
+			Priority:      1,
+		},
+	}
 
 	uc := &UseCase{
+		feeRuleProvider: &stubFeeRuleProviderWithResult{rules: rules},
 		feeScheduleRepo: &stubFeeScheduleRepoWithResult{
 			err: errors.New("db error"),
 		},
 	}
 
-	sources := []*ports.SourceInfo{
-		{ID: sourceID, Type: ports.SourceTypeLedger, FeeScheduleID: &scheduleID},
-	}
-	leftIDs := map[uuid.UUID]struct{}{sourceID: {}}
+	leftRules, rightRules, allSchedules := uc.loadFeeRulesAndSchedules(context.Background(), contextID)
+	assert.Nil(t, leftRules)
+	assert.Nil(t, rightRules)
+	assert.Nil(t, allSchedules)
+}
 
-	left, right := uc.loadFeeSchedules(context.Background(), sources, leftIDs, map[uuid.UUID]struct{}{})
-	assert.Nil(t, left)
-	assert.Nil(t, right)
+func TestLoadFeeRulesAndSchedules_FindByContextIDError(t *testing.T) {
+	t.Parallel()
+
+	uc := &UseCase{
+		feeRuleProvider: &stubFeeRuleProviderWithResult{
+			err: errors.New("provider error"),
+		},
+	}
+
+	leftRules, rightRules, allSchedules := uc.loadFeeRulesAndSchedules(context.Background(), uuid.New())
+	assert.Nil(t, leftRules)
+	assert.Nil(t, rightRules)
+	assert.Nil(t, allSchedules)
+}
+
+func TestLoadFeeRulesAndSchedules_NilFeeScheduleRepo(t *testing.T) {
+	t.Parallel()
+
+	contextID := uuid.MustParse("00000000-0000-0000-0000-000000100814")
+	scheduleID := uuid.MustParse("00000000-0000-0000-0000-000000100815")
+
+	rules := []*fee.FeeRule{
+		{
+			ID:            uuid.MustParse("00000000-0000-0000-0000-000000100816"),
+			ContextID:     contextID,
+			Side:          fee.MatchingSideAny,
+			FeeScheduleID: scheduleID,
+			Name:          "Any rule",
+			Priority:      1,
+		},
+	}
+
+	uc := &UseCase{
+		feeRuleProvider: &stubFeeRuleProviderWithResult{rules: rules},
+		feeScheduleRepo: nil,
+	}
+
+	leftRules, rightRules, allSchedules := uc.loadFeeRulesAndSchedules(context.Background(), contextID)
+	assert.Nil(t, leftRules)
+	assert.Nil(t, rightRules)
+	assert.Nil(t, allSchedules)
+}
+
+type stubFeeRuleProviderWithResult struct {
+	rules []*fee.FeeRule
+	err   error
+}
+
+func (s *stubFeeRuleProviderWithResult) FindByContextID(
+	_ context.Context,
+	_ uuid.UUID,
+) ([]*fee.FeeRule, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+
+	return s.rules, nil
 }
 
 type stubFeeScheduleRepoWithResult struct {

@@ -75,6 +75,7 @@ func TestSentinelErrors(t *testing.T) {
 		},
 		{"ErrNilAuditLogRepository", ErrNilAuditLogRepository, "audit log repository is required"},
 		{"ErrNilFeeScheduleRepository", ErrNilFeeScheduleRepository, "fee schedule repository is required"},
+		{"ErrNilFeeRuleProvider", ErrNilFeeRuleProvider, "fee rule provider is required"},
 	}
 
 	for _, tt := range tests {
@@ -484,6 +485,17 @@ func (m *mockFeeScheduleRepo) GetByIDs(
 
 var _ matchingRepositories.FeeScheduleRepository = (*mockFeeScheduleRepo)(nil)
 
+type mockFeeRuleProvider struct{}
+
+func (m *mockFeeRuleProvider) FindByContextID(
+	_ context.Context,
+	_ uuid.UUID,
+) ([]*fee.FeeRule, error) {
+	return nil, nil
+}
+
+var _ ports.FeeRuleProvider = (*mockFeeRuleProvider)(nil)
+
 type mockInfraProvider struct {
 	tx  *sql.Tx
 	err error
@@ -628,6 +640,7 @@ func TestNewUseCase(t *testing.T) {
 			InfraProvider:    &mockInfraProvider{},
 			AuditLogRepo:     &mockAuditLogRepo{},
 			FeeScheduleRepo:  &mockFeeScheduleRepo{},
+			FeeRuleProvider:  &mockFeeRuleProvider{},
 		}
 	}
 
@@ -809,6 +822,18 @@ func TestNewUseCase(t *testing.T) {
 		assert.Nil(t, uc)
 		require.ErrorIs(t, err, ErrNilFeeScheduleRepository)
 	})
+
+	t.Run("nil fee rule provider returns error", func(t *testing.T) {
+		t.Parallel()
+
+		deps := validDeps()
+		deps.FeeRuleProvider = nil
+
+		uc, err := New(deps)
+
+		assert.Nil(t, uc)
+		require.ErrorIs(t, err, ErrNilFeeRuleProvider)
+	})
 }
 
 func TestUseCaseFieldsInitialized(t *testing.T) {
@@ -865,6 +890,7 @@ func TestUseCaseFieldsInitialized(t *testing.T) {
 		InfraProvider:    &mockInfraProvider{},
 		AuditLogRepo:     &mockAuditLogRepo{},
 		FeeScheduleRepo:  &mockFeeScheduleRepo{},
+		FeeRuleProvider:  &mockFeeRuleProvider{},
 	})
 
 	require.NoError(t, err)

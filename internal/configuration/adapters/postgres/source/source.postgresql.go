@@ -25,7 +25,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
-const sourceColumns = "id, context_id, name, type, config, fee_schedule_id, created_at, updated_at"
+const sourceColumns = "id, context_id, name, type, config, created_at, updated_at"
 
 // Repository provides PostgreSQL operations for reconciliation sources.
 type Repository struct {
@@ -147,14 +147,13 @@ func (repo *Repository) executeCreate(
 
 	_, err = tx.ExecContext(
 		ctx,
-		`INSERT INTO reconciliation_sources (id, context_id, name, type, config, fee_schedule_id, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		`INSERT INTO reconciliation_sources (id, context_id, name, type, config, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 		model.ID,
 		model.ContextID,
 		model.Name,
 		model.Type,
 		model.Config,
-		model.FeeScheduleID,
 		model.CreatedAt,
 		model.UpdatedAt,
 	)
@@ -427,12 +426,11 @@ func (repo *Repository) executeUpdate(
 
 	result, err := tx.ExecContext(
 		ctx,
-		`UPDATE reconciliation_sources SET name = $1, type = $2, config = $3, fee_schedule_id = $4, updated_at = $5
-		WHERE context_id = $6 AND id = $7`,
+		`UPDATE reconciliation_sources SET name = $1, type = $2, config = $3, updated_at = $4
+		WHERE context_id = $5 AND id = $6`,
 		model.Name,
 		model.Type,
 		model.Config,
-		model.FeeScheduleID,
 		model.UpdatedAt,
 		model.ContextID,
 		model.ID,
@@ -796,7 +794,6 @@ func scanSource(
 		&model.Name,
 		&model.Type,
 		&model.Config,
-		&model.FeeScheduleID,
 		&model.CreatedAt,
 		&model.UpdatedAt,
 	); err != nil {

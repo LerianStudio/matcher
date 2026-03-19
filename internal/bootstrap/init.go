@@ -48,6 +48,7 @@ import (
 	configAudit "github.com/LerianStudio/matcher/internal/configuration/adapters/audit"
 	configHTTP "github.com/LerianStudio/matcher/internal/configuration/adapters/http"
 	configContextRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/context"
+	configFeeRuleRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/fee_rule"
 	configFieldMapRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/field_map"
 	configMatchRuleRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/match_rule"
 	configScheduleRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/schedule"
@@ -1549,6 +1550,7 @@ type sharedRepositories struct {
 	ingestionTx        *ingestionTransactionRepo.Repository
 	ingestionJob       *ingestionJobRepo.Repository
 	feeSchedule        *matchFeeScheduleRepo.Repository
+	configFeeRule      *configFeeRuleRepo.Repository
 	adjustment         *matchAdjustmentRepo.Repository
 }
 
@@ -1572,6 +1574,7 @@ func initSharedRepositories(provider sharedPorts.InfrastructureProvider) (*share
 		ingestionTx:        ingestionTransactionRepo.NewRepository(provider),
 		ingestionJob:       ingestionJobRepo.NewRepository(provider),
 		feeSchedule:        matchFeeScheduleRepo.NewRepository(provider),
+		configFeeRule:      configFeeRuleRepo.NewRepository(provider),
 		adjustment:         matchAdjustmentRepo.NewRepository(provider, auditLogRepo),
 	}, nil
 }
@@ -2137,6 +2140,11 @@ func initMatchingModule(
 		return nil, fmt.Errorf("create match rule provider adapter for matching: %w", err)
 	}
 
+	feeRuleAdapter, err := crossAdapters.NewFeeRuleProviderAdapter(repos.configFeeRule)
+	if err != nil {
+		return nil, fmt.Errorf("create fee rule provider adapter for matching: %w", err)
+	}
+
 	transactionAdapter, err := crossAdapters.NewTransactionRepositoryAdapterFromRepo(
 		provider,
 		repos.ingestionTx,
@@ -2170,6 +2178,7 @@ func initMatchingModule(
 		InfraProvider:    provider,
 		AuditLogRepo:     repos.governanceAuditLog,
 		FeeScheduleRepo:  repos.feeSchedule,
+		FeeRuleProvider:  feeRuleAdapter,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create matching command use case: %w", err)

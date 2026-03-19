@@ -13,8 +13,6 @@ type CloneContextRequest struct {
 	IncludeSources *bool `json:"includeSources,omitempty" example:"true"`
 	// Whether to include match rules in the clone (default: true)
 	IncludeRules *bool `json:"includeRules,omitempty" example:"true"`
-	// Whether to clone fee schedules (true) or keep original references (false) (default: true)
-	IncludeFeeSchedules *bool `json:"includeFeeSchedules,omitempty" example:"true"`
 }
 
 // CloneContextResponse is the response body for a clone operation.
@@ -28,8 +26,6 @@ type CloneContextResponse struct {
 	RulesCloned int `json:"rulesCloned" example:"5"`
 	// Number of field maps cloned
 	FieldMapsCloned int `json:"fieldMapsCloned" example:"3"`
-	// Number of fee schedules cloned
-	FeeSchedulesCloned int `json:"feeSchedulesCloned" example:"2"`
 }
 
 // CloneResultToResponse converts an entities.CloneResult to a CloneContextResponse.
@@ -41,10 +37,9 @@ func CloneResultToResponse(result *entities.CloneResult) CloneContextResponse {
 	}
 
 	return CloneContextResponse{
-		Context:            ReconciliationContextToResponse(result.Context),
-		SourcesCloned:      result.SourcesCloned,
-		RulesCloned:        result.RulesCloned,
-		FieldMapsCloned:    result.FieldMapsCloned,
-		FeeSchedulesCloned: result.FeeSchedulesCloned,
+		Context:         ReconciliationContextToResponse(result.Context),
+		SourcesCloned:   result.SourcesCloned,
+		RulesCloned:     result.RulesCloned,
+		FieldMapsCloned: result.FieldMapsCloned,
 	}
 }

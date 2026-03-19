@@ -16,6 +16,7 @@ import (
 	configRepositories "github.com/LerianStudio/matcher/internal/configuration/domain/repositories"
 	matchingPorts "github.com/LerianStudio/matcher/internal/matching/ports"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
 // MatchRuleProviderAdapter wraps a configuration MatchRuleRepository
@@ -86,6 +87,8 @@ var (
 	ErrContextRepositoryRequired = errors.New("context repository is required")
 	// ErrSourceRepositoryRequired is returned when the source repository is nil.
 	ErrSourceRepositoryRequired = errors.New("source repository is required")
+	// ErrFeeRuleRepositoryRequired is returned when the fee rule repository is nil.
+	ErrFeeRuleRepositoryRequired = errors.New("fee rule repository is required")
 )
 
 // NewContextProviderAdapter creates a new adapter for ContextRepository.
@@ -181,13 +184,41 @@ func (adapter *SourceProviderAdapter) FindByContextID(
 		// matching context does not validate SourceType values — it is only used as metadata.
 		// If matching starts validating SourceType, a proper mapping should be introduced.
 		result = append(result, &matchingPorts.SourceInfo{
-			ID:            src.ID,
-			Type:          matchingPorts.SourceType(src.Type.String()),
-			FeeScheduleID: src.FeeScheduleID,
+			ID:   src.ID,
+			Type: matchingPorts.SourceType(src.Type.String()),
 		})
 	}
 
 	return result, nil
+}
+
+// FeeRuleProviderAdapter wraps a configuration FeeRuleRepository
+// to implement the matching ports.FeeRuleProvider interface.
+type FeeRuleProviderAdapter struct {
+	repo configRepositories.FeeRuleRepository
+}
+
+// NewFeeRuleProviderAdapter creates a new adapter for FeeRuleRepository.
+func NewFeeRuleProviderAdapter(
+	repo configRepositories.FeeRuleRepository,
+) (*FeeRuleProviderAdapter, error) {
+	if repo == nil {
+		return nil, ErrFeeRuleRepositoryRequired
+	}
+
+	return &FeeRuleProviderAdapter{repo: repo}, nil
+}
+
+// FindByContextID retrieves fee rules for a context via the configuration repository.
+func (adapter *FeeRuleProviderAdapter) FindByContextID(
+	ctx context.Context,
+	contextID uuid.UUID,
+) ([]*fee.FeeRule, error) {
+	if adapter == nil || adapter.repo == nil {
+		return nil, ErrFeeRuleRepositoryRequired
+	}
+
+	return adapter.repo.FindByContextID(ctx, contextID)
 }
 
 const (
@@ -198,4 +229,5 @@ var (
 	_ matchingPorts.MatchRuleProvider = (*MatchRuleProviderAdapter)(nil)
 	_ matchingPorts.ContextProvider   = (*ContextProviderAdapter)(nil)
 	_ matchingPorts.SourceProvider    = (*SourceProviderAdapter)(nil)
+	_ matchingPorts.FeeRuleProvider   = (*FeeRuleProviderAdapter)(nil)
 )

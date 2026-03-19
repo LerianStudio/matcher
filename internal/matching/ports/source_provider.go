@@ -21,9 +21,8 @@ const (
 
 // SourceInfo contains source information needed by matching.
 type SourceInfo struct {
-	ID            uuid.UUID
-	Type          SourceType
-	FeeScheduleID *uuid.UUID
+	ID   uuid.UUID
+	Type SourceType
 }
 
 // SourceProvider provides reconciliation source information for matching.

@@ -547,11 +547,10 @@ func (handler *Handler) CloneContext(fiberCtx *fiber.Ctx) error {
 	}
 
 	input := command.CloneContextInput{
-		SourceContextID:     contextID,
-		NewName:             payload.Name,
-		IncludeSources:      boolDefault(payload.IncludeSources, true),
-		IncludeRules:        boolDefault(payload.IncludeRules, true),
-		IncludeFeeSchedules: boolDefault(payload.IncludeFeeSchedules, true),
+		SourceContextID: contextID,
+		NewName:         payload.Name,
+		IncludeSources:  boolDefault(payload.IncludeSources, true),
+		IncludeRules:    boolDefault(payload.IncludeRules, true),
 	}
 
 	result, err := handler.command.CloneContext(ctx, input)

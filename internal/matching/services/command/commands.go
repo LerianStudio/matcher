@@ -34,6 +34,7 @@ var (
 	ErrNilInfrastructureProvider = errors.New("infrastructure provider is required")
 	ErrNilAuditLogRepository     = errors.New("audit log repository is required")
 	ErrNilFeeScheduleRepository  = errors.New("fee schedule repository is required")
+	ErrNilFeeRuleProvider        = errors.New("fee rule provider is required")
 )
 
 type outboxTxCreator interface {
@@ -63,6 +64,7 @@ type UseCase struct {
 	infraProvider        sharedPorts.InfrastructureProvider
 	auditLogRepo         sharedPorts.AuditLogRepository
 	feeScheduleRepo      matchingRepositories.FeeScheduleRepository
+	feeRuleProvider      ports.FeeRuleProvider
 	executeRules         func(context.Context, ExecuteRulesInput) ([]matching.MatchProposal, error)
 	executeRulesDetailed func(context.Context, ExecuteRulesInput) (*ExecuteRulesResult, error)
 	lockRefreshInterval  time.Duration
@@ -87,6 +89,7 @@ type UseCaseDeps struct {
 	InfraProvider    sharedPorts.InfrastructureProvider
 	AuditLogRepo     sharedPorts.AuditLogRepository
 	FeeScheduleRepo  matchingRepositories.FeeScheduleRepository
+	FeeRuleProvider  ports.FeeRuleProvider
 }
 
 func (deps *UseCaseDeps) validate() error {
@@ -110,6 +113,7 @@ func (deps *UseCaseDeps) validate() error {
 		{deps.InfraProvider == nil, ErrNilInfrastructureProvider},
 		{deps.AuditLogRepo == nil, ErrNilAuditLogRepository},
 		{deps.FeeScheduleRepo == nil, ErrNilFeeScheduleRepository},
+		{deps.FeeRuleProvider == nil, ErrNilFeeRuleProvider},
 	}
 
 	for _, check := range checks {
@@ -150,6 +154,7 @@ func New(deps UseCaseDeps) (*UseCase, error) {
 		infraProvider:       deps.InfraProvider,
 		auditLogRepo:        deps.AuditLogRepo,
 		feeScheduleRepo:     deps.FeeScheduleRepo,
+		feeRuleProvider:     deps.FeeRuleProvider,
 		lockRefreshInterval: lockRefreshIntervalDefault,
 		maxLockBatchSize:    maxCandidateSet,
 	}

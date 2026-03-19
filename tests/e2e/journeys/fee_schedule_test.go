@@ -306,7 +306,7 @@ func TestFeeSchedule_NetNormalization_OneToOneExact(t *testing.T) {
 			// Step 1: Create a fee schedule with 1.5% fee.
 			// For $100.00 gross: fee = 1.50, net = 98.50
 			tc.Logf("Step 1: Creating fee schedule (1.5%% PARALLEL)")
-			schedule := f.FeeSchedule.NewFeeSchedule().
+			_ = f.FeeSchedule.NewFeeSchedule().
 				WithName("net-norm-test").
 				WithCurrency("USD").
 				Parallel().
@@ -326,7 +326,6 @@ func TestFeeSchedule_NetNormalization_OneToOneExact(t *testing.T) {
 			gatewaySource := f.Source.NewSource(reconciliationContext.ID).
 				WithName("gateway").
 				AsGateway().
-				WithFeeScheduleID(schedule.ID).
 				MustCreate(ctx)
 
 			bankSource := f.Source.NewSource(reconciliationContext.ID).
@@ -455,7 +454,6 @@ func TestFeeSchedule_CascadingNormalization(t *testing.T) {
 			gatewaySource := f.Source.NewSource(reconciliationContext.ID).
 				WithName("gateway").
 				AsGateway().
-				WithFeeScheduleID(schedule.ID).
 				MustCreate(ctx)
 			bankSource := f.Source.NewSource(reconciliationContext.ID).
 				WithName("bank").
@@ -523,7 +521,7 @@ func TestFeeSchedule_NoNormalization(t *testing.T) {
 			f := factories.New(tc, c)
 
 			// Fee schedule exists but normalization is disabled on context
-			schedule := f.FeeSchedule.NewFeeSchedule().
+			_ = f.FeeSchedule.NewFeeSchedule().
 				WithName("no-norm").
 				WithCurrency("USD").
 				Parallel().
@@ -538,7 +536,6 @@ func TestFeeSchedule_NoNormalization(t *testing.T) {
 			gatewaySource := f.Source.NewSource(reconciliationContext.ID).
 				WithName("gateway").
 				AsGateway().
-				WithFeeScheduleID(schedule.ID).
 				MustCreate(ctx)
 			bankSource := f.Source.NewSource(reconciliationContext.ID).
 				WithName("bank").
@@ -602,7 +599,7 @@ func TestFeeSchedule_CurrencyMismatchPassthrough(t *testing.T) {
 			f := factories.New(tc, c)
 
 			// USD fee schedule — should NOT apply to EUR transactions
-			schedule := f.FeeSchedule.NewFeeSchedule().
+			_ = f.FeeSchedule.NewFeeSchedule().
 				WithName("usd-only").
 				WithCurrency("USD").
 				Parallel().
@@ -618,7 +615,6 @@ func TestFeeSchedule_CurrencyMismatchPassthrough(t *testing.T) {
 			gatewaySource := f.Source.NewSource(reconciliationContext.ID).
 				WithName("gateway").
 				AsGateway().
-				WithFeeScheduleID(schedule.ID).
 				MustCreate(ctx)
 			bankSource := f.Source.NewSource(reconciliationContext.ID).
 				WithName("bank").
@@ -680,7 +676,7 @@ func TestFeeSchedule_PerSourceSchedules(t *testing.T) {
 			f := factories.New(tc, c)
 
 			// Gateway A: 2% fee. For $100 gross → net = $98.00
-			scheduleA := f.FeeSchedule.NewFeeSchedule().
+			_ = f.FeeSchedule.NewFeeSchedule().
 				WithName("gateway-a-fees").
 				WithCurrency("USD").
 				Parallel().
@@ -688,7 +684,7 @@ func TestFeeSchedule_PerSourceSchedules(t *testing.T) {
 				MustCreate(ctx)
 
 			// Gateway B: 3% fee. For $100 gross → net = $97.00
-			scheduleB := f.FeeSchedule.NewFeeSchedule().
+			_ = f.FeeSchedule.NewFeeSchedule().
 				WithName("gateway-b-fees").
 				WithCurrency("USD").
 				Parallel().
@@ -704,13 +700,11 @@ func TestFeeSchedule_PerSourceSchedules(t *testing.T) {
 			gatewayA := f.Source.NewSource(reconciliationContext.ID).
 				WithName("gateway-a").
 				AsLedger().
-				WithFeeScheduleID(scheduleA.ID).
 				MustCreate(ctx)
 
 			gatewayB := f.Source.NewSource(reconciliationContext.ID).
 				WithName("gateway-b").
 				AsGateway().
-				WithFeeScheduleID(scheduleB.ID).
 				MustCreate(ctx)
 
 			f.Source.NewFieldMap(reconciliationContext.ID, gatewayA.ID).

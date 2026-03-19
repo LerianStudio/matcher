@@ -139,7 +139,6 @@ func TestCloneContext_ContextOnly(t *testing.T) {
 	assert.Equal(t, 0, result.SourcesCloned)
 	assert.Equal(t, 0, result.RulesCloned)
 	assert.Equal(t, 0, result.FieldMapsCloned)
-	assert.Equal(t, 0, result.FeeSchedulesCloned)
 }
 
 func TestCloneContext_WithSourcesAndRules(t *testing.T) {
@@ -217,16 +216,14 @@ func TestCloneContext_WithSourcesAndRules(t *testing.T) {
 	result, err := uc.CloneContext(context.Background(), CloneContextInput{
 		SourceContextID:     sourceCtxID,
 		NewName:             "Clone",
-		IncludeSources:      true,
-		IncludeRules:        true,
-		IncludeFeeSchedules: false,
+		IncludeSources: true,
+		IncludeRules:   true,
 	})
 
 	require.NoError(t, err)
 	assert.Equal(t, 2, result.SourcesCloned)
 	assert.Equal(t, 1, result.FieldMapsCloned)
 	assert.Equal(t, 1, result.RulesCloned)
-	assert.Equal(t, 0, result.FeeSchedulesCloned)
 }
 
 func TestCloneMap(t *testing.T) {
