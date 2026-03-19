@@ -118,27 +118,11 @@ Each directory contains a README with detailed documentation.
 
 ## Getting Started
 
-### 1) Configure Environment
+### 1) Start Infrastructure
 
-```bash
-cp config/.env.example .env
-```
+No configuration files needed — all defaults are baked into the binary and match the docker-compose setup.
 
-Key environment variables (from `config/.env.example`):
-
-- **Application (required)**: `ENV_NAME`, `LOG_LEVEL`, `SERVER_ADDRESS`, `HTTP_BODY_LIMIT_BYTES`
-- **CORS (optional)**: `CORS_ALLOWED_ORIGINS`, `CORS_ALLOWED_METHODS`, `CORS_ALLOWED_HEADERS`
-- **TLS (optional)**: `SERVER_TLS_CERT_FILE`, `SERVER_TLS_KEY_FILE`, `TLS_TERMINATED_UPSTREAM`
-- **Tenancy (required)**: `DEFAULT_TENANT_ID`, `DEFAULT_TENANT_SLUG`; multi-tenant deployments additionally require `MULTI_TENANT_ENABLED`, `MULTI_TENANT_URL`, `MULTI_TENANT_SERVICE_API_KEY`, `MULTI_TENANT_ENVIRONMENT` (defaults to `ENV_NAME` when blank). The legacy alias `MULTI_TENANT_INFRA_ENABLED` remains supported for backward compatibility but should be considered deprecated.
-- **PostgreSQL (required)**: `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_SSLMODE`, pool config
-- **PostgreSQL Replica (optional)**: `POSTGRES_REPLICA_HOST`, `POSTGRES_REPLICA_PORT`, etc.
-- **Redis (required)**: `REDIS_HOST`, `REDIS_PASSWORD`, `REDIS_DB`, `REDIS_POOL_SIZE`, plus Sentinel/TLS options
-- **RabbitMQ (required)**: `RABBITMQ_URI`, `RABBITMQ_HOST`, `RABBITMQ_PORT`, `RABBITMQ_USER`, `RABBITMQ_PASSWORD`, `RABBITMQ_VHOST`
-- **Object Storage (optional — needed for exports/archival)**: `OBJECT_STORAGE_ENDPOINT`, `OBJECT_STORAGE_REGION`, `OBJECT_STORAGE_BUCKET`, `OBJECT_STORAGE_ACCESS_KEY_ID`, `OBJECT_STORAGE_SECRET_ACCESS_KEY`
-- **Auth (optional — disabled for development via `AUTH_ENABLED=false`)**: `AUTH_ENABLED`, `AUTH_SERVICE_ADDRESS`, `AUTH_JWT_SECRET`
-- **Telemetry (optional)**: `ENABLE_TELEMETRY`, `OTEL_*` vars
-
-See `config/.env.example` for the complete list of 80+ environment variables including archival, rate limiting, idempotency, and timeout settings.
+For production, override via env vars. See `config/.config-map.example` for bootstrap-only keys (require restart). All other settings are hot-reloadable via the systemplane API (`/v1/system/configs`).
 
 ### 2) Start Infrastructure
 
@@ -163,6 +147,8 @@ docker-compose --profile observability up -d jaeger
 ```bash
 make migrate-up
 ```
+
+For production rollout and rollback procedures, see `docs/migrations/PRODUCTION_MIGRATIONS.md`.
 
 ### 4) Run the Service
 

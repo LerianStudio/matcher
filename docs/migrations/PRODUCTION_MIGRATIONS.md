@@ -1,221 +1,59 @@
-# Production Migration Safety Guide
+# Production Migration Runbook
 
-This guide documents safe practices for running database migrations in production environments with large tables.
+This runbook defines the minimum safe procedure for applying Matcher database migrations in production.
 
-## The CONCURRENTLY Problem
+## Preconditions
 
-### Why We Can't Use CONCURRENTLY in Migrations
+- Confirm the target release commit/tag and migration files to apply.
+- Confirm a tested rollback path (`*.down.sql`) exists for every new migration.
+- Confirm recent backups/snapshots exist for the target PostgreSQL cluster.
+- Confirm application error budget and maintenance window approval.
 
-PostgreSQL's `CREATE INDEX CONCURRENTLY` is the safe way to create indexes on large tables without blocking writes. However, **golang-migrate runs all migrations inside a transaction block**, and PostgreSQL prohibits concurrent operations within transactions:
+## Dry-Run Validation (Staging)
 
-```
-ERROR: CREATE INDEX CONCURRENTLY cannot run inside a transaction block
-```
-
-This limitation also affects:
-- `DROP INDEX CONCURRENTLY`
-- `REINDEX CONCURRENTLY`
-- `ALTER TABLE ... ADD CONSTRAINT ... NOT VALID` followed by `VALIDATE CONSTRAINT` (supported with split migrations; see `golang-migrate Workaround` in `NOT VALID Constraints`)
-
-### Impact of Non-Concurrent Index Creation
-
-| Table Size | Approximate Lock Duration | Risk Level |
-|------------|---------------------------|------------|
-| < 10k rows | Milliseconds | Low |
-| 10k - 100k rows | Seconds | Medium |
-| 100k - 1M rows | Seconds to minutes | High |
-| > 1M rows | Minutes to hours | Critical |
-
-During this time, **all writes to the table are blocked**.
-
-## Production Deployment Strategy
-
-### Step 1: Identify Affected Migrations
-
-Before deploying, review migrations for index creation or constraint validation:
-
-```bash
-grep -l "CREATE INDEX" migrations/*.up.sql
-grep -l "ADD CONSTRAINT" migrations/*.up.sql
-```
-
-Current affected migrations (baseline):
-- `000001_release_0_1_0.up.sql` - `idx_exceptions_reason`
-- `000001_release_0_1_0.up.sql` - `idx_exceptions_resolution_type`
-- `000001_release_0_1_0.up.sql` - `idx_outbox_events_failed_retry`
-
-### Step 2: Check Table Sizes
-
-```sql
-SELECT 
-    schemaname,
-    relname AS table_name,
-    n_live_tup AS row_count
-FROM pg_stat_user_tables
-WHERE relname IN ('exceptions', 'outbox_events')
-ORDER BY n_live_tup DESC;
-```
-
-### Step 3: Manual Index Creation (for Large Tables)
-
-If tables have >100k rows, create indexes manually **before** running migrations:
-
-#### For exceptions table (baseline 000001_release_0_1_0):
-
-```sql
--- Create index concurrently (outside any transaction)
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_exceptions_reason ON exceptions(reason);
-
--- Verify index was created successfully
-SELECT indexname, indexdef 
-FROM pg_indexes 
-WHERE tablename = 'exceptions' AND indexname = 'idx_exceptions_reason';
-```
-
-#### For outbox_events table (baseline 000001_release_0_1_0):
-
-```sql
--- Create partial index concurrently
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_outbox_events_failed_retry 
-    ON outbox_events(status, updated_at, attempts) 
-    WHERE status = 'FAILED';
-
--- Verify
-SELECT indexname, indexdef 
-FROM pg_indexes 
-WHERE tablename = 'outbox_events' AND indexname = 'idx_outbox_events_failed_retry';
-```
-
-### Step 4: Run Migrations
-
-After manual index creation, run migrations normally. The `IF NOT EXISTS` clause ensures migrations won't fail if indexes already exist:
+1. Deploy the exact production candidate image to staging.
+2. Run:
 
 ```bash
 make migrate-up
 ```
 
-## NOT VALID Constraints
+3. Execute smoke tests for:
+   - Context/source/rule CRUD
+   - Match run trigger path
+   - Exception creation flow
+4. Validate no migration remains dirty.
 
-### When to Use NOT VALID
+## Production Apply
 
-Use `NOT VALID` when adding constraints to large tables:
-
-```sql
--- Add constraint without validating existing rows (fast, no lock)
-ALTER TABLE large_table 
-    ADD CONSTRAINT fk_example 
-    FOREIGN KEY (column_id) REFERENCES other_table(id) 
-    NOT VALID;
-
--- Validate in a separate transaction (can be done later, lower lock)
-ALTER TABLE large_table VALIDATE CONSTRAINT fk_example;
-```
-
-### Benefits
-
-1. **Initial ADD**: Takes ShareUpdateExclusiveLock (allows reads and writes)
-2. **VALIDATE**: Takes ShareUpdateExclusiveLock but can run concurrently with most operations
-   VALIDATE still performs a full-table scan to verify existing rows, so even with a ShareUpdateExclusiveLock it can be I/O and CPU intensive on large tables.
-   
-   **Scheduling Guidance**: Run `VALIDATE CONSTRAINT` during off-peak hours or scheduled maintenance windows. Always test the operation on staging or a read replica first to estimate duration and resource impact. For partitioned tables, validate per-partition when possible, or batch validation across smaller table subsets to reduce I/O and CPU pressure on production systems.
-3. **New rows**: Validated immediately after ADD, even before VALIDATE
-
-### golang-migrate Workaround
-
-Since both operations must run in separate transactions, split into two migration files:
-
-```sql
--- 000015_add_constraint.up.sql
-ALTER TABLE orders 
-    ADD CONSTRAINT fk_customer 
-    FOREIGN KEY (customer_id) REFERENCES customers(id) 
-    NOT VALID;
-
--- 000016_validate_constraint.up.sql  
-ALTER TABLE orders VALIDATE CONSTRAINT fk_customer;
-```
-
-## Rollback Considerations
-
-### Dropping Indexes Safely
-
-Similar to creation, `DROP INDEX CONCURRENTLY` cannot run in a transaction:
-
-```sql
--- Manual rollback for large tables
-DROP INDEX CONCURRENTLY IF EXISTS idx_exceptions_reason;
-DROP INDEX CONCURRENTLY IF EXISTS idx_outbox_events_failed_retry;
-```
-
-### Migration Rollback Commands
+1. Scale write traffic down according to your operational policy.
+2. Run migrations from the release artifact/environment:
 
 ```bash
-# Rollback last migration
+make migrate-up
+```
+
+3. Verify service health and key APIs:
+   - `GET /health`
+   - `GET /ready`
+4. Re-enable normal traffic.
+
+## Rollback Procedure
+
+If post-migration validation fails and rollback is required:
+
+1. Pause new write traffic.
+2. Roll back one step (or the required number of steps) in a controlled sequence:
+
+```bash
 make migrate-down
-
-# Rollback specific version (if supported)
-migrate -path migrations -database "$DATABASE_URL" goto VERSION
 ```
 
-## Monitoring During Migrations
+3. Re-run smoke checks and confirm readiness.
+4. If rollback cannot restore service integrity, restore from backup and execute incident response.
 
-### Check for Blocking Queries
+## Notes
 
-```sql
-SELECT 
-    blocked.pid AS blocked_pid,
-    blocked.query AS blocked_query,
-    blocking.pid AS blocking_pid,
-    blocking.query AS blocking_query,
-    now() - blocked.query_start AS waiting_time
-FROM pg_stat_activity blocked
-JOIN pg_locks blocked_locks ON blocked.pid = blocked_locks.pid
-JOIN pg_locks blocking_locks ON blocked_locks.locktype = blocking_locks.locktype
-    AND blocked_locks.relation = blocking_locks.relation
-    AND blocked_locks.pid != blocking_locks.pid
-JOIN pg_stat_activity blocking ON blocking_locks.pid = blocking.pid
-WHERE NOT blocked_locks.granted;
-```
-
-Shorter alternative for PostgreSQL 9.6+: query `pg_stat_activity` and use `pg_blocking_pids(pid)` with `cardinality` to list blocked PIDs, their blockers, and the query.
-
-```sql
-SELECT
-    pid,
-    pg_blocking_pids(pid) AS blocking_pids,
-    query
-FROM pg_stat_activity
-WHERE cardinality(pg_blocking_pids(pid)) > 0;
-```
-
-**When to use each approach:** The simplified query using `pg_blocking_pids`, `pg_stat_activity`, and `cardinality` (requires PostgreSQL 9.6+) is ideal for quickly listing blocked PIDs and their blockers during routine monitoring. Use the detailed query above when you need lock types, relation/object information, waiting duration, or deeper diagnostics to understand *why* a lock is held.
-
-### Monitor Index Creation Progress (PostgreSQL 12+)
-
-```sql
-SELECT 
-    a.pid,
-    a.query,
-    p.phase,
-    p.blocks_total,
-    p.blocks_done,
-    round(100.0 * p.blocks_done / nullif(p.blocks_total, 0), 1) AS "% done"
-FROM pg_stat_progress_create_index p
-JOIN pg_stat_activity a ON p.pid = a.pid;
-```
-
-## Checklist for Production Deployments
-
-- [ ] Review all new migrations for index creation
-- [ ] Check target table sizes in production
-- [ ] For tables >100k rows, create indexes manually with CONCURRENTLY
-- [ ] Verify indexes exist before running migrations
-- [ ] Schedule deployment during low-traffic period
-- [ ] Have rollback commands ready
-- [ ] Monitor for blocking queries during deployment
-
-## References
-
-- [PostgreSQL CREATE INDEX CONCURRENTLY](https://www.postgresql.org/docs/current/sql-createindex.html#SQL-CREATEINDEX-CONCURRENTLY)
-- [golang-migrate Transactions](https://github.com/golang-migrate/migrate#transactions)
-- [PostgreSQL Lock Monitoring](https://wiki.postgresql.org/wiki/Lock_Monitoring)
+- Never manually modify migration history tables in production unless incident command explicitly approves and records it.
+- Keep migrations backward-compatible with running application versions whenever possible.
+- Prefer additive schema changes first, then cleanup/removal in later releases.
