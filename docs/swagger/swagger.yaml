@@ -3170,7 +3170,7 @@ paths:
       summary: Readiness check
       tags:
       - Health
-  /v1/config/contexts:
+  /v1/contexts:
     get:
       description: Returns a cursor-paginated list of reconciliation contexts, optionally
         filtered by type and status.
@@ -3284,7 +3284,7 @@ paths:
       summary: Create a reconciliation context
       tags:
       - Configuration Contexts
-  /v1/config/contexts/{contextId}:
+  /v1/contexts/{contextId}:
     delete:
       description: Removes a reconciliation context by ID.
       operationId: deleteContext
@@ -3431,7 +3431,7 @@ paths:
       summary: Update a reconciliation context
       tags:
       - Configuration Contexts
-  /v1/config/contexts/{contextId}/clone:
+  /v1/contexts/{contextId}/clone:
     post:
       consumes:
       - application/json
@@ -3491,7 +3491,128 @@ paths:
       summary: Clone a reconciliation context
       tags:
       - Configuration Contexts
-  /v1/config/contexts/{contextId}/rules:
+  /v1/contexts/{contextId}/export-jobs:
+    get:
+      description: Lists export jobs for a specific reconciliation context.
+      operationId: listExportJobsByContext
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Context ID
+        format: uuid
+        in: path
+        name: contextId
+        required: true
+        type: string
+      - description: Pagination cursor from previous response
+        in: query
+        name: cursor
+        type: string
+      - default: 20
+        description: Maximum number of records to return
+        in: query
+        maximum: 200
+        minimum: 1
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_reporting_adapters_http.ExportJobListResponse'
+        "400":
+          description: Invalid query parameters
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+        "404":
+          description: Context not found
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List export jobs by context
+      tags:
+      - Export Jobs
+    post:
+      consumes:
+      - application/json
+      description: Creates an async export job for large report exports (CSV, JSON,
+        XML).
+      operationId: createExportJob
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Context ID
+        format: uuid
+        in: path
+        name: contextId
+        required: true
+        type: string
+      - description: Export job parameters
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_reporting_adapters_http.CreateExportJobRequest'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/internal_reporting_adapters_http.CreateExportJobResponse'
+        "400":
+          description: Invalid request payload
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+        "404":
+          description: Context not found
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+        "409":
+          description: 'Conflict: duplicate resource or idempotency key in progress'
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+        "503":
+          description: Export worker disabled
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create an export job
+      tags:
+      - Export Jobs
+  /v1/contexts/{contextId}/rules:
     get:
       description: Returns a cursor-paginated list of match rules under a context,
         optionally filtered by type.
@@ -3616,7 +3737,7 @@ paths:
       summary: Create a match rule
       tags:
       - Configuration Match Rules
-  /v1/config/contexts/{contextId}/rules/{ruleId}:
+  /v1/contexts/{contextId}/rules/{ruleId}:
     delete:
       description: Removes a match rule by ID.
       operationId: deleteMatchRule
@@ -3781,7 +3902,7 @@ paths:
       summary: Update a match rule
       tags:
       - Configuration Match Rules
-  /v1/config/contexts/{contextId}/rules/reorder:
+  /v1/contexts/{contextId}/rules/reorder:
     post:
       consumes:
       - application/json
@@ -3834,7 +3955,7 @@ paths:
       summary: Reorder match rules
       tags:
       - Configuration Match Rules
-  /v1/config/contexts/{contextId}/schedules:
+  /v1/contexts/{contextId}/schedules:
     get:
       description: Returns all schedules for a reconciliation context.
       operationId: listSchedules
@@ -3941,7 +4062,7 @@ paths:
       summary: Create a reconciliation schedule
       tags:
       - Configuration Schedules
-  /v1/config/contexts/{contextId}/schedules/{scheduleId}:
+  /v1/contexts/{contextId}/schedules/{scheduleId}:
     delete:
       description: Removes a reconciliation schedule by ID.
       operationId: deleteSchedule
@@ -4106,7 +4227,7 @@ paths:
       summary: Update a reconciliation schedule
       tags:
       - Configuration Schedules
-  /v1/config/contexts/{contextId}/sources:
+  /v1/contexts/{contextId}/sources:
     get:
       description: Returns a cursor-paginated list of reconciliation sources under
         a context, optionally filtered by type.
@@ -4233,7 +4354,7 @@ paths:
       summary: Create a reconciliation source
       tags:
       - Configuration Sources
-  /v1/config/contexts/{contextId}/sources/{sourceId}:
+  /v1/contexts/{contextId}/sources/{sourceId}:
     delete:
       description: Removes a reconciliation source by ID.
       operationId: deleteSource
@@ -4398,7 +4519,7 @@ paths:
       summary: Update a reconciliation source
       tags:
       - Configuration Sources
-  /v1/config/contexts/{contextId}/sources/{sourceId}/field-maps:
+  /v1/contexts/{contextId}/sources/{sourceId}/field-maps:
     get:
       description: Returns the field map for a source within a context.
       operationId: getFieldMapBySource
@@ -4515,529 +4636,6 @@ paths:
       summary: Create a field map
       tags:
       - Configuration Field Maps
-  /v1/config/fee-schedules:
-    get:
-      description: Returns fee schedules for the tenant. Results may be capped by
-        the "limit" query parameter (default 20, max 200).
-      operationId: listFeeSchedules
-      parameters:
-      - description: Request ID for tracing
-        in: header
-        name: X-Request-Id
-        type: string
-      - default: 20
-        description: Maximum number of records to return
-        in: query
-        maximum: 200
-        minimum: 1
-        name: limit
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: List of fee schedules
-          schema:
-            items:
-              $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeScheduleResponse'
-            type: array
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: List fee schedules
-      tags:
-      - Configuration Fee Schedules
-    post:
-      consumes:
-      - application/json
-      description: Creates a new fee schedule for transaction fee calculation.
-      operationId: createFeeSchedule
-      parameters:
-      - description: Request ID for tracing
-        in: header
-        name: X-Request-Id
-        type: string
-      - description: Idempotency key for safe retries
-        in: header
-        name: X-Idempotency-Key
-        type: string
-      - description: Fee schedule creation payload
-        in: body
-        name: feeSchedule
-        required: true
-        schema:
-          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateFeeScheduleRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Successfully created fee schedule
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeScheduleResponse'
-        "400":
-          description: Invalid request payload
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "409":
-          description: 'Conflict: duplicate resource or idempotency key in progress'
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Create a fee schedule
-      tags:
-      - Configuration Fee Schedules
-  /v1/config/fee-schedules/{scheduleId}:
-    delete:
-      description: Removes a fee schedule by ID.
-      operationId: deleteFeeSchedule
-      parameters:
-      - description: Request ID for tracing
-        in: header
-        name: X-Request-Id
-        type: string
-      - description: Schedule ID
-        format: uuid
-        in: path
-        name: scheduleId
-        required: true
-        type: string
-      responses:
-        "204":
-          description: Fee schedule successfully deleted
-        "400":
-          description: Invalid schedule ID format
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "404":
-          description: Fee schedule not found
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Delete a fee schedule
-      tags:
-      - Configuration Fee Schedules
-    get:
-      description: Returns a fee schedule by ID.
-      operationId: getFeeSchedule
-      parameters:
-      - description: Request ID for tracing
-        in: header
-        name: X-Request-Id
-        type: string
-      - description: Schedule ID
-        format: uuid
-        in: path
-        name: scheduleId
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: Successfully retrieved fee schedule
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeScheduleResponse'
-        "400":
-          description: Invalid schedule ID format
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "404":
-          description: Fee schedule not found
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Get a fee schedule
-      tags:
-      - Configuration Fee Schedules
-    patch:
-      consumes:
-      - application/json
-      description: Updates fields on a fee schedule by ID.
-      operationId: updateFeeSchedule
-      parameters:
-      - description: Request ID for tracing
-        in: header
-        name: X-Request-Id
-        type: string
-      - description: Idempotency key for safe retries
-        in: header
-        name: X-Idempotency-Key
-        type: string
-      - description: Schedule ID
-        format: uuid
-        in: path
-        name: scheduleId
-        required: true
-        type: string
-      - description: Fee schedule updates
-        in: body
-        name: feeSchedule
-        required: true
-        schema:
-          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.UpdateFeeScheduleRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: Successfully updated fee schedule
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeScheduleResponse'
-        "400":
-          description: Invalid request payload
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "404":
-          description: Fee schedule not found
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "409":
-          description: 'Conflict: duplicate resource or idempotency key in progress'
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Update a fee schedule
-      tags:
-      - Configuration Fee Schedules
-  /v1/config/fee-schedules/{scheduleId}/simulate:
-    post:
-      consumes:
-      - application/json
-      description: Calculates fees for a given gross amount using a specific fee schedule.
-      operationId: simulateFeeSchedule
-      parameters:
-      - description: Request ID for tracing
-        in: header
-        name: X-Request-Id
-        type: string
-      - description: Schedule ID
-        format: uuid
-        in: path
-        name: scheduleId
-        required: true
-        type: string
-      - description: Simulation parameters
-        in: body
-        name: simulate
-        required: true
-        schema:
-          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.SimulateFeeRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: Simulation result
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.SimulateFeeResponse'
-        "400":
-          description: Invalid request payload
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "404":
-          description: Fee schedule not found
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Simulate fee calculation
-      tags:
-      - Configuration Fee Schedules
-  /v1/config/field-maps/{fieldMapId}:
-    delete:
-      description: Removes a field map by ID.
-      operationId: deleteFieldMap
-      parameters:
-      - description: Request ID for tracing
-        in: header
-        name: X-Request-Id
-        type: string
-      - description: Field map ID
-        format: uuid
-        in: path
-        name: fieldMapId
-        required: true
-        type: string
-      responses:
-        "204":
-          description: Field map successfully deleted
-        "400":
-          description: Invalid field map ID format
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "404":
-          description: Field map not found
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Delete a field map
-      tags:
-      - Configuration Field Maps
-    patch:
-      consumes:
-      - application/json
-      description: Updates fields on a field map by ID.
-      operationId: updateFieldMap
-      parameters:
-      - description: Request ID for tracing
-        in: header
-        name: X-Request-Id
-        type: string
-      - description: Field map ID
-        format: uuid
-        in: path
-        name: fieldMapId
-        required: true
-        type: string
-      - description: Field map updates
-        in: body
-        name: fieldMap
-        required: true
-        schema:
-          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.UpdateFieldMapRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: Successfully updated field map
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldMapResponse'
-        "400":
-          description: Invalid request payload
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "404":
-          description: Field map not found
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "409":
-          description: 'Conflict: duplicate resource or idempotency key in progress'
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Update a field map
-      tags:
-      - Configuration Field Maps
-  /v1/contexts/{contextId}/export-jobs:
-    get:
-      description: Lists export jobs for a specific reconciliation context.
-      operationId: listExportJobsByContext
-      parameters:
-      - description: Request ID for tracing
-        in: header
-        name: X-Request-Id
-        type: string
-      - description: Context ID
-        format: uuid
-        in: path
-        name: contextId
-        required: true
-        type: string
-      - description: Pagination cursor from previous response
-        in: query
-        name: cursor
-        type: string
-      - default: 20
-        description: Maximum number of records to return
-        in: query
-        maximum: 200
-        minimum: 1
-        name: limit
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_reporting_adapters_http.ExportJobListResponse'
-        "400":
-          description: Invalid query parameters
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
-        "404":
-          description: Context not found
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: List export jobs by context
-      tags:
-      - Export Jobs
-    post:
-      consumes:
-      - application/json
-      description: Creates an async export job for large report exports (CSV, JSON,
-        XML).
-      operationId: createExportJob
-      parameters:
-      - description: Request ID for tracing
-        in: header
-        name: X-Request-Id
-        type: string
-      - description: Context ID
-        format: uuid
-        in: path
-        name: contextId
-        required: true
-        type: string
-      - description: Export job parameters
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/internal_reporting_adapters_http.CreateExportJobRequest'
-      produces:
-      - application/json
-      responses:
-        "202":
-          description: Accepted
-          schema:
-            $ref: '#/definitions/internal_reporting_adapters_http.CreateExportJobResponse'
-        "400":
-          description: Invalid request payload
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
-        "404":
-          description: Context not found
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
-        "409":
-          description: 'Conflict: duplicate resource or idempotency key in progress'
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
-        "503":
-          description: Export worker disabled
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Create an export job
-      tags:
-      - Export Jobs
   /v1/discovery/connections:
     get:
       description: Returns all discovered Fetcher database connections.
@@ -6744,6 +6342,408 @@ paths:
       summary: Download export file
       tags:
       - Export Jobs
+  /v1/fee-schedules:
+    get:
+      description: Returns fee schedules for the tenant. Results may be capped by
+        the "limit" query parameter (default 20, max 200).
+      operationId: listFeeSchedules
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - default: 20
+        description: Maximum number of records to return
+        in: query
+        maximum: 200
+        minimum: 1
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of fee schedules
+          schema:
+            items:
+              $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeScheduleResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List fee schedules
+      tags:
+      - Configuration Fee Schedules
+    post:
+      consumes:
+      - application/json
+      description: Creates a new fee schedule for transaction fee calculation.
+      operationId: createFeeSchedule
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Idempotency key for safe retries
+        in: header
+        name: X-Idempotency-Key
+        type: string
+      - description: Fee schedule creation payload
+        in: body
+        name: feeSchedule
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateFeeScheduleRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Successfully created fee schedule
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeScheduleResponse'
+        "400":
+          description: Invalid request payload
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "409":
+          description: 'Conflict: duplicate resource or idempotency key in progress'
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a fee schedule
+      tags:
+      - Configuration Fee Schedules
+  /v1/fee-schedules/{scheduleId}:
+    delete:
+      description: Removes a fee schedule by ID.
+      operationId: deleteFeeSchedule
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Schedule ID
+        format: uuid
+        in: path
+        name: scheduleId
+        required: true
+        type: string
+      responses:
+        "204":
+          description: Fee schedule successfully deleted
+        "400":
+          description: Invalid schedule ID format
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "404":
+          description: Fee schedule not found
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a fee schedule
+      tags:
+      - Configuration Fee Schedules
+    get:
+      description: Returns a fee schedule by ID.
+      operationId: getFeeSchedule
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Schedule ID
+        format: uuid
+        in: path
+        name: scheduleId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully retrieved fee schedule
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeScheduleResponse'
+        "400":
+          description: Invalid schedule ID format
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "404":
+          description: Fee schedule not found
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a fee schedule
+      tags:
+      - Configuration Fee Schedules
+    patch:
+      consumes:
+      - application/json
+      description: Updates fields on a fee schedule by ID.
+      operationId: updateFeeSchedule
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Idempotency key for safe retries
+        in: header
+        name: X-Idempotency-Key
+        type: string
+      - description: Schedule ID
+        format: uuid
+        in: path
+        name: scheduleId
+        required: true
+        type: string
+      - description: Fee schedule updates
+        in: body
+        name: feeSchedule
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.UpdateFeeScheduleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully updated fee schedule
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeScheduleResponse'
+        "400":
+          description: Invalid request payload
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "404":
+          description: Fee schedule not found
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "409":
+          description: 'Conflict: duplicate resource or idempotency key in progress'
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a fee schedule
+      tags:
+      - Configuration Fee Schedules
+  /v1/fee-schedules/{scheduleId}/simulate:
+    post:
+      consumes:
+      - application/json
+      description: Calculates fees for a given gross amount using a specific fee schedule.
+      operationId: simulateFeeSchedule
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Schedule ID
+        format: uuid
+        in: path
+        name: scheduleId
+        required: true
+        type: string
+      - description: Simulation parameters
+        in: body
+        name: simulate
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.SimulateFeeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Simulation result
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.SimulateFeeResponse'
+        "400":
+          description: Invalid request payload
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "404":
+          description: Fee schedule not found
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Simulate fee calculation
+      tags:
+      - Configuration Fee Schedules
+  /v1/field-maps/{fieldMapId}:
+    delete:
+      description: Removes a field map by ID.
+      operationId: deleteFieldMap
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Field map ID
+        format: uuid
+        in: path
+        name: fieldMapId
+        required: true
+        type: string
+      responses:
+        "204":
+          description: Field map successfully deleted
+        "400":
+          description: Invalid field map ID format
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "404":
+          description: Field map not found
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a field map
+      tags:
+      - Configuration Field Maps
+    patch:
+      consumes:
+      - application/json
+      description: Updates fields on a field map by ID.
+      operationId: updateFieldMap
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Field map ID
+        format: uuid
+        in: path
+        name: fieldMapId
+        required: true
+        type: string
+      - description: Field map updates
+        in: body
+        name: fieldMap
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.UpdateFieldMapRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully updated field map
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldMapResponse'
+        "400":
+          description: Invalid request payload
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "404":
+          description: Field map not found
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "409":
+          description: 'Conflict: duplicate resource or idempotency key in progress'
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a field map
+      tags:
+      - Configuration Field Maps
   /v1/governance/actor-mappings/{actorId}:
     delete:
       description: Permanently removes an actor mapping for GDPR right-to-erasure
