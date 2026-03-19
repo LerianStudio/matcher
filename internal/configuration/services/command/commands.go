@@ -35,6 +35,7 @@ type UseCase struct {
 	matchRuleRepo   repositories.MatchRuleRepository
 	auditPublisher  configPorts.AuditPublisher
 	feeScheduleRepo configPorts.FeeScheduleRepository
+	feeRuleRepo     repositories.FeeRuleRepository
 	scheduleRepo    configPorts.ScheduleRepository
 	infraProvider   sharedPorts.InfrastructureProvider
 }

@@ -20,6 +20,10 @@
 //     criteria and thresholds for transaction reconciliation. Supports priority-based
 //     ordering, filtering by rule type, and bulk priority reordering.
 //
+//   - [FeeRuleRepository]: Manages [fee.FeeRule] entities that map transaction metadata
+//     predicates to fee schedules. Rules are evaluated in priority order during match
+//     runs to determine which fee schedule applies to each transaction side.
+//
 // Implementations of these interfaces are provided in the adapters/postgres package,
 // which handles tenant isolation, transaction management, and cursor-based pagination.
 // Use cases in the services/command and services/query packages depend on these
