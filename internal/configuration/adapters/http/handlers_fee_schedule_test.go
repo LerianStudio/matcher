@@ -60,7 +60,7 @@ func TestCreateFeeSchedule_Handler(t *testing.T) {
 	app := newFeeScheduleTestApp(ctx)
 	fixture := newHandlerFixture(t)
 
-	app.Post("/v1/config/fee-schedules", fixture.handler.CreateFeeSchedule)
+	app.Post("/v1/fee-schedules", fixture.handler.CreateFeeSchedule)
 
 	payload := dto.CreateFeeScheduleRequest{
 		Name:             "Test Schedule",
@@ -81,7 +81,7 @@ func TestCreateFeeSchedule_Handler(t *testing.T) {
 	body, err := json.Marshal(payload)
 	require.NoError(t, err)
 
-	req := httptest.NewRequest(http.MethodPost, "/v1/config/fee-schedules", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/v1/fee-schedules", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := app.Test(req)
@@ -100,9 +100,9 @@ func TestListFeeSchedules_Handler(t *testing.T) {
 	app := newFeeScheduleTestApp(ctx)
 	fixture := newHandlerFixture(t)
 
-	app.Get("/v1/config/fee-schedules", fixture.handler.ListFeeSchedules)
+	app.Get("/v1/fee-schedules", fixture.handler.ListFeeSchedules)
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/config/fee-schedules", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/fee-schedules", nil)
 
 	resp, err := app.Test(req)
 	require.NoError(t, err)
@@ -120,9 +120,9 @@ func TestGetFeeSchedule_Handler_InvalidID(t *testing.T) {
 	app := newFeeScheduleTestApp(ctx)
 	fixture := newHandlerFixture(t)
 
-	app.Get("/v1/config/fee-schedules/:scheduleId", fixture.handler.GetFeeSchedule)
+	app.Get("/v1/fee-schedules/:scheduleId", fixture.handler.GetFeeSchedule)
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/config/fee-schedules/invalid-uuid", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/fee-schedules/invalid-uuid", nil)
 
 	resp, err := app.Test(req)
 	require.NoError(t, err)
@@ -137,9 +137,9 @@ func TestDeleteFeeSchedule_Handler_InvalidID(t *testing.T) {
 	app := newFeeScheduleTestApp(ctx)
 	fixture := newHandlerFixture(t)
 
-	app.Delete("/v1/config/fee-schedules/:scheduleId", fixture.handler.DeleteFeeSchedule)
+	app.Delete("/v1/fee-schedules/:scheduleId", fixture.handler.DeleteFeeSchedule)
 
-	req := httptest.NewRequest(http.MethodDelete, "/v1/config/fee-schedules/invalid-uuid", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/v1/fee-schedules/invalid-uuid", nil)
 
 	resp, err := app.Test(req)
 	require.NoError(t, err)
@@ -154,7 +154,7 @@ func TestSimulateFeeSchedule_Handler_InvalidID(t *testing.T) {
 	app := newFeeScheduleTestApp(ctx)
 	fixture := newHandlerFixture(t)
 
-	app.Post("/v1/config/fee-schedules/:scheduleId/simulate", fixture.handler.SimulateFeeSchedule)
+	app.Post("/v1/fee-schedules/:scheduleId/simulate", fixture.handler.SimulateFeeSchedule)
 
 	payload := dto.SimulateFeeRequest{
 		GrossAmount: "100.00",
@@ -164,7 +164,7 @@ func TestSimulateFeeSchedule_Handler_InvalidID(t *testing.T) {
 	body, err := json.Marshal(payload)
 	require.NoError(t, err)
 
-	req := httptest.NewRequest(http.MethodPost, "/v1/config/fee-schedules/invalid-uuid/simulate", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/v1/fee-schedules/invalid-uuid/simulate", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := app.Test(req)

@@ -34,7 +34,7 @@ import (
 // @Failure 404 {object} ErrorResponse "Context not found"
 // @Failure 409 {object} ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
 // @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId}/schedules [post]
+// @Router /v1/contexts/{contextId}/schedules [post]
 func (handler *Handler) CreateSchedule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.schedule.create")
 	defer span.End()
@@ -94,7 +94,7 @@ func (handler *Handler) CreateSchedule(fiberCtx *fiber.Ctx) error {
 // @Failure 403 {object} ErrorResponse "Forbidden"
 // @Failure 404 {object} ErrorResponse "Context not found"
 // @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId}/schedules [get]
+// @Router /v1/contexts/{contextId}/schedules [get]
 func (handler *Handler) ListSchedules(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.schedule.list")
 	defer span.End()
@@ -141,7 +141,7 @@ func (handler *Handler) ListSchedules(fiberCtx *fiber.Ctx) error {
 // @Failure 403 {object} ErrorResponse "Forbidden"
 // @Failure 404 {object} ErrorResponse "Schedule not found"
 // @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId}/schedules/{scheduleId} [get]
+// @Router /v1/contexts/{contextId}/schedules/{scheduleId} [get]
 func (handler *Handler) GetSchedule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.schedule.get")
 	defer span.End()
@@ -206,7 +206,7 @@ func (handler *Handler) GetSchedule(fiberCtx *fiber.Ctx) error {
 // @Failure 404 {object} ErrorResponse "Schedule not found"
 // @Failure 409 {object} ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
 // @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId}/schedules/{scheduleId} [patch]
+// @Router /v1/contexts/{contextId}/schedules/{scheduleId} [patch]
 func (handler *Handler) UpdateSchedule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.schedule.update")
 	defer span.End()
@@ -273,7 +273,7 @@ func (handler *Handler) UpdateSchedule(fiberCtx *fiber.Ctx) error {
 // @Failure 403 {object} ErrorResponse "Forbidden"
 // @Failure 404 {object} ErrorResponse "Schedule not found"
 // @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId}/schedules/{scheduleId} [delete]
+// @Router /v1/contexts/{contextId}/schedules/{scheduleId} [delete]
 func (handler *Handler) DeleteSchedule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.schedule.delete")
 	defer span.End()

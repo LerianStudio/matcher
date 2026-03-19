@@ -40,7 +40,7 @@ func TestCHAOS18_IdempotencyRedisLatency_500Cascade(t *testing.T) {
 	cs := BootChaosServer(t, h)
 
 	// Baseline: POST should work normally.
-	path := fmt.Sprintf("/v1/config/contexts/%s/rules", h.Seed.ContextID)
+	path := fmt.Sprintf("/v1/contexts/%s/rules", h.Seed.ContextID)
 
 	resp, _ := cs.DoJSON(t, http.MethodPost, path, map[string]any{
 		"priority": 1,
@@ -72,7 +72,7 @@ func TestCHAOS18_IdempotencyRedisLatency_500Cascade(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 
-			reqPath := fmt.Sprintf("/v1/config/contexts/%s/rules", h.Seed.ContextID)
+			reqPath := fmt.Sprintf("/v1/contexts/%s/rules", h.Seed.ContextID)
 
 			req := httptest.NewRequest(http.MethodPost, reqPath, strings.NewReader(fmt.Sprintf(
 				`{"priority": %d, "type": "EXACT", "config": {"fields": ["amount"]}}`, idx+10,
@@ -172,7 +172,7 @@ func TestCHAOS19_IdempotencyMarkCompleteFailure(t *testing.T) {
 
 	// Use a fixed idempotency key for both requests.
 	idempotencyKey := uuid.New().String()
-	path := fmt.Sprintf("/v1/config/contexts/%s/rules", h.Seed.ContextID)
+	path := fmt.Sprintf("/v1/contexts/%s/rules", h.Seed.ContextID)
 
 	// First request: should succeed.
 	req1 := httptest.NewRequest(http.MethodPost, path, strings.NewReader(
@@ -265,7 +265,7 @@ func TestCHAOS20_RedisDown_FailOpenVsFailClosed(t *testing.T) {
 	getResp, _ := cs.DoGet(t, "/health")
 	assert.Equal(t, http.StatusOK, getResp.StatusCode, "baseline GET")
 
-	postPath := fmt.Sprintf("/v1/config/contexts/%s/rules", h.Seed.ContextID)
+	postPath := fmt.Sprintf("/v1/contexts/%s/rules", h.Seed.ContextID)
 
 	postResp, _ := cs.DoJSON(t, http.MethodPost, postPath, map[string]any{
 		"priority": 1,

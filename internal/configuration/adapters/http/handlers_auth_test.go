@@ -92,7 +92,7 @@ func TestConfigRoutes_AuthEnforced(t *testing.T) {
 	err = RegisterRoutes(protected, handler)
 	require.NoError(t, err)
 
-	request := httptest.NewRequest(http.MethodGet, "/v1/config/contexts", nil)
+	request := httptest.NewRequest(http.MethodGet, "/v1/contexts", nil)
 
 	response, err := app.Test(request)
 	require.NoError(t, err)

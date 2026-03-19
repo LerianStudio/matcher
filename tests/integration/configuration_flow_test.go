@@ -125,7 +125,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 			t,
 			client,
 			"POST",
-			baseURL+"/v1/config/contexts",
+			baseURL+"/v1/contexts",
 			contextPayload,
 			http.StatusCreated,
 		)
@@ -142,7 +142,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 				t,
 				client,
 				"DELETE",
-				fmt.Sprintf("%s/v1/config/contexts/%s", baseURL, contextID),
+				fmt.Sprintf("%s/v1/contexts/%s", baseURL, contextID),
 				nil,
 				http.StatusNoContent,
 			)
@@ -160,7 +160,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 			t,
 			client,
 			"POST",
-			fmt.Sprintf("%s/v1/config/contexts/%s/sources", baseURL, contextID),
+			fmt.Sprintf("%s/v1/contexts/%s/sources", baseURL, contextID),
 			ledgerPayload,
 			http.StatusCreated,
 		)
@@ -174,7 +174,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 				t,
 				client,
 				"DELETE",
-				fmt.Sprintf("%s/v1/config/contexts/%s/sources/%s", baseURL, contextID, ledgerID),
+				fmt.Sprintf("%s/v1/contexts/%s/sources/%s", baseURL, contextID, ledgerID),
 				nil,
 				http.StatusNoContent,
 			)
@@ -192,7 +192,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 			t,
 			client,
 			"POST",
-			fmt.Sprintf("%s/v1/config/contexts/%s/sources", baseURL, contextID),
+			fmt.Sprintf("%s/v1/contexts/%s/sources", baseURL, contextID),
 			bankPayload,
 			http.StatusCreated,
 		)
@@ -206,7 +206,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 				t,
 				client,
 				"DELETE",
-				fmt.Sprintf("%s/v1/config/contexts/%s/sources/%s", baseURL, contextID, bankID),
+				fmt.Sprintf("%s/v1/contexts/%s/sources/%s", baseURL, contextID, bankID),
 				nil,
 				http.StatusNoContent,
 			)
@@ -226,7 +226,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 			client,
 			"POST",
 			fmt.Sprintf(
-				"%s/v1/config/contexts/%s/sources/%s/field-maps",
+				"%s/v1/contexts/%s/sources/%s/field-maps",
 				baseURL,
 				contextID,
 				ledgerID,
@@ -242,7 +242,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 				t,
 				client,
 				"DELETE",
-				fmt.Sprintf("%s/v1/config/field-maps/%s", baseURL, ledgerMapIDVal),
+				fmt.Sprintf("%s/v1/field-maps/%s", baseURL, ledgerMapIDVal),
 				nil,
 				http.StatusNoContent,
 			)
@@ -262,7 +262,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 			client,
 			"POST",
 			fmt.Sprintf(
-				"%s/v1/config/contexts/%s/sources/%s/field-maps",
+				"%s/v1/contexts/%s/sources/%s/field-maps",
 				baseURL,
 				contextID,
 				bankID,
@@ -278,7 +278,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 				t,
 				client,
 				"DELETE",
-				fmt.Sprintf("%s/v1/config/field-maps/%s", baseURL, bankMapIDVal),
+				fmt.Sprintf("%s/v1/field-maps/%s", baseURL, bankMapIDVal),
 				nil,
 				http.StatusNoContent,
 			)
@@ -297,7 +297,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 			t,
 			client,
 			"POST",
-			fmt.Sprintf("%s/v1/config/contexts/%s/rules", baseURL, contextID),
+			fmt.Sprintf("%s/v1/contexts/%s/rules", baseURL, contextID),
 			rulePayload,
 			http.StatusCreated,
 		)
@@ -311,7 +311,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 				t,
 				client,
 				"DELETE",
-				fmt.Sprintf("%s/v1/config/contexts/%s/rules/%s", baseURL, contextID, ruleID),
+				fmt.Sprintf("%s/v1/contexts/%s/rules/%s", baseURL, contextID, ruleID),
 				nil,
 				http.StatusNoContent,
 			)
@@ -322,7 +322,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 			t,
 			client,
 			"GET",
-			fmt.Sprintf("%s/v1/config/contexts/%s/rules", baseURL, contextID),
+			fmt.Sprintf("%s/v1/contexts/%s/rules", baseURL, contextID),
 			nil,
 			http.StatusOK,
 		)
@@ -335,7 +335,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 			t,
 			client,
 			"GET",
-			fmt.Sprintf("%s/v1/config/contexts/%s", baseURL, contextID),
+			fmt.Sprintf("%s/v1/contexts/%s", baseURL, contextID),
 			nil,
 			http.StatusOK,
 		)

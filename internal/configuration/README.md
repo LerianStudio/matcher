@@ -91,18 +91,18 @@ The context exposes a RESTful API protected by the Auth layer:
 | | PATCH | `/api/config/contexts/:contextId/rules/:ruleId` | Update a match rule |
 | | DELETE | `/api/config/contexts/:contextId/rules/:ruleId` | Delete a match rule |
 | | POST | `/api/config/contexts/:contextId/rules/reorder` | Change rule execution order |
-| **FeeSchedule** | POST | `/v1/config/fee-schedules` | Create a fee schedule |
-| | GET | `/v1/config/fee-schedules` | List fee schedules |
-| | GET | `/v1/config/fee-schedules/:scheduleId` | Get a fee schedule |
-| | PATCH | `/v1/config/fee-schedules/:scheduleId` | Update a fee schedule |
-| | DELETE | `/v1/config/fee-schedules/:scheduleId` | Delete a fee schedule |
-| | POST | `/v1/config/fee-schedules/:scheduleId/simulate` | Simulate fee calculation |
-| **Schedule** | POST | `/v1/config/contexts/:contextId/schedules` | Create a reconciliation schedule |
-| | GET | `/v1/config/contexts/:contextId/schedules` | List schedules |
-| | GET | `/v1/config/contexts/:contextId/schedules/:scheduleId` | Get a schedule |
-| | PATCH | `/v1/config/contexts/:contextId/schedules/:scheduleId` | Update a schedule |
-| | DELETE | `/v1/config/contexts/:contextId/schedules/:scheduleId` | Delete a schedule |
-| **Clone** | POST | `/v1/config/contexts/:contextId/clone` | Clone a context with all its configuration |
+| **FeeSchedule** | POST | `/v1/fee-schedules` | Create a fee schedule |
+| | GET | `/v1/fee-schedules` | List fee schedules |
+| | GET | `/v1/fee-schedules/:scheduleId` | Get a fee schedule |
+| | PATCH | `/v1/fee-schedules/:scheduleId` | Update a fee schedule |
+| | DELETE | `/v1/fee-schedules/:scheduleId` | Delete a fee schedule |
+| | POST | `/v1/fee-schedules/:scheduleId/simulate` | Simulate fee calculation |
+| **Schedule** | POST | `/v1/contexts/:contextId/schedules` | Create a reconciliation schedule |
+| | GET | `/v1/contexts/:contextId/schedules` | List schedules |
+| | GET | `/v1/contexts/:contextId/schedules/:scheduleId` | Get a schedule |
+| | PATCH | `/v1/contexts/:contextId/schedules/:scheduleId` | Update a schedule |
+| | DELETE | `/v1/contexts/:contextId/schedules/:scheduleId` | Delete a schedule |
+| **Clone** | POST | `/v1/contexts/:contextId/clone` | Clone a context with all its configuration |
 
 ## Usage
 

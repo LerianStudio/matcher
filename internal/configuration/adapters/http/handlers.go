@@ -212,7 +212,7 @@ func NewHandler(commandUseCase *command.UseCase, queryUseCase *query.UseCase, pr
 // @Failure 403 {object} ErrorResponse "Forbidden"
 // @Failure 409 {object} ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
 // @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /v1/config/contexts [post]
+// @Router /v1/contexts [post]
 func (handler *Handler) CreateContext(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.context.create")
 	defer span.End()
@@ -270,7 +270,7 @@ func (handler *Handler) CreateContext(fiberCtx *fiber.Ctx) error {
 // @Failure 401 {object} ErrorResponse "Unauthorized"
 // @Failure 403 {object} ErrorResponse "Forbidden"
 // @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /v1/config/contexts [get]
+// @Router /v1/contexts [get]
 func (handler *Handler) ListContexts(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.context.list")
 	defer span.End()
@@ -353,7 +353,7 @@ func (handler *Handler) ListContexts(fiberCtx *fiber.Ctx) error {
 // @Failure 403 {object} ErrorResponse "Forbidden"
 // @Failure 404 {object} ErrorResponse "Context not found"
 // @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId} [get]
+// @Router /v1/contexts/{contextId} [get]
 func (handler *Handler) GetContext(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.context.get")
 	defer span.End()
@@ -407,7 +407,7 @@ func (handler *Handler) GetContext(fiberCtx *fiber.Ctx) error {
 // @Failure 404 {object} ErrorResponse "Context not found"
 // @Failure 409 {object} ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
 // @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId} [patch]
+// @Router /v1/contexts/{contextId} [patch]
 func (handler *Handler) UpdateContext(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.context.update")
 	defer span.End()
@@ -463,7 +463,7 @@ func (handler *Handler) UpdateContext(fiberCtx *fiber.Ctx) error {
 // @Failure 403 {object} ErrorResponse "Forbidden"
 // @Failure 404 {object} ErrorResponse "Context not found"
 // @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId} [delete]
+// @Router /v1/contexts/{contextId} [delete]
 func (handler *Handler) DeleteContext(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.context.delete")
 	defer span.End()
@@ -520,7 +520,7 @@ func (handler *Handler) DeleteContext(fiberCtx *fiber.Ctx) error {
 // @Failure 404 {object} ErrorResponse "Context not found"
 // @Failure 409 {object} ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
 // @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId}/clone [post]
+// @Router /v1/contexts/{contextId}/clone [post]
 func (handler *Handler) CloneContext(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.context.clone")
 	defer span.End()
@@ -605,7 +605,7 @@ func boolDefault(b *bool, defaultVal bool) bool {
 // @Failure 404 {object} ErrorResponse "Context not found"
 // @Failure 409 {object} ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
 // @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId}/sources [post]
+// @Router /v1/contexts/{contextId}/sources [post]
 func (handler *Handler) CreateSource(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.source.create")
 	defer span.End()
@@ -664,7 +664,7 @@ func (handler *Handler) CreateSource(fiberCtx *fiber.Ctx) error {
 // @Failure 403 {object} ErrorResponse "Forbidden"
 // @Failure 404 {object} ErrorResponse "Context not found"
 // @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId}/sources [get]
+// @Router /v1/contexts/{contextId}/sources [get]
 func (handler *Handler) ListSources(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.source.list")
 	defer span.End()
@@ -758,7 +758,7 @@ func (handler *Handler) ListSources(fiberCtx *fiber.Ctx) error {
 // @Failure 403 {object} ErrorResponse "Forbidden"
 // @Failure 404 {object} ErrorResponse "Source not found"
 // @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId}/sources/{sourceId} [get]
+// @Router /v1/contexts/{contextId}/sources/{sourceId} [get]
 func (handler *Handler) GetSource(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.source.get")
 	defer span.End()
@@ -818,7 +818,7 @@ func (handler *Handler) GetSource(fiberCtx *fiber.Ctx) error {
 // @Failure 404 {object} ErrorResponse "Source not found"
 // @Failure 409 {object} ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
 // @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId}/sources/{sourceId} [patch]
+// @Router /v1/contexts/{contextId}/sources/{sourceId} [patch]
 func (handler *Handler) UpdateSource(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.source.update")
 	defer span.End()
@@ -884,7 +884,7 @@ func (handler *Handler) UpdateSource(fiberCtx *fiber.Ctx) error {
 // @Failure 403 {object} ErrorResponse "Forbidden"
 // @Failure 404 {object} ErrorResponse "Source not found"
 // @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId}/sources/{sourceId} [delete]
+// @Router /v1/contexts/{contextId}/sources/{sourceId} [delete]
 func (handler *Handler) DeleteSource(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.source.delete")
 	defer span.End()
@@ -947,7 +947,7 @@ func (handler *Handler) DeleteSource(fiberCtx *fiber.Ctx) error {
 // @Failure 404 {object} ErrorResponse "Context or source not found"
 // @Failure 409 {object} ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
 // @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId}/sources/{sourceId}/field-maps [post]
+// @Router /v1/contexts/{contextId}/sources/{sourceId}/field-maps [post]
 func (handler *Handler) CreateFieldMap(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fieldmap.create")
 	defer span.End()
@@ -1008,7 +1008,7 @@ func (handler *Handler) CreateFieldMap(fiberCtx *fiber.Ctx) error {
 // @Failure 403 {object} ErrorResponse "Forbidden"
 // @Failure 404 {object} ErrorResponse "Field map not found"
 // @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId}/sources/{sourceId}/field-maps [get]
+// @Router /v1/contexts/{contextId}/sources/{sourceId}/field-maps [get]
 func (handler *Handler) GetFieldMapBySource(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fieldmap.get_by_source")
 	defer span.End()
@@ -1071,7 +1071,7 @@ func (handler *Handler) GetFieldMapBySource(fiberCtx *fiber.Ctx) error {
 // @Failure 404 {object} ErrorResponse "Field map not found"
 // @Failure 409 {object} ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
 // @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /v1/config/field-maps/{fieldMapId} [patch]
+// @Router /v1/field-maps/{fieldMapId} [patch]
 func (handler *Handler) UpdateFieldMap(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fieldmap.update")
 	defer span.End()
@@ -1137,7 +1137,7 @@ func (handler *Handler) UpdateFieldMap(fiberCtx *fiber.Ctx) error {
 // @Failure 403 {object} ErrorResponse "Forbidden"
 // @Failure 404 {object} ErrorResponse "Field map not found"
 // @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /v1/config/field-maps/{fieldMapId} [delete]
+// @Router /v1/field-maps/{fieldMapId} [delete]
 func (handler *Handler) DeleteFieldMap(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fieldmap.delete")
 	defer span.End()
@@ -1201,7 +1201,7 @@ func (handler *Handler) DeleteFieldMap(fiberCtx *fiber.Ctx) error {
 // @Failure 404 {object} ErrorResponse "Context not found"
 // @Failure 409 {object} ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
 // @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId}/rules [post]
+// @Router /v1/contexts/{contextId}/rules [post]
 func (handler *Handler) CreateMatchRule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.matchrule.create")
 	defer span.End()
@@ -1265,7 +1265,7 @@ func (handler *Handler) CreateMatchRule(fiberCtx *fiber.Ctx) error {
 // @Failure 403 {object} ErrorResponse "Forbidden"
 // @Failure 404 {object} ErrorResponse "Context not found"
 // @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId}/rules [get]
+// @Router /v1/contexts/{contextId}/rules [get]
 func (handler *Handler) ListMatchRules(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.matchrule.list")
 	defer span.End()
@@ -1347,7 +1347,7 @@ func (handler *Handler) ListMatchRules(fiberCtx *fiber.Ctx) error {
 // @Failure 403 {object} ErrorResponse "Forbidden"
 // @Failure 404 {object} ErrorResponse "Match rule not found"
 // @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId}/rules/{ruleId} [get]
+// @Router /v1/contexts/{contextId}/rules/{ruleId} [get]
 func (handler *Handler) GetMatchRule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.matchrule.get")
 	defer span.End()
@@ -1407,7 +1407,7 @@ func (handler *Handler) GetMatchRule(fiberCtx *fiber.Ctx) error {
 // @Failure 404 {object} ErrorResponse "Match rule not found"
 // @Failure 409 {object} ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
 // @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId}/rules/{ruleId} [patch]
+// @Router /v1/contexts/{contextId}/rules/{ruleId} [patch]
 func (handler *Handler) UpdateMatchRule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.matchrule.update")
 	defer span.End()
@@ -1472,7 +1472,7 @@ func (handler *Handler) UpdateMatchRule(fiberCtx *fiber.Ctx) error {
 // @Failure 403 {object} ErrorResponse "Forbidden"
 // @Failure 404 {object} ErrorResponse "Match rule not found"
 // @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId}/rules/{ruleId} [delete]
+// @Router /v1/contexts/{contextId}/rules/{ruleId} [delete]
 func (handler *Handler) DeleteMatchRule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.matchrule.delete")
 	defer span.End()
@@ -1534,7 +1534,7 @@ type ReorderRequest struct {
 // @Failure 403 {object} ErrorResponse "Forbidden"
 // @Failure 404 {object} ErrorResponse "Context not found"
 // @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /v1/config/contexts/{contextId}/rules/reorder [post]
+// @Router /v1/contexts/{contextId}/rules/reorder [post]
 func (handler *Handler) ReorderMatchRules(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.matchrule.reorder")
 	defer span.End()

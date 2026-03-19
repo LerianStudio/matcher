@@ -281,7 +281,7 @@ func TestCloneContext_Success(t *testing.T) {
 	fixture.seedSource(t, contextEntity.ID)
 	fixture.seedMatchRule(t, contextEntity.ID, 1)
 
-	app.Post("/v1/config/contexts/:contextId/clone", fixture.handler.CloneContext)
+	app.Post("/v1/contexts/:contextId/clone", fixture.handler.CloneContext)
 
 	// Disable fee schedule cloning since no fee schedule repo is wired
 	noFeeSchedules := false
@@ -291,7 +291,7 @@ func TestCloneContext_Success(t *testing.T) {
 	}
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/clone",
+		"/v1/contexts/:contextId/clone",
 		contextEntity.ID.String(),
 	)
 
@@ -319,10 +319,10 @@ func TestCloneContext_InvalidPayload(t *testing.T) {
 
 	contextEntity := fixture.seedContext(t, tenantID)
 
-	app.Post("/v1/config/contexts/:contextId/clone", fixture.handler.CloneContext)
+	app.Post("/v1/contexts/:contextId/clone", fixture.handler.CloneContext)
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/clone",
+		"/v1/contexts/:contextId/clone",
 		contextEntity.ID.String(),
 	)
 
@@ -342,14 +342,14 @@ func TestCloneContext_ContextNotFound(t *testing.T) {
 	app := newTestApp(ctx)
 	fixture := newHandlerFixture(t)
 
-	app.Post("/v1/config/contexts/:contextId/clone", fixture.handler.CloneContext)
+	app.Post("/v1/contexts/:contextId/clone", fixture.handler.CloneContext)
 
 	payload := dto.CloneContextRequest{
 		Name: "Cloned Context",
 	}
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/clone",
+		"/v1/contexts/:contextId/clone",
 		uuid.NewString(),
 	)
 
@@ -372,13 +372,13 @@ func TestCloneContext_EmptyName(t *testing.T) {
 
 	contextEntity := fixture.seedContext(t, tenantID)
 
-	app.Post("/v1/config/contexts/:contextId/clone", fixture.handler.CloneContext)
+	app.Post("/v1/contexts/:contextId/clone", fixture.handler.CloneContext)
 
 	// send name that is empty after validation - the validator requires min=1
 	// but passing an empty string to the command triggers ErrCloneNameRequired
 	// Let's pass valid JSON but with empty name to trigger validation
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/clone",
+		"/v1/contexts/:contextId/clone",
 		contextEntity.ID.String(),
 	)
 
@@ -403,7 +403,7 @@ func TestCloneContext_WithBoolDefaults(t *testing.T) {
 	fixture.seedSource(t, contextEntity.ID)
 	fixture.seedMatchRule(t, contextEntity.ID, 1)
 
-	app.Post("/v1/config/contexts/:contextId/clone", fixture.handler.CloneContext)
+	app.Post("/v1/contexts/:contextId/clone", fixture.handler.CloneContext)
 
 	falseVal := false
 	payload := dto.CloneContextRequest{
@@ -414,7 +414,7 @@ func TestCloneContext_WithBoolDefaults(t *testing.T) {
 	}
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/clone",
+		"/v1/contexts/:contextId/clone",
 		contextEntity.ID.String(),
 	)
 
@@ -442,14 +442,14 @@ func TestUpdateFieldMap_NotFound(t *testing.T) {
 	app := newTestApp(ctx)
 	fixture := newHandlerFixture(t)
 
-	app.Patch("/v1/config/field-maps/:fieldMapId", fixture.handler.UpdateFieldMap)
+	app.Patch("/v1/field-maps/:fieldMapId", fixture.handler.UpdateFieldMap)
 
 	payload := mustJSON(t, entities.UpdateFieldMapInput{
 		Mapping: map[string]any{"field": "updated"},
 	})
 
 	resp := performRequest(t, app, http.MethodPatch,
-		"/v1/config/field-maps/"+uuid.NewString(), payload)
+		"/v1/field-maps/"+uuid.NewString(), payload)
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusNotFound, resp.StatusCode)
@@ -471,10 +471,10 @@ func TestUpdateFieldMap_InvalidPayload(t *testing.T) {
 	sourceEntity := fixture.seedSource(t, contextEntity.ID)
 	fieldMap := fixture.seedFieldMap(t, contextEntity.ID, sourceEntity.ID)
 
-	app.Patch("/v1/config/field-maps/:fieldMapId", fixture.handler.UpdateFieldMap)
+	app.Patch("/v1/field-maps/:fieldMapId", fixture.handler.UpdateFieldMap)
 
 	resp := performRequest(t, app, http.MethodPatch,
-		"/v1/config/field-maps/"+fieldMap.ID.String(), []byte("{invalid"))
+		"/v1/field-maps/"+fieldMap.ID.String(), []byte("{invalid"))
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
@@ -491,14 +491,14 @@ func TestUpdateFieldMap_UnauthorizedTenant(t *testing.T) {
 	app := newTestApp(ctx)
 	fixture := newHandlerFixture(t)
 
-	app.Patch("/v1/config/field-maps/:fieldMapId", fixture.handler.UpdateFieldMap)
+	app.Patch("/v1/field-maps/:fieldMapId", fixture.handler.UpdateFieldMap)
 
 	payload := mustJSON(t, entities.UpdateFieldMapInput{
 		Mapping: map[string]any{"field": "updated"},
 	})
 
 	resp := performRequest(t, app, http.MethodPatch,
-		"/v1/config/field-maps/"+uuid.NewString(), payload)
+		"/v1/field-maps/"+uuid.NewString(), payload)
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
@@ -520,14 +520,14 @@ func TestUpdateFieldMap_OwnershipDenied(t *testing.T) {
 	sourceEntity := fixture.seedSource(t, contextEntity.ID)
 	fieldMap := fixture.seedFieldMap(t, contextEntity.ID, sourceEntity.ID)
 
-	app.Patch("/v1/config/field-maps/:fieldMapId", fixture.handler.UpdateFieldMap)
+	app.Patch("/v1/field-maps/:fieldMapId", fixture.handler.UpdateFieldMap)
 
 	payload := mustJSON(t, entities.UpdateFieldMapInput{
 		Mapping: map[string]any{"field": "updated"},
 	})
 
 	resp := performRequest(t, app, http.MethodPatch,
-		"/v1/config/field-maps/"+fieldMap.ID.String(), payload)
+		"/v1/field-maps/"+fieldMap.ID.String(), payload)
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusNotFound, resp.StatusCode)
@@ -546,10 +546,10 @@ func TestDeleteFieldMap_NotFound(t *testing.T) {
 	app := newTestApp(ctx)
 	fixture := newHandlerFixture(t)
 
-	app.Delete("/v1/config/field-maps/:fieldMapId", fixture.handler.DeleteFieldMap)
+	app.Delete("/v1/field-maps/:fieldMapId", fixture.handler.DeleteFieldMap)
 
 	resp := performRequest(t, app, http.MethodDelete,
-		"/v1/config/field-maps/"+uuid.NewString(), nil)
+		"/v1/field-maps/"+uuid.NewString(), nil)
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusNotFound, resp.StatusCode)
@@ -566,10 +566,10 @@ func TestDeleteFieldMap_InvalidUUID(t *testing.T) {
 	app := newTestApp(ctx)
 	fixture := newHandlerFixture(t)
 
-	app.Delete("/v1/config/field-maps/:fieldMapId", fixture.handler.DeleteFieldMap)
+	app.Delete("/v1/field-maps/:fieldMapId", fixture.handler.DeleteFieldMap)
 
 	resp := performRequest(t, app, http.MethodDelete,
-		"/v1/config/field-maps/not-a-uuid", nil)
+		"/v1/field-maps/not-a-uuid", nil)
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
@@ -585,10 +585,10 @@ func TestDeleteFieldMap_UnauthorizedTenant(t *testing.T) {
 	app := newTestApp(ctx)
 	fixture := newHandlerFixture(t)
 
-	app.Delete("/v1/config/field-maps/:fieldMapId", fixture.handler.DeleteFieldMap)
+	app.Delete("/v1/field-maps/:fieldMapId", fixture.handler.DeleteFieldMap)
 
 	resp := performRequest(t, app, http.MethodDelete,
-		"/v1/config/field-maps/"+uuid.NewString(), nil)
+		"/v1/field-maps/"+uuid.NewString(), nil)
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
@@ -609,10 +609,10 @@ func TestDeleteFieldMap_OwnershipDenied(t *testing.T) {
 	sourceEntity := fixture.seedSource(t, contextEntity.ID)
 	fieldMap := fixture.seedFieldMap(t, contextEntity.ID, sourceEntity.ID)
 
-	app.Delete("/v1/config/field-maps/:fieldMapId", fixture.handler.DeleteFieldMap)
+	app.Delete("/v1/field-maps/:fieldMapId", fixture.handler.DeleteFieldMap)
 
 	resp := performRequest(t, app, http.MethodDelete,
-		"/v1/config/field-maps/"+fieldMap.ID.String(), nil)
+		"/v1/field-maps/"+fieldMap.ID.String(), nil)
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusNotFound, resp.StatusCode)
@@ -756,9 +756,9 @@ func TestListContexts_TypeFilter(t *testing.T) {
 	fixture := newHandlerFixture(t)
 
 	fixture.seedContext(t, tenantID)
-	app.Get("/v1/config/contexts", fixture.handler.ListContexts)
+	app.Get("/v1/contexts", fixture.handler.ListContexts)
 
-	resp := performRequest(t, app, http.MethodGet, "/v1/config/contexts?type=1:1", nil)
+	resp := performRequest(t, app, http.MethodGet, "/v1/contexts?type=1:1", nil)
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusOK, resp.StatusCode)
@@ -773,9 +773,9 @@ func TestListContexts_InvalidType(t *testing.T) {
 	app := newTestApp(ctx)
 	fixture := newHandlerFixture(t)
 
-	app.Get("/v1/config/contexts", fixture.handler.ListContexts)
+	app.Get("/v1/contexts", fixture.handler.ListContexts)
 
-	resp := performRequest(t, app, http.MethodGet, "/v1/config/contexts?type=INVALID_TYPE", nil)
+	resp := performRequest(t, app, http.MethodGet, "/v1/contexts?type=INVALID_TYPE", nil)
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
@@ -792,9 +792,9 @@ func TestListContexts_StatusFilter(t *testing.T) {
 	fixture := newHandlerFixture(t)
 
 	fixture.seedContext(t, tenantID)
-	app.Get("/v1/config/contexts", fixture.handler.ListContexts)
+	app.Get("/v1/contexts", fixture.handler.ListContexts)
 
-	resp := performRequest(t, app, http.MethodGet, "/v1/config/contexts?status=ACTIVE", nil)
+	resp := performRequest(t, app, http.MethodGet, "/v1/contexts?status=ACTIVE", nil)
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusOK, resp.StatusCode)
@@ -809,9 +809,9 @@ func TestListContexts_InvalidStatus(t *testing.T) {
 	app := newTestApp(ctx)
 	fixture := newHandlerFixture(t)
 
-	app.Get("/v1/config/contexts", fixture.handler.ListContexts)
+	app.Get("/v1/contexts", fixture.handler.ListContexts)
 
-	resp := performRequest(t, app, http.MethodGet, "/v1/config/contexts?status=INVALID_STATUS", nil)
+	resp := performRequest(t, app, http.MethodGet, "/v1/contexts?status=INVALID_STATUS", nil)
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
@@ -831,10 +831,10 @@ func TestListSources_TypeFilter(t *testing.T) {
 
 	contextEntity := fixture.seedContext(t, tenantID)
 	fixture.seedSource(t, contextEntity.ID)
-	app.Get("/v1/config/contexts/:contextId/sources", fixture.handler.ListSources)
+	app.Get("/v1/contexts/:contextId/sources", fixture.handler.ListSources)
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/sources",
+		"/v1/contexts/:contextId/sources",
 		contextEntity.ID.String(),
 	)
 
@@ -854,10 +854,10 @@ func TestListSources_InvalidType(t *testing.T) {
 	fixture := newHandlerFixture(t)
 
 	contextEntity := fixture.seedContext(t, tenantID)
-	app.Get("/v1/config/contexts/:contextId/sources", fixture.handler.ListSources)
+	app.Get("/v1/contexts/:contextId/sources", fixture.handler.ListSources)
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/sources",
+		"/v1/contexts/:contextId/sources",
 		contextEntity.ID.String(),
 	)
 
@@ -881,10 +881,10 @@ func TestListMatchRules_TypeFilter(t *testing.T) {
 
 	contextEntity := fixture.seedContext(t, tenantID)
 	fixture.seedMatchRule(t, contextEntity.ID, 1)
-	app.Get("/v1/config/contexts/:contextId/rules", fixture.handler.ListMatchRules)
+	app.Get("/v1/contexts/:contextId/rules", fixture.handler.ListMatchRules)
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/rules",
+		"/v1/contexts/:contextId/rules",
 		contextEntity.ID.String(),
 	)
 
@@ -904,10 +904,10 @@ func TestListMatchRules_InvalidType(t *testing.T) {
 	fixture := newHandlerFixture(t)
 
 	contextEntity := fixture.seedContext(t, tenantID)
-	app.Get("/v1/config/contexts/:contextId/rules", fixture.handler.ListMatchRules)
+	app.Get("/v1/contexts/:contextId/rules", fixture.handler.ListMatchRules)
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/rules",
+		"/v1/contexts/:contextId/rules",
 		contextEntity.ID.String(),
 	)
 
@@ -1019,14 +1019,14 @@ func TestCreateSchedule_Success(t *testing.T) {
 
 	contextEntity := fixture.seedContext(t, tenantID)
 
-	app.Post("/v1/config/contexts/:contextId/schedules", fixture.handler.CreateSchedule)
+	app.Post("/v1/contexts/:contextId/schedules", fixture.handler.CreateSchedule)
 
 	payload := entities.CreateScheduleInput{
 		CronExpression: "0 0 * * *",
 	}
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/schedules",
+		"/v1/contexts/:contextId/schedules",
 		contextEntity.ID.String(),
 	)
 
@@ -1053,10 +1053,10 @@ func TestCreateSchedule_InvalidPayload(t *testing.T) {
 
 	contextEntity := fixture.seedContext(t, tenantID)
 
-	app.Post("/v1/config/contexts/:contextId/schedules", fixture.handler.CreateSchedule)
+	app.Post("/v1/contexts/:contextId/schedules", fixture.handler.CreateSchedule)
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/schedules",
+		"/v1/contexts/:contextId/schedules",
 		contextEntity.ID.String(),
 	)
 
@@ -1078,14 +1078,14 @@ func TestCreateSchedule_InvalidCron(t *testing.T) {
 
 	contextEntity := fixture.seedContext(t, tenantID)
 
-	app.Post("/v1/config/contexts/:contextId/schedules", fixture.handler.CreateSchedule)
+	app.Post("/v1/contexts/:contextId/schedules", fixture.handler.CreateSchedule)
 
 	payload := entities.CreateScheduleInput{
 		CronExpression: "not a cron expression",
 	}
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/schedules",
+		"/v1/contexts/:contextId/schedules",
 		contextEntity.ID.String(),
 	)
 
@@ -1105,14 +1105,14 @@ func TestCreateSchedule_ContextNotFound(t *testing.T) {
 	app := newTestApp(ctx)
 	fixture := newScheduleFixture(t)
 
-	app.Post("/v1/config/contexts/:contextId/schedules", fixture.handler.CreateSchedule)
+	app.Post("/v1/contexts/:contextId/schedules", fixture.handler.CreateSchedule)
 
 	payload := entities.CreateScheduleInput{
 		CronExpression: "0 0 * * *",
 	}
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/schedules",
+		"/v1/contexts/:contextId/schedules",
 		uuid.NewString(),
 	)
 
@@ -1138,10 +1138,10 @@ func TestListSchedules_Success(t *testing.T) {
 	contextEntity := fixture.seedContext(t, tenantID)
 	fixture.seedSchedule(t, contextEntity.ID)
 
-	app.Get("/v1/config/contexts/:contextId/schedules", fixture.handler.ListSchedules)
+	app.Get("/v1/contexts/:contextId/schedules", fixture.handler.ListSchedules)
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/schedules",
+		"/v1/contexts/:contextId/schedules",
 		contextEntity.ID.String(),
 	)
 
@@ -1167,10 +1167,10 @@ func TestListSchedules_Empty(t *testing.T) {
 
 	contextEntity := fixture.seedContext(t, tenantID)
 
-	app.Get("/v1/config/contexts/:contextId/schedules", fixture.handler.ListSchedules)
+	app.Get("/v1/contexts/:contextId/schedules", fixture.handler.ListSchedules)
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/schedules",
+		"/v1/contexts/:contextId/schedules",
 		contextEntity.ID.String(),
 	)
 
@@ -1199,10 +1199,10 @@ func TestGetSchedule_Success(t *testing.T) {
 	contextEntity := fixture.seedContext(t, tenantID)
 	schedule := fixture.seedSchedule(t, contextEntity.ID)
 
-	app.Get("/v1/config/contexts/:contextId/schedules/:scheduleId", fixture.handler.GetSchedule)
+	app.Get("/v1/contexts/:contextId/schedules/:scheduleId", fixture.handler.GetSchedule)
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/schedules/:scheduleId",
+		"/v1/contexts/:contextId/schedules/:scheduleId",
 		contextEntity.ID.String(),
 		schedule.ID.String(),
 	)
@@ -1229,10 +1229,10 @@ func TestGetSchedule_NotFound(t *testing.T) {
 
 	contextEntity := fixture.seedContext(t, tenantID)
 
-	app.Get("/v1/config/contexts/:contextId/schedules/:scheduleId", fixture.handler.GetSchedule)
+	app.Get("/v1/contexts/:contextId/schedules/:scheduleId", fixture.handler.GetSchedule)
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/schedules/:scheduleId",
+		"/v1/contexts/:contextId/schedules/:scheduleId",
 		contextEntity.ID.String(),
 		uuid.NewString(),
 	)
@@ -1256,10 +1256,10 @@ func TestGetSchedule_InvalidUUID(t *testing.T) {
 
 	contextEntity := fixture.seedContext(t, tenantID)
 
-	app.Get("/v1/config/contexts/:contextId/schedules/:scheduleId", fixture.handler.GetSchedule)
+	app.Get("/v1/contexts/:contextId/schedules/:scheduleId", fixture.handler.GetSchedule)
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/schedules/:scheduleId",
+		"/v1/contexts/:contextId/schedules/:scheduleId",
 		contextEntity.ID.String(),
 		"not-a-uuid",
 	)
@@ -1284,11 +1284,11 @@ func TestGetSchedule_WrongContext(t *testing.T) {
 	otherContextEntity := fixture.seedContext(t, tenantID)
 	schedule := fixture.seedSchedule(t, otherContextEntity.ID)
 
-	app.Get("/v1/config/contexts/:contextId/schedules/:scheduleId", fixture.handler.GetSchedule)
+	app.Get("/v1/contexts/:contextId/schedules/:scheduleId", fixture.handler.GetSchedule)
 
 	// Use contextEntity but schedule belongs to otherContextEntity
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/schedules/:scheduleId",
+		"/v1/contexts/:contextId/schedules/:scheduleId",
 		contextEntity.ID.String(),
 		schedule.ID.String(),
 	)
@@ -1315,7 +1315,7 @@ func TestUpdateSchedule_Success(t *testing.T) {
 	contextEntity := fixture.seedContext(t, tenantID)
 	schedule := fixture.seedSchedule(t, contextEntity.ID)
 
-	app.Patch("/v1/config/contexts/:contextId/schedules/:scheduleId", fixture.handler.UpdateSchedule)
+	app.Patch("/v1/contexts/:contextId/schedules/:scheduleId", fixture.handler.UpdateSchedule)
 
 	newCron := "30 6 * * *"
 	payload := entities.UpdateScheduleInput{
@@ -1323,7 +1323,7 @@ func TestUpdateSchedule_Success(t *testing.T) {
 	}
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/schedules/:scheduleId",
+		"/v1/contexts/:contextId/schedules/:scheduleId",
 		contextEntity.ID.String(),
 		schedule.ID.String(),
 	)
@@ -1350,7 +1350,7 @@ func TestUpdateSchedule_NotFound(t *testing.T) {
 
 	contextEntity := fixture.seedContext(t, tenantID)
 
-	app.Patch("/v1/config/contexts/:contextId/schedules/:scheduleId", fixture.handler.UpdateSchedule)
+	app.Patch("/v1/contexts/:contextId/schedules/:scheduleId", fixture.handler.UpdateSchedule)
 
 	newCron := "30 6 * * *"
 	payload := entities.UpdateScheduleInput{
@@ -1358,7 +1358,7 @@ func TestUpdateSchedule_NotFound(t *testing.T) {
 	}
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/schedules/:scheduleId",
+		"/v1/contexts/:contextId/schedules/:scheduleId",
 		contextEntity.ID.String(),
 		uuid.NewString(),
 	)
@@ -1382,10 +1382,10 @@ func TestUpdateSchedule_InvalidUUID(t *testing.T) {
 
 	contextEntity := fixture.seedContext(t, tenantID)
 
-	app.Patch("/v1/config/contexts/:contextId/schedules/:scheduleId", fixture.handler.UpdateSchedule)
+	app.Patch("/v1/contexts/:contextId/schedules/:scheduleId", fixture.handler.UpdateSchedule)
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/schedules/:scheduleId",
+		"/v1/contexts/:contextId/schedules/:scheduleId",
 		contextEntity.ID.String(),
 		"not-a-uuid",
 	)
@@ -1410,7 +1410,7 @@ func TestUpdateSchedule_WrongContext(t *testing.T) {
 	otherContextEntity := fixture.seedContext(t, tenantID)
 	schedule := fixture.seedSchedule(t, otherContextEntity.ID)
 
-	app.Patch("/v1/config/contexts/:contextId/schedules/:scheduleId", fixture.handler.UpdateSchedule)
+	app.Patch("/v1/contexts/:contextId/schedules/:scheduleId", fixture.handler.UpdateSchedule)
 
 	newCron := "30 6 * * *"
 	payload := entities.UpdateScheduleInput{
@@ -1418,7 +1418,7 @@ func TestUpdateSchedule_WrongContext(t *testing.T) {
 	}
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/schedules/:scheduleId",
+		"/v1/contexts/:contextId/schedules/:scheduleId",
 		contextEntity.ID.String(),
 		schedule.ID.String(),
 	)
@@ -1442,10 +1442,10 @@ func TestUpdateSchedule_InvalidPayload(t *testing.T) {
 	contextEntity := fixture.seedContext(t, tenantID)
 	schedule := fixture.seedSchedule(t, contextEntity.ID)
 
-	app.Patch("/v1/config/contexts/:contextId/schedules/:scheduleId", fixture.handler.UpdateSchedule)
+	app.Patch("/v1/contexts/:contextId/schedules/:scheduleId", fixture.handler.UpdateSchedule)
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/schedules/:scheduleId",
+		"/v1/contexts/:contextId/schedules/:scheduleId",
 		contextEntity.ID.String(),
 		schedule.ID.String(),
 	)
@@ -1469,7 +1469,7 @@ func TestUpdateSchedule_InvalidCron(t *testing.T) {
 	contextEntity := fixture.seedContext(t, tenantID)
 	schedule := fixture.seedSchedule(t, contextEntity.ID)
 
-	app.Patch("/v1/config/contexts/:contextId/schedules/:scheduleId", fixture.handler.UpdateSchedule)
+	app.Patch("/v1/contexts/:contextId/schedules/:scheduleId", fixture.handler.UpdateSchedule)
 
 	invalidCron := "not valid cron"
 	payload := entities.UpdateScheduleInput{
@@ -1477,7 +1477,7 @@ func TestUpdateSchedule_InvalidCron(t *testing.T) {
 	}
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/schedules/:scheduleId",
+		"/v1/contexts/:contextId/schedules/:scheduleId",
 		contextEntity.ID.String(),
 		schedule.ID.String(),
 	)
@@ -1503,10 +1503,10 @@ func TestDeleteSchedule_Success(t *testing.T) {
 	contextEntity := fixture.seedContext(t, tenantID)
 	schedule := fixture.seedSchedule(t, contextEntity.ID)
 
-	app.Delete("/v1/config/contexts/:contextId/schedules/:scheduleId", fixture.handler.DeleteSchedule)
+	app.Delete("/v1/contexts/:contextId/schedules/:scheduleId", fixture.handler.DeleteSchedule)
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/schedules/:scheduleId",
+		"/v1/contexts/:contextId/schedules/:scheduleId",
 		contextEntity.ID.String(),
 		schedule.ID.String(),
 	)
@@ -1529,10 +1529,10 @@ func TestDeleteSchedule_NotFound(t *testing.T) {
 
 	contextEntity := fixture.seedContext(t, tenantID)
 
-	app.Delete("/v1/config/contexts/:contextId/schedules/:scheduleId", fixture.handler.DeleteSchedule)
+	app.Delete("/v1/contexts/:contextId/schedules/:scheduleId", fixture.handler.DeleteSchedule)
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/schedules/:scheduleId",
+		"/v1/contexts/:contextId/schedules/:scheduleId",
 		contextEntity.ID.String(),
 		uuid.NewString(),
 	)
@@ -1556,10 +1556,10 @@ func TestDeleteSchedule_InvalidUUID(t *testing.T) {
 
 	contextEntity := fixture.seedContext(t, tenantID)
 
-	app.Delete("/v1/config/contexts/:contextId/schedules/:scheduleId", fixture.handler.DeleteSchedule)
+	app.Delete("/v1/contexts/:contextId/schedules/:scheduleId", fixture.handler.DeleteSchedule)
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/schedules/:scheduleId",
+		"/v1/contexts/:contextId/schedules/:scheduleId",
 		contextEntity.ID.String(),
 		"not-a-uuid",
 	)
@@ -1584,10 +1584,10 @@ func TestDeleteSchedule_WrongContext(t *testing.T) {
 	otherContextEntity := fixture.seedContext(t, tenantID)
 	schedule := fixture.seedSchedule(t, otherContextEntity.ID)
 
-	app.Delete("/v1/config/contexts/:contextId/schedules/:scheduleId", fixture.handler.DeleteSchedule)
+	app.Delete("/v1/contexts/:contextId/schedules/:scheduleId", fixture.handler.DeleteSchedule)
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/schedules/:scheduleId",
+		"/v1/contexts/:contextId/schedules/:scheduleId",
 		contextEntity.ID.String(),
 		schedule.ID.String(),
 	)
@@ -1614,12 +1614,12 @@ func TestUpdateMatchRule_PriorityConflict(t *testing.T) {
 	fixture.seedMatchRule(t, contextEntity.ID, 1)
 	ruleToUpdate := fixture.seedMatchRule(t, contextEntity.ID, 2)
 
-	app.Patch("/v1/config/contexts/:contextId/rules/:ruleId", fixture.handler.UpdateMatchRule)
+	app.Patch("/v1/contexts/:contextId/rules/:ruleId", fixture.handler.UpdateMatchRule)
 
 	// Try to update rule 2 to have priority 1 (conflict)
 	payload := entities.UpdateMatchRuleInput{Priority: intPointer(1)}
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/rules/:ruleId",
+		"/v1/contexts/:contextId/rules/:ruleId",
 		contextEntity.ID.String(),
 		ruleToUpdate.ID.String(),
 	)
@@ -1645,10 +1645,10 @@ func TestUpdateContext_InvalidPayload(t *testing.T) {
 
 	contextEntity := fixture.seedContext(t, tenantID)
 
-	app.Patch("/v1/config/contexts/:contextId", fixture.handler.UpdateContext)
+	app.Patch("/v1/contexts/:contextId", fixture.handler.UpdateContext)
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId",
+		"/v1/contexts/:contextId",
 		contextEntity.ID.String(),
 	)
 
@@ -1672,10 +1672,10 @@ func TestUpdateContext_InvalidStateTransition_Returns409(t *testing.T) {
 	// requesting status=PAUSED on a DRAFT triggers ErrInvalidStateTransition.
 	contextEntity := fixture.seedContext(t, tenantID)
 
-	app.Patch("/v1/config/contexts/:contextId", fixture.handler.UpdateContext)
+	app.Patch("/v1/contexts/:contextId", fixture.handler.UpdateContext)
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId",
+		"/v1/contexts/:contextId",
 		contextEntity.ID.String(),
 	)
 
@@ -1704,10 +1704,10 @@ func TestUpdateContext_ArchivedContextCannotBeModified_Returns409(t *testing.T) 
 	contextEntity.Status = value_objects.ContextStatusArchived
 	fixture.contextRepo.items[contextEntity.ID] = contextEntity
 
-	app.Patch("/v1/config/contexts/:contextId", fixture.handler.UpdateContext)
+	app.Patch("/v1/contexts/:contextId", fixture.handler.UpdateContext)
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId",
+		"/v1/contexts/:contextId",
 		contextEntity.ID.String(),
 	)
 
@@ -1735,10 +1735,10 @@ func TestUpdateContext_SameStatus_IsNoOp_Returns200(t *testing.T) {
 	contextEntity.Status = value_objects.ContextStatusActive
 	fixture.contextRepo.items[contextEntity.ID] = contextEntity
 
-	app.Patch("/v1/config/contexts/:contextId", fixture.handler.UpdateContext)
+	app.Patch("/v1/contexts/:contextId", fixture.handler.UpdateContext)
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId",
+		"/v1/contexts/:contextId",
 		contextEntity.ID.String(),
 	)
 
@@ -1764,10 +1764,10 @@ func TestUpdateSource_InvalidUUID(t *testing.T) {
 	fixture := newHandlerFixture(t)
 
 	contextEntity := fixture.seedContext(t, tenantID)
-	app.Patch("/v1/config/contexts/:contextId/sources/:sourceId", fixture.handler.UpdateSource)
+	app.Patch("/v1/contexts/:contextId/sources/:sourceId", fixture.handler.UpdateSource)
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/sources/:sourceId",
+		"/v1/contexts/:contextId/sources/:sourceId",
 		contextEntity.ID.String(),
 		"not-a-uuid",
 	)
@@ -1794,10 +1794,10 @@ func TestUpdateSource_InvalidPayload(t *testing.T) {
 
 	contextEntity := fixture.seedContext(t, tenantID)
 	sourceEntity := fixture.seedSource(t, contextEntity.ID)
-	app.Patch("/v1/config/contexts/:contextId/sources/:sourceId", fixture.handler.UpdateSource)
+	app.Patch("/v1/contexts/:contextId/sources/:sourceId", fixture.handler.UpdateSource)
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/sources/:sourceId",
+		"/v1/contexts/:contextId/sources/:sourceId",
 		contextEntity.ID.String(),
 		sourceEntity.ID.String(),
 	)
@@ -1819,10 +1819,10 @@ func TestUpdateSource_NotFound(t *testing.T) {
 	fixture := newHandlerFixture(t)
 
 	contextEntity := fixture.seedContext(t, tenantID)
-	app.Patch("/v1/config/contexts/:contextId/sources/:sourceId", fixture.handler.UpdateSource)
+	app.Patch("/v1/contexts/:contextId/sources/:sourceId", fixture.handler.UpdateSource)
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/sources/:sourceId",
+		"/v1/contexts/:contextId/sources/:sourceId",
 		contextEntity.ID.String(),
 		uuid.NewString(),
 	)
@@ -1851,10 +1851,10 @@ func TestDeleteSource_InvalidUUID(t *testing.T) {
 	fixture := newHandlerFixture(t)
 
 	contextEntity := fixture.seedContext(t, tenantID)
-	app.Delete("/v1/config/contexts/:contextId/sources/:sourceId", fixture.handler.DeleteSource)
+	app.Delete("/v1/contexts/:contextId/sources/:sourceId", fixture.handler.DeleteSource)
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/sources/:sourceId",
+		"/v1/contexts/:contextId/sources/:sourceId",
 		contextEntity.ID.String(),
 		"not-a-uuid",
 	)
@@ -1876,10 +1876,10 @@ func TestDeleteSource_NotFound(t *testing.T) {
 	fixture := newHandlerFixture(t)
 
 	contextEntity := fixture.seedContext(t, tenantID)
-	app.Delete("/v1/config/contexts/:contextId/sources/:sourceId", fixture.handler.DeleteSource)
+	app.Delete("/v1/contexts/:contextId/sources/:sourceId", fixture.handler.DeleteSource)
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/sources/:sourceId",
+		"/v1/contexts/:contextId/sources/:sourceId",
 		contextEntity.ID.String(),
 		uuid.NewString(),
 	)
@@ -1905,10 +1905,10 @@ func TestUpdateMatchRule_InvalidPayload(t *testing.T) {
 
 	contextEntity := fixture.seedContext(t, tenantID)
 	rule := fixture.seedMatchRule(t, contextEntity.ID, 1)
-	app.Patch("/v1/config/contexts/:contextId/rules/:ruleId", fixture.handler.UpdateMatchRule)
+	app.Patch("/v1/contexts/:contextId/rules/:ruleId", fixture.handler.UpdateMatchRule)
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/rules/:ruleId",
+		"/v1/contexts/:contextId/rules/:ruleId",
 		contextEntity.ID.String(),
 		rule.ID.String(),
 	)
@@ -1933,14 +1933,14 @@ func TestCreateFieldMap_InvalidSourceUUID(t *testing.T) {
 
 	contextEntity := fixture.seedContext(t, tenantID)
 
-	app.Post("/v1/config/contexts/:contextId/sources/:sourceId/field-maps", fixture.handler.CreateFieldMap)
+	app.Post("/v1/contexts/:contextId/sources/:sourceId/field-maps", fixture.handler.CreateFieldMap)
 
 	payload := entities.CreateFieldMapInput{
 		Mapping: map[string]any{"field": "value"},
 	}
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/sources/:sourceId/field-maps",
+		"/v1/contexts/:contextId/sources/:sourceId/field-maps",
 		contextEntity.ID.String(),
 		"not-a-uuid",
 	)
@@ -1965,10 +1965,10 @@ func TestReorderMatchRules_InvalidPayload(t *testing.T) {
 
 	contextEntity := fixture.seedContext(t, tenantID)
 
-	app.Post("/v1/config/contexts/:contextId/rules/reorder", fixture.handler.ReorderMatchRules)
+	app.Post("/v1/contexts/:contextId/rules/reorder", fixture.handler.ReorderMatchRules)
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/rules/reorder",
+		"/v1/contexts/:contextId/rules/reorder",
 		contextEntity.ID.String(),
 	)
 
@@ -1991,9 +1991,9 @@ func TestListContexts_NilResult(t *testing.T) {
 	fixture := newHandlerFixture(t)
 
 	// Don't seed any contexts
-	app.Get("/v1/config/contexts", fixture.handler.ListContexts)
+	app.Get("/v1/contexts", fixture.handler.ListContexts)
 
-	resp := performRequest(t, app, http.MethodGet, "/v1/config/contexts", nil)
+	resp := performRequest(t, app, http.MethodGet, "/v1/contexts", nil)
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusOK, resp.StatusCode)
@@ -2017,10 +2017,10 @@ func TestListSources_NilResult(t *testing.T) {
 	fixture := newHandlerFixture(t)
 
 	contextEntity := fixture.seedContext(t, tenantID)
-	app.Get("/v1/config/contexts/:contextId/sources", fixture.handler.ListSources)
+	app.Get("/v1/contexts/:contextId/sources", fixture.handler.ListSources)
 
 	requestPath := replacePathParams(
-		"/v1/config/contexts/:contextId/sources",
+		"/v1/contexts/:contextId/sources",
 		contextEntity.ID.String(),
 	)
 
@@ -2117,7 +2117,7 @@ func TestFeeSchedule_CreateSuccess(t *testing.T) {
 	app := newTestApp(ctx)
 	fixture := newFeeScheduleHandlerFixture(t)
 
-	app.Post("/v1/config/fee-schedules", fixture.handler.CreateFeeSchedule)
+	app.Post("/v1/fee-schedules", fixture.handler.CreateFeeSchedule)
 
 	payload := dto.CreateFeeScheduleRequest{
 		Name:             "New Schedule",
@@ -2135,7 +2135,7 @@ func TestFeeSchedule_CreateSuccess(t *testing.T) {
 		},
 	}
 
-	resp := performRequest(t, app, http.MethodPost, "/v1/config/fee-schedules", mustJSON(t, payload))
+	resp := performRequest(t, app, http.MethodPost, "/v1/fee-schedules", mustJSON(t, payload))
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusCreated, resp.StatusCode)
@@ -2156,7 +2156,7 @@ func TestFeeSchedule_CreateUnauthorized(t *testing.T) {
 	app := newTestApp(ctx)
 	fixture := newFeeScheduleHandlerFixture(t)
 
-	app.Post("/v1/config/fee-schedules", fixture.handler.CreateFeeSchedule)
+	app.Post("/v1/fee-schedules", fixture.handler.CreateFeeSchedule)
 
 	payload := dto.CreateFeeScheduleRequest{
 		Name:             "New Schedule",
@@ -2174,7 +2174,7 @@ func TestFeeSchedule_CreateUnauthorized(t *testing.T) {
 		},
 	}
 
-	resp := performRequest(t, app, http.MethodPost, "/v1/config/fee-schedules", mustJSON(t, payload))
+	resp := performRequest(t, app, http.MethodPost, "/v1/fee-schedules", mustJSON(t, payload))
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
@@ -2190,7 +2190,7 @@ func TestFeeSchedule_CreateInvalidItems(t *testing.T) {
 	app := newTestApp(ctx)
 	fixture := newFeeScheduleHandlerFixture(t)
 
-	app.Post("/v1/config/fee-schedules", fixture.handler.CreateFeeSchedule)
+	app.Post("/v1/fee-schedules", fixture.handler.CreateFeeSchedule)
 
 	payload := dto.CreateFeeScheduleRequest{
 		Name:             "Bad Schedule",
@@ -2208,7 +2208,7 @@ func TestFeeSchedule_CreateInvalidItems(t *testing.T) {
 		},
 	}
 
-	resp := performRequest(t, app, http.MethodPost, "/v1/config/fee-schedules", mustJSON(t, payload))
+	resp := performRequest(t, app, http.MethodPost, "/v1/fee-schedules", mustJSON(t, payload))
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
@@ -2226,9 +2226,9 @@ func TestFeeSchedule_ListSuccess(t *testing.T) {
 
 	fixture.seedFeeSchedule(t, tenantID)
 
-	app.Get("/v1/config/fee-schedules", fixture.handler.ListFeeSchedules)
+	app.Get("/v1/fee-schedules", fixture.handler.ListFeeSchedules)
 
-	resp := performRequest(t, app, http.MethodGet, "/v1/config/fee-schedules", nil)
+	resp := performRequest(t, app, http.MethodGet, "/v1/fee-schedules", nil)
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusOK, resp.StatusCode)
@@ -2248,10 +2248,10 @@ func TestFeeSchedule_ListWithInvalidLimit(t *testing.T) {
 	app := newTestApp(ctx)
 	fixture := newFeeScheduleHandlerFixture(t)
 
-	app.Get("/v1/config/fee-schedules", fixture.handler.ListFeeSchedules)
+	app.Get("/v1/fee-schedules", fixture.handler.ListFeeSchedules)
 
 	// Test invalid limit defaults to 100
-	resp := performRequest(t, app, http.MethodGet, "/v1/config/fee-schedules?limit=bad", nil)
+	resp := performRequest(t, app, http.MethodGet, "/v1/fee-schedules?limit=bad", nil)
 	defer resp.Body.Close()
 
 	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
@@ -2268,10 +2268,10 @@ func TestFeeSchedule_GetSuccess(t *testing.T) {
 
 	schedule := fixture.seedFeeSchedule(t, tenantID)
 
-	app.Get("/v1/config/fee-schedules/:scheduleId", fixture.handler.GetFeeSchedule)
+	app.Get("/v1/fee-schedules/:scheduleId", fixture.handler.GetFeeSchedule)
 
 	resp := performRequest(t, app, http.MethodGet,
-		"/v1/config/fee-schedules/"+schedule.ID.String(), nil)
+		"/v1/fee-schedules/"+schedule.ID.String(), nil)
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusOK, resp.StatusCode)
@@ -2291,10 +2291,10 @@ func TestFeeSchedule_GetNotFound(t *testing.T) {
 	app := newTestApp(ctx)
 	fixture := newFeeScheduleHandlerFixture(t)
 
-	app.Get("/v1/config/fee-schedules/:scheduleId", fixture.handler.GetFeeSchedule)
+	app.Get("/v1/fee-schedules/:scheduleId", fixture.handler.GetFeeSchedule)
 
 	resp := performRequest(t, app, http.MethodGet,
-		"/v1/config/fee-schedules/"+uuid.NewString(), nil)
+		"/v1/fee-schedules/"+uuid.NewString(), nil)
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusNotFound, resp.StatusCode)
@@ -2313,7 +2313,7 @@ func TestFeeSchedule_UpdateSuccess(t *testing.T) {
 
 	schedule := fixture.seedFeeSchedule(t, tenantID)
 
-	app.Patch("/v1/config/fee-schedules/:scheduleId", fixture.handler.UpdateFeeSchedule)
+	app.Patch("/v1/fee-schedules/:scheduleId", fixture.handler.UpdateFeeSchedule)
 
 	updatedName := "Updated Schedule"
 	payload := dto.UpdateFeeScheduleRequest{
@@ -2321,7 +2321,7 @@ func TestFeeSchedule_UpdateSuccess(t *testing.T) {
 	}
 
 	resp := performRequest(t, app, http.MethodPatch,
-		"/v1/config/fee-schedules/"+schedule.ID.String(), mustJSON(t, payload))
+		"/v1/fee-schedules/"+schedule.ID.String(), mustJSON(t, payload))
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusOK, resp.StatusCode)
@@ -2341,7 +2341,7 @@ func TestFeeSchedule_UpdateNotFound(t *testing.T) {
 	app := newTestApp(ctx)
 	fixture := newFeeScheduleHandlerFixture(t)
 
-	app.Patch("/v1/config/fee-schedules/:scheduleId", fixture.handler.UpdateFeeSchedule)
+	app.Patch("/v1/fee-schedules/:scheduleId", fixture.handler.UpdateFeeSchedule)
 
 	updatedName := "Updated"
 	payload := dto.UpdateFeeScheduleRequest{
@@ -2349,7 +2349,7 @@ func TestFeeSchedule_UpdateNotFound(t *testing.T) {
 	}
 
 	resp := performRequest(t, app, http.MethodPatch,
-		"/v1/config/fee-schedules/"+uuid.NewString(), mustJSON(t, payload))
+		"/v1/fee-schedules/"+uuid.NewString(), mustJSON(t, payload))
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusNotFound, resp.StatusCode)
@@ -2368,10 +2368,10 @@ func TestFeeSchedule_UpdateInvalidPayload(t *testing.T) {
 
 	schedule := fixture.seedFeeSchedule(t, tenantID)
 
-	app.Patch("/v1/config/fee-schedules/:scheduleId", fixture.handler.UpdateFeeSchedule)
+	app.Patch("/v1/fee-schedules/:scheduleId", fixture.handler.UpdateFeeSchedule)
 
 	resp := performRequest(t, app, http.MethodPatch,
-		"/v1/config/fee-schedules/"+schedule.ID.String(), []byte("{invalid"))
+		"/v1/fee-schedules/"+schedule.ID.String(), []byte("{invalid"))
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
@@ -2387,10 +2387,10 @@ func TestFeeSchedule_UpdateInvalidUUID(t *testing.T) {
 	app := newTestApp(ctx)
 	fixture := newFeeScheduleHandlerFixture(t)
 
-	app.Patch("/v1/config/fee-schedules/:scheduleId", fixture.handler.UpdateFeeSchedule)
+	app.Patch("/v1/fee-schedules/:scheduleId", fixture.handler.UpdateFeeSchedule)
 
 	resp := performRequest(t, app, http.MethodPatch,
-		"/v1/config/fee-schedules/not-a-uuid", mustJSON(t, map[string]string{}))
+		"/v1/fee-schedules/not-a-uuid", mustJSON(t, map[string]string{}))
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
@@ -2406,10 +2406,10 @@ func TestFeeSchedule_UpdateUnauthorized(t *testing.T) {
 	app := newTestApp(ctx)
 	fixture := newFeeScheduleHandlerFixture(t)
 
-	app.Patch("/v1/config/fee-schedules/:scheduleId", fixture.handler.UpdateFeeSchedule)
+	app.Patch("/v1/fee-schedules/:scheduleId", fixture.handler.UpdateFeeSchedule)
 
 	resp := performRequest(t, app, http.MethodPatch,
-		"/v1/config/fee-schedules/"+uuid.NewString(), mustJSON(t, map[string]string{}))
+		"/v1/fee-schedules/"+uuid.NewString(), mustJSON(t, map[string]string{}))
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
@@ -2427,10 +2427,10 @@ func TestFeeSchedule_DeleteSuccess(t *testing.T) {
 
 	schedule := fixture.seedFeeSchedule(t, tenantID)
 
-	app.Delete("/v1/config/fee-schedules/:scheduleId", fixture.handler.DeleteFeeSchedule)
+	app.Delete("/v1/fee-schedules/:scheduleId", fixture.handler.DeleteFeeSchedule)
 
 	resp := performRequest(t, app, http.MethodDelete,
-		"/v1/config/fee-schedules/"+schedule.ID.String(), nil)
+		"/v1/fee-schedules/"+schedule.ID.String(), nil)
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusNoContent, resp.StatusCode)
@@ -2446,10 +2446,10 @@ func TestFeeSchedule_DeleteNotFound(t *testing.T) {
 	app := newTestApp(ctx)
 	fixture := newFeeScheduleHandlerFixture(t)
 
-	app.Delete("/v1/config/fee-schedules/:scheduleId", fixture.handler.DeleteFeeSchedule)
+	app.Delete("/v1/fee-schedules/:scheduleId", fixture.handler.DeleteFeeSchedule)
 
 	resp := performRequest(t, app, http.MethodDelete,
-		"/v1/config/fee-schedules/"+uuid.NewString(), nil)
+		"/v1/fee-schedules/"+uuid.NewString(), nil)
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusNotFound, resp.StatusCode)
@@ -2468,7 +2468,7 @@ func TestFeeSchedule_SimulateSuccess(t *testing.T) {
 
 	schedule := fixture.seedFeeSchedule(t, tenantID)
 
-	app.Post("/v1/config/fee-schedules/:scheduleId/simulate", fixture.handler.SimulateFeeSchedule)
+	app.Post("/v1/fee-schedules/:scheduleId/simulate", fixture.handler.SimulateFeeSchedule)
 
 	payload := dto.SimulateFeeRequest{
 		GrossAmount: "100.00",
@@ -2476,7 +2476,7 @@ func TestFeeSchedule_SimulateSuccess(t *testing.T) {
 	}
 
 	resp := performRequest(t, app, http.MethodPost,
-		"/v1/config/fee-schedules/"+schedule.ID.String()+"/simulate", mustJSON(t, payload))
+		"/v1/fee-schedules/"+schedule.ID.String()+"/simulate", mustJSON(t, payload))
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusOK, resp.StatusCode)
@@ -2497,7 +2497,7 @@ func TestFeeSchedule_SimulateNotFound(t *testing.T) {
 	app := newTestApp(ctx)
 	fixture := newFeeScheduleHandlerFixture(t)
 
-	app.Post("/v1/config/fee-schedules/:scheduleId/simulate", fixture.handler.SimulateFeeSchedule)
+	app.Post("/v1/fee-schedules/:scheduleId/simulate", fixture.handler.SimulateFeeSchedule)
 
 	payload := dto.SimulateFeeRequest{
 		GrossAmount: "100.00",
@@ -2505,7 +2505,7 @@ func TestFeeSchedule_SimulateNotFound(t *testing.T) {
 	}
 
 	resp := performRequest(t, app, http.MethodPost,
-		"/v1/config/fee-schedules/"+uuid.NewString()+"/simulate", mustJSON(t, payload))
+		"/v1/fee-schedules/"+uuid.NewString()+"/simulate", mustJSON(t, payload))
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusNotFound, resp.StatusCode)
@@ -2524,10 +2524,10 @@ func TestFeeSchedule_SimulateInvalidPayload(t *testing.T) {
 
 	schedule := fixture.seedFeeSchedule(t, tenantID)
 
-	app.Post("/v1/config/fee-schedules/:scheduleId/simulate", fixture.handler.SimulateFeeSchedule)
+	app.Post("/v1/fee-schedules/:scheduleId/simulate", fixture.handler.SimulateFeeSchedule)
 
 	resp := performRequest(t, app, http.MethodPost,
-		"/v1/config/fee-schedules/"+schedule.ID.String()+"/simulate", []byte("{invalid"))
+		"/v1/fee-schedules/"+schedule.ID.String()+"/simulate", []byte("{invalid"))
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
@@ -2545,7 +2545,7 @@ func TestFeeSchedule_SimulateInvalidGrossAmount(t *testing.T) {
 
 	schedule := fixture.seedFeeSchedule(t, tenantID)
 
-	app.Post("/v1/config/fee-schedules/:scheduleId/simulate", fixture.handler.SimulateFeeSchedule)
+	app.Post("/v1/fee-schedules/:scheduleId/simulate", fixture.handler.SimulateFeeSchedule)
 
 	payload := dto.SimulateFeeRequest{
 		GrossAmount: "not_a_number",
@@ -2553,7 +2553,7 @@ func TestFeeSchedule_SimulateInvalidGrossAmount(t *testing.T) {
 	}
 
 	resp := performRequest(t, app, http.MethodPost,
-		"/v1/config/fee-schedules/"+schedule.ID.String()+"/simulate", mustJSON(t, payload))
+		"/v1/fee-schedules/"+schedule.ID.String()+"/simulate", mustJSON(t, payload))
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
@@ -2571,7 +2571,7 @@ func TestFeeSchedule_SimulateCurrencyMismatch(t *testing.T) {
 
 	schedule := fixture.seedFeeSchedule(t, tenantID)
 
-	app.Post("/v1/config/fee-schedules/:scheduleId/simulate", fixture.handler.SimulateFeeSchedule)
+	app.Post("/v1/fee-schedules/:scheduleId/simulate", fixture.handler.SimulateFeeSchedule)
 
 	payload := dto.SimulateFeeRequest{
 		GrossAmount: "100.00",
@@ -2579,7 +2579,7 @@ func TestFeeSchedule_SimulateCurrencyMismatch(t *testing.T) {
 	}
 
 	resp := performRequest(t, app, http.MethodPost,
-		"/v1/config/fee-schedules/"+schedule.ID.String()+"/simulate", mustJSON(t, payload))
+		"/v1/fee-schedules/"+schedule.ID.String()+"/simulate", mustJSON(t, payload))
 	defer resp.Body.Close()
 
 	// Currency mismatch is a client error
@@ -2596,9 +2596,9 @@ func TestFeeSchedule_ListUnauthorized(t *testing.T) {
 	app := newTestApp(ctx)
 	fixture := newFeeScheduleHandlerFixture(t)
 
-	app.Get("/v1/config/fee-schedules", fixture.handler.ListFeeSchedules)
+	app.Get("/v1/fee-schedules", fixture.handler.ListFeeSchedules)
 
-	resp := performRequest(t, app, http.MethodGet, "/v1/config/fee-schedules", nil)
+	resp := performRequest(t, app, http.MethodGet, "/v1/fee-schedules", nil)
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
@@ -2614,10 +2614,10 @@ func TestFeeSchedule_GetUnauthorized(t *testing.T) {
 	app := newTestApp(ctx)
 	fixture := newFeeScheduleHandlerFixture(t)
 
-	app.Get("/v1/config/fee-schedules/:scheduleId", fixture.handler.GetFeeSchedule)
+	app.Get("/v1/fee-schedules/:scheduleId", fixture.handler.GetFeeSchedule)
 
 	resp := performRequest(t, app, http.MethodGet,
-		"/v1/config/fee-schedules/"+uuid.NewString(), nil)
+		"/v1/fee-schedules/"+uuid.NewString(), nil)
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
@@ -2633,10 +2633,10 @@ func TestFeeSchedule_DeleteUnauthorized(t *testing.T) {
 	app := newTestApp(ctx)
 	fixture := newFeeScheduleHandlerFixture(t)
 
-	app.Delete("/v1/config/fee-schedules/:scheduleId", fixture.handler.DeleteFeeSchedule)
+	app.Delete("/v1/fee-schedules/:scheduleId", fixture.handler.DeleteFeeSchedule)
 
 	resp := performRequest(t, app, http.MethodDelete,
-		"/v1/config/fee-schedules/"+uuid.NewString(), nil)
+		"/v1/fee-schedules/"+uuid.NewString(), nil)
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
@@ -2652,7 +2652,7 @@ func TestFeeSchedule_SimulateUnauthorized(t *testing.T) {
 	app := newTestApp(ctx)
 	fixture := newFeeScheduleHandlerFixture(t)
 
-	app.Post("/v1/config/fee-schedules/:scheduleId/simulate", fixture.handler.SimulateFeeSchedule)
+	app.Post("/v1/fee-schedules/:scheduleId/simulate", fixture.handler.SimulateFeeSchedule)
 
 	payload := dto.SimulateFeeRequest{
 		GrossAmount: "100.00",
@@ -2660,7 +2660,7 @@ func TestFeeSchedule_SimulateUnauthorized(t *testing.T) {
 	}
 
 	resp := performRequest(t, app, http.MethodPost,
-		"/v1/config/fee-schedules/"+uuid.NewString()+"/simulate", mustJSON(t, payload))
+		"/v1/fee-schedules/"+uuid.NewString()+"/simulate", mustJSON(t, payload))
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
@@ -2676,9 +2676,9 @@ func TestFeeSchedule_ListEmpty(t *testing.T) {
 	app := newTestApp(ctx)
 	fixture := newFeeScheduleHandlerFixture(t)
 
-	app.Get("/v1/config/fee-schedules", fixture.handler.ListFeeSchedules)
+	app.Get("/v1/fee-schedules", fixture.handler.ListFeeSchedules)
 
-	resp := performRequest(t, app, http.MethodGet, "/v1/config/fee-schedules", nil)
+	resp := performRequest(t, app, http.MethodGet, "/v1/fee-schedules", nil)
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusOK, resp.StatusCode)
