@@ -28,4 +28,18 @@ var (
 	ErrInvalidNormalizationMode = errors.New("invalid normalization mode")
 	ErrGrossConvergenceFailed   = errors.New("gross calculation failed to converge")
 	ErrFeeScheduleNotFound      = errors.New("fee schedule not found")
+
+	// Fee rule errors.
+	ErrFeeRuleNameRequired       = errors.New("fee rule name is required")
+	ErrFeeRuleNameTooLong        = errors.New("fee rule name must not exceed 100 characters")
+	ErrFeeRuleScheduleIDRequired = errors.New("fee rule fee schedule id is required")
+	ErrFeeRuleContextIDRequired  = errors.New("fee rule context id is required")
+	ErrFeeRuleNotFound           = errors.New("fee rule not found")
+	ErrFeeRulePriorityNegative   = errors.New("fee rule priority must be non-negative")
+	ErrInvalidMatchingSide       = errors.New("invalid matching side: must be LEFT, RIGHT, or ANY")
+	ErrInvalidPredicateOperator  = errors.New("invalid predicate operator: must be EQUALS, IN, or EXISTS")
+	ErrPredicateFieldRequired    = errors.New("predicate field is required")
+	ErrPredicateValueRequired    = errors.New("predicate value is required for EQUALS operator")
+	ErrPredicateValuesRequired   = errors.New("predicate values are required for IN operator")
+	ErrFeeRuleTooManyPredicates  = errors.New("fee rule must not have more than 50 predicates")
 )
