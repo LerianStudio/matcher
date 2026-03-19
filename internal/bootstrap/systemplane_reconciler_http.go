@@ -44,6 +44,13 @@ func (r *HTTPPolicyReconciler) Name() string {
 	return "http-policy-reconciler"
 }
 
+// Phase returns PhaseValidation because the HTTP policy reconciler acts as a
+// gate — it rejects structurally invalid HTTP configurations before any side
+// effects run.
+func (r *HTTPPolicyReconciler) Phase() domain.ReconcilerPhase {
+	return domain.PhaseValidation
+}
+
 // Reconcile validates the candidate bundle's HTTP policy. If the candidate
 // is not a *MatcherBundle (unexpected type), an error is returned to prevent
 // the swap. If the HTTPPolicyBundle is nil, validation is skipped — a nil

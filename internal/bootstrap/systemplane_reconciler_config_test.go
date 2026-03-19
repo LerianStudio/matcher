@@ -33,6 +33,19 @@ func TestConfigBridgeReconciler_Name(t *testing.T) {
 	assert.Equal(t, "config-bridge-reconciler", rec.Name())
 }
 
+func TestConfigBridgeReconciler_Phase(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cm, err := NewConfigManager(cfg, nil)
+	require.NoError(t, err)
+
+	rec, err := NewConfigBridgeReconciler(cm)
+	require.NoError(t, err)
+
+	assert.Equal(t, domain.PhaseStateSync, rec.Phase(), "config bridge must run in state-sync phase")
+}
+
 func TestNewConfigBridgeReconciler_NilManager(t *testing.T) {
 	t.Parallel()
 

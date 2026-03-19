@@ -51,6 +51,17 @@ func TestNewWorkerReconciler_Success(t *testing.T) {
 	assert.NotNil(t, rec)
 }
 
+func TestWorkerReconciler_Phase(t *testing.T) {
+	t.Parallel()
+
+	wm := NewWorkerManager(&libLog.NopLogger{}, nil)
+
+	rec, err := NewWorkerReconciler(wm)
+	require.NoError(t, err)
+
+	assert.Equal(t, domain.PhaseSideEffect, rec.Phase(), "worker reconciler must run in side-effect phase")
+}
+
 func TestWorkerReconciler_Name(t *testing.T) {
 	t.Parallel()
 

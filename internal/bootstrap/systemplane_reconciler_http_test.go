@@ -35,6 +35,14 @@ func TestHTTPPolicyReconciler_Name(t *testing.T) {
 	assert.Equal(t, "http-policy-reconciler", rec.Name())
 }
 
+func TestHTTPPolicyReconciler_Phase(t *testing.T) {
+	t.Parallel()
+
+	rec := NewHTTPPolicyReconciler()
+
+	assert.Equal(t, domain.PhaseValidation, rec.Phase(), "http policy must run in validation phase")
+}
+
 func TestHTTPPolicyReconciler_NilHTTPBundle(t *testing.T) {
 	t.Parallel()
 

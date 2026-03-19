@@ -26,20 +26,38 @@ type ReconcileCall struct {
 type FakeReconciler struct {
 	mu           sync.Mutex
 	name         string
+	phase        domain.ReconcilerPhase
 	Calls        []ReconcileCall
 	ReconcileErr error // configurable error to return
 }
 
-// NewFakeReconciler creates a reconciler with the given name and no error.
+// NewFakeReconciler creates a reconciler with the given name, default
+// PhaseSideEffect phase, and no error.
 func NewFakeReconciler(name string) *FakeReconciler {
 	return &FakeReconciler{
 		name: name,
+		// Default to PhaseSideEffect — the most common phase for test reconcilers.
+		// Tests that need a specific phase should set PhaseValue explicitly.
+		phase: domain.PhaseSideEffect,
+	}
+}
+
+// NewFakeReconcilerWithPhase creates a reconciler with the given name and phase.
+func NewFakeReconcilerWithPhase(name string, phase domain.ReconcilerPhase) *FakeReconciler {
+	return &FakeReconciler{
+		name:  name,
+		phase: phase,
 	}
 }
 
 // Name returns the human-readable identifier for this reconciler.
 func (reconciler *FakeReconciler) Name() string {
 	return reconciler.name
+}
+
+// Phase returns the reconciler's execution phase.
+func (reconciler *FakeReconciler) Phase() domain.ReconcilerPhase {
+	return reconciler.phase
 }
 
 // Reconcile records the call and returns ReconcileErr.

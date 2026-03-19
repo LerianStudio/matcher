@@ -47,6 +47,13 @@ func (r *ConfigBridgeReconciler) Name() string {
 	return "config-bridge-reconciler"
 }
 
+// Phase returns PhaseStateSync because the config bridge updates shared
+// in-process state (ConfigManager's atomic pointer) that downstream
+// reconcilers depend on via configManager.Get().
+func (r *ConfigBridgeReconciler) Phase() domain.ReconcilerPhase {
+	return domain.PhaseStateSync
+}
+
 // Reconcile converts the snapshot into a full *Config and atomically updates
 // the ConfigManager's config pointer. The previous and candidate RuntimeBundle
 // parameters are unused because the config bridge depends only on the

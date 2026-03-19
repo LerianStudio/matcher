@@ -50,6 +50,13 @@ func (r *WorkerReconciler) Name() string {
 	return "worker-reconciler"
 }
 
+// Phase returns PhaseSideEffect because worker restarts are external side
+// effects that should run after shared state is updated (PhaseStateSync) and
+// after validation gates pass (PhaseValidation).
+func (r *WorkerReconciler) Phase() domain.ReconcilerPhase {
+	return domain.PhaseSideEffect
+}
+
 // Reconcile extracts a worker-oriented Config from the snapshot and applies
 // it to the WorkerManager. The previous and candidate RuntimeBundle parameters
 // are unused because worker reconciliation depends only on the snapshot's
