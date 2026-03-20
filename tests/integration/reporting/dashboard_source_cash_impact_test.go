@@ -193,9 +193,9 @@ func TestSourceBreakdown_MultipleSourceComparison(t *testing.T) {
 
 		_, err := pgcommon.WithTenantTx(ctx, h.Connection, func(tx *sql.Tx) (struct{}, error) {
 			_, err := tx.ExecContext(ctx,
-				`INSERT INTO reconciliation_sources (id, context_id, name, type, config, created_at, updated_at)
-				 VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-				source2ID.String(), seed.ContextID.String(), "Bank Source", "BANK", "{}", now, now)
+				`INSERT INTO reconciliation_sources (id, context_id, name, type, side, config, created_at, updated_at)
+				 VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+				source2ID.String(), seed.ContextID.String(), "Bank Source", "BANK", "RIGHT", "{}", now, now)
 
 			return struct{}{}, err
 		})

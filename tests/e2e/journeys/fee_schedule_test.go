@@ -407,8 +407,11 @@ func TestFeeSchedule_NetNormalization_OneToOneExact(t *testing.T) {
 
 			// With NET normalization: gateway $100 becomes $98.50 internally,
 			// which matches bank $98.50. All 3 should match.
-			require.GreaterOrEqual(t, len(groups), 3,
+			require.Len(t, groups, 3,
 				"all 3 transactions should match when fees are normalized to net")
+			for _, group := range groups {
+				require.Len(t, group.Items, 2)
+			}
 
 			tc.Logf("PASS: NET normalization matching — 3 gross/net pairs matched")
 		},
@@ -515,8 +518,9 @@ func TestFeeSchedule_CascadingNormalization(t *testing.T) {
 			// Step 6: Verify
 			groups, err := c.Matching.GetMatchRunResults(ctx, reconciliationContext.ID, matchResp.RunID)
 			require.NoError(t, err)
-			require.GreaterOrEqual(t, len(groups), 1,
+			require.Len(t, groups, 1,
 				"cascading-normalized gateway $500 should match bank $485.10")
+			require.Len(t, groups[0].Items, 2)
 
 			tc.Logf("PASS: Cascading normalization matching — gross $500 matched net $485.10")
 		},
@@ -599,8 +603,9 @@ func TestFeeSchedule_NoNormalization(t *testing.T) {
 
 			groups, err := c.Matching.GetMatchRunResults(ctx, reconciliationContext.ID, matchResp.RunID)
 			require.NoError(t, err)
-			require.GreaterOrEqual(t, len(groups), 1,
+			require.Len(t, groups, 1,
 				"exact same amounts should match when normalization is disabled")
+			require.Len(t, groups[0].Items, 2)
 
 			tc.Logf("PASS: No normalization — raw amounts compared, $100 == $100")
 		},
@@ -684,8 +689,9 @@ func TestFeeSchedule_CurrencyMismatchPassthrough(t *testing.T) {
 
 			groups, err := c.Matching.GetMatchRunResults(ctx, reconciliationContext.ID, matchResp.RunID)
 			require.NoError(t, err)
-			require.GreaterOrEqual(t, len(groups), 1,
+			require.Len(t, groups, 1,
 				"EUR transactions should match exactly when USD fee schedule is skipped")
+			require.Len(t, groups[0].Items, 2)
 
 			tc.Logf("PASS: Currency mismatch — USD fee schedule ignored for EUR transactions")
 		},

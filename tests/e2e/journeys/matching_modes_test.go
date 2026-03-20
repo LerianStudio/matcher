@@ -328,12 +328,9 @@ func TestMatchingModes_ToleranceMatching(t *testing.T) {
 	)
 }
 
-// TestMatchingModes_DirectedPrimarySource tests directed matching where a primary
-// source ID is specified. In directed mode, the matcher treats the primary source
-// as the anchor: its transactions are the "left side" and all other sources form
-// the "right side". This test verifies that passing a real source ID (instead of
-// an empty string) correctly triggers asymmetric matching and produces valid results.
-func TestMatchingModes_DirectedPrimarySource(t *testing.T) {
+// TestMatchingModes_SideBasedDirectionalAssignment verifies that matching direction
+// is driven by persisted source sides instead of a caller-supplied primary source.
+func TestMatchingModes_SideBasedDirectionalAssignment(t *testing.T) {
 	e2e.RunE2EWithTimeout(
 		t,
 		2*time.Minute,
@@ -341,23 +338,25 @@ func TestMatchingModes_DirectedPrimarySource(t *testing.T) {
 			ctx := context.Background()
 			f := factories.New(tc, client)
 
-			// Step 1: Create reconciliation context with 1:1 matching
-			tc.Logf("Step 1: Creating reconciliation context for directed matching")
+			// Step 1: Create reconciliation context with 1:1 matching.
+			tc.Logf("Step 1: Creating reconciliation context for side-based matching")
 			reconciliationContext := f.Context.NewContext().
-				WithName("directed-match").
+				WithName("side-based-match").
 				OneToOne().
 				MustCreate(ctx)
 
-			// Step 2: Create two sources — bank and gateway
-			tc.Logf("Step 2: Creating sources (bank + gateway)")
+			// Step 2: Create two sources with explicit sides.
+			tc.Logf("Step 2: Creating LEFT/RIGHT sources (bank + gateway)")
 			bankSource := f.Source.NewSource(reconciliationContext.ID).
 				WithName("bank").
 				AsBank().
+				Left().
 				MustCreate(ctx)
 
 			gatewaySource := f.Source.NewSource(reconciliationContext.ID).
 				WithName("gateway").
 				AsGateway().
+				Right().
 				MustCreate(ctx)
 
 			// Step 3: Create field maps for both sources
@@ -378,7 +377,7 @@ func TestMatchingModes_DirectedPrimarySource(t *testing.T) {
 				WithExactConfig(true, true).
 				MustCreate(ctx)
 
-			// Step 5: Upload bank transactions (this will be our primary source)
+			// Step 5: Upload bank transactions for the LEFT source.
 			tc.Logf("Step 5: Uploading bank transactions")
 			bankCSV := factories.NewCSVBuilder(tc.NamePrefix()).
 				AddRow("DIR-001", "100.00", "USD", "2026-01-15", "wire transfer").
@@ -420,10 +419,10 @@ func TestMatchingModes_DirectedPrimarySource(t *testing.T) {
 				e2e.WaitForJobComplete(ctx, tc, client, reconciliationContext.ID, gatewayJob.ID),
 			)
 
-			// Step 7: Run directed matching with bank as the primary source
-			tc.Logf("Step 7: Running directed matching with bank source as primary (%s)", bankSource.ID)
+			// Step 7: Run matching with bank configured as LEFT and gateway as RIGHT.
+			tc.Logf("Step 7: Running side-based matching with bank=%s LEFT and gateway=%s RIGHT", bankSource.ID, gatewaySource.ID)
 			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
-			require.NoError(t, err, "directed match run should be accepted")
+			require.NoError(t, err, "side-based match run should be accepted")
 			tc.Logf("Match run started: %s", matchResp.RunID)
 
 			err = e2e.WaitForMatchRunComplete(
@@ -433,17 +432,17 @@ func TestMatchingModes_DirectedPrimarySource(t *testing.T) {
 				reconciliationContext.ID,
 				matchResp.RunID,
 			)
-			require.NoError(t, err, "directed match run should complete")
+			require.NoError(t, err, "side-based match run should complete")
 
-			// Step 8: Verify the match run completed and produced groups
-			tc.Logf("Step 8: Verifying directed match results")
+			// Step 8: Verify the match run completed and produced groups.
+			tc.Logf("Step 8: Verifying side-based match results")
 			matchRun, err := client.Matching.GetMatchRun(
 				ctx,
 				reconciliationContext.ID,
 				matchResp.RunID,
 			)
 			require.NoError(t, err)
-			require.Equal(t, "COMPLETED", matchRun.Status, "directed match run should be COMPLETED")
+			require.Equal(t, "COMPLETED", matchRun.Status, "side-based match run should be COMPLETED")
 
 			groups, err := client.Matching.GetMatchRunResults(
 				ctx,
@@ -451,35 +450,13 @@ func TestMatchingModes_DirectedPrimarySource(t *testing.T) {
 				matchResp.RunID,
 			)
 			require.NoError(t, err)
-			tc.Logf("Directed match produced %d match groups", len(groups))
-			require.GreaterOrEqual(t, len(groups), 3,
-				"directed matching with bank as primary should produce at least 3 match groups")
+			tc.Logf("Side-based match produced %d match groups", len(groups))
+			require.Len(t, groups, 3, "three bank/gateway pairs should match when sides are configured explicitly")
+			for _, group := range groups {
+				require.Len(t, group.Items, 2)
+			}
 
-			// Step 9: Run directed matching with gateway as primary (second direction)
-			tc.Logf("Step 9: Running directed matching with gateway source as primary (%s)", gatewaySource.ID)
-			matchResp2, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
-			require.NoError(t, err, "second directed match run should be accepted")
-			tc.Logf("Second match run started: %s", matchResp2.RunID)
-
-			err = e2e.WaitForMatchRunComplete(
-				ctx,
-				tc,
-				client,
-				reconciliationContext.ID,
-				matchResp2.RunID,
-			)
-			require.NoError(t, err, "second directed match run should complete")
-
-			matchRun2, err := client.Matching.GetMatchRun(
-				ctx,
-				reconciliationContext.ID,
-				matchResp2.RunID,
-			)
-			require.NoError(t, err)
-			require.Equal(t, "COMPLETED", matchRun2.Status,
-				"directed match with gateway as primary should also be COMPLETED")
-
-			tc.Logf("Directed matching completed successfully from both directions")
+			tc.Logf("Side-based matching completed successfully")
 		},
 	)
 }

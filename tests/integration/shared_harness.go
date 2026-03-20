@@ -482,6 +482,18 @@ func initSharedDBConnection(
 	waitForSharedPostgres(t, primaryDB)
 	waitForSharedPostgres(t, replicaDB)
 
+	if err := dropAllPublicTables(t, primaryDB); err != nil {
+		_ = primaryDB.Close()
+		_ = replicaDB.Close()
+		return nil, nil, fmt.Errorf("failed to reset shared database before migrations: %w", err)
+	}
+
+	if err := dropAllPublicEnumTypes(t, primaryDB); err != nil {
+		_ = primaryDB.Close()
+		_ = replicaDB.Close()
+		return nil, nil, fmt.Errorf("failed to reset shared enum types before migrations: %w", err)
+	}
+
 	// Conservative pool sizes to prevent connection exhaustion with parallel tests.
 	// Each test's bootstrap.Service also creates its own pool, so we keep this low.
 	primaryDB.SetMaxOpenConns(10)
@@ -545,6 +557,97 @@ func initSharedDBConnection(
 	}
 
 	return connection, cleanup, nil
+}
+
+func dropAllPublicTables(t *testing.T, db *sql.DB) error {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	rows, err := db.QueryContext(ctx, `
+SELECT tablename
+FROM pg_tables
+WHERE schemaname = 'public'
+ORDER BY tablename ASC
+`)
+	if err != nil {
+		return fmt.Errorf("querying public tables: %w", err)
+	}
+	defer rows.Close()
+
+	tables := make([]string, 0)
+	for rows.Next() {
+		var tableName string
+		if err := rows.Scan(&tableName); err != nil {
+			return fmt.Errorf("scanning public table name: %w", err)
+		}
+
+		tables = append(tables, tableName)
+	}
+
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterating public tables: %w", err)
+	}
+
+	if len(tables) == 0 {
+		return nil
+	}
+
+	qualifiedTables := make([]string, 0, len(tables))
+	for _, table := range tables {
+		qualifiedTables = append(qualifiedTables, "public."+quoteIdentifier(table))
+	}
+
+	query := fmt.Sprintf("DROP TABLE IF EXISTS %s CASCADE", strings.Join(qualifiedTables, ", "))
+	if _, err := db.ExecContext(ctx, query); err != nil {
+		return fmt.Errorf("dropping public tables: %w", err)
+	}
+
+	return nil
+}
+
+func dropAllPublicEnumTypes(t *testing.T, db *sql.DB) error {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	rows, err := db.QueryContext(ctx, `
+SELECT t.typname
+FROM pg_type t
+JOIN pg_namespace n ON n.oid = t.typnamespace
+WHERE n.nspname = 'public'
+  AND t.typtype = 'e'
+ORDER BY t.typname ASC
+`)
+	if err != nil {
+		return fmt.Errorf("querying public enum types: %w", err)
+	}
+	defer rows.Close()
+
+	types := make([]string, 0)
+	for rows.Next() {
+		var typeName string
+		if err := rows.Scan(&typeName); err != nil {
+			return fmt.Errorf("scanning public enum type: %w", err)
+		}
+
+		types = append(types, typeName)
+	}
+
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterating public enum types: %w", err)
+	}
+
+	for _, typeName := range types {
+		query := fmt.Sprintf("DROP TYPE IF EXISTS public.%s CASCADE", quoteIdentifier(typeName))
+		if _, err := db.ExecContext(ctx, query); err != nil {
+			return fmt.Errorf("dropping public enum type %s: %w", typeName, err)
+		}
+	}
+
+	return nil
 }
 
 func setupSharedSeedData(
