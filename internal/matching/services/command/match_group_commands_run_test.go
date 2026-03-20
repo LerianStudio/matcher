@@ -1681,6 +1681,34 @@ func (s stubSourceProvider) FindByContextID(
 	_ context.Context,
 	_ uuid.UUID,
 ) ([]*ports.SourceInfo, error) {
+	if s.err == nil {
+		normalized := make([]*ports.SourceInfo, 0, len(s.sources))
+		leftAssigned := false
+
+		for _, src := range s.sources {
+			if src == nil {
+				normalized = append(normalized, nil)
+				continue
+			}
+
+			copySrc := *src
+			if !copySrc.Side.IsExclusive() {
+				if !leftAssigned {
+					copySrc.Side = fee.MatchingSideLeft
+					leftAssigned = true
+				} else {
+					copySrc.Side = fee.MatchingSideRight
+				}
+			} else if copySrc.Side == fee.MatchingSideLeft {
+				leftAssigned = true
+			}
+
+			normalized = append(normalized, &copySrc)
+		}
+
+		return normalized, nil
+	}
+
 	return s.sources, s.err
 }
 

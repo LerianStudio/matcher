@@ -791,8 +791,8 @@ func newRunMatchUseCase(
 	t.Helper()
 
 	sourceProvider := &runMatchSourceProvider{sources: []*ports.SourceInfo{
-		{ID: uuid.New(), Type: ports.SourceTypeLedger},
-		{ID: uuid.New(), Type: ports.SourceTypeAPI},
+		{ID: uuid.New(), Type: ports.SourceTypeLedger, Side: matchingFee.MatchingSideLeft},
+		{ID: uuid.New(), Type: ports.SourceTypeAPI, Side: matchingFee.MatchingSideRight},
 	}}
 
 	ruleProvider := &runMatchRuleProvider{rules: shared.MatchRules{}}
