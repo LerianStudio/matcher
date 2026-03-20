@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
 // FieldMap represents the mapping rules for a reconciliation source.
@@ -26,6 +28,7 @@ type ReconciliationSource struct {
 	ContextID uuid.UUID
 	Name      string
 	Type      string
+	Side      sharedfee.MatchingSide
 	Config    map[string]any
 	CreatedAt time.Time
 	UpdatedAt time.Time

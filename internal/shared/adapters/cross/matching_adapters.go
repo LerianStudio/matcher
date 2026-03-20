@@ -186,6 +186,7 @@ func (adapter *SourceProviderAdapter) FindByContextID(
 		result = append(result, &matchingPorts.SourceInfo{
 			ID:   src.ID,
 			Type: matchingPorts.SourceType(src.Type.String()),
+			Side: src.Side,
 		})
 	}
 

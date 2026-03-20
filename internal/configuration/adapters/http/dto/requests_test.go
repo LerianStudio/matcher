@@ -15,6 +15,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
 func TestCreateContextRequest_ToDomainInput(t *testing.T) {
@@ -198,6 +199,7 @@ func TestCreateContextRequest_Validation_SourcesAndRulesBoundary(t *testing.T) {
 			sources[i] = CreateContextSourceRequest{
 				Name: fmt.Sprintf("Source %d", i+1),
 				Type: "BANK",
+				Side: "LEFT",
 			}
 		}
 
@@ -220,6 +222,7 @@ func TestCreateContextRequest_Validation_SourcesAndRulesBoundary(t *testing.T) {
 			sources[i] = CreateContextSourceRequest{
 				Name: fmt.Sprintf("Source %d", i+1),
 				Type: "BANK",
+				Side: "LEFT",
 			}
 		}
 
@@ -384,6 +387,7 @@ func TestCreateSourceRequest_ToDomainInput(t *testing.T) {
 		req := CreateSourceRequest{
 			Name:   "Primary Bank",
 			Type:   "BANK",
+			Side:   "LEFT",
 			Config: map[string]any{"key": "value"},
 		}
 
@@ -392,6 +396,7 @@ func TestCreateSourceRequest_ToDomainInput(t *testing.T) {
 
 		assert.Equal(t, "Primary Bank", input.Name)
 		assert.Equal(t, value_objects.SourceType("BANK"), input.Type)
+		assert.Equal(t, sharedfee.MatchingSideLeft, input.Side)
 		assert.Equal(t, map[string]any{"key": "value"}, input.Config)
 	})
 
@@ -401,11 +406,13 @@ func TestCreateSourceRequest_ToDomainInput(t *testing.T) {
 		req := CreateSourceRequest{
 			Name: "Minimal",
 			Type: "LEDGER",
+			Side: "RIGHT",
 		}
 
 		input, err := req.ToDomainInput()
 		assert.NoError(t, err)
 		assert.Nil(t, input.Config)
+		assert.Equal(t, sharedfee.MatchingSideRight, input.Side)
 	})
 }
 
@@ -417,10 +424,12 @@ func TestUpdateSourceRequest_ToDomainInput(t *testing.T) {
 
 		name := "Updated"
 		typ := "GATEWAY"
+		side := "RIGHT"
 
 		req := UpdateSourceRequest{
 			Name: &name,
 			Type: &typ,
+			Side: &side,
 		}
 
 		input, err := req.ToDomainInput()
@@ -429,6 +438,8 @@ func TestUpdateSourceRequest_ToDomainInput(t *testing.T) {
 		assert.Equal(t, &name, input.Name)
 		assert.NotNil(t, input.Type)
 		assert.Equal(t, value_objects.SourceType("GATEWAY"), *input.Type)
+		assert.NotNil(t, input.Side)
+		assert.Equal(t, sharedfee.MatchingSideRight, *input.Side)
 	})
 }
 

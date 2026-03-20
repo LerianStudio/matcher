@@ -10,6 +10,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
 // SourcePostgreSQLModel represents the database model for reconciliation sources.
@@ -18,6 +19,7 @@ type SourcePostgreSQLModel struct {
 	ContextID string
 	Name      string
 	Type      string
+	Side      string
 	Config    []byte
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -62,6 +64,7 @@ func NewSourcePostgreSQLModel(
 		ContextID: entity.ContextID.String(),
 		Name:      entity.Name,
 		Type:      entity.Type.String(),
+		Side:      string(entity.Side),
 		Config:    configJSON,
 		CreatedAt: createdAt,
 		UpdatedAt: updatedAt,
@@ -89,6 +92,8 @@ func (model *SourcePostgreSQLModel) ToEntity() (*entities.ReconciliationSource, 
 		return nil, fmt.Errorf("failed to parse source type: %w", err)
 	}
 
+	sourceSide := sharedfee.MatchingSide(model.Side)
+
 	config := make(map[string]any)
 	if len(model.Config) > 0 {
 		if err := json.Unmarshal(model.Config, &config); err != nil {
@@ -105,6 +110,7 @@ func (model *SourcePostgreSQLModel) ToEntity() (*entities.ReconciliationSource, 
 		ContextID: contextID,
 		Name:      model.Name,
 		Type:      sourceType,
+		Side:      sourceSide,
 		Config:    config,
 		CreatedAt: model.CreatedAt,
 		UpdatedAt: model.UpdatedAt,

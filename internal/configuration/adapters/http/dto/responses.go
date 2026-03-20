@@ -42,6 +42,8 @@ type ReconciliationSourceResponse struct {
 	Name string `json:"name"      example:"Primary Bank Account"`
 	// Type of the source
 	Type string `json:"type"      example:"BANK"                                 enums:"LEDGER,BANK,GATEWAY,CUSTOM"`
+	// Matching side configured for the source
+	Side string `json:"side"      example:"LEFT"                                 enums:"LEFT,RIGHT"`
 	// Source configuration
 	Config map[string]any `json:"config"`
 	// Creation timestamp in RFC3339 format

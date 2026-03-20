@@ -31,3 +31,8 @@ func (s MatchingSide) AppliesToLeft() bool {
 func (s MatchingSide) AppliesToRight() bool {
 	return s == MatchingSideRight || s == MatchingSideAny
 }
+
+// IsExclusive returns true when the side refers to exactly one side.
+func (s MatchingSide) IsExclusive() bool {
+	return s == MatchingSideLeft || s == MatchingSideRight
+}

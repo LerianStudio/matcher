@@ -126,6 +126,7 @@ func toSharedReconciliationSource(
 		ContextID: src.ContextID,
 		Name:      src.Name,
 		Type:      string(src.Type),
+		Side:      src.Side,
 		Config:    src.Config,
 		CreatedAt: src.CreatedAt,
 		UpdatedAt: src.UpdatedAt,

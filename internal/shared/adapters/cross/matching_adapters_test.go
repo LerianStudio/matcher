@@ -17,14 +17,46 @@ import (
 	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
 	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
+	configRepositories "github.com/LerianStudio/matcher/internal/configuration/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/repositories/mocks"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	matchingPorts "github.com/LerianStudio/matcher/internal/matching/ports"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
 // errTestRepo is a sentinel error used for testing repository failure scenarios.
 var errTestRepo = errors.New("database error")
+
+type feeRuleRepositoryStub struct {
+	rules []*fee.FeeRule
+	err   error
+}
+
+var _ configRepositories.FeeRuleRepository = (*feeRuleRepositoryStub)(nil)
+
+func (stub *feeRuleRepositoryStub) Create(context.Context, *fee.FeeRule) error { return nil }
+func (stub *feeRuleRepositoryStub) CreateWithTx(context.Context, *sql.Tx, *fee.FeeRule) error {
+	return nil
+}
+func (stub *feeRuleRepositoryStub) FindByID(context.Context, uuid.UUID) (*fee.FeeRule, error) {
+	return nil, nil
+}
+func (stub *feeRuleRepositoryStub) FindByContextID(context.Context, uuid.UUID) ([]*fee.FeeRule, error) {
+	if stub.err != nil {
+		return nil, stub.err
+	}
+
+	return stub.rules, nil
+}
+func (stub *feeRuleRepositoryStub) Update(context.Context, *fee.FeeRule) error { return nil }
+func (stub *feeRuleRepositoryStub) UpdateWithTx(context.Context, *sql.Tx, *fee.FeeRule) error {
+	return nil
+}
+func (stub *feeRuleRepositoryStub) Delete(context.Context, uuid.UUID) error { return nil }
+func (stub *feeRuleRepositoryStub) DeleteWithTx(context.Context, *sql.Tx, uuid.UUID) error {
+	return nil
+}
 
 func TestNewMatchRuleProviderAdapter_NilRepo(t *testing.T) {
 	t.Parallel()
@@ -265,6 +297,60 @@ func TestNewSourceProviderAdapter_ValidRepo(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, adapter)
 	assert.Equal(t, mockRepo, adapter.repo)
+}
+
+func TestNewFeeRuleProviderAdapter_NilRepo(t *testing.T) {
+	t.Parallel()
+
+	adapter, err := NewFeeRuleProviderAdapter(nil)
+	require.ErrorIs(t, err, ErrFeeRuleRepositoryRequired)
+	assert.Nil(t, adapter)
+}
+
+func TestFeeRuleProviderAdapter_FindByContextID_Success(t *testing.T) {
+	t.Parallel()
+
+	contextID := uuid.New()
+	rules := []*fee.FeeRule{{ID: uuid.New(), ContextID: contextID, Name: "fee-rule"}}
+	adapter, err := NewFeeRuleProviderAdapter(&feeRuleRepositoryStub{rules: rules})
+	require.NoError(t, err)
+
+	result, err := adapter.FindByContextID(context.Background(), contextID)
+	require.NoError(t, err)
+	assert.Len(t, result, 1)
+	assert.Equal(t, rules[0].ID, result[0].ID)
+}
+
+func TestFeeRuleProviderAdapter_FindByContextID_Empty(t *testing.T) {
+	t.Parallel()
+
+	adapter, err := NewFeeRuleProviderAdapter(&feeRuleRepositoryStub{rules: nil})
+	require.NoError(t, err)
+
+	result, err := adapter.FindByContextID(context.Background(), uuid.New())
+	require.NoError(t, err)
+	assert.Nil(t, result)
+}
+
+func TestFeeRuleProviderAdapter_FindByContextID_Error(t *testing.T) {
+	t.Parallel()
+
+	adapter, err := NewFeeRuleProviderAdapter(&feeRuleRepositoryStub{err: errTestRepo})
+	require.NoError(t, err)
+
+	result, err := adapter.FindByContextID(context.Background(), uuid.New())
+	require.ErrorIs(t, err, errTestRepo)
+	assert.Nil(t, result)
+}
+
+func TestFeeRuleProviderAdapter_FindByContextID_NilAdapter(t *testing.T) {
+	t.Parallel()
+
+	var adapter *FeeRuleProviderAdapter
+
+	result, err := adapter.FindByContextID(context.Background(), uuid.New())
+	require.ErrorIs(t, err, ErrFeeRuleRepositoryRequired)
+	assert.Nil(t, result)
 }
 
 func TestSourceProviderAdapter_FindByContextID_NilAdapter(t *testing.T) {

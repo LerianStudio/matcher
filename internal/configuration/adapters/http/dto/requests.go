@@ -10,6 +10,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
 // Sentinel errors for JSON field validation.
@@ -47,6 +48,7 @@ type CreateContextRequest struct {
 type CreateContextSourceRequest struct {
 	Name    string         `json:"name"              validate:"required,max=50"                         example:"Primary Bank Account" minLength:"1" maxLength:"50"`
 	Type    string         `json:"type"              validate:"required,oneof=LEDGER BANK GATEWAY CUSTOM FETCHER" example:"BANK"        enums:"LEDGER,BANK,GATEWAY,CUSTOM,FETCHER"`
+	Side    string         `json:"side"              validate:"required,oneof=LEFT RIGHT"                example:"LEFT"        enums:"LEFT,RIGHT"`
 	Config  map[string]any `json:"config"`
 	Mapping map[string]any `json:"mapping,omitempty" validate:"omitempty" swaggertype:"object"`
 }
@@ -113,6 +115,7 @@ func (req *CreateContextSourceRequest) ToDomainInput() (entities.CreateContextSo
 	return entities.CreateContextSourceInput{
 		Name:    req.Name,
 		Type:    value_objects.SourceType(req.Type),
+		Side:    sharedfee.MatchingSide(req.Side),
 		Config:  req.Config,
 		Mapping: req.Mapping,
 	}, nil
@@ -173,6 +176,7 @@ func (req *UpdateContextRequest) ToDomainInput() (entities.UpdateReconciliationC
 type CreateSourceRequest struct {
 	Name   string         `json:"name"   validate:"required,max=50"                         example:"Primary Bank Account" minLength:"1" maxLength:"50"`
 	Type   string         `json:"type"   validate:"required,oneof=LEDGER BANK GATEWAY CUSTOM FETCHER" example:"BANK"        enums:"LEDGER,BANK,GATEWAY,CUSTOM,FETCHER"`
+	Side   string         `json:"side"   validate:"required,oneof=LEFT RIGHT"                example:"LEFT"        enums:"LEFT,RIGHT"`
 	Config map[string]any `json:"config"`
 }
 
@@ -186,6 +190,7 @@ func (req *CreateSourceRequest) ToDomainInput() (entities.CreateReconciliationSo
 	return entities.CreateReconciliationSourceInput{
 		Name:   req.Name,
 		Type:   value_objects.SourceType(req.Type),
+		Side:   sharedfee.MatchingSide(req.Side),
 		Config: req.Config,
 	}, nil
 }
@@ -195,6 +200,7 @@ func (req *CreateSourceRequest) ToDomainInput() (entities.CreateReconciliationSo
 type UpdateSourceRequest struct {
 	Name   *string        `json:"name,omitempty"   validate:"omitempty,max=50"                         example:"Secondary Bank Account" maxLength:"50"`
 	Type   *string        `json:"type,omitempty"   validate:"omitempty,oneof=LEDGER BANK GATEWAY CUSTOM FETCHER" example:"LEDGER"        enums:"LEDGER,BANK,GATEWAY,CUSTOM,FETCHER"`
+	Side   *string        `json:"side,omitempty"   validate:"omitempty,oneof=LEFT RIGHT"                example:"RIGHT"         enums:"LEFT,RIGHT"`
 	Config map[string]any `json:"config,omitempty"`
 }
 
@@ -213,6 +219,11 @@ func (req *UpdateSourceRequest) ToDomainInput() (entities.UpdateReconciliationSo
 	if req.Type != nil {
 		st := value_objects.SourceType(*req.Type)
 		input.Type = &st
+	}
+
+	if req.Side != nil {
+		side := sharedfee.MatchingSide(*req.Side)
+		input.Side = &side
 	}
 
 	return input, nil

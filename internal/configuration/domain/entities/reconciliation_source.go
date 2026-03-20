@@ -14,6 +14,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
+	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
 // maxSourceNameLength defines the maximum allowed length for source names.
@@ -31,6 +32,10 @@ var (
 	ErrSourceTypeInvalid = errors.New("invalid source type")
 	// ErrSourceContextRequired is returned when the context_id is not provided.
 	ErrSourceContextRequired = errors.New("context_id is required")
+	// ErrSourceSideRequired is returned when the source side is not provided.
+	ErrSourceSideRequired = errors.New("source side is required")
+	// ErrSourceSideInvalid is returned when the source side is invalid.
+	ErrSourceSideInvalid = errors.New("invalid source side")
 )
 
 // ReconciliationSource represents an external source to reconcile against.
@@ -39,6 +44,7 @@ type ReconciliationSource struct {
 	ContextID uuid.UUID
 	Name      string
 	Type      value_objects.SourceType
+	Side      sharedfee.MatchingSide
 	Config    map[string]any
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -48,6 +54,7 @@ type ReconciliationSource struct {
 type CreateReconciliationSourceInput struct {
 	Name   string                   `json:"name"   validate:"required,max=50" example:"Primary Bank Account" minLength:"1" maxLength:"50"`
 	Type   value_objects.SourceType `json:"type"   validate:"required"        example:"BANK"                                              enums:"LEDGER,BANK,GATEWAY,CUSTOM,FETCHER"`
+	Side   sharedfee.MatchingSide   `json:"side"   validate:"required"        example:"LEFT"                                              enums:"LEFT,RIGHT"`
 	Config map[string]any           `json:"config"`
 }
 
@@ -55,6 +62,7 @@ type CreateReconciliationSourceInput struct {
 type CreateContextSourceInput struct {
 	Name    string                   `json:"name"              validate:"required,max=50" example:"Primary Bank Account" minLength:"1" maxLength:"50"`
 	Type    value_objects.SourceType `json:"type"              validate:"required"        example:"BANK"                                              enums:"LEDGER,BANK,GATEWAY,CUSTOM,FETCHER"`
+	Side    sharedfee.MatchingSide   `json:"side"              validate:"required"        example:"LEFT"                                              enums:"LEFT,RIGHT"`
 	Config  map[string]any           `json:"config"`
 	Mapping map[string]any           `json:"mapping,omitempty"`
 }
@@ -63,6 +71,7 @@ type CreateContextSourceInput struct {
 type UpdateReconciliationSourceInput struct {
 	Name   *string                   `json:"name,omitempty" validate:"omitempty,max=50" example:"Secondary Bank Account" maxLength:"50"`
 	Type   *value_objects.SourceType `json:"type,omitempty"                             example:"LEDGER"                                enums:"LEDGER,BANK,GATEWAY,CUSTOM,FETCHER"`
+	Side   *sharedfee.MatchingSide   `json:"side,omitempty"                             example:"RIGHT"                                 enums:"LEFT,RIGHT"`
 	Config map[string]any            `json:"config,omitempty"`
 }
 
@@ -96,6 +105,14 @@ func NewReconciliationSource(
 		return nil, ErrSourceTypeInvalid
 	}
 
+	if err := asserter.NotEmpty(ctx, string(input.Side), ErrSourceSideRequired.Error()); err != nil {
+		return nil, ErrSourceSideRequired
+	}
+
+	if err := asserter.That(ctx, input.Side.IsExclusive(), ErrSourceSideInvalid.Error(), "side", input.Side); err != nil {
+		return nil, ErrSourceSideInvalid
+	}
+
 	config := input.Config
 	if config == nil {
 		config = make(map[string]any)
@@ -108,6 +125,7 @@ func NewReconciliationSource(
 		ContextID: contextID,
 		Name:      name,
 		Type:      input.Type,
+		Side:      input.Side,
 		Config:    config,
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -149,6 +167,14 @@ func (rs *ReconciliationSource) Update(
 		}
 
 		rs.Type = *input.Type
+	}
+
+	if input.Side != nil {
+		if !input.Side.IsExclusive() {
+			return ErrSourceSideInvalid
+		}
+
+		rs.Side = *input.Side
 	}
 
 	if input.Config != nil {
