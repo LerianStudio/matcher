@@ -16,6 +16,7 @@ import (
 	discoveryWorker "github.com/LerianStudio/matcher/internal/discovery/services/worker"
 	governanceWorker "github.com/LerianStudio/matcher/internal/governance/services/worker"
 	reportingWorker "github.com/LerianStudio/matcher/internal/reporting/services/worker"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 type exportWorkerComparableConfig struct {
@@ -39,6 +40,11 @@ type archivalWorkerComparableConfig struct {
 	StoragePrefix       string
 	StorageClass        string
 	PartitionLookahead  int
+	StorageEndpoint     string
+	StorageRegion       string
+	StorageAccessKeyID  string
+	StorageSecretKey    string
+	StorageUsePathStyle bool
 }
 
 type schedulerWorkerComparableConfig struct {
@@ -192,7 +198,7 @@ func (wm *WorkerManager) restartSlotLocked(ctx context.Context, slot *workerSlot
 	// Always apply runtime config to the candidate before starting, regardless of
 	// whether it is the same instance. If factories are refactored to return new
 	// instances in the future, this ensures they always receive the latest config.
-	if err := applyWorkerRuntimeConfig(slot.name, candidate, newCfg); err != nil {
+	if err := applyWorkerRuntimeConfig(ctx, slot.name, candidate, newCfg); err != nil {
 		return fmt.Errorf("apply worker %q runtime config before restart: %w", slot.name, err)
 	}
 
@@ -226,7 +232,7 @@ func (wm *WorkerManager) rollbackAfterRestartFailureLocked(
 		return errNoPreviousWorkerForRollback
 	}
 
-	rollbackCandidate, err := prepareRollbackCandidate(slot, previous, oldCfg, sameInstance)
+	rollbackCandidate, err := prepareRollbackCandidate(ctx, slot, previous, oldCfg, sameInstance)
 	if err != nil {
 		return err
 	}
@@ -249,6 +255,7 @@ func (wm *WorkerManager) rollbackAfterRestartFailureLocked(
 // rollback after a restart failure. It applies runtime config to the previous
 // instance if same-instance, or rebuilds via factory otherwise.
 func prepareRollbackCandidate(
+	ctx context.Context,
 	slot *workerSlot,
 	previous WorkerLifecycle,
 	oldCfg *Config,
@@ -259,7 +266,7 @@ func prepareRollbackCandidate(
 	}
 
 	if sameInstance {
-		if err := applyWorkerRuntimeConfig(slot.name, previous, oldCfg); err != nil {
+		if err := applyWorkerRuntimeConfig(ctx, slot.name, previous, oldCfg); err != nil {
 			return nil, fmt.Errorf("reapply worker %q runtime config for rollback: %w", slot.name, err)
 		}
 
@@ -279,14 +286,14 @@ func prepareRollbackCandidate(
 		return previous, nil
 	}
 
-	if err := applyWorkerRuntimeConfig(slot.name, rebuilt, oldCfg); err != nil {
+	if err := applyWorkerRuntimeConfig(ctx, slot.name, rebuilt, oldCfg); err != nil {
 		return nil, fmt.Errorf("apply rebuilt worker %q runtime config for rollback: %w", slot.name, err)
 	}
 
 	return rebuilt, nil
 }
 
-func applyWorkerRuntimeConfig(name string, worker WorkerLifecycle, cfg *Config) error {
+func applyWorkerRuntimeConfig(ctx context.Context, name string, worker WorkerLifecycle, cfg *Config) error {
 	if cfg == nil || worker == nil {
 		return nil
 	}
@@ -297,7 +304,7 @@ func applyWorkerRuntimeConfig(name string, worker WorkerLifecycle, cfg *Config) 
 	case workerNameCleanup:
 		return applyCleanupRuntimeConfig(worker, cfg)
 	case workerNameArchival:
-		return applyArchivalRuntimeConfig(worker, cfg)
+		return applyArchivalRuntimeConfig(ctx, worker, cfg)
 	case workerNameScheduler:
 		return applySchedulerRuntimeConfig(worker, cfg)
 	case workerNameDiscovery:
@@ -344,12 +351,29 @@ func applyCleanupRuntimeConfig(worker WorkerLifecycle, cfg *Config) error {
 	return nil
 }
 
-func applyArchivalRuntimeConfig(worker WorkerLifecycle, cfg *Config) error {
+func applyArchivalRuntimeConfig(ctx context.Context, worker WorkerLifecycle, cfg *Config) error {
 	archivalWorker, ok := worker.(interface {
 		UpdateRuntimeConfig(governanceWorker.ArchivalWorkerConfig) error
 	})
 	if !ok {
 		return nil
+	}
+
+	if storageAwareWorker, storageAware := worker.(interface {
+		UpdateRuntimeStorage(sharedPorts.ObjectStorageClient) error
+	}); storageAware {
+		storage, err := createArchivalStorage(ctx, cfg)
+		if err != nil {
+			return fmt.Errorf("update archival runtime storage: %w", err)
+		}
+
+		if storage == nil {
+			return ErrArchivalStorageRequired
+		}
+
+		if err := storageAwareWorker.UpdateRuntimeStorage(storage); err != nil {
+			return fmt.Errorf("update archival runtime storage client: %w", err)
+		}
 	}
 
 	if err := archivalWorker.UpdateRuntimeConfig(governanceWorker.ArchivalWorkerConfig{
@@ -449,6 +473,11 @@ func extractWorkerConfig(name string, cfg *Config) any {
 			StoragePrefix:       cfg.Archival.StoragePrefix,
 			StorageClass:        cfg.Archival.StorageClass,
 			PartitionLookahead:  cfg.Archival.PartitionLookahead,
+			StorageEndpoint:     cfg.ObjectStorage.Endpoint,
+			StorageRegion:       cfg.ObjectStorage.Region,
+			StorageAccessKeyID:  cfg.ObjectStorage.AccessKeyID,
+			StorageSecretKey:    cfg.ObjectStorage.SecretAccessKey,
+			StorageUsePathStyle: cfg.ObjectStorage.UsePathStyle,
 		}
 	case workerNameScheduler:
 		return schedulerWorkerComparableConfig{

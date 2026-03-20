@@ -159,6 +159,66 @@ func formatWorkerStatus(enabled bool, interval time.Duration) string {
 	return statusDisabled
 }
 
+func newArchivalPresignExpiryGetter(cfg *Config, configGetter func() *Config) func() time.Duration {
+	if configGetter == nil {
+		return nil
+	}
+
+	return func() time.Duration {
+		runtimeCfg := configGetter()
+		if runtimeCfg == nil {
+			return cfg.ArchivalPresignExpiry()
+		}
+
+		return runtimeCfg.ArchivalPresignExpiry()
+	}
+}
+
+func registerArchiveRoutesIfAvailable(
+	routes *Routes,
+	cfg *Config,
+	archiveRepo *archiveMetadataRepo.Repository,
+	archivalStorage reportingPorts.ObjectStorageClient,
+	configGetter func() *Config,
+) error {
+	if archivalStorage == nil {
+		return nil
+	}
+
+	archiveHandler, err := governanceHTTP.NewArchiveHandler(archiveRepo, archivalStorage, cfg.ArchivalPresignExpiry())
+	if err != nil {
+		return fmt.Errorf("create archive handler: %w", err)
+	}
+
+	if expiryGetter := newArchivalPresignExpiryGetter(cfg, configGetter); expiryGetter != nil {
+		archiveHandler.SetRuntimePresignExpiryGetter(expiryGetter)
+	}
+
+	if err := governanceHTTP.RegisterArchiveRoutes(routes.Protected, archiveHandler); err != nil {
+		return fmt.Errorf("register archive routes: %w", err)
+	}
+
+	return nil
+}
+
+func shouldSkipArchivalWorker(cfg *Config) bool {
+	return cfg == nil || !cfg.Archival.Enabled
+}
+
+func openArchivalDatabase(cfg *Config) (*sql.DB, error) {
+	archivalDB, err := sql.Open("pgx", cfg.PrimaryDSN())
+	if err != nil {
+		return nil, fmt.Errorf("open database for archival worker: %w", err)
+	}
+
+	archivalDB.SetMaxOpenConns(archivalMaxOpenConns)
+	archivalDB.SetMaxIdleConns(archivalMaxIdleConns)
+	archivalDB.SetConnMaxLifetime(cfg.ConnMaxLifetime())
+	archivalDB.SetConnMaxIdleTime(cfg.ConnMaxIdleTime())
+
+	return archivalDB, nil
+}
+
 // initArchivalComponents initializes the archival worker and archive retrieval routes.
 func initArchivalComponents(
 	routes *Routes,
@@ -170,51 +230,31 @@ func initArchivalComponents(
 ) (*governanceWorker.ArchivalWorker, error) {
 	archiveRepo := archiveMetadataRepo.NewRepository(provider)
 
-	archivalStorage, err := createArchivalStorage(cfg, logger)
+	archivalStorage, err := createArchivalStorage(context.TODO(), cfg)
 	if err != nil {
 		return nil, fmt.Errorf("create archival storage: %w", err)
 	}
+
+	if err := registerArchiveRoutesIfAvailable(routes, cfg, archiveRepo, archivalStorage, configGetter); err != nil {
+		return nil, err
+	}
+
+	if shouldSkipArchivalWorker(cfg) {
+		return nil, nil
+	}
+
+	if cfg.Archival.Enabled && !createArchivalStorageAvailable(cfg) {
+		return nil, ErrArchivalStorageRequired
+	}
+
 	if configGetter != nil {
 		archivalStorage = newRuntimeArchivalStorageClient(cfg, configGetter, archivalStorage)
 	}
 
-	if archivalStorage != nil {
-		archiveHandler, handlerErr := governanceHTTP.NewArchiveHandler(archiveRepo, archivalStorage, cfg.ArchivalPresignExpiry())
-		if handlerErr != nil {
-			return nil, fmt.Errorf("create archive handler: %w", handlerErr)
-		}
-		if configGetter != nil {
-			archiveHandler.SetRuntimePresignExpiryGetter(func() time.Duration {
-				runtimeCfg := configGetter()
-				if runtimeCfg == nil {
-					return cfg.ArchivalPresignExpiry()
-				}
-
-				return runtimeCfg.ArchivalPresignExpiry()
-			})
-		}
-
-		if routeErr := governanceHTTP.RegisterArchiveRoutes(routes.Protected, archiveHandler); routeErr != nil {
-			return nil, fmt.Errorf("register archive routes: %w", routeErr)
-		}
+	archivalDB, err := openArchivalDatabase(cfg)
+	if err != nil {
+		return nil, err
 	}
-
-	if configGetter == nil && !cfg.Archival.Enabled {
-		return nil, nil
-	}
-
-	if cfg.Archival.Enabled && createArchivalStorageAvailable(cfg) == false {
-		return nil, ErrArchivalStorageRequired
-	}
-
-	archivalDB, dbErr := sql.Open("pgx", cfg.PrimaryDSN())
-	if dbErr != nil {
-		return nil, fmt.Errorf("open database for archival worker: %w", dbErr)
-	}
-	archivalDB.SetMaxOpenConns(archivalMaxOpenConns)
-	archivalDB.SetMaxIdleConns(archivalMaxIdleConns)
-	archivalDB.SetConnMaxLifetime(cfg.ConnMaxLifetime())
-	archivalDB.SetConnMaxIdleTime(cfg.ConnMaxIdleTime())
 
 	tracer := otel.Tracer(constants.ApplicationName)
 	partitionMgr := newDynamicPartitionManager(provider, logger, tracer)
@@ -257,7 +297,7 @@ func createArchivalStorageAvailable(cfg *Config) bool {
 }
 
 // createArchivalStorage creates an S3-compatible object storage client for the archival bucket.
-func createArchivalStorage(cfg *Config, _ libLog.Logger) (reportingPorts.ObjectStorageClient, error) {
+func createArchivalStorage(ctx context.Context, cfg *Config) (reportingPorts.ObjectStorageClient, error) {
 	if cfg.Archival.StorageBucket == "" || cfg.ObjectStorage.Endpoint == "" {
 		return nil, nil
 	}
@@ -271,7 +311,7 @@ func createArchivalStorage(cfg *Config, _ libLog.Logger) (reportingPorts.ObjectS
 		UsePathStyle:    cfg.ObjectStorage.UsePathStyle,
 	}
 
-	client, err := newS3ClientFn(context.Background(), s3Cfg)
+	client, err := newS3ClientFn(detachedContext(ctx), s3Cfg)
 	if err != nil {
 		return nil, fmt.Errorf("create archival S3 client: %w", err)
 	}
@@ -295,6 +335,7 @@ func newRuntimeArchivalStorageClient(
 
 	return newDynamicObjectStorageClient(func() sharedPorts.ObjectStorageClient {
 		cfg := initialCfg
+
 		if configGetter != nil {
 			if runtimeCfg := configGetter(); runtimeCfg != nil {
 				cfg = runtimeCfg
@@ -310,7 +351,7 @@ func newRuntimeArchivalStorageClient(
 			return activeClient
 		}
 
-		client, err := createArchivalStorage(cfg, nil)
+		client, err := createArchivalStorage(context.TODO(), cfg)
 		if err != nil || client == nil {
 			return nil
 		}

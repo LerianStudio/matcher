@@ -11,7 +11,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash"
+	"regexp"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -57,11 +59,14 @@ const (
 
 	// defaultPartitionLookahead is the default number of future monthly partitions to create.
 	defaultPartitionLookahead = 3
+
+	// partitionExportQueryOverhead is the static portion size of the export SELECT statement.
+	partitionExportQueryOverhead = 160
 )
 
-// ArchivalWorker orchestrates the full partition lifecycle for audit log archival.
-// It provisions future partitions, identifies eligible partitions, exports data,
-// uploads to object storage, verifies integrity, and detaches/drops source partitions.
+var archivalPartitionNameRegex = regexp.MustCompile(`^audit_logs_\d{4}_\d{2}$`)
+
+// PartitionManager manages audit log partition lifecycle operations for archival.
 type PartitionManager interface {
 	EnsurePartitionsExist(ctx context.Context, lookaheadMonths int) error
 	ListPartitions(ctx context.Context) ([]command.PartitionInfo, error)
@@ -69,6 +74,9 @@ type PartitionManager interface {
 	DropPartition(ctx context.Context, name string) error
 }
 
+// ArchivalWorker orchestrates the full partition lifecycle for audit log archival.
+// It provisions future partitions, identifies eligible partitions, exports data,
+// uploads to object storage, verifies integrity, and detaches/drops source partitions.
 type ArchivalWorker struct {
 	mu            sync.Mutex
 	archiveRepo   repositories.ArchiveMetadataRepository
@@ -99,6 +107,26 @@ func (aw *ArchivalWorker) UpdateRuntimeConfig(cfg ArchivalWorkerConfig) error {
 	}
 
 	aw.cfg = normalizeArchivalWorkerConfig(cfg)
+
+	return nil
+}
+
+// UpdateRuntimeStorage swaps the storage client used on the next start/restart.
+// It must only be called while the worker is stopped so the next archive cycle
+// uses dependencies that match the pending runtime configuration.
+func (aw *ArchivalWorker) UpdateRuntimeStorage(storage sharedPorts.ObjectStorageClient) error {
+	aw.mu.Lock()
+	defer aw.mu.Unlock()
+
+	if aw.running.Load() {
+		return ErrRuntimeConfigUpdateWhileRunning
+	}
+
+	if storage == nil {
+		return ErrNilStorageClient
+	}
+
+	aw.storage = storage
 
 	return nil
 }
@@ -658,7 +686,8 @@ func (aw *ArchivalWorker) exportPartition(
 		buf      *bytes.Buffer
 		rowCount int64
 		checksum string
-	}, error) {
+	}, error,
+	) {
 		tx, err := currentDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 		if err != nil {
 			return struct {
@@ -678,8 +707,14 @@ func (aw *ArchivalWorker) exportPartition(
 			}{}, fmt.Errorf("apply tenant schema: %w", err)
 		}
 
-		query := "SELECT id, tenant_id, entity_type, entity_id, action, actor_id, changes, created_at, tenant_seq, prev_hash, record_hash, hash_version FROM " +
-			metadata.PartitionName + " ORDER BY created_at"
+		query, err := buildPartitionExportQuery(metadata.PartitionName)
+		if err != nil {
+			return struct {
+				buf      *bytes.Buffer
+				rowCount int64
+				checksum string
+			}{}, err
+		}
 
 		rows, err := tx.QueryContext(ctx, query)
 		if err != nil {
@@ -692,7 +727,9 @@ func (aw *ArchivalWorker) exportPartition(
 		defer rows.Close()
 
 		var buf bytes.Buffer
+
 		hasher := sha256.New()
+
 		gzWriter, err := gzip.NewWriterLevel(&buf, gzip.BestCompression)
 		if err != nil {
 			return struct {
@@ -983,13 +1020,16 @@ func (aw *ArchivalWorker) listTenants(ctx context.Context) ([]string, error) {
 		defer rows.Close()
 
 		var tenants []string
+
 		for rows.Next() {
 			var tenant string
 			if err := rows.Scan(&tenant); err != nil {
 				return nil, fmt.Errorf("scan tenant schema: %w", err)
 			}
+
 			tenants = append(tenants, tenant)
 		}
+
 		if err := rows.Err(); err != nil {
 			return nil, fmt.Errorf("iterate tenant schemas: %w", err)
 		}
@@ -1018,28 +1058,7 @@ func withArchivalCurrentDBResult[T any](ctx context.Context, aw *ArchivalWorker,
 	}
 
 	if aw.infraProvider != nil {
-		lease, err := aw.infraProvider.GetPostgresConnection(ctx)
-		if err != nil {
-			return zero, fmt.Errorf("resolve postgres connection: %w", err)
-		}
-		defer lease.Release()
-
-		client := lease.Connection()
-		if client == nil {
-			return zero, command.ErrNilDB
-		}
-
-		resolver, err := client.Resolver(ctx)
-		if err != nil {
-			return zero, fmt.Errorf("resolve postgres db: %w", err)
-		}
-
-		primaryDBs := resolver.PrimaryDBs()
-		if len(primaryDBs) == 0 || primaryDBs[0] == nil {
-			return zero, command.ErrNilDB
-		}
-
-		return fn(primaryDBs[0])
+		return withArchivalProviderDBResult(ctx, aw.infraProvider, fn)
 	}
 
 	if aw.db == nil {
@@ -1047,6 +1066,51 @@ func withArchivalCurrentDBResult[T any](ctx context.Context, aw *ArchivalWorker,
 	}
 
 	return fn(aw.db)
+}
+
+func withArchivalProviderDBResult[T any](
+	ctx context.Context,
+	infraProvider sharedPorts.InfrastructureProvider,
+	fn func(*sql.DB) (T, error),
+) (T, error) {
+	var zero T
+
+	lease, err := infraProvider.GetPostgresConnection(ctx)
+	if err != nil {
+		return zero, fmt.Errorf("resolve postgres connection: %w", err)
+	}
+	defer lease.Release()
+
+	client := lease.Connection()
+	if client == nil {
+		return zero, command.ErrNilDB
+	}
+
+	resolver, err := client.Resolver(ctx)
+	if err != nil {
+		return zero, fmt.Errorf("resolve postgres db: %w", err)
+	}
+
+	primaryDBs := resolver.PrimaryDBs()
+	if len(primaryDBs) == 0 || primaryDBs[0] == nil {
+		return zero, command.ErrNilDB
+	}
+
+	return fn(primaryDBs[0])
+}
+
+func buildPartitionExportQuery(partitionName string) (string, error) {
+	if !archivalPartitionNameRegex.MatchString(partitionName) {
+		return "", fmt.Errorf("build partition export query: %w: %s", command.ErrInvalidPartitionName, partitionName)
+	}
+
+	var builder strings.Builder
+	builder.Grow(len(partitionName) + partitionExportQueryOverhead)
+	builder.WriteString("SELECT id, tenant_id, entity_type, entity_id, action, actor_id, changes, created_at, tenant_seq, prev_hash, record_hash, hash_version FROM ")
+	builder.WriteString(auth.QuoteIdentifier(partitionName))
+	builder.WriteString(" ORDER BY created_at")
+
+	return builder.String(), nil
 }
 
 // acquireLock attempts to acquire the distributed archival lock via Redis SET NX EX.

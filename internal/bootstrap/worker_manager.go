@@ -288,7 +288,7 @@ func (wm *WorkerManager) startSlotLocked(ctx context.Context, slot *workerSlot, 
 		return fmt.Errorf("worker %q: %w", slot.name, errWorkerDependencyUnavailable)
 	}
 
-	if err := applyWorkerRuntimeConfig(slot.name, worker, cfg); err != nil {
+	if err := applyWorkerRuntimeConfig(ctx, slot.name, worker, cfg); err != nil {
 		return fmt.Errorf("apply worker %q runtime config: %w", slot.name, err)
 	}
 

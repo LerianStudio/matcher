@@ -7,6 +7,7 @@
 package bootstrap
 
 import (
+	"context"
 	"sync"
 	"testing"
 
@@ -16,7 +17,9 @@ import (
 	configWorker "github.com/LerianStudio/matcher/internal/configuration/services/worker"
 	discoveryWorker "github.com/LerianStudio/matcher/internal/discovery/services/worker"
 	governanceWorker "github.com/LerianStudio/matcher/internal/governance/services/worker"
+	reportingStorage "github.com/LerianStudio/matcher/internal/reporting/adapters/storage"
 	reportingWorker "github.com/LerianStudio/matcher/internal/reporting/services/worker"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // --- Test doubles for cleanup, archival, and scheduler workers ---
@@ -51,8 +54,9 @@ func (w *runtimeAwareCleanupWorker) lastUpdate() *reportingWorker.CleanupWorkerC
 
 type runtimeAwareArchivalWorker struct {
 	mockWorker
-	mu      sync.Mutex
-	updates []governanceWorker.ArchivalWorkerConfig
+	mu             sync.Mutex
+	updates        []governanceWorker.ArchivalWorkerConfig
+	storageUpdates []sharedPorts.ObjectStorageClient
 }
 
 func (w *runtimeAwareArchivalWorker) UpdateRuntimeConfig(cfg governanceWorker.ArchivalWorkerConfig) error {
@@ -75,6 +79,26 @@ func (w *runtimeAwareArchivalWorker) lastUpdate() *governanceWorker.ArchivalWork
 	u := w.updates[len(w.updates)-1]
 
 	return &u
+}
+
+func (w *runtimeAwareArchivalWorker) UpdateRuntimeStorage(storage sharedPorts.ObjectStorageClient) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	w.storageUpdates = append(w.storageUpdates, storage)
+
+	return nil
+}
+
+func (w *runtimeAwareArchivalWorker) lastStorageUpdate() sharedPorts.ObjectStorageClient {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if len(w.storageUpdates) == 0 {
+		return nil
+	}
+
+	return w.storageUpdates[len(w.storageUpdates)-1]
 }
 
 type runtimeAwareSchedulerWorker struct {
@@ -145,7 +169,7 @@ func TestExtractWorkerConfig_AllNames(t *testing.T) {
 	}{
 		{"export", false, exportWorkerComparableConfig{PollIntervalSec: cfg.ExportWorker.PollIntervalSec, PageSize: cfg.ExportWorker.PageSize}},
 		{"cleanup", false, cleanupWorkerComparableConfig{IntervalSec: cfg.CleanupWorker.IntervalSec, BatchSize: cfg.CleanupWorker.BatchSize, GracePeriodSec: cfg.CleanupWorker.GracePeriodSec}},
-		{"archival", false, archivalWorkerComparableConfig{IntervalHours: cfg.Archival.IntervalHours, HotRetentionDays: cfg.Archival.HotRetentionDays, WarmRetentionMonths: cfg.Archival.WarmRetentionMonths, ColdRetentionMonths: cfg.Archival.ColdRetentionMonths, BatchSize: cfg.Archival.BatchSize, StorageBucket: cfg.Archival.StorageBucket, StoragePrefix: cfg.Archival.StoragePrefix, StorageClass: cfg.Archival.StorageClass, PartitionLookahead: cfg.Archival.PartitionLookahead}},
+		{"archival", false, archivalWorkerComparableConfig{IntervalHours: cfg.Archival.IntervalHours, HotRetentionDays: cfg.Archival.HotRetentionDays, WarmRetentionMonths: cfg.Archival.WarmRetentionMonths, ColdRetentionMonths: cfg.Archival.ColdRetentionMonths, BatchSize: cfg.Archival.BatchSize, StorageBucket: cfg.Archival.StorageBucket, StoragePrefix: cfg.Archival.StoragePrefix, StorageClass: cfg.Archival.StorageClass, PartitionLookahead: cfg.Archival.PartitionLookahead, StorageEndpoint: cfg.ObjectStorage.Endpoint, StorageRegion: cfg.ObjectStorage.Region, StorageAccessKeyID: cfg.ObjectStorage.AccessKeyID, StorageSecretKey: cfg.ObjectStorage.SecretAccessKey, StorageUsePathStyle: cfg.ObjectStorage.UsePathStyle}},
 		{"scheduler", false, schedulerWorkerComparableConfig{IntervalSec: cfg.Scheduler.IntervalSec}},
 		{"discovery", false, discoveryWorkerRuntimeConfig{Interval: cfg.FetcherDiscoveryInterval()}},
 		{"unknown", true, nil},
@@ -211,6 +235,16 @@ func TestWorkerConfigChanged_ArchivalPresignExpiryOnly_ReturnsFalse(t *testing.T
 	assert.False(t, workerConfigChanged("archival", old, newCfg))
 }
 
+func TestWorkerConfigChanged_ArchivalObjectStorageChange_ReturnsTrue(t *testing.T) {
+	t.Parallel()
+
+	old := defaultConfig()
+	newCfg := defaultConfig()
+	newCfg.ObjectStorage.Endpoint = "http://updated-storage:9000"
+
+	assert.True(t, workerConfigChanged("archival", old, newCfg))
+}
+
 func TestWorkerConfigChanged_NilOldConfig_ReturnsTrue(t *testing.T) {
 	t.Parallel()
 
@@ -235,7 +269,7 @@ func TestApplyWorkerRuntimeConfig_Export(t *testing.T) {
 	cfg.ExportWorker.PollIntervalSec = 10
 	cfg.ExportWorker.PageSize = 500
 
-	require.NoError(t, applyWorkerRuntimeConfig("export", worker, cfg))
+	require.NoError(t, applyWorkerRuntimeConfig(context.Background(), "export", worker, cfg))
 
 	updates := worker.lastUpdates()
 	require.Len(t, updates, 1)
@@ -251,7 +285,7 @@ func TestApplyWorkerRuntimeConfig_Cleanup(t *testing.T) {
 	cfg.CleanupWorker.IntervalSec = 7200
 	cfg.CleanupWorker.BatchSize = 50
 
-	require.NoError(t, applyWorkerRuntimeConfig("cleanup", worker, cfg))
+	require.NoError(t, applyWorkerRuntimeConfig(context.Background(), "cleanup", worker, cfg))
 
 	u := worker.lastUpdate()
 	require.NotNil(t, u)
@@ -266,13 +300,23 @@ func TestApplyWorkerRuntimeConfig_Archival(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.Archival.HotRetentionDays = 30
 	cfg.Archival.BatchSize = 2000
+	cfg.Archival.StorageBucket = "archive-bucket"
+	cfg.ObjectStorage.Endpoint = "http://localhost:8333"
 
-	require.NoError(t, applyWorkerRuntimeConfig("archival", worker, cfg))
+	originalNewS3Client := newS3ClientFn
+	t.Cleanup(func() { newS3ClientFn = originalNewS3Client })
+
+	newS3ClientFn = func(context.Context, reportingStorage.S3Config) (*reportingStorage.S3Client, error) {
+		return &reportingStorage.S3Client{}, nil
+	}
+
+	require.NoError(t, applyWorkerRuntimeConfig(context.Background(), "archival", worker, cfg))
 
 	u := worker.lastUpdate()
 	require.NotNil(t, u)
 	assert.Equal(t, 30, u.HotRetentionDays)
 	assert.Equal(t, 2000, u.BatchSize)
+	assert.NotNil(t, worker.lastStorageUpdate())
 }
 
 func TestApplyWorkerRuntimeConfig_Scheduler(t *testing.T) {
@@ -282,7 +326,7 @@ func TestApplyWorkerRuntimeConfig_Scheduler(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.Scheduler.IntervalSec = 120
 
-	require.NoError(t, applyWorkerRuntimeConfig("scheduler", worker, cfg))
+	require.NoError(t, applyWorkerRuntimeConfig(context.Background(), "scheduler", worker, cfg))
 
 	u := worker.lastUpdate()
 	require.NotNil(t, u)
@@ -296,7 +340,7 @@ func TestApplyWorkerRuntimeConfig_Discovery(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.Fetcher.DiscoveryIntervalSec = 45
 
-	require.NoError(t, applyWorkerRuntimeConfig("discovery", worker, cfg))
+	require.NoError(t, applyWorkerRuntimeConfig(context.Background(), "discovery", worker, cfg))
 
 	u := worker.lastUpdate()
 	require.NotNil(t, u)
@@ -308,7 +352,7 @@ func TestApplyWorkerRuntimeConfig_NilConfig_IsNoop(t *testing.T) {
 
 	worker := &runtimeAwareExportWorker{}
 	assert.NotPanics(t, func() {
-		require.NoError(t, applyWorkerRuntimeConfig("export", worker, nil))
+		require.NoError(t, applyWorkerRuntimeConfig(context.Background(), "export", worker, nil))
 	})
 	assert.Empty(t, worker.lastUpdates())
 }
@@ -318,7 +362,7 @@ func TestApplyWorkerRuntimeConfig_NilWorker_IsNoop(t *testing.T) {
 
 	cfg := defaultConfig()
 	assert.NotPanics(t, func() {
-		require.NoError(t, applyWorkerRuntimeConfig("export", nil, cfg))
+		require.NoError(t, applyWorkerRuntimeConfig(context.Background(), "export", nil, cfg))
 	})
 }
 
@@ -330,6 +374,6 @@ func TestApplyWorkerRuntimeConfig_WrongInterface_IsNoop(t *testing.T) {
 	cfg := defaultConfig()
 
 	assert.NotPanics(t, func() {
-		require.NoError(t, applyWorkerRuntimeConfig("export", worker, cfg))
+		require.NoError(t, applyWorkerRuntimeConfig(context.Background(), "export", worker, cfg))
 	})
 }

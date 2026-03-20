@@ -67,3 +67,17 @@ func TestInitArchivalComponents_DisabledArchival_ReturnsNil(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Nil(t, worker)
 }
+
+func TestInitArchivalComponents_DisabledArchivalWithRuntimeConfig_ReturnsNil(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cfg.Archival.Enabled = false
+
+	var cleanups []func()
+
+	worker, err := initArchivalComponents(nil, cfg, func() *Config { return cfg }, nil, nil, &cleanups)
+
+	assert.NoError(t, err)
+	assert.Nil(t, worker)
+}

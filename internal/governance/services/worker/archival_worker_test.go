@@ -322,6 +322,29 @@ func TestArchivalWorker_UpdateRuntimeConfig_WhileRunning_ReturnsError(t *testing
 	require.NoError(t, w.Stop())
 }
 
+func TestArchivalWorker_UpdateRuntimeStorage_WhileStopped_SwapsClient(t *testing.T) {
+	t.Parallel()
+
+	deps := setupTestDeps(t)
+	defer deps.ctrl.Finish()
+
+	w, err := NewArchivalWorker(
+		deps.archiveRepo,
+		deps.partitionMgr,
+		deps.storage,
+		deps.db,
+		deps.provider,
+		deps.cfg,
+		deps.logger,
+	)
+	require.NoError(t, err)
+
+	replacement := sharedPortMocks.NewMockObjectStorageClient(deps.ctrl)
+
+	require.NoError(t, w.UpdateRuntimeStorage(replacement))
+	assert.Same(t, replacement, w.storage)
+}
+
 func TestArchivalWorker_StopWithoutStart(t *testing.T) {
 	t.Parallel()
 
