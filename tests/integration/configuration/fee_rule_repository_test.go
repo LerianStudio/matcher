@@ -88,7 +88,15 @@ func TestFeeRuleRepository_CreateFindUpdateDelete(t *testing.T) {
 		fetched, err := repo.FindByID(ctx, rule.ID)
 		require.NoError(t, err)
 		require.Equal(t, rule.ID, fetched.ID)
+		require.Equal(t, fee.MatchingSideAny, fetched.Side)
+		require.Equal(t, 2, fetched.Priority)
 		require.Equal(t, scheduleA.ID, fetched.FeeScheduleID)
+		require.Len(t, fetched.Predicates, 1)
+		require.Equal(t, fee.FieldPredicate{
+			Field:    "institution",
+			Operator: fee.PredicateOperatorEquals,
+			Value:    "Itau",
+		}, fetched.Predicates[0])
 
 		secondRule, err := fee.NewFeeRule(ctx, contextID, scheduleB.ID, fee.MatchingSideRight, "Rule B", 1, nil)
 		require.NoError(t, err)
@@ -118,7 +126,10 @@ func TestFeeRuleRepository_CreateFindUpdateDelete(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, newName, updated.Name)
 		require.Equal(t, newPriority, updated.Priority)
+		require.Equal(t, fee.MatchingSideAny, updated.Side)
 		require.Equal(t, scheduleB.ID, updated.FeeScheduleID)
+		require.Len(t, updated.Predicates, 1)
+		require.Equal(t, fetched.Predicates, updated.Predicates)
 
 		err = repo.Delete(ctx, secondRule.ID)
 		require.NoError(t, err)

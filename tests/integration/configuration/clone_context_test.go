@@ -122,7 +122,10 @@ func setupSourceContextWithChildren(t *testing.T, h *integration.TestHarness, uc
 	require.NoError(t, err)
 
 	frRepo := configFeeRuleRepo.NewRepository(provider)
-	feeRule, err := fee.NewFeeRule(ctx, created.ID, createdSchedule.ID, fee.MatchingSideAny, "Clone Fee Rule", 1, nil)
+	feeRule, err := fee.NewFeeRule(ctx, created.ID, createdSchedule.ID, fee.MatchingSideAny, "Clone Fee Rule", 1, []fee.FieldPredicate{
+		{Field: "channel", Operator: fee.PredicateOperatorEquals, Value: "wire"},
+		{Field: "brand", Operator: fee.PredicateOperatorIn, Values: []string{"visa", "mastercard"}},
+	})
 	require.NoError(t, err)
 
 	err = frRepo.Create(ctx, feeRule)
@@ -168,6 +171,10 @@ func TestCloneContext_FullClone(t *testing.T) {
 		ctxRepo := contextRepo.NewRepository(h.Provider())
 		sourceContext, err := ctxRepo.FindByID(ctx, sourceContextID)
 		require.NoError(t, err)
+		frRepo := configFeeRuleRepo.NewRepository(h.Provider())
+		sourceRules, err := frRepo.FindByContextID(ctx, sourceContextID)
+		require.NoError(t, err)
+		require.Len(t, sourceRules, 1)
 
 		newName := "Cloned Full " + uuid.New().String()[:8]
 
@@ -199,6 +206,15 @@ func TestCloneContext_FullClone(t *testing.T) {
 		require.GreaterOrEqual(t, result.RulesCloned, 1)
 		require.GreaterOrEqual(t, result.FeeRulesCloned, 1)
 		require.GreaterOrEqual(t, result.FieldMapsCloned, 1)
+
+		clonedRules, err := frRepo.FindByContextID(ctx, result.Context.ID)
+		require.NoError(t, err)
+		require.Len(t, clonedRules, 1)
+		require.Equal(t, sourceRules[0].Side, clonedRules[0].Side)
+		require.Equal(t, sourceRules[0].Priority, clonedRules[0].Priority)
+		require.Equal(t, sourceRules[0].Name, clonedRules[0].Name)
+		require.Equal(t, sourceRules[0].FeeScheduleID, clonedRules[0].FeeScheduleID)
+		require.Equal(t, sourceRules[0].Predicates, clonedRules[0].Predicates)
 	})
 }
 

@@ -45,6 +45,7 @@ func TestSourceRepository_CreateAndFindByID(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, created.ID, fetched.ID)
 		require.Equal(t, created.Name, fetched.Name)
+		require.Equal(t, sharedfee.MatchingSideRight, fetched.Side)
 	})
 }
 
@@ -86,6 +87,21 @@ func TestSourceRepository_FindByContextID(t *testing.T) {
 		sources, _, err := repo.FindByContextID(ctx, h.Seed.ContextID, "", 100)
 		require.NoError(t, err)
 		require.GreaterOrEqual(t, len(sources), 2)
+
+		var foundLeft, foundRight bool
+		for _, source := range sources {
+			switch source.ID {
+			case ledgerSource.ID:
+				require.Equal(t, sharedfee.MatchingSideLeft, source.Side)
+				foundLeft = true
+			case bankSource.ID:
+				require.Equal(t, sharedfee.MatchingSideRight, source.Side)
+				foundRight = true
+			}
+		}
+
+		require.True(t, foundLeft)
+		require.True(t, foundRight)
 	})
 }
 
@@ -163,6 +179,7 @@ func TestSourceRepository_Update(t *testing.T) {
 		fetched, err := repo.FindByID(ctx, h.Seed.ContextID, created.ID)
 		require.NoError(t, err)
 		require.Equal(t, "Updated Source", fetched.Name)
+		require.Equal(t, sharedfee.MatchingSideLeft, fetched.Side)
 	})
 }
 
