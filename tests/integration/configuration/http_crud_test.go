@@ -16,6 +16,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	configCommand "github.com/LerianStudio/matcher/internal/configuration/services/command"
 	configQuery "github.com/LerianStudio/matcher/internal/configuration/services/query"
+	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
@@ -146,6 +147,7 @@ func TestConfigServiceCRUD_SourceLifecycle(t *testing.T) {
 		created, err := cmdUC.CreateSource(ctx, parent.ID, entities.CreateReconciliationSourceInput{
 			Name:   "Test Ledger Source",
 			Type:   value_objects.SourceTypeLedger,
+			Side:   sharedfee.MatchingSideLeft,
 			Config: map[string]any{"endpoint": "https://ledger.example.com"},
 		})
 		require.NoError(t, err)
@@ -209,6 +211,7 @@ func TestConfigServiceCRUD_FieldMapLifecycle(t *testing.T) {
 		source, err := cmdUC.CreateSource(ctx, parent.ID, entities.CreateReconciliationSourceInput{
 			Name:   "FM Source",
 			Type:   value_objects.SourceTypeBank,
+			Side:   sharedfee.MatchingSideRight,
 			Config: map[string]any{},
 		})
 		require.NoError(t, err)
@@ -349,6 +352,7 @@ func TestConfigServiceCRUD_CreateSourceNonExistentContext(t *testing.T) {
 		_, err := cmdUC.CreateSource(ctx, bogusContextID, entities.CreateReconciliationSourceInput{
 			Name:   "Orphan Source",
 			Type:   value_objects.SourceTypeLedger,
+			Side:   sharedfee.MatchingSideLeft,
 			Config: map[string]any{},
 		})
 		require.Error(t, err, "creating a source under a non-existent context must fail")

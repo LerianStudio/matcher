@@ -12,6 +12,7 @@ import (
 	sourceRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/source"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
@@ -28,6 +29,7 @@ func TestSourceRepository_CreateAndFindByID(t *testing.T) {
 			entities.CreateReconciliationSourceInput{
 				Name:   "Bank Source",
 				Type:   value_objects.SourceTypeBank,
+				Side:   sharedfee.MatchingSideRight,
 				Config: map[string]any{"format": "mt940"},
 			},
 		)
@@ -59,6 +61,7 @@ func TestSourceRepository_FindByContextID(t *testing.T) {
 			entities.CreateReconciliationSourceInput{
 				Name:   "Ledger Source",
 				Type:   value_objects.SourceTypeLedger,
+				Side:   sharedfee.MatchingSideLeft,
 				Config: map[string]any{},
 			},
 		)
@@ -72,6 +75,7 @@ func TestSourceRepository_FindByContextID(t *testing.T) {
 			entities.CreateReconciliationSourceInput{
 				Name:   "Bank Source",
 				Type:   value_objects.SourceTypeBank,
+				Side:   sharedfee.MatchingSideRight,
 				Config: map[string]any{},
 			},
 		)
@@ -98,6 +102,7 @@ func TestSourceRepository_FindByContextIDAndType(t *testing.T) {
 			entities.CreateReconciliationSourceInput{
 				Name:   "Bank Source For Type Filter",
 				Type:   value_objects.SourceTypeBank,
+				Side:   sharedfee.MatchingSideRight,
 				Config: map[string]any{},
 			},
 		)
@@ -141,6 +146,7 @@ func TestSourceRepository_Update(t *testing.T) {
 			entities.CreateReconciliationSourceInput{
 				Name:   "Original Source",
 				Type:   value_objects.SourceTypeLedger,
+				Side:   sharedfee.MatchingSideLeft,
 				Config: map[string]any{},
 			},
 		)
@@ -173,6 +179,7 @@ func TestSourceRepository_Delete(t *testing.T) {
 			entities.CreateReconciliationSourceInput{
 				Name:   "To Be Deleted Source",
 				Type:   value_objects.SourceTypeLedger,
+				Side:   sharedfee.MatchingSideLeft,
 				Config: map[string]any{},
 			},
 		)

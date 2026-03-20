@@ -55,10 +55,9 @@ func TestIntegrationE4T9_DryRunIsolation(t *testing.T) {
 		require.Len(t, before, 2)
 
 		dryRun, dryGroups, err := wired.MatchingUC.RunMatch(ctx, matchingCommand.RunMatchInput{
-			TenantID:        h.Seed.TenantID,
-			ContextID:       seed.ContextID,
-			Mode:            matchingVO.MatchRunModeDryRun,
-			PrimarySourceID: nil,
+			TenantID:  h.Seed.TenantID,
+			ContextID: seed.ContextID,
+			Mode:      matchingVO.MatchRunModeDryRun,
 		})
 		require.NoError(t, err)
 		require.NotNil(t, dryRun)
@@ -96,10 +95,9 @@ func TestIntegrationE4T9_DryRunIsolation(t *testing.T) {
 		commitRun, commitGroups, err := wired.MatchingUC.RunMatch(
 			ctx,
 			matchingCommand.RunMatchInput{
-				TenantID:        h.Seed.TenantID,
-				ContextID:       seed.ContextID,
-				Mode:            matchingVO.MatchRunModeCommit,
-				PrimarySourceID: nil,
+				TenantID:  h.Seed.TenantID,
+				ContextID: seed.ContextID,
+				Mode:      matchingVO.MatchRunModeCommit,
 			},
 		)
 		require.NoError(t, err)

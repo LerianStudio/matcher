@@ -325,10 +325,9 @@ func TestAdjustmentRepository_ListByMatchGroupID(t *testing.T) {
 		require.NoError(t, err)
 
 		_, groups2, err := wired.MatchingUC.RunMatch(ctx, matchingCommand.RunMatchInput{
-			TenantID:        h.Seed.TenantID,
-			ContextID:       seed.ContextID,
-			Mode:            matchingVO.MatchRunModeCommit,
-			PrimarySourceID: nil,
+			TenantID:  h.Seed.TenantID,
+			ContextID: seed.ContextID,
+			Mode:      matchingVO.MatchRunModeCommit,
 		})
 		require.NoError(t, err)
 		require.NotEmpty(t, groups2, "expected at least one match group from second RunMatch")

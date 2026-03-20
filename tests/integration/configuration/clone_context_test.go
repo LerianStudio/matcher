@@ -3,18 +3,23 @@
 package configuration
 
 import (
+	"context"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 
 	contextRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/context"
+	configFeeRuleRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/fee_rule"
 	fieldMapRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/field_map"
 	matchRuleRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/match_rule"
 	sourceRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/source"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	configCommand "github.com/LerianStudio/matcher/internal/configuration/services/command"
+	feeScheduleRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/fee_schedule"
+	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
@@ -32,9 +37,11 @@ func buildCloneUseCase(t *testing.T, h *integration.TestHarness) *configCommand.
 
 	fmRepo := fieldMapRepo.NewRepository(provider)
 	mrRepo := matchRuleRepo.NewRepository(provider)
+	frRepo := configFeeRuleRepo.NewRepository(provider)
 
 	uc, err := configCommand.NewUseCase(
 		ctxRepo, srcRepo, fmRepo, mrRepo,
+		configCommand.WithFeeRuleRepository(frRepo),
 		configCommand.WithInfrastructureProvider(provider),
 	)
 	require.NoError(t, err)
@@ -71,6 +78,7 @@ func setupSourceContextWithChildren(t *testing.T, h *integration.TestHarness, uc
 	src, err := entities.NewReconciliationSource(ctx, created.ID, entities.CreateReconciliationSourceInput{
 		Name:   "Test Source",
 		Type:   value_objects.SourceTypeLedger,
+		Side:   fee.MatchingSideLeft,
 		Config: map[string]any{},
 	})
 	require.NoError(t, err)
@@ -107,7 +115,41 @@ func setupSourceContextWithChildren(t *testing.T, h *integration.TestHarness, uc
 	_, err = mrRepo.Create(ctx, rule)
 	require.NoError(t, err)
 
+	// --- fee schedule + fee rule ---
+	fsRepo := feeScheduleRepo.NewRepository(provider)
+
+	createdSchedule, err := fsRepo.Create(ctx, mustNewFeeSchedule(t, h.Seed.TenantID, "Clone Schedule"))
+	require.NoError(t, err)
+
+	frRepo := configFeeRuleRepo.NewRepository(provider)
+	feeRule, err := fee.NewFeeRule(ctx, created.ID, createdSchedule.ID, fee.MatchingSideAny, "Clone Fee Rule", 1, nil)
+	require.NoError(t, err)
+
+	err = frRepo.Create(ctx, feeRule)
+	require.NoError(t, err)
+
 	return created.ID
+}
+
+func mustNewFeeSchedule(t *testing.T, tenantID uuid.UUID, name string) *fee.FeeSchedule {
+	t.Helper()
+
+	schedule, err := fee.NewFeeSchedule(context.Background(), fee.NewFeeScheduleInput{
+		TenantID:         tenantID,
+		Name:             name + " " + uuid.New().String()[:8],
+		Currency:         "USD",
+		ApplicationOrder: fee.ApplicationOrderParallel,
+		RoundingScale:    2,
+		RoundingMode:     fee.RoundingModeHalfUp,
+		Items: []fee.FeeScheduleItemInput{{
+			Name:      "Processing Fee",
+			Priority:  1,
+			Structure: fee.FlatFee{Amount: decimal.NewFromFloat(1.50)},
+		}},
+	})
+	require.NoError(t, err)
+
+	return schedule
 }
 
 // ---------------------------------------------------------------------------
@@ -155,6 +197,7 @@ func TestCloneContext_FullClone(t *testing.T) {
 		// Children were cloned.
 		require.GreaterOrEqual(t, result.SourcesCloned, 1)
 		require.GreaterOrEqual(t, result.RulesCloned, 1)
+		require.GreaterOrEqual(t, result.FeeRulesCloned, 1)
 		require.GreaterOrEqual(t, result.FieldMapsCloned, 1)
 	})
 }
@@ -182,6 +225,7 @@ func TestCloneContext_OnlySources(t *testing.T) {
 
 		// Rules NOT cloned.
 		require.Equal(t, 0, result.RulesCloned)
+		require.Equal(t, 0, result.FeeRulesCloned)
 	})
 }
 
@@ -204,6 +248,7 @@ func TestCloneContext_OnlyRules(t *testing.T) {
 
 		// Rules cloned.
 		require.GreaterOrEqual(t, result.RulesCloned, 1)
+		require.GreaterOrEqual(t, result.FeeRulesCloned, 1)
 
 		// Sources NOT cloned.
 		require.Equal(t, 0, result.SourcesCloned)
@@ -232,6 +277,7 @@ func TestCloneContext_EmptyClone(t *testing.T) {
 		// Only the context itself was created — no children.
 		require.Equal(t, 0, result.SourcesCloned)
 		require.Equal(t, 0, result.RulesCloned)
+		require.Equal(t, 0, result.FeeRulesCloned)
 		require.Equal(t, 0, result.FieldMapsCloned)
 	})
 }
