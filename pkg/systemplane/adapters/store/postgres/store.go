@@ -119,6 +119,7 @@ func (store *Store) Get(ctx context.Context, target domain.Target) (ports.ReadRe
 			if err != nil {
 				return ports.ReadResult{}, fmt.Errorf("postgres store get: unmarshal value for key %q: %w", key, err)
 			}
+
 			decodedValue, err = store.decryptValue(target, key, decodedValue)
 			if err != nil {
 				return ports.ReadResult{}, fmt.Errorf("postgres store get: decrypt value for key %q: %w", key, err)
@@ -306,8 +307,11 @@ func (store *Store) ensureRevisionRow(
 		actor.ID,
 		source,
 	)
+	if err != nil {
+		return fmt.Errorf("insert revision row: %w", err)
+	}
 
-	return err
+	return nil
 }
 
 // lockAndReadRevision selects the target revision row FOR UPDATE to prevent
@@ -365,12 +369,12 @@ func (store *Store) updateRevisionRow(
 		source,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("update revision row exec: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return err
+		return fmt.Errorf("update revision row rows affected: %w", err)
 	}
 
 	if rowsAffected != 1 {
@@ -454,8 +458,11 @@ func (store *Store) deleteEntry(
 	_, err := tx.ExecContext(ctx, query,
 		string(target.Kind), string(target.Scope), target.SubjectID, key,
 	)
+	if err != nil {
+		return fmt.Errorf("delete entry exec: %w", err)
+	}
 
-	return err
+	return nil
 }
 
 // upsertEntry inserts or updates an entry using ON CONFLICT.
@@ -489,8 +496,11 @@ func (store *Store) upsertEntry(
 		string(target.Kind), string(target.Scope), target.SubjectID, op.Key,
 		valueBytes, revision.Uint64(), now, actor.ID, source,
 	)
+	if err != nil {
+		return fmt.Errorf("upsert entry exec: %w", err)
+	}
 
-	return err
+	return nil
 }
 
 // insertHistory appends an audit record to the history table.
@@ -530,8 +540,11 @@ func (store *Store) insertHistory(
 		nullableJSONB(oldValueRaw), nullableJSONB(newValueRaw),
 		revision.Uint64(), actor.ID, now, source,
 	)
+	if err != nil {
+		return fmt.Errorf("insert history exec: %w", err)
+	}
 
-	return err
+	return nil
 }
 
 func (store *Store) encryptValue(target domain.Target, key string, value any) (any, error) {
@@ -539,7 +552,12 @@ func (store *Store) encryptValue(target domain.Target, key string, value any) (a
 		return value, nil
 	}
 
-	return store.secretCodec.Encrypt(target, key, value)
+	encryptedValue, err := store.secretCodec.Encrypt(target, key, value)
+	if err != nil {
+		return nil, fmt.Errorf("postgres store encrypt value %q: %w", key, err)
+	}
+
+	return encryptedValue, nil
 }
 
 func (store *Store) decryptValue(target domain.Target, key string, value any) (any, error) {
@@ -547,7 +565,12 @@ func (store *Store) decryptValue(target domain.Target, key string, value any) (a
 		return value, nil
 	}
 
-	return store.secretCodec.Decrypt(target, key, value)
+	decryptedValue, err := store.secretCodec.Decrypt(target, key, value)
+	if err != nil {
+		return nil, fmt.Errorf("postgres store decrypt value %q: %w", key, err)
+	}
+
+	return decryptedValue, nil
 }
 
 // notify sends a pg_notify event with a JSON payload describing the change.
@@ -572,8 +595,11 @@ func (store *Store) notify(
 	}
 
 	_, err = tx.ExecContext(ctx, "SELECT pg_notify($1, $2)", store.notifyChannel, string(payloadBytes))
+	if err != nil {
+		return fmt.Errorf("notify exec: %w", err)
+	}
 
-	return err
+	return nil
 }
 
 func (store *Store) escalateBehavior(ops []ports.WriteOp) domain.ApplyBehavior {
@@ -582,11 +608,13 @@ func (store *Store) escalateBehavior(ops []ports.WriteOp) domain.ApplyBehavior {
 	}
 
 	escalation := domain.ApplyLiveRead
+
 	for _, op := range ops {
 		behavior, ok := store.applyBehaviors[op.Key]
 		if !ok {
 			return domain.ApplyBundleRebuild
 		}
+
 		if behavior.Strength() > escalation.Strength() {
 			escalation = behavior
 		}

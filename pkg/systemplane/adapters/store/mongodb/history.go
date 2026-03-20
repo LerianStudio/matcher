@@ -74,6 +74,7 @@ func (historyStore *HistoryStore) ListHistory(ctx context.Context,
 		if err != nil {
 			return nil, fmt.Errorf("mongodb history list: decode secret history: %w", err)
 		}
+
 		entries[i] = entry
 	}
 

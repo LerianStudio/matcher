@@ -102,6 +102,19 @@ type notifyPayload struct {
 // listener goroutine. If the handler blocks, subsequent signals are delayed but
 // never dropped (PostgreSQL buffers them until the connection reads them).
 func (feed *Feed) Subscribe(ctx context.Context, handler func(ports.ChangeSignal)) error {
+	if err := feed.validateSubscribeInput(handler); err != nil {
+		return err
+	}
+
+	knownRevisions, err := feed.fetchRevisions(ctx)
+	if err != nil {
+		return fmt.Errorf("pg changefeed subscribe: initial revision snapshot: %w", err)
+	}
+
+	return feed.subscribeLoop(ctx, knownRevisions, handler)
+}
+
+func (feed *Feed) validateSubscribeInput(handler func(ports.ChangeSignal)) error {
 	if feed == nil {
 		return ErrNilFeed
 	}
@@ -123,23 +136,23 @@ func (feed *Feed) Subscribe(ctx context.Context, handler func(ports.ChangeSignal
 	}
 
 	if err := feed.validateRevisionSource(); err != nil {
-		return err
+		return fmt.Errorf("pg changefeed subscribe: validate revision source: %w", err)
 	}
 
-	knownRevisions, err := feed.fetchRevisions(ctx)
-	if err != nil {
-		return fmt.Errorf("pg changefeed subscribe: initial revision snapshot: %w", err)
-	}
+	return nil
+}
 
+func (feed *Feed) subscribeLoop(ctx context.Context, knownRevisions map[string]trackedRevision, handler func(ports.ChangeSignal)) error {
 	var attempt int
 
 	for {
 		listenErr := feed.listenLoop(ctx, knownRevisions, func(signal ports.ChangeSignal) error {
 			if err := basechangefeed.SafeInvokeHandler(handler, signal); err != nil {
-				return err
+				return fmt.Errorf("pg changefeed subscribe: handler: %w", err)
 			}
 
 			knownRevisions[signal.Target.String()] = trackedRevision{Target: signal.Target, Revision: signal.Revision, ApplyBehavior: signal.ApplyBehavior}
+
 			return nil
 		})
 		if errors.Is(listenErr, basechangefeed.ErrHandlerPanic) {
@@ -152,7 +165,7 @@ func (feed *Feed) Subscribe(ctx context.Context, handler func(ports.ChangeSignal
 
 		shouldReset, err := feed.reconnectAndResync(ctx, &attempt, knownRevisions, handler)
 		if err != nil {
-			return err
+			return fmt.Errorf("pg changefeed subscribe: reconnect and resync: %w", err)
 		}
 
 		if shouldReset {
@@ -220,8 +233,9 @@ func (feed *Feed) listenLoop(ctx context.Context, known map[string]trackedRevisi
 
 	if err := feed.resyncMissedSignals(ctx, known, handler); err != nil {
 		if errors.Is(err, basechangefeed.ErrHandlerPanic) {
-			return err
+			return fmt.Errorf("pg changefeed initial resync: %w", err)
 		}
+
 		return fmt.Errorf("pg changefeed initial resync: %w", err)
 	}
 
@@ -314,7 +328,7 @@ func (feed *Feed) fetchRevisions(ctx context.Context) (map[string]trackedRevisio
 func (feed *Feed) resyncMissedSignals(ctx context.Context, known map[string]trackedRevision, handler func(ports.ChangeSignal) error) error {
 	current, err := feed.fetchRevisions(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("pg changefeed resync revisions: %w", err)
 	}
 
 	keys := make([]string, 0, len(current))
@@ -331,6 +345,7 @@ func (feed *Feed) resyncMissedSignals(ctx context.Context, known map[string]trac
 		if exists && previous.Revision == revision.Revision {
 			continue
 		}
+
 		if exists && revision.Revision > previous.Revision.Next() {
 			revision.ApplyBehavior = domain.ApplyBundleRebuild
 		}
@@ -338,6 +353,7 @@ func (feed *Feed) resyncMissedSignals(ctx context.Context, known map[string]trac
 		if err := handler(ports.ChangeSignal{Target: revision.Target, Revision: revision.Revision, ApplyBehavior: revision.ApplyBehavior}); err != nil {
 			return fmt.Errorf("pg changefeed resync: %w", err)
 		}
+
 		known[key] = revision
 	}
 

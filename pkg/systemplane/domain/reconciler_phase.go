@@ -48,8 +48,8 @@ const (
 var ErrInvalidReconcilerPhase = errors.New("invalid reconciler phase")
 
 // String returns a human-readable label for the phase.
-func (p ReconcilerPhase) String() string {
-	switch p {
+func (phase ReconcilerPhase) String() string {
+	switch phase {
 	case PhaseStateSync:
 		return "state-sync"
 	case PhaseValidation:
@@ -57,13 +57,13 @@ func (p ReconcilerPhase) String() string {
 	case PhaseSideEffect:
 		return "side-effect"
 	default:
-		return fmt.Sprintf("unknown(%d)", int(p))
+		return fmt.Sprintf("unknown(%d)", int(phase))
 	}
 }
 
 // IsValid reports whether the phase is a recognized value.
-func (p ReconcilerPhase) IsValid() bool {
-	switch p {
+func (phase ReconcilerPhase) IsValid() bool {
+	switch phase {
 	case PhaseStateSync, PhaseValidation, PhaseSideEffect:
 		return true
 	}
@@ -72,8 +72,8 @@ func (p ReconcilerPhase) IsValid() bool {
 }
 
 // ParseReconcilerPhase parses a string into a ReconcilerPhase (case-insensitive).
-func ParseReconcilerPhase(s string) (ReconcilerPhase, error) {
-	switch strings.ToLower(strings.TrimSpace(s)) {
+func ParseReconcilerPhase(rawValue string) (ReconcilerPhase, error) {
+	switch strings.ToLower(strings.TrimSpace(rawValue)) {
 	case "state-sync":
 		return PhaseStateSync, nil
 	case "validation":
@@ -81,6 +81,6 @@ func ParseReconcilerPhase(s string) (ReconcilerPhase, error) {
 	case "side-effect":
 		return PhaseSideEffect, nil
 	default:
-		return -1, fmt.Errorf("parse %q: %w", s, ErrInvalidReconcilerPhase)
+		return -1, fmt.Errorf("parse %q: %w", rawValue, ErrInvalidReconcilerPhase)
 	}
 }

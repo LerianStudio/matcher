@@ -113,10 +113,11 @@ func (feed *Feed) subscribeChangeStream(ctx context.Context, handler func(ports.
 	for {
 		streamErr := feed.subscribeChangeStreamOnce(ctx, known, func(signal ports.ChangeSignal) error {
 			if err := basechangefeed.SafeInvokeHandler(handler, signal); err != nil {
-				return err
+				return fmt.Errorf("mongodb feed: handler: %w", err)
 			}
 
 			known[signal.Target.String()] = pollSnapshot{Target: signal.Target, Revision: signal.Revision, ApplyBehavior: signal.ApplyBehavior}
+
 			return nil
 		})
 		if errors.Is(streamErr, basechangefeed.ErrHandlerPanic) {
@@ -181,8 +182,9 @@ func (feed *Feed) subscribeChangeStreamOnce(ctx context.Context, known map[strin
 
 	if err := feed.resyncMissedSignals(ctx, known, handler); err != nil {
 		if errors.Is(err, basechangefeed.ErrHandlerPanic) {
-			return err
+			return fmt.Errorf("mongodb feed initial resync: %w", err)
 		}
+
 		return fmt.Errorf("mongodb feed initial resync: %w", err)
 	}
 
@@ -218,7 +220,7 @@ func (feed *Feed) subscribeChangeStreamOnce(ctx context.Context, known map[strin
 func (feed *Feed) resyncMissedSignals(ctx context.Context, known map[string]pollSnapshot, handler func(ports.ChangeSignal) error) error {
 	current, err := feed.pollRevisions(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("mongodb changefeed resync revisions: %w", err)
 	}
 
 	keys := make([]string, 0, len(current))
@@ -235,6 +237,7 @@ func (feed *Feed) resyncMissedSignals(ctx context.Context, known map[string]poll
 		if exists && previous.Revision == revision.Revision {
 			continue
 		}
+
 		if exists && revision.Revision > previous.Revision.Next() {
 			revision.ApplyBehavior = domain.ApplyBundleRebuild
 		}
@@ -242,6 +245,7 @@ func (feed *Feed) resyncMissedSignals(ctx context.Context, known map[string]poll
 		if err := handler(ports.ChangeSignal{Target: revision.Target, Revision: revision.Revision, ApplyBehavior: revision.ApplyBehavior}); err != nil {
 			return fmt.Errorf("mongodb changefeed resync: %w", err)
 		}
+
 		known[key] = revision
 	}
 
@@ -315,6 +319,7 @@ func (feed *Feed) subscribePoll(ctx context.Context, handler func(ports.ChangeSi
 					if exists && rev.Revision > prev.Revision.Next() {
 						rev.ApplyBehavior = domain.ApplyBundleRebuild
 					}
+
 					signal := ports.ChangeSignal{
 						Target:        rev.Target,
 						Revision:      rev.Revision,
@@ -323,6 +328,7 @@ func (feed *Feed) subscribePoll(ctx context.Context, handler func(ports.ChangeSi
 					if err := basechangefeed.SafeInvokeHandler(handler, signal); err != nil {
 						return fmt.Errorf("mongodb feed poll: handler: %w", err)
 					}
+
 					known[key] = rev
 				}
 			}

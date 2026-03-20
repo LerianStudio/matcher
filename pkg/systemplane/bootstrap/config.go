@@ -34,6 +34,7 @@ type BootstrapConfig struct {
 	ApplyBehaviors map[string]domain.ApplyBehavior
 }
 
+// SecretStoreConfig holds bootstrap-only encryption settings for secret values.
 type SecretStoreConfig struct {
 	MasterKey  string
 	SecretKeys []string

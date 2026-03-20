@@ -67,6 +67,7 @@ func (manager *defaultManager) previewConfigSnapshot(ctx context.Context, ops []
 		if err != nil {
 			return domain.Snapshot{}, fmt.Errorf("build fresh snapshot: %w", err)
 		}
+
 		current = cloneSnapshot(fresh)
 	}
 
@@ -202,6 +203,7 @@ func (manager *defaultManager) applyEscalation(ctx context.Context, target domai
 		if err := manager.supervisor.PublishSnapshot(ctx, snap, "live-read"); err != nil {
 			return fmt.Errorf("publish snapshot for live-read: %w", err)
 		}
+
 		if manager.stateSync != nil {
 			manager.stateSync(ctx, snap)
 		}
@@ -216,6 +218,7 @@ func (manager *defaultManager) applyEscalation(ctx context.Context, target domai
 		if err := manager.supervisor.ReconcileCurrent(ctx, snap, "worker-reconcile"); err != nil {
 			return fmt.Errorf("reconcile current for worker-reconcile: %w", err)
 		}
+
 		if manager.stateSync != nil {
 			manager.stateSync(ctx, snap)
 		}
@@ -232,6 +235,8 @@ func (manager *defaultManager) applyEscalation(ctx context.Context, target domai
 	}
 }
 
+// ApplyChangeSignal applies an externally produced change signal using the
+// signal's escalation behavior or a safe rebuild fallback.
 func (manager *defaultManager) ApplyChangeSignal(ctx context.Context, signal ports.ChangeSignal) error {
 	behavior := signal.ApplyBehavior
 	if !behavior.IsValid() {

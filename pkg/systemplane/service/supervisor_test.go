@@ -131,6 +131,57 @@ func TestSupervisor_Reload_ReconcileFailed_RollsBackAndClosesCandidate(t *testin
 	assert.True(t, candidate.Closed)
 }
 
+func TestSupervisor_Reload_FailedReconcileDoesNotNotifyObserver(t *testing.T) {
+	t.Parallel()
+
+	builder, _, factory := testSupervisorDeps(t)
+	reconciler := testutil.NewFakeReconciler("failing-rec")
+	reconciler.ReconcileErr = errors.New("boom")
+	observerCalls := 0
+
+	sv, err := NewSupervisor(SupervisorConfig{
+		Builder:     builder,
+		Factory:     factory,
+		Reconcilers: []ports.BundleReconciler{reconciler},
+		Observer: func(ReloadEvent) {
+			observerCalls++
+		},
+	})
+	require.NoError(t, err)
+
+	err = sv.Reload(context.Background(), "initial")
+	require.Error(t, err)
+	assert.Zero(t, observerCalls)
+}
+
+func TestSupervisor_Reload_IncrementalReconcileFailureDoesNotCloseCandidateWithoutDiscarder(t *testing.T) {
+	t.Parallel()
+
+	builder, _, _ := testSupervisorDeps(t)
+	factory := testutil.NewFakeIncrementalBundleFactory()
+	validation := testutil.NewFakeReconcilerWithPhase("validation", domain.PhaseValidation)
+
+	sv, err := NewSupervisor(SupervisorConfig{
+		Builder:     builder,
+		Factory:     factory,
+		Reconcilers: []ports.BundleReconciler{validation},
+	})
+	require.NoError(t, err)
+	require.NoError(t, sv.Reload(context.Background(), "initial"))
+
+	var candidate *testutil.FakeBundle
+	factory.IncrementalBuildFunc = func(_ context.Context, _ domain.Snapshot, _ domain.RuntimeBundle, _ domain.Snapshot) (domain.RuntimeBundle, error) {
+		candidate = &testutil.FakeBundle{}
+		return candidate, nil
+	}
+	validation.ReconcileErr = errors.New("boom")
+
+	err = sv.Reload(context.Background(), "incremental-failure")
+	require.Error(t, err)
+	require.NotNil(t, candidate)
+	assert.False(t, candidate.Closed)
+}
+
 func TestSupervisor_ReconcileCurrent_RequiresCurrentBundle(t *testing.T) {
 	t.Parallel()
 

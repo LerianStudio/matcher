@@ -136,6 +136,7 @@ func (store *Store) readEntriesInCollection(ctx context.Context, coll *mongo.Col
 		if err != nil {
 			return nil, fmt.Errorf("decode secret entry: %w", err)
 		}
+
 		entries[i] = entry
 	}
 
@@ -292,7 +293,12 @@ func (store *Store) encryptValue(target domain.Target, key string, value any) (a
 		return value, nil
 	}
 
-	return store.secretCodec.Encrypt(target, key, value)
+	encryptedValue, err := store.secretCodec.Encrypt(target, key, value)
+	if err != nil {
+		return nil, fmt.Errorf("mongodb store encrypt value %q: %w", key, err)
+	}
+
+	return encryptedValue, nil
 }
 
 // Internal helpers.
@@ -412,11 +418,13 @@ func (store *Store) escalateBehavior(ops []ports.WriteOp) domain.ApplyBehavior {
 	}
 
 	escalation := domain.ApplyLiveRead
+
 	for _, op := range ops {
 		behavior, ok := store.applyBehaviors[op.Key]
 		if !ok {
 			return domain.ApplyBundleRebuild
 		}
+
 		if behavior.Strength() > escalation.Strength() {
 			escalation = behavior
 		}

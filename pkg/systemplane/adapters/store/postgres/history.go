@@ -146,6 +146,7 @@ func (historyStore *HistoryStore) scanHistoryEntry(rows *sql.Rows) (ports.Histor
 		if err != nil {
 			return ports.HistoryEntry{}, fmt.Errorf("postgres history list: decrypt old_value: %w", err)
 		}
+
 		entry.OldValue = decodedOldValue
 	}
 
@@ -159,6 +160,7 @@ func (historyStore *HistoryStore) scanHistoryEntry(rows *sql.Rows) (ports.Histor
 		if err != nil {
 			return ports.HistoryEntry{}, fmt.Errorf("postgres history list: decrypt new_value: %w", err)
 		}
+
 		entry.NewValue = decodedNewValue
 	}
 
@@ -170,7 +172,12 @@ func (historyStore *HistoryStore) decryptValue(target domain.Target, key string,
 		return value, nil
 	}
 
-	return historyStore.secretCodec.Decrypt(target, key, value)
+	decryptedValue, err := historyStore.secretCodec.Decrypt(target, key, value)
+	if err != nil {
+		return nil, fmt.Errorf("postgres history decrypt value %q: %w", key, err)
+	}
+
+	return decryptedValue, nil
 }
 
 func decodeOptionalJSONValue(rawValue []byte, fieldName string) (any, bool, error) {

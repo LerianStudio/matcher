@@ -112,6 +112,35 @@ type resourceAdopter interface {
 	AdoptResourcesFrom(previous domain.RuntimeBundle)
 }
 
+type rollbackDiscarder interface {
+	Discard(context.Context) error
+}
+
+func discardFailedCandidate(ctx context.Context, candidate domain.RuntimeBundle, strategy BuildStrategy) {
+	if isNilRuntimeBundle(candidate) {
+		return
+	}
+
+	if strategy == BuildStrategyIncremental {
+		discarder, ok := candidate.(rollbackDiscarder)
+		if !ok {
+			return
+		}
+
+		_ = discarder.Discard(ctx)
+
+		return
+	}
+
+	if discarder, ok := candidate.(rollbackDiscarder); ok {
+		_ = discarder.Discard(ctx)
+
+		return
+	}
+
+	_ = candidate.Close(ctx)
+}
+
 // Current returns the currently active runtime bundle.
 func (supervisor *defaultSupervisor) Current() domain.RuntimeBundle {
 	holder := supervisor.bundle.Load()
@@ -221,7 +250,7 @@ func (supervisor *defaultSupervisor) Reload(ctx context.Context, reason string) 
 	// failed, the "rollback" would restore a gutted previous bundle.
 	for _, reconciler := range supervisor.reconcilers {
 		if err := reconciler.Reconcile(ctx, previousBundle, candidate, snap); err != nil {
-			_ = candidate.Close(ctx)
+			discardFailedCandidate(ctx, candidate, strategy)
 
 			return fmt.Errorf("reload: %s: %w: %w", reconciler.Name(), domain.ErrReconcileFailed, err)
 		}
@@ -230,6 +259,7 @@ func (supervisor *defaultSupervisor) Reload(ctx context.Context, reason string) 
 	// All reconcilers passed — commit atomically.
 	supervisor.snapshot.Store(&snap)
 	supervisor.bundle.Store(&bundleHolder{bundle: candidate})
+
 	if adopter, ok := candidate.(resourceAdopter); ok && !isNilRuntimeBundle(previousBundle) {
 		adopter.AdoptResourcesFrom(previousBundle)
 	}
@@ -305,8 +335,11 @@ func (supervisor *defaultSupervisor) buildBundle(
 
 	// Full build: construct everything from scratch.
 	bundle, err := supervisor.factory.Build(ctx, snap)
+	if err != nil {
+		return nil, BuildStrategyFull, fmt.Errorf("build full bundle: %w", err)
+	}
 
-	return bundle, BuildStrategyFull, err
+	return bundle, BuildStrategyFull, nil
 }
 
 // sortReconcilersByPhase returns a copy of the reconciler slice sorted by

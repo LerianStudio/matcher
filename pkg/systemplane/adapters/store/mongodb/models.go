@@ -3,6 +3,7 @@
 package mongodb
 
 import (
+	"fmt"
 	"math"
 	"time"
 
@@ -74,8 +75,9 @@ func (entryDocument *entryDoc) toDomainEntryWithCodec(codec *secretcodec.Codec) 
 
 	value, err := codec.Decrypt(domain.Target{Kind: entry.Kind, Scope: entry.Scope, SubjectID: entry.Subject}, entry.Key, entry.Value)
 	if err != nil {
-		return domain.Entry{}, err
+		return domain.Entry{}, fmt.Errorf("mongodb models decrypt entry %q: %w", entry.Key, err)
 	}
+
 	entry.Value = value
 
 	return entry, nil
@@ -102,14 +104,17 @@ func (historyDocument *historyDoc) toHistoryEntryWithCodec(codec *secretcodec.Co
 	}
 
 	target := domain.Target{Kind: domain.KindConfig, Scope: entry.Scope, SubjectID: entry.SubjectID}
+
 	oldValue, err := codec.Decrypt(target, entry.Key, entry.OldValue)
 	if err != nil {
-		return ports.HistoryEntry{}, err
+		return ports.HistoryEntry{}, fmt.Errorf("mongodb models decrypt old history value %q: %w", entry.Key, err)
 	}
+
 	newValue, err := codec.Decrypt(target, entry.Key, entry.NewValue)
 	if err != nil {
-		return ports.HistoryEntry{}, err
+		return ports.HistoryEntry{}, fmt.Errorf("mongodb models decrypt new history value %q: %w", entry.Key, err)
 	}
+
 	entry.OldValue = oldValue
 	entry.NewValue = newValue
 

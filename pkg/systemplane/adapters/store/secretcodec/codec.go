@@ -1,5 +1,7 @@
 // Copyright 2025 Lerian Studio.
 
+// Package secretcodec provides optional authenticated encryption for
+// systemplane secret values persisted by store adapters.
 package secretcodec
 
 import (
@@ -18,13 +20,24 @@ import (
 
 const envelopeVersion = 1
 
-var (
-	ErrMasterKeyRequired = errors.New("systemplane secret codec: master key is required")
-	ErrWeakMasterKey     = errors.New("systemplane secret codec: master key must be 32 raw bytes or base64-encoded 32 bytes")
-	ErrDecryptFailed     = errors.New("systemplane secret codec: decrypt failed")
-	ErrInvalidEnvelope   = errors.New("systemplane secret codec: invalid encrypted envelope")
+const (
+	envelopeAlgorithmAES256GCM = "aes-256-gcm"
+	masterKeySizeBytes         = 32
+	additionalDataSeparator    = "|"
 )
 
+var (
+	// ErrMasterKeyRequired indicates the codec was configured without a master key.
+	ErrMasterKeyRequired = errors.New("systemplane secret codec: master key is required")
+	// ErrWeakMasterKey indicates the provided master key does not meet size requirements.
+	ErrWeakMasterKey = errors.New("systemplane secret codec: master key must be 32 raw bytes or base64-encoded 32 bytes")
+	// ErrDecryptFailed indicates authenticated decryption failed.
+	ErrDecryptFailed = errors.New("systemplane secret codec: decrypt failed")
+	// ErrInvalidEnvelope indicates an encrypted envelope is malformed.
+	ErrInvalidEnvelope = errors.New("systemplane secret codec: invalid encrypted envelope")
+)
+
+// Codec encrypts and decrypts configured secret keys using AES-256-GCM.
 type Codec struct {
 	aead       cipher.AEAD
 	secretKeys map[string]struct{}
@@ -37,10 +50,12 @@ type envelope struct {
 	Ciphertext string `json:"ciphertext" bson:"ciphertext"`
 }
 
+// New constructs a codec when secret keys are configured.
 func New(masterKey string, secretKeys []string) (*Codec, error) {
 	if len(secretKeys) == 0 {
 		return nil, nil
 	}
+
 	if strings.TrimSpace(masterKey) == "" {
 		return nil, ErrMasterKeyRequired
 	}
@@ -65,12 +80,14 @@ func New(masterKey string, secretKeys []string) (*Codec, error) {
 		if key == "" {
 			continue
 		}
+
 		keySet[key] = struct{}{}
 	}
 
 	return &Codec{aead: aead, secretKeys: keySet}, nil
 }
 
+// Encrypt encrypts the given value when the key is configured as secret.
 func (codec *Codec) Encrypt(target domain.Target, key string, value any) (any, error) {
 	if !codec.isSecretKey(key) || value == nil {
 		return value, nil
@@ -90,12 +107,13 @@ func (codec *Codec) Encrypt(target domain.Target, key string, value any) (any, e
 
 	return envelope{
 		Version:    envelopeVersion,
-		Algorithm:  "aes-256-gcm",
+		Algorithm:  envelopeAlgorithmAES256GCM,
 		Nonce:      base64.StdEncoding.EncodeToString(nonce),
 		Ciphertext: base64.StdEncoding.EncodeToString(ciphertext),
 	}, nil
 }
 
+// Decrypt decrypts the given value when the key is configured as secret.
 func (codec *Codec) Decrypt(target domain.Target, key string, value any) (any, error) {
 	if !codec.isSecretKey(key) || value == nil {
 		return value, nil
@@ -105,23 +123,24 @@ func (codec *Codec) Decrypt(target domain.Target, key string, value any) (any, e
 	if err != nil {
 		return nil, err
 	}
+
 	if !ok {
 		return value, nil
 	}
 
 	nonce, err := base64.StdEncoding.DecodeString(env.Nonce)
 	if err != nil {
-		return nil, fmt.Errorf("%w: decode nonce: %v", ErrInvalidEnvelope, err)
+		return nil, joinEnvelopeError(ErrInvalidEnvelope, "decode nonce", err)
 	}
 
 	ciphertext, err := base64.StdEncoding.DecodeString(env.Ciphertext)
 	if err != nil {
-		return nil, fmt.Errorf("%w: decode ciphertext: %v", ErrInvalidEnvelope, err)
+		return nil, joinEnvelopeError(ErrInvalidEnvelope, "decode ciphertext", err)
 	}
 
 	plaintext, err := codec.aead.Open(nil, nonce, ciphertext, additionalData(target, key))
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrDecryptFailed, err)
+		return nil, joinEnvelopeError(ErrDecryptFailed, "open ciphertext", err)
 	}
 
 	var decoded any
@@ -138,6 +157,7 @@ func (codec *Codec) isSecretKey(key string) bool {
 	}
 
 	_, ok := codec.secretKeys[key]
+
 	return ok
 }
 
@@ -163,6 +183,7 @@ func parseEnvelope(value any) (envelope, bool, error) {
 
 	alg, _ := object["alg"].(string)
 	nonce, _ := object["nonce"].(string)
+
 	ciphertext, _ := object["ciphertext"].(string)
 	if alg == "" || nonce == "" || ciphertext == "" {
 		return envelope{}, false, ErrInvalidEnvelope
@@ -187,11 +208,13 @@ func parseVersion(value any) (int, bool) {
 }
 
 func deriveKey(masterKey string) ([]byte, error) {
-	if decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(masterKey)); err == nil && len(decoded) == 32 {
+	trimmedMasterKey := strings.TrimSpace(masterKey)
+
+	if decoded, err := base64.StdEncoding.DecodeString(trimmedMasterKey); err == nil && len(decoded) == masterKeySizeBytes {
 		return decoded, nil
 	}
 
-	if raw := []byte(masterKey); len(raw) == 32 {
+	if raw := []byte(masterKey); len(raw) == masterKeySizeBytes {
 		return raw, nil
 	}
 
@@ -199,5 +222,9 @@ func deriveKey(masterKey string) ([]byte, error) {
 }
 
 func additionalData(target domain.Target, key string) []byte {
-	return []byte(string(target.Kind) + "|" + string(target.Scope) + "|" + target.SubjectID + "|" + key)
+	return []byte(strings.Join([]string{string(target.Kind), string(target.Scope), target.SubjectID, key}, additionalDataSeparator))
+}
+
+func joinEnvelopeError(baseErr error, action string, err error) error {
+	return errors.Join(baseErr, fmt.Errorf("%s: %w", action, err))
 }
