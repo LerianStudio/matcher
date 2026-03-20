@@ -51,6 +51,30 @@ func TestMatchingSide_AppliesToLeft(t *testing.T) {
 	}
 }
 
+func TestMatchingSide_IsExclusive(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		side      MatchingSide
+		exclusive bool
+	}{
+		{"LEFT is exclusive", MatchingSideLeft, true},
+		{"RIGHT is exclusive", MatchingSideRight, true},
+		{"ANY is not exclusive", MatchingSideAny, false},
+		{"empty is not exclusive", MatchingSide(""), false},
+		{"INVALID is not exclusive", MatchingSide("INVALID"), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := tt.side.IsExclusive(); got != tt.exclusive {
+				t.Errorf("MatchingSide(%q).IsExclusive() = %v, want %v", tt.side, got, tt.exclusive)
+			}
+		})
+	}
+}
+
 func TestMatchingSide_AppliesToRight(t *testing.T) {
 	t.Parallel()
 

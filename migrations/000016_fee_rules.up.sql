@@ -6,7 +6,7 @@ CREATE TABLE fee_rules (
     side VARCHAR(10) NOT NULL CHECK (side IN ('LEFT', 'RIGHT', 'ANY')),
     fee_schedule_id UUID NOT NULL,
     name VARCHAR(100) NOT NULL,
-    priority INTEGER NOT NULL DEFAULT 0,
+    priority INTEGER NOT NULL,
     predicates JSONB NOT NULL DEFAULT '[]'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
