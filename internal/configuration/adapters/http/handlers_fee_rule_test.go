@@ -4,8 +4,10 @@ package http
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
@@ -16,6 +18,7 @@ import (
 	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
 
 	"github.com/LerianStudio/matcher/internal/auth"
+	"github.com/LerianStudio/matcher/internal/configuration/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/configuration/services/command"
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
@@ -89,6 +92,21 @@ func TestMapFeeRuleError_InvalidSide(t *testing.T) {
 	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 }
 
+func TestMapFeeRuleError_MissingFeeSchedule(t *testing.T) {
+	t.Parallel()
+
+	app := fiber.New()
+	app.Get("/test", func(c *fiber.Ctx) error {
+		return mapFeeRuleError(c, fee.ErrFeeScheduleNotFound)
+	})
+
+	resp := performRequest(t, app, "GET", "/test", nil)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
+	requireNotFoundResponse(t, resp, "fee schedule not found")
+}
+
 func TestMapFeeRuleError_WrappedClientErrors(t *testing.T) {
 	t.Parallel()
 
@@ -101,6 +119,7 @@ func TestMapFeeRuleError_WrappedClientErrors(t *testing.T) {
 		{"schedule id required", fee.ErrFeeRuleScheduleIDRequired},
 		{"context id required", fee.ErrFeeRuleContextIDRequired},
 		{"priority negative", fee.ErrFeeRulePriorityNegative},
+		{"too many predicates", fee.ErrFeeRuleTooManyPredicates},
 		{"invalid predicate operator", fee.ErrInvalidPredicateOperator},
 		{"predicate field required", fee.ErrPredicateFieldRequired},
 		{"predicate value required", fee.ErrPredicateValueRequired},
@@ -152,6 +171,7 @@ func TestIsFeeRuleClientError(t *testing.T) {
 			fee.ErrFeeRuleScheduleIDRequired,
 			fee.ErrFeeRuleContextIDRequired,
 			fee.ErrFeeRulePriorityNegative,
+			fee.ErrFeeRuleTooManyPredicates,
 			fee.ErrInvalidMatchingSide,
 			fee.ErrInvalidPredicateOperator,
 			fee.ErrPredicateFieldRequired,
@@ -366,4 +386,273 @@ func TestHandlers_FeeRuleEndpoints_InvalidTenant(t *testing.T) {
 // newTestTenantID is a helper to avoid repetition in fee rule tests.
 func newTestTenantID() uuid.UUID {
 	return uuid.New()
+}
+
+func TestCreateFeeRule_Success(t *testing.T) {
+	t.Parallel()
+
+	tracer, recorder := newTestTracer(t)
+	tenantID := newTestTenantID()
+	reqCtx := newRequestContext(tracer, tenantID)
+	app := newTestApp(reqCtx)
+	fixture := newHandlerFixture(t)
+
+	contextEntity := fixture.seedContext(t, tenantID)
+	schedule := fixture.seedFeeSchedule(t, tenantID)
+
+	app.Post("/v1/config/contexts/:contextId/fee-rules", fixture.handler.CreateFeeRule)
+
+	payload := mustJSON(t, map[string]any{
+		"side":          "ANY",
+		"feeScheduleId": schedule.ID.String(),
+		"name":          "catch-all",
+		"priority":      0,
+		"predicates":    []any{},
+	})
+
+	requestPath := replacePathParams("/v1/config/contexts/:contextId/fee-rules", contextEntity.ID.String())
+	resp := performRequest(t, app, http.MethodPost, requestPath, payload)
+	defer resp.Body.Close()
+
+	require.Equal(t, fiber.StatusCreated, resp.StatusCode)
+	requireSpanName(t, recorder, "handler.fee_rule.create")
+
+	var body dto.FeeRuleResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	assert.Equal(t, contextEntity.ID.String(), body.ContextID)
+	assert.Equal(t, schedule.ID.String(), body.FeeScheduleID)
+	assert.Equal(t, "catch-all", body.Name)
+	assert.Equal(t, "ANY", body.Side)
+	assert.Len(t, fixture.feeRuleRepo.items, 1)
+}
+
+func TestCreateFeeRule_InvalidPayload(t *testing.T) {
+	t.Parallel()
+
+	tracer, recorder := newTestTracer(t)
+	tenantID := newTestTenantID()
+	reqCtx := newRequestContext(tracer, tenantID)
+	app := newTestApp(reqCtx)
+	fixture := newHandlerFixture(t)
+
+	contextEntity := fixture.seedContext(t, tenantID)
+	app.Post("/v1/config/contexts/:contextId/fee-rules", fixture.handler.CreateFeeRule)
+
+	requestPath := replacePathParams("/v1/config/contexts/:contextId/fee-rules", contextEntity.ID.String())
+	resp := performRequest(t, app, http.MethodPost, requestPath, []byte("{"))
+	defer resp.Body.Close()
+
+	require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+	requireSpanName(t, recorder, "handler.fee_rule.create")
+}
+
+func TestCreateFeeRule_InvalidFeeScheduleID(t *testing.T) {
+	t.Parallel()
+
+	tracer, recorder := newTestTracer(t)
+	tenantID := newTestTenantID()
+	reqCtx := newRequestContext(tracer, tenantID)
+	app := newTestApp(reqCtx)
+	fixture := newHandlerFixture(t)
+
+	contextEntity := fixture.seedContext(t, tenantID)
+	app.Post("/v1/config/contexts/:contextId/fee-rules", fixture.handler.CreateFeeRule)
+
+	payload := mustJSON(t, map[string]any{
+		"side":          "ANY",
+		"feeScheduleId": "not-a-uuid",
+		"name":          "catch-all",
+		"priority":      0,
+		"predicates":    []any{},
+	})
+
+	requestPath := replacePathParams("/v1/config/contexts/:contextId/fee-rules", contextEntity.ID.String())
+	resp := performRequest(t, app, http.MethodPost, requestPath, payload)
+	defer resp.Body.Close()
+
+	require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+	requireSpanName(t, recorder, "handler.fee_rule.create")
+}
+
+func TestListFeeRules_Success(t *testing.T) {
+	t.Parallel()
+
+	tracer, recorder := newTestTracer(t)
+	tenantID := newTestTenantID()
+	reqCtx := newRequestContext(tracer, tenantID)
+	app := newTestApp(reqCtx)
+	fixture := newHandlerFixture(t)
+
+	contextEntity := fixture.seedContext(t, tenantID)
+	schedule := fixture.seedFeeSchedule(t, tenantID)
+	fixture.seedFeeRule(t, contextEntity.ID, schedule.ID, "left-rule", fee.MatchingSideLeft, 1)
+	fixture.seedFeeRule(t, contextEntity.ID, schedule.ID, "right-rule", fee.MatchingSideRight, 2)
+
+	app.Get("/v1/config/contexts/:contextId/fee-rules", fixture.handler.ListFeeRules)
+
+	requestPath := replacePathParams("/v1/config/contexts/:contextId/fee-rules", contextEntity.ID.String())
+	resp := performRequest(t, app, http.MethodGet, requestPath, nil)
+	defer resp.Body.Close()
+
+	require.Equal(t, fiber.StatusOK, resp.StatusCode)
+	requireSpanName(t, recorder, "handler.fee_rule.list")
+
+	var body []dto.FeeRuleResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	assert.Len(t, body, 2)
+}
+
+func TestGetFeeRule_Success(t *testing.T) {
+	t.Parallel()
+
+	tracer, recorder := newTestTracer(t)
+	tenantID := newTestTenantID()
+	reqCtx := newRequestContext(tracer, tenantID)
+	app := newTestApp(reqCtx)
+	fixture := newHandlerFixture(t)
+
+	contextEntity := fixture.seedContext(t, tenantID)
+	schedule := fixture.seedFeeSchedule(t, tenantID)
+	rule := fixture.seedFeeRule(t, contextEntity.ID, schedule.ID, "lookup-rule", fee.MatchingSideAny, 1)
+
+	app.Get("/v1/fee-rules/:feeRuleId", fixture.handler.GetFeeRule)
+
+	resp := performRequest(t, app, http.MethodGet, "/v1/fee-rules/"+rule.ID.String(), nil)
+	defer resp.Body.Close()
+
+	require.Equal(t, fiber.StatusOK, resp.StatusCode)
+	requireSpanName(t, recorder, "handler.fee_rule.get")
+
+	var body dto.FeeRuleResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	assert.Equal(t, rule.ID.String(), body.ID)
+	assert.Equal(t, contextEntity.ID.String(), body.ContextID)
+}
+
+func TestUpdateFeeRule_Success(t *testing.T) {
+	t.Parallel()
+
+	tracer, recorder := newTestTracer(t)
+	tenantID := newTestTenantID()
+	reqCtx := newRequestContext(tracer, tenantID)
+	app := newTestApp(reqCtx)
+	fixture := newHandlerFixture(t)
+
+	contextEntity := fixture.seedContext(t, tenantID)
+	schedule := fixture.seedFeeSchedule(t, tenantID)
+	rule := fixture.seedFeeRule(t, contextEntity.ID, schedule.ID, "before-update", fee.MatchingSideAny, 1)
+
+	app.Patch("/v1/fee-rules/:feeRuleId", fixture.handler.UpdateFeeRule)
+
+	payload := mustJSON(t, map[string]any{
+		"name":     "after-update",
+		"priority": 2,
+	})
+
+	resp := performRequest(t, app, http.MethodPatch, "/v1/fee-rules/"+rule.ID.String(), payload)
+	defer resp.Body.Close()
+
+	require.Equal(t, fiber.StatusOK, resp.StatusCode)
+	requireSpanName(t, recorder, "handler.fee_rule.update")
+
+	var body dto.FeeRuleResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	assert.Equal(t, "after-update", body.Name)
+	assert.Equal(t, 2, body.Priority)
+	assert.Equal(t, "after-update", fixture.feeRuleRepo.items[rule.ID].Name)
+}
+
+func TestUpdateFeeRule_TooManyPredicates(t *testing.T) {
+	t.Parallel()
+
+	tracer, recorder := newTestTracer(t)
+	tenantID := newTestTenantID()
+	reqCtx := newRequestContext(tracer, tenantID)
+	app := newTestApp(reqCtx)
+	fixture := newHandlerFixture(t)
+
+	contextEntity := fixture.seedContext(t, tenantID)
+	schedule := fixture.seedFeeSchedule(t, tenantID)
+	rule := fixture.seedFeeRule(t, contextEntity.ID, schedule.ID, "before-update", fee.MatchingSideAny, 1)
+
+	app.Patch("/v1/fee-rules/:feeRuleId", fixture.handler.UpdateFeeRule)
+
+	predicates := make([]map[string]any, 0, 51)
+	for i := 0; i < 51; i++ {
+		predicates = append(predicates, map[string]any{
+			"field":    "institution",
+			"operator": "EXISTS",
+		})
+	}
+
+	payload := mustJSON(t, map[string]any{"predicates": predicates})
+	resp := performRequest(t, app, http.MethodPatch, "/v1/fee-rules/"+rule.ID.String(), payload)
+	defer resp.Body.Close()
+
+	require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+	requireSpanName(t, recorder, "handler.fee_rule.update")
+}
+
+func TestDeleteFeeRule_Success(t *testing.T) {
+	t.Parallel()
+
+	tracer, recorder := newTestTracer(t)
+	tenantID := newTestTenantID()
+	reqCtx := newRequestContext(tracer, tenantID)
+	app := newTestApp(reqCtx)
+	fixture := newHandlerFixture(t)
+
+	contextEntity := fixture.seedContext(t, tenantID)
+	schedule := fixture.seedFeeSchedule(t, tenantID)
+	rule := fixture.seedFeeRule(t, contextEntity.ID, schedule.ID, "delete-me", fee.MatchingSideAny, 1)
+
+	app.Delete("/v1/fee-rules/:feeRuleId", fixture.handler.DeleteFeeRule)
+
+	resp := performRequest(t, app, http.MethodDelete, "/v1/fee-rules/"+rule.ID.String(), nil)
+	defer resp.Body.Close()
+
+	require.Equal(t, fiber.StatusNoContent, resp.StatusCode)
+	requireSpanName(t, recorder, "handler.fee_rule.delete")
+	_, exists := fixture.feeRuleRepo.items[rule.ID]
+	assert.False(t, exists)
+}
+
+func TestFeeRuleEndpoints_ForbiddenForContextOutsideTenant(t *testing.T) {
+	t.Parallel()
+
+	ownerTenantID := uuid.New()
+	requestTenantID := uuid.New()
+	require.NotEqual(t, ownerTenantID, requestTenantID)
+
+	tracer, _ := newTestTracer(t)
+	ctx := newRequestContext(tracer, requestTenantID)
+	app := newTestApp(ctx)
+	fixture := newHandlerFixture(t)
+
+	contextEntity := fixture.seedContext(t, ownerTenantID)
+	schedule := fixture.seedFeeSchedule(t, ownerTenantID)
+	rule := fixture.seedFeeRule(t, contextEntity.ID, schedule.ID, "foreign-rule", fee.MatchingSideAny, 1)
+
+	app.Get("/v1/fee-rules/:feeRuleId", fixture.handler.GetFeeRule)
+	app.Patch("/v1/fee-rules/:feeRuleId", fixture.handler.UpdateFeeRule)
+	app.Delete("/v1/fee-rules/:feeRuleId", fixture.handler.DeleteFeeRule)
+
+	tests := []struct {
+		name   string
+		method string
+		path   string
+		body   []byte
+	}{
+		{name: "get", method: http.MethodGet, path: "/v1/fee-rules/" + rule.ID.String()},
+		{name: "update", method: http.MethodPatch, path: "/v1/fee-rules/" + rule.ID.String(), body: mustJSON(t, map[string]any{"name": "blocked"})},
+		{name: "delete", method: http.MethodDelete, path: "/v1/fee-rules/" + rule.ID.String()},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp := performRequest(t, app, tt.method, tt.path, tt.body)
+			defer resp.Body.Close()
+			require.Equal(t, fiber.StatusNotFound, resp.StatusCode)
+		})
+	}
 }

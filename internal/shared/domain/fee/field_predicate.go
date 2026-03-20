@@ -38,7 +38,7 @@ type FieldPredicate struct {
 
 // Validate checks that the predicate has all required fields for its operator.
 func (pred FieldPredicate) Validate(_ context.Context) error {
-	if pred.Field == "" {
+	if strings.TrimSpace(pred.Field) == "" {
 		return fmt.Errorf("field predicate: %w", ErrPredicateFieldRequired)
 	}
 

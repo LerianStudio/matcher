@@ -23,6 +23,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/http/dto"
+	"github.com/LerianStudio/matcher/internal/configuration/services/command"
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
@@ -87,9 +88,7 @@ func TestCreateFeeSchedule_Handler(t *testing.T) {
 	resp, err := app.Test(req)
 	require.NoError(t, err)
 
-	// Without a fee schedule repo wired in the fixture, the command service returns a nil repo error (internal)
-	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode,
-		"expected 500 when fee schedule repo is nil, got %d", resp.StatusCode)
+	assert.Equal(t, http.StatusCreated, resp.StatusCode)
 }
 
 func TestListFeeSchedules_Handler(t *testing.T) {
@@ -107,9 +106,7 @@ func TestListFeeSchedules_Handler(t *testing.T) {
 	resp, err := app.Test(req)
 	require.NoError(t, err)
 
-	// Without fee schedule repo, this returns an internal server error
-	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode,
-		"expected 500 when fee schedule repo is nil, got %d", resp.StatusCode)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
 func TestGetFeeSchedule_Handler_InvalidID(t *testing.T) {
@@ -144,6 +141,26 @@ func TestDeleteFeeSchedule_Handler_InvalidID(t *testing.T) {
 	resp, err := app.Test(req)
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestDeleteFeeSchedule_Handler_InUseConflict(t *testing.T) {
+	t.Parallel()
+
+	tenantID := uuid.New()
+	ctx := newFeeScheduleTestContext(tenantID)
+	app := newFeeScheduleTestApp(ctx)
+	fixture := newHandlerFixture(t)
+	schedule := fixture.seedFeeSchedule(t, tenantID)
+	fixture.feeScheduleRepo.deleteErr = command.ErrFeeScheduleReferencedByFeeRule
+
+	app.Delete("/v1/config/fee-schedules/:scheduleId", fixture.handler.DeleteFeeSchedule)
+
+	req := httptest.NewRequest(http.MethodDelete, "/v1/config/fee-schedules/"+schedule.ID.String(), nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusConflict, resp.StatusCode)
 }
 
 func TestSimulateFeeSchedule_Handler_InvalidID(t *testing.T) {

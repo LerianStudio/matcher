@@ -282,6 +282,15 @@ func (handler *Handler) DeleteFeeSchedule(fiberCtx *fiber.Ctx) error {
 			return writeNotFound(fiberCtx, "fee schedule not found")
 		}
 
+		if errors.Is(err, command.ErrFeeScheduleReferencedByFeeRule) {
+			return libHTTP.RespondError(
+				fiberCtx,
+				fiber.StatusConflict,
+				"fee_schedule_in_use",
+				"fee schedule is still referenced by fee rules",
+			)
+		}
+
 		return writeServiceError(fiberCtx, err)
 	}
 

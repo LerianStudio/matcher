@@ -110,7 +110,8 @@ func newQueryUseCaseForTest(
 
 // feeScheduleRepository is an in-memory stub for fee schedule persistence in tests.
 type feeScheduleRepository struct {
-	items map[uuid.UUID]*fee.FeeSchedule
+	items     map[uuid.UUID]*fee.FeeSchedule
+	deleteErr error
 }
 
 func newFeeScheduleRepository() *feeScheduleRepository {
@@ -151,6 +152,10 @@ func (repo *feeScheduleRepository) Update(
 }
 
 func (repo *feeScheduleRepository) Delete(_ context.Context, id uuid.UUID) error {
+	if repo.deleteErr != nil {
+		return repo.deleteErr
+	}
+
 	if _, ok := repo.items[id]; !ok {
 		return fee.ErrFeeScheduleNotFound
 	}
@@ -196,4 +201,70 @@ func (repo *feeScheduleRepository) GetByIDs(
 var (
 	_ configPorts.ScheduleRepository    = (*scheduleRepository)(nil)
 	_ configPorts.FeeScheduleRepository = (*feeScheduleRepository)(nil)
+	_ repositories.FeeRuleRepository    = (*feeRuleRepository)(nil)
 )
+
+// feeRuleRepository is an in-memory stub for fee rule persistence in tests.
+type feeRuleRepository struct {
+	items map[uuid.UUID]*fee.FeeRule
+}
+
+func newFeeRuleRepository() *feeRuleRepository {
+	return &feeRuleRepository{items: make(map[uuid.UUID]*fee.FeeRule)}
+}
+
+func (repo *feeRuleRepository) Create(_ context.Context, rule *fee.FeeRule) error {
+	repo.items[rule.ID] = rule
+	return nil
+}
+
+func (repo *feeRuleRepository) CreateWithTx(_ context.Context, _ *sql.Tx, rule *fee.FeeRule) error {
+	repo.items[rule.ID] = rule
+	return nil
+}
+
+func (repo *feeRuleRepository) FindByID(_ context.Context, id uuid.UUID) (*fee.FeeRule, error) {
+	rule, ok := repo.items[id]
+	if !ok {
+		return nil, fee.ErrFeeRuleNotFound
+	}
+
+	return rule, nil
+}
+
+func (repo *feeRuleRepository) FindByContextID(_ context.Context, contextID uuid.UUID) ([]*fee.FeeRule, error) {
+	result := make([]*fee.FeeRule, 0)
+	for _, rule := range repo.items {
+		if rule.ContextID == contextID {
+			result = append(result, rule)
+		}
+	}
+
+	return result, nil
+}
+
+func (repo *feeRuleRepository) Update(_ context.Context, rule *fee.FeeRule) error {
+	if _, ok := repo.items[rule.ID]; !ok {
+		return fee.ErrFeeRuleNotFound
+	}
+
+	repo.items[rule.ID] = rule
+	return nil
+}
+
+func (repo *feeRuleRepository) UpdateWithTx(_ context.Context, _ *sql.Tx, rule *fee.FeeRule) error {
+	return repo.Update(context.Background(), rule)
+}
+
+func (repo *feeRuleRepository) Delete(_ context.Context, id uuid.UUID) error {
+	if _, ok := repo.items[id]; !ok {
+		return fee.ErrFeeRuleNotFound
+	}
+
+	delete(repo.items, id)
+	return nil
+}
+
+func (repo *feeRuleRepository) DeleteWithTx(_ context.Context, _ *sql.Tx, id uuid.UUID) error {
+	return repo.Delete(context.Background(), id)
+}
