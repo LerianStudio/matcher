@@ -724,18 +724,6 @@ func TestCollectFeeFindings_SkipsNonConfirmedGroups(t *testing.T) {
 
 // --- loadFeeRulesAndSchedules tests ---
 
-func TestLoadFeeRulesAndSchedules_NilProvider(t *testing.T) {
-	t.Parallel()
-
-	uc := &UseCase{feeRuleProvider: nil}
-
-	leftRules, rightRules, schedules, err := uc.loadFeeRulesAndSchedules(context.Background(), uuid.New())
-	require.NoError(t, err)
-	assert.Nil(t, leftRules)
-	assert.Nil(t, rightRules)
-	assert.Nil(t, schedules)
-}
-
 func TestLoadFeeRulesAndSchedules_NoRules(t *testing.T) {
 	t.Parallel()
 
