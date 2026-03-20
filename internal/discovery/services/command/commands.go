@@ -46,6 +46,7 @@ type UseCase struct {
 	requireTenantContext bool
 	refreshLockProvider  sharedPorts.InfrastructureProvider
 	refreshLockTTL       time.Duration
+	refreshLockTTLGetter func() time.Duration
 }
 
 // NewUseCase creates a new discovery command use case.
@@ -134,6 +135,14 @@ func (uc *UseCase) WithDiscoveryRefreshLock(provider sharedPorts.InfrastructureP
 	}
 
 	uc.refreshLockTTL = discoveryRefreshLockTTLMultiplier * interval
+}
+
+func (uc *UseCase) WithDiscoveryRefreshLockGetter(getter func() time.Duration) {
+	if uc == nil {
+		return
+	}
+
+	uc.refreshLockTTLGetter = getter
 }
 
 func isNilExtractionPoller(poller ports.ExtractionJobPoller) bool {

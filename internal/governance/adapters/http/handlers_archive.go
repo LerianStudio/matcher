@@ -243,6 +243,12 @@ func (ah *ArchiveHandler) DownloadArchive(fiberCtx *fiber.Ctx) error {
 
 	downloadURL, err := ah.storage.GeneratePresignedURL(ctx, archive.ArchiveKey, presignExpiry)
 	if err != nil {
+		if errors.Is(err, sharedPorts.ErrObjectStorageUnavailable) {
+			logSpanError(ctx, span, logger, "archive storage unavailable", err)
+
+			return sharedhttp.RespondError(fiberCtx, fiber.StatusServiceUnavailable, "object_storage_unavailable", "archive storage is unavailable")
+		}
+
 		return writeServiceError(ctx, fiberCtx, span, logger, "failed to generate download url", err)
 	}
 

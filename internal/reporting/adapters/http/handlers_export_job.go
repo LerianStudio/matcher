@@ -21,6 +21,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/reporting/services/query"
 	sharedadaptershttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 const (
@@ -154,7 +155,9 @@ func (handler *ExportJobHandlers) currentRuntimeConfig() ExportJobRuntimeConfig 
 	}
 
 	runtimeConfig := handler.runtimeConfig()
-	runtimeConfig.Enabled = config.Enabled
+	if runtimeConfig.Enabled == nil {
+		runtimeConfig.Enabled = config.Enabled
+	}
 
 	if runtimeConfig.PresignExpiry <= 0 {
 		runtimeConfig.PresignExpiry = config.PresignExpiry
@@ -724,6 +727,10 @@ func (handler *ExportJobHandlers) DownloadExportJob(fiberCtx *fiber.Ctx) error {
 
 	downloadURL, err := handler.storage.GeneratePresignedURL(ctx, job.FileKey, runtimeConfig.PresignExpiry)
 	if err != nil {
+		if errors.Is(err, sharedPorts.ErrObjectStorageUnavailable) {
+			return libHTTP.RespondError(fiberCtx, fiber.StatusServiceUnavailable, "object_storage_unavailable", "export storage is unavailable")
+		}
+
 		logSpanError(ctx, span, logger, "failed to generate download URL", err)
 
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")

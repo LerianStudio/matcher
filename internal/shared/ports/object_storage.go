@@ -3,6 +3,7 @@ package ports
 
 import (
 	"context"
+	"errors"
 	"io"
 	"time"
 
@@ -22,6 +23,9 @@ var WithStorageClass = storageopt.WithStorageClass
 
 // WithServerSideEncryption sets server-side encryption (e.g., "aws:kms", "AES256").
 var WithServerSideEncryption = storageopt.WithServerSideEncryption
+
+// ErrObjectStorageUnavailable indicates runtime object storage is not currently available.
+var ErrObjectStorageUnavailable = errors.New("object storage is unavailable")
 
 // ObjectStorageClient provides object storage operations for export files and archives.
 // This is the shared kernel interface used by governance (archival) and reporting (export jobs)

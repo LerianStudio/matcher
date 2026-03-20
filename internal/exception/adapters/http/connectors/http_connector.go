@@ -48,8 +48,9 @@ const (
 
 // HTTPConnector dispatches exceptions to external systems via HTTP.
 type HTTPConnector struct {
-	client *http.Client
-	config ConnectorConfig
+	client               *http.Client
+	config               ConnectorConfig
+	webhookTimeoutGetter func() time.Duration
 }
 
 // NewHTTPConnector creates a new HTTP connector with the given configuration.
@@ -68,6 +69,15 @@ func NewHTTPConnector(config ConnectorConfig) (*HTTPConnector, error) {
 		client: client,
 		config: config,
 	}, nil
+}
+
+// SetWebhookTimeoutGetter injects a live config-backed webhook timeout source.
+func (conn *HTTPConnector) SetWebhookTimeoutGetter(getter func() time.Duration) {
+	if conn == nil {
+		return
+	}
+
+	conn.webhookTimeoutGetter = getter
 }
 
 // newSSRFSafeTransport returns an *http.Transport with a ControlContext hook
@@ -249,7 +259,13 @@ func (conn *HTTPConnector) dispatchToWebhook(
 	}
 
 	webhookConfig := conn.config.Webhook
-	client := conn.clientWithTimeout(webhookConfig.TimeoutOrDefault())
+	timeout := webhookConfig.TimeoutOrDefault()
+	if conn.webhookTimeoutGetter != nil {
+		if runtimeTimeout := conn.webhookTimeoutGetter(); runtimeTimeout > 0 {
+			timeout = runtimeTimeout
+		}
+	}
+	client := conn.clientWithTimeout(timeout)
 
 	req, err := http.NewRequestWithContext(
 		ctx,
