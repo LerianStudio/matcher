@@ -473,7 +473,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Creates a deep copy of a reconciliation context including its sources, field maps, match rules, and optionally fee schedules.",
+                "description": "Creates a deep copy of a reconciliation context including its sources, field maps, match rules, and fee rules. Referenced fee schedules are reused by cloned fee rules.",
                 "consumes": [
                     "application/json"
                 ],
@@ -636,7 +636,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Creates a new fee rule that maps transaction metadata to a fee schedule within a context.",
+                "description": "Creates a new fee rule that maps transaction metadata to a fee schedule within a context. Priority must be unique within a context across all sides (LEFT, RIGHT, and ANY rules share the same priority space).",
                 "consumes": [
                     "application/json"
                 ],
@@ -10175,11 +10175,6 @@ const docTemplate = `{
                 "name"
             ],
             "properties": {
-                "includeFeeSchedules": {
-                    "description": "Whether to clone fee schedules (true) or keep original references (false) (default: true)",
-                    "type": "boolean",
-                    "example": true
-                },
                 "includeRules": {
                     "description": "Whether to include match rules in the clone (default: true)",
                     "type": "boolean",
@@ -10211,8 +10206,8 @@ const docTemplate = `{
                         }
                     ]
                 },
-                "feeSchedulesCloned": {
-                    "description": "Number of fee schedules cloned",
+                "feeRulesCloned": {
+                    "description": "Number of fee rules cloned",
                     "type": "integer",
                     "example": 2
                 },
@@ -10309,6 +10304,7 @@ const docTemplate = `{
             "type": "object",
             "required": [
                 "name",
+                "side",
                 "type"
             ],
             "properties": {
@@ -10324,6 +10320,14 @@ const docTemplate = `{
                     "maxLength": 50,
                     "minLength": 1,
                     "example": "Primary Bank Account"
+                },
+                "side": {
+                    "type": "string",
+                    "enum": [
+                        "LEFT",
+                        "RIGHT"
+                    ],
+                    "example": "LEFT"
                 },
                 "type": {
                     "type": "string",
@@ -10358,11 +10362,13 @@ const docTemplate = `{
                 },
                 "predicates": {
                     "type": "array",
+                    "maxItems": 50,
                     "items": {
                         "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldPredicateRequest"
                     }
                 },
                 "priority": {
+                    "description": "Unique within context; LEFT, RIGHT, and ANY share the same priority space",
                     "type": "integer",
                     "minimum": 0,
                     "example": 0
@@ -10527,6 +10533,7 @@ const docTemplate = `{
             "type": "object",
             "required": [
                 "name",
+                "side",
                 "type"
             ],
             "properties": {
@@ -10539,6 +10546,14 @@ const docTemplate = `{
                     "maxLength": 50,
                     "minLength": 1,
                     "example": "Primary Bank Account"
+                },
+                "side": {
+                    "type": "string",
+                    "enum": [
+                        "LEFT",
+                        "RIGHT"
+                    ],
+                    "example": "LEFT"
                 },
                 "type": {
                     "type": "string",
@@ -10962,6 +10977,15 @@ const docTemplate = `{
                     "type": "string",
                     "example": "Primary Bank Account"
                 },
+                "side": {
+                    "description": "Matching side configured for the source",
+                    "type": "string",
+                    "enum": [
+                        "LEFT",
+                        "RIGHT"
+                    ],
+                    "example": "LEFT"
+                },
                 "type": {
                     "description": "Type of the source",
                     "type": "string",
@@ -11122,6 +11146,15 @@ const docTemplate = `{
                     "type": "string",
                     "example": "Primary Bank Account"
                 },
+                "side": {
+                    "description": "Matching side configured for the source",
+                    "type": "string",
+                    "enum": [
+                        "LEFT",
+                        "RIGHT"
+                    ],
+                    "example": "LEFT"
+                },
                 "type": {
                     "description": "Type of the source",
                     "type": "string",
@@ -11212,6 +11245,7 @@ const docTemplate = `{
                 },
                 "predicates": {
                     "type": "array",
+                    "maxItems": 50,
                     "items": {
                         "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldPredicateRequest"
                     }
@@ -11324,6 +11358,14 @@ const docTemplate = `{
                     "type": "string",
                     "maxLength": 50,
                     "example": "Secondary Bank Account"
+                },
+                "side": {
+                    "type": "string",
+                    "enum": [
+                        "LEFT",
+                        "RIGHT"
+                    ],
+                    "example": "RIGHT"
                 },
                 "type": {
                     "type": "string",
@@ -14418,13 +14460,6 @@ const docTemplate = `{
                         "COMMIT"
                     ],
                     "example": "DRY_RUN"
-                },
-                "primarySourceId": {
-                    "description": "PrimarySourceID optionally specifies which source is the reference (left) side.\nIf provided, directed matching: this source -\u003e left, others -\u003e right.\nIf omitted, symmetric matching: sources compared freely (first source used as left internally).",
-                    "type": "string",
-                    "format": "uuid",
-                    "x-nullable": true,
-                    "example": "550e8400-e29b-41d4-a716-446655440000"
                 }
             }
         },

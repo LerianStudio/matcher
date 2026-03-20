@@ -53,11 +53,6 @@ definitions:
   github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CloneContextRequest:
     description: Request payload for cloning a context with its configuration
     properties:
-      includeFeeSchedules:
-        description: 'Whether to clone fee schedules (true) or keep original references
-          (false) (default: true)'
-        example: true
-        type: boolean
       includeRules:
         description: 'Whether to include match rules in the clone (default: true)'
         example: true
@@ -83,8 +78,8 @@ definitions:
         allOf:
         - $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.ReconciliationContextResponse'
         description: The newly created context
-      feeSchedulesCloned:
-        description: Number of fee schedules cloned
+      feeRulesCloned:
+        description: Number of fee rules cloned
         example: 2
         type: integer
       fieldMapsCloned:
@@ -167,6 +162,12 @@ definitions:
         maxLength: 50
         minLength: 1
         type: string
+      side:
+        enum:
+        - LEFT
+        - RIGHT
+        example: LEFT
+        type: string
       type:
         enum:
         - LEDGER
@@ -178,6 +179,7 @@ definitions:
         type: string
     required:
     - name
+    - side
     - type
     type: object
   github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateFeeRuleRequest:
@@ -193,8 +195,11 @@ definitions:
       predicates:
         items:
           $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldPredicateRequest'
+        maxItems: 50
         type: array
       priority:
+        description: Unique within context; LEFT, RIGHT, and ANY share the same priority
+          space
         example: 0
         minimum: 0
         type: integer
@@ -329,6 +334,12 @@ definitions:
         maxLength: 50
         minLength: 1
         type: string
+      side:
+        enum:
+        - LEFT
+        - RIGHT
+        example: LEFT
+        type: string
       type:
         enum:
         - LEDGER
@@ -340,6 +351,7 @@ definitions:
         type: string
     required:
     - name
+    - side
     - type
     type: object
   github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeRuleResponse:
@@ -653,6 +665,13 @@ definitions:
         description: Name of the source
         example: Primary Bank Account
         type: string
+      side:
+        description: Matching side configured for the source
+        enum:
+        - LEFT
+        - RIGHT
+        example: LEFT
+        type: string
       type:
         description: Type of the source
         enum:
@@ -774,6 +793,13 @@ definitions:
         description: Name of the source
         example: Primary Bank Account
         type: string
+      side:
+        description: Matching side configured for the source
+        enum:
+        - LEFT
+        - RIGHT
+        example: LEFT
+        type: string
       type:
         description: Type of the source
         enum:
@@ -844,6 +870,7 @@ definitions:
       predicates:
         items:
           $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldPredicateRequest'
+        maxItems: 50
         type: array
       priority:
         minimum: 0
@@ -925,6 +952,12 @@ definitions:
       name:
         example: Secondary Bank Account
         maxLength: 50
+        type: string
+      side:
+        enum:
+        - LEFT
+        - RIGHT
+        example: RIGHT
         type: string
       type:
         enum:
@@ -3226,15 +3259,6 @@ definitions:
         - COMMIT
         example: DRY_RUN
         type: string
-      primarySourceId:
-        description: |-
-          PrimarySourceID optionally specifies which source is the reference (left) side.
-          If provided, directed matching: this source -> left, others -> right.
-          If omitted, symmetric matching: sources compared freely (first source used as left internally).
-        example: 550e8400-e29b-41d4-a716-446655440000
-        format: uuid
-        type: string
-        x-nullable: true
     required:
     - mode
     type: object
@@ -3746,7 +3770,8 @@ paths:
       consumes:
       - application/json
       description: Creates a deep copy of a reconciliation context including its sources,
-        field maps, match rules, and optionally fee schedules.
+        field maps, match rules, and fee rules. Referenced fee schedules are reused
+        by cloned fee rules.
       operationId: cloneContext
       parameters:
       - description: Request ID for tracing
@@ -3855,7 +3880,8 @@ paths:
       consumes:
       - application/json
       description: Creates a new fee rule that maps transaction metadata to a fee
-        schedule within a context.
+        schedule within a context. Priority must be unique within a context across
+        all sides (LEFT, RIGHT, and ANY rules share the same priority space).
       operationId: createFeeRule
       parameters:
       - description: Request ID for tracing

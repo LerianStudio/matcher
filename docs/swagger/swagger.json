@@ -523,7 +523,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Creates a deep copy of a reconciliation context including its sources, field maps, match rules, and optionally fee schedules.",
+                "description": "Creates a deep copy of a reconciliation context including its sources, field maps, match rules, and fee rules. Referenced fee schedules are reused by cloned fee rules.",
                 "consumes": [
                     "application/json"
                 ],
@@ -686,7 +686,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Creates a new fee rule that maps transaction metadata to a fee schedule within a context.",
+                "description": "Creates a new fee rule that maps transaction metadata to a fee schedule within a context. Priority must be unique within a context across all sides (LEFT, RIGHT, and ANY rules share the same priority space).",
                 "consumes": [
                     "application/json"
                 ],
@@ -10225,11 +10225,6 @@
                 "name"
             ],
             "properties": {
-                "includeFeeSchedules": {
-                    "description": "Whether to clone fee schedules (true) or keep original references (false) (default: true)",
-                    "type": "boolean",
-                    "example": true
-                },
                 "includeRules": {
                     "description": "Whether to include match rules in the clone (default: true)",
                     "type": "boolean",
@@ -10261,8 +10256,8 @@
                         }
                     ]
                 },
-                "feeSchedulesCloned": {
-                    "description": "Number of fee schedules cloned",
+                "feeRulesCloned": {
+                    "description": "Number of fee rules cloned",
                     "type": "integer",
                     "example": 2
                 },
@@ -10359,6 +10354,7 @@
             "type": "object",
             "required": [
                 "name",
+                "side",
                 "type"
             ],
             "properties": {
@@ -10374,6 +10370,14 @@
                     "maxLength": 50,
                     "minLength": 1,
                     "example": "Primary Bank Account"
+                },
+                "side": {
+                    "type": "string",
+                    "enum": [
+                        "LEFT",
+                        "RIGHT"
+                    ],
+                    "example": "LEFT"
                 },
                 "type": {
                     "type": "string",
@@ -10408,11 +10412,13 @@
                 },
                 "predicates": {
                     "type": "array",
+                    "maxItems": 50,
                     "items": {
                         "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldPredicateRequest"
                     }
                 },
                 "priority": {
+                    "description": "Unique within context; LEFT, RIGHT, and ANY share the same priority space",
                     "type": "integer",
                     "minimum": 0,
                     "example": 0
@@ -10577,6 +10583,7 @@
             "type": "object",
             "required": [
                 "name",
+                "side",
                 "type"
             ],
             "properties": {
@@ -10589,6 +10596,14 @@
                     "maxLength": 50,
                     "minLength": 1,
                     "example": "Primary Bank Account"
+                },
+                "side": {
+                    "type": "string",
+                    "enum": [
+                        "LEFT",
+                        "RIGHT"
+                    ],
+                    "example": "LEFT"
                 },
                 "type": {
                     "type": "string",
@@ -11012,6 +11027,15 @@
                     "type": "string",
                     "example": "Primary Bank Account"
                 },
+                "side": {
+                    "description": "Matching side configured for the source",
+                    "type": "string",
+                    "enum": [
+                        "LEFT",
+                        "RIGHT"
+                    ],
+                    "example": "LEFT"
+                },
                 "type": {
                     "description": "Type of the source",
                     "type": "string",
@@ -11172,6 +11196,15 @@
                     "type": "string",
                     "example": "Primary Bank Account"
                 },
+                "side": {
+                    "description": "Matching side configured for the source",
+                    "type": "string",
+                    "enum": [
+                        "LEFT",
+                        "RIGHT"
+                    ],
+                    "example": "LEFT"
+                },
                 "type": {
                     "description": "Type of the source",
                     "type": "string",
@@ -11262,6 +11295,7 @@
                 },
                 "predicates": {
                     "type": "array",
+                    "maxItems": 50,
                     "items": {
                         "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldPredicateRequest"
                     }
@@ -11374,6 +11408,14 @@
                     "type": "string",
                     "maxLength": 50,
                     "example": "Secondary Bank Account"
+                },
+                "side": {
+                    "type": "string",
+                    "enum": [
+                        "LEFT",
+                        "RIGHT"
+                    ],
+                    "example": "RIGHT"
                 },
                 "type": {
                     "type": "string",
@@ -14468,13 +14510,6 @@
                         "COMMIT"
                     ],
                     "example": "DRY_RUN"
-                },
-                "primarySourceId": {
-                    "description": "PrimarySourceID optionally specifies which source is the reference (left) side.\nIf provided, directed matching: this source -> left, others -> right.\nIf omitted, symmetric matching: sources compared freely (first source used as left internally).",
-                    "type": "string",
-                    "format": "uuid",
-                    "x-nullable": true,
-                    "example": "550e8400-e29b-41d4-a716-446655440000"
                 }
             }
         },
