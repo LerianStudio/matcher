@@ -7,6 +7,7 @@
 package bootstrap
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -338,7 +339,7 @@ func TestShouldIncludeReadinessDetails(t *testing.T) {
 func TestNewFiberAppDefaults(t *testing.T) {
 	t.Parallel()
 
-	app := NewFiberApp(nil, &libLog.NopLogger{}, nil)
+	app := NewFiberApp(nil, &libLog.NopLogger{}, nil, nil)
 
 	app.Get("/", func(c *fiber.Ctx) error {
 		return c.SendStatus(http.StatusOK)
@@ -372,7 +373,7 @@ func TestRateLimiterMiddleware(t *testing.T) {
 			ExpirySec: testRateLimitExpirySec,
 		},
 	}
-	app := NewFiberApp(cfg, &libLog.NopLogger{}, nil)
+	app := NewFiberApp(cfg, &libLog.NopLogger{}, nil, nil)
 
 	rateLimiter := NewRateLimiter(cfg, nil)
 
@@ -438,7 +439,7 @@ func TestSecurityHeadersMiddleware(t *testing.T) {
 			CORSAllowedHeaders: "Content-Type",
 		},
 	}
-	app := NewFiberApp(cfg, &libLog.NopLogger{}, nil)
+	app := NewFiberApp(cfg, &libLog.NopLogger{}, nil, nil)
 
 	app.Get("/test", func(c *fiber.Ctx) error {
 		return c.SendStatus(http.StatusOK)
@@ -821,7 +822,7 @@ func TestNewFiberApp_WithCustomBodyLimit(t *testing.T) {
 		},
 	}
 
-	app := NewFiberApp(cfg, &libLog.NopLogger{}, nil)
+	app := NewFiberApp(cfg, &libLog.NopLogger{}, nil, nil)
 
 	require.NotNil(t, app)
 }
@@ -838,9 +839,54 @@ func TestNewFiberApp_WithNegativeBodyLimit(t *testing.T) {
 		},
 	}
 
-	app := NewFiberApp(cfg, &libLog.NopLogger{}, nil)
+	app := NewFiberApp(cfg, &libLog.NopLogger{}, nil, nil)
 
 	require.NotNil(t, app)
+}
+
+func TestCurrentRuntimeBodyLimit_DefaultAndOverride(t *testing.T) {
+	t.Parallel()
+
+	t.Run("uses 32MiB default when config missing", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, runtimeBodyLimitDefaultBytes, currentRuntimeBodyLimit(nil, nil))
+	})
+
+	t.Run("uses runtime config when provided", func(t *testing.T) {
+		t.Parallel()
+		cfg := &Config{Server: ServerConfig{BodyLimitBytes: 2048}}
+		assert.Equal(t, 2048, currentRuntimeBodyLimit(cfg, nil))
+	})
+
+	t.Run("caps effective runtime limit at 128MiB ceiling", func(t *testing.T) {
+		t.Parallel()
+		cfg := &Config{Server: ServerConfig{BodyLimitBytes: appBodyLimitCeilingBytes + 1024}}
+		assert.Equal(t, appBodyLimitCeilingBytes, effectiveRuntimeBodyLimit(cfg, nil))
+	})
+}
+
+func TestRuntimeBodyLimitMiddleware_UsesLiveConfig(t *testing.T) {
+	t.Parallel()
+
+	activeCfg := &Config{Server: ServerConfig{BodyLimitBytes: 8, CORSAllowedOrigins: "*", CORSAllowedMethods: "POST", CORSAllowedHeaders: "Content-Type"}}
+	app := NewFiberApp(activeCfg, &libLog.NopLogger{}, nil, func() *Config { return activeCfg })
+	app.Post("/test", func(c *fiber.Ctx) error { return c.SendStatus(http.StatusOK) })
+
+	smallReq := httptest.NewRequest(http.MethodPost, "/test", bytes.NewReader(bytes.Repeat([]byte("a"), 8)))
+	smallResp, err := app.Test(smallReq)
+	require.NoError(t, err)
+	defer smallResp.Body.Close()
+	assert.Equal(t, http.StatusOK, smallResp.StatusCode)
+
+	activeCfg = &Config{Server: ServerConfig{BodyLimitBytes: 4, CORSAllowedOrigins: "*", CORSAllowedMethods: "POST", CORSAllowedHeaders: "Content-Type"}}
+	largeReq := httptest.NewRequest(http.MethodPost, "/test", bytes.NewReader(bytes.Repeat([]byte("b"), 5)))
+	largeResp, err := app.Test(largeReq)
+	require.NoError(t, err)
+	defer largeResp.Body.Close()
+	assert.Equal(t, http.StatusRequestEntityTooLarge, largeResp.StatusCode)
+	body, readErr := io.ReadAll(largeResp.Body)
+	require.NoError(t, readErr)
+	assert.Contains(t, string(body), "request_entity_too_large")
 }
 
 func TestCustomErrorHandler_NotFoundError(t *testing.T) {
@@ -1710,7 +1756,7 @@ func TestNewFiberApp_WithTLSConfigCreatesApp(t *testing.T) {
 		},
 	}
 
-	app := NewFiberApp(cfg, &libLog.NopLogger{}, nil)
+	app := NewFiberApp(cfg, &libLog.NopLogger{}, nil, nil)
 	require.NotNil(t, app)
 
 	app.Get("/test", func(c *fiber.Ctx) error {
@@ -1740,7 +1786,7 @@ func TestNewFiberApp_WithTLSTerminatedUpstreamCreatesApp(t *testing.T) {
 		},
 	}
 
-	app := NewFiberApp(cfg, &libLog.NopLogger{}, nil)
+	app := NewFiberApp(cfg, &libLog.NopLogger{}, nil, nil)
 	require.NotNil(t, app)
 
 	app.Get("/test", func(c *fiber.Ctx) error {
@@ -1763,7 +1809,7 @@ func TestNewFiberApp_TrustedProxiesControlsForwardedIPTrust(t *testing.T) {
 		t.Parallel()
 
 		cfg := &Config{Server: ServerConfig{BodyLimitBytes: 1024, CORSAllowedOrigins: "*", CORSAllowedMethods: "GET", CORSAllowedHeaders: "Content-Type"}}
-		app := NewFiberApp(cfg, &libLog.NopLogger{}, nil)
+		app := NewFiberApp(cfg, &libLog.NopLogger{}, nil, nil)
 		app.Get("/ip", func(c *fiber.Ctx) error { return c.SendString(c.IP()) })
 
 		req := httptest.NewRequest(http.MethodGet, "/ip", http.NoBody)
@@ -1781,7 +1827,7 @@ func TestNewFiberApp_TrustedProxiesControlsForwardedIPTrust(t *testing.T) {
 		t.Parallel()
 
 		cfg := &Config{Server: ServerConfig{BodyLimitBytes: 1024, CORSAllowedOrigins: "*", CORSAllowedMethods: "GET", CORSAllowedHeaders: "Content-Type", TrustedProxies: "0.0.0.0/0,127.0.0.1"}}
-		app := NewFiberApp(cfg, &libLog.NopLogger{}, nil)
+		app := NewFiberApp(cfg, &libLog.NopLogger{}, nil, nil)
 		app.Get("/ip", func(c *fiber.Ctx) error { return c.SendString(c.IP()) })
 
 		req := httptest.NewRequest(http.MethodGet, "/ip", http.NoBody)
@@ -1811,7 +1857,7 @@ func TestNewFiberApp_WithQueryTimeoutZero(t *testing.T) {
 		},
 	}
 
-	app := NewFiberApp(cfg, &libLog.NopLogger{}, nil)
+	app := NewFiberApp(cfg, &libLog.NopLogger{}, nil, nil)
 	require.NotNil(t, app)
 
 	app.Get("/test", func(c *fiber.Ctx) error {
@@ -1843,7 +1889,7 @@ func TestNewFiberApp_ProductionDoesNotLogRequests(t *testing.T) {
 		},
 	}
 
-	app := NewFiberApp(cfg, &libLog.NopLogger{}, nil)
+	app := NewFiberApp(cfg, &libLog.NopLogger{}, nil, nil)
 	require.NotNil(t, app)
 
 	app.Get("/test", func(c *fiber.Ctx) error {
@@ -2195,7 +2241,7 @@ func TestNewFiberApp_WithTelemetry(t *testing.T) {
 	}
 
 	telemetry := InitTelemetry(cfg, &libLog.NopLogger{})
-	app := NewFiberApp(cfg, &libLog.NopLogger{}, telemetry)
+	app := NewFiberApp(cfg, &libLog.NopLogger{}, telemetry, nil)
 	require.NotNil(t, app)
 
 	app.Get("/test", func(c *fiber.Ctx) error {
@@ -2258,7 +2304,7 @@ func TestDbQueryTimeoutMiddleware_AppliesDeadline(t *testing.T) {
 	t.Parallel()
 
 	app := fiber.New()
-	app.Use(dbQueryTimeoutMiddleware(5 * time.Second))
+	app.Use(dbQueryTimeoutMiddleware(&Config{Postgres: PostgresConfig{QueryTimeoutSec: 5}}, nil))
 
 	var hasDeadline bool
 
@@ -2294,7 +2340,7 @@ func TestDbQueryTimeoutMiddleware_RespectsExistingTighterDeadline(t *testing.T) 
 	})
 
 	// Then apply the query timeout middleware with a longer timeout (30 seconds)
-	app.Use(dbQueryTimeoutMiddleware(30 * time.Second))
+	app.Use(dbQueryTimeoutMiddleware(&Config{Postgres: PostgresConfig{QueryTimeoutSec: 30}}, nil))
 
 	var deadlineFromHandler time.Time
 
@@ -2324,7 +2370,7 @@ func TestDbQueryTimeoutMiddleware_ZeroDurationDisablesTimeout(t *testing.T) {
 	// A zero-duration timeout would immediately cancel, so the middleware
 	// is expected to be skipped when timeout <= 0 (handled by NewFiberApp).
 	// Here we test that the middleware itself works with a valid duration.
-	app.Use(dbQueryTimeoutMiddleware(10 * time.Second))
+	app.Use(dbQueryTimeoutMiddleware(&Config{Postgres: PostgresConfig{QueryTimeoutSec: 10}}, nil))
 
 	var hasDeadline bool
 
@@ -2341,6 +2387,43 @@ func TestDbQueryTimeoutMiddleware_ZeroDurationDisablesTimeout(t *testing.T) {
 
 	assert.True(t, hasDeadline)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
+func TestDbQueryTimeoutMiddleware_UsesRuntimeConfigGetter(t *testing.T) {
+	t.Parallel()
+
+	activeCfg := &Config{Postgres: PostgresConfig{QueryTimeoutSec: 1}}
+	app := fiber.New()
+	app.Use(dbQueryTimeoutMiddleware(activeCfg, func() *Config { return activeCfg }))
+
+	var firstDeadline time.Duration
+	var secondDeadline time.Duration
+
+	app.Get("/test", func(c *fiber.Ctx) error {
+		deadline, ok := c.UserContext().Deadline()
+		require.True(t, ok)
+
+		remaining := time.Until(deadline)
+		if firstDeadline == 0 {
+			firstDeadline = remaining
+		} else {
+			secondDeadline = remaining
+		}
+
+		return c.SendStatus(http.StatusOK)
+	})
+
+	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/test", http.NoBody))
+	require.NoError(t, err)
+	resp.Body.Close()
+
+	activeCfg = &Config{Postgres: PostgresConfig{QueryTimeoutSec: 30}}
+	resp, err = app.Test(httptest.NewRequest(http.MethodGet, "/test", http.NoBody))
+	require.NoError(t, err)
+	resp.Body.Close()
+
+	assert.True(t, firstDeadline > 0 && firstDeadline <= 2*time.Second)
+	assert.True(t, secondDeadline >= 10*time.Second)
 }
 
 func TestServer_GetApp(t *testing.T) {

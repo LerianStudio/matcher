@@ -24,12 +24,43 @@ import (
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
+	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
 )
 
 // mockApp satisfies libCommons.App for testing.
 type mockApp struct{}
 
 func (m *mockApp) Run(_ *libCommons.Launcher) error { return nil }
+
+type orderingCloser struct {
+	order *[]string
+	name  string
+	err   error
+}
+
+func (closer *orderingCloser) Close() error {
+	*closer.order = append(*closer.order, closer.name)
+	return closer.err
+}
+
+type orderingSupervisor struct {
+	order *[]string
+	err   error
+}
+
+func (supervisor *orderingSupervisor) Current() domain.RuntimeBundle { return nil }
+func (supervisor *orderingSupervisor) Snapshot() domain.Snapshot     { return domain.Snapshot{} }
+func (supervisor *orderingSupervisor) PublishSnapshot(context.Context, domain.Snapshot, string) error {
+	return nil
+}
+func (supervisor *orderingSupervisor) ReconcileCurrent(context.Context, domain.Snapshot, string) error {
+	return nil
+}
+func (supervisor *orderingSupervisor) Reload(context.Context, string) error { return nil }
+func (supervisor *orderingSupervisor) Stop(context.Context) error {
+	*supervisor.order = append(*supervisor.order, "supervisor")
+	return supervisor.err
+}
 
 func TestServiceRun(t *testing.T) {
 	t.Parallel()
@@ -124,6 +155,22 @@ func TestServiceShutdown(t *testing.T) {
 
 		assert.NoError(t, err)
 	})
+}
+
+func TestService_stopSystemplane_OrdersCancellationBeforeShutdown(t *testing.T) {
+	t.Parallel()
+
+	order := []string{}
+	svc := &Service{
+		cancelChangeFeed: func() { order = append(order, "cancel") },
+		spComponents: &SystemplaneComponents{
+			Supervisor: &orderingSupervisor{order: &order},
+			Backend:    &orderingCloser{order: &order, name: "backend"},
+		},
+	}
+
+	svc.stopSystemplane(context.Background(), &libLog.NopLogger{})
+	assert.Equal(t, []string{"cancel", "supervisor", "backend"}, order)
 }
 
 func TestServiceShutdownWithWorkers(t *testing.T) {

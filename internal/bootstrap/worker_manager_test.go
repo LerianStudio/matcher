@@ -530,7 +530,7 @@ func TestWorkerManager_ConfigChange(t *testing.T) {
 		require.NoError(t, wm.Stop())
 	})
 
-	t.Run("ignores startup-only enable toggle at runtime", func(t *testing.T) {
+	t.Run("enables export worker at runtime", func(t *testing.T) {
 		t.Parallel()
 
 		worker1 := &mockWorker{}
@@ -552,18 +552,18 @@ func TestWorkerManager_ConfigChange(t *testing.T) {
 		// Worker not started because disabled.
 		assert.Equal(t, 0, worker1.startCount())
 
-		// Enabling at runtime is startup-only and should be ignored.
+		// Enabling at runtime should start the worker.
 		newCfg := newTestConfig()
 		newCfg.ExportWorker.Enabled = true
 		wm.onConfigChange(newCfg)
 
-		assert.Equal(t, 0, worker1.startCount())
-		assert.Empty(t, runningWorkerNames(wm))
+		assert.Equal(t, 1, worker1.startCount())
+		assert.Equal(t, []string{"export"}, runningWorkerNames(wm))
 
 		require.NoError(t, wm.Stop())
 	})
 
-	t.Run("ignores startup-only disable toggle at runtime", func(t *testing.T) {
+	t.Run("disables export worker at runtime", func(t *testing.T) {
 		t.Parallel()
 
 		worker1 := &mockWorker{}
@@ -586,13 +586,13 @@ func TestWorkerManager_ConfigChange(t *testing.T) {
 
 		assert.Equal(t, 1, worker1.startCount())
 
-		// Disabling at runtime is startup-only and should be ignored.
+		// Disabling at runtime should stop the worker.
 		newCfg := newTestConfig()
 		newCfg.ExportWorker.Enabled = false
 		wm.onConfigChange(newCfg)
 
-		assert.Equal(t, 0, worker1.stopCount())
-		assert.Equal(t, []string{"export"}, runningWorkerNames(wm))
+		assert.Equal(t, 1, worker1.stopCount())
+		assert.Empty(t, runningWorkerNames(wm))
 
 		require.NoError(t, wm.Stop())
 	})

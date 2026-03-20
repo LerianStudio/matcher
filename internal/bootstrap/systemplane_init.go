@@ -10,7 +10,11 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/url"
 	"os"
+	"strconv"
+	"strings"
+	"time"
 
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
@@ -26,13 +30,13 @@ import (
 // defaultSystemplaneBackend is the backend used when SYSTEMPLANE_BACKEND is
 // not set. Postgres is the default because Matcher already requires a
 // PostgreSQL instance for its own data.
-const defaultSystemplaneBackend = "postgres"
+const (
+	defaultSystemplaneBackend = "postgres"
+	changeFeedRetryDelay      = time.Second
+)
 
 // Sentinel errors for systemplane initialization and bundle extraction.
 var (
-	errSupervisorNil                = errors.New("extract bundle: supervisor is nil")
-	errNoCurrentBundle              = errors.New("extract bundle: supervisor has no current bundle")
-	errUnexpectedBundleType         = errors.New("extract bundle: unexpected bundle type")
 	errChangeFeedSupervisorRequired = errors.New("start change feed: supervisor is required")
 )
 
@@ -40,11 +44,7 @@ var (
 // initialization. Callers use these references to wire the manager into HTTP
 // handlers and to shut down the backend when the application stops.
 type SystemplaneComponents struct {
-	Registry   registry.Registry
-	Store      ports.Store
-	History    ports.HistoryStore
 	ChangeFeed ports.ChangeFeed
-	Builder    *service.SnapshotBuilder
 	Supervisor service.Supervisor
 	Manager    service.Manager
 	Backend    io.Closer // for shutdown
@@ -94,6 +94,7 @@ func LoadSystemplaneBackendConfig(appCfg *Config) (*spBootstrap.BootstrapConfig,
 
 	cfg := &spBootstrap.BootstrapConfig{
 		Backend: backend,
+		Secrets: &spBootstrap.SecretStoreConfig{MasterKey: loadSystemplaneSecretMasterKey()},
 	}
 
 	switch backend {
@@ -108,35 +109,57 @@ func LoadSystemplaneBackendConfig(appCfg *Config) (*spBootstrap.BootstrapConfig,
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("validate systemplane config: %w", err)
 	}
+	if cfg.Secrets != nil && cfg.Secrets.MasterKey == "" {
+		return nil, fmt.Errorf("validate systemplane config: SYSTEMPLANE_SECRET_MASTER_KEY is required")
+	}
 
 	return cfg, nil
+}
+
+func loadSystemplaneSecretMasterKey() string {
+	if value := strings.TrimSpace(os.Getenv("SYSTEMPLANE_SECRET_MASTER_KEY")); value != "" {
+		return value
+	}
+
+	return ""
 }
 
 // loadSystemplanePostgresConfig builds a PostgresBootstrapConfig from env vars,
 // falling back to the application's primary postgres DSN when
 // SYSTEMPLANE_POSTGRES_DSN is not set.
 func loadSystemplanePostgresConfig(appCfg *Config) *spBootstrap.PostgresBootstrapConfig {
-	dsn := os.Getenv("SYSTEMPLANE_POSTGRES_DSN")
+	dsn := os.Getenv(spBootstrap.EnvPostgresDSN)
 	if dsn == "" && appCfg != nil {
 		hostPort := net.JoinHostPort(appCfg.Postgres.PrimaryHost, appCfg.Postgres.PrimaryPort)
-		dsn = fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=%s",
-			appCfg.Postgres.PrimaryUser,
-			appCfg.Postgres.PrimaryPassword,
-			hostPort,
-			appCfg.Postgres.PrimaryDB,
-			appCfg.Postgres.PrimarySSLMode,
-		)
+		query := url.Values{}
+		query.Set("sslmode", appCfg.Postgres.PrimarySSLMode)
+		dsn = (&url.URL{
+			Scheme:   "postgres",
+			User:     url.UserPassword(appCfg.Postgres.PrimaryUser, appCfg.Postgres.PrimaryPassword),
+			Host:     hostPort,
+			Path:     "/" + appCfg.Postgres.PrimaryDB,
+			RawQuery: query.Encode(),
+		}).String()
 	}
 
 	pgCfg := &spBootstrap.PostgresBootstrapConfig{
 		DSN: dsn,
 	}
 
-	if v := os.Getenv("SYSTEMPLANE_POSTGRES_SCHEMA"); v != "" {
+	if v := os.Getenv(spBootstrap.EnvPostgresSchema); v != "" {
 		pgCfg.Schema = v
 	}
+	if v := os.Getenv(spBootstrap.EnvPostgresEntriesTable); v != "" {
+		pgCfg.EntriesTable = v
+	}
+	if v := os.Getenv(spBootstrap.EnvPostgresHistoryTable); v != "" {
+		pgCfg.HistoryTable = v
+	}
+	if v := os.Getenv(spBootstrap.EnvPostgresRevisionTable); v != "" {
+		pgCfg.RevisionTable = v
+	}
 
-	if v := os.Getenv("SYSTEMPLANE_POSTGRES_NOTIFY_CHANNEL"); v != "" {
+	if v := os.Getenv(spBootstrap.EnvPostgresNotifyChannel); v != "" {
 		pgCfg.NotifyChannel = v
 	}
 
@@ -149,16 +172,27 @@ func loadSystemplanePostgresConfig(appCfg *Config) *spBootstrap.PostgresBootstra
 func loadSystemplaneMongoConfig() *spBootstrap.MongoBootstrapConfig {
 	mongoCfg := &spBootstrap.MongoBootstrapConfig{}
 
-	if v := os.Getenv("SYSTEMPLANE_MONGO_URI"); v != "" {
+	if v := os.Getenv(spBootstrap.EnvMongoURI); v != "" {
 		mongoCfg.URI = v
 	}
 
-	if v := os.Getenv("SYSTEMPLANE_MONGO_DATABASE"); v != "" {
+	if v := os.Getenv(spBootstrap.EnvMongoDatabase); v != "" {
 		mongoCfg.Database = v
 	}
+	if v := os.Getenv(spBootstrap.EnvMongoEntriesCollection); v != "" {
+		mongoCfg.EntriesCollection = v
+	}
+	if v := os.Getenv(spBootstrap.EnvMongoHistoryCollection); v != "" {
+		mongoCfg.HistoryCollection = v
+	}
 
-	if v := os.Getenv("SYSTEMPLANE_MONGO_WATCH_MODE"); v != "" {
+	if v := os.Getenv(spBootstrap.EnvMongoWatchMode); v != "" {
 		mongoCfg.WatchMode = v
+	}
+	if v := os.Getenv(spBootstrap.EnvMongoPollIntervalSec); v != "" {
+		if seconds, err := strconv.Atoi(v); err == nil && seconds > 0 {
+			mongoCfg.PollInterval = time.Duration(seconds) * time.Second
+		}
 	}
 
 	return mongoCfg
@@ -172,7 +206,14 @@ func loadSystemplaneMongoConfig() *spBootstrap.MongoBootstrapConfig {
 //
 // On any error the function cleans up partially-created resources before
 // returning so the caller does not need to track intermediate state.
-func InitSystemplane(ctx context.Context, cfg *Config, configManager *ConfigManager, workerManager *WorkerManager, logger libLog.Logger) (*SystemplaneComponents, error) {
+func InitSystemplane(
+	ctx context.Context,
+	cfg *Config,
+	configManager *ConfigManager,
+	workerManager *WorkerManager,
+	logger libLog.Logger,
+	observer func(service.ReloadEvent),
+) (*SystemplaneComponents, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("init systemplane: %w", ErrConfigNil)
 	}
@@ -189,18 +230,26 @@ func InitSystemplane(ctx context.Context, cfg *Config, configManager *ConfigMana
 		return nil, fmt.Errorf("init systemplane: %w", err)
 	}
 
-	// 3. Create backend resources (store, history, changefeed).
+	// 3. Create registry and register all matcher keys.
+	reg := registry.New()
+	if err := RegisterMatcherKeys(reg); err != nil {
+		return nil, fmt.Errorf("init systemplane: %w", err)
+	}
+	if backendCfg.Secrets != nil {
+		backendCfg.Secrets.SecretKeys = systemplaneSecretKeys(reg)
+	}
+	backendCfg.ApplyBehaviors = systemplaneApplyBehaviors(reg)
+	if backendCfg.Postgres != nil {
+		backendCfg.Postgres.ApplyBehaviors = backendCfg.ApplyBehaviors
+	}
+	if backendCfg.MongoDB != nil {
+		backendCfg.MongoDB.ApplyBehaviors = backendCfg.ApplyBehaviors
+	}
+
+	// 4. Create backend resources (store, history, changefeed).
 	backend, err := builtin.NewBackendFromConfig(ctx, backendCfg)
 	if err != nil {
 		return nil, fmt.Errorf("init systemplane: create backend: %w", err)
-	}
-
-	// 4. Create registry and register all matcher keys.
-	reg := registry.New()
-	if err := RegisterMatcherKeys(reg); err != nil {
-		_ = backend.Closer.Close()
-
-		return nil, fmt.Errorf("init systemplane: %w", err)
 	}
 
 	// 5. Create snapshot builder.
@@ -228,7 +277,7 @@ func InitSystemplane(ctx context.Context, cfg *Config, configManager *ConfigMana
 	}
 
 	// 8. Create reconcilers.
-	reconcilers, err := buildReconcilers(configManager, workerManager)
+	reconcilers, err := buildReconcilers(workerManager, logger)
 	if err != nil {
 		_ = backend.Closer.Close()
 
@@ -240,7 +289,7 @@ func InitSystemplane(ctx context.Context, cfg *Config, configManager *ConfigMana
 		Builder:     builder,
 		Factory:     factory,
 		Reconcilers: reconcilers,
-		Observer:    reloadObserver(ctx, logger),
+		Observer:    composeReloadObservers(reloadObserver(ctx, logger), observer),
 	})
 	if err != nil {
 		_ = backend.Closer.Close()
@@ -249,7 +298,13 @@ func InitSystemplane(ctx context.Context, cfg *Config, configManager *ConfigMana
 	}
 
 	// 10. Initial reload (builds first snapshot + bundle).
+	if configManager != nil {
+		configManager.enterSeedMode()
+	}
 	if err := supervisor.Reload(ctx, "initial-bootstrap"); err != nil {
+		if configManager != nil {
+			configManager.leaveSeedMode()
+		}
 		_ = supervisor.Stop(ctx)
 		_ = backend.Closer.Close()
 
@@ -263,8 +318,46 @@ func InitSystemplane(ctx context.Context, cfg *Config, configManager *ConfigMana
 		History:    backend.History,
 		Supervisor: supervisor,
 		Builder:    builder,
+		StateSync: func(syncCtx context.Context, snap domain.Snapshot) {
+			if configManager == nil {
+				return
+			}
+
+			if err := configManager.UpdateFromSystemplane(snap); err != nil && logger != nil {
+				logger.Log(syncCtx, libLog.LevelWarn, "systemplane config bridge sync failed",
+					libLog.String("error", err.Error()))
+			}
+		},
+		ConfigWriteValidator: func(_ context.Context, snap domain.Snapshot) error {
+			baseCfg := cfg
+			if configManager != nil {
+				if currentCfg := configManager.Get(); currentCfg != nil {
+					baseCfg = currentCfg
+				}
+			}
+
+			candidateCfg := snapshotToFullConfig(snap, baseCfg)
+
+			if err := candidateCfg.Validate(); err != nil {
+				return err
+			}
+			if IsProductionEnvironment(candidateCfg.App.EnvName) && !candidateCfg.RateLimit.Enabled {
+				return fmt.Errorf("RATE_LIMIT_ENABLED must remain true in production")
+			}
+			if IsProductionEnvironment(candidateCfg.App.EnvName) && candidateCfg.Fetcher.AllowPrivateIPs {
+				return fmt.Errorf("FETCHER_ALLOW_PRIVATE_IPS must remain false in production")
+			}
+			if candidateCfg.Archival.Enabled && strings.TrimSpace(candidateCfg.ObjectStorage.Endpoint) == "" {
+				return fmt.Errorf("OBJECT_STORAGE_ENDPOINT is required when ARCHIVAL_WORKER_ENABLED=true")
+			}
+
+			return nil
+		},
 	})
 	if err != nil {
+		if configManager != nil {
+			configManager.leaveSeedMode()
+		}
 		_ = supervisor.Stop(ctx)
 		_ = backend.Closer.Close()
 
@@ -272,11 +365,7 @@ func InitSystemplane(ctx context.Context, cfg *Config, configManager *ConfigMana
 	}
 
 	return &SystemplaneComponents{
-		Registry:   reg,
-		Store:      backend.Store,
-		History:    backend.History,
 		ChangeFeed: backend.ChangeFeed,
-		Builder:    builder,
 		Supervisor: supervisor,
 		Manager:    manager,
 		Backend:    backend.Closer,
@@ -302,6 +391,9 @@ func seedStoreForInitialReload(
 	// Keep going and force seed mode so config bridge reconciler can apply
 	// snapshots during reload.
 	if errors.Is(seedErr, domain.ErrRevisionMismatch) {
+		if refreshErr := configManager.RefreshBootstrapSeedValues(ctx, store, reg); refreshErr != nil {
+			return fmt.Errorf("refresh bootstrap seed values: %w", refreshErr)
+		}
 		configManager.enterSeedMode()
 
 		return nil
@@ -326,25 +418,59 @@ func reloadObserver(_ context.Context, logger libLog.Logger) func(service.Reload
 	}
 }
 
+func composeReloadObservers(observers ...func(service.ReloadEvent)) func(service.ReloadEvent) {
+	filtered := make([]func(service.ReloadEvent), 0, len(observers))
+	for _, observer := range observers {
+		if observer != nil {
+			filtered = append(filtered, observer)
+		}
+	}
+
+	if len(filtered) == 0 {
+		return nil
+	}
+
+	return func(event service.ReloadEvent) {
+		for _, observer := range filtered {
+			observer(event)
+		}
+	}
+}
+
+func systemplaneSecretKeys(reg registry.Registry) []string {
+	defs := reg.List(domain.KindConfig)
+	secretKeys := make([]string, 0, len(defs))
+	for _, def := range defs {
+		if def.Secret {
+			secretKeys = append(secretKeys, def.Key)
+		}
+	}
+
+	return secretKeys
+}
+
+func systemplaneApplyBehaviors(reg registry.Registry) map[string]domain.ApplyBehavior {
+	defs := reg.List(domain.KindConfig)
+	behaviors := make(map[string]domain.ApplyBehavior, len(defs))
+	for _, def := range defs {
+		behaviors[def.Key] = def.ApplyBehavior
+	}
+	for _, def := range reg.List(domain.KindSetting) {
+		behaviors[def.Key] = def.ApplyBehavior
+	}
+
+	return behaviors
+}
+
 // buildReconcilers creates the set of BundleReconcilers that the supervisor
 // uses on each reload. Execution order is determined by each reconciler's
 // Phase() — StateSync runs first, then Validation, then SideEffect.
 // Registration order within the same phase is preserved (stable sort).
-func buildReconcilers(configManager *ConfigManager, workerManager *WorkerManager) ([]ports.BundleReconciler, error) {
+func buildReconcilers(workerManager *WorkerManager, logger libLog.Logger) ([]ports.BundleReconciler, error) {
 	var reconcilers []ports.BundleReconciler
 
-	// Config bridge (PhaseStateSync) — must be present so configManager.Get()
-	// is up-to-date before downstream reconcilers run.
-	if configManager != nil {
-		configBridge, err := NewConfigBridgeReconciler(configManager)
-		if err != nil {
-			return nil, fmt.Errorf("create config bridge reconciler: %w", err)
-		}
-
-		reconcilers = append(reconcilers, configBridge)
-	}
-
 	reconcilers = append(reconcilers, NewHTTPPolicyReconciler())
+	reconcilers = append(reconcilers, NewPublisherReconciler(logger))
 
 	if workerManager != nil {
 		workerReconciler, err := NewWorkerReconciler(workerManager)
@@ -362,12 +488,18 @@ func buildReconcilers(configManager *ConfigManager, workerManager *WorkerManager
 // reloads when store entries change. Returns a cancel function to stop the
 // feed. If changeFeed is nil (e.g., in-memory store for testing), the
 // returned cancel function is a no-op.
-func StartChangeFeed(ctx context.Context, changeFeed ports.ChangeFeed, supervisor service.Supervisor) (context.CancelFunc, error) {
-	if changeFeed == nil {
+func startChangeFeed(
+	ctx context.Context,
+	changeFeed ports.ChangeFeed,
+	supervisor service.Supervisor,
+	logger libLog.Logger,
+	applySignal func(context.Context, ports.ChangeSignal) error,
+) (context.CancelFunc, error) {
+	if domain.IsNilValue(changeFeed) {
 		return func() {}, nil
 	}
 
-	if supervisor == nil {
+	if domain.IsNilValue(supervisor) {
 		return nil, errChangeFeedSupervisorRequired
 	}
 
@@ -375,37 +507,53 @@ func StartChangeFeed(ctx context.Context, changeFeed ports.ChangeFeed, superviso
 
 	runtime.SafeGoWithContextAndComponent(
 		feedCtx,
-		nil, // logger — nil-safe in SafeGoWithContextAndComponent
+		logger,
 		"systemplane",
 		"changefeed.subscriber",
 		runtime.KeepRunning,
 		func(_ context.Context) {
-			_ = changeFeed.Subscribe(feedCtx, func(_ ports.ChangeSignal) {
-				_ = supervisor.Reload(feedCtx, "changefeed")
-			})
+			for {
+				subscribeCtx, cancelSubscribe := context.WithCancel(feedCtx)
+				var applyErr error
+				err := changeFeed.Subscribe(subscribeCtx, func(signal ports.ChangeSignal) {
+					if applySignal != nil {
+						applyErr = applySignal(feedCtx, signal)
+					} else {
+						applyErr = supervisor.Reload(feedCtx, "changefeed")
+					}
+					if applyErr != nil {
+						if logger != nil {
+							logger.Log(feedCtx, libLog.LevelWarn, "systemplane changefeed reload failed",
+								libLog.String("error", applyErr.Error()))
+						}
+						cancelSubscribe()
+					}
+				})
+				cancelSubscribe()
+				if applyErr != nil {
+					select {
+					case <-feedCtx.Done():
+						return
+					case <-time.After(changeFeedRetryDelay):
+					}
+					continue
+				}
+				if err == nil || errors.Is(err, context.Canceled) {
+					return
+				}
+				if logger != nil {
+					logger.Log(feedCtx, libLog.LevelWarn, "systemplane changefeed subscriber stopped",
+						libLog.String("error", err.Error()))
+				}
+
+				select {
+				case <-feedCtx.Done():
+					return
+				case <-time.After(changeFeedRetryDelay):
+				}
+			}
 		},
 	)
 
 	return cancel, nil
-}
-
-// ExtractBundleFromSupervisor safely type-asserts the supervisor's current
-// RuntimeBundle to a *MatcherBundle. Returns an error if the supervisor has
-// no current bundle or the bundle is an unexpected type.
-func ExtractBundleFromSupervisor(supervisor service.Supervisor) (*MatcherBundle, error) {
-	if supervisor == nil {
-		return nil, errSupervisorNil
-	}
-
-	current := supervisor.Current()
-	if current == nil {
-		return nil, errNoCurrentBundle
-	}
-
-	bundle, ok := current.(*MatcherBundle)
-	if !ok {
-		return nil, fmt.Errorf("%w: got %T", errUnexpectedBundleType, current)
-	}
-
-	return bundle, nil
 }

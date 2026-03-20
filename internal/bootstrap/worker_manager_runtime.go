@@ -462,10 +462,5 @@ func extractWorkerConfig(name string, cfg *Config) any {
 }
 
 func workerSupportsRuntimeToggle(name string) bool {
-	switch name {
-	case workerNameExport, workerNameCleanup, workerNameArchival:
-		return false
-	default:
-		return true
-	}
+	return true
 }

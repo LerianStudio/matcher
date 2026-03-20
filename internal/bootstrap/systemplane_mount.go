@@ -9,12 +9,14 @@ import (
 	"errors"
 	"fmt"
 
+	authMiddleware "github.com/LerianStudio/lib-auth/v2/auth/middleware"
 	"github.com/gofiber/fiber/v2"
 
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	fiberhttp "github.com/LerianStudio/matcher/pkg/systemplane/adapters/http/fiber"
+	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
 	"github.com/LerianStudio/matcher/pkg/systemplane/service"
 )
 
@@ -32,6 +34,7 @@ var (
 // with only the handler's own requireAuth middleware as a secondary gate.
 func MountSystemplaneAPI(
 	app *fiber.App,
+	authClient *authMiddleware.AuthClient,
 	protected func(resource, action string) fiber.Router,
 	manager service.Manager,
 	authEnabled bool,
@@ -41,7 +44,7 @@ func MountSystemplaneAPI(
 		return errMountSystemplaneAppRequired
 	}
 
-	if manager == nil {
+	if domain.IsNilValue(manager) {
 		return errMountSystemplaneManagerRequired
 	}
 
@@ -57,7 +60,7 @@ func MountSystemplaneAPI(
 		// Mount each route behind the full auth middleware chain (JWT validation,
 		// tenant extraction, permission check, idempotency, rate limiting).
 		// The handler's own requireAuth/settingsAuth still runs as defense-in-depth.
-		mountSystemplaneRoutesProtected(protected, handler)
+		mountSystemplaneRoutesProtected(authClient, protected, handler)
 	} else {
 		// Auth disabled — mount directly. The handler's own requireAuth middleware
 		// provides a secondary gate (MatcherAuthorizer permits all when auth disabled).
@@ -77,6 +80,7 @@ func MountSystemplaneAPI(
 // This ensures JWT validation and tenant extraction happen before any handler
 // code runs, matching the security model of all other Matcher API routes.
 func mountSystemplaneRoutesProtected(
+	authClient *authMiddleware.AuthClient,
 	protected func(resource, action string) fiber.Router,
 	handler *fiberhttp.Handler,
 ) {
@@ -96,11 +100,29 @@ func mountSystemplaneRoutesProtected(
 	// Base permission covers tenant scope; the handler's settingsAuth middleware
 	// elevates to global permission when ?scope=global is requested.
 	protected(auth.ResourceSystem, auth.ActionSettingsRead).
-		Get("/v1/system/settings", handler.GetSettings)
+		Get("/v1/system/settings", settingsScopeAuthorization(authClient, auth.ActionSettingsGlobalRead), handler.GetSettings)
 	protected(auth.ResourceSystem, auth.ActionSettingsWrite).
-		Patch("/v1/system/settings", handler.PatchSettings)
+		Patch("/v1/system/settings", settingsScopeAuthorization(authClient, auth.ActionSettingsGlobalWrite), handler.PatchSettings)
 	protected(auth.ResourceSystem, auth.ActionSettingsSchemaRead).
 		Get("/v1/system/settings/schema", handler.GetSettingSchema)
 	protected(auth.ResourceSystem, auth.ActionSettingsHistoryRead).
-		Get("/v1/system/settings/history", handler.GetSettingHistory)
+		Get("/v1/system/settings/history", settingsScopeAuthorization(authClient, auth.ActionSettingsGlobalRead), handler.GetSettingHistory)
+}
+
+func settingsScopeAuthorization(authClient *authMiddleware.AuthClient, globalAction string) fiber.Handler {
+	if authClient == nil {
+		return func(fiberCtx *fiber.Ctx) error {
+			return fiberCtx.Next()
+		}
+	}
+
+	globalAuthorize := auth.Authorize(authClient, auth.ResourceSystem, globalAction)
+
+	return func(fiberCtx *fiber.Ctx) error {
+		if fiberCtx.Query("scope") != "global" {
+			return fiberCtx.Next()
+		}
+
+		return globalAuthorize(fiberCtx)
+	}
 }

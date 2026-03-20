@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
 	"github.com/LerianStudio/matcher/pkg/systemplane/ports"
 )
@@ -39,25 +38,20 @@ func NewMatcherAuthorizer(authEnabled bool) *MatcherAuthorizer {
 	return &MatcherAuthorizer{authEnabled: authEnabled}
 }
 
-// permissionMap translates systemplane permission suffixes (the part after
-// "system/") to action verbs that Matcher's RBAC model recognises. The keys
-// are the "resource:action" tails of a fully-qualified systemplane permission
-// string; the values are the canonical lib-auth action names.
-var permissionMap = map[string]struct {
-	resource string
-	action   string
-}{
-	"configs:read":          {resource: auth.ResourceSystem, action: auth.ActionConfigRead},
-	"configs:write":         {resource: auth.ResourceSystem, action: auth.ActionConfigWrite},
-	"configs/schema:read":   {resource: auth.ResourceSystem, action: auth.ActionConfigSchemaRead},
-	"configs/history:read":  {resource: auth.ResourceSystem, action: auth.ActionConfigHistoryRead},
-	"configs/reload:write":  {resource: auth.ResourceSystem, action: auth.ActionConfigReloadWrite},
-	"settings:read":         {resource: auth.ResourceSystem, action: auth.ActionSettingsRead},
-	"settings:write":        {resource: auth.ResourceSystem, action: auth.ActionSettingsWrite},
-	"settings/schema:read":  {resource: auth.ResourceSystem, action: auth.ActionSettingsSchemaRead},
-	"settings/history:read": {resource: auth.ResourceSystem, action: auth.ActionSettingsHistoryRead},
-	"settings/global:read":  {resource: auth.ResourceSystem, action: auth.ActionSettingsGlobalRead},
-	"settings/global:write": {resource: auth.ResourceSystem, action: auth.ActionSettingsGlobalWrite},
+// knownPermissions lists the systemplane permission suffixes accepted by the
+// secondary authorizer gate.
+var knownPermissions = map[string]struct{}{
+	"configs:read":          {},
+	"configs:write":         {},
+	"configs/schema:read":   {},
+	"configs/history:read":  {},
+	"configs/reload:write":  {},
+	"settings:read":         {},
+	"settings:write":        {},
+	"settings/schema:read":  {},
+	"settings/history:read": {},
+	"settings/global:read":  {},
+	"settings/global:write": {},
 }
 
 // Authorize checks whether the current actor has the given permission.
@@ -77,7 +71,7 @@ func (a *MatcherAuthorizer) Authorize(_ context.Context, permission string) erro
 		return fmt.Errorf("unrecognised permission %q: %w", permission, domain.ErrPermissionDenied)
 	}
 
-	if _, known := permissionMap[suffix]; !known {
+	if _, known := knownPermissions[suffix]; !known {
 		return fmt.Errorf("unrecognised permission suffix %q: %w", suffix, domain.ErrPermissionDenied)
 	}
 

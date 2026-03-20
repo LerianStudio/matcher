@@ -64,12 +64,18 @@ type BootstrapOnlyConfig struct {
 }
 
 // ErrBootstrapConfigNil indicates a nil bootstrap config was provided to the factory.
-var ErrBootstrapConfigNil = errors.New("new matcher bundle factory: bootstrap config is required")
+var (
+	ErrBootstrapConfigNil     = errors.New("new matcher bundle factory: bootstrap config is required")
+	errInvalidKeyComponentMap = errors.New("new matcher bundle factory: invalid key component map")
+)
 
 // NewMatcherBundleFactory creates a new factory with the given bootstrap config.
 func NewMatcherBundleFactory(bootstrapCfg *BootstrapOnlyConfig) (*MatcherBundleFactory, error) {
 	if bootstrapCfg == nil {
 		return nil, ErrBootstrapConfigNil
+	}
+	if keyComponentMapErr != nil {
+		return nil, fmt.Errorf("%w: %w", errInvalidKeyComponentMap, keyComponentMapErr)
 	}
 
 	return &MatcherBundleFactory{bootstrapCfg: bootstrapCfg}, nil
@@ -95,9 +101,15 @@ func (factory *MatcherBundleFactory) Build(ctx context.Context, snap domain.Snap
 	httpPolicy := factory.buildHTTPPolicy(snap)
 
 	return &MatcherBundle{
-		Infra:  infra,
-		HTTP:   httpPolicy,
-		Logger: loggerBundle,
+		Infra:             infra,
+		HTTP:              httpPolicy,
+		Logger:            loggerBundle,
+		ownershipTracked:  true,
+		ownsLogger:        loggerBundle != nil,
+		ownsPostgres:      infra != nil && infra.Postgres != nil,
+		ownsRedis:         infra != nil && infra.Redis != nil,
+		ownsRabbitMQ:      infra != nil && infra.RabbitMQ != nil,
+		ownsObjectStorage: infra != nil && infra.ObjectStorage != nil,
 	}, nil
 }
 
@@ -118,30 +130,29 @@ var allComponents = map[string]struct{}{
 // keyComponentMap is computed once from matcherKeyDefs(). It maps each config
 // key that has a non-empty Component field to its component name.
 // Immutable after init — do not modify at runtime.
-var keyComponentMap = buildKeyComponentMap()
+var (
+	keyComponentMap, keyComponentMapErr = buildKeyComponentMap()
+)
 
 // buildKeyComponentMap iterates matcherKeyDefs() and returns a map from config
 // key to its declared Component. Keys with empty Component are omitted — they
 // are cross-cutting and do not affect incremental rebuilds.
-func buildKeyComponentMap() map[string]string {
+func buildKeyComponentMap() (map[string]string, error) {
 	defs := matcherKeyDefs()
 	keyToComponent := make(map[string]string, len(defs))
 
 	for _, def := range defs {
 		if def.Component != "" {
 			if _, known := allComponents[def.Component]; !known {
-				// Crash at init time rather than silently degrading at runtime.
-				// A typo here would cause the key to be treated as cross-cutting,
-				// forcing unnecessary full rebuilds on every config change.
-				panic(fmt.Sprintf("systemplane: key %q declares unknown Component %q; valid components: %v",
-					def.Key, def.Component, allComponentNames()))
+				return nil, fmt.Errorf("systemplane: key %q declares unknown Component %q; valid components: %v",
+					def.Key, def.Component, allComponentNames())
 			}
 
 			keyToComponent[def.Key] = def.Component
 		}
 	}
 
-	return keyToComponent
+	return keyToComponent, nil
 }
 
 // allComponentNames returns sorted component names for error messages.
@@ -192,7 +203,7 @@ func (factory *MatcherBundleFactory) BuildIncremental(
 		return factory.Build(ctx, snap)
 	}
 
-	newBundle := &MatcherBundle{}
+	newBundle := &MatcherBundle{ownershipTracked: true}
 
 	// Track which fresh components we built so we can close them on rollback.
 	var freshClosers []func() error
@@ -212,18 +223,17 @@ func (factory *MatcherBundleFactory) BuildIncremental(
 		}
 
 		newBundle.Logger = loggerBundle
+		newBundle.ownsLogger = loggerBundle != nil
 
 		freshClosers = append(freshClosers, func() error {
-			if loggerBundle.Logger != nil {
+			if loggerBundle != nil && loggerBundle.Logger != nil {
 				return loggerBundle.Logger.Sync(ctx)
 			}
 
 			return nil
 		})
 	} else {
-		// Transfer ownership from previous.
 		newBundle.Logger = prev.Logger
-		prev.Logger = nil
 	}
 
 	// We need a logger for infra builds. Use whichever we have.
@@ -247,13 +257,13 @@ func (factory *MatcherBundleFactory) BuildIncremental(
 		}
 
 		newBundle.Infra.Postgres = pgClient
+		newBundle.ownsPostgres = pgClient != nil
 
 		if pgClient != nil {
 			freshClosers = append(freshClosers, pgClient.Close)
 		}
 	} else {
 		newBundle.Infra.Postgres = prev.Infra.Postgres
-		prev.Infra.Postgres = nil
 	}
 
 	// Redis
@@ -265,26 +275,26 @@ func (factory *MatcherBundleFactory) BuildIncremental(
 		}
 
 		newBundle.Infra.Redis = redisClient
+		newBundle.ownsRedis = redisClient != nil
 
 		if redisClient != nil {
 			freshClosers = append(freshClosers, redisClient.Close)
 		}
 	} else {
 		newBundle.Infra.Redis = prev.Infra.Redis
-		prev.Infra.Redis = nil
 	}
 
 	// RabbitMQ
 	if _, changed := affected["rabbitmq"]; changed {
 		rmqConn := factory.buildRabbitMQConnection(snap, logger)
 		newBundle.Infra.RabbitMQ = rmqConn
+		newBundle.ownsRabbitMQ = rmqConn != nil
 
 		freshClosers = append(freshClosers, func() error {
 			return closeRabbitMQ(rmqConn)
 		})
 	} else {
 		newBundle.Infra.RabbitMQ = prev.Infra.RabbitMQ
-		prev.Infra.RabbitMQ = nil
 	}
 
 	// S3 / Object Storage
@@ -295,14 +305,16 @@ func (factory *MatcherBundleFactory) BuildIncremental(
 			return nil, fmt.Errorf("incremental build object storage: %w", err)
 		}
 
-		newBundle.Infra.ObjectStorage = s3Client
+		newBundle.ownsObjectStorage = s3Client != nil
+		if s3Client != nil {
+			newBundle.Infra.ObjectStorage = s3Client
+		}
 
 		if s3Client != nil {
 			freshClosers = append(freshClosers, s3Client.Close)
 		}
 	} else {
 		newBundle.Infra.ObjectStorage = prev.Infra.ObjectStorage
-		prev.Infra.ObjectStorage = nil
 	}
 
 	// --- HTTP Policy ---
@@ -310,7 +322,6 @@ func (factory *MatcherBundleFactory) BuildIncremental(
 		newBundle.HTTP = factory.buildHTTPPolicy(snap)
 	} else {
 		newBundle.HTTP = prev.HTTP
-		prev.HTTP = nil
 	}
 
 	return newBundle, nil
@@ -466,10 +477,14 @@ func (factory *MatcherBundleFactory) buildInfra(
 		return nil, fmt.Errorf("build object storage: %w", err)
 	}
 
-	return &InfraBundle{
-		Postgres:      pgClient,
-		Redis:         redisClient,
-		RabbitMQ:      rmqConn,
-		ObjectStorage: s3Client,
-	}, nil
+	infra := &InfraBundle{
+		Postgres: pgClient,
+		Redis:    redisClient,
+		RabbitMQ: rmqConn,
+	}
+	if s3Client != nil {
+		infra.ObjectStorage = s3Client
+	}
+
+	return infra, nil
 }

@@ -8,6 +8,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sync"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -16,7 +17,6 @@ import (
 
 	governanceHTTP "github.com/LerianStudio/matcher/internal/governance/adapters/http"
 	archiveMetadataRepo "github.com/LerianStudio/matcher/internal/governance/adapters/postgres/archive_metadata"
-	governanceCommand "github.com/LerianStudio/matcher/internal/governance/services/command"
 	governanceWorker "github.com/LerianStudio/matcher/internal/governance/services/worker"
 	reportingStorage "github.com/LerianStudio/matcher/internal/reporting/adapters/storage"
 	reportingPorts "github.com/LerianStudio/matcher/internal/reporting/ports"
@@ -163,17 +163,19 @@ func formatWorkerStatus(enabled bool, interval time.Duration) string {
 func initArchivalComponents(
 	routes *Routes,
 	cfg *Config,
+	configGetter func() *Config,
 	provider sharedPorts.InfrastructureProvider,
 	logger libLog.Logger,
 	cleanups *[]func(),
 ) (*governanceWorker.ArchivalWorker, error) {
-	ctx := context.Background()
-
 	archiveRepo := archiveMetadataRepo.NewRepository(provider)
 
 	archivalStorage, err := createArchivalStorage(cfg, logger)
 	if err != nil {
 		return nil, fmt.Errorf("create archival storage: %w", err)
+	}
+	if configGetter != nil {
+		archivalStorage = newRuntimeArchivalStorageClient(cfg, configGetter, archivalStorage)
 	}
 
 	if archivalStorage != nil {
@@ -181,17 +183,27 @@ func initArchivalComponents(
 		if handlerErr != nil {
 			return nil, fmt.Errorf("create archive handler: %w", handlerErr)
 		}
+		if configGetter != nil {
+			archiveHandler.SetRuntimePresignExpiryGetter(func() time.Duration {
+				runtimeCfg := configGetter()
+				if runtimeCfg == nil {
+					return cfg.ArchivalPresignExpiry()
+				}
+
+				return runtimeCfg.ArchivalPresignExpiry()
+			})
+		}
 
 		if routeErr := governanceHTTP.RegisterArchiveRoutes(routes.Protected, archiveHandler); routeErr != nil {
 			return nil, fmt.Errorf("register archive routes: %w", routeErr)
 		}
 	}
 
-	if !cfg.Archival.Enabled {
+	if configGetter == nil && !cfg.Archival.Enabled {
 		return nil, nil
 	}
 
-	if archivalStorage == nil {
+	if cfg.Archival.Enabled && createArchivalStorageAvailable(cfg) == false {
 		return nil, ErrArchivalStorageRequired
 	}
 
@@ -199,28 +211,13 @@ func initArchivalComponents(
 	if dbErr != nil {
 		return nil, fmt.Errorf("open database for archival worker: %w", dbErr)
 	}
-
-	success := false
-
-	defer func() {
-		if !success {
-			if closeErr := archivalDB.Close(); closeErr != nil {
-				logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("failed to close archival DB on error path: %v", closeErr))
-			}
-		}
-	}()
-
 	archivalDB.SetMaxOpenConns(archivalMaxOpenConns)
 	archivalDB.SetMaxIdleConns(archivalMaxIdleConns)
 	archivalDB.SetConnMaxLifetime(cfg.ConnMaxLifetime())
 	archivalDB.SetConnMaxIdleTime(cfg.ConnMaxIdleTime())
 
 	tracer := otel.Tracer(constants.ApplicationName)
-
-	partitionMgr, pmErr := governanceCommand.NewPartitionManager(archivalDB, logger, tracer)
-	if pmErr != nil {
-		return nil, fmt.Errorf("create partition manager: %w", pmErr)
-	}
+	partitionMgr := newDynamicPartitionManager(provider, logger, tracer)
 
 	archivalWorkerCfg := governanceWorker.ArchivalWorkerConfig{
 		Interval:            cfg.ArchivalInterval(),
@@ -244,18 +241,19 @@ func initArchivalComponents(
 		logger,
 	)
 	if workerErr != nil {
+		_ = archivalDB.Close()
 		return nil, fmt.Errorf("create archival worker: %w", workerErr)
 	}
 
-	success = true
-
 	*cleanups = append(*cleanups, func() {
-		if err := archivalDB.Close(); err != nil {
-			logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to close archival database: %v", err))
-		}
+		_ = archivalDB.Close()
 	})
 
 	return worker, nil
+}
+
+func createArchivalStorageAvailable(cfg *Config) bool {
+	return cfg != nil && cfg.Archival.StorageBucket != "" && cfg.ObjectStorage.Endpoint != ""
 }
 
 // createArchivalStorage creates an S3-compatible object storage client for the archival bucket.
@@ -279,4 +277,55 @@ func createArchivalStorage(cfg *Config, _ libLog.Logger) (reportingPorts.ObjectS
 	}
 
 	return client, nil
+}
+
+func newRuntimeArchivalStorageClient(
+	initialCfg *Config,
+	configGetter func() *Config,
+	fallback reportingPorts.ObjectStorageClient,
+) reportingPorts.ObjectStorageClient {
+	var (
+		mu           sync.Mutex
+		activeClient reportingPorts.ObjectStorageClient
+		activeKey    string
+	)
+
+	activeClient = fallback
+	activeKey = archivalStorageCacheKey(initialCfg)
+
+	return newDynamicObjectStorageClient(func() sharedPorts.ObjectStorageClient {
+		cfg := initialCfg
+		if configGetter != nil {
+			if runtimeCfg := configGetter(); runtimeCfg != nil {
+				cfg = runtimeCfg
+			}
+		}
+
+		cacheKey := archivalStorageCacheKey(cfg)
+
+		mu.Lock()
+		defer mu.Unlock()
+
+		if activeClient != nil && cacheKey == activeKey {
+			return activeClient
+		}
+
+		client, err := createArchivalStorage(cfg, nil)
+		if err != nil || client == nil {
+			return nil
+		}
+
+		activeClient = client
+		activeKey = cacheKey
+
+		return activeClient
+	}, fallback)
+}
+
+func archivalStorageCacheKey(cfg *Config) string {
+	if cfg == nil {
+		return ""
+	}
+
+	return fmt.Sprintf("%s|%s|%s|%s|%s|%t", cfg.ObjectStorage.Endpoint, cfg.ObjectStorage.Region, cfg.Archival.StorageBucket, cfg.ObjectStorage.AccessKeyID, cfg.ObjectStorage.SecretAccessKey, cfg.ObjectStorage.UsePathStyle)
 }

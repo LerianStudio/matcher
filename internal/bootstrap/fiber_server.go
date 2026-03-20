@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
@@ -44,7 +45,8 @@ import (
 )
 
 const (
-	defaultBodyLimitBytes = 10 * 1024 * 1024
+	runtimeBodyLimitDefaultBytes = 32 * 1024 * 1024
+	appBodyLimitCeilingBytes     = 128 * 1024 * 1024
 	// maxHeaderIDLength limits X-Request-ID / X-Header-ID to 128 chars.
 	// Rationale: UUID is 36 chars; 128 allows longer correlation IDs while
 	// preventing log injection and memory exhaustion from malicious headers.
@@ -192,21 +194,17 @@ func NewFiberApp(
 	cfg *Config,
 	logger libLog.Logger,
 	telemetry *libOpentelemetry.Telemetry,
+	configGetter func() *Config,
 ) *fiber.App {
 	if cfg == nil {
 		cfg = &Config{
 			Server: ServerConfig{
-				BodyLimitBytes:     defaultBodyLimitBytes,
+				BodyLimitBytes:     runtimeBodyLimitDefaultBytes,
 				CORSAllowedOrigins: "http://localhost:3000",
 				CORSAllowedMethods: "GET,POST,PUT,PATCH,DELETE,OPTIONS",
 				CORSAllowedHeaders: "Origin,Content-Type,Accept,Authorization,X-Request-ID",
 			},
 		}
-	}
-
-	bodyLimit := cfg.Server.BodyLimitBytes
-	if bodyLimit <= 0 {
-		bodyLimit = defaultBodyLimitBytes
 	}
 
 	envName := cfg.App.EnvName
@@ -217,7 +215,7 @@ func NewFiberApp(
 		ReadTimeout:           defaultReadTimeout * time.Second,
 		WriteTimeout:          defaultWriteTimeout * time.Second,
 		IdleTimeout:           defaultIdleTimeout * time.Second,
-		BodyLimit:             bodyLimit,
+		BodyLimit:             appBodyLimitCeilingBytes,
 		ErrorHandler:          customErrorHandlerWithEnv(logger, envName),
 	}
 
@@ -257,12 +255,17 @@ func NewFiberApp(
 	}))
 
 	app.Use(requestid.New())
+	app.Use(runtimeBodyLimitMiddleware(cfg, configGetter))
 
-	app.Use(cors.New(cors.Config{
-		AllowOrigins: cfg.Server.CORSAllowedOrigins,
-		AllowMethods: cfg.Server.CORSAllowedMethods,
-		AllowHeaders: cfg.Server.CORSAllowedHeaders,
-	}))
+	if configGetter != nil {
+		app.Use(runtimeCORSMiddleware(cfg, configGetter))
+	} else {
+		app.Use(cors.New(cors.Config{
+			AllowOrigins: cfg.Server.CORSAllowedOrigins,
+			AllowMethods: cfg.Server.CORSAllowedMethods,
+			AllowHeaders: cfg.Server.CORSAllowedHeaders,
+		}))
+	}
 
 	helmetCfg := helmet.Config{
 		XSSProtection:             "1; mode=block",
@@ -294,8 +297,8 @@ func NewFiberApp(
 	// preventing indefinite hangs when the connection pool is exhausted.
 	// Must be applied AFTER telemetry middleware so the enriched context gets the deadline.
 	queryTimeout := cfg.QueryTimeout()
-	if queryTimeout > 0 {
-		app.Use(dbQueryTimeoutMiddleware(queryTimeout))
+	if queryTimeout > 0 || configGetter != nil {
+		app.Use(dbQueryTimeoutMiddleware(cfg, configGetter))
 	}
 
 	if !IsProductionEnvironment(envName) {
@@ -303,6 +306,103 @@ func NewFiberApp(
 	}
 
 	return app
+}
+
+func runtimeBodyLimitMiddleware(initialCfg *Config, configGetter func() *Config) fiber.Handler {
+	return func(fiberCtx *fiber.Ctx) error {
+		limit := effectiveRuntimeBodyLimit(initialCfg, configGetter)
+
+		if len(fiberCtx.Body()) > limit {
+			return fiber.ErrRequestEntityTooLarge
+		}
+
+		return fiberCtx.Next()
+	}
+}
+
+func currentRuntimeBodyLimit(initialCfg *Config, configGetter func() *Config) int {
+	cfg := initialCfg
+	if configGetter != nil {
+		if runtimeCfg := configGetter(); runtimeCfg != nil {
+			cfg = runtimeCfg
+		}
+	}
+
+	if cfg == nil || cfg.Server.BodyLimitBytes <= 0 {
+		return runtimeBodyLimitDefaultBytes
+	}
+
+	return cfg.Server.BodyLimitBytes
+}
+
+func effectiveRuntimeBodyLimit(initialCfg *Config, configGetter func() *Config) int {
+	limit := currentRuntimeBodyLimit(initialCfg, configGetter)
+	if limit <= 0 {
+		return runtimeBodyLimitDefaultBytes
+	}
+	if limit > appBodyLimitCeilingBytes {
+		return appBodyLimitCeilingBytes
+	}
+
+	return limit
+}
+
+func runtimeCORSMiddleware(initialCfg *Config, configGetter func() *Config) fiber.Handler {
+	var (
+		mu            sync.RWMutex
+		activeHandler fiber.Handler
+		activeOrigins string
+		activeMethods string
+		activeHeaders string
+	)
+
+	buildHandler := func(origins, methods, headers string) fiber.Handler {
+		return cors.New(cors.Config{
+			AllowOrigins: origins,
+			AllowMethods: methods,
+			AllowHeaders: headers,
+		})
+	}
+
+	resolve := func() (string, string, string) {
+		cfg := initialCfg
+		if configGetter != nil {
+			if runtimeCfg := configGetter(); runtimeCfg != nil {
+				cfg = runtimeCfg
+			}
+		}
+
+		if cfg == nil {
+			return "http://localhost:3000", "GET,POST,PUT,PATCH,DELETE,OPTIONS", "Origin,Content-Type,Accept,Authorization,X-Request-ID"
+		}
+
+		return cfg.Server.CORSAllowedOrigins, cfg.Server.CORSAllowedMethods, cfg.Server.CORSAllowedHeaders
+	}
+
+	return func(fiberCtx *fiber.Ctx) error {
+		origins, methods, headers := resolve()
+
+		mu.RLock()
+		handler := activeHandler
+		currentOrigins := activeOrigins
+		currentMethods := activeMethods
+		currentHeaders := activeHeaders
+		mu.RUnlock()
+
+		if handler == nil || currentOrigins != origins || currentMethods != methods || currentHeaders != headers {
+			mu.Lock()
+			if activeHandler == nil || activeOrigins != origins || activeMethods != methods || activeHeaders != headers {
+				activeHandler = buildHandler(origins, methods, headers)
+				activeOrigins = origins
+				activeMethods = methods
+				activeHeaders = headers
+			}
+			handler = activeHandler
+			mu.Unlock()
+		}
+
+		return handler(fiberCtx)
+	}
 }
 
 // structuredRequestLogger creates a middleware that logs HTTP requests using the structured application logger.
@@ -343,8 +443,13 @@ func structuredRequestLogger(logger libLog.Logger) fiber.Handler {
 // Without this middleware, requests can block indefinitely when the sql.DB connection
 // pool is exhausted, since sql.DB has no built-in pool acquisition timeout.
 // The cancel function is deferred to ensure resources are released after the handler completes.
-func dbQueryTimeoutMiddleware(timeout time.Duration) fiber.Handler {
+func dbQueryTimeoutMiddleware(initialCfg *Config, configGetter func() *Config) fiber.Handler {
 	return func(fiberCtx *fiber.Ctx) error {
+		timeout := currentQueryTimeout(initialCfg, configGetter)
+		if timeout <= 0 {
+			return fiberCtx.Next()
+		}
+
 		ctx := fiberCtx.UserContext()
 
 		// Only apply timeout if the context does not already have a tighter deadline.
@@ -361,6 +466,21 @@ func dbQueryTimeoutMiddleware(timeout time.Duration) fiber.Handler {
 
 		return fiberCtx.Next()
 	}
+}
+
+func currentQueryTimeout(initialCfg *Config, configGetter func() *Config) time.Duration {
+	cfg := initialCfg
+	if configGetter != nil {
+		if runtimeCfg := configGetter(); runtimeCfg != nil {
+			cfg = runtimeCfg
+		}
+	}
+
+	if cfg == nil {
+		return 0
+	}
+
+	return cfg.QueryTimeout()
 }
 
 func customErrorHandlerWithEnv(logger libLog.Logger, envName string) fiber.ErrorHandler {
@@ -480,6 +600,8 @@ func clientErrorMessageForStatus(code int) string {
 		return "forbidden"
 	case fiber.StatusNotFound:
 		return "not_found"
+	case fiber.StatusRequestEntityTooLarge:
+		return "request_entity_too_large"
 	default:
 		return "request_failed"
 	}

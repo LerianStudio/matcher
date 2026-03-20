@@ -73,21 +73,12 @@ func RegisterRoutes(
 	app.Get("/ready", readinessHandler(cfg, configGetter, drainingGetter, deps, logger))
 
 	if cfg.Swagger.Enabled && !IsProductionEnvironment(cfg.App.EnvName) {
-		// Override the generated spec host when SWAGGER_HOST is set.
-		// When empty, the spec omits the host field and Swagger UI
-		// defaults to the request's own host (works for most setups).
-		if cfg.Swagger.Host != "" {
-			swagger.SwaggerInfo.Host = cfg.Swagger.Host
-		}
+		applySwaggerInfo(cfg)
+		app.Get("/swagger/*", runtimeSwaggerHandler(cfg, configGetter, fiberSwagger.WrapHandler))
+	}
 
-		// Override the generated spec schemes at runtime.
-		// The static annotation defaults to ["https"]; this allows
-		// development/staging environments to use ["http"] for local testing.
-		if cfg.Swagger.Schemes != "" {
-			swagger.SwaggerInfo.Schemes = parseSchemes(cfg.Swagger.Schemes)
-		}
-
-		app.Get("/swagger/*", fiberSwagger.WrapHandler)
+	if configGetter != nil && !IsProductionEnvironment(cfg.App.EnvName) && !cfg.Swagger.Enabled {
+		app.Get("/swagger/*", runtimeSwaggerHandler(cfg, configGetter, fiberSwagger.WrapHandler))
 	}
 
 	idempotencyMiddleware := sharedHTTP.NewIdempotencyMiddleware(
@@ -124,6 +115,43 @@ func RegisterRoutes(
 		API:       app.Group(""),
 		Protected: protected,
 	}, nil
+}
+
+func runtimeSwaggerHandler(initialCfg *Config, configGetter func() *Config, next fiber.Handler) fiber.Handler {
+	return func(fiberCtx *fiber.Ctx) error {
+		cfg := initialCfg
+		if configGetter != nil {
+			if runtimeCfg := configGetter(); runtimeCfg != nil {
+				cfg = runtimeCfg
+			}
+		}
+
+		if cfg == nil || !cfg.Swagger.Enabled || IsProductionEnvironment(cfg.App.EnvName) {
+			return fiber.ErrNotFound
+		}
+
+		applySwaggerInfo(cfg)
+
+		return next(fiberCtx)
+	}
+}
+
+func applySwaggerInfo(cfg *Config) {
+	if cfg == nil {
+		return
+	}
+
+	if cfg.Swagger.Host != "" {
+		swagger.SwaggerInfo.Host = cfg.Swagger.Host
+	} else {
+		swagger.SwaggerInfo.Host = ""
+	}
+
+	if cfg.Swagger.Schemes != "" {
+		swagger.SwaggerInfo.Schemes = parseSchemes(cfg.Swagger.Schemes)
+	} else {
+		swagger.SwaggerInfo.Schemes = []string{"https"}
+	}
 }
 
 // parseSchemes splits a comma-separated schemes string into a trimmed slice.

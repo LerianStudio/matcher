@@ -14,6 +14,10 @@ import (
 	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
 	libRabbitmq "github.com/LerianStudio/lib-commons/v4/commons/rabbitmq"
 	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
+
+	ingestionRabbitmq "github.com/LerianStudio/matcher/internal/ingestion/adapters/rabbitmq"
+	matchingRabbitmq "github.com/LerianStudio/matcher/internal/matching/adapters/rabbitmq"
+	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
 )
 
 // MatcherBundle is the runtime dependency container for the Matcher service.
@@ -29,9 +33,18 @@ import (
 // all errors so that a single failure does not prevent remaining resources
 // from being released.
 type MatcherBundle struct {
-	Infra  *InfraBundle
-	HTTP   *HTTPPolicyBundle
-	Logger *LoggerBundle
+	Infra                    *InfraBundle
+	HTTP                     *HTTPPolicyBundle
+	Logger                   *LoggerBundle
+	StagedMatchingPublisher  *matchingRabbitmq.EventPublisher
+	StagedIngestionPublisher *ingestionRabbitmq.EventPublisher
+
+	ownershipTracked  bool
+	ownsLogger        bool
+	ownsPostgres      bool
+	ownsRedis         bool
+	ownsRabbitMQ      bool
+	ownsObjectStorage bool
 }
 
 // InfraBundle groups infrastructure clients that require connection management.
@@ -83,7 +96,7 @@ func (bundle *MatcherBundle) Close(ctx context.Context) error {
 	// 1. Logger sync (least dependent — only observability).
 	// The lib-commons Logger interface includes Sync(ctx) so we call it
 	// directly rather than using a type assertion.
-	if bundle.Logger != nil && bundle.Logger.Logger != nil {
+	if bundle.shouldCloseLogger() && bundle.Logger != nil && bundle.Logger.Logger != nil {
 		if err := bundle.Logger.Logger.Sync(ctx); err != nil {
 			errs = append(errs, fmt.Errorf("sync logger: %w", err))
 		}
@@ -106,27 +119,39 @@ func (bundle *MatcherBundle) closeInfra() error {
 
 	var errs []error
 
-	if bundle.Infra.ObjectStorage != nil {
+	if bundle.shouldCloseObjectStorage() && bundle.Infra.ObjectStorage != nil {
 		if err := bundle.Infra.ObjectStorage.Close(); err != nil {
 			errs = append(errs, fmt.Errorf("close object storage: %w", err))
 		}
 	}
 
-	if bundle.Infra.RabbitMQ != nil {
+	if bundle.shouldCloseRabbitMQ() && bundle.Infra.RabbitMQ != nil {
 		if err := closeRabbitMQ(bundle.Infra.RabbitMQ); err != nil {
 			errs = append(errs, fmt.Errorf("close rabbitmq: %w", err))
 		}
 	}
 
-	if bundle.Infra.Redis != nil {
+	if bundle.shouldCloseRedis() && bundle.Infra.Redis != nil {
 		if err := bundle.Infra.Redis.Close(); err != nil {
 			errs = append(errs, fmt.Errorf("close redis: %w", err))
 		}
 	}
 
-	if bundle.Infra.Postgres != nil {
+	if bundle.shouldClosePostgres() && bundle.Infra.Postgres != nil {
 		if err := bundle.Infra.Postgres.Close(); err != nil {
 			errs = append(errs, fmt.Errorf("close postgres: %w", err))
+		}
+	}
+
+	if bundle.StagedMatchingPublisher != nil {
+		if err := loadCloseMatchingEventPublisherFn()(bundle.StagedMatchingPublisher); err != nil {
+			errs = append(errs, fmt.Errorf("close staged matching publisher: %w", err))
+		}
+	}
+
+	if bundle.StagedIngestionPublisher != nil {
+		if err := loadCloseIngestionEventPublisherFn()(bundle.StagedIngestionPublisher); err != nil {
+			errs = append(errs, fmt.Errorf("close staged ingestion publisher: %w", err))
 		}
 	}
 
@@ -191,4 +216,71 @@ func (bundle *MatcherBundle) Log() libLog.Logger {
 	}
 
 	return bundle.Logger.Logger
+}
+
+// AdoptResourcesFrom transfers ownership of reused resources from the previous
+// bundle after the new bundle has been committed as active.
+func (bundle *MatcherBundle) AdoptResourcesFrom(previous domain.RuntimeBundle) {
+	prev, ok := previous.(*MatcherBundle)
+	if !ok || bundle == nil || prev == nil || !bundle.ownershipTracked {
+		return
+	}
+
+	if !bundle.ownsLogger && bundle.Logger == prev.Logger {
+		bundle.ownsLogger = true
+		prev.Logger = nil
+		prev.ownsLogger = false
+	}
+
+	if bundle.Infra == nil || prev.Infra == nil {
+		return
+	}
+
+	if !bundle.ownsPostgres && bundle.Infra.Postgres == prev.Infra.Postgres {
+		bundle.ownsPostgres = true
+		prev.Infra.Postgres = nil
+		prev.ownsPostgres = false
+	}
+
+	if !bundle.ownsRedis && bundle.Infra.Redis == prev.Infra.Redis {
+		bundle.ownsRedis = true
+		prev.Infra.Redis = nil
+		prev.ownsRedis = false
+	}
+
+	if !bundle.ownsRabbitMQ && bundle.Infra.RabbitMQ == prev.Infra.RabbitMQ {
+		bundle.ownsRabbitMQ = true
+		prev.Infra.RabbitMQ = nil
+		prev.ownsRabbitMQ = false
+	}
+
+	if !bundle.ownsObjectStorage && bundle.Infra.ObjectStorage == prev.Infra.ObjectStorage {
+		bundle.ownsObjectStorage = true
+		prev.Infra.ObjectStorage = nil
+		prev.ownsObjectStorage = false
+	}
+
+	if bundle.HTTP == prev.HTTP {
+		prev.HTTP = nil
+	}
+}
+
+func (bundle *MatcherBundle) shouldCloseLogger() bool {
+	return bundle != nil && (!bundle.ownershipTracked || bundle.ownsLogger)
+}
+
+func (bundle *MatcherBundle) shouldClosePostgres() bool {
+	return bundle != nil && (!bundle.ownershipTracked || bundle.ownsPostgres)
+}
+
+func (bundle *MatcherBundle) shouldCloseRedis() bool {
+	return bundle != nil && (!bundle.ownershipTracked || bundle.ownsRedis)
+}
+
+func (bundle *MatcherBundle) shouldCloseRabbitMQ() bool {
+	return bundle != nil && (!bundle.ownershipTracked || bundle.ownsRabbitMQ)
+}
+
+func (bundle *MatcherBundle) shouldCloseObjectStorage() bool {
+	return bundle != nil && (!bundle.ownershipTracked || bundle.ownsObjectStorage)
 }

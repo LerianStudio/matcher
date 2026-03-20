@@ -7,8 +7,12 @@
 package bootstrap
 
 import (
+	"context"
 	"testing"
 
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
+	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -1176,4 +1180,71 @@ func TestMatcherKeyDefs_NoEmptyComponent(t *testing.T) {
 		assert.NotEmpty(t, def.Component,
 			"key %s has empty Component; use domain.ComponentNone for business-logic keys", def.Key)
 	}
+}
+
+func TestBuildIncremental_NoChangesKeepsPreviousBundleIntactUntilAdopt(t *testing.T) {
+	t.Parallel()
+
+	factory := &MatcherBundleFactory{bootstrapCfg: testBootstrapConfig()}
+	previous := &MatcherBundle{
+		ownershipTracked: true,
+		Infra:            &InfraBundle{},
+		Logger:           &LoggerBundle{Logger: &libLog.NopLogger{}, Level: "info"},
+		HTTP:             &HTTPPolicyBundle{BodyLimitBytes: 1024},
+		ownsLogger:       true,
+	}
+	prevSnapshot := testSnapshot(map[string]any{"app.log_level": "info"})
+	newSnapshot := testSnapshot(map[string]any{"app.log_level": "info"})
+
+	candidateBundle, err := factory.BuildIncremental(context.Background(), newSnapshot, previous, prevSnapshot)
+	require.NoError(t, err)
+
+	candidate, ok := candidateBundle.(*MatcherBundle)
+	require.True(t, ok)
+	assert.Same(t, previous.Logger, candidate.Logger)
+	assert.Same(t, previous.HTTP, candidate.HTTP)
+	assert.NotNil(t, previous.Logger)
+	assert.NotNil(t, previous.HTTP)
+
+	candidate.AdoptResourcesFrom(previous)
+	assert.Nil(t, previous.Logger)
+	assert.Nil(t, previous.HTTP)
+	assert.True(t, candidate.ownsLogger)
+}
+
+func TestBuildIncremental_RebuildsChangedPostgresAndReusesUnchangedRedis(t *testing.T) {
+	t.Parallel()
+
+	factory := &MatcherBundleFactory{bootstrapCfg: testBootstrapConfig()}
+	prevDB := &libPostgres.Client{}
+	prevRedis := &libRedis.Client{}
+	previous := &MatcherBundle{
+		ownershipTracked: true,
+		Infra: &InfraBundle{
+			Postgres: prevDB,
+			Redis:    prevRedis,
+		},
+		Logger:       &LoggerBundle{Logger: &libLog.NopLogger{}, Level: "info"},
+		HTTP:         &HTTPPolicyBundle{BodyLimitBytes: 1024},
+		ownsLogger:   true,
+		ownsPostgres: true,
+		ownsRedis:    true,
+	}
+	prevSnapshot := testSnapshot(map[string]any{
+		"postgres.primary_host": "db-a",
+		"redis.host":            "redis-a:6379",
+	})
+	newSnapshot := testSnapshot(map[string]any{
+		"postgres.primary_host": "db-b",
+		"redis.host":            "redis-a:6379",
+	})
+
+	candidateBundle, err := factory.BuildIncremental(context.Background(), newSnapshot, previous, prevSnapshot)
+	require.NoError(t, err)
+
+	candidate := candidateBundle.(*MatcherBundle)
+	assert.NotSame(t, prevDB, candidate.DB())
+	assert.Same(t, prevRedis, candidate.RedisClient())
+	assert.NotNil(t, previous.DB())
+	assert.NotNil(t, previous.RedisClient())
 }

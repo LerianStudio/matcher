@@ -20,6 +20,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bxcodec/dbresolver/v2"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -33,10 +34,8 @@ import (
 	authLog "github.com/LerianStudio/lib-commons/v2/commons/log"
 	authZap "github.com/LerianStudio/lib-commons/v2/commons/zap"
 	"github.com/LerianStudio/lib-commons/v4/commons/assert"
-	"github.com/LerianStudio/lib-commons/v4/commons/circuitbreaker"
 	"github.com/LerianStudio/lib-commons/v4/commons/errgroup"
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	"github.com/LerianStudio/lib-commons/v4/commons/net/http/ratelimit"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
 	libRabbitmq "github.com/LerianStudio/lib-commons/v4/commons/rabbitmq"
@@ -112,8 +111,8 @@ import (
 	sharedHTTP "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 	sharedRabbitmq "github.com/LerianStudio/matcher/internal/shared/adapters/rabbitmq"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
-	tenantAdapters "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant/adapters"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+	systemplaneService "github.com/LerianStudio/matcher/pkg/systemplane/service"
 )
 
 const (
@@ -427,6 +426,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 	if err != nil {
 		return nil, fmt.Errorf("initialize logger: %w", err)
 	}
+	logger = NewSwappableLogger(logger)
 
 	done()
 
@@ -474,6 +474,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 
 	infraCtx, infraCancel := context.WithTimeout(ctx, cfg.InfraConnectTimeout())
 	defer infraCancel()
+	bundleState := newActiveMatcherBundleState()
 
 	done = timer.track("redis_connect")
 
@@ -489,7 +490,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 	// Cleanup accumulator: collects cleanup functions to run on failure
 	var cleanups []func()
 
-	var infraConnectionManager *tenantAdapters.TenantConnectionManager
+	var infraConnectionManager connectionCloser
 
 	runCleanups := func() {
 		for i := len(cleanups) - 1; i >= 0; i-- {
@@ -538,20 +539,29 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		postgresConnection,
 		redisConnection,
 		rabbitMQConnection,
+		bundleState,
 		&cleanups,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create health dependencies: %w", err)
 	}
 
-	app := NewFiberApp(cfg, logger, telemetry)
+	app := NewFiberApp(cfg, logger, telemetry, configManager.Get)
 
-	rateLimitStorage := ratelimit.NewRedisStorage(redisConnection)
+	rateLimitStorage := newDynamicRedisStorage(func() *libRedis.Client {
+		if bundle := bundleState.Current(); bundle != nil && bundle.RedisClient() != nil {
+			return bundle.RedisClient()
+		}
 
-	infraProvider, connectionManager, err := createInfraProvider(
+		return redisConnection
+	}, redisConnection)
+
+	infraProvider, connectionManager, err := createInfraProviderWithBundleState(
 		cfg,
+		configManager.Get,
 		postgresConnection,
 		redisConnection,
+		bundleState,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create infra provider: %w", err)
@@ -565,7 +575,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		connCloser = connectionManager
 	}
 
-	idempotencyRepo := createIdempotencyRepository(cfg, infraProvider, logger)
+	idempotencyRepo := createIdempotencyRepository(cfg, configManager.Get, infraProvider, logger)
 
 	// Pass configManager.Get as the dynamic config getter when available.
 	// This enables hot-reload of rate limits without service restart.
@@ -599,6 +609,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		cfg,
 		moduleConfigGetter,
 		infraProvider,
+		bundleState,
 		rabbitMQConnection,
 		rateLimitStorage,
 		logger,
@@ -607,7 +618,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		return nil, err
 	}
 
-	archivalWorker, archivalErr := initArchivalComponents(routes, cfg, infraProvider, logger, &cleanups)
+	archivalWorker, archivalErr := initArchivalComponents(routes, cfg, configManager.Get, infraProvider, logger, &cleanups)
 	if archivalErr != nil {
 		if cfg.Archival.Enabled {
 			return nil, fmt.Errorf("init archival components: %w", archivalErr)
@@ -625,6 +636,18 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 	dbMetricsCollector, err := NewDBMetricsCollector(postgresConnection, cfg.DBMetricsInterval())
 	if err != nil {
 		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("Failed to create DB metrics collector: %v", err))
+	} else if dbMetricsCollector != nil {
+		dbMetricsCollector.SetResolverGetter(func(ctx context.Context) (dbresolver.DB, error) {
+			if bundle := bundleState.Current(); bundle != nil && bundle.DB() != nil {
+				return bundle.DB().Resolver(ctx)
+			}
+
+			if postgresConnection == nil {
+				return nil, ErrNilResolverWithoutError
+			}
+
+			return postgresConnection.Resolver(ctx)
+		})
 	}
 
 	server := NewServer(
@@ -646,26 +669,60 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 
 	// Initialize systemplane — the centralized runtime configuration plane.
 	// If systemplane init fails, the service continues without it (graceful degradation).
-	var snapshotReader *SnapshotReader
-
 	var cancelChangeFeed context.CancelFunc
+	runtimeReloadObserver := func(event systemplaneService.ReloadEvent) {
+		bundle, bundleOK := event.Bundle.(*MatcherBundle)
+		if bundleOK {
+			bundleState.Update(bundle)
+		}
 
-	spComponents, spErr := InitSystemplane(ctx, cfg, configManager, wm, logger)
+		if configManager != nil {
+			if updateErr := configManager.UpdateFromSystemplane(event.Snapshot); updateErr != nil {
+				logger.Log(context.Background(), libLog.LevelWarn, "systemplane config bridge apply failed",
+					libLog.String("error", updateErr.Error()),
+					libLog.String("reason", event.Reason))
+			}
+		}
+
+		if swappable, ok := logger.(*SwappableLogger); ok && bundleOK {
+			if bundle.Logger != nil {
+				swappable.Swap(bundle.Logger.Logger)
+			}
+		}
+
+		if bundleOK && modules != nil && modules.ingestionEvents != nil && modules.matchingEvents != nil {
+			if bundle.StagedMatchingPublisher != nil && bundle.StagedIngestionPublisher != nil {
+				previousMatching := modules.matchingEvents.Swap(bundle.StagedMatchingPublisher)
+				previousIngestion := modules.ingestionEvents.Swap(bundle.StagedIngestionPublisher)
+				bundle.StagedMatchingPublisher = nil
+				bundle.StagedIngestionPublisher = nil
+
+				if previousMatchingConcrete, ok := previousMatching.(*matchingRabbitmq.EventPublisher); ok {
+					if closeErr := loadCloseMatchingEventPublisherFn()(previousMatchingConcrete); closeErr != nil {
+						logger.Log(context.Background(), libLog.LevelWarn, "systemplane matching publisher cleanup failed",
+							libLog.String("error", closeErr.Error()))
+					}
+				}
+
+				if previousIngestionConcrete, ok := previousIngestion.(*ingestionRabbitmq.EventPublisher); ok {
+					if closeErr := loadCloseIngestionEventPublisherFn()(previousIngestionConcrete); closeErr != nil {
+						logger.Log(context.Background(), libLog.LevelWarn, "systemplane ingestion publisher cleanup failed",
+							libLog.String("error", closeErr.Error()))
+					}
+				}
+			}
+		}
+	}
+
+	spComponents, spErr := InitSystemplane(ctx, cfg, configManager, wm, logger, runtimeReloadObserver)
 	if spErr != nil {
 		logger.Log(ctx, libLog.LevelWarn, "systemplane initialization failed, continuing without systemplane",
 			libLog.String("error", spErr.Error()))
 	}
 
 	if spErr == nil {
-		// Create snapshot reader for live-read config keys (rate limits, health check timeouts).
-		snapshotReader, err = NewSnapshotReader(spComponents.Supervisor)
-		if err != nil {
-			logger.Log(ctx, libLog.LevelWarn, "systemplane snapshot reader creation failed",
-				libLog.String("error", err.Error()))
-		}
-
 		// Start change feed subscriber that triggers supervisor reloads on store changes.
-		cancelChangeFeed, err = StartChangeFeed(ctx, spComponents.ChangeFeed, spComponents.Supervisor)
+		cancelChangeFeed, err = startChangeFeed(ctx, spComponents.ChangeFeed, spComponents.Supervisor, logger, spComponents.Manager.ApplyChangeSignal)
 		if err != nil {
 			logger.Log(ctx, libLog.LevelWarn, "systemplane change feed start failed",
 				libLog.String("error", err.Error()))
@@ -675,7 +732,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		// Pass routes.Protected so systemplane routes go through the same auth
 		// middleware chain (JWT validation, tenant extraction, permission check)
 		// as all other Matcher API routes.
-		if mountErr := MountSystemplaneAPI(app, routes.Protected, spComponents.Manager, cfg.Auth.Enabled, logger); mountErr != nil {
+		if mountErr := MountSystemplaneAPI(app, authClient, routes.Protected, spComponents.Manager, cfg.Auth.Enabled, logger); mountErr != nil {
 			logger.Log(ctx, libLog.LevelWarn, "systemplane API mount failed",
 				libLog.String("error", mountErr.Error()))
 		}
@@ -707,7 +764,6 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		cleanupFuncs:       cleanups,
 		readinessState:     readiness,
 		spComponents:       spComponents,
-		snapshotReader:     snapshotReader,
 		cancelChangeFeed:   cancelChangeFeed,
 	}, nil
 }
@@ -782,7 +838,7 @@ func buildWorkerManager(modules *modulesResult, configManager *ConfigManager, lo
 
 		wm.Register("discovery",
 			func(_ *Config) (WorkerLifecycle, error) { return w, nil },
-			func(_ *Config) bool { return true },
+			func(cfg *Config) bool { return cfg != nil && cfg.Fetcher.Enabled },
 			nil, // never critical
 		)
 	}
@@ -929,6 +985,7 @@ func createHealthDependencies(
 	postgres *libPostgres.Client,
 	redis *libRedis.Client,
 	rabbitmq *libRabbitmq.RabbitMQConnection,
+	bundleState *activeMatcherBundleState,
 	cleanups *[]func(),
 ) (*HealthDependencies, error) {
 	deps := NewHealthDependencies(postgres, nil, redis, rabbitmq, nil)
@@ -947,6 +1004,93 @@ func createHealthDependencies(
 		*cleanups = append(*cleanups, cleanup)
 	}
 
+	if bundleState != nil {
+		deps.PostgresCheck = func(checkCtx context.Context) error {
+			bundle := bundleState.Current()
+			if bundle == nil || bundle.DB() == nil {
+				if postgres == nil {
+					return errPostgresPrimaryNil
+				}
+				bundle = &MatcherBundle{Infra: &InfraBundle{Postgres: postgres}}
+			}
+
+			resolver, err := bundle.DB().Resolver(checkCtx)
+			if err != nil {
+				return fmt.Errorf("postgres health check: get primary db failed: %w", err)
+			}
+
+			primaryDBs := resolver.PrimaryDBs()
+			if len(primaryDBs) == 0 || primaryDBs[0] == nil {
+				return errPostgresPrimaryNil
+			}
+
+			return primaryDBs[0].PingContext(checkCtx)
+		}
+
+		deps.RedisCheck = func(checkCtx context.Context) error {
+			bundle := bundleState.Current()
+			redisClient := redis
+			if bundle != nil && bundle.RedisClient() != nil {
+				redisClient = bundle.RedisClient()
+			}
+			if redisClient == nil {
+				return errRedisClientNil
+			}
+
+			client, err := redisClient.GetClient(checkCtx)
+			if err != nil {
+				return fmt.Errorf("redis health check: get client failed: %w", err)
+			}
+			if client == nil {
+				return errRedisClientNil
+			}
+
+			return client.Ping(checkCtx).Err()
+		}
+
+		deps.PostgresReplicaCheck = func(checkCtx context.Context) error {
+			bundle := bundleState.Current()
+			if bundle == nil || bundle.DB() == nil {
+				if postgres == nil {
+					return errNoReplicasConfigured
+				}
+				bundle = &MatcherBundle{Infra: &InfraBundle{Postgres: postgres}}
+			}
+
+			resolver, err := bundle.DB().Resolver(checkCtx)
+			if err != nil {
+				return fmt.Errorf("postgres replica health check: get db failed: %w", err)
+			}
+
+			replicaDBs := resolver.ReplicaDBs()
+			if len(replicaDBs) == 0 || replicaDBs[0] == nil {
+				return errNoReplicasConfigured
+			}
+
+			return replicaDBs[0].PingContext(checkCtx)
+		}
+
+		deps.RabbitMQCheck = func(checkCtx context.Context) error {
+			bundle := bundleState.Current()
+			conn := rabbitmq
+			if bundle != nil && bundle.RabbitMQConn() != nil {
+				conn = bundle.RabbitMQConn()
+			}
+			if conn == nil {
+				return errRabbitMQConnectionNil
+			}
+
+			if conn.HealthCheckURL != "" &&
+				(conn.AllowInsecureHealthCheck || !isInsecureHTTPHealthCheckURL(conn.HealthCheckURL)) {
+				if err := checkRabbitMQHTTPHealth(checkCtx, conn.HealthCheckURL); err == nil {
+					return nil
+				}
+			}
+
+			return conn.EnsureChannel()
+		}
+	}
+
 	objectStorage, err := createObjectStorageForHealth(ctx, cfg, logger)
 	if err != nil {
 		if cfg.ExportWorker.Enabled {
@@ -956,6 +1100,29 @@ func createHealthDependencies(
 		logger.Log(ctx, libLog.LevelDebug, fmt.Sprintf("Object storage health check disabled: %v", err))
 	} else if objectStorage != nil {
 		deps.ObjectStorage = objectStorage
+	}
+
+	if bundleState != nil {
+		deps.ObjectStorageCheck = func(checkCtx context.Context) error {
+			bundle := bundleState.Current()
+			if bundle != nil {
+				if bundle.Infra == nil || isNilInterface(bundle.Infra.ObjectStorage) {
+					return sharedPorts.ErrObjectStorageUnavailable
+				}
+
+				if storageClient, ok := bundle.Infra.ObjectStorage.(sharedPorts.ObjectStorageClient); ok && storageClient != nil {
+					_, storageErr := storageClient.Exists(checkCtx, ".health-check")
+					return storageErr
+				}
+
+				return sharedPorts.ErrObjectStorageUnavailable
+			}
+			if deps.ObjectStorage == nil {
+				return nil
+			}
+			_, storageErr := deps.ObjectStorage.Exists(checkCtx, ".health-check")
+			return storageErr
+		}
 	}
 
 	return deps, nil
@@ -1051,53 +1218,21 @@ func createObjectStorageForHealth(
 	return client, nil
 }
 
-func createInfraProvider(
+func createInfraProviderWithBundleState(
 	cfg *Config,
+	configGetter func() *Config,
 	postgres *libPostgres.Client,
 	redis *libRedis.Client,
-) (sharedPorts.InfrastructureProvider, *tenantAdapters.TenantConnectionManager, error) {
+	bundleState *activeMatcherBundleState,
+) (sharedPorts.InfrastructureProvider, connectionCloser, error) {
 	if !cfg.Tenancy.MultiTenantEnabled {
-		return tenantAdapters.NewSingleTenantInfrastructureProvider(postgres, redis), nil, nil
+		provider := newDynamicInfrastructureProvider(cfg, configGetter, bundleState, postgres, redis, cfg.Logger)
+		return provider, provider, nil
 	}
 
-	remoteConfigTimeout := time.Duration(cfg.Tenancy.MultiTenantCircuitBreakerTimeoutSec) * time.Second
-	if remoteConfigTimeout < minPerServiceTimeout {
-		remoteConfigTimeout = minPerServiceTimeout
-	}
+	provider := newDynamicInfrastructureProvider(cfg, configGetter, bundleState, postgres, redis, cfg.Logger)
 
-	configAdapter, err := tenantAdapters.NewRemoteConfigurationAdapter(tenantAdapters.RemoteConfigurationConfig{
-		BaseURL:            cfg.Tenancy.MultiTenantURL,
-		ServiceName:        constants.ApplicationName,
-		ServiceAPIKey:      cfg.Tenancy.MultiTenantServiceAPIKey,
-		RequestTimeout:     remoteConfigTimeout,
-		EnvironmentName:    cfg.effectiveMultiTenantEnvironment(),
-		RuntimeEnvironment: cfg.App.EnvName,
-		BreakerConfig: circuitbreaker.Config{
-			ConsecutiveFailures: safePositiveUint32(cfg.Tenancy.MultiTenantCircuitBreakerThreshold),
-			Timeout:             remoteConfigTimeout,
-		},
-		Logger: cfg.Logger,
-	})
-	if err != nil {
-		return nil, nil, fmt.Errorf("create tenant configuration adapter: %w", err)
-	}
-
-	connectionManager, err := tenantAdapters.NewTenantConnectionManager(
-		configAdapter,
-		cfg.Postgres.MaxOpenConnections,
-		cfg.Postgres.MaxIdleConnections,
-		cfg.Postgres.ConnMaxLifetimeMins,
-		cfg.Postgres.ConnMaxIdleTimeMins,
-		tenantAdapters.WithCachePolicy(
-			cfg.Tenancy.MultiTenantMaxTenantPools,
-			time.Duration(cfg.Tenancy.MultiTenantIdleTimeoutSec)*time.Second,
-		),
-	)
-	if err != nil {
-		return nil, nil, fmt.Errorf("create tenant connection manager: %w", err)
-	}
-
-	return connectionManager, connectionManager, nil
+	return provider, provider, nil
 }
 
 func safePositiveUint32(value int) uint32 {
@@ -1520,6 +1655,8 @@ func applySQLPoolSettings(dbs []*sql.DB, maxLifetime, maxIdle time.Duration) {
 
 type modulesResult struct {
 	outboxDispatcher *outboxServices.Dispatcher
+	ingestionEvents  *swappableIngestionPublisher
+	matchingEvents   *swappableMatchPublisher
 	exportWorker     *reportingWorker.ExportWorker
 	cleanupWorker    *reportingWorker.CleanupWorker
 	archivalWorker   *governanceWorker.ArchivalWorker
@@ -1590,6 +1727,7 @@ func initModulesAndMessaging(
 	cfg *Config,
 	configGetter func() *Config,
 	provider sharedPorts.InfrastructureProvider,
+	bundleState *activeMatcherBundleState,
 	rabbitMQConnection *libRabbitmq.RabbitMQConnection,
 	rateLimitStorage fiber.Storage,
 	logger libLog.Logger,
@@ -1614,12 +1752,15 @@ func initModulesAndMessaging(
 		return nil, err
 	}
 
+	runtimeMatchingPublisher := newSwappableMatchPublisher(matchingPublisher)
+	runtimeIngestionPublisher := newSwappableIngestionPublisher(ingestionPublisher)
+
 	matchingUseCase, err := initMatchingModule(routes, provider, sharedOutboxRepository, sharedRepos, isProduction)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := initIngestionModule(cfg, routes, provider, sharedOutboxRepository, ingestionPublisher, matchingUseCase, sharedRepos, isProduction); err != nil {
+	if err := initIngestionModule(cfg, configGetter, routes, provider, sharedOutboxRepository, runtimeIngestionPublisher, matchingUseCase, sharedRepos, isProduction); err != nil {
 		return nil, err
 	}
 
@@ -1630,6 +1771,18 @@ func initModulesAndMessaging(
 		}
 
 		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("Object storage not available, reporting background workers disabled: %v", err))
+	}
+	if bundleState != nil {
+		storage = newDynamicObjectStorageClient(func() sharedPorts.ObjectStorageClient {
+			bundle := bundleState.Current()
+			if bundle == nil || bundle.Infra == nil || isNilInterface(bundle.Infra.ObjectStorage) {
+				return nil
+			}
+
+			storageClient, _ := bundle.Infra.ObjectStorage.(sharedPorts.ObjectStorageClient)
+
+			return storageClient
+		}, storage)
 	}
 
 	exportWorker, cleanupWorker, err := initReportingModule(
@@ -1658,12 +1811,12 @@ func initModulesAndMessaging(
 		dispatchLimiter = NewDispatchRateLimiter(cfg, rateLimitStorage)
 	}
 
-	if err := initExceptionModule(cfg, routes, provider, sharedOutboxRepository, dispatchLimiter, sharedRepos, isProduction); err != nil {
+	if err := initExceptionModule(cfg, configGetter, routes, provider, sharedOutboxRepository, dispatchLimiter, sharedRepos, isProduction); err != nil {
 		return nil, err
 	}
 
 	// Discovery module (optional — non-critical, gated by FETCHER_ENABLED).
-	discWorker, err := initOptionalDiscoveryWorker(ctx, routes, cfg, provider, sharedOutboxRepository, logger, initDiscoveryModule)
+	discWorker, err := initOptionalDiscoveryWorker(routes, cfg, configGetter, provider, sharedOutboxRepository, logger, initDiscoveryModule)
 	if err != nil {
 		return nil, fmt.Errorf("init optional discovery worker: %w", err)
 	}
@@ -1688,8 +1841,8 @@ func initModulesAndMessaging(
 
 	outboxDispatcher, err := outboxServices.NewDispatcher(
 		sharedOutboxRepository,
-		ingestionPublisher,
-		matchingPublisher,
+		runtimeIngestionPublisher,
+		runtimeMatchingPublisher,
 		logger,
 		otel.Tracer(constants.ApplicationName),
 		outboxServices.WithAuditPublisher(auditConsumer),
@@ -1700,6 +1853,16 @@ func initModulesAndMessaging(
 	}
 
 	outboxDispatcher.SetRetryWindow(cfg.IdempotencyRetryWindow())
+	if configGetter != nil {
+		outboxDispatcher.SetRetryWindowGetter(func() time.Duration {
+			runtimeCfg := configGetter()
+			if runtimeCfg == nil {
+				return cfg.IdempotencyRetryWindow()
+			}
+
+			return runtimeCfg.IdempotencyRetryWindow()
+		})
+	}
 
 	// Create scheduler worker for cron-based matching
 	var schedulerWorker *configWorker.SchedulerWorker
@@ -1709,6 +1872,8 @@ func initModulesAndMessaging(
 
 	return &modulesResult{
 		outboxDispatcher: outboxDispatcher,
+		ingestionEvents:  runtimeIngestionPublisher,
+		matchingEvents:   runtimeMatchingPublisher,
 		exportWorker:     exportWorker,
 		cleanupWorker:    cleanupWorker,
 		schedulerWorker:  schedulerWorker,
@@ -1915,6 +2080,7 @@ func createSchedulerWorker(
 
 func createIdempotencyRepository(
 	cfg *Config,
+	configGetter func() *Config,
 	provider sharedPorts.InfrastructureProvider,
 	logger libLog.Logger,
 ) sharedHTTP.IdempotencyRepository {
@@ -1937,6 +2103,27 @@ func createIdempotencyRepository(
 			cfg.IdempotencyRetryWindow(), cfg.IdempotencySuccessTTL(), err))
 
 		return nil
+	}
+	if configGetter != nil {
+		exceptionIdempotencyRepo.SetRuntimeConfigGetters(
+			func() time.Duration {
+				runtimeCfg := configGetter()
+				if runtimeCfg == nil {
+					return cfg.IdempotencyRetryWindow()
+				}
+
+				return runtimeCfg.IdempotencyRetryWindow()
+			},
+			func() time.Duration {
+				runtimeCfg := configGetter()
+				if runtimeCfg == nil {
+					return cfg.IdempotencySuccessTTL()
+				}
+
+				return runtimeCfg.IdempotencySuccessTTL()
+			},
+			nil,
+		)
 	}
 
 	return sharedHTTP.NewIdempotencyRepositoryAdapter(exceptionIdempotencyRepo)
@@ -2037,10 +2224,11 @@ func initConfigurationModule(
 
 func initIngestionModule(
 	cfg *Config,
+	configGetter func() *Config,
 	routes *Routes,
 	provider sharedPorts.InfrastructureProvider,
 	outboxRepository outboxRepositories.OutboxRepository,
-	publisher *ingestionRabbitmq.EventPublisher,
+	publisher sharedPorts.IngestionEventPublisher,
 	matchingUseCase *matchingCommand.UseCase,
 	repos *sharedRepositories,
 	production bool,
@@ -2086,6 +2274,14 @@ func initIngestionModule(
 		TransactionRepo: repos.ingestionTx,
 		Dedupe:          dedupeService,
 		DedupeTTL:       cfg.DedupeTTL(),
+		DedupeTTLGetter: func() time.Duration {
+			runtimeCfg := configGetter()
+			if runtimeCfg == nil {
+				return cfg.DedupeTTL()
+			}
+
+			return runtimeCfg.DedupeTTL()
+		},
 		Publisher:       publisher,
 		OutboxRepo:      outboxRepository,
 		Parsers:         ingestionRegistry,
@@ -2254,10 +2450,6 @@ func initReportingModule(
 		return nil, nil, fmt.Errorf("register reporting routes: %w", err)
 	}
 
-	if storage == nil {
-		return nil, nil, nil
-	}
-
 	return initExportWorkers(
 		routes,
 		cfg,
@@ -2309,12 +2501,16 @@ func initExportWorkers(
 		exportJobHandler.SetRuntimeConfigGetter(func() reportingHTTP.ExportJobRuntimeConfig {
 			runtimeCfg := configGetter()
 			if runtimeCfg == nil {
+				enabled := cfg.ExportWorker.Enabled
 				return reportingHTTP.ExportJobRuntimeConfig{
+					Enabled:       &enabled,
 					PresignExpiry: cfg.ExportPresignExpiry(),
 				}
 			}
 
+			enabled := runtimeCfg.ExportWorker.Enabled
 			return reportingHTTP.ExportJobRuntimeConfig{
+				Enabled:       &enabled,
 				PresignExpiry: runtimeCfg.ExportPresignExpiry(),
 			}
 		})
@@ -2396,6 +2592,7 @@ func initGovernanceModule(routes *Routes, repos *sharedRepositories, provider sh
 
 func initExceptionModule(
 	cfg *Config,
+	configGetter func() *Config,
 	routes *Routes,
 	provider sharedPorts.InfrastructureProvider,
 	outboxRepository outboxRepositories.OutboxRepository,
@@ -2415,6 +2612,7 @@ func initExceptionModule(
 
 	useCases, err := initExceptionUseCases(
 		cfg,
+		configGetter,
 		provider,
 		exceptionRepository,
 		disputeRepository,
@@ -2426,7 +2624,7 @@ func initExceptionModule(
 		return err
 	}
 
-	callbackUseCase, err := initExceptionCallbackUseCase(cfg, provider, exceptionRepository, deps)
+	callbackUseCase, err := initExceptionCallbackUseCase(cfg, configGetter, provider, exceptionRepository, deps)
 	if err != nil {
 		return err
 	}
@@ -2536,6 +2734,7 @@ func initExceptionDependencies(
 // initExceptionUseCases creates the core exception use cases (exception, dispute, query, dispatch, comment).
 func initExceptionUseCases(
 	cfg *Config,
+	configGetter func() *Config,
 	provider sharedPorts.InfrastructureProvider,
 	exceptionRepository *exceptionExceptionRepo.Repository,
 	disputeRepository *exceptionDisputeRepo.Repository,
@@ -2589,6 +2788,16 @@ func initExceptionUseCases(
 	if err != nil {
 		return nil, fmt.Errorf("create http connector: %w", err)
 	}
+	if configGetter != nil {
+		httpConnector.SetWebhookTimeoutGetter(func() time.Duration {
+			runtimeCfg := configGetter()
+			if runtimeCfg == nil {
+				return cfg.WebhookTimeout()
+			}
+
+			return runtimeCfg.WebhookTimeout()
+		})
+	}
 
 	dispatchUseCase, err := exceptionCommand.NewDispatchUseCase(
 		exceptionRepository,
@@ -2628,6 +2837,7 @@ func initExceptionUseCases(
 // initExceptionCallbackUseCase creates the callback use case for processing external system webhooks.
 func initExceptionCallbackUseCase(
 	cfg *Config,
+	configGetter func() *Config,
 	provider sharedPorts.InfrastructureProvider,
 	exceptionRepository *exceptionExceptionRepo.Repository,
 	deps *exceptionModuleDeps,
@@ -2640,6 +2850,16 @@ func initExceptionCallbackUseCase(
 	if err != nil {
 		return nil, fmt.Errorf("create callback rate limiter: %w", err)
 	}
+	if configGetter != nil {
+		callbackRateLimiter.SetRuntimeLimitGetter(func() int {
+			runtimeCfg := configGetter()
+			if runtimeCfg == nil {
+				return cfg.CallbackRateLimitPerMinute()
+			}
+
+			return runtimeCfg.CallbackRateLimitPerMinute()
+		})
+	}
 
 	callbackIdempotencyRepo, err := exceptionRedis.NewIdempotencyRepositoryWithConfig(
 		provider,
@@ -2649,6 +2869,27 @@ func initExceptionCallbackUseCase(
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create callback idempotency repository: %w", err)
+	}
+	if configGetter != nil {
+		callbackIdempotencyRepo.SetRuntimeConfigGetters(
+			func() time.Duration {
+				runtimeCfg := configGetter()
+				if runtimeCfg == nil {
+					return cfg.IdempotencyRetryWindow()
+				}
+
+				return runtimeCfg.IdempotencyRetryWindow()
+			},
+			func() time.Duration {
+				runtimeCfg := configGetter()
+				if runtimeCfg == nil {
+					return cfg.IdempotencySuccessTTL()
+				}
+
+				return runtimeCfg.IdempotencySuccessTTL()
+			},
+			nil,
+		)
 	}
 
 	callbackUseCase, err := exceptionCommand.NewCallbackUseCase(

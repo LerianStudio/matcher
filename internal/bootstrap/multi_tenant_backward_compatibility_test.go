@@ -17,7 +17,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/LerianStudio/matcher/internal/auth"
-	tenantAdapters "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant/adapters"
 	sharedTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
@@ -31,19 +30,16 @@ func TestMultiTenant_BackwardCompatibility(t *testing.T) {
 	cfg.Tenancy.MultiTenantEnabled = false
 	cfg.Tenancy.MultiTenantInfraEnabled = false
 
-	provider, manager, err := createInfraProvider(cfg, postgresConn, redisConn)
+	provider, manager, err := createInfraProviderWithBundleState(cfg, nil, postgresConn, redisConn, nil)
 	require.NoError(t, err)
-	require.Nil(t, manager)
+	require.NotNil(t, manager)
 
-	singleTenantProvider, ok := provider.(*tenantAdapters.SingleTenantInfrastructureProvider)
-	require.True(t, ok, "single-tenant mode must keep using the singleton infrastructure provider")
-
-	resolvedPostgres, err := singleTenantProvider.GetPostgresConnection(context.Background())
+	resolvedPostgres, err := provider.GetPostgresConnection(context.Background())
 	require.NoError(t, err)
 	require.NotNil(t, resolvedPostgres)
 	assert.Same(t, postgresConn, resolvedPostgres.Connection())
 
-	resolvedRedis, err := singleTenantProvider.GetRedisConnection(context.Background())
+	resolvedRedis, err := provider.GetRedisConnection(context.Background())
 	require.NoError(t, err)
 	require.NotNil(t, resolvedRedis)
 	assert.Same(t, redisConn, resolvedRedis.Connection())
@@ -83,13 +79,12 @@ func TestCreateInfraProvider_MultiTenantEnabled_ReturnsTenantConnectionManager(t
 	cfg.Tenancy.MultiTenantCircuitBreakerThreshold = 5
 	cfg.Tenancy.MultiTenantCircuitBreakerTimeoutSec = 30
 
-	provider, manager, err := createInfraProvider(cfg, nil, nil)
+	provider, manager, err := createInfraProviderWithBundleState(cfg, nil, nil, nil, nil)
 	require.NoError(t, err)
 	require.NotNil(t, manager)
-	require.Same(t, provider, manager)
 
 	ctx := context.WithValue(context.Background(), auth.TenantIDKey, "tenant-a")
-	_, err = manager.GetPostgresConnection(ctx)
+	_, err = provider.GetPostgresConnection(ctx)
 	require.Error(t, err)
 	assert.True(t, requested, "multi-tenant provider should resolve tenant settings through the remote adapter")
 }

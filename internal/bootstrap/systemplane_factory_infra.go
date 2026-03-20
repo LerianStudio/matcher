@@ -7,6 +7,7 @@ package bootstrap
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/url"
 	"strconv"
@@ -19,6 +20,8 @@ import (
 	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
 
 	"github.com/LerianStudio/matcher/internal/reporting/adapters/storage"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+	"github.com/LerianStudio/matcher/pkg/storageopt"
 	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
 )
 
@@ -62,6 +65,19 @@ func (factory *MatcherBundleFactory) buildPostgresClient(
 		return nil, fmt.Errorf("create postgres client: %w", err)
 	}
 
+	if resolver, resolveErr := conn.Resolver(context.Background()); resolveErr == nil {
+		applySQLPoolSettings(
+			resolver.PrimaryDBs(),
+			time.Duration(cfg.ConnMaxLifetimeMins)*time.Minute,
+			time.Duration(cfg.ConnMaxIdleTimeMins)*time.Minute,
+		)
+		applySQLPoolSettings(
+			resolver.ReplicaDBs(),
+			time.Duration(cfg.ConnMaxLifetimeMins)*time.Minute,
+			time.Duration(cfg.ConnMaxIdleTimeMins)*time.Minute,
+		)
+	}
+
 	return conn, nil
 }
 
@@ -93,9 +109,20 @@ func (factory *MatcherBundleFactory) buildRabbitMQConnection(
 ) *libRabbitmq.RabbitMQConnection {
 	cfg := factory.extractRabbitMQConfig(snap)
 
-	allowInsecure := cfg.AllowInsecureHealthCheck
-	if IsProductionEnvironment(factory.bootstrapCfg.EnvName) {
-		allowInsecure = false
+	policyCfg := &Config{App: AppConfig{EnvName: factory.bootstrapCfg.EnvName}, RabbitMQ: RabbitMQConfig{
+		URI:                      cfg.URI,
+		Host:                     cfg.Host,
+		Port:                     cfg.Port,
+		User:                     cfg.User,
+		Password:                 cfg.Password,
+		VHost:                    cfg.VHost,
+		HealthURL:                cfg.HealthURL,
+		AllowInsecureHealthCheck: cfg.AllowInsecureHealthCheck,
+	}}
+	allowInsecure, _ := evaluateInsecureRabbitMQHealthCheckPolicy(policyCfg)
+	if !allowInsecure && isInsecureHTTPHealthCheckURL(cfg.HealthURL) && logger != nil {
+		logger.Log(context.Background(), libLog.LevelWarn,
+			"RabbitMQ health URL uses HTTP while insecure checks are disabled; set RABBITMQ_ALLOW_INSECURE_HEALTH_CHECK=true only for local/internal non-production environments")
 	}
 
 	return &libRabbitmq.RabbitMQConnection{
@@ -117,8 +144,34 @@ type objectStorageCloser struct {
 	client *storage.S3Client
 }
 
+var _ sharedPorts.ObjectStorageClient = (*objectStorageCloser)(nil)
+
 // Close is a no-op for the stateless S3 SDK client.
 func (c *objectStorageCloser) Close() error { return nil }
+
+func (c *objectStorageCloser) Upload(ctx context.Context, key string, reader io.Reader, contentType string) (string, error) {
+	return c.client.Upload(ctx, key, reader, contentType)
+}
+
+func (c *objectStorageCloser) UploadWithOptions(ctx context.Context, key string, reader io.Reader, contentType string, opts ...storageopt.UploadOption) (string, error) {
+	return c.client.UploadWithOptions(ctx, key, reader, contentType, opts...)
+}
+
+func (c *objectStorageCloser) Download(ctx context.Context, key string) (io.ReadCloser, error) {
+	return c.client.Download(ctx, key)
+}
+
+func (c *objectStorageCloser) Delete(ctx context.Context, key string) error {
+	return c.client.Delete(ctx, key)
+}
+
+func (c *objectStorageCloser) GeneratePresignedURL(ctx context.Context, key string, expiry time.Duration) (string, error) {
+	return c.client.GeneratePresignedURL(ctx, key, expiry)
+}
+
+func (c *objectStorageCloser) Exists(ctx context.Context, key string) (bool, error) {
+	return c.client.Exists(ctx, key)
+}
 
 // buildObjectStorageClient creates an S3-compatible storage client from snapshot
 // values. Returns (nil, nil) if endpoint or bucket is empty. The returned

@@ -8,25 +8,36 @@ package bootstrap
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	authMiddleware "github.com/LerianStudio/lib-auth/v2/auth/middleware"
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 
+	"github.com/LerianStudio/matcher/internal/auth"
+	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
 	"github.com/LerianStudio/matcher/pkg/systemplane/ports"
 	"github.com/LerianStudio/matcher/pkg/systemplane/service"
 )
 
+type mockManagerForMount struct {
+	getConfigsFn func(context.Context) (service.ResolvedSet, error)
+}
+
 // mockManagerForMount implements service.Manager with no-op methods,
 // sufficient for verifying that MountSystemplaneAPI wires and mounts routes
 // without requiring a real backend.
-type mockManagerForMount struct{}
+func (m *mockManagerForMount) GetConfigs(ctx context.Context) (service.ResolvedSet, error) {
+	if m.getConfigsFn != nil {
+		return m.getConfigsFn(ctx)
+	}
 
-func (m *mockManagerForMount) GetConfigs(_ context.Context) (service.ResolvedSet, error) {
 	return service.ResolvedSet{}, nil
 }
 
@@ -58,6 +69,10 @@ func (m *mockManagerForMount) GetSettingHistory(_ context.Context, _ ports.Histo
 	return nil, nil
 }
 
+func (m *mockManagerForMount) ApplyChangeSignal(_ context.Context, _ ports.ChangeSignal) error {
+	return nil
+}
+
 func (m *mockManagerForMount) Resync(_ context.Context) error {
 	return nil
 }
@@ -68,7 +83,7 @@ var _ service.Manager = (*mockManagerForMount)(nil)
 func TestMountSystemplaneAPI_NilApp(t *testing.T) {
 	t.Parallel()
 
-	err := MountSystemplaneAPI(nil, nil, &mockManagerForMount{}, false, &libLog.NopLogger{})
+	err := MountSystemplaneAPI(nil, nil, nil, &mockManagerForMount{}, false, &libLog.NopLogger{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "app is required")
 }
@@ -79,7 +94,7 @@ func TestMountSystemplaneAPI_NilManager(t *testing.T) {
 	app := fiber.New()
 	defer func() { _ = app.Shutdown() }()
 
-	err := MountSystemplaneAPI(app, nil, nil, false, &libLog.NopLogger{})
+	err := MountSystemplaneAPI(app, nil, nil, nil, false, &libLog.NopLogger{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "manager is required")
 }
@@ -90,7 +105,7 @@ func TestMountSystemplaneAPI_Success(t *testing.T) {
 	app := fiber.New()
 	defer func() { _ = app.Shutdown() }()
 
-	err := MountSystemplaneAPI(app, nil, &mockManagerForMount{}, false, &libLog.NopLogger{})
+	err := MountSystemplaneAPI(app, nil, nil, &mockManagerForMount{}, false, &libLog.NopLogger{})
 	require.NoError(t, err)
 }
 
@@ -101,7 +116,7 @@ func TestMountSystemplaneAPI_NilLogger(t *testing.T) {
 	defer func() { _ = app.Shutdown() }()
 
 	// A nil logger should not cause a panic — the function guards it.
-	err := MountSystemplaneAPI(app, nil, &mockManagerForMount{}, false, nil)
+	err := MountSystemplaneAPI(app, nil, nil, &mockManagerForMount{}, false, nil)
 	require.NoError(t, err)
 }
 
@@ -111,7 +126,7 @@ func TestMountSystemplaneAPI_RoutesRegistered(t *testing.T) {
 	app := fiber.New()
 	defer func() { _ = app.Shutdown() }()
 
-	err := MountSystemplaneAPI(app, nil, &mockManagerForMount{}, false, &libLog.NopLogger{})
+	err := MountSystemplaneAPI(app, nil, nil, &mockManagerForMount{}, false, &libLog.NopLogger{})
 	require.NoError(t, err)
 
 	// Build a set of registered routes from the Fiber app stack.
@@ -139,4 +154,126 @@ func TestMountSystemplaneAPI_RoutesRegistered(t *testing.T) {
 		assert.True(t, registeredRoutes[routeKey],
 			"expected route %q to be registered; registered routes: %v", routeKey, registeredRoutes)
 	}
+}
+
+func TestSettingsScopeAuthorization_OnlyChecksGlobalScope(t *testing.T) {
+	t.Parallel()
+
+	app := fiber.New()
+	defer func() { _ = app.Shutdown() }()
+
+	authClient := authMiddleware.NewAuthClient("http://auth.example", true, nil)
+	app.Get("/test", settingsScopeAuthorization(authClient, auth.ActionSettingsGlobalRead), func(c *fiber.Ctx) error {
+		return c.SendStatus(http.StatusOK)
+	})
+
+	t.Run("tenant scope skips elevated auth", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/test", nil)
+		resp, err := app.Test(req, -1)
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+
+	t.Run("global scope enforces elevated auth", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/test?scope=global", nil)
+		resp, err := app.Test(req, -1)
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	})
+}
+
+func TestMountSystemplaneAPI_ProtectedRoutesServeRequests(t *testing.T) {
+	t.Parallel()
+
+	app := fiber.New()
+	defer func() { _ = app.Shutdown() }()
+
+	manager := &mockManagerForMount{}
+	managerGetCalled := false
+	manager.getConfigsFn = func(_ context.Context) (service.ResolvedSet, error) {
+		managerGetCalled = true
+		return service.ResolvedSet{
+			Values: map[string]domain.EffectiveValue{
+				"app.log_level": {Key: "app.log_level", Value: "info", Source: "default"},
+			},
+			Revision: 1,
+		}, nil
+	}
+
+	protected := func(_, _ string) fiber.Router { return app.Group("") }
+	err := MountSystemplaneAPI(app, nil, protected, manager, false, &libLog.NopLogger{})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/system/configs", http.NoBody)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.True(t, managerGetCalled)
+
+	var payload map[string]any
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&payload))
+	assert.Equal(t, float64(1), payload["revision"])
+}
+
+func TestLegacyConfigRoutes_NotMounted(t *testing.T) {
+	t.Parallel()
+
+	app := fiber.New()
+	defer func() { _ = app.Shutdown() }()
+
+	err := MountSystemplaneAPI(app, nil, nil, &mockManagerForMount{}, false, &libLog.NopLogger{})
+	require.NoError(t, err)
+
+	for _, path := range []string{"/v1/configs", "/api/v1/configs", "/v1/config", "/api/v1/config"} {
+		req := httptest.NewRequest(http.MethodGet, path, http.NoBody)
+		resp, testErr := app.Test(req)
+		require.NoError(t, testErr)
+		resp.Body.Close()
+		assert.Equalf(t, http.StatusNotFound, resp.StatusCode, "legacy path %s should be absent", path)
+	}
+}
+
+func TestMountSystemplaneAPI_HistoryRoutesUseExpectedPermissions(t *testing.T) {
+	t.Parallel()
+
+	app := fiber.New()
+	defer func() { _ = app.Shutdown() }()
+
+	type routeBinding struct {
+		resource string
+		action   string
+	}
+
+	var bindings []routeBinding
+	protected := func(resource, action string) fiber.Router {
+		bindings = append(bindings, routeBinding{resource: resource, action: action})
+		return app.Group("")
+	}
+
+	err := MountSystemplaneAPI(app, nil, protected, &mockManagerForMount{}, false, &libLog.NopLogger{})
+	require.NoError(t, err)
+
+	assert.Contains(t, bindings, routeBinding{resource: auth.ResourceSystem, action: auth.ActionConfigHistoryRead})
+	assert.Contains(t, bindings, routeBinding{resource: auth.ResourceSystem, action: auth.ActionSettingsHistoryRead})
+}
+
+func TestMountSystemplaneAPI_GlobalSettingsHistoryRequiresElevatedAuth(t *testing.T) {
+	t.Parallel()
+
+	app := fiber.New()
+	defer func() { _ = app.Shutdown() }()
+
+	authClient := authMiddleware.NewAuthClient("http://auth.example", true, nil)
+	protected := func(_, _ string) fiber.Router { return app.Group("") }
+	err := MountSystemplaneAPI(app, authClient, protected, &mockManagerForMount{}, true, &libLog.NopLogger{})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/system/settings/history?scope=global", http.NoBody)
+	resp, err := app.Test(req, -1)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }

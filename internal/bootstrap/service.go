@@ -42,7 +42,6 @@ type Service struct {
 	// Systemplane components for centralized runtime configuration.
 	// These are nil when systemplane initialization fails (graceful degradation).
 	spComponents     *SystemplaneComponents
-	snapshotReader   *SnapshotReader
 	cancelChangeFeed context.CancelFunc
 }
 
