@@ -31,6 +31,7 @@ type mockManager struct {
 	getSettingSchemaFn  func(ctx context.Context) ([]service.SchemaEntry, error)
 	getConfigHistoryFn  func(ctx context.Context, filter ports.HistoryFilter) ([]ports.HistoryEntry, error)
 	getSettingHistoryFn func(ctx context.Context, filter ports.HistoryFilter) ([]ports.HistoryEntry, error)
+	applyChangeSignalFn func(ctx context.Context, signal ports.ChangeSignal) error
 	resyncFn            func(ctx context.Context) error
 }
 
@@ -96,6 +97,14 @@ func (m *mockManager) GetSettingHistory(ctx context.Context, filter ports.Histor
 	}
 
 	return nil, nil
+}
+
+func (m *mockManager) ApplyChangeSignal(ctx context.Context, signal ports.ChangeSignal) error {
+	if m.applyChangeSignalFn != nil {
+		return m.applyChangeSignalFn(ctx, signal)
+	}
+
+	return nil
 }
 
 func (m *mockManager) Resync(ctx context.Context) error {

@@ -123,19 +123,19 @@ func NewBackendFromConfig(ctx context.Context, cfg *BootstrapConfig) (*BackendRe
 		return nil, errNilBackendResources
 	}
 
-	if resources.Store == nil {
+	if domain.IsNilValue(resources.Store) {
 		return nil, errNilBackendStore
 	}
 
-	if resources.History == nil {
+	if domain.IsNilValue(resources.History) {
 		return nil, errNilBackendHistoryStore
 	}
 
-	if resources.ChangeFeed == nil {
+	if domain.IsNilValue(resources.ChangeFeed) {
 		return nil, errNilBackendChangeFeed
 	}
 
-	if resources.Closer == nil {
+	if domain.IsNilValue(resources.Closer) {
 		return nil, errNilBackendCloser
 	}
 

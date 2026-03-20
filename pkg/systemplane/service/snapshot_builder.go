@@ -30,11 +30,11 @@ type SnapshotBuilder struct {
 // store dependencies. Both are required; a nil dependency causes a
 // construction-time error rather than a runtime panic on first use.
 func NewSnapshotBuilder(reg registry.Registry, store ports.Store) (*SnapshotBuilder, error) {
-	if reg == nil {
+	if domain.IsNilValue(reg) {
 		return nil, errBuilderRegistryRequired
 	}
 
-	if store == nil {
+	if domain.IsNilValue(store) {
 		return nil, errBuilderStoreRequired
 	}
 

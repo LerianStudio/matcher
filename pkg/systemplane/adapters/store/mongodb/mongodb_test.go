@@ -22,7 +22,7 @@ func TestNew_EmptyURI_ReturnsError(t *testing.T) {
 		HistoryCollection: "runtime_history",
 	}
 
-	store, history, closer, err := New(t.Context(), cfg)
+	store, history, closer, err := New(t.Context(), cfg, nil)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errEmptyURI)
@@ -44,7 +44,7 @@ func TestNew_InvalidURI_ReturnsError(t *testing.T) {
 	// mongo.Connect may or may not fail on invalid URIs depending on the
 	// driver version -- the important thing is that either Connect or Ping
 	// returns an error. We only verify that New() does not succeed.
-	store, history, closer, err := New(t.Context(), cfg)
+	store, history, closer, err := New(t.Context(), cfg, nil)
 
 	// If New succeeded (driver deferred connection), clean up.
 	if closer != nil {

@@ -12,6 +12,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
+	"github.com/LerianStudio/matcher/pkg/systemplane/adapters/store/secretcodec"
 	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
 	"github.com/LerianStudio/matcher/pkg/systemplane/ports"
 )
@@ -39,9 +40,11 @@ var (
 // collection. All mutations run inside a multi-document transaction to
 // guarantee atomicity.
 type Store struct {
-	client  *mongo.Client
-	entries *mongo.Collection
-	history *mongo.Collection
+	client         *mongo.Client
+	entries        *mongo.Collection
+	history        *mongo.Collection
+	secretCodec    *secretcodec.Codec
+	applyBehaviors map[string]domain.ApplyBehavior
 }
 
 // txResult carries the outcome of a Put transaction callback.
@@ -129,7 +132,11 @@ func (store *Store) readEntriesInCollection(ctx context.Context, coll *mongo.Col
 
 	entries := make([]domain.Entry, len(docs))
 	for i := range docs {
-		entries[i] = docs[i].toDomainEntry()
+		entry, err := docs[i].toDomainEntryWithCodec(store.secretCodec)
+		if err != nil {
+			return nil, fmt.Errorf("decode secret entry: %w", err)
+		}
+		entries[i] = entry
 	}
 
 	return entries, nil
@@ -201,7 +208,7 @@ func (store *Store) putTransaction(
 		}
 	}
 
-	if metaErr := store.upsertRevisionMeta(ctx, target, newRevision, actor, source, now); metaErr != nil {
+	if metaErr := store.upsertRevisionMeta(ctx, target, newRevision, actor, source, now, store.escalateBehavior(ops)); metaErr != nil {
 		return txResult{}, fmt.Errorf("upsert revision meta: %w", metaErr)
 	}
 
@@ -257,17 +264,35 @@ func (store *Store) applyOperation(ctx context.Context, target domain.Target,
 		return nil
 	}
 
-	doc := newEntryDoc(target, operation.Key, operation.Value, newRevision, actor, source, now)
+	valueForStorage, err := store.encryptValue(target, operation.Key, operation.Value)
+	if err != nil {
+		return fmt.Errorf("encrypt new value: %w", err)
+	}
+
+	doc := newEntryDoc(target, operation.Key, valueForStorage, newRevision, actor, source, now)
 	if upsertErr := store.upsertEntry(ctx, target, operation.Key, doc); upsertErr != nil {
 		return fmt.Errorf("upsert entry: %w", upsertErr)
 	}
 
-	hDoc := newHistoryDoc(target, operation.Key, oldValue, operation.Value, newRevision, actor, source, now)
+	valueForHistory, err := store.encryptValue(target, operation.Key, operation.Value)
+	if err != nil {
+		return fmt.Errorf("encrypt history value: %w", err)
+	}
+
+	hDoc := newHistoryDoc(target, operation.Key, oldValue, valueForHistory, newRevision, actor, source, now)
 	if _, insertErr := store.history.InsertOne(ctx, hDoc); insertErr != nil {
 		return fmt.Errorf("insert history: %w", insertErr)
 	}
 
 	return nil
+}
+
+func (store *Store) encryptValue(target domain.Target, key string, value any) (any, error) {
+	if store == nil || store.secretCodec == nil {
+		return value, nil
+	}
+
+	return store.secretCodec.Encrypt(target, key, value)
 }
 
 // Internal helpers.
@@ -373,11 +398,31 @@ func (store *Store) upsertEntry(ctx context.Context, target domain.Target, key s
 // upsertRevisionMeta updates (or creates) the revision-tracking sentinel
 // document for a target.
 func (store *Store) upsertRevisionMeta(ctx context.Context, target domain.Target,
-	revision domain.Revision, actor domain.Actor, source string, now time.Time,
+	revision domain.Revision, actor domain.Actor, source string, now time.Time, behavior domain.ApplyBehavior,
 ) error {
 	doc := newEntryDoc(target, revisionMetaKey, nil, revision, actor, source, now)
+	doc.ApplyBehavior = string(behavior)
 
 	return store.upsertEntry(ctx, target, revisionMetaKey, doc)
+}
+
+func (store *Store) escalateBehavior(ops []ports.WriteOp) domain.ApplyBehavior {
+	if store == nil {
+		return domain.ApplyBundleRebuild
+	}
+
+	escalation := domain.ApplyLiveRead
+	for _, op := range ops {
+		behavior, ok := store.applyBehaviors[op.Key]
+		if !ok {
+			return domain.ApplyBundleRebuild
+		}
+		if behavior.Strength() > escalation.Strength() {
+			escalation = behavior
+		}
+	}
+
+	return escalation
 }
 
 func (store *Store) validateReadDependencies() error {

@@ -52,11 +52,14 @@ const revisionsDDLTemplate = `CREATE TABLE IF NOT EXISTS %s.%s (
     scope      TEXT        NOT NULL,
     subject    TEXT        NOT NULL DEFAULT '',
     revision   BIGINT      NOT NULL DEFAULT 0,
+    apply_behavior TEXT     NOT NULL DEFAULT '',
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_by TEXT        NOT NULL DEFAULT '',
     source     TEXT        NOT NULL DEFAULT '',
     PRIMARY KEY (kind, scope, subject)
-)`
+ );
+
+ ALTER TABLE %s.%s ADD COLUMN IF NOT EXISTS apply_behavior TEXT NOT NULL DEFAULT ''`
 
 // FormatSchemaDDL returns the DDL to create the schema if it does not exist.
 func FormatSchemaDDL(schema string) string {
@@ -87,5 +90,5 @@ func FormatHistoryDDL(schema, table string) string {
 
 // FormatRevisionsDDL returns the DDL to create the runtime_revisions table.
 func FormatRevisionsDDL(schema, table string) string {
-	return fmt.Sprintf(revisionsDDLTemplate, schema, table)
+	return fmt.Sprintf(revisionsDDLTemplate, schema, table, schema, table)
 }

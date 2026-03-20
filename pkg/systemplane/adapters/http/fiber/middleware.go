@@ -22,7 +22,7 @@ func (handler *Handler) requireAuth(permission string) fiber.Handler {
 // while the default tenant scope uses the tenant-scoped settings permission.
 func (handler *Handler) settingsAuth(action string) fiber.Handler {
 	return func(fiberCtx *fiber.Ctx) error {
-		permission := "system/settings/tenant:" + action
+		permission := "system/settings:" + action
 
 		if fiberCtx.Query("scope") == "global" {
 			permission = "system/settings/global:" + action

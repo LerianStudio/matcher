@@ -8,6 +8,7 @@ import (
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 
+	"github.com/LerianStudio/matcher/pkg/systemplane/adapters/store/secretcodec"
 	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
 	"github.com/LerianStudio/matcher/pkg/systemplane/ports"
 )
@@ -22,15 +23,16 @@ const revisionMetaKey = "__revision_meta__"
 // target (kind/scope/subject). The primary key equivalent is the compound
 // index on (kind, scope, subject, key).
 type entryDoc struct {
-	Kind      string    `bson:"kind"`
-	Scope     string    `bson:"scope"`
-	Subject   string    `bson:"subject"`
-	Key       string    `bson:"key"`
-	Value     any       `bson:"value,omitempty"`
-	Revision  uint64    `bson:"revision"`
-	UpdatedAt time.Time `bson:"updated_at"`
-	UpdatedBy string    `bson:"updated_by"`
-	Source    string    `bson:"source"`
+	Kind          string    `bson:"kind"`
+	Scope         string    `bson:"scope"`
+	Subject       string    `bson:"subject"`
+	Key           string    `bson:"key"`
+	Value         any       `bson:"value,omitempty"`
+	ApplyBehavior string    `bson:"apply_behavior,omitempty"`
+	Revision      uint64    `bson:"revision"`
+	UpdatedAt     time.Time `bson:"updated_at"`
+	UpdatedBy     string    `bson:"updated_by"`
+	Source        string    `bson:"source"`
 }
 
 // historyDoc is the BSON-tagged document stored in the history collection.
@@ -64,6 +66,21 @@ func (entryDocument *entryDoc) toDomainEntry() domain.Entry {
 	}
 }
 
+func (entryDocument *entryDoc) toDomainEntryWithCodec(codec *secretcodec.Codec) (domain.Entry, error) {
+	entry := entryDocument.toDomainEntry()
+	if codec == nil {
+		return entry, nil
+	}
+
+	value, err := codec.Decrypt(domain.Target{Kind: entry.Kind, Scope: entry.Scope, SubjectID: entry.Subject}, entry.Key, entry.Value)
+	if err != nil {
+		return domain.Entry{}, err
+	}
+	entry.Value = value
+
+	return entry, nil
+}
+
 // toHistoryEntry converts a historyDoc into the ports representation.
 func (historyDocument *historyDoc) toHistoryEntry() ports.HistoryEntry {
 	return ports.HistoryEntry{
@@ -76,6 +93,27 @@ func (historyDocument *historyDoc) toHistoryEntry() ports.HistoryEntry {
 		ActorID:   historyDocument.ActorID,
 		ChangedAt: historyDocument.ChangedAt,
 	}
+}
+
+func (historyDocument *historyDoc) toHistoryEntryWithCodec(codec *secretcodec.Codec) (ports.HistoryEntry, error) {
+	entry := historyDocument.toHistoryEntry()
+	if codec == nil {
+		return entry, nil
+	}
+
+	target := domain.Target{Kind: domain.KindConfig, Scope: entry.Scope, SubjectID: entry.SubjectID}
+	oldValue, err := codec.Decrypt(target, entry.Key, entry.OldValue)
+	if err != nil {
+		return ports.HistoryEntry{}, err
+	}
+	newValue, err := codec.Decrypt(target, entry.Key, entry.NewValue)
+	if err != nil {
+		return ports.HistoryEntry{}, err
+	}
+	entry.OldValue = oldValue
+	entry.NewValue = newValue
+
+	return entry, nil
 }
 
 // normalizeBSONDocument converts a bson.D (ordered document) into a plain

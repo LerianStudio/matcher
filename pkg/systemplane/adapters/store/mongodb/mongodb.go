@@ -12,6 +12,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
+	"github.com/LerianStudio/matcher/pkg/systemplane/adapters/store/secretcodec"
 	"github.com/LerianStudio/matcher/pkg/systemplane/bootstrap"
 )
 
@@ -47,7 +48,7 @@ func (c *clientCloser) Close() error {
 //
 // Returns an error if the URI is empty, the connection fails, or index
 // creation fails.
-func New(ctx context.Context, cfg bootstrap.MongoBootstrapConfig) (*Store, *HistoryStore, io.Closer, error) {
+func New(ctx context.Context, cfg bootstrap.MongoBootstrapConfig, secrets *bootstrap.SecretStoreConfig) (*Store, *HistoryStore, io.Closer, error) {
 	if cfg.URI == "" {
 		return nil, nil, nil, errEmptyURI
 	}
@@ -80,19 +81,43 @@ func New(ctx context.Context, cfg bootstrap.MongoBootstrapConfig) (*Store, *Hist
 		return nil, nil, nil, fmt.Errorf("mongodb store: create indexes: %w", err)
 	}
 
+	codec, err := secretcodec.New(secretsMasterKey(secrets), secretsKeys(secrets))
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("mongodb store: init secret codec: %w", err)
+	}
+
 	store := &Store{
-		client:  client,
-		entries: entriesColl,
-		history: historyColl,
+		client:         client,
+		entries:        entriesColl,
+		history:        historyColl,
+		secretCodec:    codec,
+		applyBehaviors: cfg.ApplyBehaviors,
 	}
 
 	historyStore := &HistoryStore{
-		history: historyColl,
+		history:     historyColl,
+		secretCodec: codec,
 	}
 
 	closer := &clientCloser{client: client}
 
 	return store, historyStore, closer, nil
+}
+
+func secretsMasterKey(secrets *bootstrap.SecretStoreConfig) string {
+	if secrets == nil {
+		return ""
+	}
+
+	return secrets.MasterKey
+}
+
+func secretsKeys(secrets *bootstrap.SecretStoreConfig) []string {
+	if secrets == nil {
+		return nil
+	}
+
+	return secrets.SecretKeys
 }
 
 type helloResult struct {

@@ -240,6 +240,63 @@ func TestManager_PatchConfigs_LiveRead_PublishesSnapshot(t *testing.T) {
 	assert.Equal(t, domain.Revision(1), spy.snapshot.Configs["app.workers"].Revision)
 }
 
+func TestManager_PatchConfigs_LiveRead_InvokesStateSync(t *testing.T) {
+	t.Parallel()
+
+	reg, store, history, spy, builder := testManagerDeps(t)
+	registerTestConfigKey(t, reg, "app.workers", domain.ApplyLiveRead, true)
+	stateSyncCalls := 0
+
+	mgr, mgrErr := NewManager(ManagerConfig{
+		Registry:   reg,
+		Store:      store,
+		History:    history,
+		Supervisor: spy,
+		Builder:    builder,
+		StateSync: func(_ context.Context, snap domain.Snapshot) {
+			stateSyncCalls++
+			assert.Equal(t, 8, snap.Configs["app.workers"].Value)
+		},
+	})
+	require.NoError(t, mgrErr)
+
+	_, err := mgr.PatchConfigs(context.Background(), PatchRequest{
+		Ops:              []ports.WriteOp{{Key: "app.workers", Value: 8}},
+		ExpectedRevision: domain.RevisionZero,
+		Actor:            domain.Actor{ID: "admin"},
+		Source:           "api",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 1, stateSyncCalls)
+}
+
+func TestManager_PatchConfigs_ConfigWriteValidatorRejectsCandidate(t *testing.T) {
+	t.Parallel()
+
+	reg, store, history, spy, builder := testManagerDeps(t)
+	registerTestConfigKey(t, reg, "app.workers", domain.ApplyLiveRead, true)
+
+	mgr, mgrErr := NewManager(ManagerConfig{
+		Registry:             reg,
+		Store:                store,
+		History:              history,
+		Supervisor:           spy,
+		Builder:              builder,
+		ConfigWriteValidator: func(_ context.Context, _ domain.Snapshot) error { return errors.New("invalid config") },
+	})
+	require.NoError(t, mgrErr)
+
+	_, err := mgr.PatchConfigs(context.Background(), PatchRequest{
+		Ops:              []ports.WriteOp{{Key: "app.workers", Value: 8}},
+		ExpectedRevision: domain.RevisionZero,
+		Actor:            domain.Actor{ID: "admin"},
+		Source:           "api",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "patch configs validation")
+	assert.Equal(t, 0, spy.publishCalls)
+}
+
 func TestManager_PatchSettings_LiveRead_UpdatesTenantSnapshot(t *testing.T) {
 	t.Parallel()
 
@@ -487,7 +544,7 @@ func TestManager_ApplyEscalation_UnexpectedBehaviorReturnsError(t *testing.T) {
 	target, err := domain.NewTarget(domain.KindConfig, domain.ScopeGlobal, "")
 	require.NoError(t, err)
 
-	err = mgr.applyEscalation(context.Background(), target, domain.ApplyBootstrapOnly)
+	err = mgr.applyEscalation(context.Background(), target, domain.ApplyBehavior("bogus"))
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUnexpectedApplyBehavior)
 }

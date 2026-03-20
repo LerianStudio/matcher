@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/LerianStudio/matcher/pkg/systemplane/adapters/store/secretcodec"
 	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
 	"github.com/LerianStudio/matcher/pkg/systemplane/ports"
 )
@@ -30,20 +31,23 @@ var ErrRevisionRowUpdateMismatch = errors.New("postgres store: revision row upda
 // user input. Raw SQL concatenation via qualify() is safe under these
 // constraints.
 type Store struct {
-	db            *sql.DB
-	schema        string
-	entriesTable  string
-	historyTable  string
-	revisionTable string
-	notifyChannel string
+	db             *sql.DB
+	schema         string
+	entriesTable   string
+	historyTable   string
+	revisionTable  string
+	notifyChannel  string
+	secretCodec    *secretcodec.Codec
+	applyBehaviors map[string]domain.ApplyBehavior
 }
 
 // notifyPayload is the JSON structure sent via pg_notify on each Put.
 type notifyPayload struct {
-	Kind     string `json:"kind"`
-	Scope    string `json:"scope"`
-	Subject  string `json:"subject"`
-	Revision uint64 `json:"revision"`
+	Kind          string `json:"kind"`
+	Scope         string `json:"scope"`
+	Subject       string `json:"subject"`
+	Revision      uint64 `json:"revision"`
+	ApplyBehavior string `json:"apply_behavior,omitempty"`
 }
 
 // qualifiedEntries returns the schema-qualified entries table name.
@@ -114,6 +118,10 @@ func (store *Store) Get(ctx context.Context, target domain.Target) (ports.ReadRe
 			decodedValue, err := decodeJSONValue(valueRaw)
 			if err != nil {
 				return ports.ReadResult{}, fmt.Errorf("postgres store get: unmarshal value for key %q: %w", key, err)
+			}
+			decodedValue, err = store.decryptValue(target, key, decodedValue)
+			if err != nil {
+				return ports.ReadResult{}, fmt.Errorf("postgres store get: decrypt value for key %q: %w", key, err)
 			}
 
 			value = decodedValue
@@ -235,11 +243,11 @@ func (store *Store) putInTx(
 		}
 	}
 
-	if err := store.updateRevisionRow(ctx, tx, target, newRevision, now, actor, source); err != nil {
+	if err := store.updateRevisionRow(ctx, tx, target, newRevision, store.escalateBehavior(ops), now, actor, source); err != nil {
 		return domain.RevisionZero, fmt.Errorf("update revision row: %w", err)
 	}
 
-	if err := store.notify(ctx, tx, target, newRevision); err != nil {
+	if err := store.notify(ctx, tx, target, newRevision, store.escalateBehavior(ops)); err != nil {
 		return domain.RevisionZero, fmt.Errorf("notify: %w", err)
 	}
 
@@ -336,13 +344,14 @@ func (store *Store) updateRevisionRow(
 	tx *sql.Tx,
 	target domain.Target,
 	revision domain.Revision,
+	behavior domain.ApplyBehavior,
 	now time.Time,
 	actor domain.Actor,
 	source string,
 ) error {
 	// #nosec G202 -- table identifier is validated in bootstrap (operator-controlled, not user input).
 	query := `UPDATE ` + store.qualifiedRevisions() + `
-		 SET revision=$4, updated_at=$5, updated_by=$6, source=$7
+		 SET revision=$4, apply_behavior=$5, updated_at=$6, updated_by=$7, source=$8
 		 WHERE kind=$1 AND scope=$2 AND subject=$3`
 
 	result, err := tx.ExecContext(ctx, query,
@@ -350,6 +359,7 @@ func (store *Store) updateRevisionRow(
 		string(target.Scope),
 		target.SubjectID,
 		revision.Uint64(),
+		string(behavior),
 		now,
 		actor.ID,
 		source,
@@ -459,7 +469,12 @@ func (store *Store) upsertEntry(
 	actor domain.Actor,
 	source string,
 ) error {
-	valueBytes, err := json.Marshal(op.Value)
+	valueForStorage, err := store.encryptValue(target, op.Key, op.Value)
+	if err != nil {
+		return fmt.Errorf("encrypt value: %w", err)
+	}
+
+	valueBytes, err := json.Marshal(valueForStorage)
 	if err != nil {
 		return fmt.Errorf("marshal value: %w", err)
 	}
@@ -493,7 +508,12 @@ func (store *Store) insertHistory(
 	var newValueRaw []byte
 
 	if !op.Reset && !domain.IsNilValue(op.Value) {
-		b, err := json.Marshal(op.Value)
+		valueForHistory, err := store.encryptValue(target, op.Key, op.Value)
+		if err != nil {
+			return fmt.Errorf("encrypt new value for history: %w", err)
+		}
+
+		b, err := json.Marshal(valueForHistory)
 		if err != nil {
 			return fmt.Errorf("marshal new value for history: %w", err)
 		}
@@ -514,18 +534,36 @@ func (store *Store) insertHistory(
 	return err
 }
 
+func (store *Store) encryptValue(target domain.Target, key string, value any) (any, error) {
+	if store == nil || store.secretCodec == nil {
+		return value, nil
+	}
+
+	return store.secretCodec.Encrypt(target, key, value)
+}
+
+func (store *Store) decryptValue(target domain.Target, key string, value any) (any, error) {
+	if store == nil || store.secretCodec == nil {
+		return value, nil
+	}
+
+	return store.secretCodec.Decrypt(target, key, value)
+}
+
 // notify sends a pg_notify event with a JSON payload describing the change.
 func (store *Store) notify(
 	ctx context.Context,
 	tx *sql.Tx,
 	target domain.Target,
 	revision domain.Revision,
+	behavior domain.ApplyBehavior,
 ) error {
 	payload := notifyPayload{
-		Kind:     string(target.Kind),
-		Scope:    string(target.Scope),
-		Subject:  target.SubjectID,
-		Revision: revision.Uint64(),
+		Kind:          string(target.Kind),
+		Scope:         string(target.Scope),
+		Subject:       target.SubjectID,
+		Revision:      revision.Uint64(),
+		ApplyBehavior: string(behavior),
 	}
 
 	payloadBytes, err := json.Marshal(payload)
@@ -536,6 +574,25 @@ func (store *Store) notify(
 	_, err = tx.ExecContext(ctx, "SELECT pg_notify($1, $2)", store.notifyChannel, string(payloadBytes))
 
 	return err
+}
+
+func (store *Store) escalateBehavior(ops []ports.WriteOp) domain.ApplyBehavior {
+	if store == nil {
+		return domain.ApplyBundleRebuild
+	}
+
+	escalation := domain.ApplyLiveRead
+	for _, op := range ops {
+		behavior, ok := store.applyBehaviors[op.Key]
+		if !ok {
+			return domain.ApplyBundleRebuild
+		}
+		if behavior.Strength() > escalation.Strength() {
+			escalation = behavior
+		}
+	}
+
+	return escalation
 }
 
 // nullableJSONB returns nil (SQL NULL) for empty/nil byte slices, or the raw

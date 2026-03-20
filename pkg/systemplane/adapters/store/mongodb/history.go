@@ -11,6 +11,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
+	"github.com/LerianStudio/matcher/pkg/systemplane/adapters/store/secretcodec"
 	"github.com/LerianStudio/matcher/pkg/systemplane/ports"
 )
 
@@ -21,7 +22,8 @@ var _ ports.HistoryStore = (*HistoryStore)(nil)
 // documents are stored in a dedicated collection and returned in reverse
 // chronological order (newest first).
 type HistoryStore struct {
-	history *mongo.Collection
+	history     *mongo.Collection
+	secretCodec *secretcodec.Codec
 }
 
 // ListHistory retrieves history entries matching the given filter. Results
@@ -68,7 +70,11 @@ func (historyStore *HistoryStore) ListHistory(ctx context.Context,
 
 	entries := make([]ports.HistoryEntry, len(docs))
 	for i := range docs {
-		entries[i] = docs[i].toHistoryEntry()
+		entry, err := docs[i].toHistoryEntryWithCodec(historyStore.secretCodec)
+		if err != nil {
+			return nil, fmt.Errorf("mongodb history list: decode secret history: %w", err)
+		}
+		entries[i] = entry
 	}
 
 	return entries, nil

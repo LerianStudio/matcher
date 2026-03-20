@@ -83,16 +83,3 @@ func (reconciler *FakeReconciler) CallCount() int {
 
 	return len(reconciler.Calls)
 }
-
-// LastCall returns the most recent ReconcileCall, or the zero value if no
-// calls have been recorded.
-func (reconciler *FakeReconciler) LastCall() ReconcileCall {
-	reconciler.mu.Lock()
-	defer reconciler.mu.Unlock()
-
-	if len(reconciler.Calls) == 0 {
-		return ReconcileCall{}
-	}
-
-	return reconciler.Calls[len(reconciler.Calls)-1]
-}

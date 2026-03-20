@@ -11,7 +11,9 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib" // pgx driver registration
 
+	"github.com/LerianStudio/matcher/pkg/systemplane/adapters/store/secretcodec"
 	"github.com/LerianStudio/matcher/pkg/systemplane/bootstrap"
+	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
 )
 
 // Sentinel errors for constructor validation.
@@ -46,7 +48,7 @@ func (c *dbCloser) Close() error {
 //
 // The caller is responsible for calling Close when the stores are no longer
 // needed.
-func New(ctx context.Context, cfg *bootstrap.PostgresBootstrapConfig) (*Store, *HistoryStore, io.Closer, error) {
+func New(ctx context.Context, cfg *bootstrap.PostgresBootstrapConfig, secrets *bootstrap.SecretStoreConfig) (*Store, *HistoryStore, io.Closer, error) {
 	if cfg == nil {
 		return nil, nil, nil, ErrNilConfig
 	}
@@ -80,19 +82,27 @@ func New(ctx context.Context, cfg *bootstrap.PostgresBootstrapConfig) (*Store, *
 		return nil, nil, nil, fmt.Errorf("postgres store: execute ddl: %w", err)
 	}
 
+	codec, err := secretcodec.New(secretsMasterKey(secrets), secretsKeys(secrets))
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("postgres store: init secret codec: %w", err)
+	}
+
 	store := &Store{
-		db:            db,
-		schema:        schema,
-		entriesTable:  entriesTable,
-		historyTable:  historyTable,
-		revisionTable: revisionTable,
-		notifyChannel: notifyChannel,
+		db:             db,
+		schema:         schema,
+		entriesTable:   entriesTable,
+		historyTable:   historyTable,
+		revisionTable:  revisionTable,
+		notifyChannel:  notifyChannel,
+		secretCodec:    codec,
+		applyBehaviors: cfg.ApplyBehaviors,
 	}
 
 	historyStore := &HistoryStore{
 		db:           db,
 		schema:       schema,
 		historyTable: historyTable,
+		secretCodec:  codec,
 	}
 
 	return store, historyStore, &dbCloser{db: db}, nil
@@ -119,12 +129,13 @@ func NewFromDB(db *sql.DB, schema, entriesTable, historyTable, notifyChannel str
 	}
 
 	store := &Store{
-		db:            db,
-		schema:        validatedSchema,
-		entriesTable:  validatedEntriesTable,
-		historyTable:  validatedHistoryTable,
-		revisionTable: bootstrap.DefaultPostgresRevisionTable,
-		notifyChannel: validatedNotifyChannel,
+		db:             db,
+		schema:         validatedSchema,
+		entriesTable:   validatedEntriesTable,
+		historyTable:   validatedHistoryTable,
+		revisionTable:  bootstrap.DefaultPostgresRevisionTable,
+		notifyChannel:  validatedNotifyChannel,
+		applyBehaviors: map[string]domain.ApplyBehavior{},
 	}
 
 	historyStore := &HistoryStore{
@@ -134,6 +145,22 @@ func NewFromDB(db *sql.DB, schema, entriesTable, historyTable, notifyChannel str
 	}
 
 	return store, historyStore, nil
+}
+
+func secretsMasterKey(secrets *bootstrap.SecretStoreConfig) string {
+	if secrets == nil {
+		return ""
+	}
+
+	return secrets.MasterKey
+}
+
+func secretsKeys(secrets *bootstrap.SecretStoreConfig) []string {
+	if secrets == nil {
+		return nil
+	}
+
+	return secrets.SecretKeys
 }
 
 // executeDDL creates the schema and tables if they do not already exist.

@@ -27,6 +27,17 @@ func (manager *defaultManager) PatchConfigs(ctx context.Context, req PatchReques
 		}
 	}
 
+	if manager.configWriteValidator != nil {
+		candidate, err := manager.previewConfigSnapshot(ctx, req.Ops)
+		if err != nil {
+			return WriteResult{}, fmt.Errorf("patch configs preview: %w", err)
+		}
+
+		if err := manager.configWriteValidator(ctx, candidate); err != nil {
+			return WriteResult{}, fmt.Errorf("patch configs validation: %w", err)
+		}
+	}
+
 	escalation, _, err := Escalate(manager.registry, req.Ops)
 	if err != nil {
 		return WriteResult{}, fmt.Errorf("patch configs escalation: %w", err)
@@ -47,6 +58,50 @@ func (manager *defaultManager) PatchConfigs(ctx context.Context, req PatchReques
 	}
 
 	return WriteResult{Revision: revision}, nil
+}
+
+func (manager *defaultManager) previewConfigSnapshot(ctx context.Context, ops []ports.WriteOp) (domain.Snapshot, error) {
+	current := cloneSnapshot(manager.supervisor.Snapshot())
+	if current.BuiltAt.IsZero() || current.Configs == nil {
+		fresh, err := manager.builder.BuildFull(ctx)
+		if err != nil {
+			return domain.Snapshot{}, fmt.Errorf("build fresh snapshot: %w", err)
+		}
+		current = cloneSnapshot(fresh)
+	}
+
+	if current.Configs == nil {
+		current.Configs = make(map[string]domain.EffectiveValue)
+	}
+
+	for _, op := range ops {
+		def, ok := manager.registry.Get(op.Key)
+		if !ok {
+			return domain.Snapshot{}, fmt.Errorf("preview config key %q: %w", op.Key, domain.ErrKeyUnknown)
+		}
+
+		ev := current.Configs[op.Key]
+		ev.Key = def.Key
+		ev.Default = def.DefaultValue
+		ev.Redacted = def.RedactPolicy != domain.RedactNone
+
+		if op.Reset || domain.IsNilValue(op.Value) {
+			ev.Value = def.DefaultValue
+			ev.Override = nil
+			ev.Source = "default"
+		} else {
+			ev.Value = op.Value
+			ev.Override = op.Value
+			ev.Source = "preview-override"
+		}
+
+		current.Configs[op.Key] = ev
+	}
+
+	current.Revision = snapshotRevision(current)
+	current.BuiltAt = time.Now().UTC()
+
+	return current, nil
 }
 
 // PatchSettings validates the mutations, persists them, and applies the
@@ -98,7 +153,7 @@ func (manager *defaultManager) validateConfigOp(op ports.WriteOp) error {
 		return fmt.Errorf("key %q: %w", op.Key, domain.ErrKeyNotMutable)
 	}
 
-	if !op.Reset && op.Value != nil {
+	if !op.Reset && !domain.IsNilValue(op.Value) {
 		if err := manager.registry.Validate(op.Key, op.Value); err != nil {
 			return fmt.Errorf("key %q: %w", op.Key, err)
 		}
@@ -125,7 +180,7 @@ func (manager *defaultManager) validateSettingOp(op ports.WriteOp, scope domain.
 		return fmt.Errorf("key %q does not allow scope %q: %w", op.Key, scope, domain.ErrScopeInvalid)
 	}
 
-	if !op.Reset && op.Value != nil {
+	if !op.Reset && !domain.IsNilValue(op.Value) {
 		if err := manager.registry.Validate(op.Key, op.Value); err != nil {
 			return fmt.Errorf("key %q: %w", op.Key, err)
 		}
@@ -136,6 +191,8 @@ func (manager *defaultManager) validateSettingOp(op ports.WriteOp, scope domain.
 
 func (manager *defaultManager) applyEscalation(ctx context.Context, target domain.Target, escalation domain.ApplyBehavior) error {
 	switch escalation {
+	case domain.ApplyBootstrapOnly:
+		return nil
 	case domain.ApplyLiveRead:
 		snap, err := manager.buildActiveSnapshot(ctx, target)
 		if err != nil {
@@ -144,6 +201,9 @@ func (manager *defaultManager) applyEscalation(ctx context.Context, target domai
 
 		if err := manager.supervisor.PublishSnapshot(ctx, snap, "live-read"); err != nil {
 			return fmt.Errorf("publish snapshot for live-read: %w", err)
+		}
+		if manager.stateSync != nil {
+			manager.stateSync(ctx, snap)
 		}
 
 		return nil
@@ -156,6 +216,9 @@ func (manager *defaultManager) applyEscalation(ctx context.Context, target domai
 		if err := manager.supervisor.ReconcileCurrent(ctx, snap, "worker-reconcile"); err != nil {
 			return fmt.Errorf("reconcile current for worker-reconcile: %w", err)
 		}
+		if manager.stateSync != nil {
+			manager.stateSync(ctx, snap)
+		}
 
 		return nil
 	case domain.ApplyBundleRebuild, domain.ApplyBundleRebuildAndReconcile:
@@ -167,6 +230,15 @@ func (manager *defaultManager) applyEscalation(ctx context.Context, target domai
 	default:
 		return fmt.Errorf("%w %q", errUnexpectedApplyBehavior, escalation)
 	}
+}
+
+func (manager *defaultManager) ApplyChangeSignal(ctx context.Context, signal ports.ChangeSignal) error {
+	behavior := signal.ApplyBehavior
+	if !behavior.IsValid() {
+		behavior = domain.ApplyBundleRebuild
+	}
+
+	return manager.applyEscalation(ctx, signal.Target, behavior)
 }
 
 func (manager *defaultManager) buildActiveSnapshot(ctx context.Context, target domain.Target) (domain.Snapshot, error) {

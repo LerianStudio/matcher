@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/LerianStudio/matcher/pkg/systemplane/adapters/store/secretcodec"
 	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
 	"github.com/LerianStudio/matcher/pkg/systemplane/ports"
 )
@@ -40,6 +41,14 @@ func newTestStore(t *testing.T) (*Store, sqlmock.Sqlmock) {
 	}
 
 	return store, mock
+}
+
+func withSecretCodec(t *testing.T, store *Store, keys ...string) {
+	t.Helper()
+
+	codec, err := secretcodec.New("0123456789abcdef0123456789abcdef", keys)
+	require.NoError(t, err)
+	store.secretCodec = codec
 }
 
 func configTarget() domain.Target {
@@ -312,6 +321,38 @@ func TestStore_Get(t *testing.T) {
 		assert.Equal(t, "tenant-abc", result.Entries[0].Subject)
 		assert.NoError(t, mock.ExpectationsWereMet())
 	})
+
+	t.Run("decrypts secret values transparently", func(t *testing.T) {
+		t.Parallel()
+
+		store, mock := newTestStore(t)
+		withSecretCodec(t, store, "postgres.primary_password")
+		ctx := context.Background()
+		target := configTarget()
+		now := time.Now().UTC()
+
+		encryptedValue, err := store.encryptValue(target, "postgres.primary_password", "secret-value")
+		require.NoError(t, err)
+		encryptedBytes, err := json.Marshal(encryptedValue)
+		require.NoError(t, err)
+
+		mock.ExpectBegin()
+		rows := sqlmock.NewRows([]string{"key", "value", "revision", "updated_at", "updated_by", "source"}).
+			AddRow("postgres.primary_password", encryptedBytes, 2, now, "admin", "api")
+		mock.ExpectQuery(`SELECT key, value, revision, updated_at, updated_by, source`).
+			WithArgs("config", "global", "").
+			WillReturnRows(rows)
+		mock.ExpectQuery(`SELECT revision FROM`).
+			WithArgs("config", "global", "").
+			WillReturnRows(sqlmock.NewRows([]string{"revision"}).AddRow(2))
+		mock.ExpectCommit()
+
+		result, err := store.Get(ctx, target)
+		require.NoError(t, err)
+		require.Len(t, result.Entries, 1)
+		assert.Equal(t, "secret-value", result.Entries[0].Value)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
 }
 
 func TestStore_Put(t *testing.T) {
@@ -367,7 +408,7 @@ func TestStore_Put(t *testing.T) {
 
 		// updateRevisionRow
 		mock.ExpectExec(`UPDATE test_schema.runtime_revisions`).
-			WithArgs("config", "global", "", uint64(1), sqlmock.AnyArg(), "admin", "api").
+			WithArgs("config", "global", "", uint64(1), sqlmock.AnyArg(), sqlmock.AnyArg(), "admin", "api").
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
 		// notify
@@ -462,7 +503,7 @@ func TestStore_Put(t *testing.T) {
 			).WillReturnResult(sqlmock.NewResult(1, 1))
 
 		mock.ExpectExec(`UPDATE test_schema.runtime_revisions`).
-			WithArgs("config", "global", "", uint64(2), sqlmock.AnyArg(), "admin", "api").
+			WithArgs("config", "global", "", uint64(2), sqlmock.AnyArg(), sqlmock.AnyArg(), "admin", "api").
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
 		mock.ExpectExec(`SELECT pg_notify`).
@@ -518,7 +559,7 @@ func TestStore_Put(t *testing.T) {
 			).WillReturnResult(sqlmock.NewResult(1, 1))
 
 		mock.ExpectExec(`UPDATE test_schema.runtime_revisions`).
-			WithArgs("config", "global", "", uint64(2), sqlmock.AnyArg(), "admin", "api").
+			WithArgs("config", "global", "", uint64(2), sqlmock.AnyArg(), sqlmock.AnyArg(), "admin", "api").
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
 		mock.ExpectExec(`SELECT pg_notify`).
@@ -622,7 +663,7 @@ func TestStore_Put(t *testing.T) {
 			).WillReturnResult(sqlmock.NewResult(1, 1))
 
 		mock.ExpectExec(`UPDATE test_schema.runtime_revisions`).
-			WithArgs("config", "global", "", uint64(1), sqlmock.AnyArg(), "admin", "api").
+			WithArgs("config", "global", "", uint64(1), sqlmock.AnyArg(), sqlmock.AnyArg(), "admin", "api").
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
 		mock.ExpectExec(`SELECT pg_notify`).
@@ -687,7 +728,7 @@ func TestStore_Put(t *testing.T) {
 		ops := []ports.WriteOp{
 			{Key: "theme", Value: "dark"},
 		}
-		expectedPayload := notifyPayload{Kind: "setting", Scope: "tenant", Subject: "tenant-abc", Revision: 1}
+		expectedPayload := notifyPayload{Kind: "setting", Scope: "tenant", Subject: "tenant-abc", Revision: 1, ApplyBehavior: string(domain.ApplyBundleRebuild)}
 
 		mock.ExpectBegin()
 
@@ -714,7 +755,7 @@ func TestStore_Put(t *testing.T) {
 			).WillReturnResult(sqlmock.NewResult(1, 1))
 
 		mock.ExpectExec(`UPDATE test_schema.runtime_revisions`).
-			WithArgs("setting", "tenant", "tenant-abc", uint64(1), sqlmock.AnyArg(), "user1", "ui").
+			WithArgs("setting", "tenant", "tenant-abc", uint64(1), sqlmock.AnyArg(), sqlmock.AnyArg(), "user1", "ui").
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
 		// Capture the notify payload to validate its structure

@@ -105,7 +105,7 @@ func TestSettingsAuth_TenantScope(t *testing.T) {
 	resp := doRequest(t, app, req)
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	assert.Equal(t, "system/settings/tenant:read", capturedPermission)
+	assert.Equal(t, "system/settings:read", capturedPermission)
 }
 
 func TestSettingsAuth_GlobalScope(t *testing.T) {

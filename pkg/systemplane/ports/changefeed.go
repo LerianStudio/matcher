@@ -10,8 +10,9 @@ import (
 
 // ChangeSignal notifies that a target's entries have been updated.
 type ChangeSignal struct {
-	Target   domain.Target
-	Revision domain.Revision
+	Target        domain.Target
+	Revision      domain.Revision
+	ApplyBehavior domain.ApplyBehavior
 }
 
 // ChangeFeed provides real-time notifications when configuration entries change.

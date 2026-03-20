@@ -10,9 +10,11 @@ import (
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 
+	"github.com/LerianStudio/matcher/pkg/systemplane/adapters/store/secretcodec"
 	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
 	"github.com/LerianStudio/matcher/pkg/systemplane/ports"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestEntryDoc_ToDomainEntry(t *testing.T) {
@@ -257,6 +259,55 @@ func TestHistoryDoc_ToHistoryEntry(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestEntryDoc_ToDomainEntryWithCodec_DecryptsSecret(t *testing.T) {
+	t.Parallel()
+
+	codec, err := secretcodec.New("0123456789abcdef0123456789abcdef", []string{"redis.password"})
+	require.NoError(t, err)
+	now := time.Now().UTC()
+	target := domain.Target{Kind: domain.KindConfig, Scope: domain.ScopeGlobal}
+	encryptedValue, err := codec.Encrypt(target, "redis.password", "secret-value")
+	require.NoError(t, err)
+
+	doc := entryDoc{
+		Kind:      "config",
+		Scope:     "global",
+		Key:       "redis.password",
+		Value:     encryptedValue,
+		Revision:  1,
+		UpdatedAt: now,
+	}
+
+	entry, err := doc.toDomainEntryWithCodec(codec)
+	require.NoError(t, err)
+	assert.Equal(t, "secret-value", entry.Value)
+}
+
+func TestHistoryDoc_ToHistoryEntryWithCodec_DecryptsSecret(t *testing.T) {
+	t.Parallel()
+
+	codec, err := secretcodec.New("0123456789abcdef0123456789abcdef", []string{"object_storage.secret_access_key"})
+	require.NoError(t, err)
+	target := domain.Target{Kind: domain.KindConfig, Scope: domain.ScopeGlobal}
+	oldValue, err := codec.Encrypt(target, "object_storage.secret_access_key", "old")
+	require.NoError(t, err)
+	newValue, err := codec.Encrypt(target, "object_storage.secret_access_key", "new")
+	require.NoError(t, err)
+
+	doc := historyDoc{
+		Kind:     "config",
+		Scope:    "global",
+		Key:      "object_storage.secret_access_key",
+		OldValue: oldValue,
+		NewValue: newValue,
+	}
+
+	entry, err := doc.toHistoryEntryWithCodec(codec)
+	require.NoError(t, err)
+	assert.Equal(t, "old", entry.OldValue)
+	assert.Equal(t, "new", entry.NewValue)
 }
 
 func TestNewEntryDoc(t *testing.T) {

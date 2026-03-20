@@ -18,7 +18,7 @@ import (
 
 func init() {
 	if err := bootstrap.RegisterBackendFactory(domain.BackendPostgres, func(ctx context.Context, cfg *bootstrap.BootstrapConfig) (*bootstrap.BackendResources, error) {
-		store, history, closer, err := postgresstore.New(ctx, cfg.Postgres)
+		store, history, closer, err := postgresstore.New(ctx, cfg.Postgres, cfg.Secrets)
 		if err != nil {
 			return nil, fmt.Errorf("postgres backend: %w", err)
 		}
@@ -35,7 +35,7 @@ func init() {
 	}
 
 	if err := bootstrap.RegisterBackendFactory(domain.BackendMongoDB, func(ctx context.Context, cfg *bootstrap.BootstrapConfig) (*bootstrap.BackendResources, error) {
-		store, history, closer, err := mongodbstore.New(ctx, *cfg.MongoDB)
+		store, history, closer, err := mongodbstore.New(ctx, *cfg.MongoDB, cfg.Secrets)
 		if err != nil {
 			return nil, fmt.Errorf("mongodb backend: %w", err)
 		}

@@ -10,6 +10,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
 	"github.com/LerianStudio/matcher/pkg/systemplane/ports"
 	"github.com/LerianStudio/matcher/pkg/systemplane/service"
 )
@@ -31,15 +32,15 @@ type Handler struct {
 // All three dependencies are required; a nil value causes a construction-time
 // error rather than a runtime panic on first use.
 func NewHandler(manager service.Manager, identity ports.IdentityResolver, auth ports.Authorizer) (*Handler, error) {
-	if manager == nil {
+	if domain.IsNilValue(manager) {
 		return nil, errHandlerManagerRequired
 	}
 
-	if identity == nil {
+	if domain.IsNilValue(identity) {
 		return nil, errHandlerIdentityRequired
 	}
 
-	if auth == nil {
+	if domain.IsNilValue(auth) {
 		return nil, errHandlerAuthRequired
 	}
 

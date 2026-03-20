@@ -27,19 +27,27 @@ var (
 // BootstrapConfig holds the initial configuration needed to connect to the
 // systemplane backend before any runtime configuration is loaded.
 type BootstrapConfig struct {
-	Backend  domain.BackendKind
-	Postgres *PostgresBootstrapConfig
-	MongoDB  *MongoBootstrapConfig
+	Backend        domain.BackendKind
+	Postgres       *PostgresBootstrapConfig
+	MongoDB        *MongoBootstrapConfig
+	Secrets        *SecretStoreConfig
+	ApplyBehaviors map[string]domain.ApplyBehavior
+}
+
+type SecretStoreConfig struct {
+	MasterKey  string
+	SecretKeys []string
 }
 
 // PostgresBootstrapConfig holds PostgreSQL-specific bootstrap settings.
 type PostgresBootstrapConfig struct {
-	DSN           string
-	Schema        string
-	EntriesTable  string
-	HistoryTable  string
-	RevisionTable string
-	NotifyChannel string
+	DSN            string
+	Schema         string
+	EntriesTable   string
+	HistoryTable   string
+	RevisionTable  string
+	NotifyChannel  string
+	ApplyBehaviors map[string]domain.ApplyBehavior
 }
 
 // MongoBootstrapConfig holds MongoDB-specific bootstrap settings.
@@ -50,6 +58,7 @@ type MongoBootstrapConfig struct {
 	HistoryCollection string
 	WatchMode         string
 	PollInterval      time.Duration
+	ApplyBehaviors    map[string]domain.ApplyBehavior
 }
 
 // Validate checks that the bootstrap configuration is well-formed.

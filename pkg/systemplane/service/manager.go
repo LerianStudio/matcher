@@ -70,35 +70,38 @@ type Manager interface {
 	GetSettingSchema(ctx context.Context) ([]SchemaEntry, error)
 	GetConfigHistory(ctx context.Context, filter ports.HistoryFilter) ([]ports.HistoryEntry, error)
 	GetSettingHistory(ctx context.Context, filter ports.HistoryFilter) ([]ports.HistoryEntry, error)
+	ApplyChangeSignal(ctx context.Context, signal ports.ChangeSignal) error
 	Resync(ctx context.Context) error
 }
 
 // ManagerConfig holds the dependencies for constructing a Manager.
 type ManagerConfig struct {
-	Registry   registry.Registry
-	Store      ports.Store
-	History    ports.HistoryStore
-	Supervisor Supervisor
-	Builder    *SnapshotBuilder
+	Registry             registry.Registry
+	Store                ports.Store
+	History              ports.HistoryStore
+	Supervisor           Supervisor
+	Builder              *SnapshotBuilder
+	ConfigWriteValidator func(ctx context.Context, snapshot domain.Snapshot) error
+	StateSync            func(ctx context.Context, snapshot domain.Snapshot)
 }
 
 // NewManager creates a new Manager with the supplied dependencies. All
 // dependencies are required; a nil dependency causes a construction-time
 // error rather than a runtime panic on first use.
 func NewManager(cfg ManagerConfig) (Manager, error) {
-	if cfg.Registry == nil {
+	if domain.IsNilValue(cfg.Registry) {
 		return nil, errManagerRegistryRequired
 	}
 
-	if cfg.Store == nil {
+	if domain.IsNilValue(cfg.Store) {
 		return nil, errManagerStoreRequired
 	}
 
-	if cfg.History == nil {
+	if domain.IsNilValue(cfg.History) {
 		return nil, errManagerHistoryRequired
 	}
 
-	if cfg.Supervisor == nil {
+	if domain.IsNilValue(cfg.Supervisor) {
 		return nil, errManagerSupervisorRequired
 	}
 
@@ -107,18 +110,22 @@ func NewManager(cfg ManagerConfig) (Manager, error) {
 	}
 
 	return &defaultManager{
-		registry:   cfg.Registry,
-		store:      cfg.Store,
-		history:    cfg.History,
-		supervisor: cfg.Supervisor,
-		builder:    cfg.Builder,
+		registry:             cfg.Registry,
+		store:                cfg.Store,
+		history:              cfg.History,
+		supervisor:           cfg.Supervisor,
+		builder:              cfg.Builder,
+		configWriteValidator: cfg.ConfigWriteValidator,
+		stateSync:            cfg.StateSync,
 	}, nil
 }
 
 type defaultManager struct {
-	registry   registry.Registry
-	store      ports.Store
-	history    ports.HistoryStore
-	supervisor Supervisor
-	builder    *SnapshotBuilder
+	registry             registry.Registry
+	store                ports.Store
+	history              ports.HistoryStore
+	supervisor           Supervisor
+	builder              *SnapshotBuilder
+	configWriteValidator func(ctx context.Context, snapshot domain.Snapshot) error
+	stateSync            func(ctx context.Context, snapshot domain.Snapshot)
 }

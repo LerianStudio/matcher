@@ -111,10 +111,13 @@ func (feed *Feed) subscribeChangeStream(ctx context.Context, handler func(ports.
 	}
 
 	for {
-		streamErr := feed.subscribeChangeStreamOnce(ctx, func(signal ports.ChangeSignal) error {
-			known[signal.Target.String()] = pollSnapshot{Target: signal.Target, Revision: signal.Revision}
+		streamErr := feed.subscribeChangeStreamOnce(ctx, known, func(signal ports.ChangeSignal) error {
+			if err := basechangefeed.SafeInvokeHandler(handler, signal); err != nil {
+				return err
+			}
 
-			return basechangefeed.SafeInvokeHandler(handler, signal)
+			known[signal.Target.String()] = pollSnapshot{Target: signal.Target, Revision: signal.Revision, ApplyBehavior: signal.ApplyBehavior}
+			return nil
 		})
 		if errors.Is(streamErr, basechangefeed.ErrHandlerPanic) {
 			return fmt.Errorf("mongodb feed: %w", streamErr)
@@ -130,7 +133,9 @@ func (feed *Feed) subscribeChangeStream(ctx context.Context, handler func(ports.
 		case <-time.After(defaultChangeStreamReconnectDelay):
 		}
 
-		if err := feed.resyncMissedSignals(ctx, known, handler); err != nil {
+		if err := feed.resyncMissedSignals(ctx, known, func(signal ports.ChangeSignal) error {
+			return basechangefeed.SafeInvokeHandler(handler, signal)
+		}); err != nil {
 			if errors.Is(err, basechangefeed.ErrHandlerPanic) {
 				return fmt.Errorf("mongodb feed: %w", err)
 			}
@@ -156,7 +161,7 @@ type changeEvent struct {
 // subscribeChangeStream opens a server-side change stream on the entries
 // collection filtering for data-mutation operations and translates each event
 // into a ChangeSignal delivered to the handler.
-func (feed *Feed) subscribeChangeStreamOnce(ctx context.Context, handler func(ports.ChangeSignal) error) error {
+func (feed *Feed) subscribeChangeStreamOnce(ctx context.Context, known map[string]pollSnapshot, handler func(ports.ChangeSignal) error) error {
 	pipeline := mongo.Pipeline{
 		{{Key: "$match", Value: bson.D{
 			{Key: "operationType", Value: bson.D{
@@ -173,6 +178,13 @@ func (feed *Feed) subscribeChangeStreamOnce(ctx context.Context, handler func(po
 		return fmt.Errorf("mongodb feed: open change stream: %w", err)
 	}
 	defer stream.Close(ctx)
+
+	if err := feed.resyncMissedSignals(ctx, known, handler); err != nil {
+		if errors.Is(err, basechangefeed.ErrHandlerPanic) {
+			return err
+		}
+		return fmt.Errorf("mongodb feed initial resync: %w", err)
+	}
 
 	for stream.Next(ctx) {
 		var event changeEvent
@@ -203,7 +215,7 @@ func (feed *Feed) subscribeChangeStreamOnce(ctx context.Context, handler func(po
 	return nil
 }
 
-func (feed *Feed) resyncMissedSignals(ctx context.Context, known map[string]pollSnapshot, handler func(ports.ChangeSignal)) error {
+func (feed *Feed) resyncMissedSignals(ctx context.Context, known map[string]pollSnapshot, handler func(ports.ChangeSignal) error) error {
 	current, err := feed.pollRevisions(ctx)
 	if err != nil {
 		return err
@@ -223,11 +235,14 @@ func (feed *Feed) resyncMissedSignals(ctx context.Context, known map[string]poll
 		if exists && previous.Revision == revision.Revision {
 			continue
 		}
+		if exists && revision.Revision > previous.Revision.Next() {
+			revision.ApplyBehavior = domain.ApplyBundleRebuild
+		}
 
-		known[key] = revision
-		if err := basechangefeed.SafeInvokeHandler(handler, ports.ChangeSignal{Target: revision.Target, Revision: revision.Revision}); err != nil {
+		if err := handler(ports.ChangeSignal{Target: revision.Target, Revision: revision.Revision, ApplyBehavior: revision.ApplyBehavior}); err != nil {
 			return fmt.Errorf("mongodb changefeed resync: %w", err)
 		}
+		known[key] = revision
 	}
 
 	return nil
@@ -256,14 +271,15 @@ func signalFromEvent(event changeEvent) (ports.ChangeSignal, bool) {
 		return ports.ChangeSignal{}, false
 	}
 
-	target, revision, ok := targetFromDoc(source)
+	target, revision, behavior, ok := targetFromDoc(source)
 	if !ok {
 		return ports.ChangeSignal{}, false
 	}
 
 	return ports.ChangeSignal{
-		Target:   target,
-		Revision: revision,
+		Target:        target,
+		Revision:      revision,
+		ApplyBehavior: behavior,
 	}, true
 }
 
@@ -296,13 +312,18 @@ func (feed *Feed) subscribePoll(ctx context.Context, handler func(ports.ChangeSi
 			for key, rev := range current {
 				prev, exists := known[key]
 				if !exists || rev.Revision != prev.Revision {
+					if exists && rev.Revision > prev.Revision.Next() {
+						rev.ApplyBehavior = domain.ApplyBundleRebuild
+					}
 					signal := ports.ChangeSignal{
-						Target:   rev.Target,
-						Revision: rev.Revision,
+						Target:        rev.Target,
+						Revision:      rev.Revision,
+						ApplyBehavior: rev.ApplyBehavior,
 					}
 					if err := basechangefeed.SafeInvokeHandler(handler, signal); err != nil {
 						return fmt.Errorf("mongodb feed poll: handler: %w", err)
 					}
+					known[key] = rev
 				}
 			}
 
@@ -313,8 +334,9 @@ func (feed *Feed) subscribePoll(ctx context.Context, handler func(ports.ChangeSi
 
 // pollSnapshot holds a target and its last-known revision.
 type pollSnapshot struct {
-	Target   domain.Target
-	Revision domain.Revision
+	Target        domain.Target
+	Revision      domain.Revision
+	ApplyBehavior domain.ApplyBehavior
 }
 
 // pollRevisions queries all revision-meta documents and returns a map keyed by
@@ -326,6 +348,7 @@ func (feed *Feed) pollRevisions(ctx context.Context) (map[string]pollSnapshot, e
 		{Key: "scope", Value: 1},
 		{Key: "subject", Value: 1},
 		{Key: "revision", Value: 1},
+		{Key: "apply_behavior", Value: 1},
 	}
 
 	opts := options.Find().SetProjection(projection)
@@ -340,10 +363,11 @@ func (feed *Feed) pollRevisions(ctx context.Context) (map[string]pollSnapshot, e
 
 	for cursor.Next(ctx) {
 		var doc struct {
-			Kind     string `bson:"kind"`
-			Scope    string `bson:"scope"`
-			Subject  string `bson:"subject"`
-			Revision uint64 `bson:"revision"`
+			Kind          string `bson:"kind"`
+			Scope         string `bson:"scope"`
+			Subject       string `bson:"subject"`
+			Revision      uint64 `bson:"revision"`
+			ApplyBehavior string `bson:"apply_behavior"`
 		}
 
 		if err := cursor.Decode(&doc); err != nil {
@@ -366,8 +390,9 @@ func (feed *Feed) pollRevisions(ctx context.Context) (map[string]pollSnapshot, e
 		}
 
 		result[target.String()] = pollSnapshot{
-			Target:   target,
-			Revision: domain.Revision(doc.Revision),
+			Target:        target,
+			Revision:      domain.Revision(doc.Revision),
+			ApplyBehavior: domain.ApplyBehavior(doc.ApplyBehavior),
 		}
 	}
 
@@ -383,34 +408,35 @@ func (feed *Feed) pollRevisions(ctx context.Context) (map[string]pollSnapshot, e
 // targetFromDoc extracts a domain.Target and revision from a BSON document
 // containing kind, scope, subject, and revision fields. Returns false when
 // any required field is missing or invalid.
-func targetFromDoc(doc *bson.D) (domain.Target, domain.Revision, bool) {
+func targetFromDoc(doc *bson.D) (domain.Target, domain.Revision, domain.ApplyBehavior, bool) {
 	kindStr := bsonLookupString(doc, "kind")
 	scopeStr := bsonLookupString(doc, "scope")
 	subject := bsonLookupString(doc, "subject")
 
 	kind, err := domain.ParseKind(kindStr)
 	if err != nil {
-		return domain.Target{}, domain.RevisionZero, false
+		return domain.Target{}, domain.RevisionZero, domain.ApplyBundleRebuild, false
 	}
 
 	scope, err := domain.ParseScope(scopeStr)
 	if err != nil {
-		return domain.Target{}, domain.RevisionZero, false
+		return domain.Target{}, domain.RevisionZero, domain.ApplyBundleRebuild, false
 	}
 
 	target, err := domain.NewTarget(kind, scope, subject)
 	if err != nil {
-		return domain.Target{}, domain.RevisionZero, false
+		return domain.Target{}, domain.RevisionZero, domain.ApplyBundleRebuild, false
 	}
 
 	revisionRaw, ok := bsonLookupUint64(doc, "revision")
 	if !ok {
-		return domain.Target{}, domain.RevisionZero, false
+		return domain.Target{}, domain.RevisionZero, domain.ApplyBundleRebuild, false
 	}
 
 	revision := domain.Revision(revisionRaw)
+	behavior := domain.ApplyBehavior(bsonLookupString(doc, "apply_behavior"))
 
-	return target, revision, true
+	return target, revision, behavior, true
 }
 
 // bsonLookupString extracts a string value from a bson.D by key.

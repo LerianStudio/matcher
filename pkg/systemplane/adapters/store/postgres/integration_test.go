@@ -41,7 +41,7 @@ func newPostgresFactory(dsn string) storetest.Factory {
 			NotifyChannel: "test_changes",
 		}
 
-		store, history, closer, err := New(context.Background(), cfg)
+		store, history, closer, err := New(context.Background(), cfg, nil)
 		require.NoError(t, err)
 
 		cleanup := func() {

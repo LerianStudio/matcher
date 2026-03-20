@@ -19,7 +19,7 @@ func TestNew_Validation(t *testing.T) {
 	t.Run("nil config returns error", func(t *testing.T) {
 		t.Parallel()
 
-		store, history, closer, err := New(t.Context(), nil)
+		store, history, closer, err := New(t.Context(), nil, nil)
 
 		require.Error(t, err)
 		require.ErrorIs(t, err, ErrNilConfig)
@@ -35,7 +35,7 @@ func TestNew_Validation(t *testing.T) {
 			DSN: "",
 		}
 
-		store, history, closer, err := New(t.Context(), cfg)
+		store, history, closer, err := New(t.Context(), cfg, nil)
 
 		require.Error(t, err)
 		require.ErrorIs(t, err, ErrEmptyDSN)
@@ -51,7 +51,7 @@ func TestNew_Validation(t *testing.T) {
 			DSN: "postgres://invalid:5432/nonexistent?sslmode=disable",
 		}
 
-		store, history, closer, err := New(t.Context(), cfg)
+		store, history, closer, err := New(t.Context(), cfg, nil)
 
 		require.Error(t, err)
 		assert.Nil(t, store)

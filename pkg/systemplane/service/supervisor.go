@@ -48,6 +48,8 @@ const (
 type ReloadEvent struct {
 	Strategy BuildStrategy // which build path was taken
 	Reason   string        // caller-supplied reason (e.g., "changefeed-signal")
+	Snapshot domain.Snapshot
+	Bundle   domain.RuntimeBundle
 }
 
 // SupervisorConfig holds the dependencies needed to construct a supervisor.
@@ -69,7 +71,7 @@ func NewSupervisor(cfg SupervisorConfig) (Supervisor, error) {
 		return nil, fmt.Errorf("%w", errSupervisorBuilderRequired)
 	}
 
-	if cfg.Factory == nil {
+	if domain.IsNilValue(cfg.Factory) {
 		return nil, fmt.Errorf("%w", errSupervisorFactoryRequired)
 	}
 
@@ -104,6 +106,10 @@ type defaultSupervisor struct {
 	observer    func(ReloadEvent)
 	stopCh      chan struct{}
 	stopOnce    sync.Once
+}
+
+type resourceAdopter interface {
+	AdoptResourcesFrom(previous domain.RuntimeBundle)
 }
 
 // Current returns the currently active runtime bundle.
@@ -224,15 +230,19 @@ func (supervisor *defaultSupervisor) Reload(ctx context.Context, reason string) 
 	// All reconcilers passed — commit atomically.
 	supervisor.snapshot.Store(&snap)
 	supervisor.bundle.Store(&bundleHolder{bundle: candidate})
-
-	// Close previous AFTER commit so transferred components are not torn down
-	// while still referenced by the now-active candidate bundle.
-	if !isNilRuntimeBundle(previousBundle) {
-		_ = previousBundle.Close(ctx)
+	if adopter, ok := candidate.(resourceAdopter); ok && !isNilRuntimeBundle(previousBundle) {
+		adopter.AdoptResourcesFrom(previousBundle)
 	}
 
 	if supervisor.observer != nil {
-		supervisor.observer(ReloadEvent{Strategy: strategy, Reason: reason})
+		supervisor.observer(ReloadEvent{Strategy: strategy, Reason: reason, Snapshot: snap, Bundle: candidate})
+	}
+
+	// Close previous AFTER commit so transferred components are not torn down
+	// while still referenced by the now-active candidate bundle or by external
+	// runtime delegates that are repointed by the observer.
+	if !isNilRuntimeBundle(previousBundle) {
+		_ = previousBundle.Close(ctx)
 	}
 
 	return nil

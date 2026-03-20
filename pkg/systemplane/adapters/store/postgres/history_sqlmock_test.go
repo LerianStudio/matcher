@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/LerianStudio/matcher/pkg/systemplane/adapters/store/secretcodec"
 	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
 	"github.com/LerianStudio/matcher/pkg/systemplane/ports"
 )
@@ -35,6 +36,14 @@ func newTestHistoryStore(t *testing.T) (*HistoryStore, sqlmock.Sqlmock) {
 	}
 
 	return store, mock
+}
+
+func withHistorySecretCodec(t *testing.T, store *HistoryStore, keys ...string) {
+	t.Helper()
+
+	codec, err := secretcodec.New("0123456789abcdef0123456789abcdef", keys)
+	require.NoError(t, err)
+	store.secretCodec = codec
 }
 
 func TestHistoryStore_ListHistory(t *testing.T) {
@@ -67,6 +76,37 @@ func TestHistoryStore_ListHistory(t *testing.T) {
 		assert.Equal(t, "info", entries[0].OldValue)
 		assert.Equal(t, "debug", entries[0].NewValue)
 		assert.Nil(t, entries[1].OldValue)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("decrypts secret history values", func(t *testing.T) {
+		t.Parallel()
+
+		store, mock := newTestHistoryStore(t)
+		withHistorySecretCodec(t, store, "rabbitmq.password")
+		ctx := context.Background()
+		now := time.Now().UTC()
+		target := domain.Target{Kind: domain.KindConfig, Scope: domain.ScopeGlobal}
+
+		oldEncrypted, err := store.secretCodec.Encrypt(target, "rabbitmq.password", "old-secret")
+		require.NoError(t, err)
+		newEncrypted, err := store.secretCodec.Encrypt(target, "rabbitmq.password", "new-secret")
+		require.NoError(t, err)
+		oldRaw, err := json.Marshal(oldEncrypted)
+		require.NoError(t, err)
+		newRaw, err := json.Marshal(newEncrypted)
+		require.NoError(t, err)
+
+		rows := sqlmock.NewRows([]string{"key", "scope", "subject", "old_value", "new_value", "revision", "actor_id", "changed_at"}).
+			AddRow("rabbitmq.password", "global", "", oldRaw, newRaw, 3, "admin", now)
+		mock.ExpectQuery(`SELECT key, scope, subject, old_value, new_value, revision, actor_id, changed_at FROM test_schema.runtime_history ORDER BY changed_at DESC`).
+			WillReturnRows(rows)
+
+		entries, err := store.ListHistory(ctx, ports.HistoryFilter{})
+		require.NoError(t, err)
+		require.Len(t, entries, 1)
+		assert.Equal(t, "old-secret", entries[0].OldValue)
+		assert.Equal(t, "new-secret", entries[0].NewValue)
 		assert.NoError(t, mock.ExpectationsWereMet())
 	})
 

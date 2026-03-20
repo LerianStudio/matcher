@@ -279,7 +279,7 @@ func TestTargetFromDoc_GlobalScope(t *testing.T) {
 		{Key: "revision", Value: int64(5)},
 	}
 
-	target, rev, ok := targetFromDoc(doc)
+	target, rev, _, ok := targetFromDoc(doc)
 
 	require.True(t, ok)
 	assert.Equal(t, domain.KindConfig, target.Kind)
@@ -298,7 +298,7 @@ func TestTargetFromDoc_TenantScope(t *testing.T) {
 		{Key: "revision", Value: int64(12)},
 	}
 
-	target, rev, ok := targetFromDoc(doc)
+	target, rev, _, ok := targetFromDoc(doc)
 
 	require.True(t, ok)
 	assert.Equal(t, domain.KindSetting, target.Kind)
@@ -317,7 +317,7 @@ func TestTargetFromDoc_InvalidKind(t *testing.T) {
 		{Key: "revision", Value: int64(1)},
 	}
 
-	_, _, ok := targetFromDoc(doc)
+	_, _, _, ok := targetFromDoc(doc)
 
 	assert.False(t, ok)
 }
@@ -332,7 +332,7 @@ func TestTargetFromDoc_InvalidScope(t *testing.T) {
 		{Key: "revision", Value: int64(1)},
 	}
 
-	_, _, ok := targetFromDoc(doc)
+	_, _, _, ok := targetFromDoc(doc)
 
 	assert.False(t, ok)
 }
@@ -344,7 +344,7 @@ func TestTargetFromDoc_MissingFields(t *testing.T) {
 		{Key: "revision", Value: int64(1)},
 	}
 
-	_, _, ok := targetFromDoc(doc)
+	_, _, _, ok := targetFromDoc(doc)
 
 	// kind and scope are empty strings which are invalid.
 	assert.False(t, ok)
@@ -361,7 +361,7 @@ func TestTargetFromDoc_TenantScopeMissingSubject(t *testing.T) {
 	}
 
 	// NewTarget requires non-empty SubjectID for tenant scope.
-	_, _, ok := targetFromDoc(doc)
+	_, _, _, ok := targetFromDoc(doc)
 
 	assert.False(t, ok)
 }
@@ -376,7 +376,7 @@ func TestTargetFromDoc_MissingRevisionRejected(t *testing.T) {
 		// No revision field.
 	}
 
-	_, _, ok := targetFromDoc(doc)
+	_, _, _, ok := targetFromDoc(doc)
 
 	assert.False(t, ok)
 }

@@ -63,7 +63,7 @@ func newMongoFactory(uri string) storetest.Factory {
 
 		ctx := context.Background()
 
-		store, history, closer, err := New(ctx, cfg)
+		store, history, closer, err := New(ctx, cfg, nil)
 		require.NoError(t, err, "failed to create MongoDB store for sub-test")
 
 		return store, history, func() {

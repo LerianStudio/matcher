@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/LerianStudio/matcher/pkg/systemplane/adapters/store/secretcodec"
 	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
 	"github.com/LerianStudio/matcher/pkg/systemplane/ports"
 )
@@ -23,6 +24,7 @@ type HistoryStore struct {
 	db           *sql.DB
 	schema       string
 	historyTable string
+	secretCodec  *secretcodec.Codec
 }
 
 // ListHistory retrieves history entries matching the given filter. Results are
@@ -61,7 +63,7 @@ func (historyStore *HistoryStore) ListHistory(ctx context.Context, filter ports.
 	var entries []ports.HistoryEntry
 
 	for rows.Next() {
-		entry, err := scanHistoryEntry(rows)
+		entry, err := historyStore.scanHistoryEntry(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -109,7 +111,7 @@ func (queryBuilder *historyQueryBuilder) nextArg() string {
 	return "$" + strconv.Itoa(queryBuilder.argIdx)
 }
 
-func scanHistoryEntry(rows *sql.Rows) (ports.HistoryEntry, error) {
+func (historyStore *HistoryStore) scanHistoryEntry(rows *sql.Rows) (ports.HistoryEntry, error) {
 	var (
 		key         string
 		scope       string
@@ -140,6 +142,10 @@ func scanHistoryEntry(rows *sql.Rows) (ports.HistoryEntry, error) {
 	}
 
 	if hasOldValue {
+		decodedOldValue, err = historyStore.decryptValue(domain.Target{Kind: domain.KindConfig, Scope: entry.Scope, SubjectID: entry.SubjectID}, key, decodedOldValue)
+		if err != nil {
+			return ports.HistoryEntry{}, fmt.Errorf("postgres history list: decrypt old_value: %w", err)
+		}
 		entry.OldValue = decodedOldValue
 	}
 
@@ -149,10 +155,22 @@ func scanHistoryEntry(rows *sql.Rows) (ports.HistoryEntry, error) {
 	}
 
 	if hasNewValue {
+		decodedNewValue, err = historyStore.decryptValue(domain.Target{Kind: domain.KindConfig, Scope: entry.Scope, SubjectID: entry.SubjectID}, key, decodedNewValue)
+		if err != nil {
+			return ports.HistoryEntry{}, fmt.Errorf("postgres history list: decrypt new_value: %w", err)
+		}
 		entry.NewValue = decodedNewValue
 	}
 
 	return entry, nil
+}
+
+func (historyStore *HistoryStore) decryptValue(target domain.Target, key string, value any) (any, error) {
+	if historyStore == nil || historyStore.secretCodec == nil {
+		return value, nil
+	}
+
+	return historyStore.secretCodec.Decrypt(target, key, value)
 }
 
 func decodeOptionalJSONValue(rawValue []byte, fieldName string) (any, bool, error) {

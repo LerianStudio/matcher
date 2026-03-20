@@ -88,10 +88,11 @@ func New(dsn, channel string, opts ...Option) *Feed {
 // notifyPayload matches the JSON structure emitted by the postgres Store
 // adapter via pg_notify on each Put operation.
 type notifyPayload struct {
-	Kind     string `json:"kind"`
-	Scope    string `json:"scope"`
-	Subject  string `json:"subject"`
-	Revision uint64 `json:"revision"`
+	Kind          string `json:"kind"`
+	Scope         string `json:"scope"`
+	Subject       string `json:"subject"`
+	Revision      uint64 `json:"revision"`
+	ApplyBehavior string `json:"apply_behavior,omitempty"`
 }
 
 // Subscribe registers a handler that is called whenever a configuration target
@@ -133,10 +134,13 @@ func (feed *Feed) Subscribe(ctx context.Context, handler func(ports.ChangeSignal
 	var attempt int
 
 	for {
-		listenErr := feed.listenLoop(ctx, func(signal ports.ChangeSignal) error {
-			knownRevisions[signal.Target.String()] = trackedRevision{Target: signal.Target, Revision: signal.Revision}
+		listenErr := feed.listenLoop(ctx, knownRevisions, func(signal ports.ChangeSignal) error {
+			if err := basechangefeed.SafeInvokeHandler(handler, signal); err != nil {
+				return err
+			}
 
-			return basechangefeed.SafeInvokeHandler(handler, signal)
+			knownRevisions[signal.Target.String()] = trackedRevision{Target: signal.Target, Revision: signal.Revision, ApplyBehavior: signal.ApplyBehavior}
+			return nil
 		})
 		if errors.Is(listenErr, basechangefeed.ErrHandlerPanic) {
 			return fmt.Errorf("pg changefeed subscribe: %w", listenErr)
@@ -172,7 +176,9 @@ func (feed *Feed) reconnectAndResync(ctx context.Context, attempt *int, knownRev
 		// Retry after backoff.
 	}
 
-	if err := feed.resyncMissedSignals(ctx, knownRevisions, handler); err != nil {
+	if err := feed.resyncMissedSignals(ctx, knownRevisions, func(signal ports.ChangeSignal) error {
+		return basechangefeed.SafeInvokeHandler(handler, signal)
+	}); err != nil {
 		if errors.Is(err, basechangefeed.ErrHandlerPanic) {
 			return false, fmt.Errorf("pg changefeed subscribe: %w", err)
 		}
@@ -189,7 +195,7 @@ func (feed *Feed) reconnectAndResync(ctx context.Context, attempt *int, knownRev
 
 // listenLoop establishes a single pgx connection, issues LISTEN, and processes
 // notifications until the context is cancelled or the connection fails.
-func (feed *Feed) listenLoop(ctx context.Context, handler func(ports.ChangeSignal) error) error {
+func (feed *Feed) listenLoop(ctx context.Context, known map[string]trackedRevision, handler func(ports.ChangeSignal) error) error {
 	listenStmt := fmt.Sprintf("LISTEN %q", feed.channel)
 	unlistenStmt := fmt.Sprintf("UNLISTEN %q", feed.channel)
 
@@ -210,6 +216,13 @@ func (feed *Feed) listenLoop(ctx context.Context, handler func(ports.ChangeSigna
 
 	if _, err := conn.Exec(ctx, listenStmt); err != nil {
 		return fmt.Errorf("pg changefeed listen: %w", err)
+	}
+
+	if err := feed.resyncMissedSignals(ctx, known, handler); err != nil {
+		if errors.Is(err, basechangefeed.ErrHandlerPanic) {
+			return err
+		}
+		return fmt.Errorf("pg changefeed initial resync: %w", err)
 	}
 
 	for {
@@ -236,8 +249,9 @@ func (feed *Feed) listenLoop(ctx context.Context, handler func(ports.ChangeSigna
 }
 
 type trackedRevision struct {
-	Target   domain.Target
-	Revision domain.Revision
+	Target        domain.Target
+	Revision      domain.Revision
+	ApplyBehavior domain.ApplyBehavior
 }
 
 func (feed *Feed) fetchRevisions(ctx context.Context) (map[string]trackedRevision, error) {
@@ -251,7 +265,7 @@ func (feed *Feed) fetchRevisions(ctx context.Context) (map[string]trackedRevisio
 	}
 	defer conn.Close(ctx)
 
-	rows, err := conn.Query(ctx, `SELECT kind, scope, subject, revision FROM `+feed.qualifiedRevisions())
+	rows, err := conn.Query(ctx, `SELECT kind, scope, subject, revision, apply_behavior FROM `+feed.qualifiedRevisions())
 	if err != nil {
 		return nil, fmt.Errorf("pg changefeed revisions: query: %w", err)
 	}
@@ -261,13 +275,14 @@ func (feed *Feed) fetchRevisions(ctx context.Context) (map[string]trackedRevisio
 
 	for rows.Next() {
 		var (
-			kindText     string
-			scopeText    string
-			subject      string
-			revisionUint uint64
+			kindText          string
+			scopeText         string
+			subject           string
+			revisionUint      uint64
+			applyBehaviorText string
 		)
 
-		if err := rows.Scan(&kindText, &scopeText, &subject, &revisionUint); err != nil {
+		if err := rows.Scan(&kindText, &scopeText, &subject, &revisionUint, &applyBehaviorText); err != nil {
 			return nil, fmt.Errorf("pg changefeed revisions: scan: %w", err)
 		}
 
@@ -286,7 +301,7 @@ func (feed *Feed) fetchRevisions(ctx context.Context) (map[string]trackedRevisio
 			continue
 		}
 
-		result[target.String()] = trackedRevision{Target: target, Revision: domain.Revision(revisionUint)}
+		result[target.String()] = trackedRevision{Target: target, Revision: domain.Revision(revisionUint), ApplyBehavior: domain.ApplyBehavior(applyBehaviorText)}
 	}
 
 	if err := rows.Err(); err != nil {
@@ -296,7 +311,7 @@ func (feed *Feed) fetchRevisions(ctx context.Context) (map[string]trackedRevisio
 	return result, nil
 }
 
-func (feed *Feed) resyncMissedSignals(ctx context.Context, known map[string]trackedRevision, handler func(ports.ChangeSignal)) error {
+func (feed *Feed) resyncMissedSignals(ctx context.Context, known map[string]trackedRevision, handler func(ports.ChangeSignal) error) error {
 	current, err := feed.fetchRevisions(ctx)
 	if err != nil {
 		return err
@@ -316,11 +331,14 @@ func (feed *Feed) resyncMissedSignals(ctx context.Context, known map[string]trac
 		if exists && previous.Revision == revision.Revision {
 			continue
 		}
+		if exists && revision.Revision > previous.Revision.Next() {
+			revision.ApplyBehavior = domain.ApplyBundleRebuild
+		}
 
-		known[key] = revision
-		if err := basechangefeed.SafeInvokeHandler(handler, ports.ChangeSignal{Target: revision.Target, Revision: revision.Revision}); err != nil {
+		if err := handler(ports.ChangeSignal{Target: revision.Target, Revision: revision.Revision, ApplyBehavior: revision.ApplyBehavior}); err != nil {
 			return fmt.Errorf("pg changefeed resync: %w", err)
 		}
+		known[key] = revision
 	}
 
 	return nil
@@ -350,8 +368,9 @@ func parsePayload(data string) (ports.ChangeSignal, error) {
 	}
 
 	return ports.ChangeSignal{
-		Target:   target,
-		Revision: domain.Revision(payload.Revision),
+		Target:        target,
+		Revision:      domain.Revision(payload.Revision),
+		ApplyBehavior: domain.ApplyBehavior(payload.ApplyBehavior),
 	}, nil
 }
 
