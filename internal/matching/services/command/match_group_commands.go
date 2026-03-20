@@ -2152,12 +2152,7 @@ func (uc *UseCase) loadFeeRulesAndSchedules(
 	contextID uuid.UUID,
 ) ([]*fee.FeeRule, []*fee.FeeRule, map[uuid.UUID]*fee.FeeSchedule, error) {
 	span := trace.SpanFromContext(ctx)
-
-	if uc.feeRuleProvider == nil {
-		span.SetAttributes(attribute.Bool("fee_rules_configured", false))
-
-		return nil, nil, nil, nil
-	}
+	span.SetAttributes(attribute.Bool("fee_rules_configured", true))
 
 	logger, _, _, _ := libCommons.NewTrackingFromContext(ctx) //nolint:dogsled // only logger needed here
 
