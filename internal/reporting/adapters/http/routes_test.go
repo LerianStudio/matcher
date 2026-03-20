@@ -15,11 +15,11 @@ func TestRegisterRoutes_Errors(t *testing.T) {
 
 	dummyHandler := &Handlers{}
 	dummyLimiter := func(c *fiber.Ctx) error { return c.Next() }
-	dummyProtected := func(_, _ string) fiber.Router { return fiber.New().Group("/") }
+	dummyProtected := func(_ string, _ ...string) fiber.Router { return fiber.New().Group("/") }
 
 	tests := []struct {
 		name          string
-		protected     func(resource, action string) fiber.Router
+		protected     func(resource string, actions ...string) fiber.Router
 		handlers      *Handlers
 		exportLimiter fiber.Handler
 		expectedError error
@@ -65,8 +65,10 @@ func TestRegisterRoutes_Success(t *testing.T) {
 	app := fiber.New()
 	routesCalled := make(map[string]bool)
 
-	protected := func(resource, action string) fiber.Router {
-		routesCalled[resource+":"+action] = true
+	protected := func(resource string, actions ...string) fiber.Router {
+		for _, action := range actions {
+			routesCalled[resource+":"+action] = true
+		}
 
 		return app.Group("/api")
 	}

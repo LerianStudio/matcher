@@ -18,7 +18,7 @@ var (
 )
 
 // RegisterRoutes registers the governance HTTP routes.
-func RegisterRoutes(protected func(resource, action string) fiber.Router, handler *Handler) error {
+func RegisterRoutes(protected func(resource string, actions ...string) fiber.Router, handler *Handler) error {
 	if protected == nil {
 		return ErrProtectedRouteHelperRequired
 	}
@@ -44,7 +44,7 @@ func RegisterRoutes(protected func(resource, action string) fiber.Router, handle
 }
 
 // RegisterArchiveRoutes registers the archive retrieval HTTP routes.
-func RegisterArchiveRoutes(protected func(resource, action string) fiber.Router, handler *ArchiveHandler) error {
+func RegisterArchiveRoutes(protected func(resource string, actions ...string) fiber.Router, handler *ArchiveHandler) error {
 	if protected == nil {
 		return ErrProtectedRouteHelperRequired
 	}
@@ -67,7 +67,7 @@ func RegisterArchiveRoutes(protected func(resource, action string) fiber.Router,
 
 // RegisterActorMappingRoutes registers the actor mapping HTTP routes.
 func RegisterActorMappingRoutes(
-	protected func(resource, action string) fiber.Router,
+	protected func(resource string, actions ...string) fiber.Router,
 	handler *ActorMappingHandler,
 ) error {
 	if protected == nil {

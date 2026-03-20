@@ -27,7 +27,7 @@ func TestRegisterRoutes_NilProtected(t *testing.T) {
 func TestRegisterRoutes_NilHandlers(t *testing.T) {
 	t.Parallel()
 
-	protected := func(resource, action string) fiber.Router {
+	protected := func(resource string, actions ...string) fiber.Router {
 		return nil
 	}
 	err := RegisterRoutes(protected, nil, noopMiddleware)
@@ -39,7 +39,7 @@ func TestRegisterRoutes_NilHandlers(t *testing.T) {
 func TestRegisterRoutes_NilDispatchLimiter(t *testing.T) {
 	t.Parallel()
 
-	protected := func(resource, action string) fiber.Router {
+	protected := func(resource string, actions ...string) fiber.Router {
 		return nil
 	}
 	handlers := &Handlers{}
@@ -57,7 +57,7 @@ func TestRegisterRoutes_Success(t *testing.T) {
 
 	registeredRoutes := make(map[string]bool)
 
-	protected := func(resource, action string) fiber.Router {
+	protected := func(resource string, actions ...string) fiber.Router {
 		return app
 	}
 

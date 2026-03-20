@@ -824,10 +824,10 @@ func TestRegisterArchiveRoutes(t *testing.T) {
 		app := fiber.New()
 		protectedCalled := false
 
-		protected := func(resource, action string) fiber.Router {
+		protected := func(resource string, actions ...string) fiber.Router {
 			protectedCalled = true
 			require.Equal(t, auth.ResourceGovernance, resource)
-			require.Equal(t, auth.ActionArchiveRead, action)
+			require.Equal(t, []string{auth.ActionArchiveRead}, actions)
 
 			return app
 		}
@@ -855,7 +855,7 @@ func TestRegisterArchiveRoutes(t *testing.T) {
 		t.Parallel()
 
 		app := fiber.New()
-		protected := func(_, _ string) fiber.Router {
+		protected := func(_ string, _ ...string) fiber.Router {
 			return app
 		}
 

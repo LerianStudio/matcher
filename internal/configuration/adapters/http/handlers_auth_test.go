@@ -68,8 +68,8 @@ func TestConfigRoutes_AuthEnforced(t *testing.T) {
 	require.NoError(t, err)
 
 	app := fiber.New()
-	protected := func(resource, action string) fiber.Router {
-		return auth.ProtectedGroupWithMiddleware(app, authClient, extractor, resource, action)
+	protected := func(resource string, actions ...string) fiber.Router {
+		return auth.ProtectedGroupWithActionsWithMiddleware(app, authClient, extractor, resource, actions)
 	}
 
 	commandUseCase, err := command.NewUseCase(
