@@ -989,7 +989,11 @@ func TestIsRunMatchBadRequestError(t *testing.T) {
 	}{
 		{"no sources configured", command.ErrNoSourcesConfigured, true},
 		{"at least two sources required", command.ErrAtLeastTwoSourcesRequired, true},
-		{"primary source not in context", command.ErrPrimarySourceNotInContext, true},
+		{"source side required", command.ErrSourceSideRequiredForMatching, true},
+		{"1:1 left topology invalid", command.ErrOneToOneRequiresExactlyOneLeftSource, true},
+		{"1:1 right topology invalid", command.ErrOneToOneRequiresExactlyOneRightSource, true},
+		{"1:N left topology invalid", command.ErrOneToManyRequiresExactlyOneLeftSource, true},
+		{"right source required", command.ErrAtLeastOneRightSourceRequired, true},
 		{"match run mode required", command.ErrMatchRunModeRequired, true},
 		{"context not found - not bad request", command.ErrContextNotFound, false},
 		{"generic error - not bad request", errTestDatabaseError, false},
@@ -1022,8 +1026,28 @@ func TestHandleRunMatchError(t *testing.T) {
 			fiber.StatusBadRequest,
 		},
 		{
-			"primary source not in context",
-			command.ErrPrimarySourceNotInContext,
+			"source side required",
+			command.ErrSourceSideRequiredForMatching,
+			fiber.StatusBadRequest,
+		},
+		{
+			"1:1 requires exactly one left",
+			command.ErrOneToOneRequiresExactlyOneLeftSource,
+			fiber.StatusBadRequest,
+		},
+		{
+			"1:1 requires exactly one right",
+			command.ErrOneToOneRequiresExactlyOneRightSource,
+			fiber.StatusBadRequest,
+		},
+		{
+			"1:N requires exactly one left",
+			command.ErrOneToManyRequiresExactlyOneLeftSource,
+			fiber.StatusBadRequest,
+		},
+		{
+			"requires at least one right",
+			command.ErrAtLeastOneRightSourceRequired,
 			fiber.StatusBadRequest,
 		},
 		{"match run mode required", command.ErrMatchRunModeRequired, fiber.StatusBadRequest},
@@ -1272,7 +1296,7 @@ func TestGetMatchRunResultsHandler_ContextNotActive(t *testing.T) {
 	require.Equal(t, "context_not_active", errResp.Title)
 }
 
-func TestRunMatchHandler_NoPrimarySourceID_SymmetricMode(t *testing.T) {
+func TestRunMatchHandler_NoPrimarySourceIDFieldNeeded(t *testing.T) {
 	t.Parallel()
 
 	tenantID := uuid.New()
@@ -1298,7 +1322,6 @@ func TestRunMatchHandler_NoPrimarySourceID_SymmetricMode(t *testing.T) {
 
 	app.Post("/v1/matching/contexts/:contextId/run", handler.RunMatch)
 
-	// No primarySourceId field — symmetric mode
 	payload := RunMatchRequest{Mode: "DRY_RUN"}
 	body, err := json.Marshal(payload)
 	require.NoError(t, err)
@@ -1314,96 +1337,5 @@ func TestRunMatchHandler_NoPrimarySourceID_SymmetricMode(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	// Symmetric mode (no primarySourceId) passes parsing and the UseCase completes
-	// successfully with empty candidates, returning 202 Accepted.
 	require.Equal(t, fiber.StatusAccepted, resp.StatusCode)
-}
-
-func TestRunMatchHandler_InvalidPrimarySourceID(t *testing.T) {
-	t.Parallel()
-
-	tenantID := uuid.New()
-	contextID := uuid.New()
-	ctx := libCommons.ContextWithTracer(
-		context.Background(),
-		noop.NewTracerProvider().Tracer("test"),
-	)
-	ctx = context.WithValue(ctx, auth.TenantIDKey, tenantID.String())
-	app := newFiberTestApp(ctx)
-
-	ctxProv := &stubContextProvider{
-		info: &ports.ReconciliationContextInfo{ID: contextID, Active: true},
-	}
-	uc := newRunMatchUseCase(t, ctxProv, []*shared.Transaction{}, nil)
-
-	handler, err := NewHandler(uc, newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}), ctxProv, false)
-	require.NoError(t, err)
-
-	app.Post("/v1/matching/contexts/:contextId/run", handler.RunMatch)
-
-	// Invalid UUID for primarySourceId
-	payloadJSON := `{"mode":"DRY_RUN","primarySourceId":"not-a-valid-uuid"}`
-
-	request := httptest.NewRequest(
-		http.MethodPost,
-		"/v1/matching/contexts/"+contextID.String()+"/run",
-		bytes.NewBufferString(payloadJSON),
-	)
-	request.Header.Set("Content-Type", "application/json")
-
-	resp, err := app.Test(request)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	var errResp sharedhttp.ErrorResponse
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
-
-	require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
-	require.Equal(t, "invalid primarySourceId", errResp.Message)
-}
-
-func TestRunMatchHandler_ValidPrimarySourceID(t *testing.T) {
-	t.Parallel()
-
-	tenantID := uuid.New()
-	contextID := uuid.New()
-	primarySourceID := uuid.New()
-	ctx := libCommons.ContextWithTracer(
-		context.Background(),
-		noop.NewTracerProvider().Tracer("test"),
-	)
-	ctx = context.WithValue(ctx, auth.TenantIDKey, tenantID.String())
-	app := newFiberTestApp(ctx)
-
-	ctxProv := &stubContextProvider{
-		info: &ports.ReconciliationContextInfo{
-			ID:     contextID,
-			Active: true,
-			Type:   shared.ContextTypeOneToOne,
-		},
-	}
-	uc := newRunMatchUseCase(t, ctxProv, []*shared.Transaction{}, nil)
-
-	handler, err := NewHandler(uc, newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}), ctxProv, false)
-	require.NoError(t, err)
-
-	app.Post("/v1/matching/contexts/:contextId/run", handler.RunMatch)
-
-	payloadJSON := `{"mode":"DRY_RUN","primarySourceId":"` + primarySourceID.String() + `"}`
-
-	request := httptest.NewRequest(
-		http.MethodPost,
-		"/v1/matching/contexts/"+contextID.String()+"/run",
-		bytes.NewBufferString(payloadJSON),
-	)
-	request.Header.Set("Content-Type", "application/json")
-
-	resp, err := app.Test(request)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	// Valid UUID for primarySourceId passes parsing. The UseCase proceeds but
-	// the primary source is not among the stub's configured sources, so
-	// classifySources returns ErrPrimarySourceNotInContext -> 400.
-	require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 }

@@ -76,23 +76,12 @@ func (handler *Handler) RunMatch(fiberCtx *fiber.Ctx) error {
 		return badRequest(ctx, fiberCtx, span, logger, "invalid match run mode", err)
 	}
 
-	var primarySourceIDStr string
-	if payload.PrimarySourceID != nil {
-		primarySourceIDStr = strings.TrimSpace(*payload.PrimarySourceID)
-	}
-
-	primarySourceID, err := parseOptionalUUID(primarySourceIDStr)
-	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid primarySourceId", err)
-	}
-
 	run, _, err := handler.command.RunMatch(
 		ctx,
 		command.RunMatchInput{
-			TenantID:        tenantID,
-			ContextID:       contextID,
-			Mode:            mode,
-			PrimarySourceID: primarySourceID,
+			TenantID:  tenantID,
+			ContextID: contextID,
+			Mode:      mode,
 		},
 	)
 	if err != nil {
@@ -403,7 +392,11 @@ func (handler *Handler) GetMatchRunResults(fiberCtx *fiber.Ctx) error {
 func isRunMatchBadRequestError(err error) bool {
 	return errors.Is(err, command.ErrNoSourcesConfigured) ||
 		errors.Is(err, command.ErrAtLeastTwoSourcesRequired) ||
-		errors.Is(err, command.ErrPrimarySourceNotInContext) ||
+		errors.Is(err, command.ErrSourceSideRequiredForMatching) ||
+		errors.Is(err, command.ErrOneToOneRequiresExactlyOneLeftSource) ||
+		errors.Is(err, command.ErrOneToOneRequiresExactlyOneRightSource) ||
+		errors.Is(err, command.ErrOneToManyRequiresExactlyOneLeftSource) ||
+		errors.Is(err, command.ErrAtLeastOneRightSourceRequired) ||
 		errors.Is(err, command.ErrMatchRunModeRequired)
 }
 
@@ -424,8 +417,16 @@ func mapRunMatchErrorToResponse(
 		return badRequest(ctx, fiberCtx, span, logger, "no sources configured for context", err)
 	case errors.Is(err, command.ErrAtLeastTwoSourcesRequired):
 		return badRequest(ctx, fiberCtx, span, logger, "at least two sources are required", err)
-	case errors.Is(err, command.ErrPrimarySourceNotInContext):
-		return badRequest(ctx, fiberCtx, span, logger, "primary source ID not found in context sources", err)
+	case errors.Is(err, command.ErrSourceSideRequiredForMatching):
+		return badRequest(ctx, fiberCtx, span, logger, "all sources must declare side LEFT or RIGHT before matching", err)
+	case errors.Is(err, command.ErrOneToOneRequiresExactlyOneLeftSource):
+		return badRequest(ctx, fiberCtx, span, logger, "1:1 contexts require exactly one LEFT source", err)
+	case errors.Is(err, command.ErrOneToOneRequiresExactlyOneRightSource):
+		return badRequest(ctx, fiberCtx, span, logger, "1:1 contexts require exactly one RIGHT source", err)
+	case errors.Is(err, command.ErrOneToManyRequiresExactlyOneLeftSource):
+		return badRequest(ctx, fiberCtx, span, logger, "1:N contexts require exactly one LEFT source", err)
+	case errors.Is(err, command.ErrAtLeastOneRightSourceRequired):
+		return badRequest(ctx, fiberCtx, span, logger, "at least one RIGHT source is required", err)
 	case errors.Is(err, command.ErrMatchRunModeRequired):
 		return badRequest(ctx, fiberCtx, span, logger, "match run mode is required", err)
 	case errors.Is(err, command.ErrMatchRunLocked):

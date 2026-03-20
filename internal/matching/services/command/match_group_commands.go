@@ -44,15 +44,21 @@ const (
 
 // Sentinel errors for run match operations.
 var (
-	ErrTenantIDRequired          = errors.New("tenant id is required")
-	ErrRunMatchContextIDRequired = errors.New("context id is required")
-	ErrMatchRunModeRequired      = errors.New("match run mode is required")
-	ErrContextNotFound           = errors.New("context not found")
-	ErrContextNotActive          = errors.New("context is not active")
-	ErrNoSourcesConfigured       = errors.New("no sources configured for context")
-	ErrAtLeastTwoSourcesRequired = errors.New("at least two sources are required")
-	ErrPrimarySourceNotInContext = errors.New("primary source ID not found in context sources")
-	ErrMatchRunPersistedNil      = errors.New(
+	ErrTenantIDRequired                      = errors.New("tenant id is required")
+	ErrRunMatchContextIDRequired             = errors.New("context id is required")
+	ErrMatchRunModeRequired                  = errors.New("match run mode is required")
+	ErrContextNotFound                       = errors.New("context not found")
+	ErrContextNotActive                      = errors.New("context is not active")
+	ErrNoSourcesConfigured                   = errors.New("no sources configured for context")
+	ErrAtLeastTwoSourcesRequired             = errors.New("at least two sources are required")
+	ErrSourceSideRequiredForMatching         = errors.New("all sources must declare side LEFT or RIGHT before matching")
+	ErrOneToOneRequiresExactlyOneLeftSource  = errors.New("1:1 contexts require exactly one LEFT source")
+	ErrOneToOneRequiresExactlyOneRightSource = errors.New("1:1 contexts require exactly one RIGHT source")
+	ErrOneToManyRequiresExactlyOneLeftSource = errors.New("1:N contexts require exactly one LEFT source")
+	ErrAtLeastOneLeftSourceRequired          = errors.New("at least one LEFT source is required")
+	ErrAtLeastOneRightSourceRequired         = errors.New("at least one RIGHT source is required")
+	ErrFeeRulesReferenceMissingSchedules     = errors.New("fee rules reference missing fee schedules")
+	ErrMatchRunPersistedNil                  = errors.New(
 		"failed to persist match run: created run is nil",
 	)
 	ErrProposalLeftTransactionNotFound  = errors.New("proposal left transaction not found")
@@ -74,12 +80,11 @@ const (
 
 // RunMatchInput contains the input parameters for running a match.
 type RunMatchInput struct {
-	TenantID        uuid.UUID
-	ContextID       uuid.UUID
-	Mode            matchingVO.MatchRunMode
-	PrimarySourceID *uuid.UUID
-	StartDate       *time.Time
-	EndDate         *time.Time
+	TenantID  uuid.UUID
+	ContextID uuid.UUID
+	Mode      matchingVO.MatchRunMode
+	StartDate *time.Time
+	EndDate   *time.Time
 }
 
 // matchRunContext holds all validated and prepared data for a match run.
@@ -317,15 +322,32 @@ func (uc *UseCase) prepareMatchRun(
 		return nil, err
 	}
 
-	leftSourceIDs, rightSourceIDs, err := classifySources(sources, in.PrimarySourceID)
+	leftSourceIDs, rightSourceIDs, err := classifySources(ctxInfo.Type, sources)
 	if err != nil {
 		return nil, err
 	}
 
 	sourceTypeByID := buildSourceTypeMap(sources)
 
+	feeNorm := fee.NormalizationModeNone
+	if ctxInfo.FeeNormalization != nil {
+		feeNorm = fee.NormalizationMode(*ctxInfo.FeeNormalization)
+	}
+
+	var (
+		leftRules    []*fee.FeeRule
+		rightRules   []*fee.FeeRule
+		allSchedules map[uuid.UUID]*fee.FeeSchedule
+	)
+
 	// Load fee rules and their associated schedules for the context
-	leftRules, rightRules, allSchedules := uc.loadFeeRulesAndSchedules(ctx, in.ContextID)
+
+	if feeNorm != fee.NormalizationModeNone {
+		leftRules, rightRules, allSchedules, err = uc.loadFeeRulesAndSchedules(ctx, in.ContextID)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	leftCandidates, rightCandidates, unmatchedIDs, err := uc.loadAndClassifyCandidates(
 		ctx,
@@ -449,17 +471,10 @@ func (uc *UseCase) loadContextAndSources(
 	return ctxInfo, sources, nil
 }
 
-// classifySources separates sources into left and right sets.
-//
-// Directed mode (primarySourceID != nil): the source matching the given ID
-// goes to the left set, all others go to the right set.
-// Symmetric mode (primarySourceID == nil): the first source goes to the left
-// set, all remaining sources go to the right set.
-//
-// Both modes require at least 2 non-nil sources.
+// classifySources separates sources into left and right sets using configured source sides.
 func classifySources(
+	contextType shared.ContextType,
 	sources []*ports.SourceInfo,
-	primarySourceID *uuid.UUID,
 ) (map[uuid.UUID]struct{}, map[uuid.UUID]struct{}, error) {
 	leftSourceIDs := make(map[uuid.UUID]struct{})
 	rightSourceIDs := make(map[uuid.UUID]struct{})
@@ -476,38 +491,55 @@ func classifySources(
 		return nil, nil, ErrAtLeastTwoSourcesRequired
 	}
 
-	if primarySourceID == nil {
-		// Symmetric mode: first source in the slice becomes left, rest become right.
-		// The ordering is determined by the upstream query (FindByContextID) and is
-		// deterministic but semantically arbitrary. Fee normalization is not affected
-		// because fee rules evaluate transaction metadata to resolve schedules, not
-		// left/right assignment.
-		leftSourceIDs[nonNil[0].ID] = struct{}{}
-
-		for _, source := range nonNil[1:] {
-			rightSourceIDs[source.ID] = struct{}{}
+	for _, source := range nonNil {
+		if !source.Side.IsExclusive() {
+			return nil, nil, ErrSourceSideRequiredForMatching
 		}
 
-		return leftSourceIDs, rightSourceIDs, nil
-	}
-
-	// Directed mode: primary source → left, rest → right
-	found := false
-
-	for _, source := range nonNil {
-		if source.ID == *primarySourceID {
+		if source.Side == fee.MatchingSideLeft {
 			leftSourceIDs[source.ID] = struct{}{}
-			found = true
 		} else {
 			rightSourceIDs[source.ID] = struct{}{}
 		}
 	}
 
-	if !found {
-		return nil, nil, ErrPrimarySourceNotInContext
+	if err := validateSourceCountForContextType(contextType, len(leftSourceIDs), len(rightSourceIDs)); err != nil {
+		return nil, nil, err
 	}
 
 	return leftSourceIDs, rightSourceIDs, nil
+}
+
+// validateSourceCountForContextType enforces left/right source cardinality per context type.
+func validateSourceCountForContextType(contextType shared.ContextType, leftCount, rightCount int) error {
+	switch contextType {
+	case shared.ContextTypeOneToOne:
+		if leftCount != 1 {
+			return ErrOneToOneRequiresExactlyOneLeftSource
+		}
+
+		if rightCount != 1 {
+			return ErrOneToOneRequiresExactlyOneRightSource
+		}
+	case shared.ContextTypeOneToMany:
+		if leftCount != 1 {
+			return ErrOneToManyRequiresExactlyOneLeftSource
+		}
+
+		if rightCount == 0 {
+			return ErrAtLeastOneRightSourceRequired
+		}
+	case shared.ContextTypeManyToMany:
+		if leftCount == 0 {
+			return ErrAtLeastOneLeftSourceRequired
+		}
+
+		if rightCount == 0 {
+			return ErrAtLeastOneRightSourceRequired
+		}
+	}
+
+	return nil
 }
 
 // loadAndClassifyCandidates loads unmatched transactions and classifies them by source.
@@ -2118,13 +2150,13 @@ func buildExceptionInputFromTx(
 func (uc *UseCase) loadFeeRulesAndSchedules(
 	ctx context.Context,
 	contextID uuid.UUID,
-) ([]*fee.FeeRule, []*fee.FeeRule, map[uuid.UUID]*fee.FeeSchedule) {
+) ([]*fee.FeeRule, []*fee.FeeRule, map[uuid.UUID]*fee.FeeSchedule, error) {
 	span := trace.SpanFromContext(ctx)
 
 	if uc.feeRuleProvider == nil {
 		span.SetAttributes(attribute.Bool("fee_rules_configured", false))
 
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 
 	logger, _, _, _ := libCommons.NewTrackingFromContext(ctx) //nolint:dogsled // only logger needed here
@@ -2132,15 +2164,15 @@ func (uc *UseCase) loadFeeRulesAndSchedules(
 	rules, err := uc.feeRuleProvider.FindByContextID(ctx, contextID)
 	if err != nil {
 		span.SetAttributes(attribute.Bool("fee_rules_load_error", true))
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelWarn, "failed to load fee rules (proceeding without normalization)")
+		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to load fee rules")
 
-		return nil, nil, nil
+		return nil, nil, nil, fmt.Errorf("loading fee rules: %w", err)
 	}
 
 	if len(rules) == 0 {
 		span.SetAttributes(attribute.Bool("fee_rules_configured", false))
 
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 
 	// Collect distinct schedule IDs from rules
@@ -2158,17 +2190,30 @@ func (uc *UseCase) loadFeeRulesAndSchedules(
 	}
 
 	if uc.feeScheduleRepo == nil || len(scheduleIDs) == 0 {
-		span.SetAttributes(attribute.Bool("fee_rules_configured", false))
+		span.SetAttributes(attribute.Bool("fee_rules_load_error", true))
 
-		return nil, nil, nil
+		return nil, nil, nil, ErrNilFeeScheduleRepository
 	}
 
 	schedules, err := uc.feeScheduleRepo.GetByIDs(ctx, scheduleIDs)
 	if err != nil {
 		span.SetAttributes(attribute.Bool("fee_rules_load_error", true))
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelWarn, "failed to load fee schedules (proceeding without normalization)")
+		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to load fee schedules")
 
-		return nil, nil, nil
+		return nil, nil, nil, fmt.Errorf("loading fee schedules: %w", err)
+	}
+
+	if len(schedules) != len(scheduleIDs) {
+		span.SetAttributes(attribute.Bool("fee_rules_load_error", true))
+
+		missingCount := len(scheduleIDs) - len(schedules)
+		logger.With(libLog.Any("missing_count", missingCount)).Log(ctx, libLog.LevelError, "fee rules reference missing fee schedules")
+
+		return nil, nil, nil, fmt.Errorf(
+			"loading fee schedules: %w: %d missing references",
+			ErrFeeRulesReferenceMissingSchedules,
+			missingCount,
+		)
 	}
 
 	span.SetAttributes(
@@ -2178,7 +2223,7 @@ func (uc *UseCase) loadFeeRulesAndSchedules(
 
 	leftRules, rightRules := fee.SplitRulesBySide(rules)
 
-	return leftRules, rightRules, schedules
+	return leftRules, rightRules, schedules, nil
 }
 
 func buildSourceTypeMap(sources []*ports.SourceInfo) map[uuid.UUID]string {

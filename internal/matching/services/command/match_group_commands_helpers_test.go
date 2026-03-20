@@ -729,7 +729,8 @@ func TestLoadFeeRulesAndSchedules_NilProvider(t *testing.T) {
 
 	uc := &UseCase{feeRuleProvider: nil}
 
-	leftRules, rightRules, schedules := uc.loadFeeRulesAndSchedules(context.Background(), uuid.New())
+	leftRules, rightRules, schedules, err := uc.loadFeeRulesAndSchedules(context.Background(), uuid.New())
+	require.NoError(t, err)
 	assert.Nil(t, leftRules)
 	assert.Nil(t, rightRules)
 	assert.Nil(t, schedules)
@@ -742,7 +743,8 @@ func TestLoadFeeRulesAndSchedules_NoRules(t *testing.T) {
 		feeRuleProvider: &stubFeeRuleProviderWithResult{rules: nil},
 	}
 
-	leftRules, rightRules, schedules := uc.loadFeeRulesAndSchedules(context.Background(), uuid.New())
+	leftRules, rightRules, schedules, err := uc.loadFeeRulesAndSchedules(context.Background(), uuid.New())
+	require.NoError(t, err)
 	assert.Nil(t, leftRules)
 	assert.Nil(t, rightRules)
 	assert.Nil(t, schedules)
@@ -839,73 +841,64 @@ func TestRecordGroupResults_PendingReview(t *testing.T) {
 
 // --- classifySources tests ---
 
-func TestClassifySources_DirectedMode_PrimarySourceFound(t *testing.T) {
+func TestClassifySources_OneToOne_UsesConfiguredSides(t *testing.T) {
 	t.Parallel()
 
-	primaryID := uuid.MustParse("00000000-0000-0000-0000-000000100300")
-	otherID := uuid.MustParse("00000000-0000-0000-0000-000000100301")
+	leftID := uuid.MustParse("00000000-0000-0000-0000-000000100300")
+	rightID := uuid.MustParse("00000000-0000-0000-0000-000000100301")
 
 	sources := []*ports.SourceInfo{
-		{ID: primaryID, Type: ports.SourceTypeLedger},
-		{ID: otherID, Type: ports.SourceTypeFile},
+		{ID: leftID, Type: ports.SourceTypeLedger, Side: fee.MatchingSideLeft},
+		{ID: rightID, Type: ports.SourceTypeFile, Side: fee.MatchingSideRight},
 	}
 
-	left, right, err := classifySources(sources, &primaryID)
+	left, right, err := classifySources(shared.ContextTypeOneToOne, sources)
 	require.NoError(t, err)
 	assert.Len(t, left, 1)
 	assert.Len(t, right, 1)
 
-	_, leftOk := left[primaryID]
-	assert.True(t, leftOk, "primary source should be in left set")
+	_, leftOk := left[leftID]
+	assert.True(t, leftOk, "configured left source should be in left set")
 
-	_, rightOk := right[otherID]
-	assert.True(t, rightOk, "other source should be in right set")
+	_, rightOk := right[rightID]
+	assert.True(t, rightOk, "configured right source should be in right set")
 }
 
-func TestClassifySources_SymmetricMode_NilPrimarySourceID(t *testing.T) {
+func TestClassifySources_OneToOne_RejectsMissingSourceSide(t *testing.T) {
 	t.Parallel()
 
 	firstID := uuid.MustParse("00000000-0000-0000-0000-000000100302")
 	secondID := uuid.MustParse("00000000-0000-0000-0000-000000100303")
 
 	sources := []*ports.SourceInfo{
-		{ID: firstID, Type: ports.SourceTypeFile},
+		{ID: firstID, Type: ports.SourceTypeFile, Side: fee.MatchingSideLeft},
 		{ID: secondID, Type: ports.SourceTypeFile},
 	}
 
-	left, right, err := classifySources(sources, nil)
-	require.NoError(t, err)
-	assert.Len(t, left, 1)
-	assert.Len(t, right, 1)
-
-	_, leftOk := left[firstID]
-	assert.True(t, leftOk, "first source should be in left set")
-
-	_, rightOk := right[secondID]
-	assert.True(t, rightOk, "second source should be in right set")
+	_, _, err := classifySources(shared.ContextTypeOneToOne, sources)
+	require.ErrorIs(t, err, ErrSourceSideRequiredForMatching)
 }
 
-func TestClassifySources_PrimarySourceNotInContext(t *testing.T) {
+func TestClassifySources_OneToOne_RejectsInvalidTopology(t *testing.T) {
 	t.Parallel()
 
-	missingID := uuid.MustParse("00000000-0000-0000-0000-000000100304")
 	sources := []*ports.SourceInfo{
-		{ID: uuid.MustParse("00000000-0000-0000-0000-000000100305"), Type: ports.SourceTypeLedger},
-		{ID: uuid.MustParse("00000000-0000-0000-0000-000000100306"), Type: ports.SourceTypeFile},
+		{ID: uuid.MustParse("00000000-0000-0000-0000-000000100305"), Type: ports.SourceTypeLedger, Side: fee.MatchingSideLeft},
+		{ID: uuid.MustParse("00000000-0000-0000-0000-000000100306"), Type: ports.SourceTypeFile, Side: fee.MatchingSideLeft},
 	}
 
-	_, _, err := classifySources(sources, &missingID)
-	require.ErrorIs(t, err, ErrPrimarySourceNotInContext)
+	_, _, err := classifySources(shared.ContextTypeOneToOne, sources)
+	require.ErrorIs(t, err, ErrOneToOneRequiresExactlyOneLeftSource)
 }
 
 func TestClassifySources_OnlyOneSource(t *testing.T) {
 	t.Parallel()
 
 	sources := []*ports.SourceInfo{
-		{ID: uuid.New(), Type: ports.SourceTypeLedger},
+		{ID: uuid.New(), Type: ports.SourceTypeLedger, Side: fee.MatchingSideLeft},
 	}
 
-	_, _, err := classifySources(sources, nil)
+	_, _, err := classifySources(shared.ContextTypeOneToOne, sources)
 	require.ErrorIs(t, err, ErrAtLeastTwoSourcesRequired)
 }
 
@@ -917,18 +910,18 @@ func TestClassifySources_NilSourcesSkipped(t *testing.T) {
 
 	sources := []*ports.SourceInfo{
 		nil,
-		{ID: id1, Type: ports.SourceTypeLedger},
+		{ID: id1, Type: ports.SourceTypeLedger, Side: fee.MatchingSideLeft},
 		nil,
-		{ID: id2, Type: ports.SourceTypeFile},
+		{ID: id2, Type: ports.SourceTypeFile, Side: fee.MatchingSideRight},
 	}
 
-	left, right, err := classifySources(sources, nil)
+	left, right, err := classifySources(shared.ContextTypeOneToOne, sources)
 	require.NoError(t, err)
 	assert.Len(t, left, 1)
 	assert.Len(t, right, 1)
 }
 
-func TestClassifySources_ThreePlusSources_WithPrimarySourceID(t *testing.T) {
+func TestClassifySources_OneToMany_RequiresOneLeftAndManyRight(t *testing.T) {
 	t.Parallel()
 
 	primaryID := uuid.MustParse("00000000-0000-0000-0000-000000100312")
@@ -936,15 +929,15 @@ func TestClassifySources_ThreePlusSources_WithPrimarySourceID(t *testing.T) {
 	otherID2 := uuid.MustParse("00000000-0000-0000-0000-000000100314")
 
 	sources := []*ports.SourceInfo{
-		{ID: otherID1, Type: ports.SourceTypeFile},
-		{ID: primaryID, Type: ports.SourceTypeLedger},
-		{ID: otherID2, Type: ports.SourceTypeAPI},
+		{ID: otherID1, Type: ports.SourceTypeFile, Side: fee.MatchingSideRight},
+		{ID: primaryID, Type: ports.SourceTypeLedger, Side: fee.MatchingSideLeft},
+		{ID: otherID2, Type: ports.SourceTypeAPI, Side: fee.MatchingSideRight},
 	}
 
-	left, right, err := classifySources(sources, &primaryID)
+	left, right, err := classifySources(shared.ContextTypeOneToMany, sources)
 	require.NoError(t, err)
-	assert.Len(t, left, 1, "only the primary source in left")
-	assert.Len(t, right, 2, "remaining sources in right")
+	assert.Len(t, left, 1, "only one configured LEFT source")
+	assert.Len(t, right, 2, "configured RIGHT sources remain on the right")
 
 	_, leftOk := left[primaryID]
 	assert.True(t, leftOk)
@@ -954,7 +947,7 @@ func TestClassifySources_ThreePlusSources_WithPrimarySourceID(t *testing.T) {
 	assert.True(t, right2Ok)
 }
 
-func TestClassifySources_ThreePlusSources_WithoutPrimarySourceID(t *testing.T) {
+func TestClassifySources_OneToMany_RejectsMultipleLeftSources(t *testing.T) {
 	t.Parallel()
 
 	id1 := uuid.MustParse("00000000-0000-0000-0000-000000100315")
@@ -962,28 +955,19 @@ func TestClassifySources_ThreePlusSources_WithoutPrimarySourceID(t *testing.T) {
 	id3 := uuid.MustParse("00000000-0000-0000-0000-000000100317")
 
 	sources := []*ports.SourceInfo{
-		{ID: id1, Type: ports.SourceTypeLedger},
-		{ID: id2, Type: ports.SourceTypeFile},
-		{ID: id3, Type: ports.SourceTypeAPI},
+		{ID: id1, Type: ports.SourceTypeLedger, Side: fee.MatchingSideLeft},
+		{ID: id2, Type: ports.SourceTypeFile, Side: fee.MatchingSideLeft},
+		{ID: id3, Type: ports.SourceTypeAPI, Side: fee.MatchingSideRight},
 	}
 
-	left, right, err := classifySources(sources, nil)
-	require.NoError(t, err)
-	assert.Len(t, left, 1, "first source in left")
-	assert.Len(t, right, 2, "remaining sources in right")
-
-	_, leftOk := left[id1]
-	assert.True(t, leftOk, "first source should be in left")
-	_, right1Ok := right[id2]
-	assert.True(t, right1Ok)
-	_, right2Ok := right[id3]
-	assert.True(t, right2Ok)
+	_, _, err := classifySources(shared.ContextTypeOneToMany, sources)
+	require.ErrorIs(t, err, ErrOneToManyRequiresExactlyOneLeftSource)
 }
 
 func TestClassifySources_EmptySlice(t *testing.T) {
 	t.Parallel()
 
-	_, _, err := classifySources([]*ports.SourceInfo{}, nil)
+	_, _, err := classifySources(shared.ContextTypeOneToOne, []*ports.SourceInfo{})
 	require.ErrorIs(t, err, ErrAtLeastTwoSourcesRequired)
 }
 
@@ -1291,7 +1275,8 @@ func TestLoadFeeRulesAndSchedules_WithRulesAndSchedules(t *testing.T) {
 		},
 	}
 
-	leftRules, rightRules, allSchedules := uc.loadFeeRulesAndSchedules(context.Background(), contextID)
+	leftRules, rightRules, allSchedules, err := uc.loadFeeRulesAndSchedules(context.Background(), contextID)
+	require.NoError(t, err)
 	require.NotNil(t, leftRules)
 	require.NotNil(t, rightRules)
 	require.NotNil(t, allSchedules)
@@ -1324,7 +1309,8 @@ func TestLoadFeeRulesAndSchedules_GetByIDsError(t *testing.T) {
 		},
 	}
 
-	leftRules, rightRules, allSchedules := uc.loadFeeRulesAndSchedules(context.Background(), contextID)
+	leftRules, rightRules, allSchedules, err := uc.loadFeeRulesAndSchedules(context.Background(), contextID)
+	require.Error(t, err)
 	assert.Nil(t, leftRules)
 	assert.Nil(t, rightRules)
 	assert.Nil(t, allSchedules)
@@ -1339,7 +1325,8 @@ func TestLoadFeeRulesAndSchedules_FindByContextIDError(t *testing.T) {
 		},
 	}
 
-	leftRules, rightRules, allSchedules := uc.loadFeeRulesAndSchedules(context.Background(), uuid.New())
+	leftRules, rightRules, allSchedules, err := uc.loadFeeRulesAndSchedules(context.Background(), uuid.New())
+	require.Error(t, err)
 	assert.Nil(t, leftRules)
 	assert.Nil(t, rightRules)
 	assert.Nil(t, allSchedules)
@@ -1367,7 +1354,35 @@ func TestLoadFeeRulesAndSchedules_NilFeeScheduleRepo(t *testing.T) {
 		feeScheduleRepo: nil,
 	}
 
-	leftRules, rightRules, allSchedules := uc.loadFeeRulesAndSchedules(context.Background(), contextID)
+	leftRules, rightRules, allSchedules, err := uc.loadFeeRulesAndSchedules(context.Background(), contextID)
+	require.ErrorIs(t, err, ErrNilFeeScheduleRepository)
+	assert.Nil(t, leftRules)
+	assert.Nil(t, rightRules)
+	assert.Nil(t, allSchedules)
+}
+
+func TestLoadFeeRulesAndSchedules_MissingScheduleReference(t *testing.T) {
+	t.Parallel()
+
+	contextID := uuid.MustParse("00000000-0000-0000-0000-000000100817")
+	missingScheduleID := uuid.MustParse("00000000-0000-0000-0000-000000100818")
+
+	rules := []*fee.FeeRule{{
+		ID:            uuid.MustParse("00000000-0000-0000-0000-000000100819"),
+		ContextID:     contextID,
+		Side:          fee.MatchingSideAny,
+		FeeScheduleID: missingScheduleID,
+		Name:          "Missing schedule",
+		Priority:      1,
+	}}
+
+	uc := &UseCase{
+		feeRuleProvider: &stubFeeRuleProviderWithResult{rules: rules},
+		feeScheduleRepo: &stubFeeScheduleRepoWithResult{scheduleCount: 0, schedules: map[uuid.UUID]*fee.FeeSchedule{}},
+	}
+
+	leftRules, rightRules, allSchedules, err := uc.loadFeeRulesAndSchedules(context.Background(), contextID)
+	require.Error(t, err)
 	assert.Nil(t, leftRules)
 	assert.Nil(t, rightRules)
 	assert.Nil(t, allSchedules)
@@ -1391,8 +1406,9 @@ func (s *stubFeeRuleProviderWithResult) FindByContextID(
 
 type stubFeeScheduleRepoWithResult struct {
 	mockFeeScheduleRepo
-	schedules map[uuid.UUID]*fee.FeeSchedule
-	err       error
+	schedules     map[uuid.UUID]*fee.FeeSchedule
+	scheduleCount int
+	err           error
 }
 
 func (s *stubFeeScheduleRepoWithResult) GetByIDs(
@@ -1401,6 +1417,10 @@ func (s *stubFeeScheduleRepoWithResult) GetByIDs(
 ) (map[uuid.UUID]*fee.FeeSchedule, error) {
 	if s.err != nil {
 		return nil, s.err
+	}
+
+	if s.scheduleCount == 0 && s.schedules == nil {
+		return map[uuid.UUID]*fee.FeeSchedule{}, nil
 	}
 
 	return s.schedules, nil
