@@ -19,6 +19,9 @@ const maxFeeRuleNameLength = 100
 // maxFeeRulePredicates is the maximum number of predicates a fee rule may contain.
 const maxFeeRulePredicates = 50
 
+// MaxFeeRulesPerContext is the maximum number of fee rules allowed for a context.
+const MaxFeeRulesPerContext = constants.MaximumPaginationLimit
+
 // FeeRule defines a conditional mapping from transaction metadata to a fee schedule.
 // Rules are evaluated in priority order (lower = higher precedence); first match wins.
 type FeeRule struct {

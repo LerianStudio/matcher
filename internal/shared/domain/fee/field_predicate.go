@@ -45,6 +45,18 @@ type FieldPredicate struct {
 
 // Validate checks that the predicate has all required fields for its operator.
 func (pred FieldPredicate) Validate(_ context.Context) error {
+	if err := pred.validateField(); err != nil {
+		return err
+	}
+
+	if err := pred.validateOperator(); err != nil {
+		return err
+	}
+
+	return pred.validateOperatorRequirements()
+}
+
+func (pred FieldPredicate) validateField() error {
 	if strings.TrimSpace(pred.Field) == "" {
 		return fmt.Errorf("field predicate: %w", ErrPredicateFieldRequired)
 	}
@@ -53,35 +65,75 @@ func (pred FieldPredicate) Validate(_ context.Context) error {
 		return fmt.Errorf("field predicate: %w", ErrPredicateFieldTooLong)
 	}
 
+	return nil
+}
+
+func (pred FieldPredicate) validateOperator() error {
 	if !pred.Operator.IsValid() {
 		return fmt.Errorf("field predicate operator %q: %w", pred.Operator, ErrInvalidPredicateOperator)
 	}
 
+	return nil
+}
+
+func (pred FieldPredicate) validateOperatorRequirements() error {
 	switch pred.Operator {
 	case PredicateOperatorEquals:
-		if pred.Value == "" {
-			return fmt.Errorf("field predicate %q: %w", pred.Field, ErrPredicateValueRequired)
-		}
+		return pred.validateEquals()
+	case PredicateOperatorIn:
+		return pred.validateIn()
+	case PredicateOperatorExists:
+		return pred.validateExists()
+	}
 
-		if len(pred.Value) > maxPredicateValueLength {
+	return nil
+}
+
+func (pred FieldPredicate) validateEquals() error {
+	if pred.Value == "" {
+		return fmt.Errorf("field predicate %q: %w", pred.Field, ErrPredicateValueRequired)
+	}
+
+	if len(pred.Values) > 0 {
+		return fmt.Errorf("field predicate %q: %w", pred.Field, ErrPredicateValuesForbidden)
+	}
+
+	if len(pred.Value) > maxPredicateValueLength {
+		return fmt.Errorf("field predicate: %w", ErrPredicateValueTooLong)
+	}
+
+	return nil
+}
+
+func (pred FieldPredicate) validateIn() error {
+	if pred.Value != "" {
+		return fmt.Errorf("field predicate %q: %w", pred.Field, ErrPredicateValueForbidden)
+	}
+
+	if len(pred.Values) == 0 {
+		return fmt.Errorf("field predicate %q: %w", pred.Field, ErrPredicateValuesRequired)
+	}
+
+	if len(pred.Values) > maxPredicateValuesCount {
+		return fmt.Errorf("field predicate: %w", ErrPredicateValuesTooMany)
+	}
+
+	for _, value := range pred.Values {
+		if len(value) > maxPredicateValueLength {
 			return fmt.Errorf("field predicate: %w", ErrPredicateValueTooLong)
 		}
-	case PredicateOperatorIn:
-		if len(pred.Values) == 0 {
-			return fmt.Errorf("field predicate %q: %w", pred.Field, ErrPredicateValuesRequired)
-		}
+	}
 
-		if len(pred.Values) > maxPredicateValuesCount {
-			return fmt.Errorf("field predicate: %w", ErrPredicateValuesTooMany)
-		}
+	return nil
+}
 
-		for _, v := range pred.Values {
-			if len(v) > maxPredicateValueLength {
-				return fmt.Errorf("field predicate: %w", ErrPredicateValueTooLong)
-			}
-		}
-	case PredicateOperatorExists:
-		// No additional fields required.
+func (pred FieldPredicate) validateExists() error {
+	if pred.Value != "" {
+		return fmt.Errorf("field predicate %q: %w", pred.Field, ErrPredicateValueForbidden)
+	}
+
+	if len(pred.Values) > 0 {
+		return fmt.Errorf("field predicate %q: %w", pred.Field, ErrPredicateValuesForbidden)
 	}
 
 	return nil
