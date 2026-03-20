@@ -158,7 +158,7 @@ services:
       RATE_LIMIT_ENABLED: "false"
       # Build settings
       CGO_ENABLED: "0"
-      GOFLAGS: "-mod=vendor"
+      GOFLAGS: "-mod=mod"
     ports:
       - "4018:4018"
     volumes:
