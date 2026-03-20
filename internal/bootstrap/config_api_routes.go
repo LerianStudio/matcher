@@ -21,7 +21,7 @@ var (
 // RegisterConfigAPIRoutes registers the system config API HTTP routes.
 // Read endpoints use ActionConfigRead; write endpoints use ActionConfigWrite.
 func RegisterConfigAPIRoutes(
-	protected func(resource, action string) fiber.Router,
+	protected func(resource string, actions ...string) fiber.Router,
 	handler *ConfigAPIHandler,
 ) error {
 	if protected == nil {

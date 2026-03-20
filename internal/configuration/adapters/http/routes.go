@@ -17,7 +17,7 @@ var (
 // RegisterRoutes registers all configuration routes with the provided router.
 //
 //nolint:funlen // route registration is a single declarative block
-func RegisterRoutes(protected func(resource, action string) fiber.Router, handler *Handler) error {
+func RegisterRoutes(protected func(resource string, actions ...string) fiber.Router, handler *Handler) error {
 	if protected == nil {
 		return ErrProtectedRouteHelperRequired
 	}
@@ -145,6 +145,7 @@ func RegisterRoutes(protected func(resource, action string) fiber.Router, handle
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionFeeRuleCreate,
+		auth.ActionFeeScheduleRead,
 	).Post("/v1/config/contexts/:contextId/fee-rules", handler.CreateFeeRule)
 	protected(
 		auth.ResourceConfiguration,
@@ -157,6 +158,7 @@ func RegisterRoutes(protected func(resource, action string) fiber.Router, handle
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionFeeRuleUpdate,
+		auth.ActionFeeScheduleRead,
 	).Patch("/v1/config/fee-rules/:feeRuleId", handler.UpdateFeeRule)
 	protected(
 		auth.ResourceConfiguration,

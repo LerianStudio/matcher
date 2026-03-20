@@ -19,7 +19,7 @@ var (
 
 // RegisterRoutes registers the exception HTTP routes with dispatch rate limiting.
 func RegisterRoutes(
-	protected func(resource, action string) fiber.Router,
+	protected func(resource string, actions ...string) fiber.Router,
 	handlers *Handlers,
 	dispatchLimiter fiber.Handler,
 ) error {

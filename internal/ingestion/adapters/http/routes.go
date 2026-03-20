@@ -17,7 +17,7 @@ var (
 
 // RegisterRoutes registers the ingestion HTTP routes.
 func RegisterRoutes(
-	protected func(resource, action string) fiber.Router,
+	protected func(resource string, actions ...string) fiber.Router,
 	handlers *Handlers,
 ) error {
 	if protected == nil {

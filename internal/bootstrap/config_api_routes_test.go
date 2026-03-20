@@ -35,8 +35,10 @@ func TestRegisterConfigAPIRoutes_Success(t *testing.T) {
 	app := fiber.New()
 	protectedCalls := make([]protectedCall, 0)
 
-	protected := func(resource, action string) fiber.Router {
-		protectedCalls = append(protectedCalls, protectedCall{resource: resource, action: action})
+	protected := func(resource string, actions ...string) fiber.Router {
+		for _, action := range actions {
+			protectedCalls = append(protectedCalls, protectedCall{resource: resource, action: action})
+		}
 
 		// Return a group that mimics auth middleware without enforcing it.
 		return app.Group("")
@@ -87,7 +89,7 @@ func TestRegisterConfigAPIRoutes_NilProtected_ReturnsError(t *testing.T) {
 func TestRegisterConfigAPIRoutes_NilHandler_ReturnsError(t *testing.T) {
 	t.Parallel()
 
-	protected := func(_, _ string) fiber.Router {
+	protected := func(_ string, _ ...string) fiber.Router {
 		return fiber.New().Group("")
 	}
 

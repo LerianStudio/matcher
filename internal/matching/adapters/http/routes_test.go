@@ -49,7 +49,7 @@ func TestRegisterRoutesNilHandler(t *testing.T) {
 	t.Parallel()
 
 	app := fiber.New()
-	protected := func(_, _ string) fiber.Router {
+	protected := func(_ string, _ ...string) fiber.Router {
 		return app.Group("/")
 	}
 
@@ -62,7 +62,7 @@ func TestRegisterRoutesSuccess(t *testing.T) {
 	t.Parallel()
 
 	app := fiber.New()
-	protected := func(_, _ string) fiber.Router {
+	protected := func(_ string, _ ...string) fiber.Router {
 		return app.Group("/")
 	}
 

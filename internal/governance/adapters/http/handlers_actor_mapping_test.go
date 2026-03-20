@@ -410,7 +410,7 @@ func TestRegisterActorMappingRoutes(t *testing.T) {
 		handler := newTestActorMappingHandler(t, repo)
 
 		app := fiber.New()
-		protected := func(_, _ string) fiber.Router {
+		protected := func(_ string, _ ...string) fiber.Router {
 			return app.Group("/")
 		}
 
@@ -433,7 +433,7 @@ func TestRegisterActorMappingRoutes(t *testing.T) {
 		t.Parallel()
 
 		app := fiber.New()
-		protected := func(_, _ string) fiber.Router {
+		protected := func(_ string, _ ...string) fiber.Router {
 			return app.Group("/")
 		}
 

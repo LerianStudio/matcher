@@ -1424,7 +1424,7 @@ func TestRegisterExportJobRoutes(t *testing.T) {
 		require.NoError(t, err)
 
 		app := fiber.New()
-		protected := func(resource, action string) fiber.Router {
+		protected := func(resource string, actions ...string) fiber.Router {
 			return app.Group("/api")
 		}
 		limiter := func(c *fiber.Ctx) error {
@@ -1464,7 +1464,7 @@ func TestRegisterExportJobRoutes(t *testing.T) {
 		t.Parallel()
 
 		app := fiber.New()
-		protected := func(resource, action string) fiber.Router {
+		protected := func(resource string, actions ...string) fiber.Router {
 			return app.Group("/api")
 		}
 		limiter := func(c *fiber.Ctx) error {
@@ -1493,7 +1493,7 @@ func TestRegisterExportJobRoutes(t *testing.T) {
 		require.NoError(t, err)
 
 		app := fiber.New()
-		protected := func(resource, action string) fiber.Router {
+		protected := func(resource string, actions ...string) fiber.Router {
 			return app.Group("/api")
 		}
 
