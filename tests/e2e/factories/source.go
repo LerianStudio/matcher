@@ -13,11 +13,12 @@ import (
 type SourceFactory struct {
 	tc     *e2e.TestContext
 	client *e2e.Client
+	sides  map[string]int
 }
 
 // NewSourceFactory creates a new source factory.
 func NewSourceFactory(tc *e2e.TestContext, c *e2e.Client) *SourceFactory {
-	return &SourceFactory{tc: tc, client: c}
+	return &SourceFactory{tc: tc, client: c, sides: make(map[string]int)}
 }
 
 // Client returns the underlying API client.
@@ -83,6 +84,18 @@ func (b *SourceBuilder) AsGateway() *SourceBuilder {
 	return b.WithType("GATEWAY")
 }
 
+// Left configures the source as the LEFT side.
+func (b *SourceBuilder) Left() *SourceBuilder {
+	b.req.Side = "LEFT"
+	return b
+}
+
+// Right configures the source as the RIGHT side.
+func (b *SourceBuilder) Right() *SourceBuilder {
+	b.req.Side = "RIGHT"
+	return b
+}
+
 // WithConfig sets the source configuration.
 func (b *SourceBuilder) WithConfig(config map[string]any) *SourceBuilder {
 	b.req.Config = config
@@ -91,6 +104,15 @@ func (b *SourceBuilder) WithConfig(config map[string]any) *SourceBuilder {
 
 // Create creates the source and registers cleanup.
 func (b *SourceBuilder) Create(ctx context.Context) (*client.Source, error) {
+	if b.req.Side == "" {
+		if b.factory.sides[b.contextID] == 0 {
+			b.req.Side = "LEFT"
+		} else {
+			b.req.Side = "RIGHT"
+		}
+	}
+	b.factory.sides[b.contextID]++
+
 	created, err := b.factory.client.Configuration.CreateSource(ctx, b.contextID, b.req)
 	if err != nil {
 		return nil, err

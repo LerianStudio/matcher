@@ -4,6 +4,7 @@ package factories
 
 import (
 	"context"
+	"errors"
 
 	"github.com/LerianStudio/matcher/tests/e2e"
 	"github.com/LerianStudio/matcher/tests/e2e/client"
@@ -124,7 +125,13 @@ func (b *FeeScheduleBuilder) Create(ctx context.Context) (*client.FeeScheduleRes
 	}
 
 	b.factory.tc.RegisterCleanup(func() error {
-		return b.factory.client.FeeSchedule.DeleteFeeSchedule(context.Background(), created.ID)
+		err := b.factory.client.FeeSchedule.DeleteFeeSchedule(context.Background(), created.ID)
+		var apiErr *client.APIError
+		if errors.As(err, &apiErr) && apiErr.IsNotFound() {
+			return nil
+		}
+
+		return err
 	})
 
 	b.factory.tc.Logf("Created fee schedule: %s (%s)", created.Name, created.ID)

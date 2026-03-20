@@ -20,21 +20,15 @@ func NewMatchingClient(client *Client) *MatchingClient {
 }
 
 // RunMatch triggers a matching run for a context.
-// If primarySourceID is non-empty, it designates one source as the anchor for asymmetric matching.
+// The third parameter is ignored and kept only to avoid mass call-site churn in E2E helpers.
 func (c *MatchingClient) RunMatch(
 	ctx context.Context,
 	contextID, mode string,
-	primarySourceID string,
+	_ string,
 ) (*RunMatchResponse, error) {
 	var resp RunMatchResponse
 	path := fmt.Sprintf("/v1/matching/contexts/%s/run", contextID)
-
-	var primarySourceIDPtr *string
-	if primarySourceID != "" {
-		primarySourceIDPtr = &primarySourceID
-	}
-
-	req := RunMatchRequest{Mode: mode, PrimarySourceID: primarySourceIDPtr}
+	req := RunMatchRequest{Mode: mode}
 	err := c.client.DoJSON(ctx, http.MethodPost, path, req, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("run match: %w", err)

@@ -197,6 +197,73 @@ func (c *ConfigurationClient) DeleteFieldMap(ctx context.Context, fieldMapID str
 	return nil
 }
 
+// CreateFeeRule creates a new fee rule within a context.
+func (c *ConfigurationClient) CreateFeeRule(
+	ctx context.Context,
+	contextID string,
+	req CreateFeeRuleRequest,
+) (*FeeRuleResponse, error) {
+	var resp FeeRuleResponse
+	path := fmt.Sprintf("/v1/config/contexts/%s/fee-rules", contextID)
+	err := c.client.DoJSON(ctx, http.MethodPost, path, req, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("create fee rule: %w", err)
+	}
+
+	return &resp, nil
+}
+
+// GetFeeRule retrieves a fee rule by ID.
+func (c *ConfigurationClient) GetFeeRule(ctx context.Context, feeRuleID string) (*FeeRuleResponse, error) {
+	var resp FeeRuleResponse
+	path := fmt.Sprintf("/v1/config/fee-rules/%s", feeRuleID)
+	err := c.client.DoJSON(ctx, http.MethodGet, path, nil, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("get fee rule: %w", err)
+	}
+
+	return &resp, nil
+}
+
+// ListFeeRules retrieves all fee rules for a context.
+func (c *ConfigurationClient) ListFeeRules(ctx context.Context, contextID string) ([]FeeRuleResponse, error) {
+	var resp []FeeRuleResponse
+	path := fmt.Sprintf("/v1/config/contexts/%s/fee-rules", contextID)
+	err := c.client.DoJSON(ctx, http.MethodGet, path, nil, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("list fee rules: %w", err)
+	}
+
+	return resp, nil
+}
+
+// UpdateFeeRule updates an existing fee rule.
+func (c *ConfigurationClient) UpdateFeeRule(
+	ctx context.Context,
+	feeRuleID string,
+	req UpdateFeeRuleRequest,
+) (*FeeRuleResponse, error) {
+	var resp FeeRuleResponse
+	path := fmt.Sprintf("/v1/config/fee-rules/%s", feeRuleID)
+	err := c.client.DoJSON(ctx, http.MethodPatch, path, req, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("update fee rule: %w", err)
+	}
+
+	return &resp, nil
+}
+
+// DeleteFeeRule deletes a fee rule.
+func (c *ConfigurationClient) DeleteFeeRule(ctx context.Context, feeRuleID string) error {
+	path := fmt.Sprintf("/v1/config/fee-rules/%s", feeRuleID)
+	err := c.client.DoJSON(ctx, http.MethodDelete, path, nil, nil)
+	if err != nil {
+		return fmt.Errorf("delete fee rule: %w", err)
+	}
+
+	return nil
+}
+
 // CreateMatchRule creates a new match rule.
 func (c *ConfigurationClient) CreateMatchRule(
 	ctx context.Context,
