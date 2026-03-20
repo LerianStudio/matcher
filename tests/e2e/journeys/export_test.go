@@ -82,7 +82,7 @@ func TestExport_SyncMatchedReport(t *testing.T) {
 			)
 
 			// Run matching
-			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -178,7 +178,7 @@ func TestExport_SyncUnmatchedReport(t *testing.T) {
 			)
 
 			// Run matching (will not match)
-			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -348,7 +348,7 @@ func TestExport_DashboardAggregates(t *testing.T) {
 			)
 
 			// Run matching
-			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,

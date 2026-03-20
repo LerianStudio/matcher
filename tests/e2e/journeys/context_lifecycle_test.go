@@ -204,7 +204,7 @@ func TestContextLifecycle_DraftRejectsMatching(t *testing.T) {
 			MustCreate(ctx)
 
 		// Attempt to run matching — should be rejected
-		_, err := apiClient.Matching.RunMatch(ctx, draft.ID, "COMMIT", "")
+		_, err := apiClient.Matching.RunMatch(ctx, draft.ID, "COMMIT")
 		require.Error(t, err, "DRAFT context should reject matching")
 		assert.True(t, strings.Contains(err.Error(), "403"),
 			"expected 403 status for DRAFT context matching, got: %v", err)

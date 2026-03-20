@@ -320,7 +320,7 @@ func TestMultiTenant_MatchRunIsolation(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, e2e.WaitForJobComplete(ctx, tc, apiClient, contextA.ID, bankJob.ID))
 
-			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, contextA.ID, "")
+			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, contextA.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,

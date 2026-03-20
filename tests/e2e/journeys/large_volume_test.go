@@ -99,7 +99,7 @@ func TestLargeVolume_ThousandTransactions(t *testing.T) {
 
 			tc.Logf("Running matching...")
 			start = time.Now()
-			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -196,7 +196,7 @@ func TestLargeVolume_HundredTransactions(t *testing.T) {
 				e2e.WaitForJobComplete(ctx, tc, client, reconciliationContext.ID, bankJob.ID),
 			)
 
-			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -299,7 +299,7 @@ func TestLargeVolume_MixedCurrencies(t *testing.T) {
 				e2e.WaitForJobComplete(ctx, tc, client, reconciliationContext.ID, bankJob.ID),
 			)
 
-			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,

@@ -71,7 +71,7 @@ func TestAdjustment_BankFee(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, e2e.WaitForJobComplete(ctx, tc, apiClient, reconciliationContext.ID, bankJob.ID))
 
-			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(t, e2e.WaitForMatchRunComplete(ctx, tc, apiClient, reconciliationContext.ID, matchResp.RunID))
 
@@ -150,7 +150,7 @@ func TestAdjustment_AllTypes(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, e2e.WaitForJobComplete(ctx, tc, apiClient, reconciliationContext.ID, bankJob.ID))
 
-			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(t, e2e.WaitForMatchRunComplete(ctx, tc, apiClient, reconciliationContext.ID, matchResp.RunID))
 
@@ -242,7 +242,7 @@ func TestAdjustment_CreditDirection(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, e2e.WaitForJobComplete(ctx, tc, apiClient, reconciliationContext.ID, bankJob.ID))
 
-			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(t, e2e.WaitForMatchRunComplete(ctx, tc, apiClient, reconciliationContext.ID, matchResp.RunID))
 
@@ -318,7 +318,7 @@ func TestAdjustment_WithTransactionID(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, e2e.WaitForJobComplete(ctx, tc, apiClient, reconciliationContext.ID, bankJob.ID))
 
-			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(t, e2e.WaitForMatchRunComplete(ctx, tc, apiClient, reconciliationContext.ID, matchResp.RunID))
 

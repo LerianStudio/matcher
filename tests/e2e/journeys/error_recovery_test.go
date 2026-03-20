@@ -237,7 +237,7 @@ func TestErrorRecovery_MatchingWithNoTransactions(t *testing.T) {
 				MustCreate(ctx)
 
 			// Try to run matching with no transactions ingested
-			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 
 			if err != nil {
 				tc.Logf("Match run with no transactions rejected: %v", err)
@@ -301,7 +301,7 @@ func TestErrorRecovery_MatchingWithNoRules(t *testing.T) {
 			)
 
 			// Try to run matching without rules
-			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 
 			if err != nil {
 				tc.Logf("Match run without rules rejected: %v", err)
@@ -381,11 +381,11 @@ func TestErrorRecovery_ConcurrentMatchRuns(t *testing.T) {
 			)
 
 			// Start first match run
-			match1, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			match1, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 
 			// Immediately try to start second match run (should be blocked or handled)
-			match2, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			match2, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 
 			if err != nil {
 				tc.Logf("Second concurrent match run rejected (expected): %v", err)
@@ -549,7 +549,7 @@ func TestErrorRecovery_RerunMatchingAfterDataFix(t *testing.T) {
 				e2e.WaitForJobComplete(ctx, tc, apiClient, reconciliationContext.ID, job2.ID),
 			)
 
-			match1, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			match1, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -605,7 +605,7 @@ func TestErrorRecovery_RerunMatchingAfterDataFix(t *testing.T) {
 				e2e.WaitForJobComplete(ctx, tc, apiClient, reconciliationContext.ID, job4.ID),
 			)
 
-			match2, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			match2, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,

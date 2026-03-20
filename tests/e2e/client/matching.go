@@ -20,11 +20,9 @@ func NewMatchingClient(client *Client) *MatchingClient {
 }
 
 // RunMatch triggers a matching run for a context.
-// The third parameter is ignored and kept only to avoid mass call-site churn in E2E helpers.
 func (c *MatchingClient) RunMatch(
 	ctx context.Context,
 	contextID, mode string,
-	_ string,
 ) (*RunMatchResponse, error) {
 	var resp RunMatchResponse
 	path := fmt.Sprintf("/v1/matching/contexts/%s/run", contextID)
@@ -40,18 +38,16 @@ func (c *MatchingClient) RunMatch(
 func (c *MatchingClient) RunMatchCommit(
 	ctx context.Context,
 	contextID string,
-	primarySourceID string,
 ) (*RunMatchResponse, error) {
-	return c.RunMatch(ctx, contextID, "COMMIT", primarySourceID)
+	return c.RunMatch(ctx, contextID, "COMMIT")
 }
 
 // RunMatchDryRun triggers a matching run in DRY_RUN mode.
 func (c *MatchingClient) RunMatchDryRun(
 	ctx context.Context,
 	contextID string,
-	primarySourceID string,
 ) (*RunMatchResponse, error) {
-	return c.RunMatch(ctx, contextID, "DRY_RUN", primarySourceID)
+	return c.RunMatch(ctx, contextID, "DRY_RUN")
 }
 
 // GetMatchRun retrieves a match run by ID.

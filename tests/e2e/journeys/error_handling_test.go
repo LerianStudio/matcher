@@ -87,7 +87,7 @@ func TestErrorHandling_BadRequestResponses(t *testing.T) {
 		t.Run("invalid match mode returns 400", func(t *testing.T) {
 			reconciliationContext := f.Context.NewContext().MustCreate(ctx)
 
-			_, err := apiClient.Matching.RunMatch(ctx, reconciliationContext.ID, "INVALID_MODE", "")
+			_, err := apiClient.Matching.RunMatch(ctx, reconciliationContext.ID, "INVALID_MODE")
 			require.Error(t, err)
 
 			var apiErr *client.APIError
