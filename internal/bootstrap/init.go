@@ -2434,6 +2434,7 @@ func initConfigurationModule(
 		repos.configMatchRule,
 		configCommand.WithAuditPublisher(auditPublisher),
 		configCommand.WithFeeScheduleRepository(repos.feeSchedule),
+		configCommand.WithFeeRuleRepository(repos.configFeeRule),
 		configCommand.WithScheduleRepository(scheduleRepository),
 		configCommand.WithInfrastructureProvider(provider),
 	)
@@ -2447,6 +2448,7 @@ func initConfigurationModule(
 		repos.configFieldMap,
 		repos.configMatchRule,
 		configQuery.WithFeeScheduleRepository(repos.feeSchedule),
+		configQuery.WithFeeRuleRepository(repos.configFeeRule),
 		configQuery.WithScheduleRepository(scheduleRepository),
 	)
 	if err != nil {
