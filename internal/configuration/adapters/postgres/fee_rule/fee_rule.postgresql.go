@@ -330,7 +330,7 @@ func (repo *Repository) executeUpdate(
 		ctx,
 		`UPDATE fee_rules
 				SET side = $1, fee_schedule_id = $2, name = $3, priority = $4, predicates = $5, updated_at = $6
-				WHERE id = $7`,
+				WHERE id = $7 AND context_id = $8`,
 		model.Side,
 		model.FeeScheduleID,
 		model.Name,
@@ -338,6 +338,7 @@ func (repo *Repository) executeUpdate(
 		model.Predicates,
 		model.UpdatedAt,
 		model.ID,
+		model.ContextID,
 	)
 	if err != nil {
 		return false, fmt.Errorf("update fee rule: %w", err)

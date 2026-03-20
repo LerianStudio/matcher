@@ -55,7 +55,6 @@ var (
 	ErrOneToOneRequiresExactlyOneLeftSource  = errors.New("1:1 contexts require exactly one LEFT source")
 	ErrOneToOneRequiresExactlyOneRightSource = errors.New("1:1 contexts require exactly one RIGHT source")
 	ErrOneToManyRequiresExactlyOneLeftSource = errors.New("1:N contexts require exactly one LEFT source")
-	ErrAtLeastOneLeftSourceRequired          = errors.New("at least one LEFT source is required")
 	ErrAtLeastOneRightSourceRequired         = errors.New("at least one RIGHT source is required")
 	ErrFeeRulesReferenceMissingSchedules     = errors.New("fee rules reference missing fee schedules")
 	ErrMatchRunPersistedNil                  = errors.New(
@@ -530,13 +529,7 @@ func validateSourceCountForContextType(contextType shared.ContextType, leftCount
 			return ErrAtLeastOneRightSourceRequired
 		}
 	case shared.ContextTypeManyToMany:
-		if leftCount == 0 {
-			return ErrAtLeastOneLeftSourceRequired
-		}
-
-		if rightCount == 0 {
-			return ErrAtLeastOneRightSourceRequired
-		}
+		return fmt.Errorf("%w: %s", ErrUnsupportedContextType, contextType)
 	}
 
 	return nil
@@ -2168,6 +2161,13 @@ func (uc *UseCase) loadFeeRulesAndSchedules(
 		span.SetAttributes(attribute.Bool("fee_rules_configured", false))
 
 		return nil, nil, nil, nil
+	}
+
+	if len(rules) > fee.MaxFeeRulesPerContext {
+		span.SetAttributes(attribute.Bool("fee_rules_load_error", true))
+		logger.With(libLog.Any("fee_rule_count", len(rules))).Log(ctx, libLog.LevelError, "fee rule count exceeds maximum allowed per context")
+
+		return nil, nil, nil, fee.ErrFeeRuleCountLimitExceeded
 	}
 
 	// Collect distinct schedule IDs from rules

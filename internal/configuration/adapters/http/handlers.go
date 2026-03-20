@@ -1625,6 +1625,8 @@ func isClientSafeError(err error) bool {
 		entities.ErrSourceNameTooLong,
 		entities.ErrSourceTypeInvalid,
 		entities.ErrSourceContextRequired,
+		entities.ErrSourceSideRequired,
+		entities.ErrSourceSideInvalid,
 		entities.ErrFieldMapNil,
 		entities.ErrFieldMapContextRequired,
 		entities.ErrFieldMapSourceRequired,

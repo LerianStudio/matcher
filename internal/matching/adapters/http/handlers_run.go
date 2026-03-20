@@ -21,6 +21,7 @@ import (
 	matchingVO "github.com/LerianStudio/matcher/internal/matching/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/matching/services/command"
 	sharedpagination "github.com/LerianStudio/matcher/internal/shared/adapters/http"
+	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
 // RunMatch triggers a matching run for a context.
@@ -399,8 +400,8 @@ var runMatchBadRequestErrors = []struct {
 	{command.ErrOneToOneRequiresExactlyOneLeftSource, "1:1 contexts require exactly one LEFT source"},
 	{command.ErrOneToOneRequiresExactlyOneRightSource, "1:1 contexts require exactly one RIGHT source"},
 	{command.ErrOneToManyRequiresExactlyOneLeftSource, "1:N contexts require exactly one LEFT source"},
-	{command.ErrAtLeastOneLeftSourceRequired, "at least one LEFT source is required"},
 	{command.ErrAtLeastOneRightSourceRequired, "at least one RIGHT source is required"},
+	{sharedfee.ErrFeeRuleCountLimitExceeded, "fee rule count exceeds the maximum allowed per context"},
 	{command.ErrMatchRunModeRequired, "match run mode is required"},
 }
 
