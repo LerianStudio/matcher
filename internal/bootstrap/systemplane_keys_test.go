@@ -22,16 +22,16 @@ import (
 const expectedTotalKeys = 124
 
 // expectedBootstrapOnlyCount is the count of keys with ApplyBootstrapOnly.
-const expectedBootstrapOnlyCount = 16
+const expectedBootstrapOnlyCount = 20
 
 // expectedLiveReadCount is the count of keys with ApplyLiveRead.
-const expectedLiveReadCount = 11
+const expectedLiveReadCount = 16
 
 // expectedWorkerReconcileCount is the count of keys with ApplyWorkerReconcile.
 const expectedWorkerReconcileCount = 13
 
 // expectedBundleRebuildCount is the count of keys with ApplyBundleRebuild.
-const expectedBundleRebuildCount = 77
+const expectedBundleRebuildCount = 68
 
 // expectedBundleRebuildAndReconcileCount is the count of keys with ApplyBundleRebuildAndReconcile.
 const expectedBundleRebuildAndReconcileCount = 7
@@ -121,6 +121,39 @@ func TestRegisterMatcherKeys_BundleRebuildAndReconcileCount(t *testing.T) {
 
 	assert.Equal(t, expectedBundleRebuildAndReconcileCount, count,
 		"bundle-rebuild+worker-reconcile key count mismatch")
+}
+
+func TestRegisterMatcherKeys_SelectedApplyBehaviors(t *testing.T) {
+	t.Parallel()
+
+	reg := registry.New()
+	require.NoError(t, RegisterMatcherKeys(reg))
+
+	tests := []struct {
+		key      string
+		behavior domain.ApplyBehavior
+		mutable  bool
+	}{
+		{key: "postgres.query_timeout_sec", behavior: domain.ApplyLiveRead, mutable: true},
+		{key: "idempotency.retry_window_sec", behavior: domain.ApplyLiveRead, mutable: true},
+		{key: "idempotency.success_ttl_hours", behavior: domain.ApplyLiveRead, mutable: true},
+		{key: "webhook.timeout_sec", behavior: domain.ApplyLiveRead, mutable: true},
+		{key: "tenancy.default_tenant_id", behavior: domain.ApplyBootstrapOnly, mutable: false},
+		{key: "tenancy.default_tenant_slug", behavior: domain.ApplyBootstrapOnly, mutable: false},
+		{key: "idempotency.hmac_secret", behavior: domain.ApplyBootstrapOnly, mutable: false},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.key, func(t *testing.T) {
+			t.Parallel()
+
+			def, ok := reg.Get(tt.key)
+			require.True(t, ok)
+			assert.Equal(t, tt.behavior, def.ApplyBehavior)
+			assert.Equal(t, tt.mutable, def.MutableAtRuntime)
+		})
+	}
 }
 
 func TestRegisterMatcherKeys_ApplyBehaviorCountsAddUp(t *testing.T) {

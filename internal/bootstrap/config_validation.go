@@ -71,6 +71,10 @@ func (cfg *Config) Validate() error {
 		return err
 	}
 
+	if err := cfg.validateReportingStorageConfig(asserter); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -171,7 +175,7 @@ func (cfg *Config) validateTelemetryConfig(asserter *assert.Asserter) error {
 func (cfg *Config) validateTenancyConfig(asserter *assert.Asserter) error {
 	ctx := context.Background()
 
-	if !cfg.Tenancy.MultiTenantEnabled {
+	if !multiTenantModeEnabled(cfg) {
 		return nil
 	}
 
@@ -466,6 +470,24 @@ func (cfg *Config) validateArchivalConfig(asserter *assert.Asserter) error {
 	}
 
 	if err := asserter.That(ctx, cfg.Archival.ColdRetentionMonths >= cfg.Archival.WarmRetentionMonths, "ARCHIVAL_COLD_RETENTION_MONTHS must be >= ARCHIVAL_WARM_RETENTION_MONTHS", "cold_months", cfg.Archival.ColdRetentionMonths, "warm_months", cfg.Archival.WarmRetentionMonths); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+
+	return nil
+}
+
+func (cfg *Config) validateReportingStorageConfig(asserter *assert.Asserter) error {
+	if cfg == nil || !reportingStorageRequired(cfg) {
+		return nil
+	}
+
+	ctx := context.Background()
+
+	if err := asserter.NotEmpty(ctx, strings.TrimSpace(cfg.ObjectStorage.Bucket), "OBJECT_STORAGE_BUCKET is required when export or cleanup workers are enabled"); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+
+	if err := asserter.NotEmpty(ctx, strings.TrimSpace(cfg.ObjectStorage.Endpoint), "OBJECT_STORAGE_ENDPOINT is required when export or cleanup workers are enabled"); err != nil {
 		return fmt.Errorf("config validation: %w", err)
 	}
 

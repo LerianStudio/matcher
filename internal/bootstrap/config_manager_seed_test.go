@@ -91,24 +91,6 @@ func TestConfigManager_EnterSeedMode_Idempotent(t *testing.T) {
 	assert.True(t, cm.InSeedMode())
 }
 
-func TestConfigManager_Reload_InSeedMode(t *testing.T) {
-	t.Parallel()
-
-	cfg := defaultConfig()
-	cm, err := NewConfigManager(cfg, &testLogger{})
-	require.NoError(t, err)
-
-	cm.enterSeedMode()
-
-	result, err := cm.Reload()
-	require.NoError(t, err)
-	require.NotNil(t, result)
-
-	assert.True(t, result.Skipped, "reload in seed mode should be skipped")
-	assert.Equal(t, "superseded by systemplane", result.Reason)
-	assert.Zero(t, result.ChangesDetected)
-}
-
 func TestConfigManager_Get_StillWorksInSeedMode(t *testing.T) {
 	t.Parallel()
 
@@ -321,7 +303,7 @@ func TestBuildSeedOps_NonDefaultValues(t *testing.T) {
 	assert.Equal(t, 500, ops[1].Value)
 }
 
-func TestBuildSeedOps_SkipsBootstrapOnly(t *testing.T) {
+func TestBuildSeedOps_IncludesBootstrapOnlyWhenNonDefault(t *testing.T) {
 	t.Parallel()
 
 	cfg := defaultConfig()
@@ -339,7 +321,31 @@ func TestBuildSeedOps_SkipsBootstrapOnly(t *testing.T) {
 	}
 
 	ops := buildSeedOps(cfg, defs)
-	assert.Empty(t, ops, "bootstrap-only keys should be skipped")
+	require.Len(t, ops, 1)
+	assert.Equal(t, "app.env_name", ops[0].Key)
+	assert.Equal(t, "staging", ops[0].Value)
+}
+
+func TestBuildSeedOps_SkipsBootstrapOnlySecrets(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cfg.Idempotency.HMACSecret = "bootstrap-secret"
+
+	defs := []domain.KeyDef{
+		{
+			Key:              "idempotency.hmac_secret",
+			Kind:             domain.KindConfig,
+			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+			DefaultValue:     "",
+			ValueType:        domain.ValueTypeString,
+			MutableAtRuntime: false,
+			Secret:           true,
+		},
+	}
+
+	ops := buildSeedOps(cfg, defs)
+	assert.Empty(t, ops)
 }
 
 func TestSeedStore_NoNonDefaultValues(t *testing.T) {
@@ -367,7 +373,7 @@ func TestSeedStore_NoNonDefaultValues(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Empty(t, store.putCalls, "no Put should be called when all values are default")
-	assert.True(t, cm.InSeedMode(), "should enter seed mode even with no writes")
+	assert.False(t, cm.InSeedMode(), "SeedStore should not enter seed mode before initial reload succeeds")
 }
 
 func TestSeedStore_WithNonDefaultValues(t *testing.T) {
@@ -425,7 +431,7 @@ func TestSeedStore_WithNonDefaultValues(t *testing.T) {
 	assert.Equal(t, "seed", call.Source)
 	assert.Len(t, call.Ops, 3)
 
-	assert.True(t, cm.InSeedMode())
+	assert.False(t, cm.InSeedMode(), "SeedStore should not enter seed mode before initial reload succeeds")
 }
 
 func TestSeedStore_StoreError(t *testing.T) {

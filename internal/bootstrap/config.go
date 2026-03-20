@@ -18,7 +18,7 @@ const (
 	// envProduction is the production environment name.
 	envProduction = "production"
 
-	defaultHTTPBodyLimitBytes = 104857600
+	defaultHTTPBodyLimitBytes = 32 * 1024 * 1024
 
 	// defaultExportWorkerPollIntervalSec is the default poll interval for export worker.
 	defaultExportWorkerPollIntervalSec = 5
@@ -44,7 +44,7 @@ type AppConfig struct {
 // ServerConfig configures the HTTP server and middleware.
 type ServerConfig struct {
 	Address               string `env:"SERVER_ADDRESS"          envDefault:":4018"                                                  mapstructure:"address"`
-	BodyLimitBytes        int    `env:"HTTP_BODY_LIMIT_BYTES"   envDefault:"104857600"                                              mapstructure:"body_limit_bytes"`
+	BodyLimitBytes        int    `env:"HTTP_BODY_LIMIT_BYTES"   envDefault:"33554432"                                               mapstructure:"body_limit_bytes"`
 	CORSAllowedOrigins    string `env:"CORS_ALLOWED_ORIGINS"    envDefault:"http://localhost:3000"                                  mapstructure:"cors_allowed_origins"`
 	CORSAllowedMethods    string `env:"CORS_ALLOWED_METHODS"    envDefault:"GET,POST,PUT,PATCH,DELETE,OPTIONS"                      mapstructure:"cors_allowed_methods"`
 	CORSAllowedHeaders    string `env:"CORS_ALLOWED_HEADERS"    envDefault:"Origin,Content-Type,Accept,Authorization,X-Request-ID"  mapstructure:"cors_allowed_headers"`

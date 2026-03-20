@@ -40,7 +40,7 @@ func TestDefaultConfig_Server(t *testing.T) {
 	cfg := defaultConfig()
 
 	assert.Equal(t, ":4018", cfg.Server.Address)
-	assert.Equal(t, 104857600, cfg.Server.BodyLimitBytes)
+	assert.Equal(t, 33554432, cfg.Server.BodyLimitBytes)
 	assert.Equal(t, "http://localhost:3000", cfg.Server.CORSAllowedOrigins)
 	assert.Contains(t, cfg.Server.CORSAllowedMethods, "GET")
 	assert.Contains(t, cfg.Server.CORSAllowedHeaders, "Authorization")

@@ -35,10 +35,9 @@ var errNotInSeedMode = errors.New("config manager is not in seed mode")
 //
 // Lifecycle: NewConfigManager() → Get() → Stop().
 //
-// After systemplane initialization, the ConfigManager enters seed mode. In seed
-// mode, Reload() returns a skipped result and all runtime configuration changes
-// flow through the systemplane supervisor via UpdateFromSystemplane(). The Get()
-// method continues to work in seed mode.
+// After systemplane initialization, the ConfigManager enters seed mode and all
+// runtime configuration changes flow through the systemplane supervisor via
+// UpdateFromSystemplane(). The Get() method continues to work in seed mode.
 type ConfigManager struct {
 	config     atomic.Pointer[Config]
 	mu         sync.Mutex // serializes writes (update)
@@ -49,27 +48,9 @@ type ConfigManager struct {
 	stopCh     chan struct{}
 
 	// seedMode is set to true when the systemplane Supervisor has assumed
-	// runtime authority. In seed mode, Reload() is a no-op and callers
-	// should use the systemplane API for runtime configuration changes.
-	// Get() still works.
+	// runtime authority. In seed mode, callers should use the systemplane API
+	// for runtime configuration changes. Get() still works.
 	seedMode atomic.Bool
-}
-
-// ReloadResult describes the outcome of a configuration reload.
-type ReloadResult struct {
-	Version         uint64         `json:"version"`
-	ReloadedAt      time.Time      `json:"reloadedAt"`
-	ChangesDetected int            `json:"changesDetected"`
-	Changes         []ConfigChange `json:"changes,omitempty"`
-	Skipped         bool           `json:"skipped,omitempty"`
-	Reason          string         `json:"reason,omitempty"`
-}
-
-// ConfigChange captures a single key that changed between reloads.
-type ConfigChange struct {
-	Key      string `json:"key"`
-	OldValue any    `json:"oldValue"`
-	NewValue any    `json:"newValue"`
 }
 
 // NewConfigManager creates a ConfigManager that wraps the given initial config.
@@ -101,15 +82,8 @@ func (cm *ConfigManager) Get() *Config {
 	return cm.config.Load()
 }
 
-// Reload returns a ReloadResult describing the current state. In seed mode,
-// it returns immediately — the systemplane supervisor owns all runtime
-// configuration changes.
-func (cm *ConfigManager) Reload() (*ReloadResult, error) {
-	return cm.reload()
-}
-
 // Version returns the current config version. Starts at 0 and increments on
-// each successful Reload(). Useful for cache invalidation and
+// each successful UpdateFromSystemplane(). Useful for cache invalidation and
 // change detection by consumers.
 func (cm *ConfigManager) Version() uint64 {
 	return cm.version.Load()
@@ -143,6 +117,10 @@ func (cm *ConfigManager) InSeedMode() bool {
 // supervisor. Safe to call multiple times.
 func (cm *ConfigManager) enterSeedMode() {
 	cm.seedMode.Store(true)
+}
+
+func (cm *ConfigManager) leaveSeedMode() {
+	cm.seedMode.Store(false)
 }
 
 // UpdateFromSystemplane converts a systemplane snapshot into a *Config and

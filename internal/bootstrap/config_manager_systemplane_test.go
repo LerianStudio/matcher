@@ -195,12 +195,10 @@ func TestUpdateFromSystemplane_ValidationFailure_PreservesOldConfig(t *testing.T
 	initialVersion := cm.Version()
 	initialLogLevel := cm.Get().App.LogLevel
 
-	// Craft a snapshot with an invalid tenant ID to trigger Validate() failure.
-	// Validate() calls libCommons.IsUUID(cfg.Tenancy.DefaultTenantID) — "not-a-uuid"
-	// is not a valid UUID, so validation must fail.
+	// Craft a snapshot with an invalid log level to trigger Validate() failure.
 	snap := domain.Snapshot{
 		Configs: map[string]domain.EffectiveValue{
-			"tenancy.default_tenant_id": {Value: "not-a-uuid"},
+			"app.log_level": {Value: "louder"},
 		},
 	}
 
@@ -283,6 +281,9 @@ func TestSnapshotToFullConfig_BootstrapFieldsPreserved(t *testing.T) {
 	}
 	oldCfg.Logger = &testLogger{}
 	oldCfg.ShutdownGracePeriod = 30 * time.Second
+	oldCfg.Tenancy.DefaultTenantID = "22222222-2222-2222-2222-222222222222"
+	oldCfg.Tenancy.DefaultTenantSlug = "prod-default"
+	oldCfg.Idempotency.HMACSecret = "seed-secret"
 
 	// Snapshot has no keys — all runtime fields get defaults, but bootstrap
 	// fields must be copied from oldCfg regardless.
@@ -300,7 +301,10 @@ func TestSnapshotToFullConfig_BootstrapFieldsPreserved(t *testing.T) {
 	assert.True(t, result.Server.TLSTerminatedUpstream)
 	assert.Equal(t, "10.0.0.0/8", result.Server.TrustedProxies)
 	assert.Equal(t, oldCfg.Auth, result.Auth)
+	assert.Equal(t, oldCfg.Tenancy.DefaultTenantID, result.Tenancy.DefaultTenantID)
+	assert.Equal(t, oldCfg.Tenancy.DefaultTenantSlug, result.Tenancy.DefaultTenantSlug)
 	assert.Equal(t, oldCfg.Telemetry, result.Telemetry)
+	assert.Equal(t, oldCfg.Idempotency.HMACSecret, result.Idempotency.HMACSecret)
 	assert.Equal(t, oldCfg.Logger, result.Logger)
 	assert.Equal(t, 30*time.Second, result.ShutdownGracePeriod)
 

@@ -213,7 +213,10 @@ func snapshotToFullConfig(snap domain.Snapshot, oldCfg *Config) *Config {
 	cfg.Server.TLSTerminatedUpstream = oldCfg.Server.TLSTerminatedUpstream
 	cfg.Server.TrustedProxies = oldCfg.Server.TrustedProxies
 	cfg.Auth = oldCfg.Auth
+	cfg.Tenancy.DefaultTenantID = oldCfg.Tenancy.DefaultTenantID
+	cfg.Tenancy.DefaultTenantSlug = oldCfg.Tenancy.DefaultTenantSlug
 	cfg.Telemetry = oldCfg.Telemetry
+	cfg.Idempotency.HMACSecret = oldCfg.Idempotency.HMACSecret
 	cfg.Logger = oldCfg.Logger
 	cfg.ShutdownGracePeriod = oldCfg.ShutdownGracePeriod
 

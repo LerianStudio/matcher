@@ -8,10 +8,8 @@ package bootstrap
 
 import (
 	"context"
-	"math"
 	"sync"
 	"testing"
-	"time"
 
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 
@@ -38,16 +36,6 @@ func (l *testLogger) With(_ ...libLog.Field) libLog.Logger { return l }
 func (l *testLogger) WithGroup(_ string) libLog.Logger     { return l }
 func (l *testLogger) Enabled(_ libLog.Level) bool          { return true }
 func (l *testLogger) Sync(_ context.Context) error         { return nil }
-
-func (l *testLogger) getMessages() []string {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	out := make([]string, len(l.messages))
-	copy(out, l.messages)
-
-	return out
-}
 
 // newTestConfigManager creates a ConfigManager for tests.
 func newTestConfigManager(t *testing.T, cfg *Config, logger libLog.Logger) *ConfigManager {
@@ -180,71 +168,6 @@ func TestConfigManager_Get_Concurrent(t *testing.T) {
 	wg.Wait()
 }
 
-func TestConfigManager_Reload_ReturnsSkipped(t *testing.T) {
-	t.Parallel()
-
-	cfg := defaultConfig()
-	cm := newTestConfigManager(t, cfg, &testLogger{})
-
-	// Reload always returns skipped now that Viper is removed from the runtime path.
-	result, err := cm.Reload()
-	require.NoError(t, err)
-
-	assert.True(t, result.Skipped)
-	assert.Contains(t, result.Reason, "file reload not supported")
-	assert.Equal(t, uint64(0), result.Version, "version should not increment on skipped reload")
-
-	// Config should remain unchanged.
-	assert.Equal(t, "info", cm.Get().App.LogLevel)
-}
-
-func TestConfigManager_Reload_InSeedMode_ReturnsSuperseded(t *testing.T) {
-	t.Parallel()
-
-	cfg := defaultConfig()
-	cm := newTestConfigManager(t, cfg, &testLogger{})
-	cm.enterSeedMode()
-
-	result, err := cm.Reload()
-	require.NoError(t, err)
-
-	assert.True(t, result.Skipped)
-	assert.Equal(t, "superseded by systemplane", result.Reason)
-}
-
-func TestConfigManager_Reload_PreservesConfig(t *testing.T) {
-	t.Parallel()
-
-	logger := &testLogger{}
-	cfg := defaultConfig()
-	cfg.Logger = logger
-	cfg.ShutdownGracePeriod = 10 * time.Second
-
-	cm := newTestConfigManager(t, cfg, logger)
-
-	_, err := cm.Reload()
-	require.NoError(t, err)
-
-	// Config should be identical — reload is a no-op.
-	newCfg := cm.Get()
-	assert.Equal(t, logger, newCfg.Logger)
-	assert.Equal(t, 10*time.Second, newCfg.ShutdownGracePeriod)
-}
-
-func TestConfigManager_Version_DoesNotIncrementOnSkippedReload(t *testing.T) {
-	t.Parallel()
-
-	cfg := defaultConfig()
-	cm := newTestConfigManager(t, cfg, &testLogger{})
-
-	assert.Equal(t, uint64(0), cm.Version())
-
-	// Reload is now skipped — version should NOT increment.
-	_, err := cm.Reload()
-	require.NoError(t, err)
-	assert.Equal(t, uint64(0), cm.Version())
-}
-
 func TestConfigManager_Version_IncrementedByUpdateFromSystemplane(t *testing.T) {
 	t.Parallel()
 
@@ -288,119 +211,6 @@ func TestConfigManager_Stop_Idempotent(t *testing.T) {
 	assert.NotNil(t, cm.Get())
 }
 
-func TestConfigManager_Reload_ReturnsSkippedWhenNotInSeedMode(t *testing.T) {
-	t.Parallel()
-
-	cfg := defaultConfig()
-	cm := newTestConfigManager(t, cfg, &testLogger{})
-
-	// Reload outside seed mode returns skipped (file reload not supported).
-	result, err := cm.Reload()
-	require.NoError(t, err)
-	assert.True(t, result.Skipped)
-	assert.Contains(t, result.Reason, "file reload not supported")
-	assert.Equal(t, uint64(0), cm.Version(), "version should not increment on skipped reload")
-}
-
-func TestConfigManager_Reload_ConcurrentSafety(t *testing.T) {
-	t.Parallel()
-
-	cfg := defaultConfig()
-	cm := newTestConfigManager(t, cfg, &testLogger{})
-
-	const goroutines = 20
-
-	var wg sync.WaitGroup
-	reloadErrs := make(chan error, goroutines/2)
-
-	// Half goroutines reading, half reloading — should not race.
-	wg.Add(goroutines)
-
-	for i := range goroutines {
-		if i%2 == 0 {
-			go func() {
-				defer wg.Done()
-
-				got := cm.Get()
-				assert.NotNil(t, got)
-			}()
-		} else {
-			go func() {
-				defer wg.Done()
-
-				_, reloadErr := cm.Reload()
-				reloadErrs <- reloadErr
-			}()
-		}
-	}
-
-	wg.Wait()
-	close(reloadErrs)
-
-	for reloadErr := range reloadErrs {
-		require.NoError(t, reloadErr)
-	}
-
-	// Post-condition: config should still be non-nil and structurally valid
-	// after concurrent access. This catches subtle corruption that doesn't panic.
-	finalCfg := cm.Get()
-	assert.NotNil(t, finalCfg, "config should not be nil after concurrent reloads")
-	assert.NotEmpty(t, finalCfg.App.EnvName, "config should not be corrupted by concurrent access")
-}
-
-func TestDiffConfigs_DetectsChanges(t *testing.T) {
-	t.Parallel()
-
-	old := defaultConfig()
-	newCfg := defaultConfig()
-
-	newCfg.App.LogLevel = "debug"
-	newCfg.RateLimit.Max = 999
-
-	changes := diffConfigs(old, newCfg)
-	assert.NotEmpty(t, changes)
-
-	// Should detect field-level changes with dotted keys.
-	keys := make(map[string]bool, len(changes))
-	for _, c := range changes {
-		keys[c.Key] = true
-	}
-
-	assert.True(t, keys["app.log_level"], "should detect app.log_level change")
-	assert.True(t, keys["rate_limit.max"], "should detect rate_limit.max change")
-}
-
-func TestDiffConfigs_NoChanges(t *testing.T) {
-	t.Parallel()
-
-	cfg1 := defaultConfig()
-	cfg2 := defaultConfig()
-
-	changes := diffConfigs(cfg1, cfg2)
-	assert.Empty(t, changes, "identical configs should produce no diff")
-}
-
-func TestDiffConfigs_NilInputs(t *testing.T) {
-	t.Parallel()
-
-	assert.Empty(t, diffConfigs(nil, defaultConfig()))
-	assert.Empty(t, diffConfigs(defaultConfig(), nil))
-	assert.Empty(t, diffConfigs(nil, nil))
-}
-
-func TestConfigManager_Reload_NoFile(t *testing.T) {
-	t.Parallel()
-
-	cfg := defaultConfig()
-	cm := newTestConfigManager(t, cfg, &testLogger{})
-
-	// Reload without a file returns skipped (file reload not supported).
-	result, err := cm.Reload()
-	require.NoError(t, err)
-	assert.True(t, result.Skipped)
-	assert.Contains(t, result.Reason, "file reload not supported")
-}
-
 func TestConfigManager_BootstrapWiring(t *testing.T) {
 	t.Parallel()
 
@@ -425,30 +235,6 @@ func TestConfigManager_BootstrapWiring(t *testing.T) {
 		assert.Equal(t, "warn", svc.ConfigManager.Get().App.LogLevel)
 	})
 
-	t.Run("ConfigManager survives reload while Config stays static", func(t *testing.T) {
-		t.Parallel()
-
-		cfg := defaultConfig()
-		cm := newTestConfigManager(t, cfg, &testLogger{})
-
-		svc := &Service{
-			Config:        cfg,
-			ConfigManager: cm,
-		}
-
-		// Simulate a config reload (now a no-op; systemplane handles runtime changes).
-		_, err := svc.ConfigManager.Reload()
-		require.NoError(t, err)
-
-		// After reload, ConfigManager.Get() may return a NEW pointer...
-		newCfg := svc.ConfigManager.Get()
-		assert.NotNil(t, newCfg)
-
-		// ...but the static snapshot is unchanged.
-		assert.Same(t, cfg, svc.Config,
-			"static Config snapshot must not change after ConfigManager reload")
-	})
-
 	t.Run("cleanup stops ConfigManager cleanly", func(t *testing.T) {
 		t.Parallel()
 
@@ -471,96 +257,6 @@ func TestConfigManager_BootstrapWiring(t *testing.T) {
 		assert.NotNil(t, cm.Get())
 		assert.Same(t, cfg, cm.Get())
 	})
-}
-
-// --- Helper function tests (H8) ---
-
-func TestRedactIfSensitive_PasswordKey(t *testing.T) {
-	t.Parallel()
-
-	result := redactIfSensitive("postgres.primary_password", "s3cret")
-	assert.Equal(t, "***REDACTED***", result)
-}
-
-func TestRedactIfSensitive_NormalKey(t *testing.T) {
-	t.Parallel()
-
-	result := redactIfSensitive("rate_limit.max", 100)
-	assert.Equal(t, 100, result)
-}
-
-func TestRedactIfSensitive_TokenKey(t *testing.T) {
-	t.Parallel()
-
-	result := redactIfSensitive("auth.token_secret", "jwt-tok")
-	assert.Equal(t, "***REDACTED***", result)
-}
-
-func TestRedactIfSensitive_SecretKey(t *testing.T) {
-	t.Parallel()
-
-	result := redactIfSensitive("idempotency.hmac_secret", "hmac-val")
-	assert.Equal(t, "***REDACTED***", result)
-}
-
-func TestIsSensitiveKey_MatchesExpectedPatterns(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		key      string
-		expected bool
-	}{
-		{name: "postgres password", key: "postgres.primary_password", expected: true},
-		{name: "rabbitmq password", key: "rabbitmq.password", expected: true},
-		{name: "auth token secret", key: "auth.token_secret", expected: true},
-		{name: "idempotency hmac secret", key: "idempotency.hmac_secret", expected: true},
-		{name: "object storage access key", key: "object_storage.access_key_id", expected: true},
-		{name: "multi-tenant service api key", key: "tenancy.multi_tenant_service_api_key", expected: true},
-		{name: "normal key", key: "rate_limit.max", expected: false},
-		{name: "host key", key: "postgres.primary_host", expected: false},
-		{name: "rabbitmq uri", key: "rabbitmq.uri", expected: false},
-		{name: "enabled key", key: "auth.enabled", expected: false},
-		{name: "empty string", key: "", expected: false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			assert.Equal(t, tt.expected, isSensitiveKey(tt.key))
-		})
-	}
-}
-
-func TestSafeUint64ToInt_NormalValue(t *testing.T) {
-	t.Parallel()
-
-	assert.Equal(t, 42, safeUint64ToInt(42))
-	assert.Equal(t, 0, safeUint64ToInt(0))
-	assert.Equal(t, 1000, safeUint64ToInt(1000))
-}
-
-func TestSafeUint64ToInt_Overflow(t *testing.T) {
-	t.Parallel()
-
-	result := safeUint64ToInt(math.MaxUint64)
-	assert.Equal(t, math.MaxInt, result)
-}
-
-func TestSafeUint64ToInt_BoundaryValue(t *testing.T) {
-	t.Parallel()
-
-	// math.MaxInt as uint64 should convert exactly.
-	result := safeUint64ToInt(uint64(math.MaxInt))
-	assert.Equal(t, math.MaxInt, result)
-}
-
-func TestSafeUint64ToInt_JustAboveBoundary(t *testing.T) {
-	t.Parallel()
-
-	// One above math.MaxInt should cap at math.MaxInt.
-	result := safeUint64ToInt(uint64(math.MaxInt) + 1)
-	assert.Equal(t, math.MaxInt, result)
 }
 
 func TestRestoreZeroedFields_RestoresBlankString(t *testing.T) {

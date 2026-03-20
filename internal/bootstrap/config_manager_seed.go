@@ -29,8 +29,9 @@ var errSeedStoreConfigNil = errors.New("seed store: config is nil")
 
 // SeedStore seeds the systemplane store with non-default values from the
 // current Config. This is a one-time migration: it reads the current Config,
-// compares each mutable-at-runtime key against its registered default, and
-// writes overrides for any non-default values.
+// compares each registered config key against its default, and writes
+// overrides for any non-default values so the systemplane snapshot matches the
+// active bootstrap/runtime truth from the first reload onward.
 //
 // After seeding (regardless of whether any writes were needed), the
 // ConfigManager enters seed mode (inert). In seed mode, hot-reload is
@@ -52,8 +53,7 @@ func (cm *ConfigManager) SeedStore(ctx context.Context, store ports.Store, reg r
 
 	if len(ops) == 0 {
 		cm.logger.Log(ctx, libLog.LevelInfo,
-			"seed store: no non-default values to seed, entering seed mode")
-		cm.enterSeedMode()
+			"seed store: no non-default values to seed")
 
 		return nil
 	}
@@ -70,22 +70,53 @@ func (cm *ConfigManager) SeedStore(ctx context.Context, store ports.Store, reg r
 	}
 
 	cm.logger.Log(ctx, libLog.LevelInfo,
-		"seed store: seeded systemplane store, entering seed mode",
+		"seed store: seeded systemplane store",
 		libLog.Int("keys_seeded", len(ops)))
-	cm.enterSeedMode()
 
 	return nil
 }
 
-// buildSeedOps computes the list of WriteOps for non-default, mutable-at-runtime
-// config values. This is a pure function (no side-effects) that makes testing
-// straightforward.
+func (cm *ConfigManager) RefreshBootstrapSeedValues(ctx context.Context, store ports.Store, reg registry.Registry) error {
+	cfg := cm.Get()
+	if cfg == nil {
+		return errSeedStoreConfigNil
+	}
+
+	target, err := domain.NewTarget(domain.KindConfig, domain.ScopeGlobal, "")
+	if err != nil {
+		return fmt.Errorf("refresh seed store: create target: %w", err)
+	}
+
+	current, err := store.Get(ctx, target)
+	if err != nil {
+		return fmt.Errorf("refresh seed store: get current entries: %w", err)
+	}
+
+	defs := reg.List(domain.KindConfig)
+	ops := buildBootstrapRefreshOps(cfg, defs, current.Entries)
+	if len(ops) == 0 {
+		return nil
+	}
+
+	_, err = store.Put(ctx, target, ops, current.Revision, domain.Actor{ID: seedActorID}, "bootstrap-refresh")
+	if err != nil {
+		return fmt.Errorf("refresh seed store: put ops: %w", err)
+	}
+
+	return nil
+}
+
+// buildSeedOps computes the list of WriteOps for non-default config values.
+// Bootstrap-only non-secret keys are also seeded so systemplane reads reflect
+// the active bootstrap truth even though those keys remain immutable at runtime.
+// Bootstrap-only secrets stay process/bootstrap-only and are not persisted into
+// the systemplane store/history.
 func buildSeedOps(cfg *Config, defs []domain.KeyDef) []ports.WriteOp {
 	var ops []ports.WriteOp
 
 	for _, def := range defs {
-		if !def.MutableAtRuntime {
-			continue // Skip bootstrap-only keys
+		if !def.MutableAtRuntime && def.Secret {
+			continue
 		}
 
 		currentVal := extractConfigValue(cfg, def.Key)
@@ -101,6 +132,35 @@ func buildSeedOps(cfg *Config, defs []domain.KeyDef) []ports.WriteOp {
 			Key:   def.Key,
 			Value: currentVal,
 		})
+	}
+
+	return ops
+}
+
+func buildBootstrapRefreshOps(cfg *Config, defs []domain.KeyDef, currentEntries []domain.Entry) []ports.WriteOp {
+	current := make(map[string]domain.Entry, len(currentEntries))
+	for _, entry := range currentEntries {
+		current[entry.Key] = entry
+	}
+
+	var ops []ports.WriteOp
+	for _, def := range defs {
+		if def.MutableAtRuntime || def.Secret {
+			continue
+		}
+
+		currentVal := extractConfigValue(cfg, def.Key)
+		entry, exists := current[def.Key]
+		if isEqualValue(currentVal, def.DefaultValue) {
+			if exists {
+				ops = append(ops, ports.WriteOp{Key: def.Key, Reset: true})
+			}
+			continue
+		}
+
+		if !exists || !isEqualValue(entry.Value, currentVal) {
+			ops = append(ops, ports.WriteOp{Key: def.Key, Value: currentVal})
+		}
 	}
 
 	return ops

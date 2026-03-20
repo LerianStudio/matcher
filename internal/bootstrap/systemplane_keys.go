@@ -6,6 +6,7 @@ package bootstrap
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
@@ -25,7 +26,7 @@ const (
 	defaultCORSAllowedOrigins    = "http://localhost:3000"
 	defaultCORSAllowedMethods    = "GET,POST,PUT,PATCH,DELETE,OPTIONS"
 	defaultCORSAllowedHeaders    = "Origin,Content-Type,Accept,Authorization,X-Request-ID"
-	defaultKeyBodyLimitBytes     = 104857600 // 100 MB
+	defaultKeyBodyLimitBytes     = 32 * 1024 * 1024 // 32 MiB
 	defaultTLSTerminatedUpstream = false
 	defaultServerTrustedProxies  = ""
 	defaultServerTLSCertFile     = ""
@@ -340,8 +341,8 @@ func matcherKeyDefs() []domain.KeyDef {
 			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
 			DefaultValue:     defaultTenantID,
 			ValueType:        domain.ValueTypeString,
-			ApplyBehavior:    domain.ApplyBundleRebuild,
-			MutableAtRuntime: true,
+			ApplyBehavior:    domain.ApplyBootstrapOnly,
+			MutableAtRuntime: false,
 			Description:      "Default tenant UUID for single-tenant mode",
 			Group:            "tenancy",
 			Component:        domain.ComponentNone,
@@ -353,8 +354,8 @@ func matcherKeyDefs() []domain.KeyDef {
 			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
 			DefaultValue:     defaultTenantSlug,
 			ValueType:        domain.ValueTypeString,
-			ApplyBehavior:    domain.ApplyBundleRebuild,
-			MutableAtRuntime: true,
+			ApplyBehavior:    domain.ApplyBootstrapOnly,
+			MutableAtRuntime: false,
 			Description:      "Default tenant slug for single-tenant mode",
 			Group:            "tenancy",
 			Component:        domain.ComponentNone,
@@ -724,7 +725,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			DefaultValue:     defaultPGQueryTimeout,
 			ValueType:        domain.ValueTypeInt,
 			Validator:        validatePositiveInt,
-			ApplyBehavior:    domain.ApplyBundleRebuild,
+			ApplyBehavior:    domain.ApplyLiveRead,
 			MutableAtRuntime: true,
 			Description:      "PostgreSQL query timeout in seconds",
 			Group:            "postgres",
@@ -1302,8 +1303,8 @@ func matcherKeyDefs() []domain.KeyDef {
 			DefaultValue:     defaultInfraConnectTimeout,
 			ValueType:        domain.ValueTypeInt,
 			Validator:        validatePositiveInt,
-			ApplyBehavior:    domain.ApplyBundleRebuild,
-			MutableAtRuntime: true,
+			ApplyBehavior:    domain.ApplyBootstrapOnly,
+			MutableAtRuntime: false,
 			Description:      "Infrastructure connection timeout in seconds",
 			Group:            "infrastructure",
 			Component:        domain.ComponentNone,
@@ -1332,7 +1333,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			DefaultValue:     defaultIdempotencyRetryWindow,
 			ValueType:        domain.ValueTypeInt,
 			Validator:        validatePositiveInt,
-			ApplyBehavior:    domain.ApplyBundleRebuild,
+			ApplyBehavior:    domain.ApplyLiveRead,
 			MutableAtRuntime: true,
 			Description:      "Failed idempotency key retry window in seconds",
 			Group:            "idempotency",
@@ -1346,7 +1347,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			DefaultValue:     defaultIdempotencySuccessTTL,
 			ValueType:        domain.ValueTypeInt,
 			Validator:        validatePositiveInt,
-			ApplyBehavior:    domain.ApplyBundleRebuild,
+			ApplyBehavior:    domain.ApplyLiveRead,
 			MutableAtRuntime: true,
 			Description:      "Completed idempotency key cache TTL in hours",
 			Group:            "idempotency",
@@ -1359,8 +1360,8 @@ func matcherKeyDefs() []domain.KeyDef {
 			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
 			DefaultValue:     "",
 			ValueType:        domain.ValueTypeString,
-			ApplyBehavior:    domain.ApplyBundleRebuild,
-			MutableAtRuntime: true,
+			ApplyBehavior:    domain.ApplyBootstrapOnly,
+			MutableAtRuntime: false,
 			Secret:           true,
 			Description:      "HMAC secret for signing idempotency keys before storage",
 			Group:            "idempotency",
@@ -1404,6 +1405,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
 			DefaultValue:     defaultFetcherURL,
 			ValueType:        domain.ValueTypeString,
+			Validator:        validateAbsoluteHTTPURL,
 			ApplyBehavior:    domain.ApplyBundleRebuild,
 			MutableAtRuntime: true,
 			Description:      "Fetcher service base URL",
@@ -1517,7 +1519,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			DefaultValue:     defaultDedupeTTLSec,
 			ValueType:        domain.ValueTypeInt,
 			Validator:        validatePositiveInt,
-			ApplyBehavior:    domain.ApplyBundleRebuild,
+			ApplyBehavior:    domain.ApplyLiveRead,
 			MutableAtRuntime: true,
 			Description:      "Deduplication key TTL in seconds",
 			Group:            "deduplication",
@@ -1672,7 +1674,7 @@ func matcherKeyDefs() []domain.KeyDef {
 			DefaultValue:     defaultWebhookTimeout,
 			ValueType:        domain.ValueTypeInt,
 			Validator:        validatePositiveInt,
-			ApplyBehavior:    domain.ApplyBundleRebuild,
+			ApplyBehavior:    domain.ApplyLiveRead,
 			MutableAtRuntime: true,
 			Description:      "Default HTTP timeout for webhook dispatches in seconds",
 			Group:            "webhook",
@@ -1905,6 +1907,26 @@ func matcherKeyDefs() []domain.KeyDef {
 			RedactPolicy:     domain.RedactNone,
 		},
 	}
+}
+
+func validateAbsoluteHTTPURL(value any) error {
+	rawValue, ok := value.(string)
+	if !ok {
+		return fmt.Errorf("fetcher url must be a string")
+	}
+
+	parsed, err := url.Parse(strings.TrimSpace(rawValue))
+	if err != nil {
+		return fmt.Errorf("fetcher url must be a valid URL: %w", err)
+	}
+	if parsed == nil || !parsed.IsAbs() || parsed.Host == "" {
+		return fmt.Errorf("fetcher url must be an absolute URL")
+	}
+	if !strings.EqualFold(parsed.Scheme, "http") && !strings.EqualFold(parsed.Scheme, "https") {
+		return fmt.Errorf("fetcher url must use http or https")
+	}
+
+	return nil
 }
 
 // Validators for systemplane key registration.
