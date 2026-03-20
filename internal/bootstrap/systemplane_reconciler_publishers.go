@@ -16,10 +16,12 @@ import (
 
 var _ ports.BundleReconciler = (*PublisherReconciler)(nil)
 
+// PublisherReconciler validates staged RabbitMQ publishers for a candidate bundle.
 type PublisherReconciler struct {
 	logger libLog.Logger
 }
 
+// NewPublisherReconciler builds a publisher reconciler with a safe logger fallback.
 func NewPublisherReconciler(logger libLog.Logger) *PublisherReconciler {
 	if logger == nil {
 		logger = &libLog.NopLogger{}
@@ -28,15 +30,23 @@ func NewPublisherReconciler(logger libLog.Logger) *PublisherReconciler {
 	return &PublisherReconciler{logger: logger}
 }
 
-func (r *PublisherReconciler) Name() string {
+// Name returns the reconciler identifier used in logs and metrics.
+func (reconciler *PublisherReconciler) Name() string {
 	return "publisher-reconciler"
 }
 
-func (r *PublisherReconciler) Phase() domain.ReconcilerPhase {
+// Phase returns the reconciliation phase for publisher validation.
+func (reconciler *PublisherReconciler) Phase() domain.ReconcilerPhase {
 	return domain.PhaseValidation
 }
 
-func (r *PublisherReconciler) Reconcile(ctx context.Context, previous domain.RuntimeBundle, candidate domain.RuntimeBundle, _ domain.Snapshot) error {
+// Reconcile validates and stages publishers for the candidate runtime bundle.
+func (reconciler *PublisherReconciler) Reconcile(
+	ctx context.Context,
+	previous domain.RuntimeBundle,
+	candidate domain.RuntimeBundle,
+	_ domain.Snapshot,
+) error {
 	currentBundle, ok := candidate.(*MatcherBundle)
 	if !ok || currentBundle == nil {
 		return nil
@@ -60,7 +70,7 @@ func (r *PublisherReconciler) Reconcile(ctx context.Context, previous domain.Run
 		return fmt.Errorf("publisher reconciler ensure rabbitmq channel: %w", err)
 	}
 
-	matchingPublisher, ingestionPublisher, err := initEventPublishers(currentConn, r.logger)
+	matchingPublisher, ingestionPublisher, err := initEventPublishers(ctx, currentConn, reconciler.logger)
 	if err != nil {
 		return fmt.Errorf("publisher reconciler init publishers: %w", err)
 	}

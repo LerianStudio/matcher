@@ -120,6 +120,7 @@ func RegisterRoutes(
 func runtimeSwaggerHandler(initialCfg *Config, configGetter func() *Config, next fiber.Handler) fiber.Handler {
 	return func(fiberCtx *fiber.Ctx) error {
 		cfg := initialCfg
+
 		if configGetter != nil {
 			if runtimeCfg := configGetter(); runtimeCfg != nil {
 				cfg = runtimeCfg

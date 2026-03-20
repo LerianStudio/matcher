@@ -39,9 +39,9 @@ func TestDynamicInfrastructureProvider_RebuildsMultiTenantManagerWhenKeyChanges(
 
 	provider := newDynamicInfrastructureProvider(activeCfg, func() *Config { return activeCfg }, nil, nil, nil, &libLog.NopLogger{})
 
-	first, err := provider.currentMultiTenantManager(activeCfg)
+	first, err := provider.currentMultiTenantManager(context.Background(), activeCfg)
 	require.NoError(t, err)
-	second, err := provider.currentMultiTenantManager(activeCfg)
+	second, err := provider.currentMultiTenantManager(context.Background(), activeCfg)
 	require.NoError(t, err)
 	assert.Same(t, first, second)
 
@@ -49,7 +49,7 @@ func TestDynamicInfrastructureProvider_RebuildsMultiTenantManagerWhenKeyChanges(
 	updatedCfg.Tenancy.MultiTenantCircuitBreakerTimeoutSec = activeCfg.Tenancy.MultiTenantCircuitBreakerTimeoutSec + 5
 	activeCfg = &updatedCfg
 
-	third, err := provider.currentMultiTenantManager(activeCfg)
+	third, err := provider.currentMultiTenantManager(context.Background(), activeCfg)
 	require.NoError(t, err)
 	assert.NotSame(t, first, third)
 	require.NoError(t, provider.Close())

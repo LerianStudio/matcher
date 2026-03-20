@@ -6,6 +6,7 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -19,6 +20,8 @@ import (
 	tenantAdapters "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant/adapters"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
+
+var errDynamicInfrastructureConfigUnavailable = errors.New("dynamic infrastructure provider config unavailable")
 
 type dynamicInfrastructureProvider struct {
 	mu           sync.Mutex
@@ -57,14 +60,20 @@ func newDynamicInfrastructureProvider(
 	}
 }
 
+// GetPostgresConnection returns the active PostgreSQL connection lease.
 func (provider *dynamicInfrastructureProvider) GetPostgresConnection(ctx context.Context) (*sharedPorts.PostgresConnectionLease, error) {
 	if currentCfg := provider.currentConfig(); currentCfg != nil && multiTenantModeEnabled(currentCfg) {
-		manager, err := provider.currentMultiTenantManager(currentCfg)
+		manager, err := provider.currentMultiTenantManager(ctx, currentCfg)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("resolve tenant manager for postgres connection: %w", err)
 		}
 
-		return manager.GetPostgresConnection(ctx)
+		lease, err := manager.GetPostgresConnection(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("get postgres connection from tenant manager: %w", err)
+		}
+
+		return lease, nil
 	}
 
 	postgres := provider.currentPostgres()
@@ -75,14 +84,20 @@ func (provider *dynamicInfrastructureProvider) GetPostgresConnection(ctx context
 	return sharedPorts.NewPostgresConnectionLease(postgres, nil), nil
 }
 
+// GetRedisConnection returns the active Redis connection lease.
 func (provider *dynamicInfrastructureProvider) GetRedisConnection(ctx context.Context) (*sharedPorts.RedisConnectionLease, error) {
 	if currentCfg := provider.currentConfig(); currentCfg != nil && multiTenantModeEnabled(currentCfg) {
-		manager, err := provider.currentMultiTenantManager(currentCfg)
+		manager, err := provider.currentMultiTenantManager(ctx, currentCfg)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("resolve tenant manager for redis connection: %w", err)
 		}
 
-		return manager.GetRedisConnection(ctx)
+		lease, err := manager.GetRedisConnection(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("get redis connection from tenant manager: %w", err)
+		}
+
+		return lease, nil
 	}
 
 	redisClient := provider.currentRedis()
@@ -93,14 +108,20 @@ func (provider *dynamicInfrastructureProvider) GetRedisConnection(ctx context.Co
 	return sharedPorts.NewRedisConnectionLease(redisClient, nil), nil
 }
 
+// BeginTx starts a write transaction against the active primary database.
 func (provider *dynamicInfrastructureProvider) BeginTx(ctx context.Context) (*sharedPorts.TxLease, error) {
 	if currentCfg := provider.currentConfig(); currentCfg != nil && multiTenantModeEnabled(currentCfg) {
-		manager, err := provider.currentMultiTenantManager(currentCfg)
+		manager, err := provider.currentMultiTenantManager(ctx, currentCfg)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("resolve tenant manager for transaction: %w", err)
 		}
 
-		return manager.BeginTx(ctx)
+		lease, err := manager.BeginTx(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("begin transaction with tenant manager: %w", err)
+		}
+
+		return lease, nil
 	}
 
 	postgres := provider.currentPostgres()
@@ -110,7 +131,7 @@ func (provider *dynamicInfrastructureProvider) BeginTx(ctx context.Context) (*sh
 
 	resolver, err := postgres.Resolver(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("resolve postgres connection: %w", err)
 	}
 
 	primaryDBs := resolver.PrimaryDBs()
@@ -120,7 +141,7 @@ func (provider *dynamicInfrastructureProvider) BeginTx(ctx context.Context) (*sh
 
 	tx, err := primaryDBs[0].BeginTx(ctx, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("begin postgres transaction: %w", err)
 	}
 
 	return sharedPorts.NewTxLease(tx, func() {
@@ -128,14 +149,20 @@ func (provider *dynamicInfrastructureProvider) BeginTx(ctx context.Context) (*sh
 	}), nil
 }
 
+// GetReplicaDB returns the active replica database lease when configured.
 func (provider *dynamicInfrastructureProvider) GetReplicaDB(ctx context.Context) (*sharedPorts.ReplicaDBLease, error) {
 	if currentCfg := provider.currentConfig(); currentCfg != nil && multiTenantModeEnabled(currentCfg) {
-		manager, err := provider.currentMultiTenantManager(currentCfg)
+		manager, err := provider.currentMultiTenantManager(ctx, currentCfg)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("resolve tenant manager for replica db: %w", err)
 		}
 
-		return manager.GetReplicaDB(ctx)
+		lease, err := manager.GetReplicaDB(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("get replica db from tenant manager: %w", err)
+		}
+
+		return lease, nil
 	}
 
 	postgres := provider.currentPostgres()
@@ -145,7 +172,7 @@ func (provider *dynamicInfrastructureProvider) GetReplicaDB(ctx context.Context)
 
 	resolver, err := postgres.Resolver(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("resolve postgres connection for replica db: %w", err)
 	}
 
 	replicas := resolver.ReplicaDBs()
@@ -156,6 +183,7 @@ func (provider *dynamicInfrastructureProvider) GetReplicaDB(ctx context.Context)
 	return sharedPorts.NewReplicaDBLease(replicas[0], nil), nil
 }
 
+// Close releases the active multi-tenant manager, if present.
 func (provider *dynamicInfrastructureProvider) Close() error {
 	provider.mu.Lock()
 	defer provider.mu.Unlock()
@@ -168,7 +196,11 @@ func (provider *dynamicInfrastructureProvider) Close() error {
 	provider.multiTenantMgr = nil
 	provider.multiTenantKey = ""
 
-	return err
+	if err != nil {
+		return fmt.Errorf("close tenant connection manager: %w", err)
+	}
+
+	return nil
 }
 
 func (provider *dynamicInfrastructureProvider) currentConfig() *Config {
@@ -205,12 +237,12 @@ func (provider *dynamicInfrastructureProvider) currentRedis() *libRedis.Client {
 	return provider.redis
 }
 
-func (provider *dynamicInfrastructureProvider) currentMultiTenantManager(cfg *Config) (*tenantAdapters.TenantConnectionManager, error) {
+func (provider *dynamicInfrastructureProvider) currentMultiTenantManager(ctx context.Context, cfg *Config) (*tenantAdapters.TenantConnectionManager, error) {
 	provider.mu.Lock()
 	defer provider.mu.Unlock()
 
 	if cfg == nil {
-		return nil, fmt.Errorf("dynamic infrastructure provider: config unavailable")
+		return nil, fmt.Errorf("current multi-tenant manager: %w", errDynamicInfrastructureConfigUnavailable)
 	}
 
 	key := dynamicMultiTenantKey(cfg)
@@ -229,7 +261,7 @@ func (provider *dynamicInfrastructureProvider) currentMultiTenantManager(cfg *Co
 
 	if previous != nil {
 		if closeErr := previous.Close(); closeErr != nil && provider.logger != nil {
-			provider.logger.Log(context.Background(), libLog.LevelWarn, "dynamic multi-tenant provider cleanup failed",
+			provider.logger.Log(ctx, libLog.LevelWarn, "dynamic multi-tenant provider cleanup failed",
 				libLog.String("error", closeErr.Error()))
 		}
 	}

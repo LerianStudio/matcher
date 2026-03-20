@@ -6,11 +6,13 @@ package bootstrap
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+
 	discoveryRedis "github.com/LerianStudio/matcher/internal/discovery/adapters/redis"
 	discoveryRepos "github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
 	discoveryPorts "github.com/LerianStudio/matcher/internal/discovery/ports"
@@ -31,40 +33,56 @@ func newProviderBackedSchemaCache(provider sharedPorts.InfrastructureProvider, a
 	return &providerBackedSchemaCache{provider: provider, allowTenantPrefix: allowTenantPrefix}
 }
 
+// GetSchema retrieves cached schema data using the current provider-backed Redis client.
 func (cache *providerBackedSchemaCache) GetSchema(ctx context.Context, connectionID string) (*sharedPorts.FetcherSchema, error) {
 	delegate, release, err := cache.currentCache(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("resolve provider-backed schema cache: %w", err)
 	}
 	defer release()
 
-	return delegate.GetSchema(ctx, connectionID)
+	schema, err := delegate.GetSchema(ctx, connectionID)
+	if err != nil {
+		return nil, fmt.Errorf("get schema from provider-backed cache: %w", err)
+	}
+
+	return schema, nil
 }
 
+// SetSchema stores schema data using the current provider-backed Redis client.
 func (cache *providerBackedSchemaCache) SetSchema(ctx context.Context, connectionID string, schema *sharedPorts.FetcherSchema, ttl time.Duration) error {
 	delegate, release, err := cache.currentCache(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("resolve provider-backed schema cache: %w", err)
 	}
 	defer release()
 
-	return delegate.SetSchema(ctx, connectionID, schema, ttl)
+	if err := delegate.SetSchema(ctx, connectionID, schema, ttl); err != nil {
+		return fmt.Errorf("set schema in provider-backed cache: %w", err)
+	}
+
+	return nil
 }
 
+// InvalidateSchema removes schema data using the current provider-backed Redis client.
 func (cache *providerBackedSchemaCache) InvalidateSchema(ctx context.Context, connectionID string) error {
 	delegate, release, err := cache.currentCache(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("resolve provider-backed schema cache: %w", err)
 	}
 	defer release()
 
-	return delegate.InvalidateSchema(ctx, connectionID)
+	if err := delegate.InvalidateSchema(ctx, connectionID); err != nil {
+		return fmt.Errorf("invalidate schema in provider-backed cache: %w", err)
+	}
+
+	return nil
 }
 
 func (cache *providerBackedSchemaCache) currentCache(ctx context.Context) (discoveryPorts.SchemaCache, func(), error) {
 	lease, err := cache.provider.GetRedisConnection(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("get redis connection for schema cache: %w", err)
 	}
 
 	redisConn := lease.Connection()
@@ -76,13 +94,13 @@ func (cache *providerBackedSchemaCache) currentCache(ctx context.Context) (disco
 	redisClient, err := redisConn.GetClient(ctx)
 	if err != nil {
 		lease.Release()
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("get redis client for schema cache: %w", err)
 	}
 
 	schemaCache, err := discoveryRedis.NewSchemaCache(redisClient, cache.allowTenantPrefix)
 	if err != nil {
 		lease.Release()
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("create schema cache: %w", err)
 	}
 
 	return schemaCache, lease.Release, nil
@@ -101,10 +119,17 @@ func newDynamicSchemaCache(inner discoveryPorts.SchemaCache, ttlGetter func() ti
 	return &dynamicSchemaCache{inner: inner, ttlGetter: ttlGetter}
 }
 
+// GetSchema retrieves cached schema data using the current dynamic TTL configuration.
 func (cache *dynamicSchemaCache) GetSchema(ctx context.Context, connectionID string) (*sharedPorts.FetcherSchema, error) {
-	return cache.inner.GetSchema(ctx, connectionID)
+	schema, err := cache.inner.GetSchema(ctx, connectionID)
+	if err != nil {
+		return nil, fmt.Errorf("get schema from dynamic cache: %w", err)
+	}
+
+	return schema, nil
 }
 
+// SetSchema stores schema data using the current dynamic TTL configuration.
 func (cache *dynamicSchemaCache) SetSchema(ctx context.Context, connectionID string, schema *sharedPorts.FetcherSchema, ttl time.Duration) error {
 	if cache.ttlGetter != nil {
 		if currentTTL := cache.ttlGetter(); currentTTL > 0 {
@@ -112,11 +137,20 @@ func (cache *dynamicSchemaCache) SetSchema(ctx context.Context, connectionID str
 		}
 	}
 
-	return cache.inner.SetSchema(ctx, connectionID, schema, ttl)
+	if err := cache.inner.SetSchema(ctx, connectionID, schema, ttl); err != nil {
+		return fmt.Errorf("set schema in dynamic cache: %w", err)
+	}
+
+	return nil
 }
 
+// InvalidateSchema removes schema data using the current dynamic TTL configuration.
 func (cache *dynamicSchemaCache) InvalidateSchema(ctx context.Context, connectionID string) error {
-	return cache.inner.InvalidateSchema(ctx, connectionID)
+	if err := cache.inner.InvalidateSchema(ctx, connectionID); err != nil {
+		return fmt.Errorf("invalidate schema in dynamic cache: %w", err)
+	}
+
+	return nil
 }
 
 type dynamicExtractionPoller struct {
@@ -144,6 +178,7 @@ func newDynamicExtractionPoller(
 	}
 }
 
+// PollUntilComplete delegates polling to a freshly built extraction poller.
 func (poller *dynamicExtractionPoller) PollUntilComplete(
 	ctx context.Context,
 	extractionID uuid.UUID,

@@ -188,6 +188,11 @@ func TestSnapshotToWorkerConfig_Defaults(t *testing.T) {
 	assert.Equal(t, "archives/audit-logs", cfg.Archival.StoragePrefix)
 	assert.Equal(t, "GLACIER", cfg.Archival.StorageClass)
 	assert.Equal(t, 3, cfg.Archival.PartitionLookahead)
+	assert.Equal(t, "http://localhost:8333", cfg.ObjectStorage.Endpoint)
+	assert.Equal(t, "us-east-1", cfg.ObjectStorage.Region)
+	assert.Equal(t, "", cfg.ObjectStorage.AccessKeyID)
+	assert.Equal(t, "", cfg.ObjectStorage.SecretAccessKey)
+	assert.True(t, cfg.ObjectStorage.UsePathStyle)
 }
 
 func TestSnapshotToWorkerConfig_Overrides(t *testing.T) {
@@ -201,6 +206,7 @@ func TestSnapshotToWorkerConfig_Overrides(t *testing.T) {
 			"scheduler.interval_sec":          {Key: "scheduler.interval_sec", Value: 120},
 			"archival.batch_size":             {Key: "archival.batch_size", Value: 10000},
 			"archival.storage_bucket":         {Key: "archival.storage_bucket", Value: "my-bucket"},
+			"object_storage.endpoint":         {Key: "object_storage.endpoint", Value: "http://storage:9000"},
 		},
 	}
 
@@ -215,6 +221,7 @@ func TestSnapshotToWorkerConfig_Overrides(t *testing.T) {
 	assert.Equal(t, 120, cfg.Scheduler.IntervalSec)
 	assert.Equal(t, 10000, cfg.Archival.BatchSize)
 	assert.Equal(t, "my-bucket", cfg.Archival.StorageBucket)
+	assert.Equal(t, "http://storage:9000", cfg.ObjectStorage.Endpoint)
 
 	// Non-overridden values remain at defaults
 	assert.True(t, cfg.ExportWorker.Enabled)

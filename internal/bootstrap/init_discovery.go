@@ -26,6 +26,7 @@ import (
 const (
 	defaultFetcherClientMaxRetries     = 3
 	defaultFetcherClientRetryBaseDelay = 500 * time.Millisecond
+	discoveryRefreshLockMultiplier     = 2
 )
 
 func fetcherHTTPClientConfig(cfg *Config) discoveryFetcher.HTTPClientConfig {
@@ -61,6 +62,7 @@ func initOptionalDiscoveryWorker(
 	if cfg == nil {
 		return nil, nil
 	}
+
 	if initFn == nil {
 		return nil, nil
 	}
@@ -116,6 +118,7 @@ func initDiscoveryModule(
 
 	extractionPoller := newDynamicExtractionPoller(fetcherClient, extractionRepo, func() discoveryWorker.ExtractionPollerConfig {
 		runtimeCfg := cfg
+
 		if configGetter != nil {
 			if currentCfg := configGetter(); currentCfg != nil {
 				runtimeCfg = currentCfg
@@ -138,13 +141,14 @@ func initDiscoveryModule(
 	cmdUseCase.WithDiscoveryRefreshLock(provider, cfg.FetcherDiscoveryInterval())
 	cmdUseCase.WithDiscoveryRefreshLockGetter(func() time.Duration {
 		runtimeCfg := cfg
+
 		if configGetter != nil {
 			if currentCfg := configGetter(); currentCfg != nil {
 				runtimeCfg = currentCfg
 			}
 		}
 
-		return 2 * runtimeCfg.FetcherDiscoveryInterval()
+		return discoveryRefreshLockMultiplier * runtimeCfg.FetcherDiscoveryInterval()
 	})
 
 	worker, err := discoveryWorker.NewDiscoveryWorker(
@@ -209,6 +213,7 @@ func wireDiscoverySchemaCacheFromRedis(
 
 	ttlGetter := func() time.Duration {
 		runtimeCfg := cfg
+
 		if configGetter != nil {
 			if currentCfg := configGetter(); currentCfg != nil {
 				runtimeCfg = currentCfg

@@ -112,6 +112,7 @@ import (
 	sharedRabbitmq "github.com/LerianStudio/matcher/internal/shared/adapters/rabbitmq"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+	systemplaneDomain "github.com/LerianStudio/matcher/pkg/systemplane/domain"
 	systemplaneService "github.com/LerianStudio/matcher/pkg/systemplane/service"
 )
 
@@ -426,6 +427,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 	if err != nil {
 		return nil, fmt.Errorf("initialize logger: %w", err)
 	}
+
 	logger = NewSwappableLogger(logger)
 
 	done()
@@ -474,6 +476,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 
 	infraCtx, infraCancel := context.WithTimeout(ctx, cfg.InfraConnectTimeout())
 	defer infraCancel()
+
 	bundleState := newActiveMatcherBundleState()
 
 	done = timer.track("redis_connect")
@@ -556,24 +559,18 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		return redisConnection
 	}, redisConnection)
 
-	infraProvider, connectionManager, err := createInfraProviderWithBundleState(
+	infraProvider, connectionManager := createInfraProviderWithBundleState(
 		cfg,
 		configManager.Get,
 		postgresConnection,
 		redisConnection,
 		bundleState,
 	)
-	if err != nil {
-		return nil, fmt.Errorf("create infra provider: %w", err)
-	}
 
 	infraConnectionManager = connectionManager
 	readiness := &readinessState{}
 
-	var connCloser connectionCloser
-	if connectionManager != nil {
-		connCloser = connectionManager
-	}
+	connCloser := connectionManager
 
 	idempotencyRepo := createIdempotencyRepository(cfg, configManager.Get, infraProvider, logger)
 
@@ -605,6 +602,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 	moduleConfigGetter := configGetterFuncFromManager(configManager)
 
 	modules, err := initModulesAndMessaging(
+		ctx,
 		routes,
 		cfg,
 		moduleConfigGetter,
@@ -670,6 +668,9 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 	// Initialize systemplane — the centralized runtime configuration plane.
 	// If systemplane init fails, the service continues without it (graceful degradation).
 	var cancelChangeFeed context.CancelFunc
+
+	reloadLogCtx := detachedContext(ctx)
+
 	runtimeReloadObserver := func(event systemplaneService.ReloadEvent) {
 		bundle, bundleOK := event.Bundle.(*MatcherBundle)
 		if bundleOK {
@@ -677,8 +678,9 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		}
 
 		if configManager != nil {
-			if updateErr := configManager.UpdateFromSystemplane(event.Snapshot); updateErr != nil {
-				logger.Log(context.Background(), libLog.LevelWarn, "systemplane config bridge apply failed",
+			//nolint:contextcheck // ConfigManager runtime bridge does not expose a context-aware variant.
+			if updateErr := updateConfigManagerFromSnapshot(configManager, event.Snapshot); updateErr != nil {
+				logger.Log(reloadLogCtx, libLog.LevelWarn, "systemplane config bridge apply failed",
 					libLog.String("error", updateErr.Error()),
 					libLog.String("reason", event.Reason))
 			}
@@ -690,27 +692,8 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 			}
 		}
 
-		if bundleOK && modules != nil && modules.ingestionEvents != nil && modules.matchingEvents != nil {
-			if bundle.StagedMatchingPublisher != nil && bundle.StagedIngestionPublisher != nil {
-				previousMatching := modules.matchingEvents.Swap(bundle.StagedMatchingPublisher)
-				previousIngestion := modules.ingestionEvents.Swap(bundle.StagedIngestionPublisher)
-				bundle.StagedMatchingPublisher = nil
-				bundle.StagedIngestionPublisher = nil
-
-				if previousMatchingConcrete, ok := previousMatching.(*matchingRabbitmq.EventPublisher); ok {
-					if closeErr := loadCloseMatchingEventPublisherFn()(previousMatchingConcrete); closeErr != nil {
-						logger.Log(context.Background(), libLog.LevelWarn, "systemplane matching publisher cleanup failed",
-							libLog.String("error", closeErr.Error()))
-					}
-				}
-
-				if previousIngestionConcrete, ok := previousIngestion.(*ingestionRabbitmq.EventPublisher); ok {
-					if closeErr := loadCloseIngestionEventPublisherFn()(previousIngestionConcrete); closeErr != nil {
-						logger.Log(context.Background(), libLog.LevelWarn, "systemplane ingestion publisher cleanup failed",
-							libLog.String("error", closeErr.Error()))
-					}
-				}
-			}
+		if canSwapRuntimePublishers(bundleOK, modules) {
+			swapRuntimePublishers(reloadLogCtx, logger, modules, bundle)
 		}
 	}
 
@@ -978,6 +961,303 @@ func detectRedisMode(cfg *Config) string {
 	return "standalone"
 }
 
+func detachedContext(ctx context.Context) context.Context {
+	if ctx == nil {
+		return context.TODO()
+	}
+
+	return context.WithoutCancel(ctx)
+}
+
+func appendCleanup(cleanups *[]func(), cleanup func()) {
+	if cleanups == nil || cleanup == nil {
+		return
+	}
+
+	*cleanups = append(*cleanups, cleanup)
+}
+
+func assignReplicaHealthCheck(
+	ctx context.Context,
+	cfg *Config,
+	logger libLog.Logger,
+	deps *HealthDependencies,
+	cleanups *[]func(),
+) {
+	if cfg.Postgres.ReplicaHost == "" || cfg.Postgres.ReplicaHost == cfg.Postgres.PrimaryHost {
+		return
+	}
+
+	check, cleanup := createPostgresReplicaHealthCheck(ctx, cfg, logger)
+	deps.PostgresReplicaCheck = check
+
+	appendCleanup(cleanups, cleanup)
+}
+
+func currentPostgresClient(
+	bundleState *activeMatcherBundleState,
+	fallback *libPostgres.Client,
+) (*libPostgres.Client, error) {
+	if bundleState != nil {
+		if bundle := bundleState.Current(); bundle != nil && bundle.DB() != nil {
+			return bundle.DB(), nil
+		}
+	}
+
+	if fallback == nil {
+		return nil, errPostgresPrimaryNil
+	}
+
+	return fallback, nil
+}
+
+func currentRedisClient(
+	bundleState *activeMatcherBundleState,
+	fallback *libRedis.Client,
+) *libRedis.Client {
+	if bundleState != nil {
+		if bundle := bundleState.Current(); bundle != nil && bundle.RedisClient() != nil {
+			return bundle.RedisClient()
+		}
+	}
+
+	return fallback
+}
+
+func currentRabbitMQConnection(
+	bundleState *activeMatcherBundleState,
+	fallback *libRabbitmq.RabbitMQConnection,
+) *libRabbitmq.RabbitMQConnection {
+	if bundleState != nil {
+		if bundle := bundleState.Current(); bundle != nil && bundle.RabbitMQConn() != nil {
+			return bundle.RabbitMQConn()
+		}
+	}
+
+	return fallback
+}
+
+func currentBundleObjectStorageClient(bundleState *activeMatcherBundleState) (sharedPorts.ObjectStorageClient, error) {
+	if bundleState == nil {
+		return nil, nil
+	}
+
+	bundle := bundleState.Current()
+	if bundle == nil {
+		return nil, nil
+	}
+
+	if bundle.Infra == nil || isNilInterface(bundle.Infra.ObjectStorage) {
+		return nil, sharedPorts.ErrObjectStorageUnavailable
+	}
+
+	storageClient, ok := bundle.Infra.ObjectStorage.(sharedPorts.ObjectStorageClient)
+	if !ok || storageClient == nil {
+		return nil, sharedPorts.ErrObjectStorageUnavailable
+	}
+
+	return storageClient, nil
+}
+
+func resolvePrimaryDB(checkCtx context.Context, postgres *libPostgres.Client) (*sql.DB, error) {
+	resolver, err := postgres.Resolver(checkCtx)
+	if err != nil {
+		return nil, fmt.Errorf("postgres health check: get primary db failed: %w", err)
+	}
+
+	primaryDBs := resolver.PrimaryDBs()
+	if len(primaryDBs) == 0 || primaryDBs[0] == nil {
+		return nil, errPostgresPrimaryNil
+	}
+
+	return primaryDBs[0], nil
+}
+
+func resolveReplicaDB(checkCtx context.Context, postgres *libPostgres.Client) (*sql.DB, error) {
+	resolver, err := postgres.Resolver(checkCtx)
+	if err != nil {
+		return nil, fmt.Errorf("postgres replica health check: get db failed: %w", err)
+	}
+
+	replicaDBs := resolver.ReplicaDBs()
+	if len(replicaDBs) == 0 || replicaDBs[0] == nil {
+		return nil, errNoReplicasConfigured
+	}
+
+	return replicaDBs[0], nil
+}
+
+func pingSQLDB(checkCtx context.Context, db *sql.DB, operation string) error {
+	if err := db.PingContext(checkCtx); err != nil {
+		return fmt.Errorf("%s: %w", operation, err)
+	}
+
+	return nil
+}
+
+func newPostgresHealthCheck(
+	bundleState *activeMatcherBundleState,
+	postgres *libPostgres.Client,
+) HealthCheckFunc {
+	return func(checkCtx context.Context) error {
+		postgresClient, err := currentPostgresClient(bundleState, postgres)
+		if err != nil {
+			return err
+		}
+
+		primaryDB, err := resolvePrimaryDB(checkCtx, postgresClient)
+		if err != nil {
+			return err
+		}
+
+		return pingSQLDB(checkCtx, primaryDB, "postgres health check: ping primary db")
+	}
+}
+
+func newRedisHealthCheck(
+	bundleState *activeMatcherBundleState,
+	redis *libRedis.Client,
+) HealthCheckFunc {
+	return func(checkCtx context.Context) error {
+		redisClient := currentRedisClient(bundleState, redis)
+		if redisClient == nil {
+			return errRedisClientNil
+		}
+
+		client, err := redisClient.GetClient(checkCtx)
+		if err != nil {
+			return fmt.Errorf("redis health check: get client failed: %w", err)
+		}
+
+		if client == nil {
+			return errRedisClientNil
+		}
+
+		if err := client.Ping(checkCtx).Err(); err != nil {
+			return fmt.Errorf("redis health check: ping failed: %w", err)
+		}
+
+		return nil
+	}
+}
+
+func newPostgresReplicaHealthCheck(
+	bundleState *activeMatcherBundleState,
+	postgres *libPostgres.Client,
+) HealthCheckFunc {
+	return func(checkCtx context.Context) error {
+		postgresClient, err := currentPostgresClient(bundleState, postgres)
+		if err != nil {
+			if errors.Is(err, errPostgresPrimaryNil) {
+				return errNoReplicasConfigured
+			}
+
+			return err
+		}
+
+		replicaDB, err := resolveReplicaDB(checkCtx, postgresClient)
+		if err != nil {
+			return err
+		}
+
+		return pingSQLDB(checkCtx, replicaDB, "postgres replica health check: ping replica db")
+	}
+}
+
+func newRabbitMQHealthCheck(
+	bundleState *activeMatcherBundleState,
+	rabbitmq *libRabbitmq.RabbitMQConnection,
+) HealthCheckFunc {
+	return func(checkCtx context.Context) error {
+		conn := currentRabbitMQConnection(bundleState, rabbitmq)
+		if conn == nil {
+			return errRabbitMQConnectionNil
+		}
+
+		if conn.HealthCheckURL != "" &&
+			(conn.AllowInsecureHealthCheck || !isInsecureHTTPHealthCheckURL(conn.HealthCheckURL)) {
+			if err := checkRabbitMQHTTPHealth(checkCtx, conn.HealthCheckURL); err == nil {
+				return nil
+			}
+		}
+
+		if err := conn.EnsureChannel(); err != nil {
+			return fmt.Errorf("rabbitmq health check: ensure channel: %w", err)
+		}
+
+		return nil
+	}
+}
+
+func attachBundleHealthChecks(
+	deps *HealthDependencies,
+	bundleState *activeMatcherBundleState,
+	postgres *libPostgres.Client,
+	redis *libRedis.Client,
+	rabbitmq *libRabbitmq.RabbitMQConnection,
+) {
+	if bundleState == nil {
+		return
+	}
+
+	deps.PostgresCheck = newPostgresHealthCheck(bundleState, postgres)
+	deps.RedisCheck = newRedisHealthCheck(bundleState, redis)
+	deps.PostgresReplicaCheck = newPostgresReplicaHealthCheck(bundleState, postgres)
+	deps.RabbitMQCheck = newRabbitMQHealthCheck(bundleState, rabbitmq)
+}
+
+func configureObjectStorageHealthChecks(
+	ctx context.Context,
+	cfg *Config,
+	deps *HealthDependencies,
+	bundleState *activeMatcherBundleState,
+	logger libLog.Logger,
+) error {
+	objectStorage, err := createObjectStorageForHealth(ctx, cfg)
+	if err != nil {
+		if cfg.ExportWorker.Enabled {
+			return fmt.Errorf("object storage required when EXPORT_WORKER_ENABLED=true: %w", err)
+		}
+
+		logger.Log(ctx, libLog.LevelDebug, fmt.Sprintf("Object storage health check disabled: %v", err))
+	} else if objectStorage != nil {
+		deps.ObjectStorage = objectStorage
+	}
+
+	if bundleState == nil {
+		return nil
+	}
+
+	deps.ObjectStorageCheck = func(checkCtx context.Context) error {
+		storageClient, storageErr := currentBundleObjectStorageClient(bundleState)
+		if storageErr != nil {
+			return storageErr
+		}
+
+		if storageClient != nil {
+			_, existsErr := storageClient.Exists(checkCtx, ".health-check")
+			if existsErr != nil {
+				return fmt.Errorf("object storage health check: exists: %w", existsErr)
+			}
+
+			return nil
+		}
+
+		if deps.ObjectStorage == nil {
+			return nil
+		}
+
+		_, existsErr := deps.ObjectStorage.Exists(checkCtx, ".health-check")
+		if existsErr != nil {
+			return fmt.Errorf("object storage health check: exists: %w", existsErr)
+		}
+
+		return nil
+	}
+
+	return nil
+}
+
 func createHealthDependencies(
 	ctx context.Context,
 	cfg *Config,
@@ -996,133 +1276,11 @@ func createHealthDependencies(
 	// can route write traffic to an instance that cannot safely process it.
 	deps.RedisOptional = false
 
-	if cfg.Postgres.ReplicaHost != "" && cfg.Postgres.ReplicaHost != cfg.Postgres.PrimaryHost {
-		//nolint:contextcheck // health check factory creates its own check closure that receives ctx at call time
-		check, cleanup := createPostgresReplicaHealthCheck(cfg, logger)
-		deps.PostgresReplicaCheck = check
+	assignReplicaHealthCheck(ctx, cfg, logger, deps, cleanups)
+	attachBundleHealthChecks(deps, bundleState, postgres, redis, rabbitmq)
 
-		*cleanups = append(*cleanups, cleanup)
-	}
-
-	if bundleState != nil {
-		deps.PostgresCheck = func(checkCtx context.Context) error {
-			bundle := bundleState.Current()
-			if bundle == nil || bundle.DB() == nil {
-				if postgres == nil {
-					return errPostgresPrimaryNil
-				}
-				bundle = &MatcherBundle{Infra: &InfraBundle{Postgres: postgres}}
-			}
-
-			resolver, err := bundle.DB().Resolver(checkCtx)
-			if err != nil {
-				return fmt.Errorf("postgres health check: get primary db failed: %w", err)
-			}
-
-			primaryDBs := resolver.PrimaryDBs()
-			if len(primaryDBs) == 0 || primaryDBs[0] == nil {
-				return errPostgresPrimaryNil
-			}
-
-			return primaryDBs[0].PingContext(checkCtx)
-		}
-
-		deps.RedisCheck = func(checkCtx context.Context) error {
-			bundle := bundleState.Current()
-			redisClient := redis
-			if bundle != nil && bundle.RedisClient() != nil {
-				redisClient = bundle.RedisClient()
-			}
-			if redisClient == nil {
-				return errRedisClientNil
-			}
-
-			client, err := redisClient.GetClient(checkCtx)
-			if err != nil {
-				return fmt.Errorf("redis health check: get client failed: %w", err)
-			}
-			if client == nil {
-				return errRedisClientNil
-			}
-
-			return client.Ping(checkCtx).Err()
-		}
-
-		deps.PostgresReplicaCheck = func(checkCtx context.Context) error {
-			bundle := bundleState.Current()
-			if bundle == nil || bundle.DB() == nil {
-				if postgres == nil {
-					return errNoReplicasConfigured
-				}
-				bundle = &MatcherBundle{Infra: &InfraBundle{Postgres: postgres}}
-			}
-
-			resolver, err := bundle.DB().Resolver(checkCtx)
-			if err != nil {
-				return fmt.Errorf("postgres replica health check: get db failed: %w", err)
-			}
-
-			replicaDBs := resolver.ReplicaDBs()
-			if len(replicaDBs) == 0 || replicaDBs[0] == nil {
-				return errNoReplicasConfigured
-			}
-
-			return replicaDBs[0].PingContext(checkCtx)
-		}
-
-		deps.RabbitMQCheck = func(checkCtx context.Context) error {
-			bundle := bundleState.Current()
-			conn := rabbitmq
-			if bundle != nil && bundle.RabbitMQConn() != nil {
-				conn = bundle.RabbitMQConn()
-			}
-			if conn == nil {
-				return errRabbitMQConnectionNil
-			}
-
-			if conn.HealthCheckURL != "" &&
-				(conn.AllowInsecureHealthCheck || !isInsecureHTTPHealthCheckURL(conn.HealthCheckURL)) {
-				if err := checkRabbitMQHTTPHealth(checkCtx, conn.HealthCheckURL); err == nil {
-					return nil
-				}
-			}
-
-			return conn.EnsureChannel()
-		}
-	}
-
-	objectStorage, err := createObjectStorageForHealth(ctx, cfg, logger)
-	if err != nil {
-		if cfg.ExportWorker.Enabled {
-			return nil, fmt.Errorf("object storage required when EXPORT_WORKER_ENABLED=true: %w", err)
-		}
-
-		logger.Log(ctx, libLog.LevelDebug, fmt.Sprintf("Object storage health check disabled: %v", err))
-	} else if objectStorage != nil {
-		deps.ObjectStorage = objectStorage
-	}
-
-	if bundleState != nil {
-		deps.ObjectStorageCheck = func(checkCtx context.Context) error {
-			bundle := bundleState.Current()
-			if bundle != nil {
-				if bundle.Infra == nil || isNilInterface(bundle.Infra.ObjectStorage) {
-					return sharedPorts.ErrObjectStorageUnavailable
-				}
-
-				if storageClient, ok := bundle.Infra.ObjectStorage.(sharedPorts.ObjectStorageClient); ok && storageClient != nil {
-					_, storageErr := storageClient.Exists(checkCtx, ".health-check")
-					return storageErr
-				}
-
-				return sharedPorts.ErrObjectStorageUnavailable
-			}
-			if deps.ObjectStorage == nil {
-				return nil
-			}
-			_, storageErr := deps.ObjectStorage.Exists(checkCtx, ".health-check")
-			return storageErr
-		}
+	if err := configureObjectStorageHealthChecks(ctx, cfg, deps, bundleState, logger); err != nil {
+		return nil, err
 	}
 
 	return deps, nil
@@ -1143,8 +1301,13 @@ func createPostgresConnection(cfg *Config, logger libLog.Logger) (*libPostgres.C
 	return conn, nil
 }
 
-func createPostgresReplicaHealthCheck(cfg *Config, logger libLog.Logger) (HealthCheckFunc, func()) {
+func createPostgresReplicaHealthCheck(
+	ctx context.Context,
+	cfg *Config,
+	logger libLog.Logger,
+) (HealthCheckFunc, func()) {
 	replicaDSN := cfg.ReplicaDSN()
+	logCtx := detachedContext(ctx)
 
 	// Create a single connection for health checks to avoid connection leak.
 	// The connection is lazily initialized on first health check.
@@ -1180,7 +1343,7 @@ func createPostgresReplicaHealthCheck(cfg *Config, logger libLog.Logger) (Health
 	cleanup := func() {
 		if healthDB != nil {
 			if err := healthDB.Close(); err != nil {
-				logger.Log(context.Background(), libLog.LevelError, fmt.Sprintf("failed to close postgres replica health check connection: %v", err))
+				logger.Log(logCtx, libLog.LevelError, fmt.Sprintf("failed to close postgres replica health check connection: %v", err))
 			}
 		}
 	}
@@ -1191,7 +1354,6 @@ func createPostgresReplicaHealthCheck(cfg *Config, logger libLog.Logger) (Health
 func createObjectStorageForHealth(
 	ctx context.Context,
 	cfg *Config,
-	_ libLog.Logger,
 ) (ObjectStorageHealthChecker, error) {
 	if cfg.ObjectStorage.Endpoint == "" {
 		return nil, nil
@@ -1210,7 +1372,7 @@ func createObjectStorageForHealth(
 		UsePathStyle:    cfg.ObjectStorage.UsePathStyle,
 	}
 
-	client, err := newS3ClientFn(ctx, s3Cfg)
+	client, err := newS3ClientFn(detachedContext(ctx), s3Cfg)
 	if err != nil {
 		return nil, fmt.Errorf("create S3 client for health check: %w", err)
 	}
@@ -1224,15 +1386,10 @@ func createInfraProviderWithBundleState(
 	postgres *libPostgres.Client,
 	redis *libRedis.Client,
 	bundleState *activeMatcherBundleState,
-) (sharedPorts.InfrastructureProvider, connectionCloser, error) {
-	if !cfg.Tenancy.MultiTenantEnabled {
-		provider := newDynamicInfrastructureProvider(cfg, configGetter, bundleState, postgres, redis, cfg.Logger)
-		return provider, provider, nil
-	}
-
+) (sharedPorts.InfrastructureProvider, connectionCloser) {
 	provider := newDynamicInfrastructureProvider(cfg, configGetter, bundleState, postgres, redis, cfg.Logger)
 
-	return provider, provider, nil
+	return provider, provider
 }
 
 func safePositiveUint32(value int) uint32 {
@@ -1378,6 +1535,74 @@ func initializeAuthBoundaryLogger() (authLog.Logger, error) {
 	}
 
 	return authLogger, nil
+}
+
+func canSwapRuntimePublishers(bundleOK bool, modules *modulesResult) bool {
+	return bundleOK && modules != nil && modules.ingestionEvents != nil && modules.matchingEvents != nil
+}
+
+func cleanupPreviousRuntimePublisher[PublisherType any](
+	ctx context.Context,
+	logger libLog.Logger,
+	message string,
+	previous any,
+	closeFn func(PublisherType) error,
+) {
+	concrete, ok := previous.(PublisherType)
+	if !ok {
+		return
+	}
+
+	if err := closeFn(concrete); err != nil {
+		logger.Log(ctx, libLog.LevelWarn, message, libLog.String("error", err.Error()))
+	}
+}
+
+func swapRuntimePublishers(
+	ctx context.Context,
+	logger libLog.Logger,
+	modules *modulesResult,
+	bundle *MatcherBundle,
+) {
+	if bundle.StagedMatchingPublisher == nil || bundle.StagedIngestionPublisher == nil {
+		return
+	}
+
+	previousMatching := modules.matchingEvents.Swap(bundle.StagedMatchingPublisher)
+	previousIngestion := modules.ingestionEvents.Swap(bundle.StagedIngestionPublisher)
+	bundle.StagedMatchingPublisher = nil
+	bundle.StagedIngestionPublisher = nil
+
+	cleanupPreviousRuntimePublisher(ctx, logger,
+		"systemplane matching publisher cleanup failed",
+		previousMatching,
+		loadCloseMatchingEventPublisherFn(),
+	)
+	cleanupPreviousRuntimePublisher(ctx, logger,
+		"systemplane ingestion publisher cleanup failed",
+		previousIngestion,
+		loadCloseIngestionEventPublisherFn(),
+	)
+}
+
+func updateConfigManagerFromSnapshot(configManager *ConfigManager, snap systemplaneDomain.Snapshot) error {
+	if configManager == nil {
+		return nil
+	}
+
+	return configManager.UpdateFromSystemplane(snap)
+}
+
+func schedulerInterval(cfg *Config) time.Duration {
+	return cfg.SchedulerInterval()
+}
+
+func webhookTimeout(cfg *Config) time.Duration {
+	return cfg.WebhookTimeout()
+}
+
+func exportPresignExpiry(cfg *Config) time.Duration {
+	return cfg.ExportPresignExpiry()
 }
 
 func evaluateInsecureRabbitMQHealthCheckPolicy(cfg *Config) (bool, string) {
@@ -1723,6 +1948,7 @@ func initSharedRepositories(provider sharedPorts.InfrastructureProvider) (*share
 
 //nolint:cyclop,gocyclo // module initialization requires sequential dependency setup for all bounded contexts.
 func initModulesAndMessaging(
+	ctx context.Context,
 	routes *Routes,
 	cfg *Config,
 	configGetter func() *Config,
@@ -1732,8 +1958,6 @@ func initModulesAndMessaging(
 	rateLimitStorage fiber.Storage,
 	logger libLog.Logger,
 ) (*modulesResult, error) {
-	ctx := context.Background()
-
 	sharedOutboxRepository := outboxPgRepo.NewRepository(provider)
 
 	sharedRepos, err := initSharedRepositories(provider)
@@ -1747,7 +1971,7 @@ func initModulesAndMessaging(
 		return nil, err
 	}
 
-	matchingPublisher, ingestionPublisher, err := initEventPublishers(rabbitMQConnection, logger)
+	matchingPublisher, ingestionPublisher, err := initEventPublishers(ctx, rabbitMQConnection, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -1764,7 +1988,7 @@ func initModulesAndMessaging(
 		return nil, err
 	}
 
-	storage, err := createObjectStorage(cfg, logger)
+	storage, err := createObjectStorage(ctx, cfg)
 	if err != nil {
 		if reportingStorageRequired(cfg) {
 			return nil, fmt.Errorf("create object storage: %w", err)
@@ -1772,6 +1996,7 @@ func initModulesAndMessaging(
 
 		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("Object storage not available, reporting background workers disabled: %v", err))
 	}
+
 	if bundleState != nil {
 		storage = newDynamicObjectStorageClient(func() sharedPorts.ObjectStorageClient {
 			bundle := bundleState.Current()
@@ -1785,6 +2010,7 @@ func initModulesAndMessaging(
 		}, storage)
 	}
 
+	//nolint:contextcheck // Reporting config accessors are not context-aware.
 	exportWorker, cleanupWorker, err := initReportingModule(
 		routes,
 		cfg,
@@ -1811,6 +2037,7 @@ func initModulesAndMessaging(
 		dispatchLimiter = NewDispatchRateLimiter(cfg, rateLimitStorage)
 	}
 
+	//nolint:contextcheck // Exception config accessors are not context-aware.
 	if err := initExceptionModule(cfg, configGetter, routes, provider, sharedOutboxRepository, dispatchLimiter, sharedRepos, isProduction); err != nil {
 		return nil, err
 	}
@@ -1853,6 +2080,7 @@ func initModulesAndMessaging(
 	}
 
 	outboxDispatcher.SetRetryWindow(cfg.IdempotencyRetryWindow())
+
 	if configGetter != nil {
 		outboxDispatcher.SetRetryWindowGetter(func() time.Duration {
 			runtimeCfg := configGetter()
@@ -1867,7 +2095,7 @@ func initModulesAndMessaging(
 	// Create scheduler worker for cron-based matching
 	var schedulerWorker *configWorker.SchedulerWorker
 	if matchingUseCase != nil {
-		schedulerWorker = createSchedulerWorker(cfg, provider, matchingUseCase, logger)
+		schedulerWorker = createSchedulerWorker(ctx, cfg, provider, matchingUseCase, logger)
 	}
 
 	return &modulesResult{
@@ -1961,10 +2189,10 @@ func cleanupPublishersOnFailure(
 // We open fresh channels from the underlying *amqp.Connection so each publisher
 // has isolated delivery tags and confirm sequences.
 func initEventPublishers(
+	ctx context.Context,
 	rabbitMQConnection *libRabbitmq.RabbitMQConnection,
 	logger libLog.Logger,
 ) (*matchingRabbitmq.EventPublisher, *ingestionRabbitmq.EventPublisher, error) {
-	ctx := context.Background()
 	success := false
 	openChannelFn := loadOpenDedicatedChannelFn()
 	newMatchingPublisherFn := loadNewMatchingEventPublisherFromChannelFn()
@@ -2042,12 +2270,13 @@ func initEventPublishers(
 // createSchedulerWorker creates the scheduler worker for cron-based matching.
 // Returns nil if any dependency fails to initialize (logged as warnings).
 func createSchedulerWorker(
+	ctx context.Context,
 	cfg *Config,
 	provider sharedPorts.InfrastructureProvider,
 	matchingUseCase *matchingCommand.UseCase,
 	logger libLog.Logger,
 ) *configWorker.SchedulerWorker {
-	ctx := context.Background()
+	ctx = detachedContext(ctx)
 
 	configScheduleRepository := configScheduleRepo.NewRepository(provider)
 
@@ -2059,7 +2288,7 @@ func createSchedulerWorker(
 	}
 
 	workerCfg := configWorker.SchedulerWorkerConfig{
-		Interval: cfg.SchedulerInterval(),
+		Interval: schedulerInterval(cfg),
 	}
 
 	sw, err := configWorker.NewSchedulerWorker(
@@ -2104,6 +2333,7 @@ func createIdempotencyRepository(
 
 		return nil
 	}
+
 	if configGetter != nil {
 		exceptionIdempotencyRepo.SetRuntimeConfigGetters(
 			func() time.Duration {
@@ -2132,8 +2362,8 @@ func createIdempotencyRepository(
 // createObjectStorage initialises the S3/MinIO client only when the reporting
 // background workers actually need it at startup.
 func createObjectStorage(
+	ctx context.Context,
 	cfg *Config,
-	_ libLog.Logger,
 ) (reportingPorts.ObjectStorageClient, error) {
 	if !reportingStorageRequired(cfg) {
 		return nil, nil
@@ -2152,7 +2382,7 @@ func createObjectStorage(
 		UsePathStyle:    cfg.ObjectStorage.UsePathStyle,
 	}
 
-	client, err := newS3ClientFn(context.Background(), s3Cfg)
+	client, err := newS3ClientFn(detachedContext(ctx), s3Cfg)
 	if err != nil {
 		return nil, fmt.Errorf("create S3 client: %w", err)
 	}
@@ -2489,7 +2719,7 @@ func initExportWorkers(
 		exportJobQuerySvc,
 		storage,
 		contextAdapter,
-		cfg.ExportPresignExpiry(),
+		exportPresignExpiry(cfg),
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("create export job handler: %w", err)
@@ -2502,16 +2732,18 @@ func initExportWorkers(
 			runtimeCfg := configGetter()
 			if runtimeCfg == nil {
 				enabled := cfg.ExportWorker.Enabled
+
 				return reportingHTTP.ExportJobRuntimeConfig{
 					Enabled:       &enabled,
-					PresignExpiry: cfg.ExportPresignExpiry(),
+					PresignExpiry: exportPresignExpiry(cfg),
 				}
 			}
 
 			enabled := runtimeCfg.ExportWorker.Enabled
+
 			return reportingHTTP.ExportJobRuntimeConfig{
 				Enabled:       &enabled,
-				PresignExpiry: runtimeCfg.ExportPresignExpiry(),
+				PresignExpiry: exportPresignExpiry(runtimeCfg),
 			}
 		})
 	}
@@ -2774,13 +3006,13 @@ func initExceptionUseCases(
 		return nil, fmt.Errorf("create exception query use case: %w", err)
 	}
 
-	webhookTimeout := cfg.WebhookTimeout()
+	webhookDispatchTimeout := webhookTimeout(cfg)
 
 	httpConnector, err := exceptionConnectors.NewHTTPConnector(
 		exceptionConnectors.ConnectorConfig{
 			Webhook: &exceptionConnectors.WebhookConnectorConfig{
 				BaseConnectorConfig: exceptionConnectors.BaseConnectorConfig{
-					Timeout: &webhookTimeout,
+					Timeout: &webhookDispatchTimeout,
 				},
 			},
 		},
@@ -2788,14 +3020,15 @@ func initExceptionUseCases(
 	if err != nil {
 		return nil, fmt.Errorf("create http connector: %w", err)
 	}
+
 	if configGetter != nil {
 		httpConnector.SetWebhookTimeoutGetter(func() time.Duration {
 			runtimeCfg := configGetter()
 			if runtimeCfg == nil {
-				return cfg.WebhookTimeout()
+				return webhookTimeout(cfg)
 			}
 
-			return runtimeCfg.WebhookTimeout()
+			return webhookTimeout(runtimeCfg)
 		})
 	}
 
@@ -2850,6 +3083,7 @@ func initExceptionCallbackUseCase(
 	if err != nil {
 		return nil, fmt.Errorf("create callback rate limiter: %w", err)
 	}
+
 	if configGetter != nil {
 		callbackRateLimiter.SetRuntimeLimitGetter(func() int {
 			runtimeCfg := configGetter()
@@ -2870,6 +3104,7 @@ func initExceptionCallbackUseCase(
 	if err != nil {
 		return nil, fmt.Errorf("create callback idempotency repository: %w", err)
 	}
+
 	if configGetter != nil {
 		callbackIdempotencyRepo.SetRuntimeConfigGetters(
 			func() time.Duration {

@@ -5,11 +5,13 @@
 package bootstrap
 
 import (
+	"fmt"
 	"time"
+
+	"github.com/gofiber/fiber/v2"
 
 	"github.com/LerianStudio/lib-commons/v4/commons/net/http/ratelimit"
 	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
-	"github.com/gofiber/fiber/v2"
 )
 
 type dynamicRedisStorage struct {
@@ -28,22 +30,44 @@ func newDynamicRedisStorage(getter func() *libRedis.Client, fallback *libRedis.C
 	}
 }
 
+// Get retrieves a value from the current rate-limit storage backend.
 func (storage *dynamicRedisStorage) Get(key string) ([]byte, error) {
-	return storage.current().Get(key)
+	value, err := storage.current().Get(key)
+	if err != nil {
+		return nil, fmt.Errorf("get redis storage value: %w", err)
+	}
+
+	return value, nil
 }
 
+// Set stores a value in the current rate-limit storage backend.
 func (storage *dynamicRedisStorage) Set(key string, val []byte, exp time.Duration) error {
-	return storage.current().Set(key, val, exp)
+	if err := storage.current().Set(key, val, exp); err != nil {
+		return fmt.Errorf("set redis storage value: %w", err)
+	}
+
+	return nil
 }
 
+// Delete removes a value from the current rate-limit storage backend.
 func (storage *dynamicRedisStorage) Delete(key string) error {
-	return storage.current().Delete(key)
+	if err := storage.current().Delete(key); err != nil {
+		return fmt.Errorf("delete redis storage value: %w", err)
+	}
+
+	return nil
 }
 
+// Reset clears the current rate-limit storage backend.
 func (storage *dynamicRedisStorage) Reset() error {
-	return storage.current().Reset()
+	if err := storage.current().Reset(); err != nil {
+		return fmt.Errorf("reset redis storage: %w", err)
+	}
+
+	return nil
 }
 
+// Close leaves the shared storage backend open for the owning runtime bundle.
 func (storage *dynamicRedisStorage) Close() error {
 	return nil
 }

@@ -6,6 +6,7 @@ package bootstrap
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
@@ -50,10 +51,12 @@ func (logger *SwappableLogger) Current() libLog.Logger {
 	return logger.state.currentLogger()
 }
 
+// Log writes a structured log entry using the current logger delegate.
 func (logger *SwappableLogger) Log(ctx context.Context, level libLog.Level, msg string, fields ...libLog.Field) {
 	logger.effective().Log(ctx, level, msg, fields...)
 }
 
+// With returns a derived logger that appends the supplied fields.
 func (logger *SwappableLogger) With(fields ...libLog.Field) libLog.Logger {
 	if logger == nil {
 		return &libLog.NopLogger{}
@@ -70,6 +73,7 @@ func (logger *SwappableLogger) With(fields ...libLog.Field) libLog.Logger {
 	}
 }
 
+// WithGroup returns a derived logger scoped to the supplied group.
 func (logger *SwappableLogger) WithGroup(name string) libLog.Logger {
 	if logger == nil {
 		return &libLog.NopLogger{}
@@ -84,12 +88,18 @@ func (logger *SwappableLogger) WithGroup(name string) libLog.Logger {
 	}
 }
 
+// Enabled reports whether the current logger delegate accepts the given level.
 func (logger *SwappableLogger) Enabled(level libLog.Level) bool {
 	return logger.effective().Enabled(level)
 }
 
+// Sync flushes buffered log entries on the current logger delegate.
 func (logger *SwappableLogger) Sync(ctx context.Context) error {
-	return logger.effective().Sync(ctx)
+	if err := logger.effective().Sync(ctx); err != nil {
+		return fmt.Errorf("sync swappable logger: %w", err)
+	}
+
+	return nil
 }
 
 func (logger *SwappableLogger) effective() libLog.Logger {
@@ -101,6 +111,7 @@ func (logger *SwappableLogger) effective() libLog.Logger {
 	for _, group := range logger.groups {
 		effective = effective.WithGroup(group)
 	}
+
 	if len(logger.fields) > 0 {
 		effective = effective.With(logger.fields...)
 	}

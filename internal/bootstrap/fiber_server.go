@@ -20,7 +20,6 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/fiber/v2/middleware/requestid"
 	"github.com/google/uuid"
-
 	// Direct OTel imports required for HTTP telemetry middleware instrumentation.
 	// lib-commons abstracts application-level tracing via NewTrackingFromContext,
 	// but middleware needs lower-level access to span kinds, semantic conventions,
@@ -322,6 +321,7 @@ func runtimeBodyLimitMiddleware(initialCfg *Config, configGetter func() *Config)
 
 func currentRuntimeBodyLimit(initialCfg *Config, configGetter func() *Config) int {
 	cfg := initialCfg
+
 	if configGetter != nil {
 		if runtimeCfg := configGetter(); runtimeCfg != nil {
 			cfg = runtimeCfg
@@ -340,6 +340,7 @@ func effectiveRuntimeBodyLimit(initialCfg *Config, configGetter func() *Config) 
 	if limit <= 0 {
 		return runtimeBodyLimitDefaultBytes
 	}
+
 	if limit > appBodyLimitCeilingBytes {
 		return appBodyLimitCeilingBytes
 	}
@@ -366,6 +367,7 @@ func runtimeCORSMiddleware(initialCfg *Config, configGetter func() *Config) fibe
 
 	resolve := func() (string, string, string) {
 		cfg := initialCfg
+
 		if configGetter != nil {
 			if runtimeCfg := configGetter(); runtimeCfg != nil {
 				cfg = runtimeCfg
@@ -383,10 +385,12 @@ func runtimeCORSMiddleware(initialCfg *Config, configGetter func() *Config) fibe
 		origins, methods, headers := resolve()
 
 		mu.RLock()
+
 		handler := activeHandler
 		currentOrigins := activeOrigins
 		currentMethods := activeMethods
 		currentHeaders := activeHeaders
+
 		mu.RUnlock()
 
 		if handler == nil || currentOrigins != origins || currentMethods != methods || currentHeaders != headers {
@@ -397,6 +401,7 @@ func runtimeCORSMiddleware(initialCfg *Config, configGetter func() *Config) fibe
 				activeMethods = methods
 				activeHeaders = headers
 			}
+
 			handler = activeHandler
 			mu.Unlock()
 		}
@@ -470,6 +475,7 @@ func dbQueryTimeoutMiddleware(initialCfg *Config, configGetter func() *Config) f
 
 func currentQueryTimeout(initialCfg *Config, configGetter func() *Config) time.Duration {
 	cfg := initialCfg
+
 	if configGetter != nil {
 		if runtimeCfg := configGetter(); runtimeCfg != nil {
 			cfg = runtimeCfg

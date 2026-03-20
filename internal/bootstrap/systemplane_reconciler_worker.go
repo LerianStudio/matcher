@@ -121,5 +121,12 @@ func snapshotToWorkerConfig(snap domain.Snapshot) *Config {
 			StorageClass:        snapString(snap, "archival.storage_class", defaultArchivalStorageClass),
 			PartitionLookahead:  snapInt(snap, "archival.partition_lookahead", defaultArchivalPartitionLA),
 		},
+		ObjectStorage: ObjectStorageConfig{
+			Endpoint:        snapString(snap, "object_storage.endpoint", "http://localhost:8333"),
+			Region:          snapString(snap, "object_storage.region", "us-east-1"),
+			AccessKeyID:     snapString(snap, "object_storage.access_key_id", ""),
+			SecretAccessKey: snapString(snap, "object_storage.secret_access_key", ""),
+			UsePathStyle:    snapBool(snap, "object_storage.use_path_style", true),
+		},
 	}
 }
