@@ -11,6 +11,8 @@ import (
 	"sort"
 
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
+	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
 	libZap "github.com/LerianStudio/lib-commons/v4/commons/zap"
 
 	"github.com/LerianStudio/matcher/internal/shared/constants"
@@ -67,6 +69,7 @@ type BootstrapOnlyConfig struct {
 var (
 	ErrBootstrapConfigNil     = errors.New("new matcher bundle factory: bootstrap config is required")
 	errInvalidKeyComponentMap = errors.New("new matcher bundle factory: invalid key component map")
+	errUnknownKeyComponent    = errors.New("systemplane key declares unknown component")
 )
 
 // NewMatcherBundleFactory creates a new factory with the given bootstrap config.
@@ -74,6 +77,7 @@ func NewMatcherBundleFactory(bootstrapCfg *BootstrapOnlyConfig) (*MatcherBundleF
 	if bootstrapCfg == nil {
 		return nil, ErrBootstrapConfigNil
 	}
+
 	if keyComponentMapErr != nil {
 		return nil, fmt.Errorf("%w: %w", errInvalidKeyComponentMap, keyComponentMapErr)
 	}
@@ -144,8 +148,8 @@ func buildKeyComponentMap() (map[string]string, error) {
 	for _, def := range defs {
 		if def.Component != "" {
 			if _, known := allComponents[def.Component]; !known {
-				return nil, fmt.Errorf("systemplane: key %q declares unknown Component %q; valid components: %v",
-					def.Key, def.Component, allComponentNames())
+				return nil, fmt.Errorf("%w: key %q component %q (valid components: %v)",
+					errUnknownKeyComponent, def.Key, def.Component, allComponentNames())
 			}
 
 			keyToComponent[def.Key] = def.Component
@@ -167,6 +171,171 @@ func allComponentNames() []string {
 	return names
 }
 
+func incrementalLogger(bundle *MatcherBundle) libLog.Logger {
+	if bundle == nil || bundle.Logger == nil {
+		return nil
+	}
+
+	return bundle.Logger.Logger
+}
+
+func appendFreshCloser[T any](freshClosers *[]func() error, component T, closeFn func(T) error) {
+	*freshClosers = append(*freshClosers, func() error {
+		return closeFn(component)
+	})
+}
+
+func (factory *MatcherBundleFactory) buildIncrementalLogger(
+	ctx context.Context,
+	snap domain.Snapshot,
+	affected map[string]struct{},
+	prev *MatcherBundle,
+	newBundle *MatcherBundle,
+	freshClosers *[]func() error,
+	rollback func(),
+) error {
+	if _, changed := affected["logger"]; !changed {
+		newBundle.Logger = prev.Logger
+		return nil
+	}
+
+	loggerBundle, err := factory.buildLogger(snap)
+	if err != nil {
+		rollback()
+		return fmt.Errorf("incremental build logger: %w", err)
+	}
+
+	newBundle.Logger = loggerBundle
+	newBundle.ownsLogger = loggerBundle != nil
+	appendFreshCloser(freshClosers, loggerBundle, func(bundle *LoggerBundle) error {
+		if bundle == nil || bundle.Logger == nil {
+			return nil
+		}
+
+		return bundle.Logger.Sync(ctx)
+	})
+
+	return nil
+}
+
+func (factory *MatcherBundleFactory) buildIncrementalPostgres(
+	ctx context.Context,
+	snap domain.Snapshot,
+	affected map[string]struct{},
+	logger libLog.Logger,
+	prev *MatcherBundle,
+	newBundle *MatcherBundle,
+	freshClosers *[]func() error,
+	rollback func(),
+) error {
+	if _, changed := affected["postgres"]; !changed {
+		newBundle.Infra.Postgres = prev.Infra.Postgres
+		return nil
+	}
+
+	pgClient, err := factory.buildPostgresClient(ctx, snap, logger)
+	if err != nil {
+		rollback()
+		return fmt.Errorf("incremental build postgres: %w", err)
+	}
+
+	newBundle.Infra.Postgres = pgClient
+
+	newBundle.ownsPostgres = pgClient != nil
+	if pgClient != nil {
+		appendFreshCloser(freshClosers, pgClient, func(client *libPostgres.Client) error {
+			return client.Close()
+		})
+	}
+
+	return nil
+}
+
+func (factory *MatcherBundleFactory) buildIncrementalRedis(
+	ctx context.Context,
+	snap domain.Snapshot,
+	affected map[string]struct{},
+	logger libLog.Logger,
+	prev *MatcherBundle,
+	newBundle *MatcherBundle,
+	freshClosers *[]func() error,
+	rollback func(),
+) error {
+	if _, changed := affected["redis"]; !changed {
+		newBundle.Infra.Redis = prev.Infra.Redis
+		return nil
+	}
+
+	redisClient, err := factory.buildRedisClient(ctx, snap, logger)
+	if err != nil {
+		rollback()
+		return fmt.Errorf("incremental build redis: %w", err)
+	}
+
+	newBundle.Infra.Redis = redisClient
+
+	newBundle.ownsRedis = redisClient != nil
+	if redisClient != nil {
+		appendFreshCloser(freshClosers, redisClient, func(client *libRedis.Client) error {
+			return client.Close()
+		})
+	}
+
+	return nil
+}
+
+func (factory *MatcherBundleFactory) buildIncrementalRabbitMQ(
+	ctx context.Context,
+	snap domain.Snapshot,
+	affected map[string]struct{},
+	logger libLog.Logger,
+	prev *MatcherBundle,
+	newBundle *MatcherBundle,
+	freshClosers *[]func() error,
+) {
+	if _, changed := affected["rabbitmq"]; !changed {
+		newBundle.Infra.RabbitMQ = prev.Infra.RabbitMQ
+		return
+	}
+
+	rmqConn := factory.buildRabbitMQConnection(ctx, snap, logger)
+	newBundle.Infra.RabbitMQ = rmqConn
+	newBundle.ownsRabbitMQ = rmqConn != nil
+	appendFreshCloser(freshClosers, rmqConn, closeRabbitMQ)
+}
+
+func (factory *MatcherBundleFactory) buildIncrementalObjectStorage(
+	ctx context.Context,
+	snap domain.Snapshot,
+	affected map[string]struct{},
+	prev *MatcherBundle,
+	newBundle *MatcherBundle,
+	freshClosers *[]func() error,
+	rollback func(),
+) error {
+	if _, changed := affected["s3"]; !changed {
+		newBundle.Infra.ObjectStorage = prev.Infra.ObjectStorage
+		return nil
+	}
+
+	s3Client, err := factory.buildObjectStorageClient(ctx, snap)
+	if err != nil {
+		rollback()
+		return fmt.Errorf("incremental build object storage: %w", err)
+	}
+
+	newBundle.ownsObjectStorage = s3Client != nil
+
+	newBundle.Infra.ObjectStorage = s3Client
+	if s3Client != nil {
+		appendFreshCloser(freshClosers, s3Client, func(client *objectStorageCloser) error {
+			return client.Close()
+		})
+	}
+
+	return nil
+}
+
 // BuildIncremental creates a new MatcherBundle, reusing unchanged components
 // from previous. It diffs prevSnap.Configs vs snap.Configs to identify which
 // keys changed, maps those keys to infrastructure components via
@@ -177,8 +346,6 @@ func allComponentNames() []string {
 //
 // If the diff reveals that ALL components are affected, or if the previous
 // bundle is not a *MatcherBundle, it falls back to a full Build.
-//
-//nolint:gocyclo,cyclop // Sequential per-component build/transfer is inherently branchy; splitting hurts readability.
 func (factory *MatcherBundleFactory) BuildIncremental(
 	ctx context.Context,
 	snap domain.Snapshot,
@@ -203,7 +370,7 @@ func (factory *MatcherBundleFactory) BuildIncremental(
 		return factory.Build(ctx, snap)
 	}
 
-	newBundle := &MatcherBundle{ownershipTracked: true}
+	newBundle := &MatcherBundle{ownershipTracked: true, Infra: &InfraBundle{}}
 
 	// Track which fresh components we built so we can close them on rollback.
 	var freshClosers []func() error
@@ -214,107 +381,23 @@ func (factory *MatcherBundleFactory) BuildIncremental(
 		}
 	}
 
-	// --- Logger ---
-	if _, changed := affected["logger"]; changed {
-		loggerBundle, err := factory.buildLogger(snap)
-		if err != nil {
-			rollback()
-			return nil, fmt.Errorf("incremental build logger: %w", err)
-		}
-
-		newBundle.Logger = loggerBundle
-		newBundle.ownsLogger = loggerBundle != nil
-
-		freshClosers = append(freshClosers, func() error {
-			if loggerBundle != nil && loggerBundle.Logger != nil {
-				return loggerBundle.Logger.Sync(ctx)
-			}
-
-			return nil
-		})
-	} else {
-		newBundle.Logger = prev.Logger
+	if err := factory.buildIncrementalLogger(ctx, snap, affected, prev, newBundle, &freshClosers, rollback); err != nil {
+		return nil, err
 	}
 
-	// We need a logger for infra builds. Use whichever we have.
-	// Guard against a nil LoggerBundle — while the entry guard above ensures
-	// prev.Logger is non-nil for the transfer path, and buildLogger returns
-	// non-nil on success, this is a belt-and-suspenders safety net.
-	var logger libLog.Logger
-	if newBundle.Logger != nil {
-		logger = newBundle.Logger.Logger
+	logger := incrementalLogger(newBundle)
+	if err := factory.buildIncrementalPostgres(ctx, snap, affected, logger, prev, newBundle, &freshClosers, rollback); err != nil {
+		return nil, err
 	}
 
-	// --- Infrastructure components ---
-	newBundle.Infra = &InfraBundle{}
-
-	// Postgres
-	if _, changed := affected["postgres"]; changed {
-		pgClient, err := factory.buildPostgresClient(snap, logger)
-		if err != nil {
-			rollback()
-			return nil, fmt.Errorf("incremental build postgres: %w", err)
-		}
-
-		newBundle.Infra.Postgres = pgClient
-		newBundle.ownsPostgres = pgClient != nil
-
-		if pgClient != nil {
-			freshClosers = append(freshClosers, pgClient.Close)
-		}
-	} else {
-		newBundle.Infra.Postgres = prev.Infra.Postgres
+	if err := factory.buildIncrementalRedis(ctx, snap, affected, logger, prev, newBundle, &freshClosers, rollback); err != nil {
+		return nil, err
 	}
 
-	// Redis
-	if _, changed := affected["redis"]; changed {
-		redisClient, err := factory.buildRedisClient(ctx, snap, logger)
-		if err != nil {
-			rollback()
-			return nil, fmt.Errorf("incremental build redis: %w", err)
-		}
+	factory.buildIncrementalRabbitMQ(ctx, snap, affected, logger, prev, newBundle, &freshClosers)
 
-		newBundle.Infra.Redis = redisClient
-		newBundle.ownsRedis = redisClient != nil
-
-		if redisClient != nil {
-			freshClosers = append(freshClosers, redisClient.Close)
-		}
-	} else {
-		newBundle.Infra.Redis = prev.Infra.Redis
-	}
-
-	// RabbitMQ
-	if _, changed := affected["rabbitmq"]; changed {
-		rmqConn := factory.buildRabbitMQConnection(snap, logger)
-		newBundle.Infra.RabbitMQ = rmqConn
-		newBundle.ownsRabbitMQ = rmqConn != nil
-
-		freshClosers = append(freshClosers, func() error {
-			return closeRabbitMQ(rmqConn)
-		})
-	} else {
-		newBundle.Infra.RabbitMQ = prev.Infra.RabbitMQ
-	}
-
-	// S3 / Object Storage
-	if _, changed := affected["s3"]; changed {
-		s3Client, err := factory.buildObjectStorageClient(ctx, snap)
-		if err != nil {
-			rollback()
-			return nil, fmt.Errorf("incremental build object storage: %w", err)
-		}
-
-		newBundle.ownsObjectStorage = s3Client != nil
-		if s3Client != nil {
-			newBundle.Infra.ObjectStorage = s3Client
-		}
-
-		if s3Client != nil {
-			freshClosers = append(freshClosers, s3Client.Close)
-		}
-	} else {
-		newBundle.Infra.ObjectStorage = prev.Infra.ObjectStorage
+	if err := factory.buildIncrementalObjectStorage(ctx, snap, affected, prev, newBundle, &freshClosers, rollback); err != nil {
+		return nil, err
 	}
 
 	// --- HTTP Policy ---
@@ -454,7 +537,7 @@ func (factory *MatcherBundleFactory) buildInfra(
 	snap domain.Snapshot,
 	logger libLog.Logger,
 ) (*InfraBundle, error) {
-	pgClient, err := factory.buildPostgresClient(snap, logger)
+	pgClient, err := factory.buildPostgresClient(ctx, snap, logger)
 	if err != nil {
 		return nil, fmt.Errorf("build postgres: %w", err)
 	}
@@ -466,7 +549,7 @@ func (factory *MatcherBundleFactory) buildInfra(
 		return nil, fmt.Errorf("build redis: %w", err)
 	}
 
-	rmqConn := factory.buildRabbitMQConnection(snap, logger)
+	rmqConn := factory.buildRabbitMQConnection(ctx, snap, logger)
 
 	s3Client, err := factory.buildObjectStorageClient(ctx, snap)
 	if err != nil {

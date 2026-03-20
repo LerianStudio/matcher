@@ -5,12 +5,19 @@
 package bootstrap
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
 
 	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
 	"github.com/LerianStudio/matcher/pkg/systemplane/registry"
+)
+
+var (
+	errFetcherURLMustBeString      = errors.New("fetcher url must be a string")
+	errFetcherURLMustBeAbsolute    = errors.New("fetcher url must be an absolute URL")
+	errFetcherURLMustUseHTTPScheme = errors.New("fetcher url must use http or https")
 )
 
 // Default values for Matcher configuration keys. These constants match the
@@ -1912,18 +1919,20 @@ func matcherKeyDefs() []domain.KeyDef {
 func validateAbsoluteHTTPURL(value any) error {
 	rawValue, ok := value.(string)
 	if !ok {
-		return fmt.Errorf("fetcher url must be a string")
+		return errFetcherURLMustBeString
 	}
 
 	parsed, err := url.Parse(strings.TrimSpace(rawValue))
 	if err != nil {
 		return fmt.Errorf("fetcher url must be a valid URL: %w", err)
 	}
+
 	if parsed == nil || !parsed.IsAbs() || parsed.Host == "" {
-		return fmt.Errorf("fetcher url must be an absolute URL")
+		return errFetcherURLMustBeAbsolute
 	}
+
 	if !strings.EqualFold(parsed.Scheme, "http") && !strings.EqualFold(parsed.Scheme, "https") {
-		return fmt.Errorf("fetcher url must use http or https")
+		return errFetcherURLMustUseHTTPScheme
 	}
 
 	return nil

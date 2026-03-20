@@ -15,6 +15,7 @@ func newActiveMatcherBundleState() *activeMatcherBundleState {
 	return &activeMatcherBundleState{}
 }
 
+// Current returns the currently active matcher bundle.
 func (state *activeMatcherBundleState) Current() *MatcherBundle {
 	if state == nil {
 		return nil
@@ -26,6 +27,7 @@ func (state *activeMatcherBundleState) Current() *MatcherBundle {
 	return state.bundle
 }
 
+// Update swaps the currently active matcher bundle.
 func (state *activeMatcherBundleState) Update(bundle *MatcherBundle) {
 	if state == nil {
 		return

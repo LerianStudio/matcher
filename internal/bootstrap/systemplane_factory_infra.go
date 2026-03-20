@@ -30,6 +30,7 @@ import (
 // reuses the same libPostgres.New call pattern as init.go's
 // createPostgresConnection.
 func (factory *MatcherBundleFactory) buildPostgresClient(
+	ctx context.Context,
 	snap domain.Snapshot,
 	logger libLog.Logger,
 ) (*libPostgres.Client, error) {
@@ -65,7 +66,7 @@ func (factory *MatcherBundleFactory) buildPostgresClient(
 		return nil, fmt.Errorf("create postgres client: %w", err)
 	}
 
-	if resolver, resolveErr := conn.Resolver(context.Background()); resolveErr == nil {
+	if resolver, resolveErr := conn.Resolver(ctx); resolveErr == nil {
 		applySQLPoolSettings(
 			resolver.PrimaryDBs(),
 			time.Duration(cfg.ConnMaxLifetimeMins)*time.Minute,
@@ -104,24 +105,17 @@ func (factory *MatcherBundleFactory) buildRedisClient(
 // insecure health check policy evaluation (the factory delegates that to
 // the connection itself).
 func (factory *MatcherBundleFactory) buildRabbitMQConnection(
+	ctx context.Context,
 	snap domain.Snapshot,
 	logger libLog.Logger,
 ) *libRabbitmq.RabbitMQConnection {
 	cfg := factory.extractRabbitMQConfig(snap)
 
-	policyCfg := &Config{App: AppConfig{EnvName: factory.bootstrapCfg.EnvName}, RabbitMQ: RabbitMQConfig{
-		URI:                      cfg.URI,
-		Host:                     cfg.Host,
-		Port:                     cfg.Port,
-		User:                     cfg.User,
-		Password:                 cfg.Password,
-		VHost:                    cfg.VHost,
-		HealthURL:                cfg.HealthURL,
-		AllowInsecureHealthCheck: cfg.AllowInsecureHealthCheck,
-	}}
+	policyCfg := &Config{App: AppConfig{EnvName: factory.bootstrapCfg.EnvName}, RabbitMQ: RabbitMQConfig(cfg)}
 	allowInsecure, _ := evaluateInsecureRabbitMQHealthCheckPolicy(policyCfg)
+
 	if !allowInsecure && isInsecureHTTPHealthCheckURL(cfg.HealthURL) && logger != nil {
-		logger.Log(context.Background(), libLog.LevelWarn,
+		logger.Log(ctx, libLog.LevelWarn,
 			"RabbitMQ health URL uses HTTP while insecure checks are disabled; set RABBITMQ_ALLOW_INSECURE_HEALTH_CHECK=true only for local/internal non-production environments")
 	}
 
@@ -149,28 +143,63 @@ var _ sharedPorts.ObjectStorageClient = (*objectStorageCloser)(nil)
 // Close is a no-op for the stateless S3 SDK client.
 func (c *objectStorageCloser) Close() error { return nil }
 
+// Upload stores an object using the wrapped S3 client.
 func (c *objectStorageCloser) Upload(ctx context.Context, key string, reader io.Reader, contentType string) (string, error) {
-	return c.client.Upload(ctx, key, reader, contentType)
+	result, err := c.client.Upload(ctx, key, reader, contentType)
+	if err != nil {
+		return "", fmt.Errorf("upload object to S3 client: %w", err)
+	}
+
+	return result, nil
 }
 
+// UploadWithOptions stores an object using the wrapped S3 client and upload options.
 func (c *objectStorageCloser) UploadWithOptions(ctx context.Context, key string, reader io.Reader, contentType string, opts ...storageopt.UploadOption) (string, error) {
-	return c.client.UploadWithOptions(ctx, key, reader, contentType, opts...)
+	result, err := c.client.UploadWithOptions(ctx, key, reader, contentType, opts...)
+	if err != nil {
+		return "", fmt.Errorf("upload object with options to S3 client: %w", err)
+	}
+
+	return result, nil
 }
 
+// Download retrieves an object using the wrapped S3 client.
 func (c *objectStorageCloser) Download(ctx context.Context, key string) (io.ReadCloser, error) {
-	return c.client.Download(ctx, key)
+	reader, err := c.client.Download(ctx, key)
+	if err != nil {
+		return nil, fmt.Errorf("download object from S3 client: %w", err)
+	}
+
+	return reader, nil
 }
 
+// Delete removes an object using the wrapped S3 client.
 func (c *objectStorageCloser) Delete(ctx context.Context, key string) error {
-	return c.client.Delete(ctx, key)
+	if err := c.client.Delete(ctx, key); err != nil {
+		return fmt.Errorf("delete object from S3 client: %w", err)
+	}
+
+	return nil
 }
 
+// GeneratePresignedURL creates a download URL using the wrapped S3 client.
 func (c *objectStorageCloser) GeneratePresignedURL(ctx context.Context, key string, expiry time.Duration) (string, error) {
-	return c.client.GeneratePresignedURL(ctx, key, expiry)
+	presignedURL, err := c.client.GeneratePresignedURL(ctx, key, expiry)
+	if err != nil {
+		return "", fmt.Errorf("generate presigned url from S3 client: %w", err)
+	}
+
+	return presignedURL, nil
 }
 
+// Exists checks whether an object exists using the wrapped S3 client.
 func (c *objectStorageCloser) Exists(ctx context.Context, key string) (bool, error) {
-	return c.client.Exists(ctx, key)
+	exists, err := c.client.Exists(ctx, key)
+	if err != nil {
+		return false, fmt.Errorf("check object existence with S3 client: %w", err)
+	}
+
+	return exists, nil
 }
 
 // buildObjectStorageClient creates an S3-compatible storage client from snapshot
