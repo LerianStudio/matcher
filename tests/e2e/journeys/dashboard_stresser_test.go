@@ -450,7 +450,7 @@ func TestDashboardStresser_FullJourney(t *testing.T) {
 			// First: Dry run to preview
 			tc.Logf("  Running DRY_RUN matching...")
 			start = time.Now()
-			dryRunResp, err := apiClient.Matching.RunMatchDryRun(ctx, reconciliationContext.ID, "")
+			dryRunResp, err := apiClient.Matching.RunMatchDryRun(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -474,7 +474,7 @@ func TestDashboardStresser_FullJourney(t *testing.T) {
 			// Second: Commit matching
 			tc.Logf("  Running COMMIT matching...")
 			start = time.Now()
-			commitResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			commitResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -848,7 +848,7 @@ func TestDashboardStresser_HighVolume(t *testing.T) {
 			// Run matching
 			tc.Logf("\nRunning matching...")
 			start = time.Now()
-			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -2103,7 +2103,7 @@ func TestDashboardStresser_QuickRun(t *testing.T) {
 			)
 
 			// Match
-			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,

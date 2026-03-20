@@ -89,7 +89,7 @@ func TestAdjustEntry_ResolveWithAmountCorrection(t *testing.T) {
 			)
 
 			// Run matching - will not match due to amount difference
-			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -183,7 +183,7 @@ func TestAdjustEntry_ResolveWithCurrencyCorrection(t *testing.T) {
 				e2e.WaitForJobComplete(ctx, tc, apiClient, reconciliationContext.ID, ledgerJob.ID),
 			)
 
-			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -269,7 +269,7 @@ func TestAdjustEntry_ResolveWithDateCorrection(t *testing.T) {
 				e2e.WaitForJobComplete(ctx, tc, apiClient, reconciliationContext.ID, ledgerJob.ID),
 			)
 
-			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -356,7 +356,7 @@ func TestAdjustEntry_ResolveWithOtherReason(t *testing.T) {
 				e2e.WaitForJobComplete(ctx, tc, apiClient, reconciliationContext.ID, ledgerJob.ID),
 			)
 
-			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -564,7 +564,7 @@ func TestAdjustEntry_AlreadyResolvedException(t *testing.T) {
 				e2e.WaitForJobComplete(ctx, tc, apiClient, reconciliationContext.ID, ledgerJob.ID),
 			)
 
-			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -670,7 +670,7 @@ func TestAdjustEntry_CreatesAuditTrail(t *testing.T) {
 				e2e.WaitForJobComplete(ctx, tc, apiClient, reconciliationContext.ID, ledgerJob.ID),
 			)
 
-			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,

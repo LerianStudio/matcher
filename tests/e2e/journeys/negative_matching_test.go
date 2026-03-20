@@ -77,7 +77,7 @@ func TestNegativeMatching_NoMatchDifferentAmounts(t *testing.T) {
 				e2e.WaitForJobComplete(ctx, tc, client, reconciliationContext.ID, bankJob.ID),
 			)
 
-			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -167,7 +167,7 @@ func TestNegativeMatching_NoMatchDifferentCurrencies(t *testing.T) {
 				e2e.WaitForJobComplete(ctx, tc, client, reconciliationContext.ID, bankJob.ID),
 			)
 
-			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -263,7 +263,7 @@ func TestNegativeMatching_OutsideTolerance(t *testing.T) {
 				e2e.WaitForJobComplete(ctx, tc, client, reconciliationContext.ID, bankJob.ID),
 			)
 
-			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -359,7 +359,7 @@ func TestNegativeMatching_PartialMatch(t *testing.T) {
 				e2e.WaitForJobComplete(ctx, tc, client, reconciliationContext.ID, bankJob.ID),
 			)
 
-			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -433,7 +433,7 @@ func TestNegativeMatching_EmptySourceNoMatches(t *testing.T) {
 				e2e.WaitForJobComplete(ctx, tc, client, reconciliationContext.ID, ledgerJob.ID),
 			)
 
-			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,

@@ -45,7 +45,7 @@ func TestMatchingClient_RunMatch(t *testing.T) {
 	defer server.Close()
 
 	client := NewMatchingClient(NewClient(server.URL, "tenant-123", 5*time.Second))
-	result, err := client.RunMatch(context.Background(), "ctx-123", "COMMIT", "")
+	result, err := client.RunMatch(context.Background(), "ctx-123", "COMMIT")
 
 	require.NoError(t, err)
 	assert.Equal(t, "run-456", result.RunID)
@@ -67,7 +67,7 @@ func TestMatchingClient_RunMatchCommit(t *testing.T) {
 	defer server.Close()
 
 	client := NewMatchingClient(NewClient(server.URL, "tenant-123", 5*time.Second))
-	result, err := client.RunMatchCommit(context.Background(), "ctx-123", "")
+	result, err := client.RunMatchCommit(context.Background(), "ctx-123")
 
 	require.NoError(t, err)
 	assert.Equal(t, "run-123", result.RunID)
@@ -88,7 +88,7 @@ func TestMatchingClient_RunMatchDryRun(t *testing.T) {
 	defer server.Close()
 
 	client := NewMatchingClient(NewClient(server.URL, "tenant-123", 5*time.Second))
-	result, err := client.RunMatchDryRun(context.Background(), "ctx-123", "")
+	result, err := client.RunMatchDryRun(context.Background(), "ctx-123")
 
 	require.NoError(t, err)
 	assert.Equal(t, "run-123", result.RunID)
@@ -206,7 +206,7 @@ func TestMatchingClient_ErrorHandling(t *testing.T) {
 
 	client := NewMatchingClient(NewClient(server.URL, "tenant-123", 5*time.Second))
 
-	_, err := client.RunMatch(context.Background(), "invalid", "COMMIT", "")
+	_, err := client.RunMatch(context.Background(), "invalid", "COMMIT")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "run match")
 }

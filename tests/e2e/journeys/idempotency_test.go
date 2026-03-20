@@ -145,7 +145,7 @@ func TestIdempotency_MultipleMatchRuns(t *testing.T) {
 			)
 
 			// First match run
-			matchResp1, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp1, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -167,7 +167,7 @@ func TestIdempotency_MultipleMatchRuns(t *testing.T) {
 			require.NoError(t, err)
 
 			// Second match run (should work, may or may not find new matches)
-			matchResp2, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp2, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -268,10 +268,10 @@ func TestIdempotency_ConcurrentDryRuns(t *testing.T) {
 			)
 
 			// Start multiple dry runs (they should not commit)
-			dryRun1, err := client.Matching.RunMatchDryRun(ctx, reconciliationContext.ID, "")
+			dryRun1, err := client.Matching.RunMatchDryRun(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 
-			dryRun2, err := client.Matching.RunMatchDryRun(ctx, reconciliationContext.ID, "")
+			dryRun2, err := client.Matching.RunMatchDryRun(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 
 			// Wait for both

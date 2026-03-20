@@ -391,7 +391,7 @@ func TestFeeSchedule_NetNormalization_OneToOneExact(t *testing.T) {
 
 			// Step 8: Run matching
 			tc.Logf("Step 8: Running matching")
-			matchResp, err := c.Matching.RunMatchCommit(ctx, reconciliationContext.ID, gatewaySource.ID)
+			matchResp, err := c.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(t, e2e.WaitForMatchRunComplete(ctx, tc, c, reconciliationContext.ID, matchResp.RunID))
 
@@ -508,7 +508,7 @@ func TestFeeSchedule_CascadingNormalization(t *testing.T) {
 
 			// Step 5: Match
 			tc.Logf("Step 5: Running matching")
-			matchResp, err := c.Matching.RunMatchCommit(ctx, reconciliationContext.ID, gatewaySource.ID)
+			matchResp, err := c.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(t, e2e.WaitForMatchRunComplete(ctx, tc, c, reconciliationContext.ID, matchResp.RunID))
 
@@ -593,7 +593,7 @@ func TestFeeSchedule_NoNormalization(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, e2e.WaitForJobComplete(ctx, tc, c, reconciliationContext.ID, bankJob.ID))
 
-			matchResp, err := c.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := c.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(t, e2e.WaitForMatchRunComplete(ctx, tc, c, reconciliationContext.ID, matchResp.RunID))
 
@@ -678,7 +678,7 @@ func TestFeeSchedule_CurrencyMismatchPassthrough(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, e2e.WaitForJobComplete(ctx, tc, c, reconciliationContext.ID, bankJob.ID))
 
-			matchResp, err := c.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := c.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(t, e2e.WaitForMatchRunComplete(ctx, tc, c, reconciliationContext.ID, matchResp.RunID))
 
@@ -780,7 +780,7 @@ func TestFeeSchedule_PerSideFeeRules(t *testing.T) {
 
 			// Run matching - both gross $100 but different net amounts.
 			// Should NOT match each other (98 != 97)
-			matchResp, err := c.Matching.RunMatchCommit(ctx, reconciliationContext.ID, gatewayA.ID)
+			matchResp, err := c.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(t, e2e.WaitForMatchRunComplete(ctx, tc, c, reconciliationContext.ID, matchResp.RunID))
 

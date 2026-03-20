@@ -94,7 +94,7 @@ func TestRulePriority_ExactBeforeTolerance(t *testing.T) {
 			)
 
 			// Run matching
-			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -203,7 +203,7 @@ func TestRulePriority_FallbackToTolerance(t *testing.T) {
 			)
 
 			// Run matching
-			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -367,7 +367,7 @@ func TestRulePriority_MultipleRuleTypes(t *testing.T) {
 			)
 
 			// Run matching
-			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,

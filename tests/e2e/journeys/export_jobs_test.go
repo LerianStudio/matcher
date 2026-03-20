@@ -500,7 +500,7 @@ func TestExportJobs_MatchedTransactionsType(t *testing.T) {
 				e2e.WaitForJobComplete(ctx, tc, apiClient, reconciliationContext.ID, bankJob.ID),
 			)
 
-			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -586,7 +586,7 @@ func TestExportJobs_UnmatchedTransactionsType(t *testing.T) {
 				e2e.WaitForJobComplete(ctx, tc, apiClient, reconciliationContext.ID, ledgerJob.ID),
 			)
 
-			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,

@@ -89,7 +89,7 @@ func TestMatchingModes_OneToMany(t *testing.T) {
 			)
 
 			// Run matching
-			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -195,7 +195,7 @@ func TestMatchingModes_ManyToMany(t *testing.T) {
 			)
 
 			// Run matching
-			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -296,7 +296,7 @@ func TestMatchingModes_ToleranceMatching(t *testing.T) {
 			)
 
 			// Run matching
-			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -422,11 +422,7 @@ func TestMatchingModes_DirectedPrimarySource(t *testing.T) {
 
 			// Step 7: Run directed matching with bank as the primary source
 			tc.Logf("Step 7: Running directed matching with bank source as primary (%s)", bankSource.ID)
-			matchResp, err := client.Matching.RunMatchCommit(
-				ctx,
-				reconciliationContext.ID,
-				bankSource.ID, // <-- the key difference: non-empty primarySourceID
-			)
+			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err, "directed match run should be accepted")
 			tc.Logf("Match run started: %s", matchResp.RunID)
 
@@ -461,11 +457,7 @@ func TestMatchingModes_DirectedPrimarySource(t *testing.T) {
 
 			// Step 9: Run directed matching with gateway as primary (second direction)
 			tc.Logf("Step 9: Running directed matching with gateway source as primary (%s)", gatewaySource.ID)
-			matchResp2, err := client.Matching.RunMatchCommit(
-				ctx,
-				reconciliationContext.ID,
-				gatewaySource.ID, // <-- gateway as primary this time
-			)
+			matchResp2, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err, "second directed match run should be accepted")
 			tc.Logf("Second match run started: %s", matchResp2.RunID)
 
@@ -564,7 +556,7 @@ func TestMatchingModes_PercentTolerance(t *testing.T) {
 			)
 
 			// Run matching
-			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
