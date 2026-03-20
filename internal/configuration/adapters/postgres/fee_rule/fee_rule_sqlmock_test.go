@@ -470,6 +470,7 @@ func TestUpdate_Success(t *testing.T) {
 			sqlmock.AnyArg(), // predicates JSON
 			sqlmock.AnyArg(), // updated_at
 			rule.ID.String(),
+			rule.ContextID.String(),
 		).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
@@ -497,6 +498,7 @@ func TestUpdate_NotFound(t *testing.T) {
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 			rule.ID.String(),
+			rule.ContextID.String(),
 		).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectRollback()
@@ -525,6 +527,7 @@ func TestUpdate_ExecError(t *testing.T) {
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 			rule.ID.String(),
+			rule.ContextID.String(),
 		).
 		WillReturnError(errTestExec)
 	mock.ExpectRollback()

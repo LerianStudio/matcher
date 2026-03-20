@@ -285,3 +285,21 @@ func TestCloneMap(t *testing.T) {
 		assert.NotContains(t, original, "c")
 	})
 }
+
+func TestClonePredicates(t *testing.T) {
+	t.Parallel()
+
+	original := []fee.FieldPredicate{
+		{Field: "channel", Operator: fee.PredicateOperatorEquals, Value: "wire"},
+		{Field: "brand", Operator: fee.PredicateOperatorIn, Values: []string{"visa", "mastercard"}},
+	}
+
+	cloned := clonePredicates(original)
+	require.Equal(t, original, cloned)
+
+	original[1].Values[0] = "elo"
+	require.Equal(t, []string{"visa", "mastercard"}, cloned[1].Values)
+
+	cloned[0].Value = "pix"
+	require.Equal(t, "wire", original[0].Value)
+}

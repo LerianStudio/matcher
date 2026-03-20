@@ -280,6 +280,40 @@ func TestCreateFeeRule_ConstraintError_DuplicateName(t *testing.T) {
 	assert.ErrorIs(t, err, ErrDuplicateFeeRuleName)
 }
 
+func TestCreateFeeRule_LimitExceeded(t *testing.T) {
+	t.Parallel()
+
+	repo := newFeeRuleMockRepo()
+	for i := 0; i < fee.MaxFeeRulesPerContext; i++ {
+		rule, err := fee.NewFeeRule(
+			context.Background(),
+			uuid.MustParse("11111111-1111-1111-1111-111111111111"),
+			uuid.New(),
+			fee.MatchingSideAny,
+			"rule-"+uuid.NewString(),
+			i,
+			validPredicates(),
+		)
+		require.NoError(t, err)
+		repo.rules[rule.ID] = rule
+	}
+
+	uc := newUseCaseWithFeeRuleRepo(repo)
+
+	result, err := uc.CreateFeeRule(
+		context.Background(),
+		uuid.MustParse("11111111-1111-1111-1111-111111111111"),
+		"LEFT",
+		uuid.New(),
+		"overflow-rule",
+		fee.MaxFeeRulesPerContext,
+		validPredicates(),
+	)
+
+	assert.Nil(t, result)
+	assert.ErrorIs(t, err, fee.ErrFeeRuleCountLimitExceeded)
+}
+
 func TestCreateFeeRule_ConstraintError_MissingFeeSchedule(t *testing.T) {
 	t.Parallel()
 
@@ -358,6 +392,7 @@ func TestUpdateFeeRule_Success(t *testing.T) {
 
 	result, err := uc.UpdateFeeRule(
 		context.Background(),
+		existing.ContextID,
 		existing.ID,
 		nil, // side unchanged
 		nil, // feeScheduleID unchanged
@@ -380,6 +415,7 @@ func TestUpdateFeeRule_NotFound(t *testing.T) {
 
 	result, err := uc.UpdateFeeRule(
 		context.Background(),
+		uuid.New(),
 		uuid.New(), // does not exist
 		nil,
 		nil,
@@ -408,6 +444,7 @@ func TestUpdateFeeRule_NilRepo(t *testing.T) {
 	result, updateErr := uc.UpdateFeeRule(
 		context.Background(),
 		uuid.New(),
+		uuid.New(),
 		nil,
 		nil,
 		&newName,
@@ -430,6 +467,7 @@ func TestUpdateFeeRule_ValidationError_InvalidSide(t *testing.T) {
 
 	result, err := uc.UpdateFeeRule(
 		context.Background(),
+		existing.ContextID,
 		existing.ID,
 		&badSide,
 		nil,
@@ -454,6 +492,7 @@ func TestUpdateFeeRule_ValidationError_EmptyName(t *testing.T) {
 
 	result, err := uc.UpdateFeeRule(
 		context.Background(),
+		existing.ContextID,
 		existing.ID,
 		nil,
 		nil,
@@ -478,6 +517,7 @@ func TestUpdateFeeRule_ValidationError_NegativePriority(t *testing.T) {
 
 	result, err := uc.UpdateFeeRule(
 		context.Background(),
+		existing.ContextID,
 		existing.ID,
 		nil,
 		nil,
@@ -503,6 +543,7 @@ func TestUpdateFeeRule_FindByIDError(t *testing.T) {
 
 	result, err := uc.UpdateFeeRule(
 		context.Background(),
+		uuid.New(),
 		uuid.New(),
 		nil,
 		nil,
@@ -530,6 +571,7 @@ func TestUpdateFeeRule_RepoUpdateError(t *testing.T) {
 
 	result, err := uc.UpdateFeeRule(
 		context.Background(),
+		existing.ContextID,
 		existing.ID,
 		nil,
 		nil,
@@ -559,6 +601,7 @@ func TestUpdateFeeRule_ConstraintError(t *testing.T) {
 
 	result, err := uc.UpdateFeeRule(
 		context.Background(),
+		existing.ContextID,
 		existing.ID,
 		nil,
 		nil,
@@ -586,6 +629,7 @@ func TestUpdateFeeRule_ConstraintError_MissingFeeSchedule(t *testing.T) {
 
 	result, err := uc.UpdateFeeRule(
 		context.Background(),
+		existing.ContextID,
 		existing.ID,
 		nil,
 		&missingSchedule,
@@ -607,7 +651,7 @@ func TestDeleteFeeRule_Success(t *testing.T) {
 	uc := newUseCaseWithFeeRuleRepo(repo)
 	existing := seedRule(t, repo)
 
-	err := uc.DeleteFeeRule(context.Background(), existing.ID)
+	err := uc.DeleteFeeRuleInContext(context.Background(), existing.ContextID, existing.ID)
 
 	assert.NoError(t, err)
 	assert.Empty(t, repo.rules)
@@ -619,7 +663,7 @@ func TestDeleteFeeRule_NotFound(t *testing.T) {
 	repo := newFeeRuleMockRepo()
 	uc := newUseCaseWithFeeRuleRepo(repo)
 
-	err := uc.DeleteFeeRule(context.Background(), uuid.New())
+	err := uc.DeleteFeeRuleInContext(context.Background(), uuid.New(), uuid.New())
 
 	assert.ErrorIs(t, err, fee.ErrFeeRuleNotFound)
 }
@@ -635,7 +679,7 @@ func TestDeleteFeeRule_NilRepo(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	deleteErr := uc.DeleteFeeRule(context.Background(), uuid.New())
+	deleteErr := uc.DeleteFeeRuleInContext(context.Background(), uuid.New(), uuid.New())
 
 	assert.ErrorIs(t, deleteErr, ErrNilFeeRuleRepository)
 }
@@ -648,7 +692,7 @@ func TestDeleteFeeRule_FindByIDError(t *testing.T) {
 
 	uc := newUseCaseWithFeeRuleRepo(repo)
 
-	err := uc.DeleteFeeRule(context.Background(), uuid.New())
+	err := uc.DeleteFeeRuleInContext(context.Background(), uuid.New(), uuid.New())
 
 	assert.Error(t, err)
 	assert.ErrorContains(t, err, "finding fee rule")
@@ -663,7 +707,7 @@ func TestDeleteFeeRule_RepoDeleteError(t *testing.T) {
 
 	repo.deleteErr = errors.New("permission denied")
 
-	err := uc.DeleteFeeRule(context.Background(), existing.ID)
+	err := uc.DeleteFeeRuleInContext(context.Background(), existing.ContextID, existing.ID)
 
 	assert.Error(t, err)
 	assert.ErrorContains(t, err, "deleting fee rule")

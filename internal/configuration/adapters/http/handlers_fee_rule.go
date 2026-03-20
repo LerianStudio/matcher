@@ -264,6 +264,7 @@ func (handler *Handler) UpdateFeeRule(fiberCtx *fiber.Ctx) error {
 
 	result, err := handler.command.UpdateFeeRule(
 		ctx,
+		existing.ContextID,
 		feeRuleID,
 		payload.Side,
 		payload.FeeScheduleID,
@@ -333,7 +334,7 @@ func (handler *Handler) DeleteFeeRule(fiberCtx *fiber.Ctx) error {
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, existing.ContextID)
 
-	if err := handler.command.DeleteFeeRule(ctx, feeRuleID); err != nil {
+	if err := handler.command.DeleteFeeRuleInContext(ctx, existing.ContextID, feeRuleID); err != nil {
 		logSpanError(ctx, span, logger, "failed to delete fee rule", err)
 
 		if errors.Is(err, fee.ErrFeeRuleNotFound) {
@@ -370,13 +371,16 @@ func isFeeRuleClientError(err error) bool {
 		fee.ErrFeeRuleNameRequired,
 		fee.ErrFeeRuleNameTooLong,
 		fee.ErrFeeRuleScheduleIDRequired,
+		fee.ErrFeeRuleCountLimitExceeded,
 		fee.ErrFeeRuleContextIDRequired,
 		fee.ErrFeeRulePriorityNegative,
 		fee.ErrFeeRuleTooManyPredicates,
 		fee.ErrInvalidMatchingSide,
 		fee.ErrInvalidPredicateOperator,
 		fee.ErrPredicateFieldRequired,
+		fee.ErrPredicateValueForbidden,
 		fee.ErrPredicateValueRequired,
+		fee.ErrPredicateValuesForbidden,
 		fee.ErrPredicateValuesRequired,
 	}
 	for _, safeErr := range clientErrors {

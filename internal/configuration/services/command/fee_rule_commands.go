@@ -61,6 +61,19 @@ func (uc *UseCase) CreateFeeRule(
 	ctx, span := tracer.Start(ctx, "command.create_fee_rule")
 	defer span.End()
 
+	existingRules, err := uc.feeRuleRepo.FindByContextID(ctx, contextID)
+	if err != nil {
+		libOpentelemetry.HandleSpanError(span, "failed to load fee rules for limit check", err)
+		return nil, fmt.Errorf("create fee rule: loading existing fee rules: %w", err)
+	}
+
+	if len(existingRules) >= fee.MaxFeeRulesPerContext {
+		limitErr := fmt.Errorf("create fee rule: %w", fee.ErrFeeRuleCountLimitExceeded)
+		libOpentelemetry.HandleSpanError(span, "fee rule count limit exceeded", limitErr)
+
+		return nil, limitErr
+	}
+
 	entity, err := fee.NewFeeRule(ctx, contextID, feeScheduleID, fee.MatchingSide(side), name, priority, predicates)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "invalid fee rule input", err)
@@ -92,6 +105,7 @@ func (uc *UseCase) CreateFeeRule(
 // UpdateFeeRule modifies an existing fee rule.
 func (uc *UseCase) UpdateFeeRule(
 	ctx context.Context,
+	contextID uuid.UUID,
 	feeRuleID uuid.UUID,
 	side *string,
 	feeScheduleID *string,
@@ -108,7 +122,7 @@ func (uc *UseCase) UpdateFeeRule(
 	ctx, span := tracer.Start(ctx, "command.update_fee_rule")
 	defer span.End()
 
-	entity, err := uc.feeRuleRepo.FindByID(ctx, feeRuleID)
+	entity, err := uc.findFeeRuleInContext(ctx, contextID, feeRuleID)
 	if err != nil {
 		if errors.Is(err, fee.ErrFeeRuleNotFound) {
 			return nil, fee.ErrFeeRuleNotFound
@@ -161,6 +175,15 @@ func (uc *UseCase) UpdateFeeRule(
 
 // DeleteFeeRule removes a fee rule.
 func (uc *UseCase) DeleteFeeRule(ctx context.Context, feeRuleID uuid.UUID) error {
+	return uc.deleteFeeRule(ctx, uuid.Nil, feeRuleID)
+}
+
+// DeleteFeeRuleInContext removes a fee rule by ID after verifying it belongs to the provided context.
+func (uc *UseCase) DeleteFeeRuleInContext(ctx context.Context, contextID, feeRuleID uuid.UUID) error {
+	return uc.deleteFeeRule(ctx, contextID, feeRuleID)
+}
+
+func (uc *UseCase) deleteFeeRule(ctx context.Context, contextID, feeRuleID uuid.UUID) error {
 	if uc == nil || uc.feeRuleRepo == nil {
 		return ErrNilFeeRuleRepository
 	}
@@ -170,7 +193,7 @@ func (uc *UseCase) DeleteFeeRule(ctx context.Context, feeRuleID uuid.UUID) error
 	ctx, span := tracer.Start(ctx, "command.delete_fee_rule")
 	defer span.End()
 
-	existing, err := uc.feeRuleRepo.FindByID(ctx, feeRuleID)
+	existing, err := uc.findFeeRuleInContext(ctx, contextID, feeRuleID)
 	if err != nil {
 		if errors.Is(err, fee.ErrFeeRuleNotFound) {
 			return fee.ErrFeeRuleNotFound
@@ -202,6 +225,29 @@ func (uc *UseCase) DeleteFeeRule(ctx context.Context, feeRuleID uuid.UUID) error
 	uc.publishAudit(ctx, "fee_rule", feeRuleID, "delete", nil)
 
 	return nil
+}
+
+func (uc *UseCase) findFeeRuleInContext(
+	ctx context.Context,
+	contextID uuid.UUID,
+	feeRuleID uuid.UUID,
+) (*fee.FeeRule, error) {
+	if contextID == uuid.Nil {
+		return uc.feeRuleRepo.FindByID(ctx, feeRuleID)
+	}
+
+	rules, err := uc.feeRuleRepo.FindByContextID(ctx, contextID)
+	if err != nil {
+		return nil, fmt.Errorf("find fee rules by context: %w", err)
+	}
+
+	for _, rule := range rules {
+		if rule != nil && rule.ID == feeRuleID {
+			return rule, nil
+		}
+	}
+
+	return nil, fee.ErrFeeRuleNotFound
 }
 
 // mapFeeRuleConstraintError maps PostgreSQL unique constraint violations to domain errors.
