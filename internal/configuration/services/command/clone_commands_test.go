@@ -18,6 +18,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/repositories/mocks"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
 func TestCloneContext_NilRepository(t *testing.T) {
@@ -41,6 +42,7 @@ func TestCloneContext_EmptyName(t *testing.T) {
 		mocks.NewMockSourceRepository(ctrl),
 		mocks.NewMockFieldMapRepository(ctrl),
 		mocks.NewMockMatchRuleRepository(ctrl),
+		WithFeeRuleRepository(newFeeRuleMockRepo()),
 	)
 	require.NoError(t, err)
 
@@ -70,6 +72,7 @@ func TestCloneContext_SourceNotFound(t *testing.T) {
 		mocks.NewMockSourceRepository(ctrl),
 		mocks.NewMockFieldMapRepository(ctrl),
 		mocks.NewMockMatchRuleRepository(ctrl),
+		WithFeeRuleRepository(newFeeRuleMockRepo()),
 	)
 	require.NoError(t, err)
 
@@ -151,6 +154,7 @@ func TestCloneContext_WithSourcesAndRules(t *testing.T) {
 	mockSrcRepo := mocks.NewMockSourceRepository(ctrl)
 	mockFMRepo := mocks.NewMockFieldMapRepository(ctrl)
 	mockRuleRepo := mocks.NewMockMatchRuleRepository(ctrl)
+	feeRuleRepo := newFeeRuleMockRepo()
 
 	sourceCtxID := uuid.New()
 	tenantID := uuid.New()
@@ -174,6 +178,9 @@ func TestCloneContext_WithSourcesAndRules(t *testing.T) {
 	rules := entities.MatchRules{
 		{ID: uuid.New(), ContextID: sourceCtxID, Priority: 1, Type: "EXACT", Config: map[string]any{"field": "amount"}},
 	}
+	feeRule, err := fee.NewFeeRule(context.Background(), sourceCtxID, uuid.New(), fee.MatchingSideAny, "fee-rule", 1, validPredicates())
+	require.NoError(t, err)
+	feeRuleRepo.rules[feeRule.ID] = feeRule
 
 	mockCtxRepo.EXPECT().FindByID(gomock.Any(), sourceCtxID).Return(sourceContext, nil)
 	mockCtxRepo.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -210,20 +217,46 @@ func TestCloneContext_WithSourcesAndRules(t *testing.T) {
 	// Create rule.
 	mockRuleRepo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(nil, nil)
 
-	uc, err := NewUseCase(mockCtxRepo, mockSrcRepo, mockFMRepo, mockRuleRepo)
+	uc, err := NewUseCase(mockCtxRepo, mockSrcRepo, mockFMRepo, mockRuleRepo, WithFeeRuleRepository(feeRuleRepo))
 	require.NoError(t, err)
 
 	result, err := uc.CloneContext(context.Background(), CloneContextInput{
-		SourceContextID:     sourceCtxID,
-		NewName:             "Clone",
-		IncludeSources: true,
-		IncludeRules:   true,
+		SourceContextID: sourceCtxID,
+		NewName:         "Clone",
+		IncludeSources:  true,
+		IncludeRules:    true,
 	})
 
 	require.NoError(t, err)
 	assert.Equal(t, 2, result.SourcesCloned)
 	assert.Equal(t, 1, result.FieldMapsCloned)
 	assert.Equal(t, 1, result.RulesCloned)
+	assert.Equal(t, 1, result.FeeRulesCloned)
+}
+
+func TestCloneContext_IncludeRulesRequiresFeeRuleRepository(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockCtxRepo := mocks.NewMockContextRepository(ctrl)
+
+	uc, err := NewUseCase(
+		mockCtxRepo,
+		mocks.NewMockSourceRepository(ctrl),
+		mocks.NewMockFieldMapRepository(ctrl),
+		mocks.NewMockMatchRuleRepository(ctrl),
+	)
+	require.NoError(t, err)
+
+	_, err = uc.CloneContext(context.Background(), CloneContextInput{
+		SourceContextID: uuid.New(),
+		NewName:         "Clone",
+		IncludeRules:    true,
+	})
+
+	assert.ErrorIs(t, err, ErrNilFeeRuleRepository)
 }
 
 func TestCloneMap(t *testing.T) {

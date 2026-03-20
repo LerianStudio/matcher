@@ -24,6 +24,8 @@ type CloneContextResponse struct {
 	SourcesCloned int `json:"sourcesCloned" example:"3"`
 	// Number of match rules cloned
 	RulesCloned int `json:"rulesCloned" example:"5"`
+	// Number of fee rules cloned
+	FeeRulesCloned int `json:"feeRulesCloned" example:"2"`
 	// Number of field maps cloned
 	FieldMapsCloned int `json:"fieldMapsCloned" example:"3"`
 }
@@ -40,6 +42,7 @@ func CloneResultToResponse(result *entities.CloneResult) CloneContextResponse {
 		Context:         ReconciliationContextToResponse(result.Context),
 		SourcesCloned:   result.SourcesCloned,
 		RulesCloned:     result.RulesCloned,
+		FeeRulesCloned:  result.FeeRulesCloned,
 		FieldMapsCloned: result.FieldMapsCloned,
 	}
 }
