@@ -120,6 +120,49 @@ func TestNewFeeRule_TrimsNameAndPredicateField(t *testing.T) {
 	assert.Equal(t, "institution", rule.Predicates[0].Field)
 }
 
+func TestNewFeeRule_NameExactlyMaxLength(t *testing.T) {
+	t.Parallel()
+
+	name := strings.Repeat("a", 100)
+
+	rule, err := NewFeeRule(context.Background(), uuid.New(), uuid.New(), MatchingSideAny, name, 0, nil)
+	require.NoError(t, err)
+	require.NotNil(t, rule)
+	assert.Equal(t, name, rule.Name)
+}
+
+func TestFeeRule_Update_NoOp(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	rule, err := NewFeeRule(ctx, uuid.New(), uuid.New(), MatchingSideLeft, "original", 5, []FieldPredicate{
+		{Field: "institution", Operator: PredicateOperatorEquals, Value: "Itau"},
+	})
+	require.NoError(t, err)
+
+	originalContextID := rule.ContextID
+	originalFeeScheduleID := rule.FeeScheduleID
+	originalSide := rule.Side
+	originalName := rule.Name
+	originalPriority := rule.Priority
+	originalPredicates := rule.Predicates
+	originalCreatedAt := rule.CreatedAt
+	originalUpdatedAt := rule.UpdatedAt
+
+	err = rule.Update(ctx, UpdateFeeRuleInput{})
+	require.NoError(t, err)
+
+	assert.Equal(t, originalContextID, rule.ContextID)
+	assert.Equal(t, originalFeeScheduleID, rule.FeeScheduleID)
+	assert.Equal(t, originalSide, rule.Side)
+	assert.Equal(t, originalName, rule.Name)
+	assert.Equal(t, originalPriority, rule.Priority)
+	assert.Equal(t, originalPredicates, rule.Predicates)
+	assert.Equal(t, originalCreatedAt, rule.CreatedAt)
+	assert.False(t, rule.UpdatedAt.Before(originalUpdatedAt))
+}
+
 func TestFeeRule_Update_Success(t *testing.T) {
 	t.Parallel()
 

@@ -18,6 +18,13 @@ const (
 	PredicateOperatorExists PredicateOperator = "EXISTS"
 )
 
+// Length and count limits for FieldPredicate fields.
+const (
+	maxPredicateFieldLength = 255
+	maxPredicateValueLength = 1024
+	maxPredicateValuesCount = 100
+)
+
 // IsValid returns true if the predicate operator is a recognized value.
 func (o PredicateOperator) IsValid() bool {
 	switch o {
@@ -42,6 +49,10 @@ func (pred FieldPredicate) Validate(_ context.Context) error {
 		return fmt.Errorf("field predicate: %w", ErrPredicateFieldRequired)
 	}
 
+	if len(pred.Field) > maxPredicateFieldLength {
+		return fmt.Errorf("field predicate: %w", ErrPredicateFieldTooLong)
+	}
+
 	if !pred.Operator.IsValid() {
 		return fmt.Errorf("field predicate operator %q: %w", pred.Operator, ErrInvalidPredicateOperator)
 	}
@@ -51,9 +62,23 @@ func (pred FieldPredicate) Validate(_ context.Context) error {
 		if pred.Value == "" {
 			return fmt.Errorf("field predicate %q: %w", pred.Field, ErrPredicateValueRequired)
 		}
+
+		if len(pred.Value) > maxPredicateValueLength {
+			return fmt.Errorf("field predicate: %w", ErrPredicateValueTooLong)
+		}
 	case PredicateOperatorIn:
 		if len(pred.Values) == 0 {
 			return fmt.Errorf("field predicate %q: %w", pred.Field, ErrPredicateValuesRequired)
+		}
+
+		if len(pred.Values) > maxPredicateValuesCount {
+			return fmt.Errorf("field predicate: %w", ErrPredicateValuesTooMany)
+		}
+
+		for _, v := range pred.Values {
+			if len(v) > maxPredicateValueLength {
+				return fmt.Errorf("field predicate: %w", ErrPredicateValueTooLong)
+			}
 		}
 	case PredicateOperatorExists:
 		// No additional fields required.
