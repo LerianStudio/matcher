@@ -12,6 +12,7 @@ type Factories struct {
 	Source      *SourceFactory
 	Rule        *RuleFactory
 	FeeSchedule *FeeScheduleFactory
+	FeeRule     *FeeRuleFactory
 }
 
 // New creates all factories for a test context.
@@ -21,5 +22,6 @@ func New(tc *e2e.TestContext, client *e2e.Client) *Factories {
 		Source:      NewSourceFactory(tc, client),
 		Rule:        NewRuleFactory(tc, client),
 		FeeSchedule: NewFeeScheduleFactory(tc, client),
+		FeeRule:     NewFeeRuleFactory(tc, client),
 	}
 }
