@@ -206,7 +206,8 @@ var (
 
 // feeRuleRepository is an in-memory stub for fee rule persistence in tests.
 type feeRuleRepository struct {
-	items map[uuid.UUID]*fee.FeeRule
+	items             map[uuid.UUID]*fee.FeeRule
+	findByIDOverride  func(ctx context.Context, id uuid.UUID) (*fee.FeeRule, error)
 }
 
 func newFeeRuleRepository() *feeRuleRepository {
@@ -223,7 +224,11 @@ func (repo *feeRuleRepository) CreateWithTx(_ context.Context, _ *sql.Tx, rule *
 	return nil
 }
 
-func (repo *feeRuleRepository) FindByID(_ context.Context, id uuid.UUID) (*fee.FeeRule, error) {
+func (repo *feeRuleRepository) FindByID(ctx context.Context, id uuid.UUID) (*fee.FeeRule, error) {
+	if repo.findByIDOverride != nil {
+		return repo.findByIDOverride(ctx, id)
+	}
+
 	rule, ok := repo.items[id]
 	if !ok {
 		return nil, fee.ErrFeeRuleNotFound

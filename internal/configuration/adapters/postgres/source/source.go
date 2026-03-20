@@ -2,6 +2,7 @@
 package source
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -19,7 +20,7 @@ type SourcePostgreSQLModel struct {
 	ContextID string
 	Name      string
 	Type      string
-	Side      string
+	Side      sql.NullString
 	Config    []byte
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -64,7 +65,7 @@ func NewSourcePostgreSQLModel(
 		ContextID: entity.ContextID.String(),
 		Name:      entity.Name,
 		Type:      entity.Type.String(),
-		Side:      string(entity.Side),
+		Side:      sql.NullString{String: string(entity.Side), Valid: entity.Side != ""},
 		Config:    configJSON,
 		CreatedAt: createdAt,
 		UpdatedAt: updatedAt,
@@ -92,7 +93,10 @@ func (model *SourcePostgreSQLModel) ToEntity() (*entities.ReconciliationSource, 
 		return nil, fmt.Errorf("failed to parse source type: %w", err)
 	}
 
-	sourceSide := sharedfee.MatchingSide(model.Side)
+	var sourceSide sharedfee.MatchingSide
+	if model.Side.Valid {
+		sourceSide = sharedfee.MatchingSide(model.Side.String)
+	}
 
 	config := make(map[string]any)
 	if len(model.Config) > 0 {
