@@ -87,6 +87,26 @@ func TestFieldPredicate_Validate(t *testing.T) {
 			predicate: FieldPredicate{Field: "f", Operator: PredicateOperatorIn, Values: []string{}},
 			wantErr:   ErrPredicateValuesRequired,
 		},
+		{
+			name:      "EQUALS rejects values slice",
+			predicate: FieldPredicate{Field: "f", Operator: PredicateOperatorEquals, Value: "x", Values: []string{"y"}},
+			wantErr:   ErrPredicateValuesForbidden,
+		},
+		{
+			name:      "IN rejects singular value",
+			predicate: FieldPredicate{Field: "f", Operator: PredicateOperatorIn, Value: "x", Values: []string{"y"}},
+			wantErr:   ErrPredicateValueForbidden,
+		},
+		{
+			name:      "EXISTS rejects singular value",
+			predicate: FieldPredicate{Field: "f", Operator: PredicateOperatorExists, Value: "x"},
+			wantErr:   ErrPredicateValueForbidden,
+		},
+		{
+			name:      "EXISTS rejects values slice",
+			predicate: FieldPredicate{Field: "f", Operator: PredicateOperatorExists, Values: []string{"x"}},
+			wantErr:   ErrPredicateValuesForbidden,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
