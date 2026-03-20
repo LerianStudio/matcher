@@ -166,11 +166,9 @@ func (repo *Repository) FindByID(
 			return nil, fee.ErrFeeRuleNotFound
 		}
 
-		if !errors.Is(err, sql.ErrNoRows) {
-			libOpentelemetry.HandleSpanError(span, "failed to find fee rule", err)
+		libOpentelemetry.HandleSpanError(span, "failed to find fee rule", err)
 
-			logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to find fee rule by id")
-		}
+		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to find fee rule by id")
 
 		return nil, fmt.Errorf("find fee rule by id: %w", err)
 	}
@@ -263,16 +261,12 @@ func (repo *Repository) Update(ctx stdctx.Context, rule *fee.FeeRule) error {
 			return fee.ErrFeeRuleNotFound
 		}
 
-		if !errors.Is(err, sql.ErrNoRows) {
-			wrappedErr := fmt.Errorf("update fee rule: %w", err)
-			libOpentelemetry.HandleSpanError(span, "failed to update fee rule", wrappedErr)
+		wrappedErr := fmt.Errorf("update fee rule: %w", err)
+		libOpentelemetry.HandleSpanError(span, "failed to update fee rule", wrappedErr)
 
-			logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to update fee rule")
+		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to update fee rule")
 
-			return wrappedErr
-		}
-
-		return fmt.Errorf("update fee rule: %w", err)
+		return wrappedErr
 	}
 
 	return nil
@@ -380,16 +374,12 @@ func (repo *Repository) Delete(ctx stdctx.Context, id uuid.UUID) error {
 			return fee.ErrFeeRuleNotFound
 		}
 
-		if !errors.Is(err, sql.ErrNoRows) {
-			wrappedErr := fmt.Errorf("delete fee rule: %w", err)
-			libOpentelemetry.HandleSpanError(span, "failed to delete fee rule", wrappedErr)
+		wrappedErr := fmt.Errorf("delete fee rule: %w", err)
+		libOpentelemetry.HandleSpanError(span, "failed to delete fee rule", wrappedErr)
 
-			logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to delete fee rule")
+		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to delete fee rule")
 
-			return wrappedErr
-		}
-
-		return fmt.Errorf("delete fee rule: %w", err)
+		return wrappedErr
 	}
 
 	return nil

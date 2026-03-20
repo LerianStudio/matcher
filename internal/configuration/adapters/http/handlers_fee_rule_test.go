@@ -529,6 +529,30 @@ func TestGetFeeRule_Success(t *testing.T) {
 	assert.Equal(t, contextEntity.ID.String(), body.ContextID)
 }
 
+func TestGetFeeRule_NotFound(t *testing.T) {
+	t.Parallel()
+
+	tracer, recorder := newTestTracer(t)
+	tenantID := newTestTenantID()
+	reqCtx := newRequestContext(tracer, tenantID)
+	app := newTestApp(reqCtx)
+	fixture := newHandlerFixture(t)
+
+	// Override FindByID to return (nil, nil), exercising the nil-result guard in the handler.
+	fixture.feeRuleRepo.findByIDOverride = func(_ context.Context, _ uuid.UUID) (*fee.FeeRule, error) {
+		return nil, nil
+	}
+
+	app.Get("/v1/fee-rules/:feeRuleId", fixture.handler.GetFeeRule)
+
+	resp := performRequest(t, app, http.MethodGet, "/v1/fee-rules/"+uuid.NewString(), nil)
+	defer resp.Body.Close()
+
+	require.Equal(t, fiber.StatusNotFound, resp.StatusCode)
+	requireSpanName(t, recorder, "handler.fee_rule.get")
+	requireNotFoundResponse(t, resp, "fee rule not found")
+}
+
 func TestUpdateFeeRule_Success(t *testing.T) {
 	t.Parallel()
 

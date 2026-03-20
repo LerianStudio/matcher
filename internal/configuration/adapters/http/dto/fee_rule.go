@@ -17,10 +17,10 @@ type CreateFeeRuleRequest struct {
 
 // FieldPredicateRequest represents a single predicate in a fee rule request.
 type FieldPredicateRequest struct {
-	Field    string   `json:"field"    validate:"required" example:"institution"`
-	Operator string   `json:"operator" validate:"required,oneof=EQUALS IN EXISTS" example:"EQUALS" enums:"EQUALS,IN,EXISTS"`
-	Value    string   `json:"value,omitempty"              example:"Banco do Brasil"`
-	Values   []string `json:"values,omitempty"`
+	Field    string   `json:"field"    validate:"required,max=255"                    example:"institution"`
+	Operator string   `json:"operator" validate:"required,oneof=EQUALS IN EXISTS"     example:"EQUALS" enums:"EQUALS,IN,EXISTS"`
+	Value    string   `json:"value,omitempty"    validate:"omitempty,max=1024"         example:"Banco do Brasil"`
+	Values   []string `json:"values,omitempty"   validate:"omitempty,max=100,dive,max=1024"`
 }
 
 // UpdateFeeRuleRequest is the request body for PATCH /v1/config/fee-rules/:feeRuleId.
