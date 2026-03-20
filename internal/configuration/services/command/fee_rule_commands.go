@@ -30,6 +30,7 @@ var (
 const (
 	constraintFeeRulePriority = "uq_fee_rules_context_priority"
 	constraintFeeRuleName     = "uq_fee_rules_context_name"
+	constraintFeeRuleSchedule = "fk_fee_rules_fee_schedule"
 )
 
 // WithFeeRuleRepository sets the fee rule repository for the use case.
@@ -109,6 +110,10 @@ func (uc *UseCase) UpdateFeeRule(
 
 	entity, err := uc.feeRuleRepo.FindByID(ctx, feeRuleID)
 	if err != nil {
+		if errors.Is(err, fee.ErrFeeRuleNotFound) {
+			return nil, fee.ErrFeeRuleNotFound
+		}
+
 		libOpentelemetry.HandleSpanError(span, "failed to load fee rule", err)
 
 		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to load fee rule")
@@ -132,6 +137,10 @@ func (uc *UseCase) UpdateFeeRule(
 	}
 
 	if err := uc.feeRuleRepo.Update(ctx, entity); err != nil {
+		if errors.Is(err, fee.ErrFeeRuleNotFound) {
+			return nil, fee.ErrFeeRuleNotFound
+		}
+
 		libOpentelemetry.HandleSpanError(span, "failed to update fee rule", err)
 
 		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to update fee rule")
@@ -163,6 +172,10 @@ func (uc *UseCase) DeleteFeeRule(ctx context.Context, feeRuleID uuid.UUID) error
 
 	existing, err := uc.feeRuleRepo.FindByID(ctx, feeRuleID)
 	if err != nil {
+		if errors.Is(err, fee.ErrFeeRuleNotFound) {
+			return fee.ErrFeeRuleNotFound
+		}
+
 		libOpentelemetry.HandleSpanError(span, "failed to load fee rule", err)
 
 		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to load fee rule")
@@ -175,6 +188,10 @@ func (uc *UseCase) DeleteFeeRule(ctx context.Context, feeRuleID uuid.UUID) error
 	}
 
 	if err := uc.feeRuleRepo.Delete(ctx, feeRuleID); err != nil {
+		if errors.Is(err, fee.ErrFeeRuleNotFound) {
+			return fee.ErrFeeRuleNotFound
+		}
+
 		libOpentelemetry.HandleSpanError(span, "failed to delete fee rule", err)
 
 		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to delete fee rule")
@@ -195,15 +212,22 @@ func mapFeeRuleConstraintError(err error) error {
 	}
 
 	// PostgreSQL error code 23505 = unique_violation.
-	if pgErr.Code != "23505" {
-		return nil
-	}
+	switch pgErr.Code {
+	case "23505":
+		switch pgErr.ConstraintName {
+		case constraintFeeRulePriority:
+			return ErrDuplicateFeeRulePriority
+		case constraintFeeRuleName:
+			return ErrDuplicateFeeRuleName
+		default:
+			return nil
+		}
+	case "23503":
+		if pgErr.ConstraintName == constraintFeeRuleSchedule {
+			return fee.ErrFeeScheduleNotFound
+		}
 
-	switch pgErr.ConstraintName {
-	case constraintFeeRulePriority:
-		return ErrDuplicateFeeRulePriority
-	case constraintFeeRuleName:
-		return ErrDuplicateFeeRuleName
+		return nil
 	default:
 		return nil
 	}

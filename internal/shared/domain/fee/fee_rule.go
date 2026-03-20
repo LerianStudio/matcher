@@ -3,6 +3,7 @@ package fee
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -42,6 +43,7 @@ func NewFeeRule(
 	predicates []FieldPredicate,
 ) (*FeeRule, error) {
 	asserter := assert.New(ctx, nil, constants.ApplicationName, "fee.rule.new")
+	trimmedName := strings.TrimSpace(name)
 
 	if err := asserter.That(ctx, contextID != uuid.Nil, "context id is required"); err != nil {
 		return nil, fmt.Errorf("fee rule context id: %w", ErrFeeRuleContextIDRequired)
@@ -55,11 +57,11 @@ func NewFeeRule(
 		return nil, fmt.Errorf("fee rule side: %w", ErrInvalidMatchingSide)
 	}
 
-	if err := asserter.NotEmpty(ctx, name, ErrFeeRuleNameRequired.Error()); err != nil {
+	if err := asserter.NotEmpty(ctx, trimmedName, ErrFeeRuleNameRequired.Error()); err != nil {
 		return nil, fmt.Errorf("fee rule name: %w", ErrFeeRuleNameRequired)
 	}
 
-	if err := asserter.That(ctx, len(name) <= maxFeeRuleNameLength, ErrFeeRuleNameTooLong.Error(), "length", len(name)); err != nil {
+	if err := asserter.That(ctx, len(trimmedName) <= maxFeeRuleNameLength, ErrFeeRuleNameTooLong.Error(), "length", len(trimmedName)); err != nil {
 		return nil, fmt.Errorf("fee rule name: %w", ErrFeeRuleNameTooLong)
 	}
 
@@ -71,7 +73,13 @@ func NewFeeRule(
 		return nil, fmt.Errorf("fee rule predicates: %w", ErrFeeRuleTooManyPredicates)
 	}
 
-	for i, pred := range predicates {
+	normalizedPredicates := make([]FieldPredicate, len(predicates))
+	copy(normalizedPredicates, predicates)
+
+	for i, pred := range normalizedPredicates {
+		pred.Field = strings.TrimSpace(pred.Field)
+		normalizedPredicates[i] = pred
+
 		if err := pred.Validate(ctx); err != nil {
 			return nil, fmt.Errorf("fee rule predicate[%d]: %w", i, err)
 		}
@@ -84,9 +92,9 @@ func NewFeeRule(
 		ContextID:     contextID,
 		Side:          side,
 		FeeScheduleID: feeScheduleID,
-		Name:          name,
+		Name:          trimmedName,
 		Priority:      priority,
-		Predicates:    predicates,
+		Predicates:    normalizedPredicates,
 		CreatedAt:     now,
 		UpdatedAt:     now,
 	}, nil
@@ -119,15 +127,17 @@ func (fr *FeeRule) Update(ctx context.Context, input UpdateFeeRuleInput) error {
 	}
 
 	if input.Name != nil {
-		if err := asserter.NotEmpty(ctx, *input.Name, ErrFeeRuleNameRequired.Error()); err != nil {
+		trimmedName := strings.TrimSpace(*input.Name)
+
+		if err := asserter.NotEmpty(ctx, trimmedName, ErrFeeRuleNameRequired.Error()); err != nil {
 			return fmt.Errorf("fee rule name: %w", ErrFeeRuleNameRequired)
 		}
 
-		if err := asserter.That(ctx, len(*input.Name) <= maxFeeRuleNameLength, ErrFeeRuleNameTooLong.Error(), "length", len(*input.Name)); err != nil {
+		if err := asserter.That(ctx, len(trimmedName) <= maxFeeRuleNameLength, ErrFeeRuleNameTooLong.Error(), "length", len(trimmedName)); err != nil {
 			return fmt.Errorf("fee rule name: %w", ErrFeeRuleNameTooLong)
 		}
 
-		fr.Name = *input.Name
+		fr.Name = trimmedName
 	}
 
 	if input.Priority != nil {
@@ -148,7 +158,9 @@ func (fr *FeeRule) Update(ctx context.Context, input UpdateFeeRuleInput) error {
 	}
 
 	if input.Predicates != nil {
-		preds := *input.Predicates
+		preds := make([]FieldPredicate, len(*input.Predicates))
+		copy(preds, *input.Predicates)
+
 		if err := validatePredicates(ctx, asserter, preds); err != nil {
 			return err
 		}
@@ -182,6 +194,9 @@ func validatePredicates(ctx context.Context, asserter *assert.Asserter, preds []
 	}
 
 	for i, pred := range preds {
+		pred.Field = strings.TrimSpace(pred.Field)
+		preds[i] = pred
+
 		if err := pred.Validate(ctx); err != nil {
 			return fmt.Errorf("fee rule predicate[%d]: %w", i, err)
 		}

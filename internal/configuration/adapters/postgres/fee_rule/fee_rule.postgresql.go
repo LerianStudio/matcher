@@ -162,6 +162,10 @@ func (repo *Repository) FindByID(
 		},
 	)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fee.ErrFeeRuleNotFound
+		}
+
 		if !errors.Is(err, sql.ErrNoRows) {
 			libOpentelemetry.HandleSpanError(span, "failed to find fee rule", err)
 
@@ -255,6 +259,10 @@ func (repo *Repository) Update(ctx stdctx.Context, rule *fee.FeeRule) error {
 		},
 	)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fee.ErrFeeRuleNotFound
+		}
+
 		if !errors.Is(err, sql.ErrNoRows) {
 			wrappedErr := fmt.Errorf("update fee rule: %w", err)
 			libOpentelemetry.HandleSpanError(span, "failed to update fee rule", wrappedErr)
@@ -368,6 +376,10 @@ func (repo *Repository) Delete(ctx stdctx.Context, id uuid.UUID) error {
 		return repo.executeDelete(ctx, tx, id)
 	})
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fee.ErrFeeRuleNotFound
+		}
+
 		if !errors.Is(err, sql.ErrNoRows) {
 			wrappedErr := fmt.Errorf("delete fee rule: %w", err)
 			libOpentelemetry.HandleSpanError(span, "failed to delete fee rule", wrappedErr)

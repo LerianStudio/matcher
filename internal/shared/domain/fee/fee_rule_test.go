@@ -75,6 +75,13 @@ func TestNewFeeRule_EmptyName(t *testing.T) {
 	require.ErrorIs(t, err, ErrFeeRuleNameRequired)
 }
 
+func TestNewFeeRule_WhitespaceOnlyName(t *testing.T) {
+	t.Parallel()
+
+	_, err := NewFeeRule(context.Background(), uuid.New(), uuid.New(), MatchingSideAny, "   ", 0, nil)
+	require.ErrorIs(t, err, ErrFeeRuleNameRequired)
+}
+
 func TestNewFeeRule_NameTooLong(t *testing.T) {
 	t.Parallel()
 
@@ -98,4 +105,109 @@ func TestNewFeeRule_InvalidPredicate(t *testing.T) {
 		{Field: "", Operator: PredicateOperatorEquals, Value: "x"},
 	})
 	require.ErrorIs(t, err, ErrPredicateFieldRequired)
+}
+
+func TestNewFeeRule_TrimsNameAndPredicateField(t *testing.T) {
+	t.Parallel()
+
+	rule, err := NewFeeRule(context.Background(), uuid.New(), uuid.New(), MatchingSideAny, "  trimmed  ", 0, []FieldPredicate{{
+		Field:    " institution ",
+		Operator: PredicateOperatorEquals,
+		Value:    "x",
+	}})
+	require.NoError(t, err)
+	assert.Equal(t, "trimmed", rule.Name)
+	assert.Equal(t, "institution", rule.Predicates[0].Field)
+}
+
+func TestFeeRule_Update_Success(t *testing.T) {
+	t.Parallel()
+
+	rule, err := NewFeeRule(context.Background(), uuid.New(), uuid.New(), MatchingSideAny, "original", 1, nil)
+	require.NoError(t, err)
+
+	newSide := "LEFT"
+	newScheduleID := uuid.New().String()
+	newName := "updated"
+	newPriority := 2
+	newPredicates := []FieldPredicate{{Field: "institution", Operator: PredicateOperatorEquals, Value: "Itau"}}
+
+	oldUpdatedAt := rule.UpdatedAt
+
+	err = rule.Update(context.Background(), UpdateFeeRuleInput{
+		Side:          &newSide,
+		FeeScheduleID: &newScheduleID,
+		Name:          &newName,
+		Priority:      &newPriority,
+		Predicates:    &newPredicates,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, MatchingSideLeft, rule.Side)
+	assert.Equal(t, newName, rule.Name)
+	assert.Equal(t, newPriority, rule.Priority)
+	assert.Equal(t, uuid.MustParse(newScheduleID), rule.FeeScheduleID)
+	assert.Len(t, rule.Predicates, 1)
+	assert.False(t, rule.UpdatedAt.Before(oldUpdatedAt))
+}
+
+func TestFeeRule_Update_InvalidFeeScheduleID(t *testing.T) {
+	t.Parallel()
+
+	rule, err := NewFeeRule(context.Background(), uuid.New(), uuid.New(), MatchingSideAny, "original", 1, nil)
+	require.NoError(t, err)
+
+	invalidScheduleID := "not-a-uuid"
+	err = rule.Update(context.Background(), UpdateFeeRuleInput{FeeScheduleID: &invalidScheduleID})
+	require.ErrorIs(t, err, ErrFeeRuleScheduleIDRequired)
+}
+
+func TestFeeRule_Update_TooManyPredicates(t *testing.T) {
+	t.Parallel()
+
+	rule, err := NewFeeRule(context.Background(), uuid.New(), uuid.New(), MatchingSideAny, "original", 1, nil)
+	require.NoError(t, err)
+
+	predicates := make([]FieldPredicate, 0, 51)
+	for i := 0; i < 51; i++ {
+		predicates = append(predicates, FieldPredicate{Field: "institution", Operator: PredicateOperatorExists})
+	}
+
+	err = rule.Update(context.Background(), UpdateFeeRuleInput{Predicates: &predicates})
+	require.ErrorIs(t, err, ErrFeeRuleTooManyPredicates)
+}
+
+func TestFeeRule_Update_InvalidPredicate(t *testing.T) {
+	t.Parallel()
+
+	rule, err := NewFeeRule(context.Background(), uuid.New(), uuid.New(), MatchingSideAny, "original", 1, nil)
+	require.NoError(t, err)
+
+	predicates := []FieldPredicate{{Field: "", Operator: PredicateOperatorEquals, Value: "x"}}
+	err = rule.Update(context.Background(), UpdateFeeRuleInput{Predicates: &predicates})
+	require.ErrorIs(t, err, ErrPredicateFieldRequired)
+}
+
+func TestFeeRule_Update_WhitespaceOnlyName(t *testing.T) {
+	t.Parallel()
+
+	rule, err := NewFeeRule(context.Background(), uuid.New(), uuid.New(), MatchingSideAny, "original", 1, nil)
+	require.NoError(t, err)
+
+	name := "   "
+	err = rule.Update(context.Background(), UpdateFeeRuleInput{Name: &name})
+	require.ErrorIs(t, err, ErrFeeRuleNameRequired)
+}
+
+func TestFeeRule_Update_TrimsNameAndPredicateField(t *testing.T) {
+	t.Parallel()
+
+	rule, err := NewFeeRule(context.Background(), uuid.New(), uuid.New(), MatchingSideAny, "original", 1, nil)
+	require.NoError(t, err)
+
+	name := "  updated  "
+	predicates := []FieldPredicate{{Field: " institution ", Operator: PredicateOperatorExists}}
+	err = rule.Update(context.Background(), UpdateFeeRuleInput{Name: &name, Predicates: &predicates})
+	require.NoError(t, err)
+	assert.Equal(t, "updated", rule.Name)
+	assert.Equal(t, "institution", rule.Predicates[0].Field)
 }

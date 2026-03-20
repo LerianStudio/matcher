@@ -63,6 +63,11 @@ func TestFieldPredicate_Validate(t *testing.T) {
 			wantErr:   ErrPredicateFieldRequired,
 		},
 		{
+			name:      "whitespace field",
+			predicate: FieldPredicate{Field: "   ", Operator: PredicateOperatorEquals, Value: "x"},
+			wantErr:   ErrPredicateFieldRequired,
+		},
+		{
 			name:      "invalid operator",
 			predicate: FieldPredicate{Field: "f", Operator: PredicateOperator("LIKE")},
 			wantErr:   ErrInvalidPredicateOperator,

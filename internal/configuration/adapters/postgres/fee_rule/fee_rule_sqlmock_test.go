@@ -247,7 +247,7 @@ func TestFindByID_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	mock.ExpectBegin()
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT "+feeRuleColumns+" FROM fee_rules WHERE id = $1")).
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT " + feeRuleColumns + " FROM fee_rules WHERE id = $1")).
 		WithArgs(id.String()).
 		WillReturnRows(sqlmock.NewRows(feeRuleCols).
 			AddRow(
@@ -286,7 +286,7 @@ func TestFindByID_NotFound(t *testing.T) {
 	id := uuid.New()
 
 	mock.ExpectBegin()
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT "+feeRuleColumns+" FROM fee_rules WHERE id = $1")).
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT " + feeRuleColumns + " FROM fee_rules WHERE id = $1")).
 		WithArgs(id.String()).
 		WillReturnError(sql.ErrNoRows)
 	mock.ExpectRollback()
@@ -295,7 +295,7 @@ func TestFindByID_NotFound(t *testing.T) {
 
 	require.Error(t, err)
 	require.Nil(t, result)
-	assert.ErrorIs(t, err, sql.ErrNoRows)
+	assert.ErrorIs(t, err, fee.ErrFeeRuleNotFound)
 }
 
 func TestFindByID_QueryError(t *testing.T) {
@@ -307,7 +307,7 @@ func TestFindByID_QueryError(t *testing.T) {
 	id := uuid.New()
 
 	mock.ExpectBegin()
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT "+feeRuleColumns+" FROM fee_rules WHERE id = $1")).
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT " + feeRuleColumns + " FROM fee_rules WHERE id = $1")).
 		WithArgs(id.String()).
 		WillReturnError(errTestQuery)
 	mock.ExpectRollback()
@@ -368,7 +368,7 @@ func TestFindByContextID_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	mock.ExpectBegin()
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT "+feeRuleColumns+" FROM fee_rules WHERE context_id = $1 ORDER BY priority ASC")).
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT " + feeRuleColumns + " FROM fee_rules WHERE context_id = $1 ORDER BY priority ASC")).
 		WithArgs(contextID.String()).
 		WillReturnRows(sqlmock.NewRows(feeRuleCols).
 			AddRow(id1.String(), contextID.String(), "LEFT", scheduleID1.String(), "rule-1", 1, preds1, now, now).
@@ -394,7 +394,7 @@ func TestFindByContextID_Empty(t *testing.T) {
 	contextID := uuid.New()
 
 	mock.ExpectBegin()
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT "+feeRuleColumns+" FROM fee_rules WHERE context_id = $1 ORDER BY priority ASC")).
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT " + feeRuleColumns + " FROM fee_rules WHERE context_id = $1 ORDER BY priority ASC")).
 		WithArgs(contextID.String()).
 		WillReturnRows(sqlmock.NewRows(feeRuleCols))
 	mock.ExpectCommit()
@@ -414,7 +414,7 @@ func TestFindByContextID_QueryError(t *testing.T) {
 	contextID := uuid.New()
 
 	mock.ExpectBegin()
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT "+feeRuleColumns+" FROM fee_rules WHERE context_id = $1 ORDER BY priority ASC")).
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT " + feeRuleColumns + " FROM fee_rules WHERE context_id = $1 ORDER BY priority ASC")).
 		WithArgs(contextID.String()).
 		WillReturnError(errTestQuery)
 	mock.ExpectRollback()
@@ -504,7 +504,7 @@ func TestUpdate_NotFound(t *testing.T) {
 	err := repo.Update(context.Background(), rule)
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, sql.ErrNoRows)
+	assert.ErrorIs(t, err, fee.ErrFeeRuleNotFound)
 }
 
 func TestUpdate_ExecError(t *testing.T) {
@@ -633,7 +633,7 @@ func TestDelete_NotFound(t *testing.T) {
 	err := repo.Delete(context.Background(), id)
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, sql.ErrNoRows)
+	assert.ErrorIs(t, err, fee.ErrFeeRuleNotFound)
 }
 
 func TestDelete_ExecError(t *testing.T) {

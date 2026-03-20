@@ -280,6 +280,31 @@ func TestCreateFeeRule_ConstraintError_DuplicateName(t *testing.T) {
 	assert.ErrorIs(t, err, ErrDuplicateFeeRuleName)
 }
 
+func TestCreateFeeRule_ConstraintError_MissingFeeSchedule(t *testing.T) {
+	t.Parallel()
+
+	repo := newFeeRuleMockRepo()
+	repo.createErr = &pgconn.PgError{
+		Code:           "23503",
+		ConstraintName: constraintFeeRuleSchedule,
+	}
+
+	uc := newUseCaseWithFeeRuleRepo(repo)
+
+	result, err := uc.CreateFeeRule(
+		context.Background(),
+		uuid.New(),
+		"LEFT",
+		uuid.New(),
+		"missing-schedule",
+		1,
+		validPredicates(),
+	)
+
+	assert.Nil(t, result)
+	assert.ErrorIs(t, err, fee.ErrFeeScheduleNotFound)
+}
+
 func TestCreateFeeRule_InvalidSide(t *testing.T) {
 	t.Parallel()
 
@@ -334,8 +359,8 @@ func TestUpdateFeeRule_Success(t *testing.T) {
 	result, err := uc.UpdateFeeRule(
 		context.Background(),
 		existing.ID,
-		nil,     // side unchanged
-		nil,     // feeScheduleID unchanged
+		nil, // side unchanged
+		nil, // feeScheduleID unchanged
 		&newName,
 		nil, // priority unchanged
 		nil, // predicates unchanged
@@ -544,6 +569,33 @@ func TestUpdateFeeRule_ConstraintError(t *testing.T) {
 
 	assert.Nil(t, result)
 	assert.ErrorIs(t, err, ErrDuplicateFeeRuleName)
+}
+
+func TestUpdateFeeRule_ConstraintError_MissingFeeSchedule(t *testing.T) {
+	t.Parallel()
+
+	repo := newFeeRuleMockRepo()
+	uc := newUseCaseWithFeeRuleRepo(repo)
+	existing := seedRule(t, repo)
+
+	missingSchedule := uuid.New().String()
+	repo.updateErr = &pgconn.PgError{
+		Code:           "23503",
+		ConstraintName: constraintFeeRuleSchedule,
+	}
+
+	result, err := uc.UpdateFeeRule(
+		context.Background(),
+		existing.ID,
+		nil,
+		&missingSchedule,
+		nil,
+		nil,
+		nil,
+	)
+
+	assert.Nil(t, result)
+	assert.ErrorIs(t, err, fee.ErrFeeScheduleNotFound)
 }
 
 // --- DeleteFeeRule tests ---

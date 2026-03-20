@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -334,6 +335,24 @@ func TestDeleteFeeSchedule_NotFound(t *testing.T) {
 	err := uc.DeleteFeeSchedule(context.Background(), uuid.New())
 	require.Error(t, err)
 	require.ErrorIs(t, err, findErr)
+}
+
+func TestDeleteFeeSchedule_ReferencedByFeeRule(t *testing.T) {
+	t.Parallel()
+
+	repo := &feeScheduleRepoStub{
+		getByIDFn: func(_ context.Context, id uuid.UUID) (*fee.FeeSchedule, error) {
+			return &fee.FeeSchedule{ID: id}, nil
+		},
+		deleteFn: func(_ context.Context, _ uuid.UUID) error {
+			return &pgconn.PgError{Code: "23503", ConstraintName: constraintFeeRuleSchedule}
+		},
+	}
+
+	uc := newUseCaseWithFeeSchedule(t, repo)
+
+	err := uc.DeleteFeeSchedule(context.Background(), uuid.New())
+	require.ErrorIs(t, err, ErrFeeScheduleReferencedByFeeRule)
 }
 
 func TestParseFeeStructureFromRequest_Flat(t *testing.T) {
