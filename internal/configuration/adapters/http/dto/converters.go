@@ -82,6 +82,7 @@ func ReconciliationSourceToResponse(
 		ContextID: src.ContextID.String(),
 		Name:      src.Name,
 		Type:      src.Type.String(),
+		Side:      string(src.Side),
 		Config:    config,
 		CreatedAt: src.CreatedAt.Format(time.RFC3339),
 		UpdatedAt: src.UpdatedAt.Format(time.RFC3339),

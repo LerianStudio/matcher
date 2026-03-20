@@ -18,6 +18,7 @@ import (
 	repoMocks "github.com/LerianStudio/matcher/internal/configuration/domain/repositories/mocks"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	portMocks "github.com/LerianStudio/matcher/internal/configuration/ports/mocks"
+	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
 // errDatabaseError is a sentinel error for database errors in tests.
@@ -39,6 +40,7 @@ func TestCreateSource_Command(t *testing.T) {
 			input: entities.CreateReconciliationSourceInput{
 				Name: "Bank",
 				Type: value_objects.SourceTypeBank,
+				Side: sharedfee.MatchingSideLeft,
 				Config: map[string]any{
 					"account": "123",
 				},
@@ -49,6 +51,7 @@ func TestCreateSource_Command(t *testing.T) {
 			input: entities.CreateReconciliationSourceInput{
 				Name: "Bank",
 				Type: value_objects.SourceTypeBank,
+				Side: sharedfee.MatchingSideLeft,
 			},
 			createErr: errDatabaseError,
 			wantErr:   errDatabaseError,
@@ -58,6 +61,7 @@ func TestCreateSource_Command(t *testing.T) {
 			input: entities.CreateReconciliationSourceInput{
 				Name: "",
 				Type: value_objects.SourceTypeBank,
+				Side: sharedfee.MatchingSideLeft,
 			},
 			wantErr: entities.ErrSourceNameRequired,
 		},
@@ -66,6 +70,7 @@ func TestCreateSource_Command(t *testing.T) {
 			input: entities.CreateReconciliationSourceInput{
 				Name: "Bank",
 				Type: value_objects.SourceType("INVALID"),
+				Side: sharedfee.MatchingSideLeft,
 			},
 			wantErr: entities.ErrSourceTypeInvalid,
 		},
@@ -74,6 +79,7 @@ func TestCreateSource_Command(t *testing.T) {
 			input: entities.CreateReconciliationSourceInput{
 				Name: strings.Repeat("a", 51),
 				Type: value_objects.SourceTypeBank,
+				Side: sharedfee.MatchingSideLeft,
 			},
 			wantErr: entities.ErrSourceNameTooLong,
 		},
@@ -126,6 +132,7 @@ func TestUpdateSource_CommandValidation(t *testing.T) {
 		entities.CreateReconciliationSourceInput{
 			Name: "Gateway",
 			Type: value_objects.SourceTypeGateway,
+			Side: sharedfee.MatchingSideLeft,
 		},
 	)
 	require.NoError(t, err)
@@ -198,6 +205,7 @@ func TestCreateSource_WithAuditPublisher(t *testing.T) {
 	input := entities.CreateReconciliationSourceInput{
 		Name: "Bank",
 		Type: value_objects.SourceTypeBank,
+		Side: sharedfee.MatchingSideLeft,
 	}
 
 	mockSrcRepo.EXPECT().
@@ -307,6 +315,7 @@ func TestUpdateSource_RepositoryUpdateError(t *testing.T) {
 		entities.CreateReconciliationSourceInput{
 			Name: "Original",
 			Type: value_objects.SourceTypeBank,
+			Side: sharedfee.MatchingSideLeft,
 		},
 	)
 	require.NoError(t, err)
@@ -353,6 +362,7 @@ func TestUpdateSource_Success(t *testing.T) {
 		entities.CreateReconciliationSourceInput{
 			Name: "Original",
 			Type: value_objects.SourceTypeBank,
+			Side: sharedfee.MatchingSideLeft,
 		},
 	)
 	require.NoError(t, err)
@@ -400,6 +410,7 @@ func TestUpdateSource_WithAuditPublisher(t *testing.T) {
 		entities.CreateReconciliationSourceInput{
 			Name: "Original",
 			Type: value_objects.SourceTypeBank,
+			Side: sharedfee.MatchingSideLeft,
 		},
 	)
 	require.NoError(t, err)

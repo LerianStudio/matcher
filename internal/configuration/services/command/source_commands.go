@@ -49,6 +49,7 @@ func (uc *UseCase) CreateSource(
 	uc.publishAudit(ctx, "source", created.ID, "create", map[string]any{
 		"name":       created.Name,
 		"type":       created.Type,
+		"side":       created.Side,
 		"context_id": created.ContextID.String(),
 	})
 
@@ -96,6 +97,7 @@ func (uc *UseCase) UpdateSource(
 	uc.publishAudit(ctx, "source", updated.ID, "update", map[string]any{
 		"name":       updated.Name,
 		"type":       updated.Type,
+		"side":       updated.Side,
 		"context_id": updated.ContextID.String(),
 	})
 

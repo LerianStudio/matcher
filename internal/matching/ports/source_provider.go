@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+
+	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
 //go:generate mockgen -destination=mocks/source_provider_mock.go -package=mocks . SourceProvider
@@ -23,6 +25,7 @@ const (
 type SourceInfo struct {
 	ID   uuid.UUID
 	Type SourceType
+	Side sharedfee.MatchingSide
 }
 
 // SourceProvider provides reconciliation source information for matching.

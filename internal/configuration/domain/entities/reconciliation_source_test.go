@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
 func TestNewReconciliationSource(t *testing.T) {
@@ -25,6 +26,7 @@ func TestNewReconciliationSource(t *testing.T) {
 		input := CreateReconciliationSourceInput{
 			Name: "Primary Ledger",
 			Type: value_objects.SourceTypeLedger,
+			Side: sharedfee.MatchingSideLeft,
 			Config: map[string]any{
 				"endpoint": "https://ledger.example.com",
 			},
@@ -37,6 +39,7 @@ func TestNewReconciliationSource(t *testing.T) {
 		assert.Equal(t, contextID, source.ContextID)
 		assert.Equal(t, "Primary Ledger", source.Name)
 		assert.Equal(t, value_objects.SourceTypeLedger, source.Type)
+		assert.Equal(t, sharedfee.MatchingSideLeft, source.Side)
 		assert.NotEmpty(t, source.Config)
 	})
 
@@ -46,6 +49,7 @@ func TestNewReconciliationSource(t *testing.T) {
 		input := CreateReconciliationSourceInput{
 			Name: "Bank",
 			Type: value_objects.SourceTypeBank,
+			Side: sharedfee.MatchingSideLeft,
 		}
 
 		_, err := NewReconciliationSource(context.Background(), uuid.Nil, input)
@@ -59,6 +63,7 @@ func TestNewReconciliationSource(t *testing.T) {
 		input := CreateReconciliationSourceInput{
 			Name: "",
 			Type: value_objects.SourceTypeBank,
+			Side: sharedfee.MatchingSideLeft,
 		}
 
 		_, err := NewReconciliationSource(context.Background(), contextID, input)
@@ -73,6 +78,7 @@ func TestNewReconciliationSource(t *testing.T) {
 		input := CreateReconciliationSourceInput{
 			Name: maxLengthName,
 			Type: value_objects.SourceTypeBank,
+			Side: sharedfee.MatchingSideLeft,
 		}
 
 		source, err := NewReconciliationSource(context.Background(), contextID, input)
@@ -87,6 +93,7 @@ func TestNewReconciliationSource(t *testing.T) {
 		input := CreateReconciliationSourceInput{
 			Name: tooLongName,
 			Type: value_objects.SourceTypeBank,
+			Side: sharedfee.MatchingSideLeft,
 		}
 
 		_, err := NewReconciliationSource(context.Background(), contextID, input)
@@ -100,11 +107,39 @@ func TestNewReconciliationSource(t *testing.T) {
 		input := CreateReconciliationSourceInput{
 			Name: "Gateway",
 			Type: value_objects.SourceType("INVALID"),
+			Side: sharedfee.MatchingSideLeft,
 		}
 
 		_, err := NewReconciliationSource(context.Background(), contextID, input)
 		require.Error(t, err)
 		assert.Equal(t, ErrSourceTypeInvalid, err)
+		t.Run("fails with missing side", func(t *testing.T) {
+			t.Parallel()
+
+			input := CreateReconciliationSourceInput{
+				Name: "Gateway",
+				Type: value_objects.SourceTypeGateway,
+			}
+
+			_, err := NewReconciliationSource(context.Background(), contextID, input)
+			require.Error(t, err)
+			assert.Equal(t, ErrSourceSideRequired, err)
+		})
+
+		t.Run("fails with invalid side", func(t *testing.T) {
+			t.Parallel()
+
+			input := CreateReconciliationSourceInput{
+				Name: "Gateway",
+				Type: value_objects.SourceTypeGateway,
+				Side: sharedfee.MatchingSideAny,
+			}
+
+			_, err := NewReconciliationSource(context.Background(), contextID, input)
+			require.Error(t, err)
+			assert.Equal(t, ErrSourceSideInvalid, err)
+		})
+
 	})
 }
 
@@ -117,6 +152,7 @@ func TestReconciliationSource_Update(t *testing.T) {
 		input := CreateReconciliationSourceInput{
 			Name: "Gateway",
 			Type: value_objects.SourceTypeGateway,
+			Side: sharedfee.MatchingSideLeft,
 			Config: map[string]any{
 				"token": "secret",
 			},
@@ -146,6 +182,16 @@ func TestReconciliationSource_Update(t *testing.T) {
 		err := source.Update(context.Background(), UpdateReconciliationSourceInput{Type: &newType})
 		require.NoError(t, err)
 		assert.Equal(t, value_objects.SourceTypeBank, source.Type)
+	})
+
+	t.Run("updates side", func(t *testing.T) {
+		t.Parallel()
+
+		source := createSource(t)
+		newSide := sharedfee.MatchingSideRight
+		err := source.Update(context.Background(), UpdateReconciliationSourceInput{Side: &newSide})
+		require.NoError(t, err)
+		assert.Equal(t, sharedfee.MatchingSideRight, source.Side)
 	})
 
 	t.Run("updates config", func(t *testing.T) {
@@ -203,6 +249,16 @@ func TestReconciliationSource_Update(t *testing.T) {
 		assert.Equal(t, originalType, source.Type)
 		assert.Equal(t, originalConfig, source.Config)
 		assert.Equal(t, originalUpdatedAt, source.UpdatedAt)
+	})
+
+	t.Run("fails with invalid side", func(t *testing.T) {
+		t.Parallel()
+
+		source := createSource(t)
+		invalidSide := sharedfee.MatchingSideAny
+		err := source.Update(context.Background(), UpdateReconciliationSourceInput{Side: &invalidSide})
+		require.Error(t, err)
+		assert.Equal(t, ErrSourceSideInvalid, err)
 	})
 
 	t.Run("fails with nil receiver", func(t *testing.T) {
