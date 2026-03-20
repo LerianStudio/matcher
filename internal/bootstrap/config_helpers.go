@@ -10,6 +10,11 @@ import (
 	"strings"
 )
 
+const (
+	maxRestoreDepth     = 10
+	envTagSplitPartsMax = 2
+)
+
 func restoreZeroedFields(dst, snapshot *Config) {
 	if dst == nil || snapshot == nil {
 		return
@@ -19,7 +24,6 @@ func restoreZeroedFields(dst, snapshot *Config) {
 }
 
 func restoreZeroedFieldsRecursive(dst, snapshot reflect.Value, depth int) {
-	const maxRestoreDepth = 10
 	if depth > maxRestoreDepth {
 		return
 	}
@@ -30,11 +34,13 @@ func restoreZeroedFieldsRecursive(dst, snapshot reflect.Value, depth int) {
 		if !field.IsExported() {
 			continue
 		}
+
 		if field.Tag.Get("mapstructure") == "-" {
 			continue
 		}
 
 		dstField := dst.Field(i)
+
 		snapField := snapshot.Field(i)
 		if field.Type.Kind() == reflect.Struct {
 			restoreZeroedFieldsRecursive(dstField, snapField, depth+1)
@@ -53,12 +59,13 @@ func hasExplicitEnvOverride(field reflect.StructField) bool {
 		return false
 	}
 
-	envName := strings.TrimSpace(strings.SplitN(envTag, ",", 2)[0])
+	envName := strings.TrimSpace(strings.SplitN(envTag, ",", envTagSplitPartsMax)[0])
 	if envName == "" {
 		return false
 	}
 
 	_, exists := os.LookupEnv(envName)
+
 	return exists
 }
 
@@ -68,6 +75,7 @@ func resolveConfigValue(cfg *Config, key string) (any, bool) {
 	}
 
 	parts := strings.Split(key, ".")
+
 	current, ok := derefPointerValue(reflect.ValueOf(cfg))
 	if !ok {
 		return nil, false
@@ -100,6 +108,7 @@ func derefPointerValue(value reflect.Value) (reflect.Value, bool) {
 	if value.Kind() != reflect.Pointer {
 		return value, true
 	}
+
 	if value.IsNil() {
 		return reflect.Value{}, false
 	}
@@ -114,6 +123,7 @@ func findMapstructureField(current reflect.Value, part string) (reflect.Value, b
 		if !field.IsExported() {
 			continue
 		}
+
 		if field.Tag.Get("mapstructure") != part {
 			continue
 		}

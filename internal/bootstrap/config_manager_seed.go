@@ -76,6 +76,9 @@ func (cm *ConfigManager) SeedStore(ctx context.Context, store ports.Store, reg r
 	return nil
 }
 
+// RefreshBootstrapSeedValues updates persisted bootstrap-only, non-secret
+// systemplane values so they continue matching the current bootstrap config
+// after restarts or environment changes.
 func (cm *ConfigManager) RefreshBootstrapSeedValues(ctx context.Context, store ports.Store, reg registry.Registry) error {
 	cfg := cm.Get()
 	if cfg == nil {
@@ -93,6 +96,7 @@ func (cm *ConfigManager) RefreshBootstrapSeedValues(ctx context.Context, store p
 	}
 
 	defs := reg.List(domain.KindConfig)
+
 	ops := buildBootstrapRefreshOps(cfg, defs, current.Entries)
 	if len(ops) == 0 {
 		return nil
@@ -144,17 +148,20 @@ func buildBootstrapRefreshOps(cfg *Config, defs []domain.KeyDef, currentEntries 
 	}
 
 	var ops []ports.WriteOp
+
 	for _, def := range defs {
 		if def.MutableAtRuntime || def.Secret {
 			continue
 		}
 
 		currentVal := extractConfigValue(cfg, def.Key)
+
 		entry, exists := current[def.Key]
 		if isEqualValue(currentVal, def.DefaultValue) {
 			if exists {
 				ops = append(ops, ports.WriteOp{Key: def.Key, Reset: true})
 			}
+
 			continue
 		}
 

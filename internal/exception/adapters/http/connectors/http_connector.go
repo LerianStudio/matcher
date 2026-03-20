@@ -260,11 +260,13 @@ func (conn *HTTPConnector) dispatchToWebhook(
 
 	webhookConfig := conn.config.Webhook
 	timeout := webhookConfig.TimeoutOrDefault()
+
 	if conn.webhookTimeoutGetter != nil {
 		if runtimeTimeout := conn.webhookTimeoutGetter(); runtimeTimeout > 0 {
 			timeout = runtimeTimeout
 		}
 	}
+
 	client := conn.clientWithTimeout(timeout)
 
 	req, err := http.NewRequestWithContext(

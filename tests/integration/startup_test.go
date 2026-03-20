@@ -52,6 +52,8 @@ func TestServiceStartup_Integration(t *testing.T) {
 		t.Setenv("EXPORT_RATE_LIMIT_EXPIRY_SEC", "300")
 		t.Setenv("DISPATCH_RATE_LIMIT_MAX", "100")
 		t.Setenv("DISPATCH_RATE_LIMIT_EXPIRY_SEC", "60")
+		t.Setenv("EXPORT_WORKER_ENABLED", "false")
+		t.Setenv("CLEANUP_WORKER_ENABLED", "false")
 		t.Setenv("OBJECT_STORAGE_ENDPOINT", "")
 		t.Setenv("ARCHIVAL_WORKER_ENABLED", "false")
 
@@ -208,6 +210,8 @@ func TestServiceStartupAndShutdown_Integration(t *testing.T) {
 		t.Setenv("EXPORT_RATE_LIMIT_EXPIRY_SEC", "300")
 		t.Setenv("DISPATCH_RATE_LIMIT_MAX", "100")
 		t.Setenv("DISPATCH_RATE_LIMIT_EXPIRY_SEC", "60")
+		t.Setenv("EXPORT_WORKER_ENABLED", "false")
+		t.Setenv("CLEANUP_WORKER_ENABLED", "false")
 		t.Setenv("OBJECT_STORAGE_ENDPOINT", "")
 		t.Setenv("ARCHIVAL_WORKER_ENABLED", "false")
 

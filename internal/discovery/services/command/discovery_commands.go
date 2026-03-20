@@ -129,6 +129,7 @@ func (uc *UseCase) acquireDiscoveryRefreshLock(ctx context.Context) (string, err
 			ttl = runtimeTTL
 		}
 	}
+
 	if ttl <= 0 {
 		ttl = defaultDiscoveryRefreshLockTTL
 	}

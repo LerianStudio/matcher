@@ -99,6 +99,8 @@ func NewDBMetricsCollector(
 	return collector, nil
 }
 
+// SetResolverGetter configures a resolver getter used to refresh the active
+// database handle before each collection cycle.
 func (collector *DBMetricsCollector) SetResolverGetter(getter func(context.Context) (dbresolver.DB, error)) {
 	if collector == nil {
 		return
@@ -215,6 +217,7 @@ func (collector *DBMetricsCollector) collect(ctx context.Context) {
 		db, err := collector.currentDB(ctx)
 		if err == nil && db != nil {
 			collector.lastStatsMu.Lock()
+
 			currentID := resolverIdentity(db)
 			if collector.lastResolverID != 0 && collector.lastResolverID != currentID {
 				collector.lastWaitCount = 0
@@ -222,6 +225,7 @@ func (collector *DBMetricsCollector) collect(ctx context.Context) {
 				collector.lastMaxIdleClosed = 0
 				collector.lastMaxLifeClosed = 0
 			}
+
 			collector.lastResolverID = currentID
 			collector.lastStatsMu.Unlock()
 			collector.db = db

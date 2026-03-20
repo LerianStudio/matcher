@@ -137,6 +137,8 @@ func (uc *UseCase) WithDiscoveryRefreshLock(provider sharedPorts.InfrastructureP
 	uc.refreshLockTTL = discoveryRefreshLockTTLMultiplier * interval
 }
 
+// WithDiscoveryRefreshLockGetter configures a dynamic TTL getter for the
+// discovery refresh lock, allowing runtime config updates to adjust the lock.
 func (uc *UseCase) WithDiscoveryRefreshLockGetter(getter func() time.Duration) {
 	if uc == nil {
 		return

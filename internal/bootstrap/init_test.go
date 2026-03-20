@@ -1124,7 +1124,7 @@ func TestCreateArchivalStorage(t *testing.T) {
 			},
 		}
 
-		client, err := createArchivalStorage(cfg, &libLog.NopLogger{})
+		client, err := createArchivalStorage(context.Background(), cfg)
 
 		assert.NoError(t, err)
 		assert.Nil(t, client)
@@ -1142,7 +1142,7 @@ func TestCreateArchivalStorage(t *testing.T) {
 			},
 		}
 
-		client, err := createArchivalStorage(cfg, &libLog.NopLogger{})
+		client, err := createArchivalStorage(context.Background(), cfg)
 
 		assert.NoError(t, err)
 		assert.Nil(t, client)
@@ -1156,7 +1156,7 @@ func TestCreateArchivalStorage(t *testing.T) {
 			ObjectStorage: ObjectStorageConfig{},
 		}
 
-		client, err := createArchivalStorage(cfg, &libLog.NopLogger{})
+		client, err := createArchivalStorage(context.Background(), cfg)
 
 		assert.NoError(t, err)
 		assert.Nil(t, client)
@@ -1562,7 +1562,7 @@ func TestCreateObjectStorage_NotEnabled(t *testing.T) {
 		},
 	}
 
-	client, err := createObjectStorage(cfg, &libLog.NopLogger{})
+	client, err := createObjectStorage(context.Background(), cfg)
 
 	assert.NoError(t, err)
 	assert.Nil(t, client)
@@ -1580,7 +1580,7 @@ func TestCreateObjectStorage_EnabledWithoutBucket(t *testing.T) {
 		},
 	}
 
-	client, err := createObjectStorage(cfg, &libLog.NopLogger{})
+	client, err := createObjectStorage(context.Background(), cfg)
 
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, ErrObjectStorageBucketRequired)
@@ -1596,7 +1596,7 @@ func TestCreateObjectStorage_CleanupEnabledWithoutBucket(t *testing.T) {
 		ObjectStorage: ObjectStorageConfig{Bucket: ""},
 	}
 
-	client, err := createObjectStorage(cfg, &libLog.NopLogger{})
+	client, err := createObjectStorage(context.Background(), cfg)
 
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, ErrObjectStorageBucketRequired)
@@ -1622,7 +1622,7 @@ func TestCreateObjectStorageForHealth_EmptyEndpoint(t *testing.T) {
 		},
 	}
 
-	client, err := createObjectStorageForHealth(context.Background(), cfg, &libLog.NopLogger{})
+	client, err := createObjectStorageForHealth(context.Background(), cfg)
 
 	assert.NoError(t, err)
 	assert.Nil(t, client)
@@ -1638,7 +1638,7 @@ func TestCreateObjectStorageForHealth_EmptyBucket(t *testing.T) {
 		},
 	}
 
-	client, err := createObjectStorageForHealth(context.Background(), cfg, &libLog.NopLogger{})
+	client, err := createObjectStorageForHealth(context.Background(), cfg)
 
 	assert.NoError(t, err)
 	assert.Nil(t, client)
@@ -1654,7 +1654,7 @@ func TestCreateObjectStorageForHealth_BothEmpty(t *testing.T) {
 		},
 	}
 
-	client, err := createObjectStorageForHealth(context.Background(), cfg, &libLog.NopLogger{})
+	client, err := createObjectStorageForHealth(context.Background(), cfg)
 
 	assert.NoError(t, err)
 	assert.Nil(t, client)
@@ -1833,7 +1833,7 @@ func TestCreateObjectStorage_ValidBucketButNoEndpoint(t *testing.T) {
 		},
 	}
 
-	client, err := createObjectStorage(cfg, &libLog.NopLogger{})
+	client, err := createObjectStorage(context.Background(), cfg)
 	require.Error(t, err)
 	assert.Nil(t, client)
 	assert.Contains(t, err.Error(), "create S3 client")
@@ -1856,7 +1856,7 @@ func TestCreateObjectStorageForHealth_ValidConfig(t *testing.T) {
 		},
 	}
 
-	client, err := createObjectStorageForHealth(context.Background(), cfg, &libLog.NopLogger{})
+	client, err := createObjectStorageForHealth(context.Background(), cfg)
 	require.NoError(t, err)
 	assert.NotNil(t, client)
 }
@@ -1880,7 +1880,7 @@ func TestCreateArchivalStorage_ValidConfig(t *testing.T) {
 		},
 	}
 
-	client, err := createArchivalStorage(cfg, &libLog.NopLogger{})
+	client, err := createArchivalStorage(context.Background(), cfg)
 	require.NoError(t, err)
 	assert.NotNil(t, client)
 }
@@ -1960,7 +1960,7 @@ func TestInitEventPublishers_OpenChannelFailure_CleansUpOpenedChannel(t *testing
 	})
 	t.Cleanup(restore)
 
-	matchingPublisher, ingestionPublisher, err := initEventPublishers(&libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{})
+	matchingPublisher, ingestionPublisher, err := initEventPublishers(context.Background(), &libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "open AMQP channels")
@@ -1992,7 +1992,7 @@ func TestInitEventPublishers_MatchingPublisherFailure_CleansUpChannels(t *testin
 	})
 	t.Cleanup(restore)
 
-	matchingPublisher, ingestionPublisher, err := initEventPublishers(&libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{})
+	matchingPublisher, ingestionPublisher, err := initEventPublishers(context.Background(), &libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "create matching event publisher")
@@ -2030,7 +2030,7 @@ func TestInitEventPublishers_IngestionPublisherFailure_CleansUpPublisherAndChann
 	})
 	t.Cleanup(restore)
 
-	matchingPublisher, ingestionPublisher, err := initEventPublishers(&libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{})
+	matchingPublisher, ingestionPublisher, err := initEventPublishers(context.Background(), &libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "create ingestion event publisher")

@@ -30,8 +30,7 @@ func TestMultiTenant_BackwardCompatibility(t *testing.T) {
 	cfg.Tenancy.MultiTenantEnabled = false
 	cfg.Tenancy.MultiTenantInfraEnabled = false
 
-	provider, manager, err := createInfraProviderWithBundleState(cfg, nil, postgresConn, redisConn, nil)
-	require.NoError(t, err)
+	provider, manager := createInfraProviderWithBundleState(cfg, nil, postgresConn, redisConn, nil)
 	require.NotNil(t, manager)
 
 	resolvedPostgres, err := provider.GetPostgresConnection(context.Background())
@@ -79,12 +78,11 @@ func TestCreateInfraProvider_MultiTenantEnabled_ReturnsTenantConnectionManager(t
 	cfg.Tenancy.MultiTenantCircuitBreakerThreshold = 5
 	cfg.Tenancy.MultiTenantCircuitBreakerTimeoutSec = 30
 
-	provider, manager, err := createInfraProviderWithBundleState(cfg, nil, nil, nil, nil)
-	require.NoError(t, err)
+	provider, manager := createInfraProviderWithBundleState(cfg, nil, nil, nil, nil)
 	require.NotNil(t, manager)
 
 	ctx := context.WithValue(context.Background(), auth.TenantIDKey, "tenant-a")
-	_, err = provider.GetPostgresConnection(ctx)
+	_, err := provider.GetPostgresConnection(ctx)
 	require.Error(t, err)
 	assert.True(t, requested, "multi-tenant provider should resolve tenant settings through the remote adapter")
 }

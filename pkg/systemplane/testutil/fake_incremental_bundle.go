@@ -4,7 +4,7 @@ package testutil
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"sync"
 
 	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
@@ -13,8 +13,9 @@ import (
 
 // Compile-time interface checks.
 var (
-	_ ports.BundleFactory            = (*FakeIncrementalBundleFactory)(nil)
-	_ ports.IncrementalBundleFactory = (*FakeIncrementalBundleFactory)(nil)
+	_                                ports.BundleFactory            = (*FakeIncrementalBundleFactory)(nil)
+	_                                ports.IncrementalBundleFactory = (*FakeIncrementalBundleFactory)(nil)
+	errIncrementalBuildNotConfigured                                = errors.New("incremental build not configured")
 )
 
 // FakeIncrementalBundleFactory implements both BundleFactory and
@@ -44,28 +45,28 @@ func NewFakeIncrementalBundleFactory() *FakeIncrementalBundleFactory {
 
 // BuildIncremental delegates to IncrementalBuildFunc if set, otherwise returns
 // an error.
-func (f *FakeIncrementalBundleFactory) BuildIncremental(
+func (factory *FakeIncrementalBundleFactory) BuildIncremental(
 	ctx context.Context,
 	snap domain.Snapshot,
 	previous domain.RuntimeBundle,
 	prevSnap domain.Snapshot,
 ) (domain.RuntimeBundle, error) {
-	f.mu.Lock()
-	f.IncrementalCalls++
-	fn := f.IncrementalBuildFunc
-	f.mu.Unlock()
+	factory.mu.Lock()
+	factory.IncrementalCalls++
+	incrementalBuildFunc := factory.IncrementalBuildFunc
+	factory.mu.Unlock()
 
-	if fn != nil {
-		return fn(ctx, snap, previous, prevSnap)
+	if incrementalBuildFunc != nil {
+		return incrementalBuildFunc(ctx, snap, previous, prevSnap)
 	}
 
-	return nil, fmt.Errorf("incremental build not configured")
+	return nil, errIncrementalBuildNotConfigured
 }
 
 // IncrementalCallCount returns the number of BuildIncremental invocations.
-func (f *FakeIncrementalBundleFactory) IncrementalCallCount() int {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+func (factory *FakeIncrementalBundleFactory) IncrementalCallCount() int {
+	factory.mu.Lock()
+	defer factory.mu.Unlock()
 
-	return f.IncrementalCalls
+	return factory.IncrementalCalls
 }

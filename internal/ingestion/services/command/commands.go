@@ -964,6 +964,7 @@ func (uc *UseCase) currentDedupeTTL() time.Duration {
 	if uc == nil {
 		return 0
 	}
+
 	if uc.dedupeTTLGetter != nil {
 		if ttl := uc.dedupeTTLGetter(); ttl > 0 {
 			return ttl
