@@ -22,6 +22,7 @@ func TestNewCloneResult(t *testing.T) {
 	assert.Equal(t, ctx, result.Context)
 	assert.Zero(t, result.SourcesCloned)
 	assert.Zero(t, result.RulesCloned)
+	assert.Zero(t, result.FeeRulesCloned)
 	assert.Zero(t, result.FieldMapsCloned)
 }
 

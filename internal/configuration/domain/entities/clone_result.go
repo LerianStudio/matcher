@@ -17,6 +17,7 @@ type CloneResult struct {
 	Context         *ReconciliationContext
 	SourcesCloned   int
 	RulesCloned     int
+	FeeRulesCloned  int
 	FieldMapsCloned int
 }
 

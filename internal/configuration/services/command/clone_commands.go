@@ -17,6 +17,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -41,6 +42,9 @@ type (
 	matchRuleTxCreator interface {
 		CreateWithTx(ctx context.Context, tx *sql.Tx, entity *entities.MatchRule) (*entities.MatchRule, error)
 	}
+	feeRuleTxCreator interface {
+		CreateWithTx(ctx context.Context, tx *sql.Tx, rule *fee.FeeRule) error
+	}
 )
 
 // WithInfrastructureProvider returns a UseCaseOption that sets the infrastructure provider for transactional clone operations.
@@ -61,12 +65,8 @@ type CloneContextInput struct {
 	AutoMatchOnUpload *bool
 }
 
-// CloneResult is an alias for entities.CloneResult for backward compatibility.
-// Use entities.CloneResult directly in new code.
-type CloneResult = entities.CloneResult
-
 // CloneContext creates a deep copy of a reconciliation context with its associated resources.
-func (uc *UseCase) CloneContext(ctx context.Context, input CloneContextInput) (*CloneResult, error) {
+func (uc *UseCase) CloneContext(ctx context.Context, input CloneContextInput) (*entities.CloneResult, error) {
 	if err := uc.validateCloneDependencies(input); err != nil {
 		return nil, err
 	}
@@ -123,7 +123,7 @@ func (uc *UseCase) CloneContext(ctx context.Context, input CloneContextInput) (*
 	return result, nil
 }
 
-func (uc *UseCase) cloneContextTransactional(ctx context.Context, input CloneContextInput, sourceContext *entities.ReconciliationContext, autoMatchOnUpload bool) (*CloneResult, error) {
+func (uc *UseCase) cloneContextTransactional(ctx context.Context, input CloneContextInput, sourceContext *entities.ReconciliationContext, autoMatchOnUpload bool) (*entities.CloneResult, error) {
 	tx, cancel, err := beginTenantTx(ctx, uc.infraProvider)
 	if err != nil {
 		return nil, fmt.Errorf("begin clone transaction: %w", err)
@@ -155,6 +155,13 @@ func (uc *UseCase) cloneContextTransactional(ctx context.Context, input CloneCon
 		}
 
 		result.RulesCloned = rulesCloned
+
+		feeRulesCloned, cloneErr := uc.cloneFeeRulesWithTx(ctx, tx, input.SourceContextID, created.ID)
+		if cloneErr != nil {
+			return nil, fmt.Errorf("cloning fee rules: %w", cloneErr)
+		}
+
+		result.FeeRulesCloned = feeRulesCloned
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -164,7 +171,7 @@ func (uc *UseCase) cloneContextTransactional(ctx context.Context, input CloneCon
 	return result, nil
 }
 
-func (uc *UseCase) cloneContextNonTransactional(ctx context.Context, input CloneContextInput, sourceContext *entities.ReconciliationContext, autoMatchOnUpload bool) (*CloneResult, error) {
+func (uc *UseCase) cloneContextNonTransactional(ctx context.Context, input CloneContextInput, sourceContext *entities.ReconciliationContext, autoMatchOnUpload bool) (*entities.CloneResult, error) {
 	created, err := uc.createClonedContext(ctx, input, sourceContext, autoMatchOnUpload)
 	if err != nil {
 		return nil, err
@@ -188,16 +195,23 @@ func (uc *UseCase) cloneContextNonTransactional(ctx context.Context, input Clone
 		}
 
 		result.RulesCloned = rulesCloned
+
+		feeRulesCloned, cloneErr := uc.cloneFeeRules(ctx, input.SourceContextID, created.ID)
+		if cloneErr != nil {
+			return nil, fmt.Errorf("cloning fee rules: %w", cloneErr)
+		}
+
+		result.FeeRulesCloned = feeRulesCloned
 	}
 
 	return result, nil
 }
 
-func (uc *UseCase) publishCloneAudit(ctx context.Context, input CloneContextInput, result *CloneResult) {
+func (uc *UseCase) publishCloneAudit(ctx context.Context, input CloneContextInput, result *entities.CloneResult) {
 	uc.publishAudit(ctx, "context", result.Context.ID, "clone", map[string]any{
 		"source_context_id": input.SourceContextID.String(), "name": result.Context.Name,
 		"sources_cloned": result.SourcesCloned, "rules_cloned": result.RulesCloned,
-		"field_maps_cloned": result.FieldMapsCloned,
+		"fee_rules_cloned": result.FeeRulesCloned, "field_maps_cloned": result.FieldMapsCloned,
 	})
 }
 
@@ -216,6 +230,10 @@ func (uc *UseCase) validateCloneDependencies(input CloneContextInput) error {
 
 	if input.IncludeRules && uc.matchRuleRepo == nil {
 		return ErrNilMatchRuleRepository
+	}
+
+	if input.IncludeRules && uc.feeRuleRepo == nil {
+		return ErrNilFeeRuleRepository
 	}
 
 	if input.NewName == "" {
@@ -264,7 +282,7 @@ func (uc *UseCase) createClonedContext(ctx context.Context, input CloneContextIn
 	return created, nil
 }
 
-func (uc *UseCase) cloneSourcesIntoResult(ctx context.Context, input CloneContextInput, newContextID uuid.UUID, result *CloneResult) error {
+func (uc *UseCase) cloneSourcesIntoResult(ctx context.Context, input CloneContextInput, newContextID uuid.UUID, result *entities.CloneResult) error {
 	sources, fieldMaps, err := uc.cloneSourcesAndFieldMaps(ctx, nil, input.SourceContextID, newContextID)
 	if err != nil {
 		return err
@@ -276,7 +294,7 @@ func (uc *UseCase) cloneSourcesIntoResult(ctx context.Context, input CloneContex
 	return nil
 }
 
-func (uc *UseCase) cloneSourcesIntoResultWithTx(ctx context.Context, tx *sql.Tx, input CloneContextInput, newContextID uuid.UUID, result *CloneResult) error {
+func (uc *UseCase) cloneSourcesIntoResultWithTx(ctx context.Context, tx *sql.Tx, input CloneContextInput, newContextID uuid.UUID, result *entities.CloneResult) error {
 	sources, fieldMaps, err := uc.cloneSourcesAndFieldMaps(ctx, tx, input.SourceContextID, newContextID)
 	if err != nil {
 		return err
@@ -315,7 +333,7 @@ func (uc *UseCase) cloneSourcesAndFieldMaps(ctx context.Context, tx *sql.Tx, sou
 		newSourceID := uuid.New()
 
 		newSource := &entities.ReconciliationSource{
-			ID: newSourceID, ContextID: newContextID, Name: src.Name, Type: src.Type,
+			ID: newSourceID, ContextID: newContextID, Name: src.Name, Type: src.Type, Side: src.Side,
 			Config: cloneMap(ctx, src.Config), CreatedAt: now, UpdatedAt: now,
 		}
 
@@ -400,6 +418,14 @@ func (uc *UseCase) cloneMatchRulesWithTx(ctx context.Context, tx *sql.Tx, source
 	return uc.cloneMatchRulesInternal(ctx, tx, sourceContextID, newContextID)
 }
 
+func (uc *UseCase) cloneFeeRules(ctx context.Context, sourceContextID, newContextID uuid.UUID) (int, error) {
+	return uc.cloneFeeRulesInternal(ctx, nil, sourceContextID, newContextID)
+}
+
+func (uc *UseCase) cloneFeeRulesWithTx(ctx context.Context, tx *sql.Tx, sourceContextID, newContextID uuid.UUID) (int, error) {
+	return uc.cloneFeeRulesInternal(ctx, tx, sourceContextID, newContextID)
+}
+
 func (uc *UseCase) cloneMatchRulesInternal(ctx context.Context, tx *sql.Tx, sourceContextID, newContextID uuid.UUID) (int, error) {
 	rules, err := uc.fetchAllRules(ctx, sourceContextID)
 	if err != nil {
@@ -440,6 +466,55 @@ func (uc *UseCase) createMatchRuleWithOptionalTx(ctx context.Context, tx *sql.Tx
 	_, err := uc.matchRuleRepo.Create(ctx, rule)
 
 	return err
+}
+
+func (uc *UseCase) cloneFeeRulesInternal(ctx context.Context, tx *sql.Tx, sourceContextID, newContextID uuid.UUID) (int, error) {
+	rules, err := uc.feeRuleRepo.FindByContextID(ctx, sourceContextID)
+	if err != nil {
+		return 0, fmt.Errorf("fetching fee rules: %w", err)
+	}
+
+	now := time.Now().UTC()
+	cloned := 0
+
+	for _, rule := range rules {
+		if rule == nil {
+			continue
+		}
+
+		newRule := &fee.FeeRule{
+			ID:            uuid.New(),
+			ContextID:     newContextID,
+			Side:          rule.Side,
+			FeeScheduleID: rule.FeeScheduleID,
+			Name:          rule.Name,
+			Priority:      rule.Priority,
+			Predicates:    clonePredicates(rule.Predicates),
+			CreatedAt:     now,
+			UpdatedAt:     now,
+		}
+
+		if err := uc.createFeeRuleWithOptionalTx(ctx, tx, newRule); err != nil {
+			return cloned, fmt.Errorf("creating cloned fee rule %q: %w", rule.Name, err)
+		}
+
+		cloned++
+	}
+
+	return cloned, nil
+}
+
+func (uc *UseCase) createFeeRuleWithOptionalTx(ctx context.Context, tx *sql.Tx, rule *fee.FeeRule) error {
+	if tx != nil {
+		txCreator, ok := uc.feeRuleRepo.(feeRuleTxCreator)
+		if !ok {
+			return fmt.Errorf("fee rule repository does not support CreateWithTx: %w", ErrCloneProviderRequired)
+		}
+
+		return txCreator.CreateWithTx(ctx, tx, rule)
+	}
+
+	return uc.feeRuleRepo.Create(ctx, rule)
 }
 
 func (uc *UseCase) fetchAllSources(ctx context.Context, contextID uuid.UUID) ([]*entities.ReconciliationSource, error) {
@@ -519,4 +594,22 @@ func cloneMap(ctx context.Context, src map[string]any) map[string]any {
 	}
 
 	return copied
+}
+
+func clonePredicates(predicates []fee.FieldPredicate) []fee.FieldPredicate {
+	if len(predicates) == 0 {
+		return nil
+	}
+
+	cloned := make([]fee.FieldPredicate, 0, len(predicates))
+	for _, predicate := range predicates {
+		copyPredicate := predicate
+		if len(predicate.Values) > 0 {
+			copyPredicate.Values = append([]string(nil), predicate.Values...)
+		}
+
+		cloned = append(cloned, copyPredicate)
+	}
+
+	return cloned
 }

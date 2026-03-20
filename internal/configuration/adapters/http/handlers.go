@@ -505,7 +505,7 @@ func (handler *Handler) DeleteContext(fiberCtx *fiber.Ctx) error {
 //
 // @ID cloneContext
 // @Summary Clone a reconciliation context
-// @Description Creates a deep copy of a reconciliation context including its sources, field maps, match rules, and optionally fee schedules.
+// @Description Creates a deep copy of a reconciliation context including its sources, field maps, match rules, and fee rules. Referenced fee schedules are reused by cloned fee rules.
 // @Tags Configuration Contexts
 // @Accept json
 // @Produce json

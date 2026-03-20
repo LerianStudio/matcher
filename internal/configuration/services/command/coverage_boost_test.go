@@ -211,7 +211,7 @@ func TestCloneContext_SourcesCloneError(t *testing.T) {
 	mockSrcRepo.EXPECT().FindByContextID(gomock.Any(), sourceCtxID, "", maxClonePaginationLimit).
 		Return(nil, libHTTP.CursorPagination{}, fetchErr)
 
-	uc, err := NewUseCase(mockCtxRepo, mockSrcRepo, mockFMRepo, mockRuleRepo)
+	uc, err := NewUseCase(mockCtxRepo, mockSrcRepo, mockFMRepo, mockRuleRepo, WithFeeRuleRepository(newFeeRuleMockRepo()))
 	require.NoError(t, err)
 
 	_, err = uc.CloneContext(context.Background(), CloneContextInput{
@@ -260,7 +260,7 @@ func TestCloneContext_RulesCloneError(t *testing.T) {
 	mockRuleRepo.EXPECT().FindByContextID(gomock.Any(), sourceCtxID, "", maxClonePaginationLimit).
 		Return(nil, libHTTP.CursorPagination{}, ruleErr)
 
-	uc, err := NewUseCase(mockCtxRepo, mockSrcRepo, mockFMRepo, mockRuleRepo)
+	uc, err := NewUseCase(mockCtxRepo, mockSrcRepo, mockFMRepo, mockRuleRepo, WithFeeRuleRepository(newFeeRuleMockRepo()))
 	require.NoError(t, err)
 
 	_, err = uc.CloneContext(context.Background(), CloneContextInput{
@@ -433,7 +433,7 @@ func TestCloneSourcesAndFieldMaps_SourceCreateError(t *testing.T) {
 	require.ErrorIs(t, err, createErr)
 }
 
-func TestCloneSourcesAndFieldMaps_SourceClonedWithoutFeeScheduleID(t *testing.T) {
+func TestCloneSourcesAndFieldMaps_SourceClonedWithoutLegacyFeeScheduleField(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
