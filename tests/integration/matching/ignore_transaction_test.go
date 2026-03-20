@@ -101,10 +101,9 @@ func TestIgnoreTransaction_ExcludedFromMatching(t *testing.T) {
 		require.NoError(t, err)
 
 		_, groups, err := wired.MatchingUC.RunMatch(ctx, matchingCommand.RunMatchInput{
-			TenantID:        h.Seed.TenantID,
-			ContextID:       seed.ContextID,
-			Mode:            matchingVO.MatchRunModeCommit,
-			PrimarySourceID: nil,
+			TenantID:  h.Seed.TenantID,
+			ContextID: seed.ContextID,
+			Mode:      matchingVO.MatchRunModeCommit,
 		})
 		require.NoError(t, err)
 		require.Empty(t, groups, "Ignored transaction should not participate in matching")
@@ -140,10 +139,9 @@ func TestIgnoreTransaction_AlreadyMatchedRejected(t *testing.T) {
 		require.NoError(t, err)
 
 		_, groups, err := wired.MatchingUC.RunMatch(ctx, matchingCommand.RunMatchInput{
-			TenantID:        h.Seed.TenantID,
-			ContextID:       seed.ContextID,
-			Mode:            matchingVO.MatchRunModeCommit,
-			PrimarySourceID: nil,
+			TenantID:  h.Seed.TenantID,
+			ContextID: seed.ContextID,
+			Mode:      matchingVO.MatchRunModeCommit,
 		})
 		require.NoError(t, err)
 		require.Len(t, groups, 1)

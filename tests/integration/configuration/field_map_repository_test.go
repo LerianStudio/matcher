@@ -13,6 +13,7 @@ import (
 	sourceRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/source"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
@@ -63,6 +64,7 @@ func TestFieldMapRepository_FindBySourceID(t *testing.T) {
 			entities.CreateReconciliationSourceInput{
 				Name:   "Field Map Test Source",
 				Type:   value_objects.SourceTypeLedger,
+				Side:   sharedfee.MatchingSideLeft,
 				Config: map[string]any{},
 			},
 		)
@@ -135,6 +137,7 @@ func TestFieldMapRepository_Delete(t *testing.T) {
 			entities.CreateReconciliationSourceInput{
 				Name:   "Delete Field Map Source",
 				Type:   value_objects.SourceTypeLedger,
+				Side:   sharedfee.MatchingSideLeft,
 				Config: map[string]any{},
 			},
 		)

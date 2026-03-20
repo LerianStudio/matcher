@@ -25,6 +25,7 @@ import (
 	ingestionCommand "github.com/LerianStudio/matcher/internal/ingestion/services/command"
 	outboxRepo "github.com/LerianStudio/matcher/internal/outbox/adapters/postgres"
 	sharedCross "github.com/LerianStudio/matcher/internal/shared/adapters/cross"
+	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	tenantAdapters "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant/adapters"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
@@ -158,6 +159,7 @@ func seedAutoMatchConfig(
 		configEntities.CreateReconciliationSourceInput{
 			Name:   "AutoMatch Ledger",
 			Type:   configVO.SourceTypeLedger,
+			Side:   sharedfee.MatchingSideLeft,
 			Config: map[string]any{"format": "csv"},
 		},
 	)
@@ -173,6 +175,7 @@ func seedAutoMatchConfig(
 		configEntities.CreateReconciliationSourceInput{
 			Name:   "AutoMatch Bank",
 			Type:   configVO.SourceTypeBank,
+			Side:   sharedfee.MatchingSideRight,
 			Config: map[string]any{"format": "csv"},
 		},
 	)

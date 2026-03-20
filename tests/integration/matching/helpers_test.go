@@ -21,12 +21,13 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	configContextRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/context"
+	configFeeRuleRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/fee_rule"
 	configFieldMapRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/field_map"
 	configMatchRuleRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/match_rule"
 	configSourceRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/source"
-	configFeeRuleRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/fee_rule"
 	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	configVO "github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 
 	ingestionParsers "github.com/LerianStudio/matcher/internal/ingestion/adapters/parsers"
@@ -123,6 +124,7 @@ func seedE4T9Config(t *testing.T, h *integration.TestHarness) e4t9Seed {
 		configEntities.CreateReconciliationSourceInput{
 			Name:   "Integration Bank Source",
 			Type:   configVO.SourceTypeBank,
+			Side:   sharedfee.MatchingSideRight,
 			Config: map[string]any{"format": "csv"},
 		},
 	)
@@ -448,10 +450,9 @@ func runMatchAndGetGroup(
 	require.NoError(t, err)
 
 	_, groups, err := wired.MatchingUC.RunMatch(ctx, matchingCommand.RunMatchInput{
-		TenantID:        h.Seed.TenantID,
-		ContextID:       seed.ContextID,
-		Mode:            matchingVO.MatchRunModeCommit,
-		PrimarySourceID: nil,
+		TenantID:  h.Seed.TenantID,
+		ContextID: seed.ContextID,
+		Mode:      matchingVO.MatchRunModeCommit,
 	})
 	require.NoError(t, err)
 	require.NotEmpty(t, groups, "expected at least one match group from RunMatch")

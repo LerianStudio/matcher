@@ -152,6 +152,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 		ledgerPayload := map[string]any{
 			"name": "Ledger Source",
 			"type": "LEDGER",
+			"side": "LEFT",
 			"config": map[string]any{
 				"table": "journal_entries",
 			},
@@ -184,6 +185,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 		bankPayload := map[string]any{
 			"name": "Bank Source",
 			"type": "BANK",
+			"side": "RIGHT",
 			"config": map[string]any{
 				"file_format": "mt940",
 			},

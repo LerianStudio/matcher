@@ -30,6 +30,7 @@ import (
 	outboxRepo "github.com/LerianStudio/matcher/internal/outbox/adapters/postgres"
 	outboxEntities "github.com/LerianStudio/matcher/internal/outbox/domain/entities"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
 func TestCrossDomainFlow_EndToEndReconciliation(t *testing.T) {
@@ -70,6 +71,7 @@ func TestCrossDomainFlow_EndToEndReconciliation(t *testing.T) {
 			configEntities.CreateReconciliationSourceInput{
 				Name:   "Ledger Source",
 				Type:   configVO.SourceTypeLedger,
+				Side:   sharedfee.MatchingSideLeft,
 				Config: map[string]any{"table": "journal_entries"},
 			},
 		)
@@ -83,6 +85,7 @@ func TestCrossDomainFlow_EndToEndReconciliation(t *testing.T) {
 			configEntities.CreateReconciliationSourceInput{
 				Name:   "Bank Source",
 				Type:   configVO.SourceTypeBank,
+				Side:   sharedfee.MatchingSideRight,
 				Config: map[string]any{"format": "mt940"},
 			},
 		)
