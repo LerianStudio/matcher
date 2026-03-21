@@ -193,6 +193,10 @@ func (provider *dynamicInfrastructureProvider) GetReplicaDB(ctx context.Context)
 
 // Close releases the active multi-tenant manager, if present.
 func (provider *dynamicInfrastructureProvider) Close() error {
+	if provider == nil {
+		return nil
+	}
+
 	provider.mu.Lock()
 	defer provider.mu.Unlock()
 

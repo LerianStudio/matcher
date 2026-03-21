@@ -32,7 +32,12 @@ func newDynamicRedisStorage(getter func() *libRedis.Client, fallback *libRedis.C
 
 // Get retrieves a value from the current rate-limit storage backend.
 func (storage *dynamicRedisStorage) Get(key string) ([]byte, error) {
-	value, err := storage.current().Get(key)
+	delegate := storage.current()
+	if delegate == nil {
+		return nil, nil // rate-limit storage unavailable: permit the request
+	}
+
+	value, err := delegate.Get(key)
 	if err != nil {
 		return nil, fmt.Errorf("get redis storage value: %w", err)
 	}
@@ -42,7 +47,12 @@ func (storage *dynamicRedisStorage) Get(key string) ([]byte, error) {
 
 // Set stores a value in the current rate-limit storage backend.
 func (storage *dynamicRedisStorage) Set(key string, val []byte, exp time.Duration) error {
-	if err := storage.current().Set(key, val, exp); err != nil {
+	delegate := storage.current()
+	if delegate == nil {
+		return nil // rate-limit storage unavailable: permit the request
+	}
+
+	if err := delegate.Set(key, val, exp); err != nil {
 		return fmt.Errorf("set redis storage value: %w", err)
 	}
 
@@ -51,7 +61,12 @@ func (storage *dynamicRedisStorage) Set(key string, val []byte, exp time.Duratio
 
 // Delete removes a value from the current rate-limit storage backend.
 func (storage *dynamicRedisStorage) Delete(key string) error {
-	if err := storage.current().Delete(key); err != nil {
+	delegate := storage.current()
+	if delegate == nil {
+		return nil // rate-limit storage unavailable: permit the request
+	}
+
+	if err := delegate.Delete(key); err != nil {
 		return fmt.Errorf("delete redis storage value: %w", err)
 	}
 
@@ -60,7 +75,12 @@ func (storage *dynamicRedisStorage) Delete(key string) error {
 
 // Reset clears the current rate-limit storage backend.
 func (storage *dynamicRedisStorage) Reset() error {
-	if err := storage.current().Reset(); err != nil {
+	delegate := storage.current()
+	if delegate == nil {
+		return nil // rate-limit storage unavailable: permit the request
+	}
+
+	if err := delegate.Reset(); err != nil {
 		return fmt.Errorf("reset redis storage: %w", err)
 	}
 

@@ -6,6 +6,7 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"go.opentelemetry.io/otel/trace"
@@ -16,6 +17,8 @@ import (
 	governanceWorker "github.com/LerianStudio/matcher/internal/governance/services/worker"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
+
+var errPartitionManagerProviderUnavailable = errors.New("partition manager: infrastructure provider not available")
 
 type dynamicPartitionManager struct {
 	provider sharedPorts.InfrastructureProvider
@@ -96,7 +99,7 @@ func (manager *dynamicPartitionManager) DropPartition(ctx context.Context, name 
 
 func (manager *dynamicPartitionManager) current(ctx context.Context) (*governanceCommand.PartitionManager, func(), error) {
 	if manager == nil || manager.provider == nil {
-		return nil, nil, fmt.Errorf("partition manager: infrastructure provider not available")
+		return nil, nil, errPartitionManagerProviderUnavailable
 	}
 
 	lease, err := manager.provider.GetPostgresConnection(ctx)
