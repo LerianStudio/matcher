@@ -41,6 +41,13 @@ func mapTransactions(in []*shared.Transaction) []matching.CandidateTransaction {
 	return out
 }
 
+// mapTransactionsWithFeeRules resolves fee schedules per transaction using predicate rules
+// and applies fee normalization (net/gross adjustment) to candidate amounts.
+//
+// Fee normalization only adjusts Amount (the original-currency transaction value).
+// AmountBase and CurrencyBase represent FX-converted values and are intentionally not
+// modified by fee normalization — they are an orthogonal concern (cross-currency conversion)
+// that is computed independently upstream.
 func mapTransactionsWithFeeRules(
 	ctx context.Context,
 	in []*shared.Transaction,

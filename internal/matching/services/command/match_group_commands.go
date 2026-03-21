@@ -38,6 +38,7 @@ var (
 	ErrOneToManyRequiresExactlyOneLeftSource = errors.New("1:N contexts require exactly one LEFT source")
 	ErrAtLeastOneRightSourceRequired         = errors.New("at least one RIGHT source is required")
 	ErrFeeRulesReferenceMissingSchedules     = errors.New("fee rules reference missing fee schedules")
+	ErrFeeRulesRequiredForNormalization      = errors.New("fee normalization is enabled but no fee rules are configured")
 	ErrMatchRunPersistedNil                  = errors.New(
 		"failed to persist match run: created run is nil",
 	)
@@ -77,6 +78,7 @@ type matchRunContext struct {
 	leftCandidates  []*shared.Transaction
 	rightCandidates []*shared.Transaction
 	unmatchedIDs    []uuid.UUID
+	externalTxByID  map[uuid.UUID]*shared.Transaction
 	stats           map[string]int
 	leftRules       []*fee.FeeRule
 	rightRules      []*fee.FeeRule

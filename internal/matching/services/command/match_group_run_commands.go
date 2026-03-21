@@ -112,6 +112,7 @@ func (uc *UseCase) RunMatch(
 			mrc.leftCandidates,
 			mrc.rightCandidates,
 			mrc.unmatchedIDs,
+			mrc.externalTxByID,
 			mrc.sourceTypeByID,
 		)
 	}
@@ -254,9 +255,13 @@ func (uc *UseCase) prepareMatchRun(
 		if err != nil {
 			return nil, err
 		}
+
+		if len(leftRules) == 0 && len(rightRules) == 0 {
+			return nil, ErrFeeRulesRequiredForNormalization
+		}
 	}
 
-	leftCandidates, rightCandidates, unmatchedIDs, err := uc.loadAndClassifyCandidates(
+	leftCandidates, rightCandidates, unmatchedIDs, externalTxByID, err := uc.loadAndClassifyCandidates(
 		ctx,
 		span,
 		logger,
@@ -298,6 +303,7 @@ func (uc *UseCase) prepareMatchRun(
 		leftCandidates:  leftCandidates,
 		rightCandidates: rightCandidates,
 		unmatchedIDs:    unmatchedIDs,
+		externalTxByID:  externalTxByID,
 		stats:           stats,
 		leftRules:       leftRules,
 		rightRules:      rightRules,
@@ -382,7 +388,7 @@ func (uc *UseCase) loadAndClassifyCandidates(
 	logger libLog.Logger,
 	in RunMatchInput,
 	leftSourceIDs, rightSourceIDs map[uuid.UUID]struct{},
-) ([]*shared.Transaction, []*shared.Transaction, []uuid.UUID, error) {
+) ([]*shared.Transaction, []*shared.Transaction, []uuid.UUID, map[uuid.UUID]*shared.Transaction, error) {
 	_, tracer, _, _ := libCommons.NewTrackingFromContext(ctx) //nolint:dogsled
 
 	ctx, loadSpan := tracer.Start(ctx, "command.matching.load_and_classify_candidates")
@@ -403,12 +409,13 @@ func (uc *UseCase) loadAndClassifyCandidates(
 	)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to load candidate transactions", err)
-		return nil, nil, nil, fmt.Errorf("failed to load candidate transactions: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("failed to load candidate transactions: %w", err)
 	}
 
 	leftCandidates := make([]*shared.Transaction, 0, len(candidates))
 	rightCandidates := make([]*shared.Transaction, 0, len(candidates))
 	unmatchedIDs := make([]uuid.UUID, 0, len(candidates))
+	externalTxByID := make(map[uuid.UUID]*shared.Transaction)
 
 	for _, tx := range candidates {
 		if tx == nil {
@@ -428,7 +435,8 @@ func (uc *UseCase) loadAndClassifyCandidates(
 		logger.With(libLog.Any("tx.id", tx.ID.String()), libLog.Any("source.id", tx.SourceID.String())).Log(ctx, libLog.LevelWarn, "transaction source not in configured sources")
 
 		unmatchedIDs = append(unmatchedIDs, tx.ID)
+		externalTxByID[tx.ID] = tx
 	}
 
-	return leftCandidates, rightCandidates, unmatchedIDs, nil
+	return leftCandidates, rightCandidates, unmatchedIDs, externalTxByID, nil
 }

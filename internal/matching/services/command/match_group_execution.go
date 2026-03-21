@@ -145,7 +145,7 @@ func (uc *UseCase) executeMatchRules(
 		)
 	}
 
-	allTxByID := mergeTransactionMaps(leftByID, rightByID)
+	allTxByID := mergeTransactionMaps(leftByID, rightByID, mrc.externalTxByID)
 
 	return &matchExecutionResult{
 		groups:           groups,
