@@ -582,11 +582,7 @@ func TestDashboardStresser_FullJourney(t *testing.T) {
 // Entries prefixed with "env:" are environment-dependent (no infra configured).
 // Entries prefixed with "bug:" are tracked backend issues to fix.
 // When a known failure starts passing, the test will remind you to remove it.
-var knownFailures = map[string]string{
-	"ForceMatch":         "bug: MatchingGateway/ResolutionExecutor nil in bootstrap",
-	"BulkDispatch":       "bug: UUID validation issue",
-	"DispatchToExternal": "env: no external dispatch target configured",
-}
+var knownFailures = map[string]string{}
 
 // TestDashboardStresser_HighVolume creates ~500k transactions for dashboard stress testing.
 // Run with: E2E_KEEP_DATA=1 go test -tags e2e -v -run TestDashboardStresser_HighVolume -count=1 ./tests/e2e/journeys/...
@@ -1240,7 +1236,7 @@ func TestDashboardStresser_HighVolume(t *testing.T) {
 			// Force match the first exception
 			if len(exceptionIDs) > 0 {
 				if _, err := apiClient.Exception.ForceMatch(ctx, exceptionIDs[0], client.ForceMatchRequest{
-					OverrideReason: "stresser test",
+					OverrideReason: "POLICY_EXCEPTION",
 					Notes:          "Force matching for API coverage",
 				}); err != nil {
 					endpointFailures["ForceMatch"] = err.Error()
@@ -1271,7 +1267,7 @@ func TestDashboardStresser_HighVolume(t *testing.T) {
 			// Dispatch third exception to external system
 			if len(exceptionIDs) > 2 {
 				if _, err := apiClient.Exception.DispatchToExternal(ctx, exceptionIDs[2], client.DispatchRequest{
-					TargetSystem: "jira",
+					TargetSystem: "MANUAL",
 					Queue:        "RECON-TEAM",
 				}); err != nil {
 					endpointFailures["DispatchToExternal"] = err.Error()
@@ -1392,7 +1388,7 @@ func TestDashboardStresser_HighVolume(t *testing.T) {
 				if len(dispatchBatch) > 0 {
 					if resp, err := apiClient.Exception.BulkDispatch(ctx, client.BulkDispatchRequest{
 						ExceptionIDs: dispatchBatch,
-						TargetSystem: "jira",
+						TargetSystem: "MANUAL",
 						Queue:        "BULK-TEST",
 					}); err != nil {
 						endpointFailures["BulkDispatch"] = err.Error()

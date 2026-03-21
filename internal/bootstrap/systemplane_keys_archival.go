@@ -130,7 +130,7 @@ func matcherKeyDefsArchivalStorage() []domain.KeyDef {
 			Key:              "archival.storage_bucket",
 			Kind:             domain.KindConfig,
 			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
-			DefaultValue:     "",
+			DefaultValue:     defaultArchivalStorageBucket,
 			ValueType:        domain.ValueTypeString,
 			ApplyBehavior:    domain.ApplyBundleRebuildAndReconcile,
 			MutableAtRuntime: true,

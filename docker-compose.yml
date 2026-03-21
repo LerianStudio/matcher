@@ -149,8 +149,11 @@ services:
       OBJECT_STORAGE_BUCKET: matcher-exports
       OBJECT_STORAGE_ACCESS_KEY_ID: "any"
       OBJECT_STORAGE_SECRET_ACCESS_KEY: "any"
+      ARCHIVAL_STORAGE_BUCKET: matcher-archives
       # Rate limiting - disabled for development/e2e testing
       RATE_LIMIT_ENABLED: "false"
+      # Systemplane
+      SYSTEMPLANE_SECRET_MASTER_KEY: +PnwgNy8bL3HGT1rOXp47PqyGcPywXH/epgmSVwPkL0=
       # Build settings
       CGO_ENABLED: "0"
       GOFLAGS: "-mod=vendor"

@@ -273,7 +273,7 @@ type ArchivalConfig struct {
 	WarmRetentionMonths int    `env:"ARCHIVAL_WARM_RETENTION_MONTHS" envDefault:"24"                  mapstructure:"warm_retention_months"`
 	ColdRetentionMonths int    `env:"ARCHIVAL_COLD_RETENTION_MONTHS" envDefault:"84"                  mapstructure:"cold_retention_months"`
 	BatchSize           int    `env:"ARCHIVAL_BATCH_SIZE"            envDefault:"5000"                mapstructure:"batch_size"`
-	StorageBucket       string `env:"ARCHIVAL_STORAGE_BUCKET"                                         mapstructure:"storage_bucket"`
+	StorageBucket       string `env:"ARCHIVAL_STORAGE_BUCKET"         envDefault:"matcher-archives"    mapstructure:"storage_bucket"`
 	StoragePrefix       string `env:"ARCHIVAL_STORAGE_PREFIX"        envDefault:"archives/audit-logs" mapstructure:"storage_prefix"`
 	StorageClass        string `env:"ARCHIVAL_STORAGE_CLASS"         envDefault:"GLACIER"             mapstructure:"storage_class"`
 	PartitionLookahead  int    `env:"ARCHIVAL_PARTITION_LOOKAHEAD"   envDefault:"3"                   mapstructure:"partition_lookahead"`

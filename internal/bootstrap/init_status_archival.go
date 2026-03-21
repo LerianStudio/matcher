@@ -57,15 +57,14 @@ func safeInfraTarget(envName, value string) string {
 func logStartupInfo(logger libLog.Logger, cfg *Config, status *InfraStatus) {
 	ctx := context.Background()
 
-	banner := `
-                    __       __             
-   _________ ______/ /______/ /_  ___  _____
-  / __  __ /  __ / __/  ___/ __ \/ _ \/ ___/
- / / / / / / /_/ / /_/ /__/ / / /  __/ /    
-/_/ /_/ /_/\__,_/\__/\___/_/ /_/\___/_/     
-                       by lerian studio         
-`
-	logger.Log(ctx, libLog.LevelInfo, banner)
+	logger.Log(ctx, libLog.LevelInfo, "")
+	logger.Log(ctx, libLog.LevelInfo, `                     __       __`)
+	logger.Log(ctx, libLog.LevelInfo, `    _________ ______/ /______/ /_  ___  _____`)
+	logger.Log(ctx, libLog.LevelInfo, `   / __  __ /  __ / __/  ___/ __ \/ _ \/ ___/`)
+	logger.Log(ctx, libLog.LevelInfo, `  / / / / / / /_/ / /_/ /__/ / / /  __/ /`)
+	logger.Log(ctx, libLog.LevelInfo, ` /_/ /_/ /_/\__,_/\__/\___/_/ /_/\___/_/`)
+	logger.Log(ctx, libLog.LevelInfo, `                        by lerian studio`)
+	logger.Log(ctx, libLog.LevelInfo, "")
 
 	logger.Log(ctx, libLog.LevelInfo, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	logger.Log(ctx, libLog.LevelInfo, "  🚀 SERVICE CONFIGURATION")

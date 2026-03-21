@@ -56,3 +56,8 @@ OTEL_EXPORTER_OTLP_ENDPOINT=localhost:4317
 
 # Database metrics scrape interval (seconds).
 DB_METRICS_INTERVAL_SEC=15
+
+# Systemplane key must be a base64
+# Use: openssl rand -base64 32 | tr -d '\n'
+# Example used in docker compose below
+SYSTEMPLANE_SECRET_MASTER_KEY="+PnwgNy8bL3HGT1rOXp47PqyGcPywXH/epgmSVwPkL0="

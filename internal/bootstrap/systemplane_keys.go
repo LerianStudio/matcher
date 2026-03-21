@@ -164,6 +164,7 @@ const (
 	defaultArchivalWarmMonths    = 24
 	defaultArchivalColdMonths    = 84
 	defaultArchivalBatchSize     = 5000
+	defaultArchivalStorageBucket = "matcher-archives"
 	defaultArchivalStoragePrefix = "archives/audit-logs"
 	defaultArchivalStorageClass  = "GLACIER"
 	defaultArchivalPartitionLA   = 3
