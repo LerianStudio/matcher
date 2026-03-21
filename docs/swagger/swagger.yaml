@@ -51,10 +51,14 @@ definitions:
         type: string
     type: object
   github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CloneContextRequest:
-    description: Request payload for cloning a context with its configuration
+    description: Request payload for cloning a context with its configuration. When
+      sources are included, their LEFT/RIGHT side assignments and field maps are preserved.
+      When rules are included, both match rules and fee rules are cloned, and cloned
+      fee rules keep referencing the same fee schedules as the source context.
     properties:
       includeRules:
-        description: 'Whether to include match rules in the clone (default: true)'
+        description: 'Whether to include match rules and fee rules in the clone (default:
+          true)'
         example: true
         type: boolean
       includeSources:
@@ -72,7 +76,8 @@ definitions:
     - name
     type: object
   github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CloneContextResponse:
-    description: Result of cloning a reconciliation context
+    description: Result of cloning a reconciliation context, including counts for
+      cloned sources, match rules, fee rules, and field maps.
     properties:
       context:
         allOf:
@@ -198,8 +203,8 @@ definitions:
         maxItems: 50
         type: array
       priority:
-        description: Unique within context; LEFT, RIGHT, and ANY share the same priority
-          space
+        description: Priority must be unique within the context. LEFT, RIGHT, and
+          ANY rules share the same priority space.
         example: 0
         minimum: 0
         type: integer
@@ -497,6 +502,7 @@ definitions:
     properties:
       field:
         example: institution
+        maxLength: 255
         type: string
       operator:
         enum:
@@ -507,10 +513,12 @@ definitions:
         type: string
       value:
         example: Banco do Brasil
+        maxLength: 1024
         type: string
       values:
         items:
           type: string
+        maxItems: 100
         type: array
     required:
     - field
@@ -873,6 +881,8 @@ definitions:
         maxItems: 50
         type: array
       priority:
+        description: Priority must remain unique within the context. LEFT, RIGHT,
+          and ANY rules share the same priority space.
         minimum: 0
         type: integer
       side:
@@ -3881,7 +3891,8 @@ paths:
       - application/json
       description: Creates a new fee rule that maps transaction metadata to a fee
         schedule within a context. Priority must be unique within a context across
-        all sides (LEFT, RIGHT, and ANY rules share the same priority space).
+        all sides (LEFT, RIGHT, and ANY rules share the same priority space). The
+        caller must also be allowed to read the referenced fee schedule.
       operationId: createFeeRule
       parameters:
       - description: Request ID for tracing
@@ -5056,7 +5067,8 @@ paths:
     patch:
       consumes:
       - application/json
-      description: Updates fields on a fee rule by ID.
+      description: Updates fields on a fee rule by ID. If the referenced fee schedule
+        changes, the caller must also be allowed to read that fee schedule.
       operationId: updateFeeRule
       parameters:
       - description: Request ID for tracing
@@ -5242,6 +5254,10 @@ paths:
             $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "404":
           description: Fee schedule not found
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "409":
+          description: 'Conflict: fee schedule is still referenced by fee rules'
           schema:
             $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "500":

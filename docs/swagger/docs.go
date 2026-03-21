@@ -636,7 +636,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Creates a new fee rule that maps transaction metadata to a fee schedule within a context. Priority must be unique within a context across all sides (LEFT, RIGHT, and ANY rules share the same priority space).",
+                "description": "Creates a new fee rule that maps transaction metadata to a fee schedule within a context. Priority must be unique within a context across all sides (LEFT, RIGHT, and ANY rules share the same priority space). The caller must also be allowed to read the referenced fee schedule.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2404,7 +2404,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Updates fields on a fee rule by ID.",
+                "description": "Updates fields on a fee rule by ID. If the referenced fee schedule changes, the caller must also be allowed to read that fee schedule.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2760,6 +2760,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Fee schedule not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict: fee schedule is still referenced by fee rules",
                         "schema": {
                             "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
@@ -10169,14 +10175,14 @@ const docTemplate = `{
             }
         },
         "github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CloneContextRequest": {
-            "description": "Request payload for cloning a context with its configuration",
+            "description": "Request payload for cloning a context with its configuration. When sources are included, their LEFT/RIGHT side assignments and field maps are preserved. When rules are included, both match rules and fee rules are cloned, and cloned fee rules keep referencing the same fee schedules as the source context.",
             "type": "object",
             "required": [
                 "name"
             ],
             "properties": {
                 "includeRules": {
-                    "description": "Whether to include match rules in the clone (default: true)",
+                    "description": "Whether to include match rules and fee rules in the clone (default: true)",
                     "type": "boolean",
                     "example": true
                 },
@@ -10195,7 +10201,7 @@ const docTemplate = `{
             }
         },
         "github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CloneContextResponse": {
-            "description": "Result of cloning a reconciliation context",
+            "description": "Result of cloning a reconciliation context, including counts for cloned sources, match rules, fee rules, and field maps.",
             "type": "object",
             "properties": {
                 "context": {
@@ -10368,7 +10374,7 @@ const docTemplate = `{
                     }
                 },
                 "priority": {
-                    "description": "Unique within context; LEFT, RIGHT, and ANY share the same priority space",
+                    "description": "Priority must be unique within the context. LEFT, RIGHT, and ANY rules share the same priority space.",
                     "type": "integer",
                     "minimum": 0,
                     "example": 0
@@ -10763,6 +10769,7 @@ const docTemplate = `{
             "properties": {
                 "field": {
                     "type": "string",
+                    "maxLength": 255,
                     "example": "institution"
                 },
                 "operator": {
@@ -10776,10 +10783,12 @@ const docTemplate = `{
                 },
                 "value": {
                     "type": "string",
+                    "maxLength": 1024,
                     "example": "Banco do Brasil"
                 },
                 "values": {
                     "type": "array",
+                    "maxItems": 100,
                     "items": {
                         "type": "string"
                     }
@@ -11251,6 +11260,7 @@ const docTemplate = `{
                     }
                 },
                 "priority": {
+                    "description": "Priority must remain unique within the context. LEFT, RIGHT, and ANY rules share the same priority space.",
                     "type": "integer",
                     "minimum": 0
                 },
