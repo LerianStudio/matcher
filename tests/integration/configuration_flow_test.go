@@ -58,6 +58,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 		t.Setenv("CLEANUP_WORKER_ENABLED", "false")
 		t.Setenv("OBJECT_STORAGE_ENDPOINT", "")
 		t.Setenv("ARCHIVAL_WORKER_ENABLED", "false")
+		t.Setenv("SYSTEMPLANE_SECRET_MASTER_KEY", "+PnwgNy8bL3HGT1rOXp47PqyGcPywXH/epgmSVwPkL0=")
 
 		// Initialize Service
 		service, err := bootstrap.InitServersWithOptions(nil)

@@ -56,6 +56,7 @@ func TestServiceStartup_Integration(t *testing.T) {
 		t.Setenv("CLEANUP_WORKER_ENABLED", "false")
 		t.Setenv("OBJECT_STORAGE_ENDPOINT", "")
 		t.Setenv("ARCHIVAL_WORKER_ENABLED", "false")
+		t.Setenv("SYSTEMPLANE_SECRET_MASTER_KEY", "+PnwgNy8bL3HGT1rOXp47PqyGcPywXH/epgmSVwPkL0=")
 
 		service, err := bootstrap.InitServersWithOptions(nil)
 		require.NoError(t, err)
@@ -214,6 +215,7 @@ func TestServiceStartupAndShutdown_Integration(t *testing.T) {
 		t.Setenv("CLEANUP_WORKER_ENABLED", "false")
 		t.Setenv("OBJECT_STORAGE_ENDPOINT", "")
 		t.Setenv("ARCHIVAL_WORKER_ENABLED", "false")
+		t.Setenv("SYSTEMPLANE_SECRET_MASTER_KEY", "+PnwgNy8bL3HGT1rOXp47PqyGcPywXH/epgmSVwPkL0=")
 
 		service, err := bootstrap.InitServersWithOptions(nil)
 		require.NoError(t, err)
