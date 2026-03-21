@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/LerianStudio/matcher/tests/e2e"
@@ -38,6 +39,10 @@ func TestMatchingModes_OneToMany(t *testing.T) {
 				WithName("bank").
 				AsBank().
 				MustCreate(ctx)
+
+			// H19: Auto-assigned sides should also be deterministic (first=LEFT, second=RIGHT).
+			assert.Equal(t, "LEFT", ledgerSource.Side, "first auto-assigned source should be LEFT")
+			assert.Equal(t, "RIGHT", bankSource.Side, "second auto-assigned source should be RIGHT")
 
 			f.Source.NewFieldMap(reconciliationContext.ID, ledgerSource.ID).
 				WithStandardMapping().
@@ -358,6 +363,21 @@ func TestMatchingModes_SideBasedDirectionalAssignment(t *testing.T) {
 				AsGateway().
 				Right().
 				MustCreate(ctx)
+
+			// H19: Verify explicit side assignment is persisted and returned from API.
+			assert.Equal(t, "LEFT", bankSource.Side, "bank source should be LEFT from create response")
+			assert.Equal(t, "RIGHT", gatewaySource.Side, "gateway source should be RIGHT from create response")
+
+			// Verify side provenance round-trips through the GET API.
+			fetchedBank, err := client.Configuration.GetSource(ctx, reconciliationContext.ID, bankSource.ID)
+			require.NoError(t, err, "should fetch bank source")
+			assert.Equal(t, "LEFT", fetchedBank.Side, "bank source should remain LEFT after GET")
+
+			fetchedGateway, err := client.Configuration.GetSource(ctx, reconciliationContext.ID, gatewaySource.ID)
+			require.NoError(t, err, "should fetch gateway source")
+			assert.Equal(t, "RIGHT", fetchedGateway.Side, "gateway source should remain RIGHT after GET")
+
+			tc.Logf("✓ H19: Side provenance verified — bank=LEFT, gateway=RIGHT")
 
 			// Step 3: Create field maps for both sources
 			tc.Logf("Step 3: Creating field maps")

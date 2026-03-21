@@ -218,12 +218,14 @@ func createSourceWithoutCleanup(
 ) *client.Source {
 	builder := f.Source.NewSource(contextID).WithName(name).WithType(sourceType)
 	if skipCleanup {
+		req := builder.GetRequest()
 		created, err := f.Source.Client().Configuration.CreateSource(
 			ctx,
 			contextID,
 			client.CreateSourceRequest{
-				Name: builder.GetRequest().Name,
+				Name: req.Name,
 				Type: sourceType,
+				Side: req.Side,
 			},
 		)
 		if err != nil {

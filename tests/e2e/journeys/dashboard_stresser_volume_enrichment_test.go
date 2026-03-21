@@ -110,19 +110,35 @@ func runDashboardStresserHighVolumeEnrichment(
 		tc.Logf("  ListMatchRules: %d rules", len(rules))
 		enrichedEndpoints++
 
-		// Reorder rules (reverse then restore)
+		// Reorder rules: reverse order, then restore original order.
 		if len(rules) >= 2 {
 			ruleIDs := make([]string, len(rules))
 			for i, r := range rules {
 				ruleIDs[i] = r.ID
 			}
+
+			// Phase 1: reverse
+			reversed := make([]string, len(ruleIDs))
+			for i, id := range ruleIDs {
+				reversed[len(ruleIDs)-1-i] = id
+			}
+
 			if err := apiClient.Configuration.ReorderMatchRules(ctx, reconciliationContextID, client.ReorderMatchRulesRequest{
-				RuleIDs: ruleIDs,
+				RuleIDs: reversed,
 			}); err != nil {
-				endpointFailures["ReorderMatchRules"] = err.Error()
+				endpointFailures["ReorderMatchRules_reverse"] = err.Error()
 			} else {
-				tc.Logf("  ReorderMatchRules: reordered %d rules", len(ruleIDs))
+				tc.Logf("  ReorderMatchRules: reversed %d rules", len(reversed))
 				enrichedEndpoints++
+
+				// Phase 2: restore original order
+				if err := apiClient.Configuration.ReorderMatchRules(ctx, reconciliationContextID, client.ReorderMatchRulesRequest{
+					RuleIDs: ruleIDs,
+				}); err != nil {
+					endpointFailures["ReorderMatchRules_restore"] = err.Error()
+				} else {
+					tc.Logf("  ReorderMatchRules: restored original order")
+				}
 			}
 		}
 	}

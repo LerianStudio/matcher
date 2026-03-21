@@ -170,9 +170,34 @@ func TestDashboardStresser_QuickRun(t *testing.T) {
 			)
 			require.NoError(t, err)
 
+			// H20: Tighten assertions beyond `> 0`.
+			//
+			// With seed=123 the RNG is deterministic. The test creates:
+			//   - 30 perfect match pairs  → 30 match groups (exact rule, priority 1)
+			//   - 10 tolerance match pairs → up to 10 match groups (tolerance rule, priority 2)
+			//   - 15 unmatched (single-sided, no matches expected)
+			//   -  5 multi-source pairs   → not generated in quick test
+			//
+			// Perfect matches always hit the exact rule, so we expect at least 30 groups.
+			// Some tolerance pairs might coincidentally land in the exact rule too.
+			// The combined minimum is 30 (perfect) + some tolerance matches.
+			expectedMinGroups := cfg.PerfectMatchCount // 30 perfect pairs guaranteed
+			require.GreaterOrEqual(t, len(groups), expectedMinGroups,
+				"seeded(123) quick run should produce at least %d match groups from %d perfect + %d tolerance pairs",
+				expectedMinGroups, cfg.PerfectMatchCount, cfg.ToleranceMatchCount,
+			)
+
+			// Upper bound sanity: we can't match more pairs than we created.
+			maxPossibleGroups := cfg.PerfectMatchCount + cfg.ToleranceMatchCount
+			require.LessOrEqual(t, len(groups), maxPossibleGroups,
+				"match groups should not exceed total matchable pairs (%d)", maxPossibleGroups,
+			)
+
 			tc.Logf(
-				"✓ Quick run completed: %d match groups, Context: %s",
+				"✓ Quick run completed: %d match groups (expected range [%d, %d]), Context: %s",
 				len(groups),
+				expectedMinGroups,
+				maxPossibleGroups,
 				reconciliationContext.ID,
 			)
 		},

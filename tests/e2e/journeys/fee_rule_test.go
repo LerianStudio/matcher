@@ -106,6 +106,124 @@ func TestFeeRule_CRUD(t *testing.T) {
 		})
 }
 
+// TestFeeRule_PredicateRoundTrip verifies that fee rule predicates survive
+// a create → get → list round-trip with all fields intact (M13).
+func TestFeeRule_PredicateRoundTrip(t *testing.T) {
+	e2e.RunE2EWithTimeout(t, 2*time.Minute,
+		func(t *testing.T, tc *e2e.TestContext, c *e2e.Client) {
+			ctx := context.Background()
+			f := factories.New(tc, c)
+
+			reconciliationContext := f.Context.NewContext().OneToOne().MustCreate(ctx)
+			schedule := f.FeeSchedule.NewFeeSchedule().
+				WithName("predicate-roundtrip-schedule").
+				WithCurrency("USD").
+				Parallel().
+				WithFlatFee("flat", 1, "1.00").
+				MustCreate(ctx)
+
+			// Create a fee rule with both EQUALS and IN predicates.
+			tc.Logf("Step 1: Create fee rule with EQUALS + IN predicates")
+			created := f.FeeRule.NewFeeRule(reconciliationContext.ID).
+				WithName("predicate-roundtrip").
+				Left().
+				WithFeeScheduleID(schedule.ID).
+				WithPriority(1).
+				WithEqualsPredicate("brand", "visa").
+				WithInPredicate("channel", "pos", "ecommerce", "online").
+				MustCreate(ctx)
+
+			require.NotEmpty(t, created.ID)
+			require.Len(t, created.Predicates, 2, "create response should contain both predicates")
+
+			// Verify EQUALS predicate from create response.
+			equalsPred := created.Predicates[0]
+			assert.Equal(t, "brand", equalsPred.Field, "EQUALS predicate field")
+			assert.Equal(t, "EQUALS", equalsPred.Operator, "EQUALS predicate operator")
+			assert.Equal(t, "visa", equalsPred.Value, "EQUALS predicate value")
+
+			// Verify IN predicate from create response.
+			inPred := created.Predicates[1]
+			assert.Equal(t, "channel", inPred.Field, "IN predicate field")
+			assert.Equal(t, "IN", inPred.Operator, "IN predicate operator")
+			assert.Equal(t, []string{"pos", "ecommerce", "online"}, inPred.Values, "IN predicate values")
+
+			// Step 2: GET the fee rule and verify predicates survive the round-trip.
+			tc.Logf("Step 2: GET fee rule and verify predicates round-trip")
+			fetched, err := c.Configuration.GetFeeRule(ctx, created.ID)
+			require.NoError(t, err)
+			require.Len(t, fetched.Predicates, 2, "GET response should contain both predicates")
+
+			// Find predicates by operator (order not guaranteed after persistence).
+			var fetchedEquals, fetchedIn *client.FeeRulePredicateResponse
+			for i := range fetched.Predicates {
+				switch fetched.Predicates[i].Operator {
+				case "EQUALS":
+					fetchedEquals = &fetched.Predicates[i]
+				case "IN":
+					fetchedIn = &fetched.Predicates[i]
+				}
+			}
+
+			require.NotNil(t, fetchedEquals, "GET should return EQUALS predicate")
+			assert.Equal(t, "brand", fetchedEquals.Field)
+			assert.Equal(t, "visa", fetchedEquals.Value)
+
+			require.NotNil(t, fetchedIn, "GET should return IN predicate")
+			assert.Equal(t, "channel", fetchedIn.Field)
+			assert.ElementsMatch(t, []string{"pos", "ecommerce", "online"}, fetchedIn.Values)
+
+			// Step 3: LIST fee rules and verify predicates in the list response.
+			tc.Logf("Step 3: LIST fee rules and verify predicates in list response")
+			listed, err := c.Configuration.ListFeeRules(ctx, reconciliationContext.ID)
+			require.NoError(t, err)
+
+			var listedRule *client.FeeRuleResponse
+			for i := range listed {
+				if listed[i].ID == created.ID {
+					listedRule = &listed[i]
+					break
+				}
+			}
+			require.NotNil(t, listedRule, "created fee rule should appear in list")
+			require.Len(t, listedRule.Predicates, 2, "list response should contain both predicates")
+
+			// Step 4: UPDATE with new predicates and verify replacement.
+			tc.Logf("Step 4: UPDATE predicates and verify replacement")
+			newPredicates := []client.CreateFeeRulePredicateRequest{
+				{Field: "country", Operator: "EQUALS", Value: "BR"},
+				{Field: "mcc", Operator: "IN", Values: []string{"5411", "5541", "5812"}},
+				{Field: "brand", Operator: "EQUALS", Value: "mastercard"},
+			}
+			updated, err := c.Configuration.UpdateFeeRule(ctx, created.ID, client.UpdateFeeRuleRequest{
+				Predicates: &newPredicates,
+			})
+			require.NoError(t, err)
+			require.Len(t, updated.Predicates, 3, "update should replace with 3 new predicates")
+
+			// Verify the updated predicates via GET.
+			refetched, err := c.Configuration.GetFeeRule(ctx, created.ID)
+			require.NoError(t, err)
+			require.Len(t, refetched.Predicates, 3, "refetched should have 3 predicates after update")
+
+			// Count operators to verify structure.
+			equalsCount := 0
+			inCount := 0
+			for _, p := range refetched.Predicates {
+				switch p.Operator {
+				case "EQUALS":
+					equalsCount++
+				case "IN":
+					inCount++
+				}
+			}
+			assert.Equal(t, 2, equalsCount, "should have 2 EQUALS predicates after update")
+			assert.Equal(t, 1, inCount, "should have 1 IN predicate after update")
+
+			tc.Logf("✓ M13: Fee rule predicate round-trip verified (create→get→list→update→get)")
+		})
+}
+
 func TestFeeRule_ValidationAndConflicts(t *testing.T) {
 	e2e.RunE2EWithTimeout(t, 2*time.Minute,
 		func(t *testing.T, tc *e2e.TestContext, c *e2e.Client) {
