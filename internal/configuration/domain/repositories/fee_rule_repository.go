@@ -19,6 +19,6 @@ type FeeRuleRepository interface {
 	FindByContextID(ctx context.Context, contextID uuid.UUID) ([]*fee.FeeRule, error)
 	Update(ctx context.Context, rule *fee.FeeRule) error
 	UpdateWithTx(ctx context.Context, tx *sql.Tx, rule *fee.FeeRule) error
-	Delete(ctx context.Context, id uuid.UUID) error
-	DeleteWithTx(ctx context.Context, tx *sql.Tx, id uuid.UUID) error
+	Delete(ctx context.Context, contextID, id uuid.UUID) error
+	DeleteWithTx(ctx context.Context, tx *sql.Tx, contextID, id uuid.UUID) error
 }

@@ -132,7 +132,7 @@ func TestFeeRuleRepository_CreateFindUpdateDelete(t *testing.T) {
 		require.Len(t, updated.Predicates, 1)
 		require.Equal(t, fetched.Predicates, updated.Predicates)
 
-		err = repo.Delete(ctx, secondRule.ID)
+		err = repo.Delete(ctx, contextID, secondRule.ID)
 		require.NoError(t, err)
 
 		_, err = repo.FindByID(ctx, secondRule.ID)
@@ -261,6 +261,29 @@ func TestFeeRuleRepository_ConcurrentDuplicatePriority(t *testing.T) {
 		require.Equal(t, 1, successes)
 		require.Equal(t, 1, constraintFailures)
 	})
+}
+
+// TestFeeRuleRepository_CrossTenantIsolation verifies that fee rules created
+// in one tenant's schema are invisible to another tenant. This is H21 from
+// the fee-rules-per-field feature review.
+//
+// The matcher uses PostgreSQL schema-based tenant isolation: each tenant
+// operates within its own search_path set by WithTenantTxProvider. Creating
+// a separate schema requires DDL (CREATE SCHEMA + table replication), which
+// the standard test harness does not support out-of-the-box.
+//
+// When multi-schema harness support is available, this test should:
+//  1. Create tenant A schema and insert a fee rule there.
+//  2. Switch to tenant B schema via context value.
+//  3. Assert FindByID(tenantA_rule.ID) returns ErrFeeRuleNotFound.
+//  4. Assert FindByContextID(tenantA_context.ID) returns empty slice.
+func TestFeeRuleRepository_CrossTenantIsolation(t *testing.T) {
+	t.Parallel()
+
+	t.Skip("requires multi-schema harness: the shared integration harness operates " +
+		"in a single 'public' schema; cross-tenant isolation for fee rules needs " +
+		"separate PostgreSQL schemas with replicated DDL — see " +
+		"tests/integration/auth/tenant_isolation_test.go for the pattern")
 }
 
 func assertPgConstraintName(t *testing.T, err error, expected string) {
