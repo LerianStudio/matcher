@@ -6,10 +6,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
-	"sort"
 	"sync"
 	"sync/atomic"
+
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
 	"github.com/LerianStudio/matcher/pkg/systemplane/ports"
@@ -108,39 +108,6 @@ type defaultSupervisor struct {
 	stopOnce    sync.Once
 }
 
-type resourceAdopter interface {
-	AdoptResourcesFrom(previous domain.RuntimeBundle)
-}
-
-type rollbackDiscarder interface {
-	Discard(context.Context) error
-}
-
-func discardFailedCandidate(ctx context.Context, candidate domain.RuntimeBundle, strategy BuildStrategy) {
-	if isNilRuntimeBundle(candidate) {
-		return
-	}
-
-	if strategy == BuildStrategyIncremental {
-		discarder, ok := candidate.(rollbackDiscarder)
-		if !ok {
-			return
-		}
-
-		_ = discarder.Discard(ctx)
-
-		return
-	}
-
-	if discarder, ok := candidate.(rollbackDiscarder); ok {
-		_ = discarder.Discard(ctx)
-
-		return
-	}
-
-	_ = candidate.Close(ctx)
-}
-
 // Current returns the currently active runtime bundle.
 func (supervisor *defaultSupervisor) Current() domain.RuntimeBundle {
 	holder := supervisor.bundle.Load()
@@ -162,8 +129,15 @@ func (supervisor *defaultSupervisor) Snapshot() domain.Snapshot {
 }
 
 // PublishSnapshot publishes a snapshot without rebuilding bundles.
-func (supervisor *defaultSupervisor) PublishSnapshot(_ context.Context, snap domain.Snapshot, _ string) error {
+// The context and reason parameters are part of the Supervisor contract and are
+// reserved for future tracing/audit hooks even though the current implementation
+// only needs the snapshot payload.
+func (supervisor *defaultSupervisor) PublishSnapshot(ctx context.Context, snap domain.Snapshot, _ string) error {
+	_, span := startSupervisorSpan(ctx, "publish_snapshot")
+	defer span.End()
+
 	if supervisor.isStopped() {
+		libOpentelemetry.HandleSpanError(span, "supervisor stopped", domain.ErrSupervisorStopped)
 		return domain.ErrSupervisorStopped
 	}
 
@@ -176,8 +150,14 @@ func (supervisor *defaultSupervisor) PublishSnapshot(_ context.Context, snap dom
 }
 
 // ReconcileCurrent reconciles the current bundle against a provided snapshot.
+// The reason parameter is reserved for future tracing/audit hooks while the
+// current implementation only needs the context and snapshot.
 func (supervisor *defaultSupervisor) ReconcileCurrent(ctx context.Context, snap domain.Snapshot, _ string) error {
+	ctx, span := startSupervisorSpan(ctx, "reconcile_current")
+	defer span.End()
+
 	if supervisor.isStopped() {
+		libOpentelemetry.HandleSpanError(span, "supervisor stopped", domain.ErrSupervisorStopped)
 		return domain.ErrSupervisorStopped
 	}
 
@@ -186,6 +166,7 @@ func (supervisor *defaultSupervisor) ReconcileCurrent(ctx context.Context, snap 
 
 	holder := supervisor.bundle.Load()
 	if holder == nil || isNilRuntimeBundle(holder.bundle) {
+		libOpentelemetry.HandleSpanError(span, "missing current bundle", domain.ErrNoCurrentBundle)
 		return domain.ErrNoCurrentBundle
 	}
 
@@ -199,6 +180,8 @@ func (supervisor *defaultSupervisor) ReconcileCurrent(ctx context.Context, snap 
 				supervisor.snapshot.Store(previous)
 			}
 
+			libOpentelemetry.HandleSpanError(span, "reconcile current bundle", err)
+
 			return fmt.Errorf("%s: %w: %w", reconciler.Name(), domain.ErrReconcileFailed, err)
 		}
 	}
@@ -208,7 +191,11 @@ func (supervisor *defaultSupervisor) ReconcileCurrent(ctx context.Context, snap 
 
 // Reload rebuilds the snapshot and runtime bundle, then reconciles consumers.
 func (supervisor *defaultSupervisor) Reload(ctx context.Context, reason string) error {
+	ctx, span := startSupervisorSpan(ctx, "reload")
+	defer span.End()
+
 	if supervisor.isStopped() {
+		libOpentelemetry.HandleSpanError(span, "supervisor stopped", domain.ErrSupervisorStopped)
 		return domain.ErrSupervisorStopped
 	}
 
@@ -219,6 +206,7 @@ func (supervisor *defaultSupervisor) Reload(ctx context.Context, reason string) 
 
 	snap, err := supervisor.builder.BuildFull(ctx, tenantIDs...)
 	if err != nil {
+		libOpentelemetry.HandleSpanError(span, "build full snapshot", err)
 		return fmt.Errorf("reload: %w: %w", domain.ErrSnapshotBuildFailed, err)
 	}
 
@@ -236,10 +224,12 @@ func (supervisor *defaultSupervisor) Reload(ctx context.Context, reason string) 
 	// Falls back to full build on failure or when incremental is not available.
 	candidate, strategy, err := supervisor.buildBundle(ctx, snap, previousBundle, prevSnap)
 	if err != nil {
+		libOpentelemetry.HandleSpanError(span, "build runtime bundle", err)
 		return fmt.Errorf("reload: %w: %w", domain.ErrBundleBuildFailed, err)
 	}
 
 	if isNilRuntimeBundle(candidate) {
+		libOpentelemetry.HandleSpanError(span, "nil runtime bundle", domain.ErrBundleBuildFailed)
 		return fmt.Errorf("reload: %w: nil runtime bundle", domain.ErrBundleBuildFailed)
 	}
 
@@ -251,6 +241,8 @@ func (supervisor *defaultSupervisor) Reload(ctx context.Context, reason string) 
 	for _, reconciler := range supervisor.reconcilers {
 		if err := reconciler.Reconcile(ctx, previousBundle, candidate, snap); err != nil {
 			discardFailedCandidate(ctx, candidate, strategy)
+
+			libOpentelemetry.HandleSpanError(span, "reconcile candidate bundle", err)
 
 			return fmt.Errorf("reload: %s: %w: %w", reconciler.Name(), domain.ErrReconcileFailed, err)
 		}
@@ -280,6 +272,9 @@ func (supervisor *defaultSupervisor) Reload(ctx context.Context, reason string) 
 
 // Stop terminates supervisor operations and closes the active bundle.
 func (supervisor *defaultSupervisor) Stop(ctx context.Context) error {
+	ctx, span := startSupervisorSpan(ctx, "stop")
+	defer span.End()
+
 	supervisor.stopOnce.Do(func() {
 		close(supervisor.stopCh)
 	})
@@ -290,84 +285,10 @@ func (supervisor *defaultSupervisor) Stop(ctx context.Context) error {
 	holder := supervisor.bundle.Load()
 	if holder != nil && !isNilRuntimeBundle(holder.bundle) {
 		if err := holder.bundle.Close(ctx); err != nil {
+			libOpentelemetry.HandleSpanError(span, "close current bundle", err)
 			return fmt.Errorf("stop close current bundle: %w", err)
 		}
 	}
 
 	return nil
-}
-
-func (supervisor *defaultSupervisor) isStopped() bool {
-	select {
-	case <-supervisor.stopCh:
-		return true
-	default:
-		return false
-	}
-}
-
-func isNilRuntimeBundle(bundle domain.RuntimeBundle) bool {
-	return domain.IsNilValue(bundle)
-}
-
-func isNilReconciler(reconciler ports.BundleReconciler) bool {
-	return domain.IsNilValue(reconciler)
-}
-
-// buildBundle attempts an incremental build first (if the factory supports it
-// and a previous bundle exists), falling back to a full build. Returns the
-// build strategy used for observability.
-func (supervisor *defaultSupervisor) buildBundle(
-	ctx context.Context,
-	snap domain.Snapshot,
-	previousBundle domain.RuntimeBundle,
-	prevSnap *domain.Snapshot,
-) (domain.RuntimeBundle, BuildStrategy, error) {
-	// Incremental path: reuse unchanged components from the previous bundle.
-	if incFactory, ok := supervisor.factory.(ports.IncrementalBundleFactory); ok &&
-		prevSnap != nil && !isNilRuntimeBundle(previousBundle) {
-		candidate, err := incFactory.BuildIncremental(ctx, snap, previousBundle, *prevSnap)
-		if err == nil && !isNilRuntimeBundle(candidate) {
-			return candidate, BuildStrategyIncremental, nil
-		}
-		// Incremental build failed — fall through to full build.
-	}
-
-	// Full build: construct everything from scratch.
-	bundle, err := supervisor.factory.Build(ctx, snap)
-	if err != nil {
-		return nil, BuildStrategyFull, fmt.Errorf("build full bundle: %w", err)
-	}
-
-	return bundle, BuildStrategyFull, nil
-}
-
-// sortReconcilersByPhase returns a copy of the reconciler slice sorted by
-// phase in ascending order (StateSync → Validation → SideEffect). Reconcilers
-// within the same phase retain their original relative order (stable sort).
-func sortReconcilersByPhase(reconcilers []ports.BundleReconciler) []ports.BundleReconciler {
-	sorted := make([]ports.BundleReconciler, len(reconcilers))
-	copy(sorted, reconcilers)
-
-	slices.SortStableFunc(sorted, func(a, b ports.BundleReconciler) int {
-		return int(a.Phase()) - int(b.Phase())
-	})
-
-	return sorted
-}
-
-func cachedTenantIDs(snapshot *domain.Snapshot) []string {
-	if snapshot == nil || len(snapshot.TenantSettings) == 0 {
-		return nil
-	}
-
-	tenantIDs := make([]string, 0, len(snapshot.TenantSettings))
-
-	for tenantID := range snapshot.TenantSettings {
-		tenantIDs = append(tenantIDs, tenantID)
-	}
-
-	sort.Strings(tenantIDs)
-
-	return tenantIDs
 }

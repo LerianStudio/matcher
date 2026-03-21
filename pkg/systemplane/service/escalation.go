@@ -29,9 +29,16 @@ func Escalate(reg registry.Registry, ops []ports.WriteOp) (domain.ApplyBehavior,
 		strongest     domain.ApplyBehavior
 		strongestKeys []string
 		maxStrength   int
+		seen          = make(map[string]struct{}, len(ops))
 	)
 
 	for _, op := range ops {
+		if _, exists := seen[op.Key]; exists {
+			return "", nil, fmt.Errorf("duplicate key %q in batch: %w", op.Key, domain.ErrValueInvalid)
+		}
+
+		seen[op.Key] = struct{}{}
+
 		def, ok := reg.Get(op.Key)
 		if !ok {
 			return "", nil, fmt.Errorf("key %q: %w", op.Key, domain.ErrKeyUnknown)

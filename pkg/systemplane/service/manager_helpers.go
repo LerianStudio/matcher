@@ -3,9 +3,17 @@
 package service
 
 import (
+	"reflect"
+	"strings"
+
 	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
 	"github.com/LerianStudio/matcher/pkg/systemplane/ports"
 	"github.com/LerianStudio/matcher/pkg/systemplane/registry"
+)
+
+const (
+	maskedValuePlaceholder = "****"
+	visibleSuffixRuneCount = 4
 )
 
 func buildSchema(reg registry.Registry, kind domain.Kind) []SchemaEntry {
@@ -55,10 +63,70 @@ func cloneEffectiveValues(values map[string]domain.EffectiveValue) map[string]do
 	cloned := make(map[string]domain.EffectiveValue, len(values))
 
 	for key, value := range values {
+		value.Value = cloneRuntimeValue(value.Value)
+		value.Default = cloneRuntimeValue(value.Default)
+		value.Override = cloneRuntimeValue(value.Override)
 		cloned[key] = value
 	}
 
 	return cloned
+}
+
+func cloneRuntimeValue(value any) any {
+	if value == nil {
+		return nil
+	}
+
+	rv := reflect.ValueOf(value)
+
+	switch rv.Kind() {
+	case reflect.Map:
+		if rv.IsNil() {
+			return value
+		}
+
+		cloned := reflect.MakeMapWithSize(rv.Type(), rv.Len())
+		for _, key := range rv.MapKeys() {
+			cloned.SetMapIndex(key, cloneRuntimeReflectValue(rv.MapIndex(key), rv.Type().Elem()))
+		}
+
+		return cloned.Interface()
+	case reflect.Slice:
+		if rv.IsNil() {
+			return value
+		}
+
+		cloned := reflect.MakeSlice(rv.Type(), rv.Len(), rv.Len())
+		for index := range rv.Len() {
+			cloned.Index(index).Set(cloneRuntimeReflectValue(rv.Index(index), rv.Type().Elem()))
+		}
+
+		return cloned.Interface()
+	default:
+		return value
+	}
+}
+
+func cloneRuntimeReflectValue(value reflect.Value, target reflect.Type) reflect.Value {
+	if !value.IsValid() {
+		return reflect.Zero(target)
+	}
+
+	cloned := cloneRuntimeValue(value.Interface())
+	if cloned == nil {
+		return reflect.Zero(target)
+	}
+
+	clonedValue := reflect.ValueOf(cloned)
+	if clonedValue.Type().AssignableTo(target) {
+		return clonedValue
+	}
+
+	if clonedValue.Type().ConvertibleTo(target) {
+		return clonedValue.Convert(target)
+	}
+
+	return value
 }
 
 // revisionFromValues returns the highest revision across all entries in the
@@ -130,16 +198,39 @@ func redactValue(def domain.KeyDef, value any) any {
 	// This prevents accidental secret leaks when a developer sets Secret=true
 	// but forgets to set RedactPolicy explicitly.
 	if def.Secret {
-		return "****"
+		return maskedValuePlaceholder
 	}
 
 	if def.RedactPolicy == "" || def.RedactPolicy == domain.RedactNone {
 		return value
 	}
 
-	// Non-secret keys with an explicit redact policy (e.g. RedactMask,
-	// RedactFull) are redacted.
-	return "****"
+	if def.RedactPolicy == domain.RedactMask {
+		return maskRedactedValue(value)
+	}
+
+	// Non-secret keys with an explicit full redact policy are fully hidden.
+	return maskedValuePlaceholder
+}
+
+func maskRedactedValue(value any) any {
+	stringValue, ok := value.(string)
+	if !ok {
+		return maskedValuePlaceholder
+	}
+
+	trimmed := strings.TrimSpace(stringValue)
+	if trimmed == "" {
+		return maskedValuePlaceholder
+	}
+
+	runes := []rune(trimmed)
+	if len(runes) <= visibleSuffixRuneCount {
+		return maskedValuePlaceholder
+	}
+
+	return strings.Repeat("*", len(runes)-visibleSuffixRuneCount) +
+		string(runes[len(runes)-visibleSuffixRuneCount:])
 }
 
 func scopeAllowed(allowed []domain.Scope, target domain.Scope) bool {

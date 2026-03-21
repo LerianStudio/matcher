@@ -324,3 +324,21 @@ func TestEscalate_AllMutableBehaviors_HighestWins(t *testing.T) {
 	assert.Equal(t, domain.ApplyBundleRebuildAndReconcile, behavior)
 	assert.Equal(t, []string{"combo.key"}, keys)
 }
+
+func TestEscalate_DuplicateKeys_RejectsBatch(t *testing.T) {
+	t.Parallel()
+
+	reg := newTestRegistry()
+	ops := []ports.WriteOp{
+		{Key: "live.key", Value: "first"},
+		{Key: "live.key", Value: "second"},
+	}
+
+	behavior, keys, err := Escalate(reg, ops)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, domain.ErrValueInvalid)
+	assert.Contains(t, err.Error(), "duplicate key \"live.key\" in batch")
+	assert.Empty(t, string(behavior))
+	assert.Nil(t, keys)
+}

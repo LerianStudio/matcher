@@ -9,6 +9,9 @@ import (
 	"sort"
 	"time"
 
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+
 	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
 	"github.com/LerianStudio/matcher/pkg/systemplane/ports"
 	"github.com/LerianStudio/matcher/pkg/systemplane/registry"
@@ -45,16 +48,23 @@ func NewSnapshotBuilder(reg registry.Registry, store ports.Store) (*SnapshotBuil
 // KindConfig defaults from the registry and then overlaying global overrides
 // from the store.
 func (builder *SnapshotBuilder) BuildConfigs(ctx context.Context) (map[string]domain.EffectiveValue, domain.Revision, error) {
+	_, tracer, _, _ := libCommons.NewTrackingFromContext(ctx) //nolint:dogsled
+
+	ctx, span := tracer.Start(ctx, "systemplane.snapshot_builder.build_configs")
+	defer span.End()
+
 	defs := builder.registry.List(domain.KindConfig)
 	effective := initDefaults(defs)
 
 	target, err := domain.NewTarget(domain.KindConfig, domain.ScopeGlobal, "")
 	if err != nil {
+		libOpentelemetry.HandleSpanError(span, "build config target", err)
 		return nil, domain.RevisionZero, fmt.Errorf("build config target: %w", err)
 	}
 
 	result, err := builder.store.Get(ctx, target)
 	if err != nil {
+		libOpentelemetry.HandleSpanError(span, "load config overrides", err)
 		return nil, domain.RevisionZero, fmt.Errorf("get config overrides: %w", err)
 	}
 
@@ -67,16 +77,23 @@ func (builder *SnapshotBuilder) BuildConfigs(ctx context.Context) (map[string]do
 // BuildGlobalSettings builds global settings using defaults plus global
 // overrides only.
 func (builder *SnapshotBuilder) BuildGlobalSettings(ctx context.Context) (map[string]domain.EffectiveValue, domain.Revision, error) {
+	_, tracer, _, _ := libCommons.NewTrackingFromContext(ctx) //nolint:dogsled
+
+	ctx, span := tracer.Start(ctx, "systemplane.snapshot_builder.build_global_settings")
+	defer span.End()
+
 	defs := filterDefsByScope(builder.registry.List(domain.KindSetting), domain.ScopeGlobal)
 	effective := initDefaults(defs)
 
 	target, err := domain.NewTarget(domain.KindSetting, domain.ScopeGlobal, "")
 	if err != nil {
+		libOpentelemetry.HandleSpanError(span, "build global settings target", err)
 		return nil, domain.RevisionZero, fmt.Errorf("build global setting target: %w", err)
 	}
 
 	result, err := builder.store.Get(ctx, target)
 	if err != nil {
+		libOpentelemetry.HandleSpanError(span, "load global setting overrides", err)
 		return nil, domain.RevisionZero, fmt.Errorf("get global setting overrides: %w", err)
 	}
 
@@ -88,12 +105,18 @@ func (builder *SnapshotBuilder) BuildGlobalSettings(ctx context.Context) (map[st
 
 // BuildSettings builds effective settings for the requested subject.
 func (builder *SnapshotBuilder) BuildSettings(ctx context.Context, subject Subject) (map[string]domain.EffectiveValue, domain.Revision, error) {
+	_, tracer, _, _ := libCommons.NewTrackingFromContext(ctx) //nolint:dogsled
+
+	ctx, span := tracer.Start(ctx, "systemplane.snapshot_builder.build_settings")
+	defer span.End()
+
 	switch subject.Scope {
 	case domain.ScopeGlobal:
 		return builder.BuildGlobalSettings(ctx)
 	case domain.ScopeTenant:
 		return builder.buildTenantSettings(ctx, subject.SubjectID)
 	default:
+		libOpentelemetry.HandleSpanError(span, "build settings scope", domain.ErrScopeInvalid)
 		return nil, domain.RevisionZero, fmt.Errorf("build settings scope %q: %w", subject.Scope, domain.ErrScopeInvalid)
 	}
 }
@@ -133,13 +156,20 @@ func (builder *SnapshotBuilder) buildTenantSettings(ctx context.Context, tenantI
 // BuildFull builds a complete snapshot with configs, global settings, and any
 // requested tenant settings.
 func (builder *SnapshotBuilder) BuildFull(ctx context.Context, tenantIDs ...string) (domain.Snapshot, error) {
+	_, tracer, _, _ := libCommons.NewTrackingFromContext(ctx) //nolint:dogsled
+
+	ctx, span := tracer.Start(ctx, "systemplane.snapshot_builder.build_full")
+	defer span.End()
+
 	configs, configRev, err := builder.BuildConfigs(ctx)
 	if err != nil {
+		libOpentelemetry.HandleSpanError(span, "build configs", err)
 		return domain.Snapshot{}, fmt.Errorf("build configs: %w", err)
 	}
 
 	globalSettings, globalRev, err := builder.BuildGlobalSettings(ctx)
 	if err != nil {
+		libOpentelemetry.HandleSpanError(span, "build global settings", err)
 		return domain.Snapshot{}, fmt.Errorf("build global settings: %w", err)
 	}
 
@@ -149,6 +179,7 @@ func (builder *SnapshotBuilder) BuildFull(ctx context.Context, tenantIDs ...stri
 	for _, tenantID := range uniqueTenantIDs(tenantIDs) {
 		settings, rev, buildErr := builder.BuildSettings(ctx, Subject{Scope: domain.ScopeTenant, SubjectID: tenantID})
 		if buildErr != nil {
+			libOpentelemetry.HandleSpanError(span, "build tenant settings", buildErr)
 			return domain.Snapshot{}, fmt.Errorf("build tenant settings %q: %w", tenantID, buildErr)
 		}
 
