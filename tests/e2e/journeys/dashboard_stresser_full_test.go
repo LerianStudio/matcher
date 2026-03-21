@@ -417,9 +417,55 @@ func TestDashboardStresser_FullJourney(t *testing.T) {
 				tc.Logf("  Rule %s: %d groups", ruleID, count)
 			}
 
-			// Assertions
-			require.Greater(t, len(matchGroups), 0, "should have some matches")
+			// H20: Tighten assertions using deterministic seed (42).
+			//
+			// Transaction generation is seeded, so counts are reproducible:
+			//   - 200 perfect-match pairs  → 200 exact-rule groups (guaranteed)
+			//   -  50 tolerance-match pairs → up to 50 tolerance-rule groups
+			//   -  30 date-lag-match pairs  → up to 30 date-lag-rule groups
+			//   - 100 unmatched             → 0 groups (single-sided by design)
+			//   -  20 multi-source triples  → extra matches via ledger↔bank exact rule
+			//
+			// Lower bound: all 200 perfect-match pairs share the same external ID
+			// on both sides, so the exact rule (priority 1) will always match them.
+			// Multi-source triples also share the external ID across ledger+bank,
+			// so they add another ~20 exact-match groups.
+			expectedMinGroups := cfg.PerfectMatchCount + cfg.MultiSourceCount // 200 + 20 = 220
+			require.GreaterOrEqual(t, len(matchGroups), expectedMinGroups,
+				"seeded(42) full run: expected >= %d groups from %d perfect + %d multi-source pairs",
+				expectedMinGroups, cfg.PerfectMatchCount, cfg.MultiSourceCount,
+			)
+
+			// Upper bound: total matchable pairs across all three rules.
+			maxPossibleGroups := cfg.PerfectMatchCount + cfg.ToleranceMatchCount +
+				cfg.DateLagMatchCount + cfg.MultiSourceCount // 200+50+30+20 = 300
+			require.LessOrEqual(t, len(matchGroups), maxPossibleGroups,
+				"match groups should not exceed total matchable pairs (%d)", maxPossibleGroups,
+			)
+
+			// Also verify the dashboard volume stats are populated with reasonable counts.
+			if dashboard.Volume != nil {
+				// Total ingested = perfect*2 + tolerance*2 + dateLag*2 + unmatched + multi*3
+				expectedIngested := cfg.PerfectMatchCount*2 + cfg.ToleranceMatchCount*2 +
+					cfg.DateLagMatchCount*2 + cfg.UnmatchedCount + cfg.MultiSourceCount*3
+				require.Greater(t, dashboard.Volume.TotalTransactions, 0,
+					"dashboard should report > 0 total transactions")
+				require.LessOrEqual(t, dashboard.Volume.TotalTransactions, expectedIngested+10,
+					"dashboard total should not wildly exceed expected ingested count (%d)",
+					expectedIngested,
+				)
+			}
+
+			if dashboard.MatchRate != nil {
+				require.Greater(t, dashboard.MatchRate.MatchedCount, 0,
+					"dashboard should report > 0 matched transactions")
+				require.GreaterOrEqual(t, dashboard.MatchRate.MatchRate, 30.0,
+					"match rate should be at least 30%% given 200+ matchable pairs vs 100 unmatched",
+				)
+			}
+
 			tc.Logf("\n✓ Dashboard stresser completed successfully!")
+			tc.Logf("  Match groups: %d (expected range [%d, %d])", len(matchGroups), expectedMinGroups, maxPossibleGroups)
 			tc.Logf("  Context ID for dashboard viewing: %s", reconciliationContext.ID)
 		},
 	)
