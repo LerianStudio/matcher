@@ -753,10 +753,11 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 
 // IMPORTANT: Worker re-entrancy contract
 // Each factory closure returns the SAME worker instance (captured from modules).
-// The WorkerManager calls Stop() → UpdateRuntimeConfig() → Start() on the same
+// The WorkerManager calls Stop() -> UpdateRuntimeConfig() -> Start() on the same
 // instance during restarts. All workers MUST support this lifecycle by implementing
 // prepareRunState() to reinitialize channels and sync primitives. Workers that do
-// NOT support Stop→Start re-entrancy will fail silently on restart.
+// NOT support Stop -> Start re-entrancy may hang or panic on restart because
+// they can retain closed channels or stale synchronization state.
 // registerCriticalWorkers registers workers that are critical when explicitly enabled
 // via config (export, cleanup, archival).
 func registerCriticalWorkers(wm *WorkerManager, modules *modulesResult) {

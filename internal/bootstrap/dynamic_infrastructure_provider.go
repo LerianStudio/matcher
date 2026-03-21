@@ -269,6 +269,11 @@ func (provider *dynamicInfrastructureProvider) currentMultiTenantManager(ctx con
 	return provider.multiTenantMgr, nil
 }
 
+// dynamicMultiTenantKey builds the cache key that determines whether the
+// current tenant connection manager can be reused. Any field included here is
+// considered manager-shaping: if it changes, the provider rebuilds the manager
+// and closes the previous one. Keep this list aligned with
+// buildTenantConnectionManagerFromConfig.
 func dynamicMultiTenantKey(cfg *Config) string {
 	if cfg == nil {
 		return ""
