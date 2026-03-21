@@ -397,8 +397,8 @@ func seedSecondSourceWithTransactions(t *testing.T, h *ChaosHarness, count int) 
 
 	_, err := pgcommon.WithTenantTx(ctx, h.Connection, func(tx *sql.Tx) (struct{}, error) {
 		_, execErr := tx.ExecContext(ctx, `
-			INSERT INTO reconciliation_sources (id, context_id, name, type, config, created_at, updated_at)
-			VALUES ($1, $2, 'Chaos Source B', 'BANK', '{}', NOW(), NOW())
+			INSERT INTO reconciliation_sources (id, context_id, name, type, side, config, created_at, updated_at)
+			VALUES ($1, $2, 'Chaos Source B', 'BANK', 'RIGHT', '{}', NOW(), NOW())
 			ON CONFLICT (id) DO NOTHING
 		`, secondSourceID, h.Seed.ContextID)
 		return struct{}{}, execErr

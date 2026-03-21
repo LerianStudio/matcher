@@ -266,6 +266,114 @@ func TestProtectedGroup_AuthEnabledInvalidTokenFailsBeforeLibAuth(t *testing.T) 
 	assert.NotContains(t, string(body), "Forbidden")
 }
 
+func TestProtectedGroupWithActionsWithMiddleware_NilExtractor(t *testing.T) {
+	t.Parallel()
+
+	app := fiber.New()
+	router := app.Group("/api")
+
+	group := ProtectedGroupWithActionsWithMiddleware(
+		router, nil, nil, "resource", []string{"read", "write"},
+	)
+	require.NotNil(t, group)
+
+	group.Get("/test", func(c *fiber.Ctx) error {
+		return c.SendString("success")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/test", http.NoBody)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusInternalServerError, resp.StatusCode)
+
+	body, _ := io.ReadAll(resp.Body)
+	assert.Contains(t, string(body), "tenant extractor not initialized")
+}
+
+func TestProtectedGroupWithActionsWithMiddleware_EmptyActions(t *testing.T) {
+	t.Parallel()
+
+	app := fiber.New()
+	router := app.Group("/api")
+
+	extractor, err := NewTenantExtractor(
+		false, DefaultTenantID, DefaultTenantSlug, "", "development",
+	)
+	require.NoError(t, err)
+
+	group := ProtectedGroupWithActionsWithMiddleware(
+		router, nil, extractor, "resource", []string{},
+	)
+	require.NotNil(t, group)
+
+	group.Get("/test", func(c *fiber.Ctx) error {
+		return c.SendString("success")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/test", http.NoBody)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusInternalServerError, resp.StatusCode)
+
+	body, _ := io.ReadAll(resp.Body)
+	assert.Contains(t, string(body), "authorization actions not configured")
+}
+
+func TestProtectedGroupWithActionsWithMiddleware_EmptyActionString(t *testing.T) {
+	t.Parallel()
+
+	app := fiber.New()
+	router := app.Group("/api")
+
+	extractor, err := NewTenantExtractor(
+		false, DefaultTenantID, DefaultTenantSlug, "", "development",
+	)
+	require.NoError(t, err)
+
+	group := ProtectedGroupWithActionsWithMiddleware(
+		router, nil, extractor, "resource", []string{"read", "  ", "write"},
+	)
+	require.NotNil(t, group)
+
+	group.Get("/test", func(c *fiber.Ctx) error {
+		return c.SendString("success")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/test", http.NoBody)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusInternalServerError, resp.StatusCode)
+
+	body, _ := io.ReadAll(resp.Body)
+	assert.Contains(t, string(body), "authorization actions contain empty entry")
+}
+
+func TestProtectedGroupWithActionsWithMiddleware_ValidInputCreatesGroup(t *testing.T) {
+	t.Parallel()
+
+	app := fiber.New()
+	router := app.Group("/api")
+
+	extractor, err := NewTenantExtractor(
+		false, DefaultTenantID, DefaultTenantSlug, "", "development",
+	)
+	require.NoError(t, err)
+
+	group := ProtectedGroupWithActionsWithMiddleware(
+		router, nil, extractor, "resource", []string{"read", "write"},
+	)
+	require.NotNil(t, group)
+}
+
 func TestProtectedGroupWithMiddleware_AdditionalMiddlewareSeesTenantAndUserAfterAuth(t *testing.T) {
 	t.Parallel()
 
