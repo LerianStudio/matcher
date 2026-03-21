@@ -33,10 +33,8 @@ var _ ports.InfrastructureProvider = (*SingleTenantInfrastructureProvider)(nil)
 // SingleTenantInfrastructureProvider wraps singleton connections for single-tenant mode.
 // This is the default provider that maintains current behavior with no changes.
 type SingleTenantInfrastructureProvider struct {
-	postgres       *libPostgres.Client
-	redis          *libRedis.Client
-	postgresGetter func() *libPostgres.Client
-	redisGetter    func() *libRedis.Client
+	postgres *libPostgres.Client
+	redis    *libRedis.Client
 }
 
 // NewSingleTenantInfrastructureProvider creates a provider wrapping existing singleton connections.
@@ -47,18 +45,6 @@ func NewSingleTenantInfrastructureProvider(
 	return &SingleTenantInfrastructureProvider{
 		postgres: postgres,
 		redis:    redis,
-	}
-}
-
-// NewDynamicSingleTenantInfrastructureProvider creates a provider whose
-// Postgres/Redis handles are resolved on demand, enabling runtime swaps.
-func NewDynamicSingleTenantInfrastructureProvider(
-	postgresGetter func() *libPostgres.Client,
-	redisGetter func() *libRedis.Client,
-) *SingleTenantInfrastructureProvider {
-	return &SingleTenantInfrastructureProvider{
-		postgresGetter: postgresGetter,
-		redisGetter:    redisGetter,
 	}
 }
 
@@ -179,24 +165,12 @@ func (provider *SingleTenantInfrastructureProvider) currentPostgres() *libPostgr
 		return nil
 	}
 
-	if provider.postgresGetter != nil {
-		if postgres := provider.postgresGetter(); postgres != nil {
-			return postgres
-		}
-	}
-
 	return provider.postgres
 }
 
 func (provider *SingleTenantInfrastructureProvider) currentRedis() *libRedis.Client {
 	if provider == nil {
 		return nil
-	}
-
-	if provider.redisGetter != nil {
-		if redis := provider.redisGetter(); redis != nil {
-			return redis
-		}
 	}
 
 	return provider.redis

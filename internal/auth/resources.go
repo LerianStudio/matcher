@@ -27,9 +27,6 @@ const (
 	ResourceDiscovery = "discovery"
 
 	// ResourceSystem is the RBAC resource for system-level operations.
-	// TODO(config-api): The external auth service (lib-auth RBAC) must be configured
-	// to recognize the "system" resource with "config:read" and "config:write" actions
-	// before the config API routes are enabled in production.
 	ResourceSystem = "system"
 )
 
