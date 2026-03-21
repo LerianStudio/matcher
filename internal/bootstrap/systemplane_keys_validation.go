@@ -1,0 +1,142 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
+package bootstrap
+
+import (
+	"fmt"
+	"net/url"
+	"strings"
+
+	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
+)
+
+func validateAbsoluteHTTPURL(value any) error {
+	rawValue, ok := value.(string)
+	if !ok {
+		return errFetcherURLMustBeString
+	}
+
+	parsed, err := url.Parse(strings.TrimSpace(rawValue))
+	if err != nil {
+		return fmt.Errorf("fetcher url must be a valid URL: %w", err)
+	}
+
+	if parsed == nil || !parsed.IsAbs() || parsed.Host == "" {
+		return errFetcherURLMustBeAbsolute
+	}
+
+	if !strings.EqualFold(parsed.Scheme, "http") && !strings.EqualFold(parsed.Scheme, "https") {
+		return errFetcherURLMustUseHTTPScheme
+	}
+
+	return nil
+}
+
+// Validators for systemplane key registration.
+
+// validatePositiveInt rejects zero and negative integers.
+func validatePositiveInt(value any) error {
+	intVal, ok := toInt(value)
+	if !ok {
+		return fmt.Errorf("expected integer value: %w", domain.ErrValueInvalid)
+	}
+
+	if intVal <= 0 {
+		return fmt.Errorf("value must be a positive integer, got %d: %w", intVal, domain.ErrValueInvalid)
+	}
+
+	return nil
+}
+
+// validateNonNegativeInt rejects negative integers but allows zero.
+func validateNonNegativeInt(value any) error {
+	intVal, ok := toInt(value)
+	if !ok {
+		return fmt.Errorf("expected integer value: %w", domain.ErrValueInvalid)
+	}
+
+	if intVal < 0 {
+		return fmt.Errorf("value must be a non-negative integer, got %d: %w", intVal, domain.ErrValueInvalid)
+	}
+
+	return nil
+}
+
+// validateLogLevel accepts only the standard structured log levels.
+func validateLogLevel(value any) error {
+	strVal, ok := value.(string)
+	if !ok {
+		return fmt.Errorf("expected string value: %w", domain.ErrValueInvalid)
+	}
+
+	switch strings.ToLower(strVal) {
+	case "debug", "info", "warn", "error":
+		return nil
+	default:
+		return fmt.Errorf("invalid log level %q, must be one of: debug, info, warn, error: %w", strVal, domain.ErrValueInvalid)
+	}
+}
+
+// validateSSLMode accepts only valid PostgreSQL SSL modes.
+func validateSSLMode(value any) error {
+	strVal, ok := value.(string)
+	if !ok {
+		return fmt.Errorf("expected string value: %w", domain.ErrValueInvalid)
+	}
+
+	switch strVal {
+	case "disable", "require", "verify-ca", "verify-full":
+		return nil
+	default:
+		return fmt.Errorf("invalid SSL mode %q, must be one of: disable, require, verify-ca, verify-full: %w", strVal, domain.ErrValueInvalid)
+	}
+}
+
+// validateOptionalSSLMode allows empty string (unset replica) or a valid SSL mode.
+func validateOptionalSSLMode(value any) error {
+	strVal, ok := value.(string)
+	if !ok {
+		return fmt.Errorf("expected string value: %w", domain.ErrValueInvalid)
+	}
+
+	if strVal == "" {
+		return nil
+	}
+
+	return validateSSLMode(value)
+}
+
+// validateNonEmptyString rejects empty strings.
+func validateNonEmptyString(value any) error {
+	strVal, ok := value.(string)
+	if !ok {
+		return fmt.Errorf("expected string value: %w", domain.ErrValueInvalid)
+	}
+
+	if strings.TrimSpace(strVal) == "" {
+		return fmt.Errorf("value must not be empty: %w", domain.ErrValueInvalid)
+	}
+
+	return nil
+}
+
+// toInt converts value to int64 for validation, handling int, int64, and
+// whole-number float64 (which is how JSON numbers arrive).
+func toInt(value any) (int64, bool) {
+	switch typed := value.(type) {
+	case int:
+		return int64(typed), true
+	case int64:
+		return typed, true
+	case float64:
+		if typed == float64(int64(typed)) {
+			return int64(typed), true
+		}
+
+		return 0, false
+	default:
+		return 0, false
+	}
+}
