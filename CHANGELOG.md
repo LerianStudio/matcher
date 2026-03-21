@@ -1,3 +1,42 @@
+## [1.1.0-beta.20](https://github.com/LerianStudio/matcher/compare/v1.1.0-beta.19...v1.1.0-beta.20) (2026-03-21)
+
+
+### Features
+
+* **systemplane:** add apply behaviors, store encryption, write validation, and resource lifecycle ([ecfe42a](https://github.com/LerianStudio/matcher/commit/ecfe42a26579cb9e9e4083138dc7ec70c8a15221))
+* **systemplane:** add bootstrap config, backend factory registry, and identifier validation ([248f371](https://github.com/LerianStudio/matcher/commit/248f371b86b3c2f8f0538360fd44a3feb04ebc87))
+* **systemplane:** add change feed adapters with debounce and resync ([b87e8aa](https://github.com/LerianStudio/matcher/commit/b87e8aaec61ccdf7f4147c744465cf093a01bb7d))
+* **systemplane:** add Component field to KeyDef and IncrementalBundleFactory port ([ea3da97](https://github.com/LerianStudio/matcher/commit/ea3da97a5b7f906da4ca105f308a79bab3649aee))
+* **systemplane:** add Fiber HTTP adapter for runtime configuration API ([d4700b1](https://github.com/LerianStudio/matcher/commit/d4700b12d91db58114dabfc1347e88136848cac7))
+* **bootstrap:** add incremental build methods to bundle factory ([4063299](https://github.com/LerianStudio/matcher/commit/4063299258d53901d6b7fede8f28f4ae6346ab26))
+* **systemplane:** add MongoDB store and history adapters ([8fbca28](https://github.com/LerianStudio/matcher/commit/8fbca2828315e1da685e78ac2349dff0e433e4e1))
+* **db:** add official mongodb driver to enable database connectivity ([6ef23ea](https://github.com/LerianStudio/matcher/commit/6ef23ea4884d97122353a3ee1f06179e75039087))
+* **systemplane:** add phase 1 runtime configuration core ([dc616ed](https://github.com/LerianStudio/matcher/commit/dc616ed98c93dde6d5bec58dfe9998e5e766c9cc))
+* **systemplane:** add PostgreSQL store and history adapters ([5356318](https://github.com/LerianStudio/matcher/commit/5356318d8c29572c39d9e0d164e6be5850d520a8))
+* **systemplane:** add ReconcilerPhase type and phase-sorted reconciler execution ([7e034d9](https://github.com/LerianStudio/matcher/commit/7e034d9c936631e46862ca9156eb211e9d224565))
+* **governance:** add runtime storage swapping to archival worker ([64af419](https://github.com/LerianStudio/matcher/commit/64af41921438b506fb96d809e7008c7a074c65a7))
+* **systemplane:** add secret codec for at-rest config encryption ([3a9dbc2](https://github.com/LerianStudio/matcher/commit/3a9dbc2cc1d3c56fa9b13a9072c0eb47c622123a))
+* **bootstrap:** add swappable handles and dynamic infrastructure adapters ([cefb476](https://github.com/LerianStudio/matcher/commit/cefb476ba8488092593d46fcf4c6f6ea7da30c7b))
+* **auth:** add system module action constants for systemplane ([f5ee2f6](https://github.com/LerianStudio/matcher/commit/f5ee2f682276a72046b6085e4e3115d7d1fbe565))
+* **swagger:** add systemplane API annotations and regenerate docs ([4a0c70b](https://github.com/LerianStudio/matcher/commit/4a0c70b95fceb9577ab4e56f7efe7b93735d80fc))
+* **systemplane:** implement incremental bundle rebuilds in supervisor ([86241be](https://github.com/LerianStudio/matcher/commit/86241bec78b1a997ea89e7a03fed03537e0ecfff))
+* **systemplane:** simplify ConfigManager by removing unused versioning and reload tracking ([ae377cf](https://github.com/LerianStudio/matcher/commit/ae377cf559596b5342bb83ae5d7abd5ca1cf42b2))
+* **systemplane:** wire builtin backend factories for PostgreSQL and MongoDB ([4c1eba7](https://github.com/LerianStudio/matcher/commit/4c1eba7878a1fbbc89b90ea75a3f0f6026650c0a))
+* **bootstrap:** wire reload observer and pass logger to InitSystemplane ([e57f66d](https://github.com/LerianStudio/matcher/commit/e57f66d2285b235023d0b30f0c6e124042d8411f))
+* **bootstrap:** wire systemplane hot reload into bootstrap lifecycle ([2641b0c](https://github.com/LerianStudio/matcher/commit/2641b0c745ab30f3a38b48a6417cac120590d57e))
+
+
+### Bug Fixes
+
+* **systemplane:** add rollback discard logic and improve error handling ([88ac82f](https://github.com/LerianStudio/matcher/commit/88ac82fc2f9cf9a645a1b889cc49c1e71195dafe))
+* **systemplane:** correct critical runtime orchestration and safety bugs ([7af113b](https://github.com/LerianStudio/matcher/commit/7af113bed81fcf7d3e4f82500f7d29c346bed44f))
+* **systemplane:** harden adapters and preserve API contract semantics ([14a7995](https://github.com/LerianStudio/matcher/commit/14a7995fe1d38953228e93e6e0f46c92f2cbd8a3))
+* **exception:** register bulk routes before parameterized :exceptionId routes ([7c84ff4](https://github.com/LerianStudio/matcher/commit/7c84ff4be0dd332ebf1507a8e03365cd9165bc31))
+* **e2e:** resolve dashboard stresser failures and enable archival routes ([b4f6d5e](https://github.com/LerianStudio/matcher/commit/b4f6d5ef73cea658dc230ba7a4835973ffa3d094))
+* **bootstrap:** restore tenant isolation and harden runtime lifecycle ([cec542e](https://github.com/LerianStudio/matcher/commit/cec542e24c3df52d7089314898aef526919f4c55))
+* **systemplane:** update DTOs and service helpers for API contract compliance ([d25a66a](https://github.com/LerianStudio/matcher/commit/d25a66a75d519dd68c8155921d4168a91c045b48))
+* **systemplane:** use persisted kind for secret history decryption ([df1b46f](https://github.com/LerianStudio/matcher/commit/df1b46f3fce1127e58c4f085e0c2f0c66c1ea09a))
+
 ## [1.1.0-beta.19](https://github.com/LerianStudio/matcher/compare/v1.1.0-beta.18...v1.1.0-beta.19) (2026-03-21)
 
 
