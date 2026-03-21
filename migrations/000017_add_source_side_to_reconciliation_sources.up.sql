@@ -1,19 +1,10 @@
--- Pre-launch hard cutover:
--- Matching now requires every source to declare an explicit LEFT/RIGHT side.
--- This migration intentionally refuses to guess sides for existing rows.
--- Operators must reset internal data or explicitly backfill side assignments
--- before this migration can be applied.
-SELECT CASE
-    WHEN EXISTS (SELECT 1 FROM reconciliation_sources) THEN current_setting(
-        'migration_000017_blocked_reset_or_backfill_source_side_assignments_before_cutover'
-    )
-    ELSE 'ok'
-END;
-
+-- Phase 1 of source-side cutover (additive only):
+-- Adds the nullable side column so existing environments can backfill
+-- explicit LEFT/RIGHT assignments before enforcement in 000018.
 ALTER TABLE reconciliation_sources
-    ADD COLUMN side TEXT NOT NULL,
-    ADD CONSTRAINT chk_reconciliation_sources_side
-        CHECK (side IN ('LEFT', 'RIGHT'));
+    ADD COLUMN side TEXT;
 
+-- Composite lookup path: find all sources for a context filtered by side (LEFT/RIGHT).
+-- Used during match execution to partition transactions by reconciliation side.
 CREATE INDEX idx_reconciliation_sources_context_side
     ON reconciliation_sources (context_id, side);

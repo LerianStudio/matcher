@@ -52,7 +52,7 @@ SELECT
     relname AS table_name,
     n_live_tup AS row_count
 FROM pg_stat_user_tables
-WHERE relname IN ('exceptions', 'outbox_events')
+WHERE relname IN ('exceptions', 'outbox_events', 'reconciliation_sources', 'fee_rules')
 ORDER BY n_live_tup DESC;
 ```
 
@@ -61,8 +61,9 @@ ORDER BY n_live_tup DESC;
 The fee-rule feature introduces an intentional hard cutover for internal environments before public launch:
 
 - `000016_fee_rules.up.sql` refuses to run while `reconciliation_sources.fee_schedule_id` still contains legacy bindings.
-- `000017_add_source_side_to_reconciliation_sources.up.sql` refuses to run while `reconciliation_sources` already contains rows without explicit `LEFT`/`RIGHT` side assignments.
-- `000018_drop_legacy_source_fee_schedule.up.sql` removes the legacy `fee_schedule_id` column after the cutover is complete.
+- `000017_add_source_side_to_reconciliation_sources.up.sql` adds the `side` column as nullable so existing rows are preserved.
+- `000018_enforce_source_side_not_null.up.sql` enforces `NOT NULL` + `CHECK (side IN ('LEFT', 'RIGHT'))` — refuses to run while any source has a `NULL` side.
+- `000019_drop_legacy_source_fee_schedule.up.sql` removes the legacy `fee_schedule_id` column after the cutover is complete.
 
 ### Why the Cutover Is Strict
 
@@ -72,28 +73,33 @@ The new matching model depends on explicit source sides. Automatically assigning
 
 If the environment can be recreated, reset the data and rerun migrations from scratch.
 
-If the environment must be preserved, backfill it explicitly before running the migrations:
+If the environment must be preserved, follow the phased cutover:
 
 ```sql
--- Inspect legacy source-level fee schedule bindings.
-SELECT id, context_id, name, fee_schedule_id
-FROM reconciliation_sources
-WHERE fee_schedule_id IS NOT NULL;
+-- Step 1: Clear legacy fee schedule bindings (before 000016).
+UPDATE reconciliation_sources SET fee_schedule_id = NULL WHERE fee_schedule_id IS NOT NULL;
 
--- Inspect sources that still need explicit LEFT/RIGHT assignment.
-SELECT id, context_id, name
-FROM reconciliation_sources;
+-- Step 2: Run 000016 (creates fee_rules table) and 000017 (adds nullable side column).
+
+-- Step 3: Backfill explicit side assignments (between 000017 and 000018).
+-- Inspect current sources:
+SELECT id, context_id, name FROM reconciliation_sources WHERE side IS NULL;
+
+-- Assign sides according to your intended matching topology:
+UPDATE reconciliation_sources SET side = 'LEFT' WHERE name LIKE '%bank%';
+UPDATE reconciliation_sources SET side = 'RIGHT' WHERE name LIKE '%gateway%';
+
+-- Verify no NULL sides remain:
+SELECT COUNT(*) FROM reconciliation_sources WHERE side IS NULL;  -- must be 0
+
+-- Step 4: Run 000018 (enforces NOT NULL) and 000019 (drops legacy column).
 ```
-
-Then either:
-
-1. reset the environment, or
-2. manually assign `LEFT`/`RIGHT` according to the intended matching topology and clear legacy `fee_schedule_id` bindings before applying the cutover migrations.
 
 ### Rollback Expectations
 
-- Rolling back `000017` drops the `side` column and loses source-side assignments.
-- Rolling back `000018` restores only the `fee_schedule_id` column shape; it does not reconstruct old values.
+- Rolling back `000018` removes the NOT NULL constraint; the `side` column becomes nullable again.
+- Rolling back `000017` drops the `side` column entirely and loses source-side assignments.
+- Rolling back `000019` restores only the `fee_schedule_id` column shape; it does not reconstruct old values.
 - Treat these migrations as a schema rollback path, not a data restoration path.
 
 ### Step 3: Manual Index Creation (for Large Tables)
