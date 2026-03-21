@@ -56,6 +56,46 @@ WHERE relname IN ('exceptions', 'outbox_events')
 ORDER BY n_live_tup DESC;
 ```
 
+## Fee Rule / Source Side Pre-Launch Cutover
+
+The fee-rule feature introduces an intentional hard cutover for internal environments before public launch:
+
+- `000016_fee_rules.up.sql` refuses to run while `reconciliation_sources.fee_schedule_id` still contains legacy bindings.
+- `000017_add_source_side_to_reconciliation_sources.up.sql` refuses to run while `reconciliation_sources` already contains rows without explicit `LEFT`/`RIGHT` side assignments.
+- `000018_drop_legacy_source_fee_schedule.up.sql` removes the legacy `fee_schedule_id` column after the cutover is complete.
+
+### Why the Cutover Is Strict
+
+The new matching model depends on explicit source sides. Automatically assigning `LEFT` or `RIGHT` to existing rows would silently invent matching behavior, which is riskier than blocking the migration.
+
+### Recommended Path for Internal Environments
+
+If the environment can be recreated, reset the data and rerun migrations from scratch.
+
+If the environment must be preserved, backfill it explicitly before running the migrations:
+
+```sql
+-- Inspect legacy source-level fee schedule bindings.
+SELECT id, context_id, name, fee_schedule_id
+FROM reconciliation_sources
+WHERE fee_schedule_id IS NOT NULL;
+
+-- Inspect sources that still need explicit LEFT/RIGHT assignment.
+SELECT id, context_id, name
+FROM reconciliation_sources;
+```
+
+Then either:
+
+1. reset the environment, or
+2. manually assign `LEFT`/`RIGHT` according to the intended matching topology and clear legacy `fee_schedule_id` bindings before applying the cutover migrations.
+
+### Rollback Expectations
+
+- Rolling back `000017` drops the `side` column and loses source-side assignments.
+- Rolling back `000018` restores only the `fee_schedule_id` column shape; it does not reconstruct old values.
+- Treat these migrations as a schema rollback path, not a data restoration path.
+
 ### Step 3: Manual Index Creation (for Large Tables)
 
 If tables have >100k rows, create indexes manually **before** running migrations:
