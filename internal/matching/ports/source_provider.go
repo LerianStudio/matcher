@@ -10,7 +10,11 @@ import (
 
 //go:generate mockgen -destination=mocks/source_provider_mock.go -package=mocks . SourceProvider
 
-// SourceType defines the type of data source.
+// SourceType defines the type of data source as seen by the matching engine.
+// These constants represent the matching engine's view of source types. The configuration
+// context may use different source type values (e.g., BANK, GATEWAY, CUSTOM, FETCHER).
+// The cross-context adapter maps configuration types to this matching-level representation.
+// Matching treats SourceType as opaque metadata for observability and does not branch on it.
 type SourceType string
 
 // SourceType values.

@@ -27,6 +27,7 @@ func (uc *UseCase) completeEmptyRun(
 	stats map[string]int,
 	leftCandidates, rightCandidates []*shared.Transaction,
 	externalUnmatched []uuid.UUID,
+	externalTxByID map[uuid.UUID]*shared.Transaction,
 	sourceTypeByID map[uuid.UUID]string,
 ) (*matchingEntities.MatchRun, []*matchingEntities.MatchGroup, error) {
 	_, tracer, _, _ := libCommons.NewTrackingFromContext(ctx) //nolint:dogsled
@@ -48,6 +49,7 @@ func (uc *UseCase) completeEmptyRun(
 	txByID := mergeTransactionMaps(
 		indexTransactions(leftCandidates),
 		indexTransactions(rightCandidates),
+		externalTxByID,
 	)
 
 	run, err := matchingEntities.NewMatchRun(ctx, in.ContextID, in.Mode)

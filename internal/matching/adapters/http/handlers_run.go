@@ -401,7 +401,6 @@ var runMatchBadRequestErrors = []struct {
 	{command.ErrOneToOneRequiresExactlyOneRightSource, "1:1 contexts require exactly one RIGHT source"},
 	{command.ErrOneToManyRequiresExactlyOneLeftSource, "1:N contexts require exactly one LEFT source"},
 	{command.ErrAtLeastOneRightSourceRequired, "at least one RIGHT source is required"},
-	{sharedfee.ErrFeeRuleCountLimitExceeded, "fee rule count exceeds the maximum allowed per context"},
 	{command.ErrMatchRunModeRequired, "match run mode is required"},
 }
 
@@ -448,6 +447,20 @@ func mapRunMatchErrorToResponse(
 			fiber.StatusUnprocessableEntity,
 			"fee_rules_misconfigured",
 			"fee rules reference fee schedules that do not exist",
+		)
+	case errors.Is(err, command.ErrFeeRulesRequiredForNormalization):
+		return libHTTP.RespondError(
+			fiberCtx,
+			fiber.StatusUnprocessableEntity,
+			"fee_rules_missing",
+			"fee normalization is enabled but no fee rules are configured for this context",
+		)
+	case errors.Is(err, sharedfee.ErrFeeRuleCountLimitExceeded):
+		return libHTTP.RespondError(
+			fiberCtx,
+			fiber.StatusUnprocessableEntity,
+			"fee_rules_misconfigured",
+			"fee rule count exceeds the maximum allowed per context",
 		)
 	case errors.Is(err, command.ErrMatchRunLocked):
 		return libHTTP.RespondError(
