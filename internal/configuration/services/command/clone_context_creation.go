@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -20,6 +21,14 @@ func (uc *UseCase) cloneContextTransactional(ctx context.Context, input CloneCon
 
 	defer cancel()
 	defer func() { _ = tx.Rollback() }()
+
+	// Acquire a shared lock on the source context row to prevent concurrent
+	// modifications while we read and clone its children (sources, field maps,
+	// match rules, fee rules). Without this lock the reads happen outside the
+	// write transaction and a concurrent edit could produce an inconsistent clone.
+	if err := lockSourceContextForShare(ctx, tx, input.SourceContextID); err != nil {
+		return nil, fmt.Errorf("lock source context for clone: %w", err)
+	}
 
 	created, err := uc.createClonedContextWithTx(ctx, tx, input, sourceContext, autoMatchOnUpload)
 	if err != nil {
@@ -102,7 +111,7 @@ func (uc *UseCase) buildClonedContextEntity(input CloneContextInput, sourceConte
 	return &entities.ReconciliationContext{
 		ID:                uuid.New(),
 		TenantID:          sourceContext.TenantID,
-		Name:              input.NewName,
+		Name:              strings.TrimSpace(input.NewName),
 		Type:              sourceContext.Type,
 		Interval:          sourceContext.Interval,
 		Status:            value_objects.ContextStatusActive,

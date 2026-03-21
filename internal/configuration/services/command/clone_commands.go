@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -54,11 +55,10 @@ func WithInfrastructureProvider(provider sharedPorts.InfrastructureProvider) Use
 
 // CloneContextInput holds the parameters required to clone a reconciliation context.
 type CloneContextInput struct {
-	SourceContextID   uuid.UUID
-	NewName           string
-	IncludeSources    bool
-	IncludeRules      bool
-	AutoMatchOnUpload *bool
+	SourceContextID uuid.UUID
+	NewName         string
+	IncludeSources  bool
+	IncludeRules    bool
 }
 
 // CloneContext creates a deep copy of a reconciliation context with its associated resources.
@@ -83,9 +83,6 @@ func (uc *UseCase) CloneContext(ctx context.Context, input CloneContextInput) (*
 	}
 
 	autoMatchOnUpload := sourceContext.AutoMatchOnUpload
-	if input.AutoMatchOnUpload != nil {
-		autoMatchOnUpload = *input.AutoMatchOnUpload
-	}
 
 	if uc.infraProvider != nil {
 		result, txErr := uc.cloneContextTransactional(ctx, input, sourceContext, autoMatchOnUpload)
@@ -139,7 +136,7 @@ func (uc *UseCase) validateCloneDependencies(input CloneContextInput) error {
 		return ErrNilFeeRuleRepository
 	}
 
-	if input.NewName == "" {
+	if strings.TrimSpace(input.NewName) == "" {
 		return ErrCloneNameRequired
 	}
 

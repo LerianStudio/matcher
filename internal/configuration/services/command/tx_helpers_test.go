@@ -6,6 +6,8 @@ import (
 	"context"
 	"testing"
 
+	sqlmock "github.com/DATA-DOG/go-sqlmock"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -93,4 +95,55 @@ func TestBeginTenantTx_ProviderReturnsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "begin tenant transaction")
 
 	cancel()
+}
+
+func TestLockSourceContextForShare_Success(t *testing.T) {
+	t.Parallel()
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+
+	defer db.Close()
+
+	mock.ExpectBegin()
+
+	tx, err := db.Begin()
+	require.NoError(t, err)
+
+	sourceID := uuid.New()
+
+	mock.ExpectExec(`SELECT 1 FROM reconciliation_contexts WHERE id = \$1 FOR SHARE`).
+		WithArgs(sourceID).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	err = lockSourceContextForShare(context.Background(), tx, sourceID)
+	require.NoError(t, err)
+
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestLockSourceContextForShare_Error(t *testing.T) {
+	t.Parallel()
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+
+	defer db.Close()
+
+	mock.ExpectBegin()
+
+	tx, err := db.Begin()
+	require.NoError(t, err)
+
+	sourceID := uuid.New()
+
+	mock.ExpectExec(`SELECT 1 FROM reconciliation_contexts WHERE id = \$1 FOR SHARE`).
+		WithArgs(sourceID).
+		WillReturnError(assert.AnError)
+
+	err = lockSourceContextForShare(context.Background(), tx, sourceID)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "lock source context for share")
+
+	require.NoError(t, mock.ExpectationsWereMet())
 }
