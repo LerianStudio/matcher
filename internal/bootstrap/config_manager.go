@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 
@@ -39,13 +38,9 @@ var errNotInSeedMode = errors.New("config manager is not in seed mode")
 // runtime configuration changes flow through the systemplane supervisor via
 // UpdateFromSystemplane(). The Get() method continues to work in seed mode.
 type ConfigManager struct {
-	config     atomic.Pointer[Config]
-	mu         sync.Mutex // serializes writes (update)
-	logger     libLog.Logger
-	version    atomic.Uint64
-	lastReload atomic.Value // stores time.Time
-	stopOnce   sync.Once
-	stopCh     chan struct{}
+	config atomic.Pointer[Config]
+	mu     sync.Mutex // serializes writes (update)
+	logger libLog.Logger
 
 	// seedMode is set to true when the systemplane Supervisor has assumed
 	// runtime authority. In seed mode, callers should use the systemplane API
@@ -67,11 +62,9 @@ func NewConfigManager(cfg *Config, logger libLog.Logger) (*ConfigManager, error)
 
 	cm := &ConfigManager{
 		logger: logger,
-		stopCh: make(chan struct{}),
 	}
 
 	cm.config.Store(cfg)
-	cm.lastReload.Store(time.Now().UTC())
 
 	return cm, nil
 }
@@ -82,28 +75,10 @@ func (cm *ConfigManager) Get() *Config {
 	return cm.config.Load()
 }
 
-// Version returns the current config version. Starts at 0 and increments on
-// each successful UpdateFromSystemplane(). Useful for cache invalidation and
-// change detection by consumers.
-func (cm *ConfigManager) Version() uint64 {
-	return cm.version.Load()
-}
-
-// LastReloadAt returns the timestamp of the last successful config reload.
-func (cm *ConfigManager) LastReloadAt() time.Time {
-	if t, ok := cm.lastReload.Load().(time.Time); ok {
-		return t
-	}
-
-	return time.Time{}
-}
-
-// Stop cleans up resources. Idempotent — safe to call multiple times.
-func (cm *ConfigManager) Stop() {
-	cm.stopOnce.Do(func() {
-		close(cm.stopCh)
-	})
-}
+// Stop is a no-op retained for the shutdown ordering contract.
+// ConfigManager has no background goroutines — all state is managed
+// via atomic operations and the systemplane supervisor.
+func (cm *ConfigManager) Stop() {}
 
 // InSeedMode reports whether the ConfigManager has been superseded by the
 // systemplane Supervisor. In seed mode, hot-reload is disabled and callers
@@ -150,8 +125,6 @@ func (cm *ConfigManager) UpdateFromSystemplane(snap domain.Snapshot) error {
 	}
 
 	cm.config.Store(newCfg)
-	cm.version.Add(1)
-	cm.lastReload.Store(time.Now().UTC())
 
 	return nil
 }

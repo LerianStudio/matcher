@@ -47,8 +47,6 @@ func TestUpdateFromSystemplane_Success(t *testing.T) {
 
 	cm.enterSeedMode()
 
-	beforeUpdate := time.Now().UTC().Add(-time.Millisecond)
-
 	snap := domain.Snapshot{
 		Configs: map[string]domain.EffectiveValue{
 			"app.log_level":  {Value: "debug"},
@@ -64,13 +62,6 @@ func TestUpdateFromSystemplane_Success(t *testing.T) {
 	require.NotNil(t, updated)
 	assert.Equal(t, "debug", updated.App.LogLevel)
 	assert.Equal(t, 999, updated.RateLimit.Max)
-
-	// Version was incremented.
-	assert.Equal(t, uint64(1), cm.Version())
-
-	// lastReload was updated to a recent timestamp.
-	assert.True(t, cm.LastReloadAt().After(beforeUpdate),
-		"lastReload should be updated to a time after the call")
 }
 
 func TestUpdateFromSystemplane_PreservesBootstrapFields(t *testing.T) {
@@ -128,35 +119,6 @@ func TestUpdateFromSystemplane_PreservesBootstrapFields(t *testing.T) {
 	assert.Equal(t, 15*time.Second, updated.ShutdownGracePeriod)
 }
 
-func TestUpdateFromSystemplane_IncrementsVersion(t *testing.T) {
-	t.Parallel()
-
-	cfg := defaultConfig()
-	cm, err := NewConfigManager(cfg, nil)
-	require.NoError(t, err)
-
-	cm.enterSeedMode()
-
-	assert.Equal(t, uint64(0), cm.Version(), "initial version should be 0")
-
-	snap := domain.Snapshot{
-		Configs: map[string]domain.EffectiveValue{
-			"app.log_level": {Value: "warn"},
-		},
-	}
-
-	err = cm.UpdateFromSystemplane(snap)
-	require.NoError(t, err)
-
-	assert.Equal(t, uint64(1), cm.Version(), "version should be 1 after first update")
-
-	// Second update should increment to 2.
-	err = cm.UpdateFromSystemplane(snap)
-	require.NoError(t, err)
-
-	assert.Equal(t, uint64(2), cm.Version(), "version should be 2 after second update")
-}
-
 func TestSnapshotToFullConfig_RuntimeFields(t *testing.T) {
 	t.Parallel()
 
@@ -192,7 +154,6 @@ func TestUpdateFromSystemplane_ValidationFailure_PreservesOldConfig(t *testing.T
 
 	cm.enterSeedMode()
 
-	initialVersion := cm.Version()
 	initialLogLevel := cm.Get().App.LogLevel
 
 	// Craft a snapshot with an invalid log level to trigger Validate() failure.
@@ -206,9 +167,8 @@ func TestUpdateFromSystemplane_ValidationFailure_PreservesOldConfig(t *testing.T
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "validation")
 
-	// Config and version should NOT have changed — the failed update was discarded.
+	// Config should NOT have changed — the failed update was discarded.
 	assert.Equal(t, initialLogLevel, cm.Get().App.LogLevel)
-	assert.Equal(t, initialVersion, cm.Version())
 }
 
 func TestUpdateFromSystemplane_CanChangeFormerlyImmutableKeys(t *testing.T) {

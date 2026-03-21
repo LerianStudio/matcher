@@ -1289,10 +1289,8 @@ func newWorkerMgrTestConfigManager(t *testing.T, cfg *Config) *ConfigManager {
 
 	cm := &ConfigManager{
 		logger: &libLog.NopLogger{},
-		stopCh: make(chan struct{}),
 	}
 	cm.config.Store(cfg)
-	cm.lastReload.Store(time.Now().UTC())
 
 	return cm
 }

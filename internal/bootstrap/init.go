@@ -132,6 +132,11 @@ const (
 	// the two parallel infrastructure goroutines (Postgres and RabbitMQ).
 	infraConnectTimeoutDivisor = 2
 
+	// changeFeedDebounceWindow is the trailing-edge debounce window for systemplane
+	// change feed signals. Rapid signals (e.g., bulk config writes) are coalesced
+	// into fewer supervisor reloads.
+	changeFeedDebounceWindow = 200 * time.Millisecond
+
 	// statusSuccess and statusError are metric attribute values for cleanup recording.
 	statusSuccess = "success"
 	statusError   = "error"
@@ -667,7 +672,9 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 	done = timer.track("systemplane")
 
 	// Initialize systemplane — the centralized runtime configuration plane.
-	// If systemplane init fails, the service continues without it (graceful degradation).
+	// Systemplane is a hard startup dependency: it owns the runtime configuration
+	// registry, snapshot builder, and change-feed subscriber. Without it, the
+	// service cannot serve consistent configuration to consumers.
 	var cancelChangeFeed context.CancelFunc
 
 	reloadLogCtx := detachedContext(ctx)
@@ -706,7 +713,8 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 	// Start change feed subscriber that triggers supervisor reloads on store changes.
 	// Wrap the raw feed with trailing-edge debounce to coalesce rapid signals
 	// (e.g., bulk config writes) into fewer supervisor reloads.
-	debouncedFeed := changefeed.NewDebouncedFeed(spComponents.ChangeFeed, changefeed.WithWindow(200*time.Millisecond))
+	debouncedFeed := changefeed.NewDebouncedFeed(spComponents.ChangeFeed, changefeed.WithWindow(changeFeedDebounceWindow))
+
 	cancelChangeFeed, err = startChangeFeed(ctx, debouncedFeed, spComponents.Supervisor, logger, spComponents.Manager.ApplyChangeSignal)
 	if err != nil {
 		logger.Log(ctx, libLog.LevelWarn, "systemplane change feed start failed",

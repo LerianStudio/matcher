@@ -35,13 +35,19 @@ const (
 	changeFeedRetryDelay      = time.Second
 )
 
+// wellKnownDevMasterKey is the development-mode default for the systemplane
+// secret master key. It is committed in docker-compose.yml for local
+// convenience, but MUST be rejected in production environments.
+const wellKnownDevMasterKey = "+PnwgNy8bL3HGT1rOXp47PqyGcPywXH/epgmSVwPkL0="
+
 // Sentinel errors for systemplane initialization and bundle extraction.
 var (
-	errChangeFeedSupervisorRequired = errors.New("start change feed: supervisor is required")
-	errSystemplaneSecretMasterKey   = errors.New("validate systemplane config: SYSTEMPLANE_SECRET_MASTER_KEY is required")
-	errRateLimitRequiredProduction  = errors.New("RATE_LIMIT_ENABLED must remain true in production")
-	errFetcherPrivateIPsProduction  = errors.New("FETCHER_ALLOW_PRIVATE_IPS must remain false in production")
-	errArchivalEndpointRequired     = errors.New("OBJECT_STORAGE_ENDPOINT is required when ARCHIVAL_WORKER_ENABLED=true")
+	errChangeFeedSupervisorRequired  = errors.New("start change feed: supervisor is required")
+	errSystemplaneSecretMasterKey    = errors.New("validate systemplane config: SYSTEMPLANE_SECRET_MASTER_KEY is required")
+	errSystemplaneDevMasterKeyInProd = errors.New("validate systemplane config: SYSTEMPLANE_SECRET_MASTER_KEY must not use the well-known development default in production")
+	errRateLimitRequiredProduction   = errors.New("RATE_LIMIT_ENABLED must remain true in production")
+	errFetcherPrivateIPsProduction   = errors.New("FETCHER_ALLOW_PRIVATE_IPS must remain false in production")
+	errArchivalEndpointRequired      = errors.New("OBJECT_STORAGE_ENDPOINT is required when ARCHIVAL_WORKER_ENABLED=true")
 )
 
 // SystemplaneComponents holds all systemplane components created during
@@ -116,6 +122,12 @@ func LoadSystemplaneBackendConfig(appCfg *Config) (*spBootstrap.BootstrapConfig,
 
 	if cfg.Secrets != nil && cfg.Secrets.MasterKey == "" {
 		return nil, errSystemplaneSecretMasterKey
+	}
+
+	if cfg.Secrets != nil && appCfg != nil &&
+		IsProductionEnvironment(appCfg.App.EnvName) &&
+		cfg.Secrets.MasterKey == wellKnownDevMasterKey {
+		return nil, errSystemplaneDevMasterKeyInProd
 	}
 
 	return cfg, nil

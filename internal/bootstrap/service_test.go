@@ -350,7 +350,7 @@ func TestServiceRun_PropagatesWorkerManagerStartFailure(t *testing.T) {
 	assert.Contains(t, err.Error(), "critical worker \"critical\" failed to start")
 }
 
-func TestServiceStopBackgroundWorkers_StopsConfigManagerBeforeWorkers(t *testing.T) {
+func TestServiceStopBackgroundWorkers_StopsConfigManagerAndWorkers(t *testing.T) {
 	t.Parallel()
 
 	cm, err := NewConfigManager(defaultConfig(), &libLog.NopLogger{})
@@ -359,12 +359,7 @@ func TestServiceStopBackgroundWorkers_StopsConfigManagerBeforeWorkers(t *testing
 
 	worker := &recordingLifecycleWorker{}
 	worker.stopFn = func() {
-		select {
-		case <-cm.stopCh:
-			worker.stopObserved = true
-		default:
-			worker.stopObserved = false
-		}
+		worker.stopObserved = true
 	}
 
 	wm := NewWorkerManager(&libLog.NopLogger{}, nil)
@@ -379,7 +374,7 @@ func TestServiceStopBackgroundWorkers_StopsConfigManagerBeforeWorkers(t *testing
 	}
 
 	svc.stopBackgroundWorkers(context.Background(), &libLog.NopLogger{})
-	assert.True(t, worker.stopObserved)
+	assert.True(t, worker.stopObserved, "worker should have been stopped during shutdown")
 }
 
 func TestServerRun_StartsAndShutdowns(t *testing.T) {

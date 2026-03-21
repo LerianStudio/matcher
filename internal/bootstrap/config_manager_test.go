@@ -13,8 +13,6 @@ import (
 
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 
-	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -59,8 +57,6 @@ func TestNewConfigManager_Success(t *testing.T) {
 
 	assert.NotNil(t, cm)
 	assert.Equal(t, cfg, cm.Get())
-	assert.Equal(t, uint64(0), cm.Version())
-	assert.False(t, cm.LastReloadAt().IsZero())
 }
 
 func TestNewConfigManager_NilConfig(t *testing.T) {
@@ -166,33 +162,6 @@ func TestConfigManager_Get_Concurrent(t *testing.T) {
 	}
 
 	wg.Wait()
-}
-
-func TestConfigManager_Version_IncrementedByUpdateFromSystemplane(t *testing.T) {
-	t.Parallel()
-
-	cfg := defaultConfig()
-	cm := newTestConfigManager(t, cfg, &testLogger{})
-	cm.enterSeedMode()
-
-	assert.Equal(t, uint64(0), cm.Version())
-
-	// UpdateFromSystemplane increments the version.
-	snap := domain.Snapshot{}
-
-	err := cm.UpdateFromSystemplane(snap)
-	require.NoError(t, err)
-	assert.Equal(t, uint64(1), cm.Version())
-}
-
-func TestConfigManager_LastReloadAt_SetAtConstruction(t *testing.T) {
-	t.Parallel()
-
-	cfg := defaultConfig()
-	cm := newTestConfigManager(t, cfg, &testLogger{})
-
-	initialTime := cm.LastReloadAt()
-	assert.False(t, initialTime.IsZero(), "LastReloadAt should be set at construction")
 }
 
 func TestConfigManager_Stop_Idempotent(t *testing.T) {
