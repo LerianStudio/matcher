@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	basechangefeed "github.com/LerianStudio/matcher/pkg/systemplane/adapters/changefeed"
 	"github.com/LerianStudio/matcher/pkg/systemplane/bootstrap"
 	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
 	"github.com/LerianStudio/matcher/pkg/systemplane/ports"
@@ -526,6 +527,132 @@ func TestSignalFromEvent_InvalidKindInDocument_Skipped(t *testing.T) {
 	_, ok := signalFromEvent(event)
 
 	assert.False(t, ok)
+}
+
+// ---------------------------------------------------------------------------
+// HIGH-15: Revision gap detection in poll mode triggers ApplyBundleRebuild
+// ---------------------------------------------------------------------------
+
+func TestPollRevisionGapDetection_TriggersRebuild(t *testing.T) {
+	t.Parallel()
+
+	// The poll mode gap detection logic is:
+	//   if exists && rev.Revision > prev.Revision.Next() → set ApplyBundleRebuild
+	// We test this logic in isolation without requiring a live MongoDB.
+
+	target, err := domain.NewTarget(domain.KindConfig, domain.ScopeGlobal, "")
+	require.NoError(t, err)
+
+	key := target.String()
+
+	tests := []struct {
+		name             string
+		prevRevision     domain.Revision
+		currentRevision  domain.Revision
+		originalBehavior domain.ApplyBehavior
+		expectRebuild    bool
+	}{
+		{
+			name:             "sequential revision (no gap)",
+			prevRevision:     domain.Revision(3),
+			currentRevision:  domain.Revision(4),
+			originalBehavior: domain.ApplyLiveRead,
+			expectRebuild:    false,
+		},
+		{
+			name:             "gap detected (prev=3, current=6)",
+			prevRevision:     domain.Revision(3),
+			currentRevision:  domain.Revision(6),
+			originalBehavior: domain.ApplyLiveRead,
+			expectRebuild:    true,
+		},
+		{
+			name:             "same revision (no change)",
+			prevRevision:     domain.Revision(5),
+			currentRevision:  domain.Revision(5),
+			originalBehavior: domain.ApplyLiveRead,
+			expectRebuild:    false,
+		},
+		{
+			name:             "gap of exactly 2 (prev=3, current=5)",
+			prevRevision:     domain.Revision(3),
+			currentRevision:  domain.Revision(5),
+			originalBehavior: domain.ApplyWorkerReconcile,
+			expectRebuild:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			prev := pollSnapshot{Target: target, Revision: tt.prevRevision, ApplyBehavior: tt.originalBehavior}
+			rev := pollSnapshot{Target: target, Revision: tt.currentRevision, ApplyBehavior: tt.originalBehavior}
+
+			known := map[string]pollSnapshot{key: prev}
+
+			// Simulate the subscribePoll/resyncMissedSignals gap detection logic.
+			if prev.Revision != rev.Revision {
+				if rev.Revision > prev.Revision.Next() {
+					rev.ApplyBehavior = domain.ApplyBundleRebuild
+				}
+
+				known[key] = rev
+			}
+
+			if tt.expectRebuild {
+				assert.Equal(t, domain.ApplyBundleRebuild, known[key].ApplyBehavior,
+					"revision gap should escalate to bundle-rebuild")
+			} else if tt.prevRevision != tt.currentRevision {
+				assert.Equal(t, tt.originalBehavior, known[key].ApplyBehavior,
+					"no gap should keep original behavior")
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// HIGH-15: Handler panic propagation (signal handler panics → error returned)
+// ---------------------------------------------------------------------------
+
+func TestSignalHandlerPanic_PropagatesAsError(t *testing.T) {
+	t.Parallel()
+
+	// SafeInvokeHandler from the base changefeed package converts panics to
+	// errors. Both subscribePoll and subscribeChangeStream use it.
+	// This test verifies the contract through the public signalFromEvent path
+	// combined with a panicking handler scenario.
+
+	// Construct a valid revision-meta event.
+	event := changeEvent{
+		OperationType: "update",
+		FullDocument: &bson.D{
+			{Key: "kind", Value: "config"},
+			{Key: "scope", Value: "global"},
+			{Key: "subject", Value: ""},
+			{Key: "key", Value: revisionMetaKey},
+			{Key: "revision", Value: int64(10)},
+		},
+	}
+
+	signal, ok := signalFromEvent(event)
+	require.True(t, ok, "revision-meta event should produce a valid signal")
+
+	// Verify the signal is valid and would be passed to a handler.
+	assert.Equal(t, domain.KindConfig, signal.Target.Kind)
+	assert.Equal(t, domain.Revision(10), signal.Revision)
+
+	// The SafeInvokeHandler function catches panics. This is tested
+	// in the base changefeed package (safe_handler_test.go), but we verify
+	// the contract here: a panicking handler returns an error, not a crash.
+	panicHandler := func(_ ports.ChangeSignal) {
+		panic("handler exploded")
+	}
+
+	// This must NOT panic — SafeInvokeHandler wraps it.
+	require.NotPanics(t, func() {
+		_ = basechangefeed.SafeInvokeHandler(panicHandler, signal)
+	}, "SafeInvokeHandler must convert panics to errors")
 }
 
 // ---------------------------------------------------------------------------

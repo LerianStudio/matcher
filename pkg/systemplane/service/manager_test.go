@@ -55,7 +55,7 @@ func (s *spySupervisor) ReconcileCurrent(_ context.Context, snap domain.Snapshot
 	return nil
 }
 
-func (s *spySupervisor) Reload(_ context.Context, reason string) error {
+func (s *spySupervisor) Reload(_ context.Context, reason string, _ ...string) error {
 	s.reloadCalls++
 	s.lastReason = reason
 
@@ -561,4 +561,131 @@ func TestManager_Resync_PropagatesReloadFailure(t *testing.T) {
 	err := mgr.Resync(context.Background())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "reload failed")
+}
+
+// ---------------------------------------------------------------------------
+// HIGH-12: ApplyChangeSignal tests
+// ---------------------------------------------------------------------------
+
+func TestManager_ApplyChangeSignal_ValidBehavior_Dispatches(t *testing.T) {
+	t.Parallel()
+
+	reg, store, history, spy, builder := testManagerDeps(t)
+	registerTestConfigKey(t, reg, "app.workers", domain.ApplyLiveRead, true)
+
+	mgr, mgrErr := NewManager(ManagerConfig{Registry: reg, Store: store, History: history, Supervisor: spy, Builder: builder})
+	require.NoError(t, mgrErr)
+
+	target, err := domain.NewTarget(domain.KindConfig, domain.ScopeGlobal, "")
+	require.NoError(t, err)
+
+	err = mgr.ApplyChangeSignal(context.Background(), ports.ChangeSignal{
+		Target:        target,
+		Revision:      domain.Revision(5),
+		ApplyBehavior: domain.ApplyBundleRebuild,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 1, spy.reloadCalls, "valid ApplyBundleRebuild should trigger Reload")
+	assert.Equal(t, string(domain.ApplyBundleRebuild), spy.lastReason)
+}
+
+func TestManager_ApplyChangeSignal_InvalidBehavior_FallsBackToRebuild(t *testing.T) {
+	t.Parallel()
+
+	reg, store, history, spy, builder := testManagerDeps(t)
+
+	mgr, mgrErr := NewManager(ManagerConfig{Registry: reg, Store: store, History: history, Supervisor: spy, Builder: builder})
+	require.NoError(t, mgrErr)
+
+	target, err := domain.NewTarget(domain.KindConfig, domain.ScopeGlobal, "")
+	require.NoError(t, err)
+
+	err = mgr.ApplyChangeSignal(context.Background(), ports.ChangeSignal{
+		Target:        target,
+		Revision:      domain.Revision(3),
+		ApplyBehavior: domain.ApplyBehavior("completely-invalid"),
+	})
+	require.NoError(t, err)
+	// Invalid behavior falls back to ApplyBundleRebuild, which calls Reload.
+	assert.Equal(t, 1, spy.reloadCalls, "invalid behavior should fall back to bundle-rebuild → Reload")
+	assert.Equal(t, string(domain.ApplyBundleRebuild), spy.lastReason)
+}
+
+func TestManager_ApplyChangeSignal_PropagatesEscalationError(t *testing.T) {
+	t.Parallel()
+
+	reg, store, history, spy, builder := testManagerDeps(t)
+	spy.reloadErr = errors.New("supervisor reload failed")
+
+	mgr, mgrErr := NewManager(ManagerConfig{Registry: reg, Store: store, History: history, Supervisor: spy, Builder: builder})
+	require.NoError(t, mgrErr)
+
+	target, err := domain.NewTarget(domain.KindConfig, domain.ScopeGlobal, "")
+	require.NoError(t, err)
+
+	err = mgr.ApplyChangeSignal(context.Background(), ports.ChangeSignal{
+		Target:        target,
+		Revision:      domain.Revision(1),
+		ApplyBehavior: domain.ApplyBundleRebuild,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "supervisor reload failed")
+}
+
+// ---------------------------------------------------------------------------
+// HIGH-13: Worker-reconcile success path tests
+// ---------------------------------------------------------------------------
+
+func TestManager_PatchConfigs_WorkerReconcile_CallsReconcileCurrent(t *testing.T) {
+	t.Parallel()
+
+	reg, store, history, spy, builder := testManagerDeps(t)
+	registerTestConfigKey(t, reg, "worker.interval", domain.ApplyWorkerReconcile, true)
+
+	mgr, mgrErr := NewManager(ManagerConfig{Registry: reg, Store: store, History: history, Supervisor: spy, Builder: builder})
+	require.NoError(t, mgrErr)
+
+	result, err := mgr.PatchConfigs(context.Background(), PatchRequest{
+		Ops:              []ports.WriteOp{{Key: "worker.interval", Value: 30}},
+		ExpectedRevision: domain.RevisionZero,
+		Actor:            domain.Actor{ID: "admin"},
+		Source:           "api",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, domain.Revision(1), result.Revision)
+	assert.Equal(t, 1, spy.reconcileCalls, "worker-reconcile should call ReconcileCurrent")
+	assert.Equal(t, 0, spy.publishCalls, "worker-reconcile should NOT call PublishSnapshot")
+	assert.Equal(t, 0, spy.reloadCalls, "worker-reconcile should NOT trigger Reload")
+}
+
+func TestManager_PatchConfigs_WorkerReconcile_InvokesStateSyncWithCorrectSnapshot(t *testing.T) {
+	t.Parallel()
+
+	reg, store, history, spy, builder := testManagerDeps(t)
+	registerTestConfigKey(t, reg, "worker.interval", domain.ApplyWorkerReconcile, true)
+
+	var syncedSnapshots []domain.Snapshot
+
+	mgr, mgrErr := NewManager(ManagerConfig{
+		Registry:   reg,
+		Store:      store,
+		History:    history,
+		Supervisor: spy,
+		Builder:    builder,
+		StateSync: func(_ context.Context, snap domain.Snapshot) {
+			syncedSnapshots = append(syncedSnapshots, snap)
+		},
+	})
+	require.NoError(t, mgrErr)
+
+	_, err := mgr.PatchConfigs(context.Background(), PatchRequest{
+		Ops:              []ports.WriteOp{{Key: "worker.interval", Value: 42}},
+		ExpectedRevision: domain.RevisionZero,
+		Actor:            domain.Actor{ID: "admin"},
+		Source:           "api",
+	})
+	require.NoError(t, err)
+	require.Len(t, syncedSnapshots, 1, "stateSync should be invoked once")
+	assert.Equal(t, 42, syncedSnapshots[0].Configs["worker.interval"].Value,
+		"synced snapshot should contain the updated value")
 }

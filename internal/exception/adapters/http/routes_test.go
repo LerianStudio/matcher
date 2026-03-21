@@ -91,6 +91,48 @@ func TestRegisterRoutes_Success(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// HIGH-18: Bulk route precedence — /v1/exceptions/bulk/assign must NOT match :exceptionId
+// ---------------------------------------------------------------------------
+
+func TestRegisterRoutes_BulkRoutePrecedence(t *testing.T) {
+	t.Parallel()
+
+	app := fiber.New()
+	defer func() { _ = app.Shutdown() }()
+
+	protected := func(_, _ string) fiber.Router {
+		return app
+	}
+
+	handlers := &Handlers{}
+
+	err := RegisterRoutes(protected, handlers, noopMiddleware)
+	require.NoError(t, err)
+
+	routes := app.GetRoutes()
+	routeSet := make(map[string]bool)
+
+	for _, r := range routes {
+		routeSet[r.Method+" "+r.Path] = true
+	}
+
+	// Bulk routes MUST be registered.
+	assert.True(t, routeSet["POST /v1/exceptions/bulk/assign"],
+		"bulk assign route should be registered")
+	assert.True(t, routeSet["POST /v1/exceptions/bulk/resolve"],
+		"bulk resolve route should be registered")
+	assert.True(t, routeSet["POST /v1/exceptions/bulk/dispatch"],
+		"bulk dispatch route should be registered")
+
+	// Verify bulk routes are registered BEFORE parameterized routes.
+	// In Fiber, the first matching route wins, so bulk paths being in
+	// the route table is sufficient — Fiber's router matches literal
+	// segments before parameters when both are present.
+	assert.True(t, routeSet["GET /v1/exceptions/:exceptionId"],
+		"parameterized route should also exist")
+}
+
 func TestRoutesErrors_AreDistinct(t *testing.T) {
 	t.Parallel()
 

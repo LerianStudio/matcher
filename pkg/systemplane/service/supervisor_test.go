@@ -225,6 +225,31 @@ func TestSupervisor_Stop_PreventsFurtherOperations(t *testing.T) {
 	assert.ErrorIs(t, sv.ReconcileCurrent(context.Background(), domain.Snapshot{}, "after-stop"), domain.ErrSupervisorStopped)
 }
 
+// ---------------------------------------------------------------------------
+// MEDIUM-10: Supervisor Stop propagates Close error
+// ---------------------------------------------------------------------------
+
+func TestSupervisor_Stop_PropagatesCloseError(t *testing.T) {
+	t.Parallel()
+
+	builder, _, factory := testSupervisorDeps(t)
+
+	closeErr := errors.New("persistent connection leaked")
+
+	factory.BuildFn = func(_ context.Context, _ domain.Snapshot) (domain.RuntimeBundle, error) {
+		return &testutil.FakeBundle{CloseErr: closeErr}, nil
+	}
+
+	sv, err := NewSupervisor(SupervisorConfig{Builder: builder, Factory: factory})
+	require.NoError(t, err)
+	require.NoError(t, sv.Reload(context.Background(), "initial"))
+
+	err = sv.Stop(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "persistent connection leaked",
+		"Stop should propagate the bundle's Close error")
+}
+
 func TestSupervisor_RejectsTypedNilBundle(t *testing.T) {
 	t.Parallel()
 

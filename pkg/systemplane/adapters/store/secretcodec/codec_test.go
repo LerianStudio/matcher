@@ -80,6 +80,91 @@ func TestCodec_New_RejectsWeakMasterKey(t *testing.T) {
 	assert.ErrorIs(t, err, ErrWeakMasterKey)
 }
 
+// ---------------------------------------------------------------------------
+// HIGH-16: Secret round-trip — verify raw data is encrypted (not plaintext)
+// ---------------------------------------------------------------------------
+
+func TestCodec_EncryptProducesNonPlaintext(t *testing.T) {
+	t.Parallel()
+
+	codec, err := New("0123456789abcdef0123456789abcdef", []string{"db.password"})
+	require.NoError(t, err)
+
+	target := domain.Target{Kind: domain.KindConfig, Scope: domain.ScopeGlobal}
+	original := "my-super-secret-password"
+
+	encrypted, err := codec.Encrypt(target, "db.password", original)
+	require.NoError(t, err)
+
+	// The encrypted value should be an envelope struct, not the plaintext string.
+	env, ok := encrypted.(envelope)
+	require.True(t, ok, "encrypted value should be an envelope type")
+	assert.Equal(t, 1, env.Version)
+	assert.Equal(t, "aes-256-gcm", env.Algorithm)
+	assert.NotEmpty(t, env.Nonce)
+	assert.NotEmpty(t, env.Ciphertext)
+	assert.NotContains(t, env.Ciphertext, original,
+		"ciphertext should not contain the plaintext value")
+
+	// Round-trip: decrypt and verify.
+	normalized := normalizeEnvelopeForAssert(encrypted)
+	decrypted, err := codec.Decrypt(target, "db.password", normalized)
+	require.NoError(t, err)
+	assert.Equal(t, original, decrypted)
+}
+
+func TestCodec_EncryptDecrypt_MultipleTypes(t *testing.T) {
+	t.Parallel()
+
+	codec, err := New("0123456789abcdef0123456789abcdef", []string{"secret.key"})
+	require.NoError(t, err)
+
+	target := domain.Target{Kind: domain.KindConfig, Scope: domain.ScopeGlobal}
+
+	tests := []struct {
+		name  string
+		value any
+	}{
+		{"string value", "hello-world"},
+		{"integer value", 42},
+		{"boolean value", true},
+		{"float value", 3.14},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			encrypted, err := codec.Encrypt(target, "secret.key", tt.value)
+			require.NoError(t, err)
+
+			// Verify it's actually an envelope (not plaintext).
+			_, isEnvelope := encrypted.(envelope)
+			require.True(t, isEnvelope, "encrypted value should be envelope")
+
+			// Round-trip decrypt.
+			normalized := normalizeEnvelopeForAssert(encrypted)
+			decrypted, err := codec.Decrypt(target, "secret.key", normalized)
+			require.NoError(t, err)
+			assert.NotNil(t, decrypted)
+		})
+	}
+}
+
+func TestCodec_NonSecretKey_PassthroughNoEncryption(t *testing.T) {
+	t.Parallel()
+
+	codec, err := New("0123456789abcdef0123456789abcdef", []string{"db.password"})
+	require.NoError(t, err)
+
+	target := domain.Target{Kind: domain.KindConfig, Scope: domain.ScopeGlobal}
+
+	// A key NOT in the secret list should pass through without encryption.
+	encrypted, err := codec.Encrypt(target, "app.timeout", 30)
+	require.NoError(t, err)
+	assert.Equal(t, 30, encrypted, "non-secret key should not be encrypted")
+}
+
 func normalizeEnvelopeForAssert(value any) map[string]any {
 	env, ok := value.(envelope)
 	if !ok {

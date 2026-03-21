@@ -301,6 +301,42 @@ func TestPatchSettings_InvalidRevision(t *testing.T) {
 	assert.Equal(t, "system_invalid_revision", errResp.Code)
 }
 
+// ---------------------------------------------------------------------------
+// MEDIUM-8: Settings history — tenant isolation enforcement
+// ---------------------------------------------------------------------------
+
+func TestGetSettingHistory_TenantIsolation_IgnoresSpoofedSubjectID(t *testing.T) {
+	t.Parallel()
+
+	app, _, mgr, id, _ := newTestApp(t)
+
+	authenticatedTenantID := "real-tenant-abc"
+
+	id.tenantIDFn = func(_ context.Context) (string, error) {
+		return authenticatedTenantID, nil
+	}
+
+	var capturedFilter ports.HistoryFilter
+
+	mgr.getSettingHistoryFn = func(_ context.Context, filter ports.HistoryFilter) ([]ports.HistoryEntry, error) {
+		capturedFilter = filter
+		return nil, nil
+	}
+
+	// Client tries to spoof subjectId via query parameter.
+	req := httptest.NewRequest(http.MethodGet,
+		"/v1/system/settings/history?scope=tenant&subjectId=spoofed-tenant-id", nil)
+	resp := doRequest(t, app, req)
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// The critical assertion: the filter's SubjectID must come from the
+	// authenticated tenant context, not from the query parameter.
+	assert.Equal(t, authenticatedTenantID, capturedFilter.SubjectID,
+		"SubjectID should come from auth context, not from spoofed query parameter")
+	assert.Equal(t, domain.ScopeTenant, capturedFilter.Scope)
+}
+
 func TestGetSettings_TenantResolutionFailure(t *testing.T) {
 	t.Parallel()
 

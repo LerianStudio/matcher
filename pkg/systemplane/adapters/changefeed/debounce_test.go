@@ -100,11 +100,14 @@ func TestSingleSignalPassesThrough(t *testing.T) {
 		Revision: domain.Revision(1),
 	})
 
-	// Wait for debounce window to elapse.
-	time.Sleep(100 * time.Millisecond)
+	// Use require.Eventually instead of fixed sleep for debounce window.
+	require.Eventually(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(received) == 1
+	}, 500*time.Millisecond, 10*time.Millisecond, "signal should be delivered after debounce window")
 
 	mu.Lock()
-	require.Len(t, received, 1)
 	assert.Equal(t, domain.Revision(1), received[0].Revision)
 	assert.Equal(t, target, received[0].Target)
 	mu.Unlock()
@@ -151,11 +154,14 @@ func TestRapidSignalsCoalesced(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	// Wait for debounce window after last signal.
-	time.Sleep(150 * time.Millisecond)
+	// Use require.Eventually instead of fixed sleep for debounce window.
+	require.Eventually(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(received) == 1
+	}, 500*time.Millisecond, 10*time.Millisecond, "rapid signals should be coalesced into one")
 
 	mu.Lock()
-	require.Len(t, received, 1, "rapid signals should be coalesced into one")
 	assert.Equal(t, domain.Revision(5), received[0].Revision, "should deliver the latest revision")
 	mu.Unlock()
 
@@ -198,10 +204,13 @@ func TestRapidSignalsOutOfOrder_EmitsHighestRevision(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 	inner.emit(ports.ChangeSignal{Target: target, Revision: domain.Revision(4)})
 
-	time.Sleep(150 * time.Millisecond)
+	require.Eventually(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(received) == 1
+	}, 500*time.Millisecond, 10*time.Millisecond, "out-of-order signals should coalesce")
 
 	mu.Lock()
-	require.Len(t, received, 1)
 	assert.Equal(t, domain.Revision(5), received[0].Revision)
 	mu.Unlock()
 
@@ -242,11 +251,15 @@ func TestDifferentTargetsIndependent(t *testing.T) {
 	inner.emit(ports.ChangeSignal{Target: targetA, Revision: domain.Revision(1)})
 	inner.emit(ports.ChangeSignal{Target: targetB, Revision: domain.Revision(10)})
 
-	// Wait for both timers to fire.
-	time.Sleep(150 * time.Millisecond)
+	// Use require.Eventually instead of fixed sleep for debounce window.
+	require.Eventually(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(received) == 2
+	}, 500*time.Millisecond, 10*time.Millisecond, "signals for different targets should both fire")
 
 	mu.Lock()
-	require.Len(t, received, 2, "signals for different targets should both fire")
+	require.Len(t, received, 2)
 
 	targets := make(map[string]domain.Revision)
 	for _, s := range received {

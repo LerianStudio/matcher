@@ -398,4 +398,41 @@ func TestRegisterBackendFactory_RejectsNilFactory(t *testing.T) {
 	assert.True(t, ok)
 }
 
+// ---------------------------------------------------------------------------
+// MEDIUM-12: Verify ResetBackendFactories clears state for test isolation
+// ---------------------------------------------------------------------------
+
+func TestResetBackendFactories_ClearsRegistrations(t *testing.T) {
+	// Not parallel: mutates global backendFactories.
+	// Save the original state.
+	origFactories := make(map[domain.BackendKind]BackendFactory, len(backendFactories))
+	for k, v := range backendFactories {
+		origFactories[k] = v
+	}
+
+	origErrors := initErrors
+
+	t.Cleanup(func() {
+		backendFactories = origFactories
+		initErrors = origErrors
+	})
+
+	// Register a factory and record an init error.
+	delete(backendFactories, domain.BackendPostgres)
+	require.NoError(t, RegisterBackendFactory(domain.BackendPostgres, func(_ context.Context, _ *BootstrapConfig) (*BackendResources, error) {
+		return &BackendResources{Store: noopStore{}, History: noopHistoryStore{}, ChangeFeed: noopChangeFeed{}, Closer: noopCloser{}}, nil
+	}))
+
+	RecordInitError(fmt.Errorf("simulated init error"))
+
+	assert.Len(t, backendFactories, 1)
+	assert.NotEmpty(t, initErrors)
+
+	// Reset and verify.
+	ResetBackendFactories()
+
+	assert.Empty(t, backendFactories, "ResetBackendFactories should clear all factories")
+	assert.Nil(t, initErrors, "ResetBackendFactories should clear init errors")
+}
+
 var _ io.Closer = noopCloser{}
