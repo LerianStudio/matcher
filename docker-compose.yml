@@ -153,7 +153,7 @@ services:
       # Rate limiting - disabled for development/e2e testing
       RATE_LIMIT_ENABLED: "false"
       # Systemplane
-      SYSTEMPLANE_SECRET_MASTER_KEY: +PnwgNy8bL3HGT1rOXp47PqyGcPywXH/epgmSVwPkL0=
+      SYSTEMPLANE_SECRET_MASTER_KEY: ${SYSTEMPLANE_SECRET_MASTER_KEY:-+PnwgNy8bL3HGT1rOXp47PqyGcPywXH/epgmSVwPkL0=}
       # Build settings
       CGO_ENABLED: "0"
       GOFLAGS: "-mod=vendor"
