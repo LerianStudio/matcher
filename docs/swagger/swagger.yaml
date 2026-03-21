@@ -26,6 +26,10 @@ tags:
     name: Governance
   - description: Service health and readiness endpoints for Kubernetes probes
     name: Health
+  - description: Runtime configuration management - view, patch, and audit system configs
+    name: System Configs
+  - description: Tenant-scoped settings management - view, patch, and audit system settings
+    name: System Settings
 definitions:
   github_com_LerianStudio_lib-commons_v4_commons_net_http.CursorPagination:
     properties:
@@ -3116,6 +3120,123 @@ definitions:
         - CANCELED
         example: SUCCEEDED
         type: string
+    type: object
+  pkg_systemplane_adapters_http_fiber.ConfigsResponse:
+    properties:
+      revision:
+        type: integer
+      values:
+        additionalProperties:
+          $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.EffectiveValueDTO'
+        type: object
+    type: object
+  pkg_systemplane_adapters_http_fiber.EffectiveValueDTO:
+    properties:
+      default: {}
+      key:
+        type: string
+      redacted:
+        type: boolean
+      source:
+        type: string
+      value: {}
+    type: object
+  pkg_systemplane_adapters_http_fiber.ErrorResponse:
+    properties:
+      code:
+        type: string
+      message:
+        type: string
+    type: object
+  pkg_systemplane_adapters_http_fiber.HistoryEntryDTO:
+    properties:
+      actorId:
+        type: string
+      changedAt:
+        description: RFC3339
+        type: string
+      key:
+        type: string
+      newValue: {}
+      oldValue: {}
+      revision:
+        type: integer
+      scope:
+        type: string
+      subjectId:
+        type: string
+    type: object
+  pkg_systemplane_adapters_http_fiber.HistoryResponse:
+    properties:
+      entries:
+        items:
+          $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.HistoryEntryDTO'
+        type: array
+    type: object
+  pkg_systemplane_adapters_http_fiber.PatchConfigsRequest:
+    properties:
+      values:
+        additionalProperties: {}
+        description: null value = reset to default
+        type: object
+    type: object
+  pkg_systemplane_adapters_http_fiber.PatchResponse:
+    properties:
+      revision:
+        type: integer
+    type: object
+  pkg_systemplane_adapters_http_fiber.PatchSettingsRequest:
+    properties:
+      values:
+        additionalProperties: {}
+        type: object
+    type: object
+  pkg_systemplane_adapters_http_fiber.ReloadResponse:
+    properties:
+      status:
+        type: string
+    type: object
+  pkg_systemplane_adapters_http_fiber.SchemaEntryDTO:
+    properties:
+      allowedScopes:
+        items:
+          type: string
+        type: array
+      applyBehavior:
+        type: string
+      defaultValue: {}
+      description:
+        type: string
+      group:
+        type: string
+      key:
+        type: string
+      kind:
+        type: string
+      mutableAtRuntime:
+        type: boolean
+      secret:
+        type: boolean
+      valueType:
+        type: string
+    type: object
+  pkg_systemplane_adapters_http_fiber.SchemaResponse:
+    properties:
+      keys:
+        items:
+          $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.SchemaEntryDTO'
+        type: array
+    type: object
+  pkg_systemplane_adapters_http_fiber.SettingsResponse:
+    properties:
+      revision:
+        type: integer
+      scope:
+        type: string
+      values:
+        additionalProperties:
+          $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.EffectiveValueDTO'
+        type: object
     type: object
 info:
   contact:
@@ -9494,6 +9615,433 @@ paths:
       summary: Export variance report
       tags:
       - Reporting
+  /v1/system/configs:
+    get:
+      description: |-
+        Returns all resolved configuration values with their source and redaction status.
+        Bootstrap-only keys (require restart) are included with their current effective value.
+      operationId: getSystemConfigs
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Resolved configuration values
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ConfigsResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get effective configs
+      tags:
+      - System Configs
+    patch:
+      consumes:
+      - application/json
+      description: |-
+        Applies a batch of configuration mutations with optimistic concurrency control.
+        Pass the expected revision in the If-Match header (ETag format). A null JSON
+        value for any key resets it to its registered default.
+      operationId: patchSystemConfigs
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Expected revision for optimistic concurrency (e.g. \
+        in: header
+        name: If-Match
+        type: string
+      - description: Configuration values to update
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.PatchConfigsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: New revision after successful write
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.PatchResponse'
+        "400":
+          description: Invalid request body or empty values
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+        "409":
+          description: Revision conflict
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Patch config values
+      tags:
+      - System Configs
+  /v1/system/configs/history:
+    get:
+      description: |-
+        Returns the change audit trail for configuration entries, ordered by revision.
+        Supports pagination via limit/offset and optional key filtering.
+      operationId: getSystemConfigHistory
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Filter history by config key
+        in: query
+        name: key
+        type: string
+      - default: 50
+        description: Maximum number of entries to return
+        in: query
+        maximum: 100
+        minimum: 1
+        name: limit
+        type: integer
+      - default: 0
+        description: Number of entries to skip
+        in: query
+        minimum: 0
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Configuration change history entries
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.HistoryResponse'
+        "400":
+          description: Invalid query parameters
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get config change history
+      tags:
+      - System Configs
+  /v1/system/configs/reload:
+    post:
+      description: |-
+        Triggers a full configuration resynchronization from the backing store.
+        Use after manual database changes or to force a cache refresh.
+      operationId: reloadSystemConfigs
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Reload acknowledged
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ReloadResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+        "500":
+          description: Reload failed
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Reload configuration
+      tags:
+      - System Configs
+  /v1/system/configs/schema:
+    get:
+      description: |-
+        Returns the registry metadata for all configuration keys, including
+        value type, default value, allowed scopes, mutability, and apply behavior.
+      operationId: getSystemConfigSchema
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Schema metadata for all config keys
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.SchemaResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get config key schema
+      tags:
+      - System Configs
+  /v1/system/settings:
+    get:
+      description: |-
+        Returns resolved settings for the current scope. The scope defaults to "tenant"
+        and can be overridden with ?scope=global. Tenant-scoped settings inherit from
+        global defaults when no tenant override exists.
+      operationId: getSystemSettings
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - default: tenant
+        description: Resolution scope
+        enum:
+        - tenant
+        - global
+        in: query
+        name: scope
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Resolved setting values with scope
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.SettingsResponse'
+        "400":
+          description: Invalid scope parameter
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get effective settings
+      tags:
+      - System Settings
+    patch:
+      consumes:
+      - application/json
+      description: |-
+        Applies a batch of settings mutations for the resolved scope with optimistic
+        concurrency control. Pass the expected revision in the If-Match header.
+        A null JSON value for any key resets it to its registered default.
+      operationId: patchSystemSettings
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Expected revision for optimistic concurrency (e.g. \
+        in: header
+        name: If-Match
+        type: string
+      - default: tenant
+        description: Resolution scope
+        enum:
+        - tenant
+        - global
+        in: query
+        name: scope
+        type: string
+      - description: Setting values to update
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.PatchSettingsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: New revision after successful write
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.PatchResponse'
+        "400":
+          description: Invalid request body or empty values
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+        "409":
+          description: Revision conflict
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Patch setting values
+      tags:
+      - System Settings
+  /v1/system/settings/history:
+    get:
+      description: |-
+        Returns the change audit trail for settings entries, ordered by revision.
+        The subject is resolved from the auth context (tenant isolation enforcement).
+        Supports pagination via limit/offset and optional key filtering.
+      operationId: getSystemSettingHistory
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Filter history by setting key
+        in: query
+        name: key
+        type: string
+      - default: tenant
+        description: Resolution scope
+        enum:
+        - tenant
+        - global
+        in: query
+        name: scope
+        type: string
+      - default: 50
+        description: Maximum number of entries to return
+        in: query
+        maximum: 100
+        minimum: 1
+        name: limit
+        type: integer
+      - default: 0
+        description: Number of entries to skip
+        in: query
+        minimum: 0
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Setting change history entries
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.HistoryResponse'
+        "400":
+          description: Invalid query parameters or scope
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get setting change history
+      tags:
+      - System Settings
+  /v1/system/settings/schema:
+    get:
+      description: |-
+        Returns the registry metadata for all setting keys, including
+        value type, default value, allowed scopes, mutability, and apply behavior.
+      operationId: getSystemSettingSchema
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Schema metadata for all setting keys
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.SchemaResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get setting key schema
+      tags:
+      - System Settings
 schemes:
 - https
 securityDefinitions:
