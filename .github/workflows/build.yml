@@ -19,7 +19,7 @@ jobs:
   update_gitops:
     needs: [build]
     if: needs.build.result == 'success'
-    uses: LerianStudio/github-actions-shared-workflows/.github/workflows/gitops-update.yml@v1.15.0
+    uses: LerianStudio/github-actions-shared-workflows/.github/workflows/gitops-update.yml@v1.17.0
     with:
       runner_type: "firmino-lxc-runners"
       artifact_pattern: "gitops-tags-matcher"
