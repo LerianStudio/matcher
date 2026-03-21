@@ -136,11 +136,7 @@ Optional object storage for exports and archival:
 docker-compose --profile storage up -d seaweedfs
 ```
 
-Optional observability stack:
-
-```bash
-docker-compose --profile observability up -d jaeger
-```
+Optional observability stack (requires OpenTelemetry Collector configured via `OTEL_EXPORTER_OTLP_ENDPOINT`).
 
 ### 3) Run Migrations
 

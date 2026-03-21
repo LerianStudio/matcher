@@ -60,6 +60,18 @@ OTEL_EXPORTER_OTLP_ENDPOINT=localhost:4317
 # Database metrics scrape interval (seconds).
 DB_METRICS_INTERVAL_SEC=15
 
-# SYSTEMPLANE_SECRET_MASTER_KEY=
-# REQUIRED: generate a unique value per environment:
+# ── Systemplane ──────────────────────────────────────────────────────────────
+# Backend store for runtime configuration. Default: postgres (reuses the
+# application Postgres DSN). Set to "mongodb" for a Mongo-backed store.
+# SYSTEMPLANE_BACKEND=postgres
+
+# Override the connection DSN for the systemplane store. When unset, the
+# application's primary Postgres DSN is used.
+# SYSTEMPLANE_POSTGRES_DSN=
+
+# REQUIRED: AES-256-GCM master key for encrypting secret config values.
+# Generate a unique value per environment:
 #   openssl rand -base64 32 | tr -d '\n'
+# SECURITY: The development default (used in docker-compose.yml) is
+# explicitly blocked in production by validateProductionConfig.
+# SYSTEMPLANE_SECRET_MASTER_KEY=

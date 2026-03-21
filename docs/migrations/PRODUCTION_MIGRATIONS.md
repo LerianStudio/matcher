@@ -52,6 +52,24 @@ make migrate-down
 3. Re-run smoke checks and confirm readiness.
 4. If rollback cannot restore service integrity, restore from backup and execute incident response.
 
+## Index Creation Safety
+
+Matcher's initial migrations use `CREATE INDEX` (not `CREATE INDEX CONCURRENTLY`).
+On production tables with significant row counts, plain `CREATE INDEX` acquires a
+`SHARE` lock that blocks writes for the duration of the index build.
+
+**For large tables** (> 1M rows, or any table under sustained write load):
+
+1. Before applying the migration, review `.up.sql` files for `CREATE INDEX` statements.
+2. For each such statement on a large table, consider:
+   - Running `CREATE INDEX CONCURRENTLY` manually _before_ applying the migration
+   - Then converting the migration `CREATE INDEX` to `CREATE INDEX IF NOT EXISTS`
+   - This avoids holding a write lock during the full index scan
+3. Monitor `pg_stat_activity` for lock waits during migration apply.
+
+Note: `CREATE INDEX CONCURRENTLY` cannot run inside a transaction. Run it as a
+standalone statement outside the migration tool if needed.
+
 ## Notes
 
 - Never manually modify migration history tables in production unless incident command explicitly approves and records it.
