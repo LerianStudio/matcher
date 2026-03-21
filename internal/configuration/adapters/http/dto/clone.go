@@ -5,7 +5,7 @@ import (
 )
 
 // CloneContextRequest is the request body for cloning a reconciliation context.
-// @Description Request payload for cloning a context with its configuration
+// @Description Request payload for cloning a context with its configuration. When sources are included, their LEFT/RIGHT side assignments and field maps are preserved. When rules are included, both match rules and fee rules are cloned, and cloned fee rules keep referencing the same fee schedules as the source context.
 type CloneContextRequest struct {
 	// Name for the cloned context
 	Name string `json:"name" validate:"required,min=1,max=100" example:"Bank Reconciliation Q1 (Copy)" minLength:"1" maxLength:"100"`
@@ -16,7 +16,7 @@ type CloneContextRequest struct {
 }
 
 // CloneContextResponse is the response body for a clone operation.
-// @Description Result of cloning a reconciliation context
+// @Description Result of cloning a reconciliation context, including counts for cloned sources, match rules, fee rules, and field maps.
 type CloneContextResponse struct {
 	// The newly created context
 	Context ReconciliationContextResponse `json:"context"`

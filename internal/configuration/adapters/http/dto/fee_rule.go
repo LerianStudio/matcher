@@ -8,11 +8,12 @@ import (
 
 // CreateFeeRuleRequest is the request body for POST /v1/config/contexts/:contextId/fee-rules.
 type CreateFeeRuleRequest struct {
-	Side          string                  `json:"side"          validate:"required,oneof=LEFT RIGHT ANY" example:"RIGHT" enums:"LEFT,RIGHT,ANY"`
-	FeeScheduleID string                  `json:"feeScheduleId" validate:"required,uuid"                 example:"550e8400-e29b-41d4-a716-446655440000"`
-	Name          string                  `json:"name"          validate:"required,max=100"              example:"BB Right-Side Rule"                   minLength:"1" maxLength:"100"`
-	Priority      int                     `json:"priority"      validate:"gte=0"                         example:"0"` // Unique within context; LEFT, RIGHT, and ANY share the same priority space
-	Predicates    []FieldPredicateRequest `json:"predicates"    validate:"max=50,dive"`
+	Side          string `json:"side"          validate:"required,oneof=LEFT RIGHT ANY" example:"RIGHT" enums:"LEFT,RIGHT,ANY"`
+	FeeScheduleID string `json:"feeScheduleId" validate:"required,uuid"                 example:"550e8400-e29b-41d4-a716-446655440000"`
+	Name          string `json:"name"          validate:"required,max=100"              example:"BB Right-Side Rule"                   minLength:"1" maxLength:"100"`
+	// Priority must be unique within the context. LEFT, RIGHT, and ANY rules share the same priority space.
+	Priority   int                     `json:"priority"      validate:"gte=0"                         example:"0"`
+	Predicates []FieldPredicateRequest `json:"predicates"    validate:"max=50,dive"`
 }
 
 // FieldPredicateRequest represents a single predicate in a fee rule request.
@@ -25,11 +26,12 @@ type FieldPredicateRequest struct {
 
 // UpdateFeeRuleRequest is the request body for PATCH /v1/config/fee-rules/:feeRuleId.
 type UpdateFeeRuleRequest struct {
-	Side          *string                  `json:"side,omitempty"          validate:"omitempty,oneof=LEFT RIGHT ANY" example:"LEFT"   enums:"LEFT,RIGHT,ANY"`
-	FeeScheduleID *string                  `json:"feeScheduleId,omitempty" validate:"omitempty,uuid"`
-	Name          *string                  `json:"name,omitempty"          validate:"omitempty,max=100"              example:"Updated Rule"`
-	Priority      *int                     `json:"priority,omitempty"      validate:"omitempty,gte=0"`
-	Predicates    *[]FieldPredicateRequest `json:"predicates,omitempty"    validate:"omitempty,max=50,dive"`
+	Side          *string `json:"side,omitempty"          validate:"omitempty,oneof=LEFT RIGHT ANY" example:"LEFT"   enums:"LEFT,RIGHT,ANY"`
+	FeeScheduleID *string `json:"feeScheduleId,omitempty" validate:"omitempty,uuid"`
+	Name          *string `json:"name,omitempty"          validate:"omitempty,max=100"              example:"Updated Rule"`
+	// Priority must remain unique within the context. LEFT, RIGHT, and ANY rules share the same priority space.
+	Priority   *int                     `json:"priority,omitempty"      validate:"omitempty,gte=0"`
+	Predicates *[]FieldPredicateRequest `json:"predicates,omitempty"    validate:"omitempty,max=50,dive"`
 }
 
 // FeeRuleResponse is the response body for fee rule endpoints.

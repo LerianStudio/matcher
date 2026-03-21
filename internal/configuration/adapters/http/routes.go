@@ -142,6 +142,8 @@ func RegisterRoutes(protected func(resource string, actions ...string) fiber.Rou
 	).Post("/v1/config/fee-schedules/:scheduleId/simulate", handler.SimulateFeeSchedule)
 
 	// Fee rule routes
+	// Create/update require fee-schedule:read in addition to fee-rule permissions
+	// because the caller must be allowed to reference the target schedule.
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionFeeRuleCreate,

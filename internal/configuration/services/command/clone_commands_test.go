@@ -284,6 +284,29 @@ func TestCloneMap(t *testing.T) {
 		copied["c"] = "new"
 		assert.NotContains(t, original, "c")
 	})
+
+	t.Run("deep copies nested json-like structures", func(t *testing.T) {
+		t.Parallel()
+
+		original := map[string]any{
+			"config": map[string]any{
+				"tags": []any{"a", map[string]any{"enabled": true}},
+			},
+		}
+
+		copied := cloneMap(context.Background(), original)
+		require.Equal(t, original, copied)
+
+		nestedCopy := copied["config"].(map[string]any)
+		nestedTags := nestedCopy["tags"].([]any)
+		nestedTagMap := nestedTags[1].(map[string]any)
+		nestedTagMap["enabled"] = false
+
+		nestedOriginal := original["config"].(map[string]any)
+		originalTags := nestedOriginal["tags"].([]any)
+		originalTagMap := originalTags[1].(map[string]any)
+		assert.Equal(t, true, originalTagMap["enabled"])
+	})
 }
 
 func TestClonePredicates(t *testing.T) {

@@ -243,6 +243,32 @@ func TestMapTransactionsWithFeeRules_NoMatchingRule(t *testing.T) {
 		"no breakdown when no rule matches")
 }
 
+func TestMapTransactionsWithFeeRules_MatchingRuleWithNilSchedules_DoesNotNormalize(t *testing.T) {
+	t.Parallel()
+
+	sourceID := uuid.New()
+	txn := newTestTransaction(sourceID, "500.00", "USD", map[string]any{"type": "wire"})
+	rule := newTestRule(uuid.New(), 1, []fee.FieldPredicate{{
+		Field:    "type",
+		Operator: fee.PredicateOperatorEquals,
+		Value:    "wire",
+	}})
+
+	result := mapTransactionsWithFeeRules(
+		context.Background(),
+		[]*shared.Transaction{txn},
+		[]*fee.FeeRule{rule},
+		nil,
+		fee.NormalizationModeNet,
+		&libLog.NopLogger{},
+	)
+
+	require.Len(t, result, 1)
+	assert.True(t, txn.Amount.Equal(result[0].Amount), "amount should remain unchanged when schedules map is nil")
+	assert.True(t, txn.Amount.Equal(result[0].OriginalAmount), "original amount should be preserved when schedules map is nil")
+	assert.Nil(t, result[0].FeeBreakdown, "no fee breakdown should be produced when schedules map is nil")
+}
+
 func TestMapTransactionsWithFeeRules_NilTransactionSkipped(t *testing.T) {
 	t.Parallel()
 

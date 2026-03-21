@@ -130,6 +130,19 @@ func validPredicates() []fee.FieldPredicate {
 	}
 }
 
+func tooManyPredicates() []fee.FieldPredicate {
+	predicates := make([]fee.FieldPredicate, 0, 51)
+	for i := 0; i < 51; i++ {
+		predicates = append(predicates, fee.FieldPredicate{
+			Field:    "field",
+			Operator: fee.PredicateOperatorEquals,
+			Value:    "value",
+		})
+	}
+
+	return predicates
+}
+
 // seedRule inserts a rule into the mock repo and returns it.
 func seedRule(t *testing.T, repo *feeRuleMockRepo) *fee.FeeRule {
 	t.Helper()
@@ -360,6 +373,50 @@ func TestCreateFeeRule_InvalidSide(t *testing.T) {
 	assert.ErrorIs(t, err, fee.ErrInvalidMatchingSide)
 }
 
+func TestCreateFeeRule_InvalidPredicateOperator(t *testing.T) {
+	t.Parallel()
+
+	repo := newFeeRuleMockRepo()
+	uc := newUseCaseWithFeeRuleRepo(repo)
+
+	result, err := uc.CreateFeeRule(
+		context.Background(),
+		uuid.New(),
+		"LEFT",
+		uuid.New(),
+		"my-rule",
+		1,
+		[]fee.FieldPredicate{{Field: "currency", Operator: fee.PredicateOperator("INVALID"), Value: "USD"}},
+	)
+
+	assert.Nil(t, result)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, fee.ErrInvalidPredicateOperator)
+	assert.Len(t, repo.rules, 0)
+}
+
+func TestCreateFeeRule_TooManyPredicates(t *testing.T) {
+	t.Parallel()
+
+	repo := newFeeRuleMockRepo()
+	uc := newUseCaseWithFeeRuleRepo(repo)
+
+	result, err := uc.CreateFeeRule(
+		context.Background(),
+		uuid.New(),
+		"LEFT",
+		uuid.New(),
+		"my-rule",
+		1,
+		tooManyPredicates(),
+	)
+
+	assert.Nil(t, result)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, fee.ErrFeeRuleTooManyPredicates)
+	assert.Len(t, repo.rules, 0)
+}
+
 func TestCreateFeeRule_NilReceiver(t *testing.T) {
 	t.Parallel()
 
@@ -426,6 +483,54 @@ func TestUpdateFeeRule_NotFound(t *testing.T) {
 
 	assert.Nil(t, result)
 	assert.ErrorIs(t, err, fee.ErrFeeRuleNotFound)
+}
+
+func TestUpdateFeeRule_InvalidPredicates(t *testing.T) {
+	t.Parallel()
+
+	repo := newFeeRuleMockRepo()
+	uc := newUseCaseWithFeeRuleRepo(repo)
+	existing := seedRule(t, repo)
+	invalidPredicates := []fee.FieldPredicate{{Field: "currency", Operator: fee.PredicateOperator("INVALID"), Value: "USD"}}
+
+	result, err := uc.UpdateFeeRule(
+		context.Background(),
+		existing.ContextID,
+		existing.ID,
+		nil,
+		nil,
+		nil,
+		nil,
+		&invalidPredicates,
+	)
+
+	assert.Nil(t, result)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, fee.ErrInvalidPredicateOperator)
+}
+
+func TestUpdateFeeRule_TooManyPredicates(t *testing.T) {
+	t.Parallel()
+
+	repo := newFeeRuleMockRepo()
+	uc := newUseCaseWithFeeRuleRepo(repo)
+	existing := seedRule(t, repo)
+	predicates := tooManyPredicates()
+
+	result, err := uc.UpdateFeeRule(
+		context.Background(),
+		existing.ContextID,
+		existing.ID,
+		nil,
+		nil,
+		nil,
+		nil,
+		&predicates,
+	)
+
+	assert.Nil(t, result)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, fee.ErrFeeRuleTooManyPredicates)
 }
 
 func TestUpdateFeeRule_NilRepo(t *testing.T) {

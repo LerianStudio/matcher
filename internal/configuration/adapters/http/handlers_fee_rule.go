@@ -18,7 +18,7 @@ import (
 //
 // @ID createFeeRule
 // @Summary Create a fee rule
-// @Description Creates a new fee rule that maps transaction metadata to a fee schedule within a context. Priority must be unique within a context across all sides (LEFT, RIGHT, and ANY rules share the same priority space).
+// @Description Creates a new fee rule that maps transaction metadata to a fee schedule within a context. Priority must be unique within a context across all sides (LEFT, RIGHT, and ANY rules share the same priority space). The caller must also be allowed to read the referenced fee schedule.
 // @Tags Configuration Fee Rules
 // @Accept json
 // @Produce json
@@ -196,7 +196,7 @@ func (handler *Handler) GetFeeRule(fiberCtx *fiber.Ctx) error {
 //
 // @ID updateFeeRule
 // @Summary Update a fee rule
-// @Description Updates fields on a fee rule by ID.
+// @Description Updates fields on a fee rule by ID. If the referenced fee schedule changes, the caller must also be allowed to read that fee schedule.
 // @Tags Configuration Fee Rules
 // @Accept json
 // @Produce json

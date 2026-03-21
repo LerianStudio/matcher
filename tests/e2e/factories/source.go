@@ -11,14 +11,14 @@ import (
 
 // SourceFactory creates reconciliation sources for tests.
 type SourceFactory struct {
-	tc     *e2e.TestContext
-	client *e2e.Client
-	sides  map[string]int
+	tc                 *e2e.TestContext
+	client             *e2e.Client
+	sideCountByContext map[string]int
 }
 
 // NewSourceFactory creates a new source factory.
 func NewSourceFactory(tc *e2e.TestContext, c *e2e.Client) *SourceFactory {
-	return &SourceFactory{tc: tc, client: c, sides: make(map[string]int)}
+	return &SourceFactory{tc: tc, client: c, sideCountByContext: make(map[string]int)}
 }
 
 // Client returns the underlying API client.
@@ -105,13 +105,13 @@ func (b *SourceBuilder) WithConfig(config map[string]any) *SourceBuilder {
 // Create creates the source and registers cleanup.
 func (b *SourceBuilder) Create(ctx context.Context) (*client.Source, error) {
 	if b.req.Side == "" {
-		if b.factory.sides[b.contextID] == 0 {
+		if b.factory.sideCountByContext[b.contextID] == 0 {
 			b.req.Side = "LEFT"
 		} else {
 			b.req.Side = "RIGHT"
 		}
 	}
-	b.factory.sides[b.contextID]++
+	b.factory.sideCountByContext[b.contextID]++
 
 	created, err := b.factory.client.Configuration.CreateSource(ctx, b.contextID, b.req)
 	if err != nil {
