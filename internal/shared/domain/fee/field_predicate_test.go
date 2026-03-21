@@ -155,6 +155,18 @@ func TestFieldPredicate_Evaluate(t *testing.T) {
 			matches:   true,
 		},
 		{
+			name:      "EQUALS bool value coercion",
+			predicate: FieldPredicate{Field: "enabled", Operator: PredicateOperatorEquals, Value: "true"},
+			metadata:  map[string]any{"enabled": true},
+			matches:   true,
+		},
+		{
+			name:      "IN float value coercion",
+			predicate: FieldPredicate{Field: "rate", Operator: PredicateOperatorIn, Values: []string{"1.5", "2.0"}},
+			metadata:  map[string]any{"rate": 1.5},
+			matches:   true,
+		},
+		{
 			name:      "IN match",
 			predicate: FieldPredicate{Field: "brand", Operator: PredicateOperatorIn, Values: []string{"Visa", "Mastercard"}},
 			metadata:  map[string]any{"brand": "visa"},

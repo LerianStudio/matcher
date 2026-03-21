@@ -109,6 +109,16 @@ func TestResolveFeeSchedule_ScheduleNotInMap_SkipsRule(t *testing.T) {
 	assert.Nil(t, result)
 }
 
+func TestResolveFeeSchedule_NilSchedulesMap_SkipsRule(t *testing.T) {
+	t.Parallel()
+
+	scheduleID := uuid.New()
+	rules := []*FeeRule{{Priority: 0, FeeScheduleID: scheduleID, Predicates: nil}}
+
+	result := ResolveFeeSchedule(map[string]any{}, rules, nil)
+	assert.Nil(t, result)
+}
+
 func TestResolveFeeSchedule_ANDSemantics_AllPredicatesMustMatch(t *testing.T) {
 	t.Parallel()
 
