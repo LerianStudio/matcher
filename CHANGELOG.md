@@ -1,3 +1,10 @@
+## [1.1.0-beta.19](https://github.com/LerianStudio/matcher/compare/v1.1.0-beta.18...v1.1.0-beta.19) (2026-03-21)
+
+
+### Bug Fixes
+
+* treat permission denied as graceful fallback in config file loading ([007c00c](https://github.com/LerianStudio/matcher/commit/007c00ca04cc0e9645f934b08e710a6fe957344c)), closes [#52](https://github.com/LerianStudio/matcher/issues/52)
+
 ## [1.1.0-beta.18](https://github.com/LerianStudio/matcher/compare/v1.1.0-beta.17...v1.1.0-beta.18) (2026-03-21)
 
 ## [1.1.0-beta.17](https://github.com/LerianStudio/matcher/compare/v1.1.0-beta.16...v1.1.0-beta.17) (2026-03-21)
