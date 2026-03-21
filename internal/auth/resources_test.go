@@ -386,6 +386,37 @@ func TestReportingModuleActions(t *testing.T) {
 	}
 }
 
+func TestSystemModuleActions(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		constant string
+		expected string
+	}{
+		{name: "ActionConfigRead", constant: ActionConfigRead, expected: "config:read"},
+		{name: "ActionConfigWrite", constant: ActionConfigWrite, expected: "config:write"},
+		{name: "ActionConfigSchemaRead", constant: ActionConfigSchemaRead, expected: "config/schema:read"},
+		{name: "ActionConfigHistoryRead", constant: ActionConfigHistoryRead, expected: "config/history:read"},
+		{name: "ActionConfigReloadWrite", constant: ActionConfigReloadWrite, expected: "config/reload:write"},
+		{name: "ActionSettingsRead", constant: ActionSettingsRead, expected: "settings:read"},
+		{name: "ActionSettingsWrite", constant: ActionSettingsWrite, expected: "settings:write"},
+		{name: "ActionSettingsSchemaRead", constant: ActionSettingsSchemaRead, expected: "settings/schema:read"},
+		{name: "ActionSettingsHistoryRead", constant: ActionSettingsHistoryRead, expected: "settings/history:read"},
+		{name: "ActionSettingsGlobalRead", constant: ActionSettingsGlobalRead, expected: "settings/global:read"},
+		{name: "ActionSettingsGlobalWrite", constant: ActionSettingsGlobalWrite, expected: "settings/global:write"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tt.expected, tt.constant)
+			assert.Contains(t, tt.constant, ":")
+		})
+	}
+}
+
 func TestExceptionModuleActions(t *testing.T) {
 	t.Parallel()
 
@@ -538,59 +569,70 @@ func TestActionsAreNotEmpty(t *testing.T) {
 	t.Parallel()
 
 	actions := map[string]string{
-		"ActionRead":               ActionRead,
-		"ActionWrite":              ActionWrite,
-		"ActionDelete":             ActionDelete,
-		"ActionAdmin":              ActionAdmin,
-		"ActionContextCreate":      ActionContextCreate,
-		"ActionContextRead":        ActionContextRead,
-		"ActionContextUpdate":      ActionContextUpdate,
-		"ActionContextDelete":      ActionContextDelete,
-		"ActionSourceCreate":       ActionSourceCreate,
-		"ActionSourceRead":         ActionSourceRead,
-		"ActionSourceUpdate":       ActionSourceUpdate,
-		"ActionSourceDelete":       ActionSourceDelete,
-		"ActionFieldMapCreate":     ActionFieldMapCreate,
-		"ActionFieldMapRead":       ActionFieldMapRead,
-		"ActionFieldMapUpdate":     ActionFieldMapUpdate,
-		"ActionFieldMapDelete":     ActionFieldMapDelete,
-		"ActionRuleCreate":         ActionRuleCreate,
-		"ActionRuleRead":           ActionRuleRead,
-		"ActionRuleUpdate":         ActionRuleUpdate,
-		"ActionRuleDelete":         ActionRuleDelete,
-		"ActionFeeScheduleCreate":  ActionFeeScheduleCreate,
-		"ActionFeeScheduleRead":    ActionFeeScheduleRead,
-		"ActionFeeScheduleUpdate":  ActionFeeScheduleUpdate,
-		"ActionFeeScheduleDelete":  ActionFeeScheduleDelete,
-		"ActionScheduleCreate":     ActionScheduleCreate,
-		"ActionScheduleRead":       ActionScheduleRead,
-		"ActionScheduleUpdate":     ActionScheduleUpdate,
-		"ActionScheduleDelete":     ActionScheduleDelete,
-		"ActionImportCreate":       ActionImportCreate,
-		"ActionJobRead":            ActionJobRead,
-		"ActionTransactionIgnore":  ActionTransactionIgnore,
-		"ActionTransactionSearch":  ActionTransactionSearch,
-		"ActionMatchRun":           ActionMatchRun,
-		"ActionMatchRead":          ActionMatchRead,
-		"ActionMatchDelete":        ActionMatchDelete,
-		"ActionManualMatch":        ActionManualMatch,
-		"ActionAdjustmentCreate":   ActionAdjustmentCreate,
-		"ActionAuditRead":          ActionAuditRead,
-		"ActionArchiveRead":        ActionArchiveRead,
-		"ActionActorMappingRead":   ActionActorMappingRead,
-		"ActionActorMappingWrite":  ActionActorMappingWrite,
-		"ActionActorMappingDelete": ActionActorMappingDelete,
-		"ActionDashboardRead":      ActionDashboardRead,
-		"ActionExportRead":         ActionExportRead,
-		"ActionExportJobWrite":     ActionExportJobWrite,
-		"ActionExportJobRead":      ActionExportJobRead,
-		"ActionExceptionRead":      ActionExceptionRead,
-		"ActionExceptionResolve":   ActionExceptionResolve,
-		"ActionExceptionDispatch":  ActionExceptionDispatch,
-		"ActionCallbackProcess":    ActionCallbackProcess,
-		"ActionDisputeRead":        ActionDisputeRead,
-		"ActionDisputeWrite":       ActionDisputeWrite,
-		"ActionCommentWrite":       ActionCommentWrite,
+		"ActionRead":                ActionRead,
+		"ActionWrite":               ActionWrite,
+		"ActionDelete":              ActionDelete,
+		"ActionAdmin":               ActionAdmin,
+		"ActionContextCreate":       ActionContextCreate,
+		"ActionContextRead":         ActionContextRead,
+		"ActionContextUpdate":       ActionContextUpdate,
+		"ActionContextDelete":       ActionContextDelete,
+		"ActionSourceCreate":        ActionSourceCreate,
+		"ActionSourceRead":          ActionSourceRead,
+		"ActionSourceUpdate":        ActionSourceUpdate,
+		"ActionSourceDelete":        ActionSourceDelete,
+		"ActionFieldMapCreate":      ActionFieldMapCreate,
+		"ActionFieldMapRead":        ActionFieldMapRead,
+		"ActionFieldMapUpdate":      ActionFieldMapUpdate,
+		"ActionFieldMapDelete":      ActionFieldMapDelete,
+		"ActionRuleCreate":          ActionRuleCreate,
+		"ActionRuleRead":            ActionRuleRead,
+		"ActionRuleUpdate":          ActionRuleUpdate,
+		"ActionRuleDelete":          ActionRuleDelete,
+		"ActionFeeScheduleCreate":   ActionFeeScheduleCreate,
+		"ActionFeeScheduleRead":     ActionFeeScheduleRead,
+		"ActionFeeScheduleUpdate":   ActionFeeScheduleUpdate,
+		"ActionFeeScheduleDelete":   ActionFeeScheduleDelete,
+		"ActionScheduleCreate":      ActionScheduleCreate,
+		"ActionScheduleRead":        ActionScheduleRead,
+		"ActionScheduleUpdate":      ActionScheduleUpdate,
+		"ActionScheduleDelete":      ActionScheduleDelete,
+		"ActionImportCreate":        ActionImportCreate,
+		"ActionJobRead":             ActionJobRead,
+		"ActionTransactionIgnore":   ActionTransactionIgnore,
+		"ActionTransactionSearch":   ActionTransactionSearch,
+		"ActionMatchRun":            ActionMatchRun,
+		"ActionMatchRead":           ActionMatchRead,
+		"ActionMatchDelete":         ActionMatchDelete,
+		"ActionManualMatch":         ActionManualMatch,
+		"ActionAdjustmentCreate":    ActionAdjustmentCreate,
+		"ActionAuditRead":           ActionAuditRead,
+		"ActionArchiveRead":         ActionArchiveRead,
+		"ActionActorMappingRead":    ActionActorMappingRead,
+		"ActionActorMappingWrite":   ActionActorMappingWrite,
+		"ActionActorMappingDelete":  ActionActorMappingDelete,
+		"ActionDashboardRead":       ActionDashboardRead,
+		"ActionExportRead":          ActionExportRead,
+		"ActionExportJobWrite":      ActionExportJobWrite,
+		"ActionExportJobRead":       ActionExportJobRead,
+		"ActionExceptionRead":       ActionExceptionRead,
+		"ActionExceptionResolve":    ActionExceptionResolve,
+		"ActionExceptionDispatch":   ActionExceptionDispatch,
+		"ActionCallbackProcess":     ActionCallbackProcess,
+		"ActionDisputeRead":         ActionDisputeRead,
+		"ActionDisputeWrite":        ActionDisputeWrite,
+		"ActionCommentWrite":        ActionCommentWrite,
+		"ActionConfigRead":          ActionConfigRead,
+		"ActionConfigWrite":         ActionConfigWrite,
+		"ActionConfigSchemaRead":    ActionConfigSchemaRead,
+		"ActionConfigHistoryRead":   ActionConfigHistoryRead,
+		"ActionConfigReloadWrite":   ActionConfigReloadWrite,
+		"ActionSettingsRead":        ActionSettingsRead,
+		"ActionSettingsWrite":       ActionSettingsWrite,
+		"ActionSettingsSchemaRead":  ActionSettingsSchemaRead,
+		"ActionSettingsHistoryRead": ActionSettingsHistoryRead,
+		"ActionSettingsGlobalRead":  ActionSettingsGlobalRead,
+		"ActionSettingsGlobalWrite": ActionSettingsGlobalWrite,
 	}
 
 	for name, value := range actions {

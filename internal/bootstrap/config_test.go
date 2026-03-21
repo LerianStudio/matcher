@@ -257,7 +257,7 @@ func testConfigValidCases(t *testing.T) {
 			config: buildConfig(flatConfig{
 				EnvName:                  "production",
 				DefaultTenantID:          validTenantID,
-				PrimaryDBPassword:        "secret",
+				PrimaryDBPassword:        "pr0d-s3cure-p@ss!",
 				RedisPassword:            "redis-secret",
 				RabbitMQUser:             "matcher",
 				RabbitMQPassword:         "secure",
@@ -281,7 +281,7 @@ func testConfigValidCases(t *testing.T) {
 				DefaultTenantID:          validTenantID,
 				AuthEnabled:              true,
 				AuthHost:                 "http://auth:8080",
-				AuthTokenSecret:          "secret",
+				AuthTokenSecret:          "jwt-pr0d-t0ken-s3cret!",
 				BodyLimitBytes:           1024,
 				LogLevel:                 "info",
 				RateLimitMax:             100,
@@ -364,7 +364,7 @@ func testConfigProductionValidations(t *testing.T) {
 			config: buildConfig(flatConfig{
 				EnvName:            "production",
 				DefaultTenantID:    validTenantID,
-				PrimaryDBPassword:  "secret",
+				PrimaryDBPassword:  "pr0d-s3cure-p@ss!",
 				RabbitMQUser:       "guest",
 				RabbitMQPassword:   "guest",
 				CORSAllowedOrigins: "https://example.com",
@@ -378,7 +378,7 @@ func testConfigProductionValidations(t *testing.T) {
 			config: buildConfig(flatConfig{
 				EnvName:            "production",
 				DefaultTenantID:    validTenantID,
-				PrimaryDBPassword:  "secret",
+				PrimaryDBPassword:  "pr0d-s3cure-p@ss!",
 				RabbitMQUser:       "matcher",
 				RabbitMQPassword:   "secure",
 				CORSAllowedOrigins: "*",
@@ -392,7 +392,7 @@ func testConfigProductionValidations(t *testing.T) {
 			config: buildConfig(flatConfig{
 				EnvName:                     "production",
 				DefaultTenantID:             validTenantID,
-				PrimaryDBPassword:           "secret",
+				PrimaryDBPassword:           "pr0d-s3cure-p@ss!",
 				PrimaryDBSSLMode:            "require",
 				RedisTLS:                    true,
 				RedisPassword:               "redis-secret",
@@ -402,7 +402,7 @@ func testConfigProductionValidations(t *testing.T) {
 				RabbitMQAllowInsecureHealth: true,
 				AuthEnabled:                 true,
 				AuthHost:                    "http://auth:8080",
-				AuthTokenSecret:             "secret",
+				AuthTokenSecret:             "jwt-pr0d-t0ken-s3cret!",
 				CORSAllowedOrigins:          "https://example.com",
 				BodyLimitBytes:              1024,
 				LogLevel:                    "info",
@@ -440,7 +440,7 @@ func testConfigAuthValidations(t *testing.T) {
 				DefaultTenantID: validTenantID,
 				AuthEnabled:     true,
 				AuthHost:        "",
-				AuthTokenSecret: "secret",
+				AuthTokenSecret: "jwt-pr0d-t0ken-s3cret!",
 				BodyLimitBytes:  1024,
 				LogLevel:        "info",
 			}),
@@ -566,13 +566,13 @@ func TestConfig_PrimaryDSN(t *testing.T) {
 		PrimaryDBHost:             "localhost",
 		PrimaryDBPort:             "5432",
 		PrimaryDBUser:             "matcher",
-		PrimaryDBPassword:         "secret",
+		PrimaryDBPassword:         "pr0d-s3cure-p@ss!",
 		PrimaryDBName:             "matcher_db",
 		PrimaryDBSSLMode:          "disable",
 		PostgresConnectTimeoutSec: 10,
 	})
 
-	expected := "host=localhost port=5432 user=matcher password=secret dbname=matcher_db sslmode=disable connect_timeout=10"
+	expected := "host=localhost port=5432 user=matcher password=pr0d-s3cure-p@ss! dbname=matcher_db sslmode=disable connect_timeout=10"
 	assert.Equal(t, expected, cfg.PrimaryDSN())
 }
 
@@ -583,7 +583,7 @@ func TestConfig_ReplicaDSN_FallbackToPrimary(t *testing.T) {
 		PrimaryDBHost:             "primary.db",
 		PrimaryDBPort:             "5432",
 		PrimaryDBUser:             "matcher",
-		PrimaryDBPassword:         "secret",
+		PrimaryDBPassword:         "pr0d-s3cure-p@ss!",
 		PrimaryDBName:             "matcher_db",
 		PrimaryDBSSLMode:          "require",
 		PostgresConnectTimeoutSec: 10,
@@ -600,7 +600,7 @@ func TestConfig_ReplicaDSN_WithReplica(t *testing.T) {
 		PrimaryDBHost:             "primary.db",
 		PrimaryDBPort:             "5432",
 		PrimaryDBUser:             "matcher",
-		PrimaryDBPassword:         "secret",
+		PrimaryDBPassword:         "pr0d-s3cure-p@ss!",
 		PrimaryDBName:             "matcher_db",
 		PrimaryDBSSLMode:          "require",
 		PostgresConnectTimeoutSec: 10,
@@ -608,7 +608,7 @@ func TestConfig_ReplicaDSN_WithReplica(t *testing.T) {
 		ReplicaDBPort:             "5433",
 	})
 
-	expected := "host=replica.db port=5433 user=matcher password=secret dbname=matcher_db sslmode=require connect_timeout=10"
+	expected := "host=replica.db port=5433 user=matcher password=pr0d-s3cure-p@ss! dbname=matcher_db sslmode=require connect_timeout=10"
 	assert.Equal(t, expected, cfg.ReplicaDSN())
 }
 
@@ -1044,7 +1044,7 @@ func TestConfig_ReplicaDSN_ExtendedCases(t *testing.T) {
 			PrimaryDBHost:             "primary-host",
 			PrimaryDBPort:             "5432",
 			PrimaryDBUser:             "matcher",
-			PrimaryDBPassword:         "secret",
+			PrimaryDBPassword:         "pr0d-s3cure-p@ss!",
 			PrimaryDBName:             "matcher_db",
 			PrimaryDBSSLMode:          "require",
 			PostgresConnectTimeoutSec: 10,
@@ -1073,7 +1073,7 @@ func TestConfig_ReplicaDSN_ExtendedCases(t *testing.T) {
 			PrimaryDBHost:             "primary-host",
 			PrimaryDBPort:             "5432",
 			PrimaryDBUser:             "matcher",
-			PrimaryDBPassword:         "secret",
+			PrimaryDBPassword:         "pr0d-s3cure-p@ss!",
 			PrimaryDBName:             "matcher_db",
 			PrimaryDBSSLMode:          "require",
 			PostgresConnectTimeoutSec: 10,
@@ -1085,7 +1085,7 @@ func TestConfig_ReplicaDSN_ExtendedCases(t *testing.T) {
 		assert.Contains(t, dsn, "host=replica-host")
 		assert.Contains(t, dsn, "port=5432")
 		assert.Contains(t, dsn, "user=matcher")
-		assert.Contains(t, dsn, "password=secret")
+		assert.Contains(t, dsn, "password=pr0d-s3cure-p@ss!")
 		assert.Contains(t, dsn, "dbname=matcher_db")
 		assert.Contains(t, dsn, "sslmode=require")
 	})
@@ -1123,7 +1123,7 @@ func TestConfig_ReplicaDSNMasked(t *testing.T) {
 			PrimaryDBHost:     "primary-host",
 			PrimaryDBPort:     "5432",
 			PrimaryDBUser:     "matcher",
-			PrimaryDBPassword: "secret",
+			PrimaryDBPassword: "pr0d-s3cure-p@ss!",
 			PrimaryDBName:     "matcher_db",
 			PrimaryDBSSLMode:  "require",
 			ReplicaDBHost:     "",
@@ -1142,7 +1142,7 @@ func TestConfig_ReplicaDSNMasked(t *testing.T) {
 			PrimaryDBHost:     "primary-host",
 			PrimaryDBPort:     "5432",
 			PrimaryDBUser:     "matcher",
-			PrimaryDBPassword: "secret",
+			PrimaryDBPassword: "pr0d-s3cure-p@ss!",
 			PrimaryDBName:     "matcher_db",
 			PrimaryDBSSLMode:  "require",
 			ReplicaDBHost:     "replica-host",
@@ -1676,7 +1676,7 @@ func TestConfig_ReplicaDSNMasked_PartialFallbacks(t *testing.T) {
 			PrimaryDBHost:     "primary-host",
 			PrimaryDBPort:     "5432",
 			PrimaryDBUser:     "matcher",
-			PrimaryDBPassword: "secret",
+			PrimaryDBPassword: "pr0d-s3cure-p@ss!",
 			PrimaryDBName:     "matcher_db",
 			PrimaryDBSSLMode:  "require",
 			ReplicaDBHost:     "replica-host",
@@ -1697,7 +1697,7 @@ func TestConfig_ReplicaDSNMasked_PartialFallbacks(t *testing.T) {
 			PrimaryDBHost:     "primary-host",
 			PrimaryDBPort:     "5432",
 			PrimaryDBUser:     "matcher",
-			PrimaryDBPassword: "secret",
+			PrimaryDBPassword: "pr0d-s3cure-p@ss!",
 			PrimaryDBName:     "matcher_db",
 			PrimaryDBSSLMode:  "require",
 			ReplicaDBHost:     "replica-host",
@@ -1716,7 +1716,7 @@ func TestConfig_ReplicaDSNMasked_PartialFallbacks(t *testing.T) {
 			PrimaryDBHost:     "primary-host",
 			PrimaryDBPort:     "5432",
 			PrimaryDBUser:     "matcher",
-			PrimaryDBPassword: "secret",
+			PrimaryDBPassword: "pr0d-s3cure-p@ss!",
 			PrimaryDBName:     "matcher_db",
 			PrimaryDBSSLMode:  "require",
 			ReplicaDBHost:     "replica-host",
@@ -1735,7 +1735,7 @@ func TestConfig_ReplicaDSNMasked_PartialFallbacks(t *testing.T) {
 			PrimaryDBHost:     "primary-host",
 			PrimaryDBPort:     "5432",
 			PrimaryDBUser:     "matcher",
-			PrimaryDBPassword: "secret",
+			PrimaryDBPassword: "pr0d-s3cure-p@ss!",
 			PrimaryDBName:     "matcher_db",
 			PrimaryDBSSLMode:  "require",
 			ReplicaDBHost:     "replica-host",
@@ -1754,7 +1754,7 @@ func TestConfig_ReplicaDSNMasked_PartialFallbacks(t *testing.T) {
 			PrimaryDBHost:     "primary-host",
 			PrimaryDBPort:     "5432",
 			PrimaryDBUser:     "matcher",
-			PrimaryDBPassword: "secret",
+			PrimaryDBPassword: "pr0d-s3cure-p@ss!",
 			PrimaryDBName:     "matcher_db",
 			PrimaryDBSSLMode:  "require",
 			ReplicaDBHost:     "replica-host",
@@ -2025,7 +2025,7 @@ func TestConfig_RabbitMQDSN_EdgeCases(t *testing.T) {
 			RabbitMQHost:     "rabbitmq.example.com",
 			RabbitMQPort:     "5671",
 			RabbitMQUser:     "matcher",
-			RabbitMQPassword: "secret",
+			RabbitMQPassword: "rmq-pr0d-s3cure!",
 			RabbitMQVHost:    "/production",
 		})
 
@@ -2106,7 +2106,7 @@ func TestConfig_ProductionTLSValidation(t *testing.T) {
 		cfg := buildConfig(flatConfig{
 			EnvName:                  "production",
 			DefaultTenantID:          validTenantID,
-			PrimaryDBPassword:        "secret",
+			PrimaryDBPassword:        "pr0d-s3cure-p@ss!",
 			PrimaryDBSSLMode:         "require",
 			RedisTLS:                 true,
 			RedisHost:                "redis.example.com",
@@ -2138,7 +2138,7 @@ func TestConfig_ProductionTLSValidation(t *testing.T) {
 		cfg := buildConfig(flatConfig{
 			EnvName:                  "production",
 			DefaultTenantID:          validTenantID,
-			PrimaryDBPassword:        "secret",
+			PrimaryDBPassword:        "pr0d-s3cure-p@ss!",
 			PrimaryDBSSLMode:         "require",
 			RedisTLS:                 true,
 			RedisHost:                "redis.example.com",
@@ -2182,7 +2182,7 @@ func TestConfig_AuthHostAndSecretValidation(t *testing.T) {
 			LogLevel:                 "info",
 			AuthEnabled:              true,
 			AuthHost:                 "",
-			AuthTokenSecret:          "secret",
+			AuthTokenSecret:          "jwt-pr0d-t0ken-s3cret!",
 			RateLimitMax:             100,
 			RateLimitExpirySec:       60,
 			ExportRateLimitMax:       10,
@@ -2228,7 +2228,7 @@ func TestConfig_AuthHostAndSecretValidation(t *testing.T) {
 			LogLevel:                 "info",
 			AuthEnabled:              true,
 			AuthHost:                 "   ",
-			AuthTokenSecret:          "secret",
+			AuthTokenSecret:          "jwt-pr0d-t0ken-s3cret!",
 			RateLimitMax:             100,
 			RateLimitExpirySec:       60,
 			ExportRateLimitMax:       10,
@@ -2275,7 +2275,7 @@ func TestConfig_ProductionCORSWildcard(t *testing.T) {
 		cfg := buildConfig(flatConfig{
 			EnvName:               "production",
 			DefaultTenantID:       validTenantID,
-			PrimaryDBPassword:     "secret",
+			PrimaryDBPassword:     "pr0d-s3cure-p@ss!",
 			PrimaryDBSSLMode:      "require",
 			RedisTLS:              true,
 			RabbitMQURI:           "amqps",
@@ -2301,7 +2301,7 @@ func TestConfig_ProductionCORSWildcard(t *testing.T) {
 		cfg := buildConfig(flatConfig{
 			EnvName:               "production",
 			DefaultTenantID:       validTenantID,
-			PrimaryDBPassword:     "secret",
+			PrimaryDBPassword:     "pr0d-s3cure-p@ss!",
 			PrimaryDBSSLMode:      "require",
 			RedisTLS:              true,
 			RabbitMQURI:           "amqps",

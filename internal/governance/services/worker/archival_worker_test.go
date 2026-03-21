@@ -14,6 +14,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/alicebob/miniredis/v2"
+	"github.com/bxcodec/dbresolver/v2"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
@@ -67,7 +68,10 @@ func setupTestDeps(t *testing.T) *testDeps {
 	srv := miniredis.RunT(t)
 	redisClient := redis.NewClient(&redis.Options{Addr: srv.Addr()})
 	conn := infraTestutil.NewRedisClientWithMock(redisClient)
-	provider := &infraTestutil.MockInfrastructureProvider{RedisConn: conn}
+	provider := &infraTestutil.MockInfrastructureProvider{
+		RedisConn:    conn,
+		PostgresConn: infraTestutil.NewClientWithResolver(dbresolver.New(dbresolver.WithPrimaryDBs(db))),
+	}
 
 	// Create partition manager with sqlmock db.
 	// No pre-seeded expectations; tests that use partition manager operations
@@ -316,6 +320,29 @@ func TestArchivalWorker_UpdateRuntimeConfig_WhileRunning_ReturnsError(t *testing
 	err = w.UpdateRuntimeConfig(ArchivalWorkerConfig{Interval: time.Hour})
 	require.ErrorIs(t, err, ErrRuntimeConfigUpdateWhileRunning)
 	require.NoError(t, w.Stop())
+}
+
+func TestArchivalWorker_UpdateRuntimeStorage_WhileStopped_SwapsClient(t *testing.T) {
+	t.Parallel()
+
+	deps := setupTestDeps(t)
+	defer deps.ctrl.Finish()
+
+	w, err := NewArchivalWorker(
+		deps.archiveRepo,
+		deps.partitionMgr,
+		deps.storage,
+		deps.db,
+		deps.provider,
+		deps.cfg,
+		deps.logger,
+	)
+	require.NoError(t, err)
+
+	replacement := sharedPortMocks.NewMockObjectStorageClient(deps.ctrl)
+
+	require.NoError(t, w.UpdateRuntimeStorage(replacement))
+	assert.Same(t, replacement, w.storage)
 }
 
 func TestArchivalWorker_StopWithoutStart(t *testing.T) {

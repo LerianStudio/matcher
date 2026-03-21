@@ -5,19 +5,21 @@
 # Define the root directory of the project
 MATCHER_ROOT := $(shell pwd)
 
-# Load environment variables from config/.env if it exists.
-# These are exported for docker-compose, migration, and dev-server targets.
 # Test targets use CLEAN_ENV to unset the full Matcher config env surface so
-# viper-backed tests are not polluted by host or local config values.
+# tests are not polluted by host environment values.
+CONFIG_ENV_KEYS := $(shell sed -n 's/^[[:space:]]*"\([A-Z0-9_]*\)",/\1/p' internal/bootstrap/config_test_helpers_test.go 2>/dev/null)
+MATCHER_OVERRIDE_KEYS := $(shell sed -n 's/^[[:space:]]*"\(MATCHER_[A-Z0-9_]*\)",/\1/p' internal/bootstrap/config_override_env_keys_test.go 2>/dev/null)
+TEST_ENV_KEYS := $(CONFIG_ENV_KEYS)
+CLEAN_ENV := env $(foreach v,$(TEST_ENV_KEYS),-u $(v)) $(foreach v,$(MATCHER_OVERRIDE_KEYS),-u $(v))
+
+# Load environment variables from config/.env if it exists.
+# This is optional — all defaults are baked into the binary.
+# Create config/.env only when you need to override defaults for local dev.
 -include config/.env
 ifneq ("$(wildcard config/.env)","")
 ENV_VARS := $(shell sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' config/.env)
-export $(ENV_VARS)
+$(foreach v,$(ENV_VARS),$(eval export $(v)))
 endif
-CONFIG_ENV_KEYS := $(shell sed -n 's/^[[:space:]]*"\([A-Z0-9_]*\)",/\1/p' internal/bootstrap/config_test_helpers_test.go 2>/dev/null)
-MATCHER_OVERRIDE_KEYS := $(shell sed -n 's/^[[:space:]]*"\(MATCHER_[A-Z0-9_]*\)",/\1/p' internal/bootstrap/config_override_env_keys_test.go 2>/dev/null)
-TEST_ENV_KEYS := $(CONFIG_ENV_KEYS) CONFIG_FILE_PATH
-CLEAN_ENV := env $(foreach v,$(TEST_ENV_KEYS),-u $(v)) $(foreach v,$(MATCHER_OVERRIDE_KEYS),-u $(v))
 
 # Directory configuration
 CONFIG_DIR := ./config
@@ -116,11 +118,6 @@ help:
 	@echo "  make tidy                        - Clean go module dependencies"
 	@echo ""
 	@echo ""
-	@echo "Setup Commands:"
-	@echo "  make set-env                     - Copy .env.example to .env"
-	@echo "  make clear-envs                  - Remove .env file"
-	@echo ""
-	@echo ""
 	@echo "Code Quality Commands:"
 	@echo "  make lint                        - Run golangci-lint"
 	@echo "  make lint-fix                    - Run golangci-lint with auto-fix"
@@ -207,29 +204,6 @@ tidy:
 	@go mod tidy
 	@cd tools && go mod tidy
 	@echo "[ok] Go modules tidied successfully"
-
-#-------------------------------------------------------
-# Setup Commands
-#-------------------------------------------------------
-
-.PHONY: set-env clear-envs
-
-set-env:
-	$(call print_title,Setting up environment files)
-	@if [ -f "$(CONFIG_DIR)/.env.example" ] && [ ! -f "$(CONFIG_DIR)/.env" ]; then \
-		cp $(CONFIG_DIR)/.env.example $(CONFIG_DIR)/.env; \
-		echo "Created $(CONFIG_DIR)/.env from .env.example"; \
-	elif [ -f "$(CONFIG_DIR)/.env" ]; then \
-		echo "$(CONFIG_DIR)/.env already exists, skipping"; \
-	else \
-		echo "Warning: $(CONFIG_DIR)/.env.example not found"; \
-	fi
-	@echo "[ok] Environment setup completed"
-
-clear-envs:
-	$(call print_title,Removing environment files)
-	@rm -f $(CONFIG_DIR)/.env
-	@echo "[ok] Environment files removed"
 
 #-------------------------------------------------------
 # Code Quality Commands
@@ -325,7 +299,6 @@ check-generated-artifacts:
 		diff -ru "$$tmp_dir/swagger-before" docs/swagger || true; \
 		exit 1; \
 	fi; \
-	$(CLEAN_ENV) go test -tags unit ./internal/bootstrap -run 'TestLoadConfigFromYAML_ExampleFile_LoadsSuccessfully' >/dev/null; \
 	echo "[ok] Generated artifacts are up to date"
 
 check-coverage: test

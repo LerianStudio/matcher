@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"sync"
 	"time"
 
@@ -32,11 +33,12 @@ const DefaultMetricsCollectionInterval = 15 * time.Second
 // to OpenTelemetry. It tracks open, idle, and in-use connections, as well as
 // wait counts, wait durations, and connection closures due to pool limits.
 type DBMetricsCollector struct {
-	db       dbresolver.DB
-	meter    metric.Meter
-	interval time.Duration
-	stopCh   chan struct{}
-	stopOnce sync.Once
+	db        dbresolver.DB
+	currentDB func(context.Context) (dbresolver.DB, error)
+	meter     metric.Meter
+	interval  time.Duration
+	stopCh    chan struct{}
+	stopOnce  sync.Once
 
 	// Gauges for connection pool stats
 	openConns     metric.Int64Gauge
@@ -53,6 +55,7 @@ type DBMetricsCollector struct {
 	lastMaxIdleClosed int64
 	lastMaxLifeClosed int64
 	lastStatsMu       sync.Mutex
+	lastResolverID    uintptr
 }
 
 // NewDBMetricsCollector creates a new collector for the given PostgreSQL connection.
@@ -94,6 +97,16 @@ func NewDBMetricsCollector(
 	}
 
 	return collector, nil
+}
+
+// SetResolverGetter configures a resolver getter used to refresh the active
+// database handle before each collection cycle.
+func (collector *DBMetricsCollector) SetResolverGetter(getter func(context.Context) (dbresolver.DB, error)) {
+	if collector == nil {
+		return
+	}
+
+	collector.currentDB = getter
 }
 
 func (collector *DBMetricsCollector) initMetrics() error {
@@ -200,6 +213,25 @@ func (collector *DBMetricsCollector) Stop() {
 // For cumulative counters (WaitCount, WaitDuration, MaxIdleClosed, MaxLifetimeClosed),
 // we calculate deltas to avoid double-counting since sql.DBStats returns totals.
 func (collector *DBMetricsCollector) collect(ctx context.Context) {
+	if collector.currentDB != nil {
+		db, err := collector.currentDB(ctx)
+		if err == nil && db != nil {
+			collector.lastStatsMu.Lock()
+
+			currentID := resolverIdentity(db)
+			if collector.lastResolverID != 0 && collector.lastResolverID != currentID {
+				collector.lastWaitCount = 0
+				collector.lastWaitDuration = 0
+				collector.lastMaxIdleClosed = 0
+				collector.lastMaxLifeClosed = 0
+			}
+
+			collector.lastResolverID = currentID
+			collector.lastStatsMu.Unlock()
+			collector.db = db
+		}
+	}
+
 	if collector.db == nil {
 		return
 	}
@@ -244,4 +276,13 @@ func (collector *DBMetricsCollector) collect(ctx context.Context) {
 	}
 
 	collector.lastMaxLifeClosed = stats.MaxLifetimeClosed
+}
+
+func resolverIdentity(db dbresolver.DB) uintptr {
+	value := reflect.ValueOf(db)
+	if value.Kind() == reflect.Pointer {
+		return value.Pointer()
+	}
+
+	return 0
 }

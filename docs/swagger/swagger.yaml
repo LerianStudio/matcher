@@ -26,6 +26,10 @@ tags:
     name: Governance
   - description: Service health and readiness endpoints for Kubernetes probes
     name: Health
+  - description: Runtime configuration management - view, patch, and audit system configs
+    name: System Configs
+  - description: Tenant-scoped settings management - view, patch, and audit system settings
+    name: System Settings
 definitions:
   github_com_LerianStudio_lib-commons_v4_commons_net_http.CursorPagination:
     properties:
@@ -2574,132 +2578,6 @@ definitions:
           type: string
         type: object
     type: object
-  internal_bootstrap.ConfigChange:
-    properties:
-      key:
-        type: string
-      newValue: {}
-      oldValue: {}
-    type: object
-  internal_bootstrap.ConfigChangeRejection:
-    properties:
-      key:
-        type: string
-      reason:
-        type: string
-      value: {}
-    type: object
-  internal_bootstrap.ConfigChangeResult:
-    properties:
-      hotReloaded:
-        type: boolean
-      key:
-        type: string
-      newValue: {}
-      oldValue: {}
-    type: object
-  internal_bootstrap.ConfigFieldSchema:
-    description: Schema metadata for a single config field
-    properties:
-      constraints:
-        description: Validation constraints (e.g., "min:1", "max:10000")
-        example:
-        - min:1
-        - max:10000
-        items:
-          type: string
-        type: array
-      currentValue:
-        description: Current effective value (redacted for secrets), serialized as
-          a string.
-        example: "200"
-        type: string
-      defaultValue:
-        description: Default value serialized as a string for a stable OpenAPI contract.
-        example: "100"
-        type: string
-      description:
-        description: Human-readable description
-        example: Maximum requests per rate limit window
-        type: string
-      envOverride:
-        description: Whether the field is currently overridden by an env var
-        example: false
-        type: boolean
-      envVar:
-        description: Name of the corresponding environment variable
-        example: RATE_LIMIT_MAX
-        type: string
-      hotReloadable:
-        description: Whether changes take effect without restart
-        example: true
-        type: boolean
-      key:
-        description: Dot-notation key (e.g., "rate_limit.max")
-        example: rate_limit.max
-        type: string
-      label:
-        description: Human-readable label
-        example: Rate Limit Max
-        type: string
-      section:
-        description: Logical section for UI grouping
-        example: rate_limit
-        type: string
-      type:
-        description: 'Data type: string, int, bool'
-        enum:
-        - string
-        - int
-        - bool
-        example: int
-        type: string
-    type: object
-  internal_bootstrap.ConfigHistoryEntry:
-    description: A historical configuration change event
-    properties:
-      actor:
-        description: Actor who made the change (user ID or "system")
-        example: system
-        type: string
-      changeType:
-        description: 'Type of change: "reloaded", "updated", "startup"'
-        example: updated
-        type: string
-      changes:
-        description: Changed fields with old/new values
-        items:
-          $ref: '#/definitions/internal_bootstrap.ConfigChange'
-        type: array
-      timestamp:
-        description: Timestamp of the change
-        example: "2025-07-15T10:30:00Z"
-        type: string
-    type: object
-  internal_bootstrap.ConfigHistoryResponse:
-    description: Configuration change history
-    properties:
-      items:
-        description: History entries ordered newest-first
-        items:
-          $ref: '#/definitions/internal_bootstrap.ConfigHistoryEntry'
-        type: array
-    type: object
-  internal_bootstrap.ConfigSchemaResponse:
-    description: Configuration schema grouped by section
-    properties:
-      sections:
-        additionalProperties:
-          items:
-            $ref: '#/definitions/internal_bootstrap.ConfigFieldSchema'
-          type: array
-        description: Sections maps section names to their field schemas
-        type: object
-      totalFields:
-        description: Total number of managed fields
-        example: 56
-        type: integer
-    type: object
   internal_bootstrap.DependencyChecks:
     description: Individual dependency health status
     properties:
@@ -2744,30 +2622,6 @@ definitions:
         example: ok
         type: string
     type: object
-  internal_bootstrap.GetConfigResponse:
-    description: Current system configuration with metadata
-    properties:
-      config:
-        additionalProperties: {}
-        description: Config sections with redacted secrets
-        type: object
-      envOverrides:
-        description: List of keys currently overridden by environment variables
-        example:
-        - postgres.primary_password
-        - auth.token_secret
-        items:
-          type: string
-        type: array
-      lastReloadAt:
-        description: Timestamp of last successful reload
-        example: "2025-07-15T10:30:00Z"
-        type: string
-      version:
-        description: Current config version (increments on each reload/update)
-        example: 3
-        type: integer
-    type: object
   internal_bootstrap.ReadinessResponse:
     description: Service readiness status with optional dependency checks
     properties:
@@ -2784,55 +2638,6 @@ definitions:
         - degraded
         example: ok
         type: string
-    type: object
-  internal_bootstrap.ReloadConfigResponse:
-    description: Result of a configuration reload operation
-    properties:
-      changes:
-        description: Details of each changed field
-        items:
-          $ref: '#/definitions/internal_bootstrap.ConfigChange'
-        type: array
-      changesDetected:
-        description: Number of changed fields detected
-        example: 2
-        type: integer
-      reloadedAt:
-        description: Timestamp of the reload
-        example: "2025-07-15T10:35:00Z"
-        type: string
-      version:
-        description: New config version after reload
-        example: 5
-        type: integer
-    type: object
-  internal_bootstrap.UpdateConfigRequest:
-    description: Request to update configuration values
-    properties:
-      changes:
-        additionalProperties: {}
-        description: Map of dotted keys to new values
-        type: object
-    required:
-    - changes
-    type: object
-  internal_bootstrap.UpdateConfigResponse:
-    description: Result of a configuration update operation
-    properties:
-      applied:
-        description: Successfully applied changes (secret values are redacted)
-        items:
-          $ref: '#/definitions/internal_bootstrap.ConfigChangeResult'
-        type: array
-      rejected:
-        description: Changes that were rejected (immutable keys, validation failures)
-        items:
-          $ref: '#/definitions/internal_bootstrap.ConfigChangeRejection'
-        type: array
-      version:
-        description: New config version after update
-        example: 4
-        type: integer
     type: object
   internal_configuration_adapters_http.ErrorResponse:
     properties:
@@ -3316,6 +3121,123 @@ definitions:
         example: SUCCEEDED
         type: string
     type: object
+  pkg_systemplane_adapters_http_fiber.ConfigsResponse:
+    properties:
+      revision:
+        type: integer
+      values:
+        additionalProperties:
+          $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.EffectiveValueDTO'
+        type: object
+    type: object
+  pkg_systemplane_adapters_http_fiber.EffectiveValueDTO:
+    properties:
+      default: {}
+      key:
+        type: string
+      redacted:
+        type: boolean
+      source:
+        type: string
+      value: {}
+    type: object
+  pkg_systemplane_adapters_http_fiber.ErrorResponse:
+    properties:
+      code:
+        type: string
+      message:
+        type: string
+    type: object
+  pkg_systemplane_adapters_http_fiber.HistoryEntryDTO:
+    properties:
+      actorId:
+        type: string
+      changedAt:
+        description: RFC3339
+        type: string
+      key:
+        type: string
+      newValue: {}
+      oldValue: {}
+      revision:
+        type: integer
+      scope:
+        type: string
+      subjectId:
+        type: string
+    type: object
+  pkg_systemplane_adapters_http_fiber.HistoryResponse:
+    properties:
+      entries:
+        items:
+          $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.HistoryEntryDTO'
+        type: array
+    type: object
+  pkg_systemplane_adapters_http_fiber.PatchConfigsRequest:
+    properties:
+      values:
+        additionalProperties: {}
+        description: null value = reset to default
+        type: object
+    type: object
+  pkg_systemplane_adapters_http_fiber.PatchResponse:
+    properties:
+      revision:
+        type: integer
+    type: object
+  pkg_systemplane_adapters_http_fiber.PatchSettingsRequest:
+    properties:
+      values:
+        additionalProperties: {}
+        type: object
+    type: object
+  pkg_systemplane_adapters_http_fiber.ReloadResponse:
+    properties:
+      status:
+        type: string
+    type: object
+  pkg_systemplane_adapters_http_fiber.SchemaEntryDTO:
+    properties:
+      allowedScopes:
+        items:
+          type: string
+        type: array
+      applyBehavior:
+        type: string
+      defaultValue: {}
+      description:
+        type: string
+      group:
+        type: string
+      key:
+        type: string
+      kind:
+        type: string
+      mutableAtRuntime:
+        type: boolean
+      secret:
+        type: boolean
+      valueType:
+        type: string
+    type: object
+  pkg_systemplane_adapters_http_fiber.SchemaResponse:
+    properties:
+      keys:
+        items:
+          $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.SchemaEntryDTO'
+        type: array
+    type: object
+  pkg_systemplane_adapters_http_fiber.SettingsResponse:
+    properties:
+      revision:
+        type: integer
+      scope:
+        type: string
+      values:
+        additionalProperties:
+          $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.EffectiveValueDTO'
+        type: object
+    type: object
 info:
   contact:
     email: support@lerian.studio
@@ -3369,7 +3291,7 @@ paths:
       summary: Readiness check
       tags:
       - Health
-  /v1/config/contexts:
+  /v1/contexts:
     get:
       description: Returns a cursor-paginated list of reconciliation contexts, optionally
         filtered by type and status.
@@ -3483,7 +3405,7 @@ paths:
       summary: Create a reconciliation context
       tags:
       - Configuration Contexts
-  /v1/config/contexts/{contextId}:
+  /v1/contexts/{contextId}:
     delete:
       description: Removes a reconciliation context by ID.
       operationId: deleteContext
@@ -3630,7 +3552,7 @@ paths:
       summary: Update a reconciliation context
       tags:
       - Configuration Contexts
-  /v1/config/contexts/{contextId}/clone:
+  /v1/contexts/{contextId}/clone:
     post:
       consumes:
       - application/json
@@ -3690,7 +3612,128 @@ paths:
       summary: Clone a reconciliation context
       tags:
       - Configuration Contexts
-  /v1/config/contexts/{contextId}/rules:
+  /v1/contexts/{contextId}/export-jobs:
+    get:
+      description: Lists export jobs for a specific reconciliation context.
+      operationId: listExportJobsByContext
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Context ID
+        format: uuid
+        in: path
+        name: contextId
+        required: true
+        type: string
+      - description: Pagination cursor from previous response
+        in: query
+        name: cursor
+        type: string
+      - default: 20
+        description: Maximum number of records to return
+        in: query
+        maximum: 200
+        minimum: 1
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_reporting_adapters_http.ExportJobListResponse'
+        "400":
+          description: Invalid query parameters
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+        "404":
+          description: Context not found
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List export jobs by context
+      tags:
+      - Export Jobs
+    post:
+      consumes:
+      - application/json
+      description: Creates an async export job for large report exports (CSV, JSON,
+        XML).
+      operationId: createExportJob
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Context ID
+        format: uuid
+        in: path
+        name: contextId
+        required: true
+        type: string
+      - description: Export job parameters
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_reporting_adapters_http.CreateExportJobRequest'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/internal_reporting_adapters_http.CreateExportJobResponse'
+        "400":
+          description: Invalid request payload
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+        "404":
+          description: Context not found
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+        "409":
+          description: 'Conflict: duplicate resource or idempotency key in progress'
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+        "503":
+          description: Export worker disabled
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create an export job
+      tags:
+      - Export Jobs
+  /v1/contexts/{contextId}/rules:
     get:
       description: Returns a cursor-paginated list of match rules under a context,
         optionally filtered by type.
@@ -3815,7 +3858,7 @@ paths:
       summary: Create a match rule
       tags:
       - Configuration Match Rules
-  /v1/config/contexts/{contextId}/rules/{ruleId}:
+  /v1/contexts/{contextId}/rules/{ruleId}:
     delete:
       description: Removes a match rule by ID.
       operationId: deleteMatchRule
@@ -3980,7 +4023,7 @@ paths:
       summary: Update a match rule
       tags:
       - Configuration Match Rules
-  /v1/config/contexts/{contextId}/rules/reorder:
+  /v1/contexts/{contextId}/rules/reorder:
     post:
       consumes:
       - application/json
@@ -4033,7 +4076,7 @@ paths:
       summary: Reorder match rules
       tags:
       - Configuration Match Rules
-  /v1/config/contexts/{contextId}/schedules:
+  /v1/contexts/{contextId}/schedules:
     get:
       description: Returns all schedules for a reconciliation context.
       operationId: listSchedules
@@ -4140,7 +4183,7 @@ paths:
       summary: Create a reconciliation schedule
       tags:
       - Configuration Schedules
-  /v1/config/contexts/{contextId}/schedules/{scheduleId}:
+  /v1/contexts/{contextId}/schedules/{scheduleId}:
     delete:
       description: Removes a reconciliation schedule by ID.
       operationId: deleteSchedule
@@ -4305,7 +4348,7 @@ paths:
       summary: Update a reconciliation schedule
       tags:
       - Configuration Schedules
-  /v1/config/contexts/{contextId}/sources:
+  /v1/contexts/{contextId}/sources:
     get:
       description: Returns a cursor-paginated list of reconciliation sources under
         a context, optionally filtered by type.
@@ -4432,7 +4475,7 @@ paths:
       summary: Create a reconciliation source
       tags:
       - Configuration Sources
-  /v1/config/contexts/{contextId}/sources/{sourceId}:
+  /v1/contexts/{contextId}/sources/{sourceId}:
     delete:
       description: Removes a reconciliation source by ID.
       operationId: deleteSource
@@ -4597,7 +4640,7 @@ paths:
       summary: Update a reconciliation source
       tags:
       - Configuration Sources
-  /v1/config/contexts/{contextId}/sources/{sourceId}/field-maps:
+  /v1/contexts/{contextId}/sources/{sourceId}/field-maps:
     get:
       description: Returns the field map for a source within a context.
       operationId: getFieldMapBySource
@@ -4714,529 +4757,6 @@ paths:
       summary: Create a field map
       tags:
       - Configuration Field Maps
-  /v1/config/fee-schedules:
-    get:
-      description: Returns fee schedules for the tenant. Results may be capped by
-        the "limit" query parameter (default 20, max 200).
-      operationId: listFeeSchedules
-      parameters:
-      - description: Request ID for tracing
-        in: header
-        name: X-Request-Id
-        type: string
-      - default: 20
-        description: Maximum number of records to return
-        in: query
-        maximum: 200
-        minimum: 1
-        name: limit
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: List of fee schedules
-          schema:
-            items:
-              $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeScheduleResponse'
-            type: array
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: List fee schedules
-      tags:
-      - Configuration Fee Schedules
-    post:
-      consumes:
-      - application/json
-      description: Creates a new fee schedule for transaction fee calculation.
-      operationId: createFeeSchedule
-      parameters:
-      - description: Request ID for tracing
-        in: header
-        name: X-Request-Id
-        type: string
-      - description: Idempotency key for safe retries
-        in: header
-        name: X-Idempotency-Key
-        type: string
-      - description: Fee schedule creation payload
-        in: body
-        name: feeSchedule
-        required: true
-        schema:
-          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateFeeScheduleRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Successfully created fee schedule
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeScheduleResponse'
-        "400":
-          description: Invalid request payload
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "409":
-          description: 'Conflict: duplicate resource or idempotency key in progress'
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Create a fee schedule
-      tags:
-      - Configuration Fee Schedules
-  /v1/config/fee-schedules/{scheduleId}:
-    delete:
-      description: Removes a fee schedule by ID.
-      operationId: deleteFeeSchedule
-      parameters:
-      - description: Request ID for tracing
-        in: header
-        name: X-Request-Id
-        type: string
-      - description: Schedule ID
-        format: uuid
-        in: path
-        name: scheduleId
-        required: true
-        type: string
-      responses:
-        "204":
-          description: Fee schedule successfully deleted
-        "400":
-          description: Invalid schedule ID format
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "404":
-          description: Fee schedule not found
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Delete a fee schedule
-      tags:
-      - Configuration Fee Schedules
-    get:
-      description: Returns a fee schedule by ID.
-      operationId: getFeeSchedule
-      parameters:
-      - description: Request ID for tracing
-        in: header
-        name: X-Request-Id
-        type: string
-      - description: Schedule ID
-        format: uuid
-        in: path
-        name: scheduleId
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: Successfully retrieved fee schedule
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeScheduleResponse'
-        "400":
-          description: Invalid schedule ID format
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "404":
-          description: Fee schedule not found
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Get a fee schedule
-      tags:
-      - Configuration Fee Schedules
-    patch:
-      consumes:
-      - application/json
-      description: Updates fields on a fee schedule by ID.
-      operationId: updateFeeSchedule
-      parameters:
-      - description: Request ID for tracing
-        in: header
-        name: X-Request-Id
-        type: string
-      - description: Idempotency key for safe retries
-        in: header
-        name: X-Idempotency-Key
-        type: string
-      - description: Schedule ID
-        format: uuid
-        in: path
-        name: scheduleId
-        required: true
-        type: string
-      - description: Fee schedule updates
-        in: body
-        name: feeSchedule
-        required: true
-        schema:
-          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.UpdateFeeScheduleRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: Successfully updated fee schedule
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeScheduleResponse'
-        "400":
-          description: Invalid request payload
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "404":
-          description: Fee schedule not found
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "409":
-          description: 'Conflict: duplicate resource or idempotency key in progress'
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Update a fee schedule
-      tags:
-      - Configuration Fee Schedules
-  /v1/config/fee-schedules/{scheduleId}/simulate:
-    post:
-      consumes:
-      - application/json
-      description: Calculates fees for a given gross amount using a specific fee schedule.
-      operationId: simulateFeeSchedule
-      parameters:
-      - description: Request ID for tracing
-        in: header
-        name: X-Request-Id
-        type: string
-      - description: Schedule ID
-        format: uuid
-        in: path
-        name: scheduleId
-        required: true
-        type: string
-      - description: Simulation parameters
-        in: body
-        name: simulate
-        required: true
-        schema:
-          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.SimulateFeeRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: Simulation result
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.SimulateFeeResponse'
-        "400":
-          description: Invalid request payload
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "404":
-          description: Fee schedule not found
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Simulate fee calculation
-      tags:
-      - Configuration Fee Schedules
-  /v1/config/field-maps/{fieldMapId}:
-    delete:
-      description: Removes a field map by ID.
-      operationId: deleteFieldMap
-      parameters:
-      - description: Request ID for tracing
-        in: header
-        name: X-Request-Id
-        type: string
-      - description: Field map ID
-        format: uuid
-        in: path
-        name: fieldMapId
-        required: true
-        type: string
-      responses:
-        "204":
-          description: Field map successfully deleted
-        "400":
-          description: Invalid field map ID format
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "404":
-          description: Field map not found
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Delete a field map
-      tags:
-      - Configuration Field Maps
-    patch:
-      consumes:
-      - application/json
-      description: Updates fields on a field map by ID.
-      operationId: updateFieldMap
-      parameters:
-      - description: Request ID for tracing
-        in: header
-        name: X-Request-Id
-        type: string
-      - description: Field map ID
-        format: uuid
-        in: path
-        name: fieldMapId
-        required: true
-        type: string
-      - description: Field map updates
-        in: body
-        name: fieldMap
-        required: true
-        schema:
-          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.UpdateFieldMapRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: Successfully updated field map
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldMapResponse'
-        "400":
-          description: Invalid request payload
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "404":
-          description: Field map not found
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "409":
-          description: 'Conflict: duplicate resource or idempotency key in progress'
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Update a field map
-      tags:
-      - Configuration Field Maps
-  /v1/contexts/{contextId}/export-jobs:
-    get:
-      description: Lists export jobs for a specific reconciliation context.
-      operationId: listExportJobsByContext
-      parameters:
-      - description: Request ID for tracing
-        in: header
-        name: X-Request-Id
-        type: string
-      - description: Context ID
-        format: uuid
-        in: path
-        name: contextId
-        required: true
-        type: string
-      - description: Pagination cursor from previous response
-        in: query
-        name: cursor
-        type: string
-      - default: 20
-        description: Maximum number of records to return
-        in: query
-        maximum: 200
-        minimum: 1
-        name: limit
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_reporting_adapters_http.ExportJobListResponse'
-        "400":
-          description: Invalid query parameters
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
-        "404":
-          description: Context not found
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: List export jobs by context
-      tags:
-      - Export Jobs
-    post:
-      consumes:
-      - application/json
-      description: Creates an async export job for large report exports (CSV, JSON,
-        XML).
-      operationId: createExportJob
-      parameters:
-      - description: Request ID for tracing
-        in: header
-        name: X-Request-Id
-        type: string
-      - description: Context ID
-        format: uuid
-        in: path
-        name: contextId
-        required: true
-        type: string
-      - description: Export job parameters
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/internal_reporting_adapters_http.CreateExportJobRequest'
-      produces:
-      - application/json
-      responses:
-        "202":
-          description: Accepted
-          schema:
-            $ref: '#/definitions/internal_reporting_adapters_http.CreateExportJobResponse'
-        "400":
-          description: Invalid request payload
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
-        "404":
-          description: Context not found
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
-        "409":
-          description: 'Conflict: duplicate resource or idempotency key in progress'
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
-        "503":
-          description: Export worker disabled
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Create an export job
-      tags:
-      - Export Jobs
   /v1/discovery/connections:
     get:
       description: Returns all discovered Fetcher database connections.
@@ -6943,6 +6463,408 @@ paths:
       summary: Download export file
       tags:
       - Export Jobs
+  /v1/fee-schedules:
+    get:
+      description: Returns fee schedules for the tenant. Results may be capped by
+        the "limit" query parameter (default 20, max 200).
+      operationId: listFeeSchedules
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - default: 20
+        description: Maximum number of records to return
+        in: query
+        maximum: 200
+        minimum: 1
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of fee schedules
+          schema:
+            items:
+              $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeScheduleResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List fee schedules
+      tags:
+      - Configuration Fee Schedules
+    post:
+      consumes:
+      - application/json
+      description: Creates a new fee schedule for transaction fee calculation.
+      operationId: createFeeSchedule
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Idempotency key for safe retries
+        in: header
+        name: X-Idempotency-Key
+        type: string
+      - description: Fee schedule creation payload
+        in: body
+        name: feeSchedule
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateFeeScheduleRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Successfully created fee schedule
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeScheduleResponse'
+        "400":
+          description: Invalid request payload
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "409":
+          description: 'Conflict: duplicate resource or idempotency key in progress'
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a fee schedule
+      tags:
+      - Configuration Fee Schedules
+  /v1/fee-schedules/{scheduleId}:
+    delete:
+      description: Removes a fee schedule by ID.
+      operationId: deleteFeeSchedule
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Schedule ID
+        format: uuid
+        in: path
+        name: scheduleId
+        required: true
+        type: string
+      responses:
+        "204":
+          description: Fee schedule successfully deleted
+        "400":
+          description: Invalid schedule ID format
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "404":
+          description: Fee schedule not found
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a fee schedule
+      tags:
+      - Configuration Fee Schedules
+    get:
+      description: Returns a fee schedule by ID.
+      operationId: getFeeSchedule
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Schedule ID
+        format: uuid
+        in: path
+        name: scheduleId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully retrieved fee schedule
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeScheduleResponse'
+        "400":
+          description: Invalid schedule ID format
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "404":
+          description: Fee schedule not found
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a fee schedule
+      tags:
+      - Configuration Fee Schedules
+    patch:
+      consumes:
+      - application/json
+      description: Updates fields on a fee schedule by ID.
+      operationId: updateFeeSchedule
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Idempotency key for safe retries
+        in: header
+        name: X-Idempotency-Key
+        type: string
+      - description: Schedule ID
+        format: uuid
+        in: path
+        name: scheduleId
+        required: true
+        type: string
+      - description: Fee schedule updates
+        in: body
+        name: feeSchedule
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.UpdateFeeScheduleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully updated fee schedule
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeScheduleResponse'
+        "400":
+          description: Invalid request payload
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "404":
+          description: Fee schedule not found
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "409":
+          description: 'Conflict: duplicate resource or idempotency key in progress'
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a fee schedule
+      tags:
+      - Configuration Fee Schedules
+  /v1/fee-schedules/{scheduleId}/simulate:
+    post:
+      consumes:
+      - application/json
+      description: Calculates fees for a given gross amount using a specific fee schedule.
+      operationId: simulateFeeSchedule
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Schedule ID
+        format: uuid
+        in: path
+        name: scheduleId
+        required: true
+        type: string
+      - description: Simulation parameters
+        in: body
+        name: simulate
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.SimulateFeeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Simulation result
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.SimulateFeeResponse'
+        "400":
+          description: Invalid request payload
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "404":
+          description: Fee schedule not found
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Simulate fee calculation
+      tags:
+      - Configuration Fee Schedules
+  /v1/field-maps/{fieldMapId}:
+    delete:
+      description: Removes a field map by ID.
+      operationId: deleteFieldMap
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Field map ID
+        format: uuid
+        in: path
+        name: fieldMapId
+        required: true
+        type: string
+      responses:
+        "204":
+          description: Field map successfully deleted
+        "400":
+          description: Invalid field map ID format
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "404":
+          description: Field map not found
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a field map
+      tags:
+      - Configuration Field Maps
+    patch:
+      consumes:
+      - application/json
+      description: Updates fields on a field map by ID.
+      operationId: updateFieldMap
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Field map ID
+        format: uuid
+        in: path
+        name: fieldMapId
+        required: true
+        type: string
+      - description: Field map updates
+        in: body
+        name: fieldMap
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.UpdateFieldMapRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully updated field map
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldMapResponse'
+        "400":
+          description: Invalid request payload
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "404":
+          description: Field map not found
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "409":
+          description: 'Conflict: duplicate resource or idempotency key in progress'
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a field map
+      tags:
+      - Configuration Field Maps
   /v1/governance/actor-mappings/{actorId}:
     delete:
       description: Permanently removes an actor mapping for GDPR right-to-erasure
@@ -9693,13 +9615,12 @@ paths:
       summary: Export variance report
       tags:
       - Reporting
-  /v1/system/config:
+  /v1/system/configs:
     get:
       description: |-
-        Returns the current effective configuration values with secrets redacted.
-        Includes metadata: version, last reload timestamp, and env var overrides.
-        Route is only registered when AUTH_ENABLED=true at startup.
-      operationId: getSystemConfig
+        Returns all resolved configuration values with their source and redaction status.
+        Bootstrap-only keys (require restart) are included with their current effective value.
+      operationId: getSystemConfigs
       parameters:
       - description: Request ID for tracing
         in: header
@@ -9709,123 +9630,143 @@ paths:
       - application/json
       responses:
         "200":
-          description: OK
+          description: Resolved configuration values
           schema:
-            $ref: '#/definitions/internal_bootstrap.GetConfigResponse'
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ConfigsResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Get current configuration
+      summary: Get effective configs
       tags:
-      - System
+      - System Configs
     patch:
       consumes:
       - application/json
       description: |-
-        Apply runtime configuration changes. Changes are validated, written to
-        YAML, and hot-reloaded. Immutable keys (infrastructure-bound) are rejected.
-        Route is only registered when AUTH_ENABLED=true at startup.
-        Requires an initialized audit/history backend; failures can return runtime_apply_failed or audit_failed.
-      operationId: updateSystemConfig
+        Applies a batch of configuration mutations with optimistic concurrency control.
+        Pass the expected revision in the If-Match header (ETag format). A null JSON
+        value for any key resets it to its registered default.
+      operationId: patchSystemConfigs
       parameters:
       - description: Request ID for tracing
         in: header
         name: X-Request-Id
         type: string
-      - description: Configuration changes
+      - description: Expected revision for optimistic concurrency (e.g. \
+        in: header
+        name: If-Match
+        type: string
+      - description: Configuration values to update
         in: body
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_bootstrap.UpdateConfigRequest'
+          $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.PatchConfigsRequest'
       produces:
       - application/json
       responses:
         "200":
-          description: OK
+          description: New revision after successful write
           schema:
-            $ref: '#/definitions/internal_bootstrap.UpdateConfigResponse'
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.PatchResponse'
         "400":
-          description: Invalid request
+          description: Invalid request body or empty values
           schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
-        "422":
-          description: Validation failed
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+        "409":
+          description: Revision conflict
           schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Update configuration
+      summary: Patch config values
       tags:
-      - System
-  /v1/system/config/history:
+      - System Configs
+  /v1/system/configs/history:
     get:
       description: |-
-        Returns recent configuration changes with timestamps, actors, and diffs.
-        Route is only registered when AUTH_ENABLED=true at startup.
-        Requires an initialized audit/history backend.
+        Returns the change audit trail for configuration entries, ordered by revision.
+        Supports pagination via limit/offset and optional key filtering.
       operationId: getSystemConfigHistory
       parameters:
       - description: Request ID for tracing
         in: header
         name: X-Request-Id
         type: string
+      - description: Filter history by config key
+        in: query
+        name: key
+        type: string
+      - default: 50
+        description: Maximum number of entries to return
+        in: query
+        maximum: 100
+        minimum: 1
+        name: limit
+        type: integer
+      - default: 0
+        description: Number of entries to skip
+        in: query
+        minimum: 0
+        name: offset
+        type: integer
       produces:
       - application/json
       responses:
         "200":
-          description: OK
+          description: Configuration change history entries
           schema:
-            $ref: '#/definitions/internal_bootstrap.ConfigHistoryResponse'
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.HistoryResponse'
+        "400":
+          description: Invalid query parameters
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Get configuration change history
+      summary: Get config change history
       tags:
-      - System
-  /v1/system/config/reload:
+      - System Configs
+  /v1/system/configs/reload:
     post:
       description: |-
-        Re-reads the YAML configuration file, applies environment variable overlays,
-        validates the result, and atomically swaps the active config. Returns a diff
-        of detected changes.
-        Route is only registered when AUTH_ENABLED=true at startup.
-        Requires an initialized audit/history backend; failures can return runtime_apply_failed or audit_failed.
-      operationId: reloadSystemConfig
+        Triggers a full configuration resynchronization from the backing store.
+        Use after manual database changes or to force a cache refresh.
+      operationId: reloadSystemConfigs
       parameters:
       - description: Request ID for tracing
         in: header
@@ -9835,33 +9776,31 @@ paths:
       - application/json
       responses:
         "200":
-          description: OK
+          description: Reload acknowledged
           schema:
-            $ref: '#/definitions/internal_bootstrap.ReloadConfigResponse'
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ReloadResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
         "500":
-          description: Internal server error
+          description: Reload failed
           schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Force reload configuration from disk
+      summary: Reload configuration
       tags:
-      - System
-  /v1/system/config/schema:
+      - System Configs
+  /v1/system/configs/schema:
     get:
       description: |-
-        Returns field metadata for all YAML-managed configuration fields,
-        grouped by section for UI rendering. Includes key, type, default,
-        current value, hot-reloadability, env override status, and constraints.
-        Route is only registered when AUTH_ENABLED=true at startup.
+        Returns the registry metadata for all configuration keys, including
+        value type, default value, allowed scopes, mutability, and apply behavior.
       operationId: getSystemConfigSchema
       parameters:
       - description: Request ID for tracing
@@ -9872,26 +9811,237 @@ paths:
       - application/json
       responses:
         "200":
-          description: OK
+          description: Schema metadata for all config keys
           schema:
-            $ref: '#/definitions/internal_bootstrap.ConfigSchemaResponse'
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.SchemaResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Get configuration schema
+      summary: Get config key schema
       tags:
-      - System
+      - System Configs
+  /v1/system/settings:
+    get:
+      description: |-
+        Returns resolved settings for the current scope. The scope defaults to "tenant"
+        and can be overridden with ?scope=global. Tenant-scoped settings inherit from
+        global defaults when no tenant override exists.
+      operationId: getSystemSettings
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - default: tenant
+        description: Resolution scope
+        enum:
+        - tenant
+        - global
+        in: query
+        name: scope
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Resolved setting values with scope
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.SettingsResponse'
+        "400":
+          description: Invalid scope parameter
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get effective settings
+      tags:
+      - System Settings
+    patch:
+      consumes:
+      - application/json
+      description: |-
+        Applies a batch of settings mutations for the resolved scope with optimistic
+        concurrency control. Pass the expected revision in the If-Match header.
+        A null JSON value for any key resets it to its registered default.
+      operationId: patchSystemSettings
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Expected revision for optimistic concurrency (e.g. \
+        in: header
+        name: If-Match
+        type: string
+      - default: tenant
+        description: Resolution scope
+        enum:
+        - tenant
+        - global
+        in: query
+        name: scope
+        type: string
+      - description: Setting values to update
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.PatchSettingsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: New revision after successful write
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.PatchResponse'
+        "400":
+          description: Invalid request body or empty values
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+        "409":
+          description: Revision conflict
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Patch setting values
+      tags:
+      - System Settings
+  /v1/system/settings/history:
+    get:
+      description: |-
+        Returns the change audit trail for settings entries, ordered by revision.
+        The subject is resolved from the auth context (tenant isolation enforcement).
+        Supports pagination via limit/offset and optional key filtering.
+      operationId: getSystemSettingHistory
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Filter history by setting key
+        in: query
+        name: key
+        type: string
+      - default: tenant
+        description: Resolution scope
+        enum:
+        - tenant
+        - global
+        in: query
+        name: scope
+        type: string
+      - default: 50
+        description: Maximum number of entries to return
+        in: query
+        maximum: 100
+        minimum: 1
+        name: limit
+        type: integer
+      - default: 0
+        description: Number of entries to skip
+        in: query
+        minimum: 0
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Setting change history entries
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.HistoryResponse'
+        "400":
+          description: Invalid query parameters or scope
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get setting change history
+      tags:
+      - System Settings
+  /v1/system/settings/schema:
+    get:
+      description: |-
+        Returns the registry metadata for all setting keys, including
+        value type, default value, allowed scopes, mutability, and apply behavior.
+      operationId: getSystemSettingSchema
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Schema metadata for all setting keys
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.SchemaResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get setting key schema
+      tags:
+      - System Settings
 schemes:
 - https
 securityDefinitions:

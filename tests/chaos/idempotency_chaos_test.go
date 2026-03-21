@@ -40,7 +40,7 @@ func TestCHAOS18_IdempotencyRedisLatency_500Cascade(t *testing.T) {
 	cs := BootChaosServer(t, h)
 
 	// Baseline: POST should work normally.
-	path := fmt.Sprintf("/v1/config/contexts/%s/rules", h.Seed.ContextID)
+	path := fmt.Sprintf("/v1/contexts/%s/rules", h.Seed.ContextID)
 
 	resp, _ := cs.DoJSON(t, http.MethodPost, path, map[string]any{
 		"priority": 1,
@@ -72,7 +72,7 @@ func TestCHAOS18_IdempotencyRedisLatency_500Cascade(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 
-			reqPath := fmt.Sprintf("/v1/config/contexts/%s/rules", h.Seed.ContextID)
+			reqPath := fmt.Sprintf("/v1/contexts/%s/rules", h.Seed.ContextID)
 
 			req := httptest.NewRequest(http.MethodPost, reqPath, strings.NewReader(fmt.Sprintf(
 				`{"priority": %d, "type": "EXACT", "config": {"fields": ["amount"]}}`, idx+10,
@@ -121,11 +121,13 @@ func TestCHAOS18_IdempotencyRedisLatency_500Cascade(t *testing.T) {
 		"GET /health should work even with Redis latency (idempotency only affects POST/PUT/PATCH)")
 
 	// The finding: if ANY requests returned 500, the middleware is failing closed.
-	if status500.Load() > 0 && baselineWorked {
-		t.Logf("FINDING CONFIRMED: Idempotency middleware fails-closed on Redis errors. "+
-			"%d/%d POST requests returned 500. All mutating endpoints become unavailable "+
-			"during any Redis latency spike. No circuit breaker, no fallback.",
-			status500.Load(), concurrency)
+	// Use threshold-based assertion: at least 1 request should fail with 500
+	// when Redis has 2s latency (idempotency middleware has no circuit breaker).
+	if baselineWorked {
+		require.GreaterOrEqual(t, status500.Load(), int32(1),
+			"idempotency middleware should fail-closed (return 500) when Redis has high latency; "+
+				"got %d/500s, %d successful out of %d requests",
+			status500.Load(), statusOK.Load(), concurrency)
 	}
 
 	// Recovery: remove toxic and verify system recovers.
@@ -172,7 +174,7 @@ func TestCHAOS19_IdempotencyMarkCompleteFailure(t *testing.T) {
 
 	// Use a fixed idempotency key for both requests.
 	idempotencyKey := uuid.New().String()
-	path := fmt.Sprintf("/v1/config/contexts/%s/rules", h.Seed.ContextID)
+	path := fmt.Sprintf("/v1/contexts/%s/rules", h.Seed.ContextID)
 
 	// First request: should succeed.
 	req1 := httptest.NewRequest(http.MethodPost, path, strings.NewReader(
@@ -265,7 +267,7 @@ func TestCHAOS20_RedisDown_FailOpenVsFailClosed(t *testing.T) {
 	getResp, _ := cs.DoGet(t, "/health")
 	assert.Equal(t, http.StatusOK, getResp.StatusCode, "baseline GET")
 
-	postPath := fmt.Sprintf("/v1/config/contexts/%s/rules", h.Seed.ContextID)
+	postPath := fmt.Sprintf("/v1/contexts/%s/rules", h.Seed.ContextID)
 
 	postResp, _ := cs.DoJSON(t, http.MethodPost, postPath, map[string]any{
 		"priority": 1,
@@ -323,13 +325,13 @@ func TestCHAOS20_RedisDown_FailOpenVsFailClosed(t *testing.T) {
 	t.Logf("  POST:        status=%d (idempotency fail-closed = 500)", postStatus)
 	t.Logf("  50 rapid GETs: %d/50 succeeded (rate limiter fail-open = no protection)", rapidGetCount)
 
-	if postStatus == http.StatusInternalServerError && rapidGetCount >= 50 {
-		t.Log("FINDING CONFIRMED: Inconsistent failure modes when Redis is down. " +
-			"Rate limiter: fail-OPEN (all 50 rapid requests passed). " +
-			"Idempotency: fail-CLOSED (POST returns 500). " +
-			"The system is simultaneously vulnerable to floods " +
-			"AND unable to process legitimate mutations.")
-	}
+	// Assert the inconsistent failure mode: idempotency fails-closed while
+	// rate limiter fails-open. Use loose thresholds for chaos test stability.
+	require.Equal(t, http.StatusInternalServerError, postStatus,
+		"idempotency middleware should fail-closed (500) when Redis is down")
+	require.GreaterOrEqual(t, rapidGetCount, 45,
+		"rate limiter should fail-open (allow most requests) when Redis is down; "+
+			"got %d/50 successful GETs", rapidGetCount)
 
 	// Recovery.
 	h.EnableRedisProxy(t)

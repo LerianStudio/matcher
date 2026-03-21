@@ -118,6 +118,7 @@ type UseCase struct {
 	transactionRepo ingestionRepositories.TransactionRepository
 	dedupe          ports.DedupeService
 	dedupeTTL       time.Duration
+	dedupeTTLGetter func() time.Duration
 	publisher       ports.EventPublisher
 	outboxRepo      sharedPorts.OutboxRepository
 	jobTxRunner     jobTxRunner
@@ -142,6 +143,7 @@ type UseCaseDeps struct {
 	FieldMapRepo    ports.FieldMapRepository
 	SourceRepo      ports.SourceRepository
 	DedupeTTL       time.Duration
+	DedupeTTLGetter func() time.Duration
 	MatchTrigger    ports.MatchTrigger
 	ContextProvider ports.ContextProvider
 }
@@ -210,6 +212,7 @@ func NewUseCase(deps UseCaseDeps) (*UseCase, error) {
 		transactionRepo: deps.TransactionRepo,
 		dedupe:          deps.Dedupe,
 		dedupeTTL:       deps.DedupeTTL,
+		dedupeTTLGetter: deps.DedupeTTLGetter,
 		publisher:       deps.Publisher,
 		outboxRepo:      deps.OutboxRepo,
 		jobTxRunner:     jobTx,
@@ -685,7 +688,7 @@ func (uc *UseCase) filterAndInsertChunk(
 
 	for _, tx := range transactions {
 		hash := uc.dedupe.CalculateHash(tx.SourceID, tx.ExternalID)
-		if err := uc.dedupe.MarkSeenWithRetry(ctx, job.ContextID, hash, uc.dedupeTTL, defaultDedupeRetries); err != nil {
+		if err := uc.dedupe.MarkSeenWithRetry(ctx, job.ContextID, hash, uc.currentDedupeTTL(), defaultDedupeRetries); err != nil {
 			if errors.Is(err, ports.ErrDuplicateTransaction) {
 				continue
 			}
@@ -955,4 +958,18 @@ func convertParseErrors(errs []ports.ParseError) []entities.RowError {
 	}
 
 	return result
+}
+
+func (uc *UseCase) currentDedupeTTL() time.Duration {
+	if uc == nil {
+		return 0
+	}
+
+	if uc.dedupeTTLGetter != nil {
+		if ttl := uc.dedupeTTLGetter(); ttl > 0 {
+			return ttl
+		}
+	}
+
+	return uc.dedupeTTL
 }

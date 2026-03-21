@@ -53,11 +53,12 @@ func NewSingleTenantInfrastructureProvider(
 func (provider *SingleTenantInfrastructureProvider) GetPostgresConnection(
 	_ context.Context,
 ) (*ports.PostgresConnectionLease, error) {
-	if provider.postgres == nil {
+	postgres := provider.currentPostgres()
+	if postgres == nil {
 		return nil, ErrPostgresConnectionNotConfigured
 	}
 
-	return ports.NewPostgresConnectionLease(provider.postgres, nil), nil
+	return ports.NewPostgresConnectionLease(postgres, nil), nil
 }
 
 // GetRedisConnection returns the singleton redis connection.
@@ -65,21 +66,23 @@ func (provider *SingleTenantInfrastructureProvider) GetPostgresConnection(
 func (provider *SingleTenantInfrastructureProvider) GetRedisConnection(
 	_ context.Context,
 ) (*ports.RedisConnectionLease, error) {
-	if provider.redis == nil {
+	redis := provider.currentRedis()
+	if redis == nil {
 		return nil, ErrRedisConnectionNotConfigured
 	}
 
-	return ports.NewRedisConnectionLease(provider.redis, nil), nil
+	return ports.NewRedisConnectionLease(redis, nil), nil
 }
 
 // BeginTx starts a tenant-scoped database transaction.
 // The caller is responsible for calling Commit() or Rollback() on the returned transaction.
 func (provider *SingleTenantInfrastructureProvider) BeginTx(ctx context.Context) (*ports.TxLease, error) {
-	if provider.postgres == nil {
+	postgres := provider.currentPostgres()
+	if postgres == nil {
 		return nil, ErrPostgresConnectionNotConfigured
 	}
 
-	resolver, err := provider.postgres.Resolver(ctx)
+	resolver, err := postgres.Resolver(ctx)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"failed to get database connection: %w",
@@ -131,11 +134,12 @@ func (provider *SingleTenantInfrastructureProvider) BeginTx(ctx context.Context)
 // SET search_path before executing queries. Direct use without schema scoping
 // in multi-tenant mode will cause cross-tenant data leakage.
 func (provider *SingleTenantInfrastructureProvider) GetReplicaDB(ctx context.Context) (*ports.ReplicaDBLease, error) {
-	if provider.postgres == nil {
+	postgres := provider.currentPostgres()
+	if postgres == nil {
 		return nil, ErrPostgresConnectionNotConfigured
 	}
 
-	resolver, err := provider.postgres.Resolver(ctx)
+	resolver, err := postgres.Resolver(ctx)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"failed to get database connection: %w",
@@ -154,4 +158,20 @@ func (provider *SingleTenantInfrastructureProvider) GetReplicaDB(ctx context.Con
 	}
 
 	return ports.NewReplicaDBLease(primaryDBs[0], nil), nil
+}
+
+func (provider *SingleTenantInfrastructureProvider) currentPostgres() *libPostgres.Client {
+	if provider == nil {
+		return nil
+	}
+
+	return provider.postgres
+}
+
+func (provider *SingleTenantInfrastructureProvider) currentRedis() *libRedis.Client {
+	if provider == nil {
+		return nil
+	}
+
+	return provider.redis
 }

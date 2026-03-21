@@ -36,7 +36,7 @@ var errParseItemStructure = errors.New("item structure parse error")
 // @Failure 403 {object} ErrorResponse "Forbidden"
 // @Failure 409 {object} ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
 // @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /v1/config/fee-schedules [post]
+// @Router /v1/fee-schedules [post]
 func (handler *Handler) CreateFeeSchedule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fee_schedule.create")
 	defer span.End()
@@ -95,7 +95,7 @@ func (handler *Handler) CreateFeeSchedule(fiberCtx *fiber.Ctx) error {
 // @Failure 401 {object} ErrorResponse "Unauthorized"
 // @Failure 403 {object} ErrorResponse "Forbidden"
 // @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /v1/config/fee-schedules [get]
+// @Router /v1/fee-schedules [get]
 func (handler *Handler) ListFeeSchedules(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fee_schedule.list")
 	defer span.End()
@@ -145,7 +145,7 @@ func (handler *Handler) ListFeeSchedules(fiberCtx *fiber.Ctx) error {
 // @Failure 403 {object} ErrorResponse "Forbidden"
 // @Failure 404 {object} ErrorResponse "Fee schedule not found"
 // @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /v1/config/fee-schedules/{scheduleId} [get]
+// @Router /v1/fee-schedules/{scheduleId} [get]
 func (handler *Handler) GetFeeSchedule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fee_schedule.get")
 	defer span.End()
@@ -196,7 +196,7 @@ func (handler *Handler) GetFeeSchedule(fiberCtx *fiber.Ctx) error {
 // @Failure 404 {object} ErrorResponse "Fee schedule not found"
 // @Failure 409 {object} ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
 // @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /v1/config/fee-schedules/{scheduleId} [patch]
+// @Router /v1/fee-schedules/{scheduleId} [patch]
 func (handler *Handler) UpdateFeeSchedule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fee_schedule.update")
 	defer span.End()
@@ -258,7 +258,7 @@ func (handler *Handler) UpdateFeeSchedule(fiberCtx *fiber.Ctx) error {
 // @Failure 403 {object} ErrorResponse "Forbidden"
 // @Failure 404 {object} ErrorResponse "Fee schedule not found"
 // @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /v1/config/fee-schedules/{scheduleId} [delete]
+// @Router /v1/fee-schedules/{scheduleId} [delete]
 func (handler *Handler) DeleteFeeSchedule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fee_schedule.delete")
 	defer span.End()
@@ -306,7 +306,7 @@ func (handler *Handler) DeleteFeeSchedule(fiberCtx *fiber.Ctx) error {
 // @Failure 403 {object} ErrorResponse "Forbidden"
 // @Failure 404 {object} ErrorResponse "Fee schedule not found"
 // @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /v1/config/fee-schedules/{scheduleId}/simulate [post]
+// @Router /v1/fee-schedules/{scheduleId}/simulate [post]
 func (handler *Handler) SimulateFeeSchedule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fee_schedule.simulate")
 	defer span.End()

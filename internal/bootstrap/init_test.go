@@ -1124,7 +1124,7 @@ func TestCreateArchivalStorage(t *testing.T) {
 			},
 		}
 
-		client, err := createArchivalStorage(cfg, &libLog.NopLogger{})
+		client, err := createArchivalStorage(context.Background(), cfg)
 
 		assert.NoError(t, err)
 		assert.Nil(t, client)
@@ -1142,7 +1142,7 @@ func TestCreateArchivalStorage(t *testing.T) {
 			},
 		}
 
-		client, err := createArchivalStorage(cfg, &libLog.NopLogger{})
+		client, err := createArchivalStorage(context.Background(), cfg)
 
 		assert.NoError(t, err)
 		assert.Nil(t, client)
@@ -1156,7 +1156,7 @@ func TestCreateArchivalStorage(t *testing.T) {
 			ObjectStorage: ObjectStorageConfig{},
 		}
 
-		client, err := createArchivalStorage(cfg, &libLog.NopLogger{})
+		client, err := createArchivalStorage(context.Background(), cfg)
 
 		assert.NoError(t, err)
 		assert.Nil(t, client)
@@ -1177,7 +1177,7 @@ func TestInitArchivalComponents_DisabledNoStorage(t *testing.T) {
 		}
 
 		var cleanups []func()
-		worker, err := initArchivalComponents(nil, cfg, nil, &libLog.NopLogger{}, &cleanups)
+		worker, err := initArchivalComponents(nil, cfg, nil, nil, &libLog.NopLogger{}, &cleanups)
 
 		assert.NoError(t, err)
 		assert.Nil(t, worker)
@@ -1483,13 +1483,13 @@ func TestInitOptionalDiscoveryWorker(t *testing.T) {
 		called := false
 
 		worker, err := initOptionalDiscoveryWorker(
-			context.Background(),
 			nil,
 			cfg,
 			nil,
 			nil,
+			nil,
 			logger,
-			func(_ *Routes, _ *Config, _ sharedPorts.InfrastructureProvider, _ sharedPorts.TenantLister, _ libLog.Logger) (*discoveryWorker.DiscoveryWorker, error) {
+			func(_ *Routes, _ *Config, _ func() *Config, _ sharedPorts.InfrastructureProvider, _ sharedPorts.TenantLister, _ libLog.Logger) (*discoveryWorker.DiscoveryWorker, error) {
 				called = true
 				return expectedWorker, nil
 			},
@@ -1501,31 +1501,31 @@ func TestInitOptionalDiscoveryWorker(t *testing.T) {
 		assert.False(t, logger.hasEntry(libLog.LevelWarn, "discovery module failed to initialize"))
 	})
 
-	t.Run("disabled_fetcher_skips_initialization", func(t *testing.T) {
+	t.Run("disabled_fetcher_still_initializes_shell", func(t *testing.T) {
 		t.Parallel()
 
 		logger := &recordingInitLogger{}
 		cfg := defaultConfig()
 		cfg.Fetcher.Enabled = false
 
+		expectedWorker := &discoveryWorker.DiscoveryWorker{}
 		called := false
 		worker, err := initOptionalDiscoveryWorker(
-			context.Background(),
 			nil,
 			cfg,
 			nil,
 			nil,
+			nil,
 			logger,
-			func(_ *Routes, _ *Config, _ sharedPorts.InfrastructureProvider, _ sharedPorts.TenantLister, _ libLog.Logger) (*discoveryWorker.DiscoveryWorker, error) {
+			func(_ *Routes, _ *Config, _ func() *Config, _ sharedPorts.InfrastructureProvider, _ sharedPorts.TenantLister, _ libLog.Logger) (*discoveryWorker.DiscoveryWorker, error) {
 				called = true
-				return nil, nil
+				return expectedWorker, nil
 			},
 		)
 
 		require.NoError(t, err)
-		assert.Nil(t, worker)
-		assert.False(t, called)
-		assert.True(t, logger.hasEntry(libLog.LevelInfo, "discovery module disabled (FETCHER_ENABLED=false)"))
+		assert.Same(t, expectedWorker, worker)
+		assert.True(t, called)
 	})
 
 	t.Run("enabled_fetcher_failure_returns_error", func(t *testing.T) {
@@ -1536,13 +1536,13 @@ func TestInitOptionalDiscoveryWorker(t *testing.T) {
 		cfg.Fetcher.Enabled = true
 
 		worker, err := initOptionalDiscoveryWorker(
-			context.Background(),
 			nil,
 			cfg,
 			nil,
 			nil,
+			nil,
 			logger,
-			func(_ *Routes, _ *Config, _ sharedPorts.InfrastructureProvider, _ sharedPorts.TenantLister, _ libLog.Logger) (*discoveryWorker.DiscoveryWorker, error) {
+			func(_ *Routes, _ *Config, _ func() *Config, _ sharedPorts.InfrastructureProvider, _ sharedPorts.TenantLister, _ libLog.Logger) (*discoveryWorker.DiscoveryWorker, error) {
 				return nil, errors.New("fetcher bootstrap failed")
 			},
 		)
@@ -1562,7 +1562,7 @@ func TestCreateObjectStorage_NotEnabled(t *testing.T) {
 		},
 	}
 
-	client, err := createObjectStorage(cfg, &libLog.NopLogger{})
+	client, err := createObjectStorage(context.Background(), cfg)
 
 	assert.NoError(t, err)
 	assert.Nil(t, client)
@@ -1580,7 +1580,7 @@ func TestCreateObjectStorage_EnabledWithoutBucket(t *testing.T) {
 		},
 	}
 
-	client, err := createObjectStorage(cfg, &libLog.NopLogger{})
+	client, err := createObjectStorage(context.Background(), cfg)
 
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, ErrObjectStorageBucketRequired)
@@ -1596,7 +1596,7 @@ func TestCreateObjectStorage_CleanupEnabledWithoutBucket(t *testing.T) {
 		ObjectStorage: ObjectStorageConfig{Bucket: ""},
 	}
 
-	client, err := createObjectStorage(cfg, &libLog.NopLogger{})
+	client, err := createObjectStorage(context.Background(), cfg)
 
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, ErrObjectStorageBucketRequired)
@@ -1622,7 +1622,7 @@ func TestCreateObjectStorageForHealth_EmptyEndpoint(t *testing.T) {
 		},
 	}
 
-	client, err := createObjectStorageForHealth(context.Background(), cfg, &libLog.NopLogger{})
+	client, err := createObjectStorageForHealth(context.Background(), cfg)
 
 	assert.NoError(t, err)
 	assert.Nil(t, client)
@@ -1638,7 +1638,7 @@ func TestCreateObjectStorageForHealth_EmptyBucket(t *testing.T) {
 		},
 	}
 
-	client, err := createObjectStorageForHealth(context.Background(), cfg, &libLog.NopLogger{})
+	client, err := createObjectStorageForHealth(context.Background(), cfg)
 
 	assert.NoError(t, err)
 	assert.Nil(t, client)
@@ -1654,7 +1654,7 @@ func TestCreateObjectStorageForHealth_BothEmpty(t *testing.T) {
 		},
 	}
 
-	client, err := createObjectStorageForHealth(context.Background(), cfg, &libLog.NopLogger{})
+	client, err := createObjectStorageForHealth(context.Background(), cfg)
 
 	assert.NoError(t, err)
 	assert.Nil(t, client)
@@ -1723,7 +1723,7 @@ func TestCreateIdempotencyRepository_NilProvider(t *testing.T) {
 		},
 	}
 
-	repo := createIdempotencyRepository(cfg, nil, &libLog.NopLogger{})
+	repo := createIdempotencyRepository(cfg, nil, nil, &libLog.NopLogger{})
 	assert.Nil(t, repo)
 }
 
@@ -1833,7 +1833,7 @@ func TestCreateObjectStorage_ValidBucketButNoEndpoint(t *testing.T) {
 		},
 	}
 
-	client, err := createObjectStorage(cfg, &libLog.NopLogger{})
+	client, err := createObjectStorage(context.Background(), cfg)
 	require.Error(t, err)
 	assert.Nil(t, client)
 	assert.Contains(t, err.Error(), "create S3 client")
@@ -1856,7 +1856,7 @@ func TestCreateObjectStorageForHealth_ValidConfig(t *testing.T) {
 		},
 	}
 
-	client, err := createObjectStorageForHealth(context.Background(), cfg, &libLog.NopLogger{})
+	client, err := createObjectStorageForHealth(context.Background(), cfg)
 	require.NoError(t, err)
 	assert.NotNil(t, client)
 }
@@ -1880,7 +1880,7 @@ func TestCreateArchivalStorage_ValidConfig(t *testing.T) {
 		},
 	}
 
-	client, err := createArchivalStorage(cfg, &libLog.NopLogger{})
+	client, err := createArchivalStorage(context.Background(), cfg)
 	require.NoError(t, err)
 	assert.NotNil(t, client)
 }
@@ -1960,7 +1960,7 @@ func TestInitEventPublishers_OpenChannelFailure_CleansUpOpenedChannel(t *testing
 	})
 	t.Cleanup(restore)
 
-	matchingPublisher, ingestionPublisher, err := initEventPublishers(&libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{})
+	matchingPublisher, ingestionPublisher, err := initEventPublishers(context.Background(), &libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "open AMQP channels")
@@ -1992,7 +1992,7 @@ func TestInitEventPublishers_MatchingPublisherFailure_CleansUpChannels(t *testin
 	})
 	t.Cleanup(restore)
 
-	matchingPublisher, ingestionPublisher, err := initEventPublishers(&libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{})
+	matchingPublisher, ingestionPublisher, err := initEventPublishers(context.Background(), &libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "create matching event publisher")
@@ -2030,7 +2030,7 @@ func TestInitEventPublishers_IngestionPublisherFailure_CleansUpPublisherAndChann
 	})
 	t.Cleanup(restore)
 
-	matchingPublisher, ingestionPublisher, err := initEventPublishers(&libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{})
+	matchingPublisher, ingestionPublisher, err := initEventPublishers(context.Background(), &libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "create ingestion event publisher")

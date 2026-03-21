@@ -56,9 +56,8 @@ make clean-docker     # Remove all containers/volumes
 make generate         # Generate mocks (go:generate)
 make generate-docs    # Generate Swagger docs
 
-# Environment
-make set-env          # Copy .env.example to config/.env
-make clear-envs       # Remove config/.env
+# Environment (zero-config — all defaults are baked in)
+# Override via env vars for production. See config/.config-map.example for bootstrap-only keys.
 ```
 
 ## Architecture Quick Start
@@ -463,11 +462,23 @@ Split into `handlers_{feature}.go` when a context has 3+ distinct feature areas:
 - Background workers live in `services/worker/` (e.g., `configuration/services/worker/scheduler_worker.go`, `governance/services/worker/archival_worker.go`)
 - The outbox **dispatcher** is a known exception: it lives at `outbox/services/dispatcher.go` (services root, not in command/, query/, or worker/) because it is pure infrastructure — not a use case and not a scheduled job
 
+### 12. Systemplane is the Runtime Config Authority
+- Viper + env vars are **bootstrap-only** — used to load the initial `Config` struct at startup
+- After startup, the **systemplane** (`pkg/systemplane`) owns all runtime config
+- For runtime config values: use `configManager.Get()` which returns the systemplane-backed `*Config`
+- For runtime config schema/metadata: use `registry.Get(key)` which returns `KeyDef` metadata
+- Direct systemplane API: `GET /v1/system/configs`, schema: `GET /v1/system/configs/schema`, history: `GET /v1/system/configs/history`
+- Never read Viper directly at runtime
+
 ## Configuration
 
 ### Environment Variables
 
-All env vars are documented in `config/.env.example` and loaded via `internal/bootstrap/config.go`.
+Matcher uses **zero-config defaults** — all configuration has sensible defaults baked into `defaultConfig()`. No `.env` or YAML files are required. Override via environment variables for production.
+
+**Runtime authority**: The systemplane (`pkg/systemplane`) is the sole runtime configuration authority. Env vars are bootstrap-only — after startup, the systemplane registry owns all config reads. Runtime queries: `GET /v1/system/configs`, schema: `GET /v1/system/configs/schema`, history: `GET /v1/system/configs/history`.
+
+**Bootstrap-only keys** (require restart): See `config/.config-map.example`. These include server address, TLS, auth, and telemetry settings.
 
 **Categories**:
 - **Application**: `ENV_NAME`, `LOG_LEVEL`, `SERVER_ADDRESS`, `HTTP_BODY_LIMIT_BYTES`
@@ -603,7 +614,7 @@ Run with `make lint-custom`. These enforce Matcher-specific patterns:
 | [CLAUDE.md](CLAUDE.md) | Main agent instruction file (this file's companion) |
 | [docs/PROJECT_RULES.md](docs/PROJECT_RULES.md) | Critical architectural rules and constraints |
 | [README.md](README.md) | User-facing project overview |
-| [config/.env.example](config/.env.example) | Environment variable reference |
+| [config/.config-map.example](config/.config-map.example) | Bootstrap-only env vars (require restart) |
 | [docs/pre-dev/matcher/prd.md](docs/pre-dev/matcher/prd.md) | Product requirements, user stories |
 | [docs/pre-dev/matcher/trd.md](docs/pre-dev/matcher/trd.md) | Technical requirements, security |
 | [docs/pre-dev/matcher/api-design.md](docs/pre-dev/matcher/api-design.md) | API contracts, error codes |

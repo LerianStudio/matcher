@@ -18,7 +18,7 @@ const (
 	// envProduction is the production environment name.
 	envProduction = "production"
 
-	defaultHTTPBodyLimitBytes = 104857600
+	defaultHTTPBodyLimitBytes = 32 * 1024 * 1024
 
 	// defaultExportWorkerPollIntervalSec is the default poll interval for export worker.
 	defaultExportWorkerPollIntervalSec = 5
@@ -44,7 +44,7 @@ type AppConfig struct {
 // ServerConfig configures the HTTP server and middleware.
 type ServerConfig struct {
 	Address               string `env:"SERVER_ADDRESS"          envDefault:":4018"                                                  mapstructure:"address"`
-	BodyLimitBytes        int    `env:"HTTP_BODY_LIMIT_BYTES"   envDefault:"104857600"                                              mapstructure:"body_limit_bytes"`
+	BodyLimitBytes        int    `env:"HTTP_BODY_LIMIT_BYTES"   envDefault:"33554432"                                               mapstructure:"body_limit_bytes"`
 	CORSAllowedOrigins    string `env:"CORS_ALLOWED_ORIGINS"    envDefault:"http://localhost:3000"                                  mapstructure:"cors_allowed_origins"`
 	CORSAllowedMethods    string `env:"CORS_ALLOWED_METHODS"    envDefault:"GET,POST,PUT,PATCH,DELETE,OPTIONS"                      mapstructure:"cors_allowed_methods"`
 	CORSAllowedHeaders    string `env:"CORS_ALLOWED_HEADERS"    envDefault:"Origin,Content-Type,Accept,Authorization,X-Request-ID"  mapstructure:"cors_allowed_headers"`
@@ -79,7 +79,7 @@ type PostgresConfig struct {
 	PrimaryHost     string `env:"POSTGRES_HOST"     envDefault:"localhost" mapstructure:"primary_host"`
 	PrimaryPort     string `env:"POSTGRES_PORT"     envDefault:"5432"      mapstructure:"primary_port"`
 	PrimaryUser     string `env:"POSTGRES_USER"     envDefault:"matcher"   mapstructure:"primary_user"`
-	PrimaryPassword string `env:"POSTGRES_PASSWORD"                        mapstructure:"primary_password"`
+	PrimaryPassword string `env:"POSTGRES_PASSWORD" envDefault:"matcher_dev_password" mapstructure:"primary_password"`
 	PrimaryDB       string `env:"POSTGRES_DB"       envDefault:"matcher"   mapstructure:"primary_db"`
 	PrimarySSLMode  string `env:"POSTGRES_SSLMODE"  envDefault:"disable"   mapstructure:"primary_ssl_mode"`
 
@@ -120,8 +120,8 @@ type RabbitMQConfig struct {
 	URI                      string `env:"RABBITMQ_URI"                         envDefault:"amqp"                mapstructure:"uri"`
 	Host                     string `env:"RABBITMQ_HOST"                        envDefault:"localhost"           mapstructure:"host"`
 	Port                     string `env:"RABBITMQ_PORT"                        envDefault:"5672"                mapstructure:"port"`
-	User                     string `env:"RABBITMQ_USER"                        envDefault:"guest"               mapstructure:"user"`
-	Password                 string `env:"RABBITMQ_PASSWORD"                    envDefault:"guest" json:"-"      mapstructure:"password"`
+	User                     string `env:"RABBITMQ_USER"                        envDefault:"matcher_admin"       mapstructure:"user"`
+	Password                 string `env:"RABBITMQ_PASSWORD"                    envDefault:"matcher_dev_password" json:"-" mapstructure:"password"`
 	VHost                    string `env:"RABBITMQ_VHOST"                       envDefault:"/"                   mapstructure:"vhost"`
 	HealthURL                string `env:"RABBITMQ_HEALTH_URL"                  envDefault:"http://localhost:15672" mapstructure:"health_url"`
 	AllowInsecureHealthCheck bool   `env:"RABBITMQ_ALLOW_INSECURE_HEALTH_CHECK" envDefault:"false"               mapstructure:"allow_insecure_health_check"`
@@ -273,7 +273,7 @@ type ArchivalConfig struct {
 	WarmRetentionMonths int    `env:"ARCHIVAL_WARM_RETENTION_MONTHS" envDefault:"24"                  mapstructure:"warm_retention_months"`
 	ColdRetentionMonths int    `env:"ARCHIVAL_COLD_RETENTION_MONTHS" envDefault:"84"                  mapstructure:"cold_retention_months"`
 	BatchSize           int    `env:"ARCHIVAL_BATCH_SIZE"            envDefault:"5000"                mapstructure:"batch_size"`
-	StorageBucket       string `env:"ARCHIVAL_STORAGE_BUCKET"                                         mapstructure:"storage_bucket"`
+	StorageBucket       string `env:"ARCHIVAL_STORAGE_BUCKET"         envDefault:"matcher-archives"    mapstructure:"storage_bucket"`
 	StoragePrefix       string `env:"ARCHIVAL_STORAGE_PREFIX"        envDefault:"archives/audit-logs" mapstructure:"storage_prefix"`
 	StorageClass        string `env:"ARCHIVAL_STORAGE_CLASS"         envDefault:"GLACIER"             mapstructure:"storage_class"`
 	PartitionLookahead  int    `env:"ARCHIVAL_PARTITION_LOOKAHEAD"   envDefault:"3"                   mapstructure:"partition_lookahead"`

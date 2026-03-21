@@ -26,6 +26,7 @@ import (
 const (
 	defaultFetcherClientMaxRetries     = 3
 	defaultFetcherClientRetryBaseDelay = 500 * time.Millisecond
+	discoveryRefreshLockMultiplier     = 2
 )
 
 func fetcherHTTPClientConfig(cfg *Config) discoveryFetcher.HTTPClientConfig {
@@ -43,29 +44,30 @@ func fetcherHTTPClientConfig(cfg *Config) discoveryFetcher.HTTPClientConfig {
 type discoveryModuleInitFunc func(
 	routes *Routes,
 	cfg *Config,
+	configGetter func() *Config,
 	provider sharedPorts.InfrastructureProvider,
 	tenantLister sharedPorts.TenantLister,
 	logger libLog.Logger,
 ) (*discoveryWorker.DiscoveryWorker, error)
 
 func initOptionalDiscoveryWorker(
-	ctx context.Context,
 	routes *Routes,
 	cfg *Config,
+	configGetter func() *Config,
 	provider sharedPorts.InfrastructureProvider,
 	tenantLister sharedPorts.TenantLister,
 	logger libLog.Logger,
 	initFn discoveryModuleInitFunc,
 ) (*discoveryWorker.DiscoveryWorker, error) {
-	if cfg == nil || !cfg.Fetcher.Enabled {
-		if logger != nil {
-			logger.Log(ctx, libLog.LevelInfo, "discovery module disabled (FETCHER_ENABLED=false)")
-		}
-
+	if cfg == nil {
 		return nil, nil
 	}
 
-	worker, err := initFn(routes, cfg, provider, tenantLister, logger)
+	if initFn == nil {
+		return nil, nil
+	}
+
+	worker, err := initFn(routes, cfg, configGetter, provider, tenantLister, logger)
 	if err != nil {
 		return nil, fmt.Errorf("initialize discovery module: %w", err)
 	}
@@ -79,14 +81,12 @@ func initOptionalDiscoveryWorker(
 func initDiscoveryModule(
 	routes *Routes,
 	cfg *Config,
+	configGetter func() *Config,
 	provider sharedPorts.InfrastructureProvider,
 	tenantLister sharedPorts.TenantLister,
 	logger libLog.Logger,
 ) (*discoveryWorker.DiscoveryWorker, error) {
-	fetcherClient, err := discoveryFetcher.NewHTTPFetcherClient(fetcherHTTPClientConfig(cfg))
-	if err != nil {
-		return nil, fmt.Errorf("create fetcher client: %w", err)
-	}
+	fetcherClient := newDynamicFetcherClient(cfg, configGetter)
 
 	connRepo := discoveryConnRepo.NewRepository(provider)
 	schemaRepo := discoverySchemaRepo.NewRepository(provider)
@@ -116,19 +116,21 @@ func initDiscoveryModule(
 		return nil, fmt.Errorf("register discovery routes: %w", err)
 	}
 
-	extractionPoller, pollerErr := discoveryWorker.NewExtractionPoller(
-		fetcherClient,
-		extractionRepo,
-		discoveryWorker.ExtractionPollerConfig{
-			PollInterval: cfg.FetcherExtractionPollInterval(),
-			Timeout:      cfg.FetcherExtractionTimeout(),
-		},
-		logger,
-	)
-	if pollerErr != nil {
-		logger.Log(context.Background(), libLog.LevelWarn,
-			fmt.Sprintf("discovery: failed to create extraction poller: %v", pollerErr))
-	} else {
+	extractionPoller := newDynamicExtractionPoller(fetcherClient, extractionRepo, func() discoveryWorker.ExtractionPollerConfig {
+		runtimeCfg := cfg
+
+		if configGetter != nil {
+			if currentCfg := configGetter(); currentCfg != nil {
+				runtimeCfg = currentCfg
+			}
+		}
+
+		return discoveryWorker.ExtractionPollerConfig{
+			PollInterval: runtimeCfg.FetcherExtractionPollInterval(),
+			Timeout:      runtimeCfg.FetcherExtractionTimeout(),
+		}
+	}, logger)
+	if extractionPoller != nil {
 		cmdUseCase.WithExtractionPoller(extractionPoller)
 		logger.Log(context.Background(), libLog.LevelInfo,
 			fmt.Sprintf("discovery: extraction poller wired into command use case (poll: %s, timeout: %s)",
@@ -137,6 +139,17 @@ func initDiscoveryModule(
 
 	cmdUseCase.WithTenantContextRequirement(cfg.Auth.Enabled)
 	cmdUseCase.WithDiscoveryRefreshLock(provider, cfg.FetcherDiscoveryInterval())
+	cmdUseCase.WithDiscoveryRefreshLockGetter(func() time.Duration {
+		runtimeCfg := cfg
+
+		if configGetter != nil {
+			if currentCfg := configGetter(); currentCfg != nil {
+				runtimeCfg = currentCfg
+			}
+		}
+
+		return discoveryRefreshLockMultiplier * runtimeCfg.FetcherDiscoveryInterval()
+	})
 
 	worker, err := discoveryWorker.NewDiscoveryWorker(
 		fetcherClient,
@@ -151,7 +164,7 @@ func initDiscoveryModule(
 		return nil, fmt.Errorf("create discovery worker: %w", err)
 	}
 
-	wireDiscoverySchemaCacheFromRedis(provider, cmdUseCase, queryUseCase, worker, cfg, logger)
+	wireDiscoverySchemaCacheFromRedis(provider, cmdUseCase, queryUseCase, worker, cfg, configGetter, logger)
 
 	return worker, nil
 }
@@ -164,6 +177,7 @@ func wireDiscoverySchemaCacheFromRedis(
 	queryUseCase *discoveryQuery.UseCase,
 	worker *discoveryWorker.DiscoveryWorker,
 	cfg *Config,
+	configGetter func() *Config,
 	logger libLog.Logger,
 ) {
 	ctx := context.Background()
@@ -190,18 +204,29 @@ func wireDiscoverySchemaCacheFromRedis(
 		return
 	}
 
-	schemaCache, cacheErr := discoveryRedis.NewSchemaCache(redisClient, !cfg.Auth.Enabled)
-	if cacheErr != nil {
+	if _, cacheErr := discoveryRedis.NewSchemaCache(redisClient, !cfg.Auth.Enabled); cacheErr != nil {
 		logger.Log(ctx, libLog.LevelWarn,
 			fmt.Sprintf("discovery: failed to create schema cache: %v", cacheErr))
 
 		return
 	}
 
-	ttl := cfg.FetcherSchemaCacheTTL()
-	queryUseCase.WithSchemaCache(schemaCache, ttl)
-	cmdUseCase.WithSchemaCache(schemaCache, ttl)
-	worker.WithSchemaCache(schemaCache, ttl)
+	ttlGetter := func() time.Duration {
+		runtimeCfg := cfg
+
+		if configGetter != nil {
+			if currentCfg := configGetter(); currentCfg != nil {
+				runtimeCfg = currentCfg
+			}
+		}
+
+		return runtimeCfg.FetcherSchemaCacheTTL()
+	}
+	dynamicCache := newDynamicSchemaCache(newProviderBackedSchemaCache(provider, !cfg.Auth.Enabled), ttlGetter)
+	ttl := ttlGetter()
+	queryUseCase.WithSchemaCache(dynamicCache, ttl)
+	cmdUseCase.WithSchemaCache(dynamicCache, ttl)
+	worker.WithSchemaCache(dynamicCache, ttl)
 
 	logger.Log(ctx, libLog.LevelInfo,
 		"discovery: schema cache wired into discovery module (TTL: "+ttl.String()+")")

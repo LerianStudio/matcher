@@ -652,7 +652,7 @@ func TestReconciliationContext_StateTransitionGuards(t *testing.T) {
 
 // TestPausedContextRecoveryPath_SecurityAudit proves the complete recovery
 // scenario: ACTIVE -> PAUSED -> ACTIVE via Update() with status=ACTIVE.
-// This is the exact code path exercised by PATCH /v1/config/contexts/:contextId
+// This is the exact code path exercised by PATCH /v1/contexts/:contextId
 // with body {"status": "ACTIVE"}.
 func TestPausedContextRecoveryPath_SecurityAudit(t *testing.T) {
 	t.Parallel()

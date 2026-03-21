@@ -21,6 +21,29 @@ const (
 	maxRateLimitWindowSeconds     = 86_400
 )
 
+// wellKnownDevCredentials lists passwords that are known development defaults.
+// These pass the not-empty and not-guest checks but must NEVER be used in production.
+// This list is intentionally kept in source code as a safety net — if a credential
+// appears here, production validation will reject it.
+var wellKnownDevCredentials = []string{
+	"matcher_dev_password",
+	"password",
+	"changeme",
+	"secret",
+}
+
+// isWellKnownDevCredential returns true if the given value matches a known development default.
+func isWellKnownDevCredential(value string) bool {
+	lower := strings.ToLower(strings.TrimSpace(value))
+	for _, blocked := range wellKnownDevCredentials {
+		if lower == blocked {
+			return true
+		}
+	}
+
+	return false
+}
+
 // Validate checks the configuration for required fields and production constraints.
 func (cfg *Config) Validate() error {
 	ctx := context.Background()
@@ -45,6 +68,10 @@ func (cfg *Config) Validate() error {
 	}
 
 	if err := cfg.validateArchivalConfig(asserter); err != nil {
+		return err
+	}
+
+	if err := cfg.validateReportingStorageConfig(asserter); err != nil {
 		return err
 	}
 
@@ -148,7 +175,7 @@ func (cfg *Config) validateTelemetryConfig(asserter *assert.Asserter) error {
 func (cfg *Config) validateTenancyConfig(asserter *assert.Asserter) error {
 	ctx := context.Background()
 
-	if !cfg.Tenancy.MultiTenantEnabled {
+	if !multiTenantModeEnabled(cfg) {
 		return nil
 	}
 
@@ -366,6 +393,12 @@ func (cfg *Config) validateProductionCoreConfig(asserter *assert.Asserter) error
 		return fmt.Errorf("production config validation: %w", err)
 	}
 
+	if err := asserter.That(ctx, !isWellKnownDevCredential(cfg.Postgres.PrimaryPassword),
+		"POSTGRES_PASSWORD must not use a well-known development default in production",
+		"password_hint", "set a strong, unique password via POSTGRES_PASSWORD env var"); err != nil {
+		return fmt.Errorf("production config validation: %w", err)
+	}
+
 	if err := asserter.That(ctx, strings.TrimSpace(cfg.Server.CORSAllowedOrigins) != "" && !strings.Contains(cfg.Server.CORSAllowedOrigins, "*"), "CORS_ALLOWED_ORIGINS must be restricted in production", "cors_origins", cfg.Server.CORSAllowedOrigins); err != nil {
 		return fmt.Errorf("production config validation: %w", err)
 	}
@@ -377,6 +410,12 @@ func (cfg *Config) validateProductionSecurityConfig(asserter *assert.Asserter) e
 	ctx := context.Background()
 
 	if err := asserter.That(ctx, !strings.EqualFold(strings.TrimSpace(cfg.RabbitMQ.User), "guest") && !strings.EqualFold(strings.TrimSpace(cfg.RabbitMQ.Password), "guest"), "RABBITMQ credentials must be set to non-default values in production"); err != nil {
+		return fmt.Errorf("production config validation: %w", err)
+	}
+
+	if err := asserter.That(ctx, !isWellKnownDevCredential(cfg.RabbitMQ.Password),
+		"RABBITMQ_PASSWORD must not use a well-known development default in production",
+		"password_hint", "set a strong, unique password via RABBITMQ_PASSWORD env var"); err != nil {
 		return fmt.Errorf("production config validation: %w", err)
 	}
 
@@ -392,6 +431,55 @@ func (cfg *Config) validateProductionOptionalConfig(asserter *assert.Asserter) e
 
 	if err := asserter.NotEmpty(ctx, strings.TrimSpace(cfg.Redis.Password), "REDIS_PASSWORD is required in production"); err != nil {
 		return fmt.Errorf("production config validation: %w", err)
+	}
+
+	if err := cfg.validateProductionEndpoints(asserter); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// validateProductionEndpoints enforces HTTPS for service URLs in production environments.
+func (cfg *Config) validateProductionEndpoints(asserter *assert.Asserter) error {
+	ctx := context.Background()
+
+	// Multi-tenant URL must use HTTPS in production — it carries tenant
+	// provisioning data and service API keys.
+	if multiTenantModeEnabled(cfg) && strings.TrimSpace(cfg.Tenancy.MultiTenantURL) != "" {
+		if err := requireProductionHTTPS(ctx, asserter, cfg.Tenancy.MultiTenantURL, "MULTI_TENANT_URL"); err != nil {
+			return err
+		}
+	}
+
+	// Fetcher URL must use HTTPS in production when fetcher is enabled.
+	if cfg.Fetcher.Enabled && strings.TrimSpace(cfg.Fetcher.URL) != "" {
+		if err := requireProductionHTTPS(ctx, asserter, cfg.Fetcher.URL, "FETCHER_URL"); err != nil {
+			return err
+		}
+	}
+
+	// Object storage endpoint must use HTTPS in production when configured.
+	if strings.TrimSpace(cfg.ObjectStorage.Endpoint) != "" {
+		if err := requireProductionHTTPS(ctx, asserter, cfg.ObjectStorage.Endpoint, "OBJECT_STORAGE_ENDPOINT"); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// requireProductionHTTPS validates that rawURL uses HTTPS. The envVar name is
+// used in both the assertion message and the structured key-value pair.
+func requireProductionHTTPS(ctx context.Context, asserter *assert.Asserter, rawURL, envVar string) error {
+	parsed, parseErr := url.Parse(strings.TrimSpace(rawURL))
+	if parseErr == nil && parsed != nil {
+		if err := asserter.That(ctx,
+			strings.EqualFold(parsed.Scheme, "https"),
+			envVar+" must use HTTPS in production",
+			strings.ToLower(envVar), rawURL); err != nil {
+			return fmt.Errorf("production config validation: %w", err)
+		}
 	}
 
 	return nil
@@ -431,6 +519,24 @@ func (cfg *Config) validateArchivalConfig(asserter *assert.Asserter) error {
 	}
 
 	if err := asserter.That(ctx, cfg.Archival.ColdRetentionMonths >= cfg.Archival.WarmRetentionMonths, "ARCHIVAL_COLD_RETENTION_MONTHS must be >= ARCHIVAL_WARM_RETENTION_MONTHS", "cold_months", cfg.Archival.ColdRetentionMonths, "warm_months", cfg.Archival.WarmRetentionMonths); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+
+	return nil
+}
+
+func (cfg *Config) validateReportingStorageConfig(asserter *assert.Asserter) error {
+	if cfg == nil || !reportingStorageRequired(cfg) {
+		return nil
+	}
+
+	ctx := context.Background()
+
+	if err := asserter.NotEmpty(ctx, strings.TrimSpace(cfg.ObjectStorage.Bucket), "OBJECT_STORAGE_BUCKET is required when export or cleanup workers are enabled"); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+
+	if err := asserter.NotEmpty(ctx, strings.TrimSpace(cfg.ObjectStorage.Endpoint), "OBJECT_STORAGE_ENDPOINT is required when export or cleanup workers are enabled"); err != nil {
 		return fmt.Errorf("config validation: %w", err)
 	}
 

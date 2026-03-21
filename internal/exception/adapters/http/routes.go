@@ -49,6 +49,21 @@ func RegisterRoutes(
 		auth.ActionExceptionRead,
 	).Get("/v1/exceptions/:exceptionId/history", handlers.GetHistory)
 
+	// Bulk exception endpoints (registered before parameterized :exceptionId routes
+	// to prevent Fiber from matching "bulk" as an :exceptionId parameter).
+	protected(
+		auth.ResourceException,
+		auth.ActionExceptionResolve,
+	).Post("/v1/exceptions/bulk/assign", handlers.BulkAssign)
+	protected(
+		auth.ResourceException,
+		auth.ActionExceptionResolve,
+	).Post("/v1/exceptions/bulk/resolve", handlers.BulkResolve)
+	protected(
+		auth.ResourceException,
+		auth.ActionExceptionDispatch,
+	).Post("/v1/exceptions/bulk/dispatch", dispatchLimiter, handlers.BulkDispatch)
+
 	// Exception resolution endpoints
 	protected(
 		auth.ResourceException,
@@ -71,20 +86,6 @@ func RegisterRoutes(
 		auth.ResourceException,
 		auth.ActionCallbackProcess,
 	).Post("/v1/exceptions/:exceptionId/callback", dispatchLimiter, handlers.ProcessCallback)
-
-	// Bulk exception endpoints
-	protected(
-		auth.ResourceException,
-		auth.ActionExceptionResolve,
-	).Post("/v1/exceptions/bulk/assign", handlers.BulkAssign)
-	protected(
-		auth.ResourceException,
-		auth.ActionExceptionResolve,
-	).Post("/v1/exceptions/bulk/resolve", handlers.BulkResolve)
-	protected(
-		auth.ResourceException,
-		auth.ActionExceptionDispatch,
-	).Post("/v1/exceptions/bulk/dispatch", dispatchLimiter, handlers.BulkDispatch)
 
 	// Comment endpoints on exceptions
 	protected(

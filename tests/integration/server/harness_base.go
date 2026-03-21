@@ -283,6 +283,9 @@ func (sh *serverHarnessBase) setEnvFromContainers(t *testing.T) error {
 
 		// Disable background workers not needed in tests
 		"ARCHIVAL_WORKER_ENABLED": "false",
+
+		// Systemplane secret master key (well-known dev default)
+		"SYSTEMPLANE_SECRET_MASTER_KEY": "+PnwgNy8bL3HGT1rOXp47PqyGcPywXH/epgmSVwPkL0=",
 	}
 
 	for key, val := range envVars {

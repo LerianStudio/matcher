@@ -85,6 +85,10 @@ var (
 // @tag.description Immutable audit logs and archive retrieval
 // @tag.name Health
 // @tag.description Service health and readiness endpoints for Kubernetes probes
+// @tag.name System Configs
+// @tag.description Runtime configuration management - view, patch, and audit system configs
+// @tag.name System Settings
+// @tag.description Tenant-scoped settings management - view, patch, and audit system settings
 func main() {
 	os.Exit(run())
 }

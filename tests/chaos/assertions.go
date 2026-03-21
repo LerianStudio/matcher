@@ -5,7 +5,6 @@ package chaos
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"strings"
 	"testing"
 	"time"

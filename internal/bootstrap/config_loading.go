@@ -18,15 +18,11 @@ import (
 	libZap "github.com/LerianStudio/lib-commons/v4/commons/zap"
 )
 
-// Architecture Decision: Dual Configuration Pipeline
+// Architecture Decision: Environment-Only Configuration
 //
-// Viper handles YAML file reading and fsnotify-based file watching for hot-reload.
-// libCommons.SetConfigFromEnvVars handles env-var overlay for backward compatibility.
-//
-// This dual pipeline is intentional — lib-commons does not support YAML file loading
-// or file-watcher-based hot-reload. Env vars always take precedence over YAML values,
-// preserving the existing deployment contract where Kubernetes secrets and .env files
-// override file-based configuration.
+// defaultConfig() provides all defaults. libCommons.SetConfigFromEnvVars overlays
+// environment variables on top. After bootstrap, the systemplane supervisor owns
+// all runtime configuration changes.
 
 // LoadConfigWithLogger loads configuration from environment variables with an optional logger.
 // If logger is nil, a default logger will be created for warning messages.
@@ -35,16 +31,9 @@ func LoadConfigWithLogger(logger libLog.Logger) (*Config, error) {
 	ctx := context.Background()
 	asserter := newConfigAsserter(ctx, "config.load")
 
-	configFilePath, pathErr := resolveConfigFilePathStrict()
-	if err := asserter.NoError(ctx, pathErr, "invalid config file path override"); err != nil {
-		return nil, fmt.Errorf("load config: %w", err)
-	}
-
-	if err := asserter.NoError(ctx, loadConfigFromYAML(cfg, configFilePath), "failed to load config from YAML file"); err != nil {
-		return nil, fmt.Errorf("load config: %w", err)
-	}
-
-	yamlSnapshot := *cfg
+	// Snapshot defaults before env overlay. SetConfigFromEnvVars zeros out fields
+	// whose env vars are absent, so we restore non-zero defaults afterwards.
+	defaults := *cfg
 
 	if err := asserter.NoError(ctx, loadConfigFromEnvForStartup(cfg), "failed to load config from environment variables"); err != nil {
 		return nil, fmt.Errorf("load config: %w", err)
@@ -52,7 +41,7 @@ func LoadConfigWithLogger(logger libLog.Logger) (*Config, error) {
 
 	cfg.normalizeTenancyConfig()
 
-	restoreZeroedFields(cfg, &yamlSnapshot)
+	restoreZeroedFields(cfg, &defaults)
 	cfg.normalizeTenancyConfig()
 
 	if cfg.Server.BodyLimitBytes <= 0 {
@@ -133,9 +122,9 @@ func (cfg *Config) enforceProductionSecurityDefaults(logger libLog.Logger) {
 }
 
 // sanitizeEnvVarsForConfig trims trailing whitespace from all environment variables
-// referenced by Config struct tags. This is defense-in-depth against .env files with
-// inline comments (e.g., "RATE_LIMIT_MAX=100  # comment") that Make's -include
-// directive loads verbatim, causing strconv.Atoi to fail on "100  # comment" or "100  ".
+// referenced by Config struct tags. This is defense-in-depth against env vars with
+// trailing whitespace (e.g., from shell quoting or process managers) that would cause
+// strconv.Atoi to fail on "100  " instead of "100".
 //
 // This function mutates global process state via os.Setenv and is called exactly once
 // during bootstrap (LoadConfig), before any goroutines are spawned. Do NOT call from
@@ -188,8 +177,8 @@ func sanitizeEnvVarsForStruct(structType reflect.Type) {
 func loadConfigFromEnvForStartup(cfg *Config) error {
 	// Trim trailing whitespace from all config-related env vars before parsing.
 	// This is safe during bootstrap because it happens before background goroutines
-	// are started and preserves compatibility with `.env` files that include
-	// inline comments or trailing spaces.
+	// are started. Handles edge cases like trailing whitespace from shell quoting
+	// or process managers.
 	sanitizeEnvVarsForConfig()
 
 	return loadConfigFromEnv(cfg)
@@ -222,6 +211,7 @@ func loadConfigFromEnv(cfg *Config) error {
 	loadErr = errors.Join(loadErr, libCommons.SetConfigFromEnvVars(&cfg.Webhook))
 	loadErr = errors.Join(loadErr, libCommons.SetConfigFromEnvVars(&cfg.CallbackRateLimit))
 	loadErr = errors.Join(loadErr, libCommons.SetConfigFromEnvVars(&cfg.CleanupWorker))
+	loadErr = errors.Join(loadErr, libCommons.SetConfigFromEnvVars(&cfg.Fetcher))
 
 	applyDeprecatedTenancyEnvAlias(cfg)
 

@@ -17,7 +17,7 @@ import (
 // We must unset (not set to empty string): restoreZeroedFields treats presence
 // of an env var as an explicit override, including empty-string values.
 // Setting to "" would therefore blank fields like DEFAULT_TENANT_ID and break
-// validation paths that depend on defaults/YAML values.
+// validation paths that depend on default values.
 //
 // Original values are restored via t.Cleanup so neighbouring tests are unaffected.
 // Because process env is global mutable state, the calling test MUST NOT call

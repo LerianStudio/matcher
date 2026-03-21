@@ -44,9 +44,10 @@ var (
 //   - If the counter exceeds the limit, deny the request
 //   - When the TTL expires, the counter resets automatically
 type CallbackRateLimiter struct {
-	provider sharedPorts.InfrastructureProvider
-	limit    int
-	window   time.Duration
+	provider    sharedPorts.InfrastructureProvider
+	limit       int
+	window      time.Duration
+	limitGetter func() int
 }
 
 // NewCallbackRateLimiter creates a new Redis-based callback rate limiter
@@ -73,6 +74,33 @@ func NewCallbackRateLimiter(
 		limit:    limitPerWindow,
 		window:   window,
 	}, nil
+}
+
+// SetRuntimeLimitGetter injects a live config-backed callback limit source.
+func (rl *CallbackRateLimiter) SetRuntimeLimitGetter(getter func() int) {
+	if rl == nil {
+		return
+	}
+
+	rl.limitGetter = getter
+}
+
+func (rl *CallbackRateLimiter) currentLimit() int {
+	if rl == nil {
+		return DefaultCallbackRateLimitPerMin
+	}
+
+	if rl.limitGetter != nil {
+		if limit := rl.limitGetter(); limit > 0 {
+			return limit
+		}
+	}
+
+	if rl.limit > 0 {
+		return rl.limit
+	}
+
+	return DefaultCallbackRateLimitPerMin
 }
 
 // Allow checks whether a callback identified by key is within the configured rate limit.
@@ -134,7 +162,7 @@ return 1
 		ctx,
 		script,
 		[]string{redisKey},
-		rl.limit,
+		rl.currentLimit(),
 		rl.window.Milliseconds(),
 	).Result()
 	if err != nil {

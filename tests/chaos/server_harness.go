@@ -178,7 +178,7 @@ func (cs *ChaosServer) DoGet(t *testing.T, path string) (*http.Response, []byte)
 func (cs *ChaosServer) CreateFieldMap(t *testing.T, contextID, sourceID uuid.UUID) {
 	t.Helper()
 
-	path := fmt.Sprintf("/v1/config/contexts/%s/sources/%s/field-maps", contextID, sourceID)
+	path := fmt.Sprintf("/v1/contexts/%s/sources/%s/field-maps", contextID, sourceID)
 
 	resp, body := cs.DoJSON(t, http.MethodPost, path, map[string]any{
 		"mapping": map[string]string{
@@ -197,7 +197,7 @@ func (cs *ChaosServer) CreateFieldMap(t *testing.T, contextID, sourceID uuid.UUI
 func (cs *ChaosServer) CreateMatchRule(t *testing.T, contextID uuid.UUID) {
 	t.Helper()
 
-	path := fmt.Sprintf("/v1/config/contexts/%s/rules", contextID)
+	path := fmt.Sprintf("/v1/contexts/%s/rules", contextID)
 
 	resp, body := cs.DoJSON(t, http.MethodPost, path, map[string]any{
 		"priority": 1,

@@ -60,9 +60,33 @@ func TestInitArchivalComponents_DisabledArchival_ReturnsNil(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.Archival.Enabled = false
 
+	// Clear storage fields so createArchivalStorage returns nil without
+	// attempting a real S3 connection — the test passes routes=nil which
+	// would panic if a non-nil storage client reached registerArchiveRoutes.
+	cfg.Archival.StorageBucket = ""
+	cfg.ObjectStorage.Endpoint = ""
+
 	var cleanups []func()
 
-	worker, err := initArchivalComponents(nil, cfg, nil, nil, &cleanups)
+	worker, err := initArchivalComponents(nil, cfg, nil, nil, nil, &cleanups)
+
+	assert.NoError(t, err)
+	assert.Nil(t, worker)
+}
+
+func TestInitArchivalComponents_DisabledArchivalWithRuntimeConfig_ReturnsNil(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cfg.Archival.Enabled = false
+
+	// Clear storage fields — same reason as above.
+	cfg.Archival.StorageBucket = ""
+	cfg.ObjectStorage.Endpoint = ""
+
+	var cleanups []func()
+
+	worker, err := initArchivalComponents(nil, cfg, func() *Config { return cfg }, nil, nil, &cleanups)
 
 	assert.NoError(t, err)
 	assert.Nil(t, worker)

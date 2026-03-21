@@ -124,6 +124,12 @@ func (uc *UseCase) acquireDiscoveryRefreshLock(ctx context.Context) (string, err
 	token := uuid.NewString()
 
 	ttl := uc.refreshLockTTL
+	if uc.refreshLockTTLGetter != nil {
+		if runtimeTTL := uc.refreshLockTTLGetter(); runtimeTTL > 0 {
+			ttl = runtimeTTL
+		}
+	}
+
 	if ttl <= 0 {
 		ttl = defaultDiscoveryRefreshLockTTL
 	}

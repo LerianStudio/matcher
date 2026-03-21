@@ -27,9 +27,6 @@ const (
 	ResourceDiscovery = "discovery"
 
 	// ResourceSystem is the RBAC resource for system-level operations.
-	// TODO(config-api): The external auth service (lib-auth RBAC) must be configured
-	// to recognize the "system" resource with "config:read" and "config:write" actions
-	// before the config API routes are enabled in production.
 	ResourceSystem = "system"
 )
 
@@ -123,8 +120,17 @@ const (
 
 // System module actions.
 const (
-	ActionConfigRead  = "config:read"
-	ActionConfigWrite = "config:write"
+	ActionConfigRead          = "config:read"
+	ActionConfigWrite         = "config:write"
+	ActionConfigSchemaRead    = "config/schema:read"
+	ActionConfigHistoryRead   = "config/history:read"
+	ActionConfigReloadWrite   = "config/reload:write"
+	ActionSettingsRead        = "settings:read"
+	ActionSettingsWrite       = "settings:write"
+	ActionSettingsSchemaRead  = "settings/schema:read"
+	ActionSettingsHistoryRead = "settings/history:read"
+	ActionSettingsGlobalRead  = "settings/global:read"
+	ActionSettingsGlobalWrite = "settings/global:write"
 )
 
 // Exception module actions.

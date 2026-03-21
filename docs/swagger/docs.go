@@ -72,7 +72,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/config/contexts": {
+        "/v1/contexts": {
             "get": {
                 "security": [
                     {
@@ -242,7 +242,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/config/contexts/{contextId}": {
+        "/v1/contexts/{contextId}": {
             "get": {
                 "security": [
                     {
@@ -466,7 +466,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/config/contexts/{contextId}/clone": {
+        "/v1/contexts/{contextId}/clone": {
             "post": {
                 "security": [
                     {
@@ -556,7 +556,188 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/config/contexts/{contextId}/rules": {
+        "/v1/contexts/{contextId}/export-jobs": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Lists export jobs for a specific reconciliation context.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Export Jobs"
+                ],
+                "summary": "List export jobs by context",
+                "operationId": "listExportJobsByContext",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Context ID",
+                        "name": "contextId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Pagination cursor from previous response",
+                        "name": "cursor",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 200,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 20,
+                        "description": "Maximum number of records to return",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_reporting_adapters_http.ExportJobListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid query parameters",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Context not found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Creates an async export job for large report exports (CSV, JSON, XML).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Export Jobs"
+                ],
+                "summary": "Create an export job",
+                "operationId": "createExportJob",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Context ID",
+                        "name": "contextId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Export job parameters",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_reporting_adapters_http.CreateExportJobRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/internal_reporting_adapters_http.CreateExportJobResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request payload",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Context not found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict: duplicate resource or idempotency key in progress",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Export worker disabled",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/contexts/{contextId}/rules": {
             "get": {
                 "security": [
                     {
@@ -742,7 +923,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/config/contexts/{contextId}/rules/reorder": {
+        "/v1/contexts/{contextId}/rules/reorder": {
             "post": {
                 "security": [
                     {
@@ -823,7 +1004,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/config/contexts/{contextId}/rules/{ruleId}": {
+        "/v1/contexts/{contextId}/rules/{ruleId}": {
             "get": {
                 "security": [
                     {
@@ -1071,7 +1252,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/config/contexts/{contextId}/schedules": {
+        "/v1/contexts/{contextId}/schedules": {
             "get": {
                 "security": [
                     {
@@ -1234,7 +1415,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/config/contexts/{contextId}/schedules/{scheduleId}": {
+        "/v1/contexts/{contextId}/schedules/{scheduleId}": {
             "get": {
                 "security": [
                     {
@@ -1482,7 +1663,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/config/contexts/{contextId}/sources": {
+        "/v1/contexts/{contextId}/sources": {
             "get": {
                 "security": [
                     {
@@ -1670,7 +1851,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/config/contexts/{contextId}/sources/{sourceId}": {
+        "/v1/contexts/{contextId}/sources/{sourceId}": {
             "get": {
                 "security": [
                     {
@@ -1918,7 +2099,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/config/contexts/{contextId}/sources/{sourceId}/field-maps": {
+        "/v1/contexts/{contextId}/sources/{sourceId}/field-maps": {
             "get": {
                 "security": [
                     {
@@ -2089,799 +2270,6 @@ const docTemplate = `{
                         "description": "Internal server error",
                         "schema": {
                             "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/config/fee-schedules": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Returns fee schedules for the tenant. Results may be capped by the \"limit\" query parameter (default 20, max 200).",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Configuration Fee Schedules"
-                ],
-                "summary": "List fee schedules",
-                "operationId": "listFeeSchedules",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Request ID for tracing",
-                        "name": "X-Request-Id",
-                        "in": "header"
-                    },
-                    {
-                        "maximum": 200,
-                        "minimum": 1,
-                        "type": "integer",
-                        "default": 20,
-                        "description": "Maximum number of records to return",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "List of fee schedules",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeScheduleResponse"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Creates a new fee schedule for transaction fee calculation.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Configuration Fee Schedules"
-                ],
-                "summary": "Create a fee schedule",
-                "operationId": "createFeeSchedule",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Request ID for tracing",
-                        "name": "X-Request-Id",
-                        "in": "header"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Idempotency key for safe retries",
-                        "name": "X-Idempotency-Key",
-                        "in": "header"
-                    },
-                    {
-                        "description": "Fee schedule creation payload",
-                        "name": "feeSchedule",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateFeeScheduleRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Successfully created fee schedule",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeScheduleResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid request payload",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "409": {
-                        "description": "Conflict: duplicate resource or idempotency key in progress",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/config/fee-schedules/{scheduleId}": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Returns a fee schedule by ID.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Configuration Fee Schedules"
-                ],
-                "summary": "Get a fee schedule",
-                "operationId": "getFeeSchedule",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Request ID for tracing",
-                        "name": "X-Request-Id",
-                        "in": "header"
-                    },
-                    {
-                        "type": "string",
-                        "format": "uuid",
-                        "description": "Schedule ID",
-                        "name": "scheduleId",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Successfully retrieved fee schedule",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeScheduleResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid schedule ID format",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Fee schedule not found",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Removes a fee schedule by ID.",
-                "tags": [
-                    "Configuration Fee Schedules"
-                ],
-                "summary": "Delete a fee schedule",
-                "operationId": "deleteFeeSchedule",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Request ID for tracing",
-                        "name": "X-Request-Id",
-                        "in": "header"
-                    },
-                    {
-                        "type": "string",
-                        "format": "uuid",
-                        "description": "Schedule ID",
-                        "name": "scheduleId",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "Fee schedule successfully deleted"
-                    },
-                    "400": {
-                        "description": "Invalid schedule ID format",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Fee schedule not found",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "patch": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Updates fields on a fee schedule by ID.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Configuration Fee Schedules"
-                ],
-                "summary": "Update a fee schedule",
-                "operationId": "updateFeeSchedule",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Request ID for tracing",
-                        "name": "X-Request-Id",
-                        "in": "header"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Idempotency key for safe retries",
-                        "name": "X-Idempotency-Key",
-                        "in": "header"
-                    },
-                    {
-                        "type": "string",
-                        "format": "uuid",
-                        "description": "Schedule ID",
-                        "name": "scheduleId",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Fee schedule updates",
-                        "name": "feeSchedule",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.UpdateFeeScheduleRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Successfully updated fee schedule",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeScheduleResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid request payload",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Fee schedule not found",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "409": {
-                        "description": "Conflict: duplicate resource or idempotency key in progress",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/config/fee-schedules/{scheduleId}/simulate": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Calculates fees for a given gross amount using a specific fee schedule.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Configuration Fee Schedules"
-                ],
-                "summary": "Simulate fee calculation",
-                "operationId": "simulateFeeSchedule",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Request ID for tracing",
-                        "name": "X-Request-Id",
-                        "in": "header"
-                    },
-                    {
-                        "type": "string",
-                        "format": "uuid",
-                        "description": "Schedule ID",
-                        "name": "scheduleId",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Simulation parameters",
-                        "name": "simulate",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.SimulateFeeRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Simulation result",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.SimulateFeeResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid request payload",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Fee schedule not found",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/config/field-maps/{fieldMapId}": {
-            "delete": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Removes a field map by ID.",
-                "tags": [
-                    "Configuration Field Maps"
-                ],
-                "summary": "Delete a field map",
-                "operationId": "deleteFieldMap",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Request ID for tracing",
-                        "name": "X-Request-Id",
-                        "in": "header"
-                    },
-                    {
-                        "type": "string",
-                        "format": "uuid",
-                        "description": "Field map ID",
-                        "name": "fieldMapId",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "Field map successfully deleted"
-                    },
-                    "400": {
-                        "description": "Invalid field map ID format",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Field map not found",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "patch": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Updates fields on a field map by ID.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Configuration Field Maps"
-                ],
-                "summary": "Update a field map",
-                "operationId": "updateFieldMap",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Request ID for tracing",
-                        "name": "X-Request-Id",
-                        "in": "header"
-                    },
-                    {
-                        "type": "string",
-                        "format": "uuid",
-                        "description": "Field map ID",
-                        "name": "fieldMapId",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Field map updates",
-                        "name": "fieldMap",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.UpdateFieldMapRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Successfully updated field map",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldMapResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid request payload",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Field map not found",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "409": {
-                        "description": "Conflict: duplicate resource or idempotency key in progress",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/contexts/{contextId}/export-jobs": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Lists export jobs for a specific reconciliation context.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Export Jobs"
-                ],
-                "summary": "List export jobs by context",
-                "operationId": "listExportJobsByContext",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Request ID for tracing",
-                        "name": "X-Request-Id",
-                        "in": "header"
-                    },
-                    {
-                        "type": "string",
-                        "format": "uuid",
-                        "description": "Context ID",
-                        "name": "contextId",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Pagination cursor from previous response",
-                        "name": "cursor",
-                        "in": "query"
-                    },
-                    {
-                        "maximum": 200,
-                        "minimum": 1,
-                        "type": "integer",
-                        "default": 20,
-                        "description": "Maximum number of records to return",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_reporting_adapters_http.ExportJobListResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid query parameters",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Context not found",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Creates an async export job for large report exports (CSV, JSON, XML).",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Export Jobs"
-                ],
-                "summary": "Create an export job",
-                "operationId": "createExportJob",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Request ID for tracing",
-                        "name": "X-Request-Id",
-                        "in": "header"
-                    },
-                    {
-                        "type": "string",
-                        "format": "uuid",
-                        "description": "Context ID",
-                        "name": "contextId",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Export job parameters",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_reporting_adapters_http.CreateExportJobRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "202": {
-                        "description": "Accepted",
-                        "schema": {
-                            "$ref": "#/definitions/internal_reporting_adapters_http.CreateExportJobResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid request payload",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Context not found",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
-                        }
-                    },
-                    "409": {
-                        "description": "Conflict: duplicate resource or idempotency key in progress",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
-                        }
-                    },
-                    "503": {
-                        "description": "Export worker disabled",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -5437,6 +4825,618 @@ const docTemplate = `{
                         "description": "Internal server error",
                         "schema": {
                             "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/fee-schedules": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns fee schedules for the tenant. Results may be capped by the \"limit\" query parameter (default 20, max 200).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Configuration Fee Schedules"
+                ],
+                "summary": "List fee schedules",
+                "operationId": "listFeeSchedules",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "maximum": 200,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 20,
+                        "description": "Maximum number of records to return",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of fee schedules",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeScheduleResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Creates a new fee schedule for transaction fee calculation.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Configuration Fee Schedules"
+                ],
+                "summary": "Create a fee schedule",
+                "operationId": "createFeeSchedule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Idempotency key for safe retries",
+                        "name": "X-Idempotency-Key",
+                        "in": "header"
+                    },
+                    {
+                        "description": "Fee schedule creation payload",
+                        "name": "feeSchedule",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateFeeScheduleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Successfully created fee schedule",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeScheduleResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request payload",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict: duplicate resource or idempotency key in progress",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/fee-schedules/{scheduleId}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns a fee schedule by ID.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Configuration Fee Schedules"
+                ],
+                "summary": "Get a fee schedule",
+                "operationId": "getFeeSchedule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Schedule ID",
+                        "name": "scheduleId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully retrieved fee schedule",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeScheduleResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid schedule ID format",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Fee schedule not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Removes a fee schedule by ID.",
+                "tags": [
+                    "Configuration Fee Schedules"
+                ],
+                "summary": "Delete a fee schedule",
+                "operationId": "deleteFeeSchedule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Schedule ID",
+                        "name": "scheduleId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Fee schedule successfully deleted"
+                    },
+                    "400": {
+                        "description": "Invalid schedule ID format",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Fee schedule not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Updates fields on a fee schedule by ID.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Configuration Fee Schedules"
+                ],
+                "summary": "Update a fee schedule",
+                "operationId": "updateFeeSchedule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Idempotency key for safe retries",
+                        "name": "X-Idempotency-Key",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Schedule ID",
+                        "name": "scheduleId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Fee schedule updates",
+                        "name": "feeSchedule",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.UpdateFeeScheduleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully updated fee schedule",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeScheduleResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request payload",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Fee schedule not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict: duplicate resource or idempotency key in progress",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/fee-schedules/{scheduleId}/simulate": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Calculates fees for a given gross amount using a specific fee schedule.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Configuration Fee Schedules"
+                ],
+                "summary": "Simulate fee calculation",
+                "operationId": "simulateFeeSchedule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Schedule ID",
+                        "name": "scheduleId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Simulation parameters",
+                        "name": "simulate",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.SimulateFeeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Simulation result",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.SimulateFeeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request payload",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Fee schedule not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/field-maps/{fieldMapId}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Removes a field map by ID.",
+                "tags": [
+                    "Configuration Field Maps"
+                ],
+                "summary": "Delete a field map",
+                "operationId": "deleteFieldMap",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Field map ID",
+                        "name": "fieldMapId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Field map successfully deleted"
+                    },
+                    "400": {
+                        "description": "Invalid field map ID format",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Field map not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Updates fields on a field map by ID.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Configuration Field Maps"
+                ],
+                "summary": "Update a field map",
+                "operationId": "updateFieldMap",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Field map ID",
+                        "name": "fieldMapId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Field map updates",
+                        "name": "fieldMap",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.UpdateFieldMapRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully updated field map",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldMapResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request payload",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Field map not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict: duplicate resource or idempotency key in progress",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -9453,22 +9453,22 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/system/config": {
+        "/v1/system/configs": {
             "get": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns the current effective configuration values with secrets redacted.\nIncludes metadata: version, last reload timestamp, and env var overrides.\nRoute is only registered when AUTH_ENABLED=true at startup.",
+                "description": "Returns all resolved configuration values with their source and redaction status.\nBootstrap-only keys (require restart) are included with their current effective value.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "System"
+                    "System Configs"
                 ],
-                "summary": "Get current configuration",
-                "operationId": "getSystemConfig",
+                "summary": "Get effective configs",
+                "operationId": "getSystemConfigs",
                 "parameters": [
                     {
                         "type": "string",
@@ -9479,27 +9479,27 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Resolved configuration values",
                         "schema": {
-                            "$ref": "#/definitions/internal_bootstrap.GetConfigResponse"
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.ConfigsResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse"
                         }
                     }
                 }
@@ -9510,7 +9510,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Apply runtime configuration changes. Changes are validated, written to\nYAML, and hot-reloaded. Immutable keys (infrastructure-bound) are rejected.\nRoute is only registered when AUTH_ENABLED=true at startup.\nRequires an initialized audit/history backend; failures can return runtime_apply_failed or audit_failed.",
+                "description": "Applies a batch of configuration mutations with optimistic concurrency control.\nPass the expected revision in the If-Match header (ETag format). A null JSON\nvalue for any key resets it to its registered default.",
                 "consumes": [
                     "application/json"
                 ],
@@ -9518,10 +9518,10 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "System"
+                    "System Configs"
                 ],
-                "summary": "Update configuration",
-                "operationId": "updateSystemConfig",
+                "summary": "Patch config values",
+                "operationId": "patchSystemConfigs",
                 "parameters": [
                     {
                         "type": "string",
@@ -9530,70 +9530,76 @@ const docTemplate = `{
                         "in": "header"
                     },
                     {
-                        "description": "Configuration changes",
+                        "type": "string",
+                        "description": "Expected revision for optimistic concurrency (e.g. \\",
+                        "name": "If-Match",
+                        "in": "header"
+                    },
+                    {
+                        "description": "Configuration values to update",
                         "name": "request",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_bootstrap.UpdateConfigRequest"
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.PatchConfigsRequest"
                         }
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "New revision after successful write",
                         "schema": {
-                            "$ref": "#/definitions/internal_bootstrap.UpdateConfigResponse"
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.PatchResponse"
                         }
                     },
                     "400": {
-                        "description": "Invalid request",
+                        "description": "Invalid request body or empty values",
                         "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse"
                         }
                     },
-                    "422": {
-                        "description": "Validation failed",
+                    "409": {
+                        "description": "Revision conflict",
                         "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse"
                         }
                     }
                 }
             }
         },
-        "/v1/system/config/history": {
+        "/v1/system/configs/history": {
             "get": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns recent configuration changes with timestamps, actors, and diffs.\nRoute is only registered when AUTH_ENABLED=true at startup.\nRequires an initialized audit/history backend.",
+                "description": "Returns the change audit trail for configuration entries, ordered by revision.\nSupports pagination via limit/offset and optional key filtering.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "System"
+                    "System Configs"
                 ],
-                "summary": "Get configuration change history",
+                "summary": "Get config change history",
                 "operationId": "getSystemConfigHistory",
                 "parameters": [
                     {
@@ -9601,52 +9607,81 @@ const docTemplate = `{
                         "description": "Request ID for tracing",
                         "name": "X-Request-Id",
                         "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter history by config key",
+                        "name": "key",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 100,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Maximum number of entries to return",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "minimum": 0,
+                        "type": "integer",
+                        "default": 0,
+                        "description": "Number of entries to skip",
+                        "name": "offset",
+                        "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Configuration change history entries",
                         "schema": {
-                            "$ref": "#/definitions/internal_bootstrap.ConfigHistoryResponse"
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.HistoryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid query parameters",
+                        "schema": {
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse"
                         }
                     }
                 }
             }
         },
-        "/v1/system/config/reload": {
+        "/v1/system/configs/reload": {
             "post": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
                 ],
-                "description": "Re-reads the YAML configuration file, applies environment variable overlays,\nvalidates the result, and atomically swaps the active config. Returns a diff\nof detected changes.\nRoute is only registered when AUTH_ENABLED=true at startup.\nRequires an initialized audit/history backend; failures can return runtime_apply_failed or audit_failed.",
+                "description": "Triggers a full configuration resynchronization from the backing store.\nUse after manual database changes or to force a cache refresh.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "System"
+                    "System Configs"
                 ],
-                "summary": "Force reload configuration from disk",
-                "operationId": "reloadSystemConfig",
+                "summary": "Reload configuration",
+                "operationId": "reloadSystemConfigs",
                 "parameters": [
                     {
                         "type": "string",
@@ -9657,47 +9692,47 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Reload acknowledged",
                         "schema": {
-                            "$ref": "#/definitions/internal_bootstrap.ReloadConfigResponse"
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.ReloadResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse"
                         }
                     },
                     "500": {
-                        "description": "Internal server error",
+                        "description": "Reload failed",
                         "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse"
                         }
                     }
                 }
             }
         },
-        "/v1/system/config/schema": {
+        "/v1/system/configs/schema": {
             "get": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns field metadata for all YAML-managed configuration fields,\ngrouped by section for UI rendering. Includes key, type, default,\ncurrent value, hot-reloadability, env override status, and constraints.\nRoute is only registered when AUTH_ENABLED=true at startup.",
+                "description": "Returns the registry metadata for all configuration keys, including\nvalue type, default value, allowed scopes, mutability, and apply behavior.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "System"
+                    "System Configs"
                 ],
-                "summary": "Get configuration schema",
+                "summary": "Get config key schema",
                 "operationId": "getSystemConfigSchema",
                 "parameters": [
                     {
@@ -9709,27 +9744,331 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Schema metadata for all config keys",
                         "schema": {
-                            "$ref": "#/definitions/internal_bootstrap.ConfigSchemaResponse"
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.SchemaResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/system/settings": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns resolved settings for the current scope. The scope defaults to \"tenant\"\nand can be overridden with ?scope=global. Tenant-scoped settings inherit from\nglobal defaults when no tenant override exists.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "System Settings"
+                ],
+                "summary": "Get effective settings",
+                "operationId": "getSystemSettings",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "enum": [
+                            "tenant",
+                            "global"
+                        ],
+                        "type": "string",
+                        "default": "tenant",
+                        "description": "Resolution scope",
+                        "name": "scope",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Resolved setting values with scope",
+                        "schema": {
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.SettingsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid scope parameter",
+                        "schema": {
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Applies a batch of settings mutations for the resolved scope with optimistic\nconcurrency control. Pass the expected revision in the If-Match header.\nA null JSON value for any key resets it to its registered default.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "System Settings"
+                ],
+                "summary": "Patch setting values",
+                "operationId": "patchSystemSettings",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Expected revision for optimistic concurrency (e.g. \\",
+                        "name": "If-Match",
+                        "in": "header"
+                    },
+                    {
+                        "enum": [
+                            "tenant",
+                            "global"
+                        ],
+                        "type": "string",
+                        "default": "tenant",
+                        "description": "Resolution scope",
+                        "name": "scope",
+                        "in": "query"
+                    },
+                    {
+                        "description": "Setting values to update",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.PatchSettingsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "New revision after successful write",
+                        "schema": {
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.PatchResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request body or empty values",
+                        "schema": {
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Revision conflict",
+                        "schema": {
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/system/settings/history": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the change audit trail for settings entries, ordered by revision.\nThe subject is resolved from the auth context (tenant isolation enforcement).\nSupports pagination via limit/offset and optional key filtering.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "System Settings"
+                ],
+                "summary": "Get setting change history",
+                "operationId": "getSystemSettingHistory",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter history by setting key",
+                        "name": "key",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "tenant",
+                            "global"
+                        ],
+                        "type": "string",
+                        "default": "tenant",
+                        "description": "Resolution scope",
+                        "name": "scope",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 100,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Maximum number of entries to return",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "minimum": 0,
+                        "type": "integer",
+                        "default": 0,
+                        "description": "Number of entries to skip",
+                        "name": "offset",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Setting change history entries",
+                        "schema": {
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.HistoryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid query parameters or scope",
+                        "schema": {
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/system/settings/schema": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the registry metadata for all setting keys, including\nvalue type, default value, allowed scopes, mutability, and apply behavior.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "System Settings"
+                ],
+                "summary": "Get setting key schema",
+                "operationId": "getSystemSettingSchema",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Schema metadata for all setting keys",
+                        "schema": {
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.SchemaResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.ErrorResponse"
                         }
                     }
                 }
@@ -13129,175 +13468,6 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_bootstrap.ConfigChange": {
-            "type": "object",
-            "properties": {
-                "key": {
-                    "type": "string"
-                },
-                "newValue": {},
-                "oldValue": {}
-            }
-        },
-        "internal_bootstrap.ConfigChangeRejection": {
-            "type": "object",
-            "properties": {
-                "key": {
-                    "type": "string"
-                },
-                "reason": {
-                    "type": "string"
-                },
-                "value": {}
-            }
-        },
-        "internal_bootstrap.ConfigChangeResult": {
-            "type": "object",
-            "properties": {
-                "hotReloaded": {
-                    "type": "boolean"
-                },
-                "key": {
-                    "type": "string"
-                },
-                "newValue": {},
-                "oldValue": {}
-            }
-        },
-        "internal_bootstrap.ConfigFieldSchema": {
-            "description": "Schema metadata for a single config field",
-            "type": "object",
-            "properties": {
-                "constraints": {
-                    "description": "Validation constraints (e.g., \"min:1\", \"max:10000\")",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    },
-                    "example": [
-                        "min:1",
-                        "max:10000"
-                    ]
-                },
-                "currentValue": {
-                    "description": "Current effective value (redacted for secrets), serialized as a string.",
-                    "type": "string",
-                    "example": "200"
-                },
-                "defaultValue": {
-                    "description": "Default value serialized as a string for a stable OpenAPI contract.",
-                    "type": "string",
-                    "example": "100"
-                },
-                "description": {
-                    "description": "Human-readable description",
-                    "type": "string",
-                    "example": "Maximum requests per rate limit window"
-                },
-                "envOverride": {
-                    "description": "Whether the field is currently overridden by an env var",
-                    "type": "boolean",
-                    "example": false
-                },
-                "envVar": {
-                    "description": "Name of the corresponding environment variable",
-                    "type": "string",
-                    "example": "RATE_LIMIT_MAX"
-                },
-                "hotReloadable": {
-                    "description": "Whether changes take effect without restart",
-                    "type": "boolean",
-                    "example": true
-                },
-                "key": {
-                    "description": "Dot-notation key (e.g., \"rate_limit.max\")",
-                    "type": "string",
-                    "example": "rate_limit.max"
-                },
-                "label": {
-                    "description": "Human-readable label",
-                    "type": "string",
-                    "example": "Rate Limit Max"
-                },
-                "section": {
-                    "description": "Logical section for UI grouping",
-                    "type": "string",
-                    "example": "rate_limit"
-                },
-                "type": {
-                    "description": "Data type: string, int, bool",
-                    "type": "string",
-                    "enum": [
-                        "string",
-                        "int",
-                        "bool"
-                    ],
-                    "example": "int"
-                }
-            }
-        },
-        "internal_bootstrap.ConfigHistoryEntry": {
-            "description": "A historical configuration change event",
-            "type": "object",
-            "properties": {
-                "actor": {
-                    "description": "Actor who made the change (user ID or \"system\")",
-                    "type": "string",
-                    "example": "system"
-                },
-                "changeType": {
-                    "description": "Type of change: \"reloaded\", \"updated\", \"startup\"",
-                    "type": "string",
-                    "example": "updated"
-                },
-                "changes": {
-                    "description": "Changed fields with old/new values",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/internal_bootstrap.ConfigChange"
-                    }
-                },
-                "timestamp": {
-                    "description": "Timestamp of the change",
-                    "type": "string",
-                    "example": "2025-07-15T10:30:00Z"
-                }
-            }
-        },
-        "internal_bootstrap.ConfigHistoryResponse": {
-            "description": "Configuration change history",
-            "type": "object",
-            "properties": {
-                "items": {
-                    "description": "History entries ordered newest-first",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/internal_bootstrap.ConfigHistoryEntry"
-                    }
-                }
-            }
-        },
-        "internal_bootstrap.ConfigSchemaResponse": {
-            "description": "Configuration schema grouped by section",
-            "type": "object",
-            "properties": {
-                "sections": {
-                    "description": "Sections maps section names to their field schemas",
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/definitions/internal_bootstrap.ConfigFieldSchema"
-                        }
-                    }
-                },
-                "totalFields": {
-                    "description": "Total number of managed fields",
-                    "type": "integer",
-                    "example": 56
-                }
-            }
-        },
         "internal_bootstrap.DependencyChecks": {
             "description": "Individual dependency health status",
             "type": "object",
@@ -13354,38 +13524,6 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_bootstrap.GetConfigResponse": {
-            "description": "Current system configuration with metadata",
-            "type": "object",
-            "properties": {
-                "config": {
-                    "description": "Config sections with redacted secrets",
-                    "type": "object",
-                    "additionalProperties": {}
-                },
-                "envOverrides": {
-                    "description": "List of keys currently overridden by environment variables",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    },
-                    "example": [
-                        "postgres.primary_password",
-                        "auth.token_secret"
-                    ]
-                },
-                "lastReloadAt": {
-                    "description": "Timestamp of last successful reload",
-                    "type": "string",
-                    "example": "2025-07-15T10:30:00Z"
-                },
-                "version": {
-                    "description": "Current config version (increments on each reload/update)",
-                    "type": "integer",
-                    "example": 3
-                }
-            }
-        },
         "internal_bootstrap.ReadinessResponse": {
             "description": "Service readiness status with optional dependency checks",
             "type": "object",
@@ -13406,73 +13544,6 @@ const docTemplate = `{
                         "degraded"
                     ],
                     "example": "ok"
-                }
-            }
-        },
-        "internal_bootstrap.ReloadConfigResponse": {
-            "description": "Result of a configuration reload operation",
-            "type": "object",
-            "properties": {
-                "changes": {
-                    "description": "Details of each changed field",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/internal_bootstrap.ConfigChange"
-                    }
-                },
-                "changesDetected": {
-                    "description": "Number of changed fields detected",
-                    "type": "integer",
-                    "example": 2
-                },
-                "reloadedAt": {
-                    "description": "Timestamp of the reload",
-                    "type": "string",
-                    "example": "2025-07-15T10:35:00Z"
-                },
-                "version": {
-                    "description": "New config version after reload",
-                    "type": "integer",
-                    "example": 5
-                }
-            }
-        },
-        "internal_bootstrap.UpdateConfigRequest": {
-            "description": "Request to update configuration values",
-            "type": "object",
-            "required": [
-                "changes"
-            ],
-            "properties": {
-                "changes": {
-                    "description": "Map of dotted keys to new values",
-                    "type": "object",
-                    "additionalProperties": {}
-                }
-            }
-        },
-        "internal_bootstrap.UpdateConfigResponse": {
-            "description": "Result of a configuration update operation",
-            "type": "object",
-            "properties": {
-                "applied": {
-                    "description": "Successfully applied changes (secret values are redacted)",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/internal_bootstrap.ConfigChangeResult"
-                    }
-                },
-                "rejected": {
-                    "description": "Changes that were rejected (immutable keys, validation failures)",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/internal_bootstrap.ConfigChangeRejection"
-                    }
-                },
-                "version": {
-                    "description": "New config version after update",
-                    "type": "integer",
-                    "example": 4
                 }
             }
         },
@@ -14114,6 +14185,183 @@ const docTemplate = `{
                         "CANCELED"
                     ],
                     "example": "SUCCEEDED"
+                }
+            }
+        },
+        "pkg_systemplane_adapters_http_fiber.ConfigsResponse": {
+            "type": "object",
+            "properties": {
+                "revision": {
+                    "type": "integer"
+                },
+                "values": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.EffectiveValueDTO"
+                    }
+                }
+            }
+        },
+        "pkg_systemplane_adapters_http_fiber.EffectiveValueDTO": {
+            "type": "object",
+            "properties": {
+                "default": {},
+                "key": {
+                    "type": "string"
+                },
+                "redacted": {
+                    "type": "boolean"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "value": {}
+            }
+        },
+        "pkg_systemplane_adapters_http_fiber.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "pkg_systemplane_adapters_http_fiber.HistoryEntryDTO": {
+            "type": "object",
+            "properties": {
+                "actorId": {
+                    "type": "string"
+                },
+                "changedAt": {
+                    "description": "RFC3339",
+                    "type": "string"
+                },
+                "key": {
+                    "type": "string"
+                },
+                "newValue": {},
+                "oldValue": {},
+                "revision": {
+                    "type": "integer"
+                },
+                "scope": {
+                    "type": "string"
+                },
+                "subjectId": {
+                    "type": "string"
+                }
+            }
+        },
+        "pkg_systemplane_adapters_http_fiber.HistoryResponse": {
+            "type": "object",
+            "properties": {
+                "entries": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.HistoryEntryDTO"
+                    }
+                }
+            }
+        },
+        "pkg_systemplane_adapters_http_fiber.PatchConfigsRequest": {
+            "type": "object",
+            "properties": {
+                "values": {
+                    "description": "null value = reset to default",
+                    "type": "object",
+                    "additionalProperties": {}
+                }
+            }
+        },
+        "pkg_systemplane_adapters_http_fiber.PatchResponse": {
+            "type": "object",
+            "properties": {
+                "revision": {
+                    "type": "integer"
+                }
+            }
+        },
+        "pkg_systemplane_adapters_http_fiber.PatchSettingsRequest": {
+            "type": "object",
+            "properties": {
+                "values": {
+                    "type": "object",
+                    "additionalProperties": {}
+                }
+            }
+        },
+        "pkg_systemplane_adapters_http_fiber.ReloadResponse": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "pkg_systemplane_adapters_http_fiber.SchemaEntryDTO": {
+            "type": "object",
+            "properties": {
+                "allowedScopes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "applyBehavior": {
+                    "type": "string"
+                },
+                "defaultValue": {},
+                "description": {
+                    "type": "string"
+                },
+                "group": {
+                    "type": "string"
+                },
+                "key": {
+                    "type": "string"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "mutableAtRuntime": {
+                    "type": "boolean"
+                },
+                "secret": {
+                    "type": "boolean"
+                },
+                "valueType": {
+                    "type": "string"
+                }
+            }
+        },
+        "pkg_systemplane_adapters_http_fiber.SchemaResponse": {
+            "type": "object",
+            "properties": {
+                "keys": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.SchemaEntryDTO"
+                    }
+                }
+            }
+        },
+        "pkg_systemplane_adapters_http_fiber.SettingsResponse": {
+            "type": "object",
+            "properties": {
+                "revision": {
+                    "type": "integer"
+                },
+                "scope": {
+                    "type": "string"
+                },
+                "values": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/pkg_systemplane_adapters_http_fiber.EffectiveValueDTO"
+                    }
                 }
             }
         }

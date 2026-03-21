@@ -73,7 +73,6 @@ type WorkerManager struct {
 	parentCtx     context.Context
 	cancel        context.CancelFunc
 	running       bool
-	unsubscribe   func()
 }
 
 // NewWorkerManager creates a WorkerManager. If configManager is non-nil,
@@ -139,7 +138,6 @@ func (wm *WorkerManager) Start(ctx context.Context, cfg *Config) error {
 	wm.running = true
 
 	if wm.configManager != nil {
-		wm.unsubscribe = wm.configManager.SubscribeWithUnsubscribeErr(wm.onConfigChange)
 		if latestCfg := wm.configManager.Get(); latestCfg != nil {
 			cfg = latestCfg
 		}
@@ -155,11 +153,6 @@ func (wm *WorkerManager) Start(ctx context.Context, cfg *Config) error {
 
 		if wm.cancel != nil {
 			wm.cancel()
-		}
-
-		if wm.unsubscribe != nil {
-			wm.unsubscribe()
-			wm.unsubscribe = nil
 		}
 
 		wm.parentCtx = nil
@@ -195,16 +188,19 @@ func (wm *WorkerManager) Stop() error {
 		wm.cancel = nil
 	}
 
-	if wm.unsubscribe != nil {
-		wm.unsubscribe()
-		wm.unsubscribe = nil
-	}
-
 	wm.running = false
 	wm.parentCtx = nil
 	wm.mu.Unlock()
 
 	return stopErr
+}
+
+// ApplyConfig is the public entry point for applying a config change to all
+// managed workers. It is called by the systemplane WorkerReconciler when the
+// Supervisor detects a configuration change, replacing the ConfigManager
+// subscription path. Delegates to onConfigChange for the actual reconciliation.
+func (wm *WorkerManager) ApplyConfig(cfg *Config) error {
+	return wm.onConfigChange(cfg)
 }
 
 // onConfigChange is the subscriber callback invoked by ConfigManager after
@@ -292,7 +288,7 @@ func (wm *WorkerManager) startSlotLocked(ctx context.Context, slot *workerSlot, 
 		return fmt.Errorf("worker %q: %w", slot.name, errWorkerDependencyUnavailable)
 	}
 
-	if err := applyWorkerRuntimeConfig(slot.name, worker, cfg); err != nil {
+	if err := applyWorkerRuntimeConfig(ctx, slot.name, worker, cfg); err != nil {
 		return fmt.Errorf("apply worker %q runtime config: %w", slot.name, err)
 	}
 

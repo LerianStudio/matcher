@@ -38,6 +38,11 @@ type Service struct {
 	connectionManager  connectionCloser
 	cleanupFuncs       []func()
 	readinessState     *readinessState
+
+	// Systemplane components for centralized runtime configuration.
+	// These are nil when systemplane initialization fails (graceful degradation).
+	spComponents     *SystemplaneComponents
+	cancelChangeFeed context.CancelFunc
 }
 
 type readinessState struct {
@@ -194,16 +199,23 @@ func (svc *Service) Shutdown(ctx context.Context) error {
 // stopBackgroundWorkers stops all background workers and the outbox runner.
 //
 // Shutdown ordering contract:
-// 1. ConfigManager.Stop() — prevents file watcher from triggering reloads
-// 2. WorkerManager.Stop() — stops all managed workers
-// 3. Standalone workers — stops workers not yet migrated to WorkerManager
+// 1. ConfigManager.Stop() — prevents config mutations during shutdown
+// 2. Systemplane change feed — stop change feed before supervisor
+// 3. Systemplane supervisor — stop config supervisory loop
+// 4. WorkerManager.Stop() — stops all managed workers
+// 5. Standalone workers — stops workers not yet migrated to WorkerManager
 // This order is CRITICAL: stopping ConfigManager first prevents the
 // config-change subscriber from restarting workers while we're shutting them down.
+// Systemplane change feed stops before the supervisor to prevent reload triggers
+// during shutdown.
 func (svc *Service) stopBackgroundWorkers(ctx context.Context, logger libLog.Logger) {
-	// Step 1: Stop config file watcher first (see ordering contract above).
+	// Step 1: Stop ConfigManager first (see ordering contract above).
 	if svc.ConfigManager != nil {
 		svc.ConfigManager.Stop()
 	}
+
+	// Step 2: Stop systemplane change feed and supervisor.
+	svc.stopSystemplane(ctx, logger)
 
 	_ = svc.stopWorkerManager(ctx, logger)
 
@@ -213,6 +225,31 @@ func (svc *Service) stopBackgroundWorkers(ctx context.Context, logger libLog.Log
 
 	if outbox := svc.outboxStoppable(); outbox != nil {
 		outbox.Stop()
+	}
+}
+
+// stopSystemplane gracefully shuts down the systemplane components.
+// The ordering matters: change feed stops first to prevent triggering reloads,
+// then the supervisor stops, and finally the backend connection is closed.
+func (svc *Service) stopSystemplane(ctx context.Context, logger libLog.Logger) {
+	if svc.cancelChangeFeed != nil {
+		svc.cancelChangeFeed()
+	}
+
+	if svc.spComponents == nil {
+		return
+	}
+
+	if svc.spComponents.Supervisor != nil {
+		if err := svc.spComponents.Supervisor.Stop(ctx); err != nil {
+			logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("systemplane supervisor stop failed: %v", err))
+		}
+	}
+
+	if svc.spComponents.Backend != nil {
+		if err := svc.spComponents.Backend.Close(); err != nil {
+			logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("systemplane backend close failed: %v", err))
+		}
 	}
 }
 

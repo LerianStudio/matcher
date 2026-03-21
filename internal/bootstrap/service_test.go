@@ -24,12 +24,43 @@ import (
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
+	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
 )
 
 // mockApp satisfies libCommons.App for testing.
 type mockApp struct{}
 
 func (m *mockApp) Run(_ *libCommons.Launcher) error { return nil }
+
+type orderingCloser struct {
+	order *[]string
+	name  string
+	err   error
+}
+
+func (closer *orderingCloser) Close() error {
+	*closer.order = append(*closer.order, closer.name)
+	return closer.err
+}
+
+type orderingSupervisor struct {
+	order *[]string
+	err   error
+}
+
+func (supervisor *orderingSupervisor) Current() domain.RuntimeBundle { return nil }
+func (supervisor *orderingSupervisor) Snapshot() domain.Snapshot     { return domain.Snapshot{} }
+func (supervisor *orderingSupervisor) PublishSnapshot(context.Context, domain.Snapshot, string) error {
+	return nil
+}
+func (supervisor *orderingSupervisor) ReconcileCurrent(context.Context, domain.Snapshot, string) error {
+	return nil
+}
+func (supervisor *orderingSupervisor) Reload(context.Context, string, ...string) error { return nil }
+func (supervisor *orderingSupervisor) Stop(context.Context) error {
+	*supervisor.order = append(*supervisor.order, "supervisor")
+	return supervisor.err
+}
 
 func TestServiceRun(t *testing.T) {
 	t.Parallel()
@@ -124,6 +155,22 @@ func TestServiceShutdown(t *testing.T) {
 
 		assert.NoError(t, err)
 	})
+}
+
+func TestService_stopSystemplane_OrdersCancellationBeforeShutdown(t *testing.T) {
+	t.Parallel()
+
+	order := []string{}
+	svc := &Service{
+		cancelChangeFeed: func() { order = append(order, "cancel") },
+		spComponents: &SystemplaneComponents{
+			Supervisor: &orderingSupervisor{order: &order},
+			Backend:    &orderingCloser{order: &order, name: "backend"},
+		},
+	}
+
+	svc.stopSystemplane(context.Background(), &libLog.NopLogger{})
+	assert.Equal(t, []string{"cancel", "supervisor", "backend"}, order)
 }
 
 func TestServiceShutdownWithWorkers(t *testing.T) {
@@ -268,7 +315,7 @@ func TestServiceResolveActiveConfig_UsesConfigManagerSnapshot(t *testing.T) {
 	managedCfg := defaultConfig()
 	managedCfg.App.LogLevel = "debug"
 
-	cm, err := NewConfigManager(managedCfg, "", &libLog.NopLogger{})
+	cm, err := NewConfigManager(managedCfg, &libLog.NopLogger{})
 	require.NoError(t, err)
 	t.Cleanup(cm.Stop)
 
@@ -303,21 +350,16 @@ func TestServiceRun_PropagatesWorkerManagerStartFailure(t *testing.T) {
 	assert.Contains(t, err.Error(), "critical worker \"critical\" failed to start")
 }
 
-func TestServiceStopBackgroundWorkers_StopsConfigManagerBeforeWorkers(t *testing.T) {
+func TestServiceStopBackgroundWorkers_StopsConfigManagerAndWorkers(t *testing.T) {
 	t.Parallel()
 
-	cm, err := NewConfigManager(defaultConfig(), "", &libLog.NopLogger{})
+	cm, err := NewConfigManager(defaultConfig(), &libLog.NopLogger{})
 	require.NoError(t, err)
 	t.Cleanup(cm.Stop)
 
 	worker := &recordingLifecycleWorker{}
 	worker.stopFn = func() {
-		select {
-		case <-cm.stopCh:
-			worker.stopObserved = true
-		default:
-			worker.stopObserved = false
-		}
+		worker.stopObserved = true
 	}
 
 	wm := NewWorkerManager(&libLog.NopLogger{}, nil)
@@ -332,7 +374,7 @@ func TestServiceStopBackgroundWorkers_StopsConfigManagerBeforeWorkers(t *testing
 	}
 
 	svc.stopBackgroundWorkers(context.Background(), &libLog.NopLogger{})
-	assert.True(t, worker.stopObserved)
+	assert.True(t, worker.stopObserved, "worker should have been stopped during shutdown")
 }
 
 func TestServerRun_StartsAndShutdowns(t *testing.T) {

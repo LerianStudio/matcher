@@ -8,7 +8,6 @@ package bootstrap
 
 import (
 	"os"
-	"path/filepath"
 	"testing"
 
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
@@ -57,15 +56,8 @@ func TestLoadConfigWithLogger_TypedNilLogger_CreatesDefault(t *testing.T) {
 func TestLoadConfigWithLogger_TenancyAliasConflictUsesPrimaryEnv(t *testing.T) {
 	clearConfigEnvVars(t)
 
-	wd, err := os.Getwd()
-	require.NoError(t, err)
-
-	yamlPath := filepath.Join(wd, "matcher-tenancy-alias-test.yaml")
-	t.Cleanup(func() {
-		require.NoError(t, os.Remove(yamlPath))
-	})
-	require.NoError(t, os.WriteFile(yamlPath, []byte("tenancy:\n  multi_tenant_infra_enabled: true\n"), 0o600))
-	t.Setenv(configFilePathEnv, yamlPath)
+	// When both MULTI_TENANT_ENABLED and MULTI_TENANT_INFRA_ENABLED are set,
+	// the primary (MULTI_TENANT_ENABLED) takes precedence.
 	t.Setenv("MULTI_TENANT_ENABLED", "false")
 	t.Setenv("MULTI_TENANT_INFRA_ENABLED", "true")
 
@@ -186,4 +178,20 @@ func TestLoadConfigFromEnv_DoesNotMutateProcessEnvironment(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "debug  ", os.Getenv("LOG_LEVEL"))
 	assert.Equal(t, "debug  ", cfg.App.LogLevel)
+}
+
+func TestLoadConfigFromEnv_OverlaysFetcherConfig(t *testing.T) {
+	// Not parallel: modifies env vars.
+	clearConfigEnvVars(t)
+	t.Setenv("FETCHER_ENABLED", "true")
+	t.Setenv("FETCHER_URL", "http://fetcher.local:4006")
+	t.Setenv("FETCHER_DISCOVERY_INTERVAL_SEC", "45")
+
+	cfg := defaultConfig()
+	err := loadConfigFromEnv(cfg)
+	require.NoError(t, err)
+
+	assert.True(t, cfg.Fetcher.Enabled)
+	assert.Equal(t, "http://fetcher.local:4006", cfg.Fetcher.URL)
+	assert.Equal(t, 45, cfg.Fetcher.DiscoveryIntervalSec)
 }
