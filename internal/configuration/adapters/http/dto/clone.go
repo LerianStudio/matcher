@@ -11,7 +11,7 @@ type CloneContextRequest struct {
 	Name string `json:"name" validate:"required,min=1,max=100" example:"Bank Reconciliation Q1 (Copy)" minLength:"1" maxLength:"100"`
 	// Whether to include sources and field maps in the clone (default: true)
 	IncludeSources *bool `json:"includeSources,omitempty" example:"true"`
-	// Whether to include match rules in the clone (default: true)
+	// Whether to include match rules and fee rules in the clone (default: true)
 	IncludeRules *bool `json:"includeRules,omitempty" example:"true"`
 }
 
