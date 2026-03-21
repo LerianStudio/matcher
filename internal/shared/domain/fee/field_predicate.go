@@ -190,6 +190,13 @@ func stringifyPredicateValue(raw any) string {
 	case bool:
 		return strconv.FormatBool(value)
 	case fmt.Stringer:
+		// Guard against typed-nil interface values (e.g. (*time.Time)(nil) satisfies
+		// fmt.Stringer but calling String() on it panics).
+		rv := reflect.ValueOf(value)
+		if rv.Kind() == reflect.Ptr && rv.IsNil() {
+			return ""
+		}
+
 		return value.String()
 	}
 
