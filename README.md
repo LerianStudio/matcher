@@ -118,7 +118,7 @@ Each directory contains a README with detailed documentation.
 
 ## Getting Started
 
-### 1) Start Infrastructure
+### 1) Configure (Optional)
 
 No configuration files needed — all defaults are baked into the binary and match the docker-compose setup.
 

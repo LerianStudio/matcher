@@ -1,7 +1,9 @@
 # Matcher — Bootstrap-Only Configuration (requires restart)
 #
-# These are the ONLY settings that require a container/pod restart to take
-# effect. Everything else is hot-reloadable at runtime via the systemplane API:
+# Common settings that require a container/pod restart to take effect.
+# For the full list of bootstrap-only keys, see the systemplane key definitions
+# in internal/bootstrap/systemplane_keys_*.go (any key with ApplyBootstrapOnly).
+# Everything else is hot-reloadable at runtime via the systemplane API:
 #
 #   GET  /v1/system/configs          — view current runtime config
 #   PATCH /v1/system/configs         — change any runtime-managed key
@@ -35,8 +37,9 @@ TLS_TERMINATED_UPSTREAM=false
 # TRUSTED_PROXIES=
 
 # ── Authentication ───────────────────────────────────────────────────────────
-# Enable lib-auth JWT middleware. When false, all endpoints are open.
-AUTH_ENABLED=false
+# Enable lib-auth JWT middleware.
+# REQUIRED for production. Only set to false for isolated local development.
+AUTH_ENABLED=true
 
 # Auth service address for token validation.
 # AUTH_SERVICE_ADDRESS=http://localhost:8081
@@ -57,7 +60,6 @@ OTEL_EXPORTER_OTLP_ENDPOINT=localhost:4317
 # Database metrics scrape interval (seconds).
 DB_METRICS_INTERVAL_SEC=15
 
-# Systemplane key must be a base64
-# Use: openssl rand -base64 32 | tr -d '\n'
-# Example used in docker compose below
-SYSTEMPLANE_SECRET_MASTER_KEY="+PnwgNy8bL3HGT1rOXp47PqyGcPywXH/epgmSVwPkL0="
+# SYSTEMPLANE_SECRET_MASTER_KEY=
+# REQUIRED: generate a unique value per environment:
+#   openssl rand -base64 32 | tr -d '\n'

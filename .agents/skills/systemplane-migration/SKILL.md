@@ -881,14 +881,14 @@ Content-Type: application/json
 
 ### PATCH Response Format
 
+<!-- Note: These examples match the actual DTOs in pkg/systemplane/adapters/http/fiber/dto.go -->
+
 ```json
 HTTP/1.1 200 OK
 ETag: "43"
 
 {
-  "revision": 43,
-  "applied_behavior": "worker-reconcile",
-  "changed_keys": ["rate_limit.max", "rate_limit.expiry_sec", "export_worker.enabled"]
+  "revision": 43
 }
 ```
 
@@ -900,14 +900,14 @@ ETag: "43"
     {
       "key": "rate_limit.max",
       "kind": "config",
-      "type": "int",
-      "default": 100,
-      "mutable_at_runtime": true,
-      "apply_behavior": "live-read",
+      "valueType": "int",
+      "defaultValue": 100,
+      "mutableAtRuntime": true,
+      "applyBehavior": "live-read",
       "secret": false,
       "description": "Maximum requests per window",
       "group": "rate_limit",
-      "allowed_scopes": ["global"]
+      "allowedScopes": ["global"]
     }
   ]
 }
@@ -1102,6 +1102,8 @@ The Matcher service registers **100+ keys** across 20 groups. Here's a summary:
 ## Appendix B: Quick Reference Commands
 
 ```bash
+# LOCAL DEV ONLY — requires AUTH_ENABLED=false
+
 # View current runtime config
 curl -s http://localhost:4018/v1/system/configs | jq
 

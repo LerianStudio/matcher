@@ -464,9 +464,11 @@ Split into `handlers_{feature}.go` when a context has 3+ distinct feature areas:
 
 ### 12. Systemplane is the Runtime Config Authority
 - Viper + env vars are **bootstrap-only** — used to load the initial `Config` struct at startup
-- After startup, the **systemplane** (`pkg/systemplane`) registry owns all runtime config reads
-- Runtime queries: `GET /v1/system/configs`, schema: `GET /v1/system/configs/schema`, history: `GET /v1/system/configs/history`
-- Never read Viper directly at runtime; use the systemplane registry's `Get(key)` method
+- After startup, the **systemplane** (`pkg/systemplane`) owns all runtime config
+- For runtime config values: use `configManager.Get()` which returns the systemplane-backed `*Config`
+- For runtime config schema/metadata: use `registry.Get(key)` which returns `KeyDef` metadata
+- Direct systemplane API: `GET /v1/system/configs`, schema: `GET /v1/system/configs/schema`, history: `GET /v1/system/configs/history`
+- Never read Viper directly at runtime
 
 ## Configuration
 
