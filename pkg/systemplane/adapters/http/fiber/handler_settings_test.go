@@ -224,6 +224,23 @@ func TestGetSettingHistory_Success(t *testing.T) {
 	assert.Equal(t, "dark", result.Entries[0].NewValue)
 }
 
+func TestGetSettingHistory_InvalidScope(t *testing.T) {
+	t.Parallel()
+
+	app, _, _, _, _ := newTestApp(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/system/settings/history?scope=invalid", nil)
+	resp := doRequest(t, app, req)
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+	body := readBody(t, resp)
+
+	var errResp ErrorResponse
+	require.NoError(t, json.Unmarshal([]byte(body), &errResp))
+	assert.Equal(t, "system_scope_invalid", errResp.Code)
+}
+
 func TestPatchSettings_InvalidBody(t *testing.T) {
 	t.Parallel()
 

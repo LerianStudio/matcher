@@ -83,7 +83,10 @@ func (handler *Handler) GetConfigSchema(fiberCtx *fiber.Ctx) error {
 
 // GetConfigHistory returns the change audit trail for config entries.
 func (handler *Handler) GetConfigHistory(fiberCtx *fiber.Ctx) error {
-	filter := parseHistoryFilter(fiberCtx, domain.KindConfig)
+	filter, err := parseHistoryFilter(fiberCtx, domain.KindConfig)
+	if err != nil {
+		return writeError(fiberCtx, err)
+	}
 
 	entries, err := handler.manager.GetConfigHistory(fiberCtx.UserContext(), filter)
 	if err != nil {

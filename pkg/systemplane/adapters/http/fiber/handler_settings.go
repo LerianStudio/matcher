@@ -94,7 +94,10 @@ func (handler *Handler) GetSettingSchema(fiberCtx *fiber.Ctx) error {
 // The subject is resolved from auth context — clients cannot specify
 // subjectId via query params (tenant isolation enforcement).
 func (handler *Handler) GetSettingHistory(fiberCtx *fiber.Ctx) error {
-	filter := parseHistoryFilter(fiberCtx, domain.KindSetting)
+	filter, err := parseHistoryFilter(fiberCtx, domain.KindSetting)
+	if err != nil {
+		return writeError(fiberCtx, err)
+	}
 
 	// Override subject from auth context — never trust client-supplied subjectId.
 	subject, err := handler.resolveSubject(fiberCtx)

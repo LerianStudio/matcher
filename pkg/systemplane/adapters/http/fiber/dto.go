@@ -254,7 +254,7 @@ func toHistoryResponse(entries []ports.HistoryEntry) HistoryResponse {
 
 // parseHistoryFilter extracts pagination and filter query params from the
 // Fiber context and returns a HistoryFilter with sensible defaults.
-func parseHistoryFilter(fiberCtx *fiber.Ctx, kind domain.Kind) ports.HistoryFilter {
+func parseHistoryFilter(fiberCtx *fiber.Ctx, kind domain.Kind) (ports.HistoryFilter, error) {
 	limit, _ := strconv.Atoi(fiberCtx.Query("limit", strconv.Itoa(defaultHistoryLimit)))
 	offset, _ := strconv.Atoi(fiberCtx.Query("offset", "0"))
 
@@ -272,7 +272,7 @@ func parseHistoryFilter(fiberCtx *fiber.Ctx, kind domain.Kind) ports.HistoryFilt
 	if scopeStr := fiberCtx.Query("scope"); scopeStr != "" {
 		scope = domain.Scope(scopeStr)
 		if scope != domain.ScopeGlobal && scope != domain.ScopeTenant {
-			scope = "" // ignore invalid scope rather than pass arbitrary string
+			return ports.HistoryFilter{}, domain.ErrScopeInvalid
 		}
 	}
 
@@ -285,5 +285,5 @@ func parseHistoryFilter(fiberCtx *fiber.Ctx, kind domain.Kind) ports.HistoryFilt
 		// NOTE: SubjectID is intentionally NOT read from query params.
 		// For settings history, the handler overrides this with the auth-resolved
 		// tenant identity. For config history, subject is always empty (global).
-	}
+	}, nil
 }

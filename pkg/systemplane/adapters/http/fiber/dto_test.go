@@ -198,7 +198,8 @@ func TestParseHistoryFilter_Defaults(t *testing.T) {
 	app, _, _, _, _ := newTestApp(t)
 
 	app.Get("/test-filter", func(c *fiber.Ctx) error {
-		filter := parseHistoryFilter(c, domain.KindConfig)
+		filter, err := parseHistoryFilter(c, domain.KindConfig)
+		require.NoError(t, err)
 		assert.Equal(t, domain.KindConfig, filter.Kind)
 		assert.Equal(t, defaultHistoryLimit, filter.Limit)
 		assert.Equal(t, 0, filter.Offset)
@@ -218,7 +219,8 @@ func TestParseHistoryFilter_CustomValues(t *testing.T) {
 	app, _, _, _, _ := newTestApp(t)
 
 	app.Get("/test-filter", func(c *fiber.Ctx) error {
-		filter := parseHistoryFilter(c, domain.KindSetting)
+		filter, err := parseHistoryFilter(c, domain.KindSetting)
+		require.NoError(t, err)
 		assert.Equal(t, domain.KindSetting, filter.Kind)
 		assert.Equal(t, 25, filter.Limit)
 		assert.Equal(t, 10, filter.Offset)
@@ -241,7 +243,8 @@ func TestParseHistoryFilter_ClampsBadLimit(t *testing.T) {
 	app, _, _, _, _ := newTestApp(t)
 
 	app.Get("/test-filter", func(c *fiber.Ctx) error {
-		filter := parseHistoryFilter(c, domain.KindConfig)
+		filter, err := parseHistoryFilter(c, domain.KindConfig)
+		require.NoError(t, err)
 		assert.Equal(t, defaultHistoryLimit, filter.Limit)
 
 		return c.SendStatus(http.StatusOK)
@@ -258,12 +261,29 @@ func TestParseHistoryFilter_ClampsNegativeOffset(t *testing.T) {
 	app, _, _, _, _ := newTestApp(t)
 
 	app.Get("/test-filter", func(c *fiber.Ctx) error {
-		filter := parseHistoryFilter(c, domain.KindConfig)
+		filter, err := parseHistoryFilter(c, domain.KindConfig)
+		require.NoError(t, err)
 		assert.Equal(t, 0, filter.Offset)
 
 		return c.SendStatus(http.StatusOK)
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/test-filter?offset=-5", nil)
+	doRequest(t, app, req)
+}
+
+func TestParseHistoryFilter_InvalidScope(t *testing.T) {
+	t.Parallel()
+
+	app, _, _, _, _ := newTestApp(t)
+
+	app.Get("/test-filter", func(c *fiber.Ctx) error {
+		_, err := parseHistoryFilter(c, domain.KindConfig)
+		require.ErrorIs(t, err, domain.ErrScopeInvalid)
+
+		return c.SendStatus(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test-filter?scope=invalid", nil)
 	doRequest(t, app, req)
 }

@@ -303,6 +303,23 @@ func TestGetConfigHistory_Success(t *testing.T) {
 	assert.Equal(t, "2026-03-17T12:00:00Z", result.Entries[0].ChangedAt)
 }
 
+func TestGetConfigHistory_InvalidScope(t *testing.T) {
+	t.Parallel()
+
+	app, _, _, _, _ := newTestApp(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/system/configs/history?scope=invalid", nil)
+	resp := doRequest(t, app, req)
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+	body := readBody(t, resp)
+
+	var errResp ErrorResponse
+	require.NoError(t, json.Unmarshal([]byte(body), &errResp))
+	assert.Equal(t, "system_scope_invalid", errResp.Code)
+}
+
 func TestPatchConfigs_ActorResolutionFailure(t *testing.T) {
 	t.Parallel()
 
