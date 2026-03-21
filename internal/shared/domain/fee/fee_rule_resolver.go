@@ -6,6 +6,7 @@ import "github.com/google/uuid"
 // metadata and returns the schedule from the first matching rule.
 // Returns nil if no rule matches (no normalization applied).
 // The caller must guarantee rules are pre-filtered by side and sorted by Priority ASC.
+// A nil or partial schedules map is treated defensively: missing schedules are skipped.
 func ResolveFeeSchedule(
 	metadata map[string]any,
 	rules []*FeeRule,

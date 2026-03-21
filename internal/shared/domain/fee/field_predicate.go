@@ -3,6 +3,8 @@ package fee
 import (
 	"context"
 	"fmt"
+	"reflect"
+	"strconv"
 	"strings"
 )
 
@@ -154,14 +156,14 @@ func (pred FieldPredicate) Evaluate(metadata map[string]any) bool {
 			return false
 		}
 
-		return strings.EqualFold(fmt.Sprintf("%v", rawVal), pred.Value)
+		return strings.EqualFold(stringifyPredicateValue(rawVal), pred.Value)
 
 	case PredicateOperatorIn:
 		if !exists {
 			return false
 		}
 
-		strVal := fmt.Sprintf("%v", rawVal)
+		strVal := stringifyPredicateValue(rawVal)
 
 		for _, candidate := range pred.Values {
 			if strings.EqualFold(strVal, candidate) {
@@ -176,5 +178,40 @@ func (pred FieldPredicate) Evaluate(metadata map[string]any) bool {
 
 	default:
 		return false
+	}
+}
+
+func stringifyPredicateValue(raw any) string {
+	switch value := raw.(type) {
+	case string:
+		return value
+	case []byte:
+		return string(value)
+	case bool:
+		return strconv.FormatBool(value)
+	case fmt.Stringer:
+		return value.String()
+	}
+
+	return stringifyPredicateScalar(raw)
+}
+
+func stringifyPredicateScalar(raw any) string {
+	rv := reflect.ValueOf(raw)
+	if !rv.IsValid() {
+		return fmt.Sprintf("%v", raw)
+	}
+
+	switch rv.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return strconv.FormatInt(rv.Int(), 10)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return strconv.FormatUint(rv.Uint(), 10)
+	case reflect.Float32:
+		return strconv.FormatFloat(rv.Float(), 'f', -1, 32)
+	case reflect.Float64:
+		return strconv.FormatFloat(rv.Float(), 'f', -1, 64)
+	default:
+		return fmt.Sprintf("%v", raw)
 	}
 }
