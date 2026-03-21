@@ -103,7 +103,7 @@ func (historyDocument *historyDoc) toHistoryEntryWithCodec(codec *secretcodec.Co
 		return entry, nil
 	}
 
-	target := domain.Target{Kind: domain.KindConfig, Scope: entry.Scope, SubjectID: entry.SubjectID}
+	target := domain.Target{Kind: domain.Kind(historyDocument.Kind), Scope: entry.Scope, SubjectID: entry.SubjectID}
 
 	oldValue, err := codec.Decrypt(target, entry.Key, entry.OldValue)
 	if err != nil {

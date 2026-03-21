@@ -61,11 +61,11 @@ func TestHistoryStore_ListHistory(t *testing.T) {
 		newVal, err := json.Marshal("debug")
 		require.NoError(t, err)
 
-		rows := sqlmock.NewRows([]string{"key", "scope", "subject", "old_value", "new_value", "revision", "actor_id", "changed_at"}).
-			AddRow("log_level", "global", "", oldVal, newVal, 2, "admin", now).
-			AddRow("log_level", "global", "", nil, oldVal, 1, "admin", now.Add(-time.Hour))
+		rows := sqlmock.NewRows([]string{"kind", "key", "scope", "subject", "old_value", "new_value", "revision", "actor_id", "changed_at"}).
+			AddRow("config", "log_level", "global", "", oldVal, newVal, 2, "admin", now).
+			AddRow("config", "log_level", "global", "", nil, oldVal, 1, "admin", now.Add(-time.Hour))
 
-		mock.ExpectQuery(`SELECT key, scope, subject, old_value, new_value, revision, actor_id, changed_at FROM test_schema.runtime_history ORDER BY changed_at DESC`).
+		mock.ExpectQuery(`SELECT kind, key, scope, subject, old_value, new_value, revision, actor_id, changed_at FROM test_schema.runtime_history ORDER BY changed_at DESC`).
 			WillReturnRows(rows)
 
 		entries, err := store.ListHistory(ctx, ports.HistoryFilter{})
@@ -97,9 +97,9 @@ func TestHistoryStore_ListHistory(t *testing.T) {
 		newRaw, err := json.Marshal(newEncrypted)
 		require.NoError(t, err)
 
-		rows := sqlmock.NewRows([]string{"key", "scope", "subject", "old_value", "new_value", "revision", "actor_id", "changed_at"}).
-			AddRow("rabbitmq.password", "global", "", oldRaw, newRaw, 3, "admin", now)
-		mock.ExpectQuery(`SELECT key, scope, subject, old_value, new_value, revision, actor_id, changed_at FROM test_schema.runtime_history ORDER BY changed_at DESC`).
+		rows := sqlmock.NewRows([]string{"kind", "key", "scope", "subject", "old_value", "new_value", "revision", "actor_id", "changed_at"}).
+			AddRow("config", "rabbitmq.password", "global", "", oldRaw, newRaw, 3, "admin", now)
+		mock.ExpectQuery(`SELECT kind, key, scope, subject, old_value, new_value, revision, actor_id, changed_at FROM test_schema.runtime_history ORDER BY changed_at DESC`).
 			WillReturnRows(rows)
 
 		entries, err := store.ListHistory(ctx, ports.HistoryFilter{})
@@ -120,10 +120,10 @@ func TestHistoryStore_ListHistory(t *testing.T) {
 		newVal, err := json.Marshal("value")
 		require.NoError(t, err)
 
-		rows := sqlmock.NewRows([]string{"key", "scope", "subject", "old_value", "new_value", "revision", "actor_id", "changed_at"}).
-			AddRow("key1", "global", "", nil, newVal, 1, "admin", now)
+		rows := sqlmock.NewRows([]string{"kind", "key", "scope", "subject", "old_value", "new_value", "revision", "actor_id", "changed_at"}).
+			AddRow("config", "key1", "global", "", nil, newVal, 1, "admin", now)
 
-		mock.ExpectQuery(`SELECT key, scope, subject, old_value, new_value, revision, actor_id, changed_at FROM test_schema.runtime_history WHERE kind = \$1 ORDER BY changed_at DESC`).
+		mock.ExpectQuery(`SELECT kind, key, scope, subject, old_value, new_value, revision, actor_id, changed_at FROM test_schema.runtime_history WHERE kind = \$1 ORDER BY changed_at DESC`).
 			WithArgs("config").
 			WillReturnRows(rows)
 
@@ -142,9 +142,9 @@ func TestHistoryStore_ListHistory(t *testing.T) {
 		store, mock := newTestHistoryStore(t)
 		ctx := context.Background()
 
-		rows := sqlmock.NewRows([]string{"key", "scope", "subject", "old_value", "new_value", "revision", "actor_id", "changed_at"})
+		rows := sqlmock.NewRows([]string{"kind", "key", "scope", "subject", "old_value", "new_value", "revision", "actor_id", "changed_at"})
 
-		mock.ExpectQuery(`SELECT key, scope, subject, old_value, new_value, revision, actor_id, changed_at FROM test_schema.runtime_history WHERE kind = \$1 AND scope = \$2 ORDER BY changed_at DESC`).
+		mock.ExpectQuery(`SELECT kind, key, scope, subject, old_value, new_value, revision, actor_id, changed_at FROM test_schema.runtime_history WHERE kind = \$1 AND scope = \$2 ORDER BY changed_at DESC`).
 			WithArgs("setting", "tenant").
 			WillReturnRows(rows)
 
@@ -164,9 +164,9 @@ func TestHistoryStore_ListHistory(t *testing.T) {
 		store, mock := newTestHistoryStore(t)
 		ctx := context.Background()
 
-		rows := sqlmock.NewRows([]string{"key", "scope", "subject", "old_value", "new_value", "revision", "actor_id", "changed_at"})
+		rows := sqlmock.NewRows([]string{"kind", "key", "scope", "subject", "old_value", "new_value", "revision", "actor_id", "changed_at"})
 
-		mock.ExpectQuery(`SELECT key, scope, subject, old_value, new_value, revision, actor_id, changed_at FROM test_schema.runtime_history WHERE subject = \$1 ORDER BY changed_at DESC`).
+		mock.ExpectQuery(`SELECT kind, key, scope, subject, old_value, new_value, revision, actor_id, changed_at FROM test_schema.runtime_history WHERE subject = \$1 ORDER BY changed_at DESC`).
 			WithArgs("tenant-xyz").
 			WillReturnRows(rows)
 
@@ -185,9 +185,9 @@ func TestHistoryStore_ListHistory(t *testing.T) {
 		store, mock := newTestHistoryStore(t)
 		ctx := context.Background()
 
-		rows := sqlmock.NewRows([]string{"key", "scope", "subject", "old_value", "new_value", "revision", "actor_id", "changed_at"})
+		rows := sqlmock.NewRows([]string{"kind", "key", "scope", "subject", "old_value", "new_value", "revision", "actor_id", "changed_at"})
 
-		mock.ExpectQuery(`SELECT key, scope, subject, old_value, new_value, revision, actor_id, changed_at FROM test_schema.runtime_history WHERE key = \$1 ORDER BY changed_at DESC`).
+		mock.ExpectQuery(`SELECT kind, key, scope, subject, old_value, new_value, revision, actor_id, changed_at FROM test_schema.runtime_history WHERE key = \$1 ORDER BY changed_at DESC`).
 			WithArgs("log_level").
 			WillReturnRows(rows)
 
@@ -206,9 +206,9 @@ func TestHistoryStore_ListHistory(t *testing.T) {
 		store, mock := newTestHistoryStore(t)
 		ctx := context.Background()
 
-		rows := sqlmock.NewRows([]string{"key", "scope", "subject", "old_value", "new_value", "revision", "actor_id", "changed_at"})
+		rows := sqlmock.NewRows([]string{"kind", "key", "scope", "subject", "old_value", "new_value", "revision", "actor_id", "changed_at"})
 
-		mock.ExpectQuery(`SELECT key, scope, subject, old_value, new_value, revision, actor_id, changed_at FROM test_schema.runtime_history WHERE kind = \$1 AND scope = \$2 AND subject = \$3 AND key = \$4 ORDER BY changed_at DESC`).
+		mock.ExpectQuery(`SELECT kind, key, scope, subject, old_value, new_value, revision, actor_id, changed_at FROM test_schema.runtime_history WHERE kind = \$1 AND scope = \$2 AND subject = \$3 AND key = \$4 ORDER BY changed_at DESC`).
 			WithArgs("setting", "tenant", "tenant-abc", "theme").
 			WillReturnRows(rows)
 
@@ -230,9 +230,9 @@ func TestHistoryStore_ListHistory(t *testing.T) {
 		store, mock := newTestHistoryStore(t)
 		ctx := context.Background()
 
-		rows := sqlmock.NewRows([]string{"key", "scope", "subject", "old_value", "new_value", "revision", "actor_id", "changed_at"})
+		rows := sqlmock.NewRows([]string{"kind", "key", "scope", "subject", "old_value", "new_value", "revision", "actor_id", "changed_at"})
 
-		mock.ExpectQuery(`SELECT key, scope, subject, old_value, new_value, revision, actor_id, changed_at FROM test_schema.runtime_history ORDER BY changed_at DESC, revision DESC, id DESC LIMIT \$1`).
+		mock.ExpectQuery(`SELECT kind, key, scope, subject, old_value, new_value, revision, actor_id, changed_at FROM test_schema.runtime_history ORDER BY changed_at DESC, revision DESC, id DESC LIMIT \$1`).
 			WithArgs(10).
 			WillReturnRows(rows)
 
@@ -251,9 +251,9 @@ func TestHistoryStore_ListHistory(t *testing.T) {
 		store, mock := newTestHistoryStore(t)
 		ctx := context.Background()
 
-		rows := sqlmock.NewRows([]string{"key", "scope", "subject", "old_value", "new_value", "revision", "actor_id", "changed_at"})
+		rows := sqlmock.NewRows([]string{"kind", "key", "scope", "subject", "old_value", "new_value", "revision", "actor_id", "changed_at"})
 
-		mock.ExpectQuery(`SELECT key, scope, subject, old_value, new_value, revision, actor_id, changed_at FROM test_schema.runtime_history ORDER BY changed_at DESC, revision DESC, id DESC OFFSET \$1`).
+		mock.ExpectQuery(`SELECT kind, key, scope, subject, old_value, new_value, revision, actor_id, changed_at FROM test_schema.runtime_history ORDER BY changed_at DESC, revision DESC, id DESC OFFSET \$1`).
 			WithArgs(5).
 			WillReturnRows(rows)
 
@@ -272,9 +272,9 @@ func TestHistoryStore_ListHistory(t *testing.T) {
 		store, mock := newTestHistoryStore(t)
 		ctx := context.Background()
 
-		rows := sqlmock.NewRows([]string{"key", "scope", "subject", "old_value", "new_value", "revision", "actor_id", "changed_at"})
+		rows := sqlmock.NewRows([]string{"kind", "key", "scope", "subject", "old_value", "new_value", "revision", "actor_id", "changed_at"})
 
-		mock.ExpectQuery(`SELECT key, scope, subject, old_value, new_value, revision, actor_id, changed_at FROM test_schema.runtime_history ORDER BY changed_at DESC, revision DESC, id DESC LIMIT \$1 OFFSET \$2`).
+		mock.ExpectQuery(`SELECT kind, key, scope, subject, old_value, new_value, revision, actor_id, changed_at FROM test_schema.runtime_history ORDER BY changed_at DESC, revision DESC, id DESC LIMIT \$1 OFFSET \$2`).
 			WithArgs(10, 20).
 			WillReturnRows(rows)
 
@@ -294,9 +294,9 @@ func TestHistoryStore_ListHistory(t *testing.T) {
 		store, mock := newTestHistoryStore(t)
 		ctx := context.Background()
 
-		rows := sqlmock.NewRows([]string{"key", "scope", "subject", "old_value", "new_value", "revision", "actor_id", "changed_at"})
+		rows := sqlmock.NewRows([]string{"kind", "key", "scope", "subject", "old_value", "new_value", "revision", "actor_id", "changed_at"})
 
-		mock.ExpectQuery(`SELECT key, scope, subject, old_value, new_value, revision, actor_id, changed_at FROM test_schema.runtime_history WHERE kind = \$1 ORDER BY changed_at DESC, revision DESC, id DESC LIMIT \$2`).
+		mock.ExpectQuery(`SELECT kind, key, scope, subject, old_value, new_value, revision, actor_id, changed_at FROM test_schema.runtime_history WHERE kind = \$1 ORDER BY changed_at DESC, revision DESC, id DESC LIMIT \$2`).
 			WithArgs("config", 5).
 			WillReturnRows(rows)
 
@@ -316,7 +316,7 @@ func TestHistoryStore_ListHistory(t *testing.T) {
 		store, mock := newTestHistoryStore(t)
 		ctx := context.Background()
 
-		mock.ExpectQuery(`SELECT key, scope, subject, old_value, new_value, revision, actor_id, changed_at`).
+		mock.ExpectQuery(`SELECT kind, key, scope, subject, old_value, new_value, revision, actor_id, changed_at`).
 			WillReturnError(errors.New("connection lost"))
 
 		_, err := store.ListHistory(ctx, ports.HistoryFilter{})
@@ -336,7 +336,7 @@ func TestHistoryStore_ListHistory(t *testing.T) {
 		rows := sqlmock.NewRows([]string{"key", "scope"}).
 			AddRow("log_level", "global")
 
-		mock.ExpectQuery(`SELECT key, scope, subject, old_value, new_value, revision, actor_id, changed_at`).
+		mock.ExpectQuery(`SELECT kind, key, scope, subject, old_value, new_value, revision, actor_id, changed_at`).
 			WillReturnRows(rows)
 
 		_, err := store.ListHistory(ctx, ports.HistoryFilter{})
@@ -353,10 +353,10 @@ func TestHistoryStore_ListHistory(t *testing.T) {
 		ctx := context.Background()
 
 		now := time.Now().UTC()
-		rows := sqlmock.NewRows([]string{"key", "scope", "subject", "old_value", "new_value", "revision", "actor_id", "changed_at"}).
-			AddRow("key1", "global", "", []byte("{bad}"), nil, 1, "admin", now)
+		rows := sqlmock.NewRows([]string{"kind", "key", "scope", "subject", "old_value", "new_value", "revision", "actor_id", "changed_at"}).
+			AddRow("config", "key1", "global", "", []byte("{bad}"), nil, 1, "admin", now)
 
-		mock.ExpectQuery(`SELECT key, scope, subject, old_value, new_value, revision, actor_id, changed_at`).
+		mock.ExpectQuery(`SELECT kind, key, scope, subject, old_value, new_value, revision, actor_id, changed_at`).
 			WillReturnRows(rows)
 
 		_, err := store.ListHistory(ctx, ports.HistoryFilter{})
@@ -373,10 +373,10 @@ func TestHistoryStore_ListHistory(t *testing.T) {
 		ctx := context.Background()
 
 		now := time.Now().UTC()
-		rows := sqlmock.NewRows([]string{"key", "scope", "subject", "old_value", "new_value", "revision", "actor_id", "changed_at"}).
-			AddRow("key1", "global", "", nil, []byte("{bad}"), 1, "admin", now)
+		rows := sqlmock.NewRows([]string{"kind", "key", "scope", "subject", "old_value", "new_value", "revision", "actor_id", "changed_at"}).
+			AddRow("config", "key1", "global", "", nil, []byte("{bad}"), 1, "admin", now)
 
-		mock.ExpectQuery(`SELECT key, scope, subject, old_value, new_value, revision, actor_id, changed_at`).
+		mock.ExpectQuery(`SELECT kind, key, scope, subject, old_value, new_value, revision, actor_id, changed_at`).
 			WillReturnRows(rows)
 
 		_, err := store.ListHistory(ctx, ports.HistoryFilter{})
@@ -393,10 +393,10 @@ func TestHistoryStore_ListHistory(t *testing.T) {
 		ctx := context.Background()
 
 		now := time.Now().UTC()
-		rows := sqlmock.NewRows([]string{"key", "scope", "subject", "old_value", "new_value", "revision", "actor_id", "changed_at"}).
-			AddRow("key1", "global", "", nil, nil, 1, "admin", now)
+		rows := sqlmock.NewRows([]string{"kind", "key", "scope", "subject", "old_value", "new_value", "revision", "actor_id", "changed_at"}).
+			AddRow("config", "key1", "global", "", nil, nil, 1, "admin", now)
 
-		mock.ExpectQuery(`SELECT key, scope, subject, old_value, new_value, revision, actor_id, changed_at`).
+		mock.ExpectQuery(`SELECT kind, key, scope, subject, old_value, new_value, revision, actor_id, changed_at`).
 			WillReturnRows(rows)
 
 		entries, err := store.ListHistory(ctx, ports.HistoryFilter{})
@@ -420,10 +420,10 @@ func TestHistoryStore_ListHistory(t *testing.T) {
 		newVal, err := json.Marshal(map[string]any{"new": true})
 		require.NoError(t, err)
 
-		rows := sqlmock.NewRows([]string{"key", "scope", "subject", "old_value", "new_value", "revision", "actor_id", "changed_at"}).
-			AddRow("theme", "tenant", "tenant-123", oldVal, newVal, 5, "user1", now)
+		rows := sqlmock.NewRows([]string{"kind", "key", "scope", "subject", "old_value", "new_value", "revision", "actor_id", "changed_at"}).
+			AddRow("setting", "theme", "tenant", "tenant-123", oldVal, newVal, 5, "user1", now)
 
-		mock.ExpectQuery(`SELECT key, scope, subject, old_value, new_value, revision, actor_id, changed_at`).
+		mock.ExpectQuery(`SELECT kind, key, scope, subject, old_value, new_value, revision, actor_id, changed_at`).
 			WillReturnRows(rows)
 
 		entries, err := store.ListHistory(ctx, ports.HistoryFilter{})

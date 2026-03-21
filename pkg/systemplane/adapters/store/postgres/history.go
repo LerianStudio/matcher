@@ -42,7 +42,7 @@ func (historyStore *HistoryStore) ListHistory(ctx context.Context, filter ports.
 	builder.addFilterClause("key", filter.Key)
 
 	// #nosec G202 -- table identifier is validated in bootstrap (operator-controlled, not user input).
-	query := "SELECT key, scope, subject, old_value, new_value, revision, actor_id, changed_at FROM " +
+	query := "SELECT kind, key, scope, subject, old_value, new_value, revision, actor_id, changed_at FROM " +
 		qualify(historyStore.schema, historyStore.historyTable)
 
 	if len(builder.clauses) > 0 {
@@ -113,6 +113,7 @@ func (queryBuilder *historyQueryBuilder) nextArg() string {
 
 func (historyStore *HistoryStore) scanHistoryEntry(rows *sql.Rows) (ports.HistoryEntry, error) {
 	var (
+		kind        string
 		key         string
 		scope       string
 		subject     string
@@ -123,7 +124,7 @@ func (historyStore *HistoryStore) scanHistoryEntry(rows *sql.Rows) (ports.Histor
 		changedAt   time.Time
 	)
 
-	if err := rows.Scan(&key, &scope, &subject, &oldValueRaw, &newValueRaw, &revision, &actorID, &changedAt); err != nil {
+	if err := rows.Scan(&kind, &key, &scope, &subject, &oldValueRaw, &newValueRaw, &revision, &actorID, &changedAt); err != nil {
 		return ports.HistoryEntry{}, fmt.Errorf("postgres history list: scan: %w", err)
 	}
 
@@ -136,13 +137,15 @@ func (historyStore *HistoryStore) scanHistoryEntry(rows *sql.Rows) (ports.Histor
 		ChangedAt: changedAt,
 	}
 
+	decryptTarget := domain.Target{Kind: domain.Kind(kind), Scope: entry.Scope, SubjectID: entry.SubjectID}
+
 	decodedOldValue, hasOldValue, err := decodeOptionalJSONValue(oldValueRaw, "old_value")
 	if err != nil {
 		return ports.HistoryEntry{}, err
 	}
 
 	if hasOldValue {
-		decodedOldValue, err = historyStore.decryptValue(domain.Target{Kind: domain.KindConfig, Scope: entry.Scope, SubjectID: entry.SubjectID}, key, decodedOldValue)
+		decodedOldValue, err = historyStore.decryptValue(decryptTarget, key, decodedOldValue)
 		if err != nil {
 			return ports.HistoryEntry{}, fmt.Errorf("postgres history list: decrypt old_value: %w", err)
 		}
@@ -156,7 +159,7 @@ func (historyStore *HistoryStore) scanHistoryEntry(rows *sql.Rows) (ports.Histor
 	}
 
 	if hasNewValue {
-		decodedNewValue, err = historyStore.decryptValue(domain.Target{Kind: domain.KindConfig, Scope: entry.Scope, SubjectID: entry.SubjectID}, key, decodedNewValue)
+		decodedNewValue, err = historyStore.decryptValue(decryptTarget, key, decodedNewValue)
 		if err != nil {
 			return ports.HistoryEntry{}, fmt.Errorf("postgres history list: decrypt new_value: %w", err)
 		}
