@@ -382,6 +382,9 @@ func isFeeRuleClientError(err error) bool {
 		fee.ErrPredicateValueRequired,
 		fee.ErrPredicateValuesForbidden,
 		fee.ErrPredicateValuesRequired,
+		fee.ErrPredicateFieldTooLong,
+		fee.ErrPredicateValueTooLong,
+		fee.ErrPredicateValuesTooMany,
 	}
 	for _, safeErr := range clientErrors {
 		if errors.Is(err, safeErr) {

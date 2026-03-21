@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"strings"
+
 	"github.com/gofiber/fiber/v2"
 
 	authMiddleware "github.com/LerianStudio/lib-auth/v2/auth/middleware"
@@ -33,6 +35,17 @@ func ProtectedGroupWithActionsWithMiddleware(
 				"authorization actions not configured",
 			)
 		})
+	}
+
+	for _, action := range actions {
+		if strings.TrimSpace(action) == "" {
+			return router.Group("/", func(c *fiber.Ctx) error {
+				return fiber.NewError(
+					fiber.StatusInternalServerError,
+					"authorization actions contain empty entry",
+				)
+			})
+		}
 	}
 
 	handlers := make([]fiber.Handler, 0, len(actions)+2+len(additionalMiddleware))
