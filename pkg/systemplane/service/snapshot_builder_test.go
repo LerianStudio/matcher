@@ -127,7 +127,7 @@ func TestBuildSettings_TenantFallsBackToGlobalOverride(t *testing.T) {
 	require.NoError(t, builderErr)
 	settings, rev, err := builder.BuildSettings(context.Background(), Subject{Scope: domain.ScopeTenant, SubjectID: "tenant-001"})
 	require.NoError(t, err)
-	assert.Equal(t, domain.RevisionZero, rev)
+	assert.Equal(t, domain.Revision(3), rev)
 	assert.Equal(t, 50, settings["ui.page_size"].Value)
 	assert.Equal(t, "global-override", settings["ui.page_size"].Source)
 }

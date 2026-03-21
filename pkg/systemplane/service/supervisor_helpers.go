@@ -92,6 +92,12 @@ func (supervisor *defaultSupervisor) buildBundle(
 		if err == nil && !isNilRuntimeBundle(candidate) {
 			return candidate, BuildStrategyIncremental, nil
 		}
+
+		// Discard partially-built candidate to prevent resource leaks.
+		if err != nil && !isNilRuntimeBundle(candidate) {
+			// RuntimeBundle.Close(ctx) is the contract for releasing held resources.
+			_ = candidate.Close(ctx)
+		}
 		// Incremental build failed — fall through to full build.
 	}
 
@@ -116,6 +122,36 @@ func sortReconcilersByPhase(reconcilers []ports.BundleReconciler) []ports.Bundle
 	})
 
 	return sorted
+}
+
+// mergeUniqueTenantIDs merges extra tenant IDs into the base list, deduplicating
+// and sorting the result. This ensures first-seen tenants (not yet in any
+// snapshot) are included in bundle rebuilds.
+func mergeUniqueTenantIDs(base, extra []string) []string {
+	if len(extra) == 0 {
+		return base
+	}
+
+	seen := make(map[string]struct{}, len(base)+len(extra))
+
+	for _, id := range base {
+		seen[id] = struct{}{}
+	}
+
+	for _, id := range extra {
+		if id == "" {
+			continue
+		}
+
+		if _, exists := seen[id]; !exists {
+			seen[id] = struct{}{}
+			base = append(base, id)
+		}
+	}
+
+	sort.Strings(base)
+
+	return base
 }
 
 func cachedTenantIDs(snapshot *domain.Snapshot) []string {

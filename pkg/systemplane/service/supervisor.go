@@ -27,7 +27,7 @@ type Supervisor interface {
 	Snapshot() domain.Snapshot
 	PublishSnapshot(ctx context.Context, snap domain.Snapshot, reason string) error
 	ReconcileCurrent(ctx context.Context, snap domain.Snapshot, reason string) error
-	Reload(ctx context.Context, reason string) error
+	Reload(ctx context.Context, reason string, extraTenantIDs ...string) error
 	Stop(ctx context.Context) error
 }
 
@@ -190,7 +190,9 @@ func (supervisor *defaultSupervisor) ReconcileCurrent(ctx context.Context, snap 
 }
 
 // Reload rebuilds the snapshot and runtime bundle, then reconciles consumers.
-func (supervisor *defaultSupervisor) Reload(ctx context.Context, reason string) error {
+// Optional extraTenantIDs are merged into the cached tenant list to ensure
+// first-seen tenants (not yet in any snapshot) are included in the rebuild.
+func (supervisor *defaultSupervisor) Reload(ctx context.Context, reason string, extraTenantIDs ...string) error {
 	ctx, span := startSupervisorSpan(ctx, "reload")
 	defer span.End()
 
@@ -202,7 +204,7 @@ func (supervisor *defaultSupervisor) Reload(ctx context.Context, reason string) 
 	supervisor.mu.Lock()
 	defer supervisor.mu.Unlock()
 
-	tenantIDs := cachedTenantIDs(supervisor.snapshot.Load())
+	tenantIDs := mergeUniqueTenantIDs(cachedTenantIDs(supervisor.snapshot.Load()), extraTenantIDs)
 
 	snap, err := supervisor.builder.BuildFull(ctx, tenantIDs...)
 	if err != nil {

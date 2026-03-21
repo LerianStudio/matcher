@@ -19,4 +19,5 @@ var (
 	ErrReconcileFailed     = errors.New("bundle reconciliation failed")
 	ErrNoCurrentBundle     = errors.New("no current runtime bundle")
 	ErrSupervisorStopped   = errors.New("supervisor has been stopped")
+	ErrRegistryRequired    = errors.New("registry is required")
 )

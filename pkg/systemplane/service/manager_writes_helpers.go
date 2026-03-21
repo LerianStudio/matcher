@@ -144,7 +144,12 @@ func (manager *defaultManager) applyEscalation(ctx context.Context, target domai
 
 		return nil
 	case domain.ApplyBundleRebuild, domain.ApplyBundleRebuildAndReconcile:
-		if err := manager.supervisor.Reload(ctx, string(escalation)); err != nil {
+		var extraTenants []string
+		if target.Scope == domain.ScopeTenant && target.SubjectID != "" {
+			extraTenants = []string{target.SubjectID}
+		}
+
+		if err := manager.supervisor.Reload(ctx, string(escalation), extraTenants...); err != nil {
 			return fmt.Errorf("reload for %s: %w", escalation, err)
 		}
 

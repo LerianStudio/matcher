@@ -153,7 +153,8 @@ func (df *DebouncedFeed) launchInnerSubscribe(ctx context.Context) (<-chan ports
 }
 
 // handleSignal upserts a signal into the pending map, keeping the highest
-// revision and extending the debounce deadline.
+// revision and strongest ApplyBehavior seen, then extending the debounce
+// deadline.
 func (df *DebouncedFeed) handleSignal(ds *debounceState, signal ports.ChangeSignal) {
 	key := signal.Target.String()
 
@@ -163,8 +164,15 @@ func (df *DebouncedFeed) handleSignal(ds *debounceState, signal ports.ChangeSign
 		return
 	}
 
+	// Keep the highest revision seen.
 	if signal.Revision >= entry.signal.Revision {
-		entry.signal = signal
+		entry.signal.Revision = signal.Revision
+		entry.signal.Target = signal.Target
+	}
+
+	// Escalate to the strongest apply behavior seen in this window.
+	if signal.ApplyBehavior.Strength() > entry.signal.ApplyBehavior.Strength() {
+		entry.signal.ApplyBehavior = signal.ApplyBehavior
 	}
 
 	entry.dueAt = time.Now().Add(df.debounceDuration())

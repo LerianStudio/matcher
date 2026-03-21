@@ -21,6 +21,10 @@ import (
 //
 // An empty batch is a no-op and returns ApplyLiveRead with no keys.
 func Escalate(reg registry.Registry, ops []ports.WriteOp) (domain.ApplyBehavior, []string, error) {
+	if domain.IsNilValue(reg) {
+		return "", nil, fmt.Errorf("escalate: %w", domain.ErrRegistryRequired)
+	}
+
 	if len(ops) == 0 {
 		return domain.ApplyLiveRead, nil, nil
 	}

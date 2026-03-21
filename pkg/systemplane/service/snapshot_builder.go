@@ -148,9 +148,15 @@ func (builder *SnapshotBuilder) buildTenantSettings(ctx context.Context, tenantI
 	}
 
 	applyOverrides(effective, tenantResult.Entries, "tenant-override")
-	setRevision(effective, tenantResult.Revision)
 
-	return effective, tenantResult.Revision, nil
+	effectiveRevision := globalResult.Revision
+	if tenantResult.Revision > effectiveRevision {
+		effectiveRevision = tenantResult.Revision
+	}
+
+	setRevision(effective, effectiveRevision)
+
+	return effective, effectiveRevision, nil
 }
 
 // BuildFull builds a complete snapshot with configs, global settings, and any
