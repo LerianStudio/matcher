@@ -4,6 +4,7 @@ package fee
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -210,4 +211,134 @@ func TestFieldPredicate_Evaluate(t *testing.T) {
 			assert.Equal(t, tt.matches, got)
 		})
 	}
+}
+
+func TestFieldPredicate_BoundaryValidation(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	t.Run("field length", func(t *testing.T) {
+		t.Parallel()
+
+		t.Run("exact at limit passes", func(t *testing.T) {
+			t.Parallel()
+
+			field := strings.Repeat("a", maxPredicateFieldLength) // 255
+			pred := FieldPredicate{
+				Field:    field,
+				Operator: PredicateOperatorEquals,
+				Value:    "ok",
+			}
+			require.NoError(t, pred.Validate(ctx))
+		})
+
+		t.Run("one over limit fails", func(t *testing.T) {
+			t.Parallel()
+
+			field := strings.Repeat("a", maxPredicateFieldLength+1) // 256
+			pred := FieldPredicate{
+				Field:    field,
+				Operator: PredicateOperatorEquals,
+				Value:    "ok",
+			}
+			err := pred.Validate(ctx)
+			require.ErrorIs(t, err, ErrPredicateFieldTooLong)
+		})
+	})
+
+	t.Run("value length EQUALS", func(t *testing.T) {
+		t.Parallel()
+
+		t.Run("exact at limit passes", func(t *testing.T) {
+			t.Parallel()
+
+			value := strings.Repeat("v", maxPredicateValueLength) // 1024
+			pred := FieldPredicate{
+				Field:    "f",
+				Operator: PredicateOperatorEquals,
+				Value:    value,
+			}
+			require.NoError(t, pred.Validate(ctx))
+		})
+
+		t.Run("one over limit fails", func(t *testing.T) {
+			t.Parallel()
+
+			value := strings.Repeat("v", maxPredicateValueLength+1) // 1025
+			pred := FieldPredicate{
+				Field:    "f",
+				Operator: PredicateOperatorEquals,
+				Value:    value,
+			}
+			err := pred.Validate(ctx)
+			require.ErrorIs(t, err, ErrPredicateValueTooLong)
+		})
+	})
+
+	t.Run("value length IN element", func(t *testing.T) {
+		t.Parallel()
+
+		t.Run("exact at limit passes", func(t *testing.T) {
+			t.Parallel()
+
+			value := strings.Repeat("v", maxPredicateValueLength) // 1024
+			pred := FieldPredicate{
+				Field:    "f",
+				Operator: PredicateOperatorIn,
+				Values:   []string{"short", value},
+			}
+			require.NoError(t, pred.Validate(ctx))
+		})
+
+		t.Run("one over limit fails", func(t *testing.T) {
+			t.Parallel()
+
+			value := strings.Repeat("v", maxPredicateValueLength+1) // 1025
+			pred := FieldPredicate{
+				Field:    "f",
+				Operator: PredicateOperatorIn,
+				Values:   []string{"short", value},
+			}
+			err := pred.Validate(ctx)
+			require.ErrorIs(t, err, ErrPredicateValueTooLong)
+		})
+	})
+
+	t.Run("values count", func(t *testing.T) {
+		t.Parallel()
+
+		t.Run("exact at limit passes", func(t *testing.T) {
+			t.Parallel()
+
+			values := make([]string, maxPredicateValuesCount) // 100
+			for i := range values {
+				values[i] = "val"
+			}
+
+			pred := FieldPredicate{
+				Field:    "f",
+				Operator: PredicateOperatorIn,
+				Values:   values,
+			}
+			require.NoError(t, pred.Validate(ctx))
+		})
+
+		t.Run("one over limit fails", func(t *testing.T) {
+			t.Parallel()
+
+			values := make([]string, maxPredicateValuesCount+1) // 101
+			for i := range values {
+				values[i] = "val"
+			}
+
+			pred := FieldPredicate{
+				Field:    "f",
+				Operator: PredicateOperatorIn,
+				Values:   values,
+			}
+			err := pred.Validate(ctx)
+			require.ErrorIs(t, err, ErrPredicateValuesTooMany)
+		})
+	})
 }

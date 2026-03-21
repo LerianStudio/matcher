@@ -76,6 +76,11 @@ func (m *mockScheduleRepository) Delete(ctx context.Context, id uuid.UUID) error
 	return nil
 }
 
+// TODO: This tests mock behavior, not adapter behavior. Consider replacing with sqlmock test.
+// The test below creates a manual mock, calls its methods, and asserts the mock's canned responses —
+// this only verifies that the mock struct satisfies the interface, not that any real repository
+// implementation behaves correctly. A sqlmock-based test in adapters/postgres/ would exercise
+// actual SQL generation and scan logic.
 func TestScheduleRepositoryInterfaceSatisfaction(t *testing.T) {
 	t.Parallel()
 
@@ -114,6 +119,8 @@ func TestScheduleRepositoryInterfaceSatisfaction(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TODO: This tests mock behavior, not adapter behavior. Consider replacing with sqlmock test.
+// See note on TestScheduleRepositoryInterfaceSatisfaction above.
 func TestScheduleRepositoryMock_CustomBehavior(t *testing.T) {
 	t.Parallel()
 

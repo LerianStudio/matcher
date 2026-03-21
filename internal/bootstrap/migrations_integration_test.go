@@ -211,6 +211,120 @@ func TestRunMigrations_DiscoverySlice_ApplyRollbackAndReapply(t *testing.T) {
 	})
 }
 
+// TestMigrations_017_AddsNullableSideColumn verifies the two-phase source-side cutover:
+//
+//  1. Migration 017 adds a nullable "side" column to reconciliation_sources.
+//     Sources created without a side value are valid at this point.
+//  2. Migration 018 enforces NOT NULL + CHECK(side IN ('LEFT','RIGHT')).
+//     After 018, inserting without side must fail.
+//
+// The test walks the migrator to just-after-017, inserts a side-less source,
+// then applies 018 only if no NULL rows remain (backfill first).
+func TestMigrations_017_AddsNullableSideColumn(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	pgContainer, err := postgres.Run(ctx,
+		"postgres:17-alpine",
+		postgres.WithDatabase("matcher_side_test"),
+		postgres.WithUsername("matcher"),
+		postgres.WithPassword("matcher_test"),
+		testcontainers.WithWaitStrategy(
+			wait.ForAll(
+				wait.ForLog("database system is ready to accept connections").WithOccurrence(2),
+				wait.ForListeningPort("5432/tcp"),
+			).WithStartupTimeout(90*time.Second),
+		),
+	)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, pgContainer.Terminate(context.Background()))
+	}()
+
+	dsn, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
+	require.NoError(t, err)
+
+	db, err := sql.Open("pgx", dsn)
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, db.PingContext(ctx))
+
+	// Apply all migrations up to and including 017.
+	// The embedded source uses sequential numbering; step 17 times from version 0.
+	migrator, err := newMigrator(db, "matcher_side_test", "migrations")
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, closeMigrator(migrator))
+	}()
+
+	stepper, ok := migrator.(interface{ Steps(int) error })
+	require.True(t, ok, "migrator must support stepping")
+
+	// Step forward 17 migrations (000001 through 000017).
+	require.NoError(t, stepper.Steps(17))
+
+	t.Run("after 017 sources without side are allowed", func(t *testing.T) {
+		contextID := mustInsertReconciliationContext(t, ctx, db)
+
+		// Insert a source WITHOUT side — should succeed because 017 adds a nullable column.
+		var sourceID string
+		err := db.QueryRowContext(ctx, `
+			INSERT INTO reconciliation_sources (context_id, name, type, config)
+			VALUES ($1, $2, 'LEDGER', '{}'::jsonb)
+			RETURNING id`, contextID, uniqueName("side-null-src")).Scan(&sourceID)
+		require.NoError(t, err, "nullable side column must allow NULL after migration 017")
+		assert.NotEmpty(t, sourceID)
+
+		// Verify the column actually is NULL.
+		var side sql.NullString
+		err = db.QueryRowContext(ctx, `
+			SELECT side FROM reconciliation_sources WHERE id = $1`, sourceID).Scan(&side)
+		require.NoError(t, err)
+		assert.False(t, side.Valid, "side must be NULL for the newly inserted source")
+	})
+
+	t.Run("migration 018 blocks when NULL sides exist", func(t *testing.T) {
+		// 018's SELECT … current_setting() trick raises an error if any NULL side rows exist.
+		err := stepper.Steps(1)
+		require.Error(t, err, "migration 018 must block when sources have NULL side values")
+	})
+
+	t.Run("after backfill and 018 inserts without side fail", func(t *testing.T) {
+		// Backfill all NULL side rows so 018 can proceed.
+		_, err := db.ExecContext(ctx, `UPDATE reconciliation_sources SET side = 'LEFT' WHERE side IS NULL`)
+		require.NoError(t, err)
+
+		// Force the migrator dirty flag clean so we can retry the step.
+		// After a failed migration, golang-migrate marks the version dirty.
+		// We need a fresh migrator to retry from the correct version.
+		require.NoError(t, closeMigrator(migrator))
+
+		migrator, err = newMigrator(db, "matcher_side_test", "migrations")
+		require.NoError(t, err)
+
+		// Force to version 17 (clean) so step(1) applies 018.
+		forcer, ok := migrator.(interface{ Force(int) error })
+		require.True(t, ok, "migrator must support Force for dirty recovery")
+		require.NoError(t, forcer.Force(17))
+
+		stepper, ok = migrator.(interface{ Steps(int) error })
+		require.True(t, ok)
+
+		require.NoError(t, stepper.Steps(1), "migration 018 must succeed after backfill")
+
+		// Now inserting without side must fail (NOT NULL constraint).
+		contextID := mustInsertReconciliationContext(t, ctx, db)
+		_, err = db.ExecContext(ctx, `
+			INSERT INTO reconciliation_sources (context_id, name, type, config)
+			VALUES ($1, $2, 'LEDGER', '{}'::jsonb)`,
+			contextID, uniqueName("side-missing-src"))
+		require.Error(t, err, "NOT NULL constraint must reject sources without side after migration 018")
+		assert.Contains(t, err.Error(), "side")
+	})
+}
+
 func tableExists(t *testing.T, ctx context.Context, db *sql.DB, tableName string) bool {
 	t.Helper()
 
@@ -323,8 +437,8 @@ func mustInsertReconciliationSource(t *testing.T, ctx context.Context, db *sql.D
 
 	var sourceID string
 	err := db.QueryRowContext(ctx, `
-		INSERT INTO reconciliation_sources (context_id, name, type, config)
-		VALUES ($1, $2, $3, '{}'::jsonb)
+		INSERT INTO reconciliation_sources (context_id, name, type, side, config)
+		VALUES ($1, $2, $3, 'LEFT', '{}'::jsonb)
 		RETURNING id`, contextID, name, sourceType).Scan(&sourceID)
 	require.NoError(t, err)
 
