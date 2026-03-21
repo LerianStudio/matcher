@@ -444,29 +444,41 @@ func (cfg *Config) validateProductionOptionalConfig(asserter *assert.Asserter) e
 func (cfg *Config) validateProductionEndpoints(asserter *assert.Asserter) error {
 	ctx := context.Background()
 
+	// Multi-tenant URL must use HTTPS in production — it carries tenant
+	// provisioning data and service API keys.
+	if multiTenantModeEnabled(cfg) && strings.TrimSpace(cfg.Tenancy.MultiTenantURL) != "" {
+		if err := requireProductionHTTPS(ctx, asserter, cfg.Tenancy.MultiTenantURL, "MULTI_TENANT_URL"); err != nil {
+			return err
+		}
+	}
+
 	// Fetcher URL must use HTTPS in production when fetcher is enabled.
 	if cfg.Fetcher.Enabled && strings.TrimSpace(cfg.Fetcher.URL) != "" {
-		parsed, parseErr := url.Parse(strings.TrimSpace(cfg.Fetcher.URL))
-		if parseErr == nil && parsed != nil {
-			if err := asserter.That(ctx,
-				strings.EqualFold(parsed.Scheme, "https"),
-				"FETCHER_URL must use HTTPS in production",
-				"fetcher_url", cfg.Fetcher.URL); err != nil {
-				return fmt.Errorf("production config validation: %w", err)
-			}
+		if err := requireProductionHTTPS(ctx, asserter, cfg.Fetcher.URL, "FETCHER_URL"); err != nil {
+			return err
 		}
 	}
 
 	// Object storage endpoint must use HTTPS in production when configured.
 	if strings.TrimSpace(cfg.ObjectStorage.Endpoint) != "" {
-		parsed, parseErr := url.Parse(strings.TrimSpace(cfg.ObjectStorage.Endpoint))
-		if parseErr == nil && parsed != nil {
-			if err := asserter.That(ctx,
-				strings.EqualFold(parsed.Scheme, "https"),
-				"OBJECT_STORAGE_ENDPOINT must use HTTPS in production",
-				"object_storage_endpoint", cfg.ObjectStorage.Endpoint); err != nil {
-				return fmt.Errorf("production config validation: %w", err)
-			}
+		if err := requireProductionHTTPS(ctx, asserter, cfg.ObjectStorage.Endpoint, "OBJECT_STORAGE_ENDPOINT"); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// requireProductionHTTPS validates that rawURL uses HTTPS. The envVar name is
+// used in both the assertion message and the structured key-value pair.
+func requireProductionHTTPS(ctx context.Context, asserter *assert.Asserter, rawURL, envVar string) error {
+	parsed, parseErr := url.Parse(strings.TrimSpace(rawURL))
+	if parseErr == nil && parsed != nil {
+		if err := asserter.That(ctx,
+			strings.EqualFold(parsed.Scheme, "https"),
+			envVar+" must use HTTPS in production",
+			strings.ToLower(envVar), rawURL); err != nil {
+			return fmt.Errorf("production config validation: %w", err)
 		}
 	}
 
