@@ -112,9 +112,11 @@ func TestToEffectiveValueDTO_Normal(t *testing.T) {
 func TestToEffectiveValueDTO_Redacted(t *testing.T) {
 	t.Parallel()
 
+	// The service layer is the redaction authority — values arriving at the DTO
+	// layer are already masked. The DTO preserves them without re-masking.
 	ev := domain.EffectiveValue{
 		Key:      "db.password",
-		Value:    "secret123",
+		Value:    redactedPlaceholder,
 		Default:  "default-secret",
 		Source:   "env",
 		Redacted: true,
@@ -124,7 +126,7 @@ func TestToEffectiveValueDTO_Redacted(t *testing.T) {
 
 	assert.Equal(t, "db.password", dto.Key)
 	assert.Equal(t, redactedPlaceholder, dto.Value)
-	assert.Nil(t, dto.Default)
+	assert.Equal(t, "default-secret", dto.Default)
 	assert.True(t, dto.Redacted)
 }
 

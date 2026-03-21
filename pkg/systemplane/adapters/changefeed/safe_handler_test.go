@@ -28,7 +28,8 @@ func TestSafeInvokeHandler_PanicConvertedToError(t *testing.T) {
 	err := SafeInvokeHandler(func(_ ports.ChangeSignal) { panic("boom") }, ports.ChangeSignal{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrHandlerPanic)
-	assert.Contains(t, err.Error(), "boom")
+	// Panic detail is intentionally sanitized (MEDIUM-6 review fix).
+	assert.NotContains(t, err.Error(), "boom", "panic detail should not leak into error")
 }
 
 func TestSafeInvokeHandler_ErrorPanicConvertedToError(t *testing.T) {
@@ -39,5 +40,6 @@ func TestSafeInvokeHandler_ErrorPanicConvertedToError(t *testing.T) {
 	err := SafeInvokeHandler(func(_ ports.ChangeSignal) { panic(sentinelErr) }, ports.ChangeSignal{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrHandlerPanic)
-	assert.Contains(t, err.Error(), sentinelErr.Error())
+	// Panic detail is intentionally sanitized (MEDIUM-6 review fix).
+	assert.NotContains(t, err.Error(), sentinelErr.Error(), "panic detail should not leak into error")
 }

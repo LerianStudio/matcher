@@ -168,6 +168,18 @@ func ensureIndexes(ctx context.Context, entries, history *mongo.Collection) erro
 			},
 			Options: options.Index().SetUnique(true),
 		},
+		// Index optimized for revision-meta polling: the changefeed poll query
+		// filters by {key: "__revision_meta__"} first, so key must be the
+		// leading column.
+		{
+			Keys: bson.D{
+				{Key: "key", Value: 1},
+				{Key: "kind", Value: 1},
+				{Key: "scope", Value: 1},
+				{Key: "subject", Value: 1},
+			},
+			Options: options.Index().SetName("idx_revision_meta"),
+		},
 	}
 
 	if _, err := entries.Indexes().CreateMany(ctx, entriesModels); err != nil {

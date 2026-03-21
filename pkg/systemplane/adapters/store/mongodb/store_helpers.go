@@ -215,6 +215,10 @@ func (store *Store) validateReadDependencies() error {
 		return ErrNilStore
 	}
 
+	if store.client == nil {
+		return ErrNilClient
+	}
+
 	if store.entries == nil {
 		return ErrNilEntries
 	}

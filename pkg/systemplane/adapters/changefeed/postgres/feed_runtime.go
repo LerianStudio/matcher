@@ -39,19 +39,26 @@ func secureRandomFactor() float64 {
 
 // validateRevisionSource ensures that schema and revisionTable identifiers are
 // safe for SQL interpolation. Both must be empty (revision tracking disabled)
-// or both must match the PostgreSQL identifier pattern. This provides
-// defense-in-depth — the bootstrap layer validates upstream, but the Feed is a
-// public API and must enforce its own safety contract.
+// or both must match the PostgreSQL identifier pattern. A one-sided config
+// (schema set but not table, or vice versa) is rejected to prevent silent
+// no-op revision polling.
 func (feed *Feed) validateRevisionSource() error {
-	if feed.schema == "" && feed.revisionTable == "" {
+	schemaSet := feed.schema != ""
+	tableSet := feed.revisionTable != ""
+
+	if schemaSet != tableSet {
+		return fmt.Errorf("%w: schema and revision table must be configured together", ErrInvalidIdentifier)
+	}
+
+	if !schemaSet {
 		return nil // Revision tracking disabled — no identifiers to validate.
 	}
 
-	if feed.schema != "" && !identifierPattern.MatchString(feed.schema) {
+	if !identifierPattern.MatchString(feed.schema) {
 		return fmt.Errorf("%w: schema %q", ErrInvalidIdentifier, feed.schema)
 	}
 
-	if feed.revisionTable != "" && !identifierPattern.MatchString(feed.revisionTable) {
+	if !identifierPattern.MatchString(feed.revisionTable) {
 		return fmt.Errorf("%w: revision table %q", ErrInvalidIdentifier, feed.revisionTable)
 	}
 

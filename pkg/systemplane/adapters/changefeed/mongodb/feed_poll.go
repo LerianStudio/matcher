@@ -5,6 +5,7 @@ package mongodb
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -41,7 +42,17 @@ func (feed *Feed) subscribePoll(ctx context.Context, handler func(ports.ChangeSi
 				continue
 			}
 
-			for key, rev := range current {
+			// Sort keys for deterministic signal emission order.
+			sortedKeys := make([]string, 0, len(current))
+			for key := range current {
+				sortedKeys = append(sortedKeys, key)
+			}
+
+			sort.Strings(sortedKeys)
+
+			for _, key := range sortedKeys {
+				rev := current[key]
+
 				prev, exists := known[key]
 				if !exists || rev.Revision != prev.Revision {
 					if exists && rev.Revision > prev.Revision.Next() {

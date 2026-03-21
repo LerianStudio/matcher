@@ -172,22 +172,17 @@ func toConfigsResponse(resolved service.ResolvedSet) ConfigsResponse {
 }
 
 // toEffectiveValueDTO converts a domain EffectiveValue to its DTO form.
-// Redacted values are masked with a placeholder string and default is cleared.
+// The service layer is the authority on redaction — values reaching here are
+// already masked according to the key's RedactPolicy (full, mask-last-4, etc.).
+// The DTO layer preserves the upstream shape without re-masking.
 func toEffectiveValueDTO(ev domain.EffectiveValue) EffectiveValueDTO {
-	dto := EffectiveValueDTO{
+	return EffectiveValueDTO{
 		Key:      ev.Key,
 		Value:    ev.Value,
 		Default:  ev.Default,
 		Source:   ev.Source,
 		Redacted: ev.Redacted,
 	}
-
-	if ev.Redacted {
-		dto.Value = redactedPlaceholder
-		dto.Default = nil
-	}
-
-	return dto
 }
 
 // toSchemaResponse converts a slice of SchemaEntry into the API response.

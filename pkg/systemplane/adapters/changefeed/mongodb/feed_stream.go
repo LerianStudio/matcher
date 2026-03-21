@@ -84,6 +84,10 @@ func (feed *Feed) subscribeChangeStreamOnce(ctx context.Context, known map[strin
 			{Key: "operationType", Value: bson.D{
 				{Key: "$in", Value: bson.A{"insert", "update", "replace", "delete"}},
 			}},
+			// Filter server-side to only receive revision-meta sentinel documents.
+			// Other entry mutations are irrelevant — the revision-meta document is
+			// the canonical per-target revision signal for MongoDB-backed state.
+			{Key: "fullDocument.key", Value: revisionMetaKey},
 		}}},
 	}
 

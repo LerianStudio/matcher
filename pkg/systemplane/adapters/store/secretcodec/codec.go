@@ -189,6 +189,10 @@ func parseEnvelope(value any) (envelope, bool, error) {
 		return envelope{}, false, ErrInvalidEnvelope
 	}
 
+	if alg != envelopeAlgorithmAES256GCM {
+		return envelope{}, false, fmt.Errorf("%w: unsupported algorithm %q", ErrInvalidEnvelope, alg)
+	}
+
 	return envelope{Version: parsedVersion, Algorithm: alg, Nonce: nonce, Ciphertext: ciphertext}, true, nil
 }
 

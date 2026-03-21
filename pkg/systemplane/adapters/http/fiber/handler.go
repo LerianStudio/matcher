@@ -73,5 +73,5 @@ func (handler *Handler) Mount(router fiber.Router) {
 	settings.Get("/", handler.settingsAuth("read"), handler.GetSettings)
 	settings.Patch("/", handler.settingsAuth("write"), handler.PatchSettings)
 	settings.Get("/schema", handler.requireAuth("system/settings/schema:read"), handler.GetSettingSchema)
-	settings.Get("/history", handler.requireAuth("system/settings/history:read"), handler.GetSettingHistory)
+	settings.Get("/history", handler.settingsAuth("history:read"), handler.GetSettingHistory)
 }

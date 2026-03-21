@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
 // TestStoreImplementsInterface verifies compile-time interface compliance.
@@ -128,8 +129,14 @@ func TestStore_Get_NilDependenciesReturnSentinelErrors(t *testing.T) {
 	_, err := nilStore.Get(context.Background(), target)
 	assert.ErrorIs(t, err, ErrNilStore)
 
+	// Zero-value Store has nil client — validated before entries.
 	zeroValueStore := &Store{}
 	_, err = zeroValueStore.Get(context.Background(), target)
+	assert.ErrorIs(t, err, ErrNilClient)
+
+	// Non-nil client but nil entries collection.
+	clientOnlyStore := &Store{client: &mongo.Client{}}
+	_, err = clientOnlyStore.Get(context.Background(), target)
 	assert.ErrorIs(t, err, ErrNilEntries)
 }
 

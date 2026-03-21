@@ -21,7 +21,10 @@ func SafeInvokeHandler(handler func(ports.ChangeSignal), signal ports.ChangeSign
 
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			err = fmt.Errorf("%w: %v", ErrHandlerPanic, recovered)
+			// Sanitize: do not reflect panic value in the error to avoid leaking
+			// sensitive runtime data (stack addresses, internal state, etc.).
+			_ = recovered
+			err = fmt.Errorf("%w", ErrHandlerPanic)
 		}
 	}()
 
