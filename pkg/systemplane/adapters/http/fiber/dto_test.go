@@ -239,33 +239,33 @@ func TestParseHistoryFilter_CustomValues(t *testing.T) {
 	doRequest(t, app, req)
 }
 
-func TestParseHistoryFilter_ClampsBadLimit(t *testing.T) {
+func TestParseHistoryFilter_RejectsBadLimit(t *testing.T) {
 	t.Parallel()
 
 	app, _, _, _, _ := newTestApp(t)
 
 	app.Get("/test-filter", func(c *fiber.Ctx) error {
-		filter, err := parseHistoryFilter(c, domain.KindConfig)
-		require.NoError(t, err)
-		assert.Equal(t, defaultHistoryLimit, filter.Limit)
+		_, err := parseHistoryFilter(c, domain.KindConfig)
+		require.ErrorIs(t, err, domain.ErrValueInvalid)
+		assert.Contains(t, err.Error(), "limit must be a positive integer")
 
 		return c.SendStatus(http.StatusOK)
 	})
 
-	// Limit > maxHistoryLimit should be clamped to default
+	// Limit > maxHistoryLimit should be rejected
 	req := httptest.NewRequest(http.MethodGet, "/test-filter?limit=999", nil)
 	doRequest(t, app, req)
 }
 
-func TestParseHistoryFilter_ClampsNegativeOffset(t *testing.T) {
+func TestParseHistoryFilter_RejectsNegativeOffset(t *testing.T) {
 	t.Parallel()
 
 	app, _, _, _, _ := newTestApp(t)
 
 	app.Get("/test-filter", func(c *fiber.Ctx) error {
-		filter, err := parseHistoryFilter(c, domain.KindConfig)
-		require.NoError(t, err)
-		assert.Equal(t, 0, filter.Offset)
+		_, err := parseHistoryFilter(c, domain.KindConfig)
+		require.ErrorIs(t, err, domain.ErrValueInvalid)
+		assert.Contains(t, err.Error(), "offset must be a non-negative integer")
 
 		return c.SendStatus(http.StatusOK)
 	})

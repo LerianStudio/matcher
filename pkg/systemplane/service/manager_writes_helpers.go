@@ -114,35 +114,9 @@ func (manager *defaultManager) applyEscalation(ctx context.Context, target domai
 	case domain.ApplyBootstrapOnly:
 		return nil
 	case domain.ApplyLiveRead:
-		snap, err := manager.buildActiveSnapshot(ctx, target)
-		if err != nil {
-			return fmt.Errorf("build snapshot for live-read: %w", err)
-		}
-
-		if err := manager.supervisor.PublishSnapshot(ctx, snap, "live-read"); err != nil {
-			return fmt.Errorf("publish snapshot for live-read: %w", err)
-		}
-
-		if manager.stateSync != nil {
-			manager.stateSync(ctx, snap)
-		}
-
-		return nil
+		return manager.applyWithSnapshot(ctx, target, "live-read", manager.supervisor.PublishSnapshot)
 	case domain.ApplyWorkerReconcile:
-		snap, err := manager.buildActiveSnapshot(ctx, target)
-		if err != nil {
-			return fmt.Errorf("build snapshot for worker-reconcile: %w", err)
-		}
-
-		if err := manager.supervisor.ReconcileCurrent(ctx, snap, "worker-reconcile"); err != nil {
-			return fmt.Errorf("reconcile current for worker-reconcile: %w", err)
-		}
-
-		if manager.stateSync != nil {
-			manager.stateSync(ctx, snap)
-		}
-
-		return nil
+		return manager.applyWithSnapshot(ctx, target, "worker-reconcile", manager.supervisor.ReconcileCurrent)
 	case domain.ApplyBundleRebuild, domain.ApplyBundleRebuildAndReconcile:
 		var extraTenants []string
 		if target.Scope == domain.ScopeTenant && target.SubjectID != "" {
@@ -157,6 +131,30 @@ func (manager *defaultManager) applyEscalation(ctx context.Context, target domai
 	default:
 		return fmt.Errorf("%w %q", errUnexpectedApplyBehavior, escalation)
 	}
+}
+
+// applyWithSnapshot builds a snapshot, applies it via the given function, and
+// syncs local state. Shared by live-read and worker-reconcile escalations.
+func (manager *defaultManager) applyWithSnapshot(
+	ctx context.Context,
+	target domain.Target,
+	label string,
+	apply func(context.Context, domain.Snapshot, string) error,
+) error {
+	snap, err := manager.buildActiveSnapshot(ctx, target)
+	if err != nil {
+		return fmt.Errorf("build snapshot for %s: %w", label, err)
+	}
+
+	if err := apply(ctx, snap, label); err != nil {
+		return fmt.Errorf("apply %s: %w", label, err)
+	}
+
+	if manager.stateSync != nil {
+		manager.stateSync(ctx, snap)
+	}
+
+	return nil
 }
 
 // ApplyChangeSignal applies an externally produced change signal using the

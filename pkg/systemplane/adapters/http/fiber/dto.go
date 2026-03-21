@@ -249,16 +249,31 @@ func toHistoryResponse(entries []ports.HistoryEntry) HistoryResponse {
 
 // parseHistoryFilter extracts pagination and filter query params from the
 // Fiber context and returns a HistoryFilter with sensible defaults.
+// Explicitly invalid values (non-numeric, negative, beyond max) return an error
+// so the client gets a clear 400 rather than silently coerced results.
 func parseHistoryFilter(fiberCtx *fiber.Ctx, kind domain.Kind) (ports.HistoryFilter, error) {
-	limit, _ := strconv.Atoi(fiberCtx.Query("limit", strconv.Itoa(defaultHistoryLimit)))
-	offset, _ := strconv.Atoi(fiberCtx.Query("offset", "0"))
+	limitStr := fiberCtx.Query("limit")
+	offsetStr := fiberCtx.Query("offset")
 
-	if limit <= 0 || limit > maxHistoryLimit {
-		limit = defaultHistoryLimit
+	limit := defaultHistoryLimit
+	offset := 0
+
+	if limitStr != "" {
+		parsed, err := strconv.Atoi(limitStr)
+		if err != nil || parsed <= 0 || parsed > maxHistoryLimit {
+			return ports.HistoryFilter{}, fmt.Errorf("limit must be a positive integer between 1 and %d: %w", maxHistoryLimit, domain.ErrValueInvalid)
+		}
+
+		limit = parsed
 	}
 
-	if offset < 0 {
-		offset = 0
+	if offsetStr != "" {
+		parsed, err := strconv.Atoi(offsetStr)
+		if err != nil || parsed < 0 {
+			return ports.HistoryFilter{}, fmt.Errorf("offset must be a non-negative integer: %w", domain.ErrValueInvalid)
+		}
+
+		offset = parsed
 	}
 
 	// Validate scope if provided — reject arbitrary values before they reach the store.
