@@ -1,12 +1,17 @@
 -- Fee rules: per-transaction fee schedule resolution based on field predicates.
 -- Attached to reconciliation context with a side indicator (LEFT/RIGHT/ANY).
+--
+-- Pre-launch hard cutover:
+-- This migration intentionally refuses to run while any source still carries the
+-- legacy source-level fee_schedule_id binding. Operators must either reset the
+-- environment or manually migrate those bindings to fee rules before proceeding.
 SELECT CASE
     WHEN EXISTS (
         SELECT 1
         FROM reconciliation_sources
         WHERE fee_schedule_id IS NOT NULL
     ) THEN current_setting(
-        'strict_fee_rule_cutover_blocked_clear_legacy_source_fee_schedule_bindings_before_migration_000016'
+        'migration_000016_blocked_clear_legacy_source_fee_schedule_bindings_before_cutover'
     )
     ELSE 'ok'
 END;
@@ -18,6 +23,7 @@ CREATE TABLE fee_rules (
     fee_schedule_id UUID NOT NULL,
     name VARCHAR(100) NOT NULL,
     priority INTEGER NOT NULL,
+    -- Predicate structure is validated in the domain layer before persistence.
     predicates JSONB NOT NULL DEFAULT '[]'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
