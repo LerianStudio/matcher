@@ -345,6 +345,9 @@ func resetSharedDatabase(t *testing.T, connection *libPostgres.Client) error {
 	rolledBack := false
 	defer func() {
 		if !rolledBack {
+			// Cleanup runs in a deferred path after the real test outcome is already
+			// determined. Unexpected rollback errors are logged for diagnosis, but are
+			// intentionally non-fatal so they do not mask the primary test failure.
 			if rbErr := tx.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
 				t.Logf("warning: rollback error during database reset cleanup: %v", rbErr)
 			}

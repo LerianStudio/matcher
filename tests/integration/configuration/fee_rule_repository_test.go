@@ -3,6 +3,7 @@
 package configuration
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -206,6 +207,59 @@ func TestFeeRuleRepository_AllowsDuplicatePriorityAndNameAcrossContexts(t *testi
 		ruleB, err := fee.NewFeeRule(ctx, contextB, schedule.ID, fee.MatchingSideLeft, "Shared Rule", 7, nil)
 		require.NoError(t, err)
 		require.NoError(t, repo.Create(ctx, ruleB))
+	})
+}
+
+func TestFeeRuleRepository_ConcurrentDuplicatePriority(t *testing.T) {
+	t.Parallel()
+
+	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
+		repo := configFeeRuleRepo.NewRepository(h.Provider())
+		ctx := h.Ctx()
+		contextID := createFeeRuleTestContext(t, h)
+		schedule := createFeeRuleTestSchedule(t, h, "Concurrent Duplicate Priority")
+
+		buildRule := func(name string) *fee.FeeRule {
+			rule, err := fee.NewFeeRule(ctx, contextID, schedule.ID, fee.MatchingSideAny, name, 5, nil)
+			require.NoError(t, err)
+			return rule
+		}
+
+		rules := []*fee.FeeRule{
+			buildRule("Concurrent Rule A"),
+			buildRule("Concurrent Rule B"),
+		}
+
+		errs := make([]error, len(rules))
+		var wg sync.WaitGroup
+		wg.Add(len(rules))
+
+		for i, rule := range rules {
+			go func(index int, r *fee.FeeRule) {
+				defer wg.Done()
+				errs[index] = repo.Create(ctx, r)
+			}(i, rule)
+		}
+
+		wg.Wait()
+
+		successes := 0
+		constraintFailures := 0
+		for _, err := range errs {
+			if err == nil {
+				successes++
+				continue
+			}
+
+			var pgErr *pgconn.PgError
+			require.ErrorAs(t, err, &pgErr)
+			require.Equal(t, "23505", pgErr.Code)
+			require.Equal(t, "uq_fee_rules_context_priority", pgErr.ConstraintName)
+			constraintFailures++
+		}
+
+		require.Equal(t, 1, successes)
+		require.Equal(t, 1, constraintFailures)
 	})
 }
 

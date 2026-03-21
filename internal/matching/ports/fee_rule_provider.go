@@ -11,5 +11,6 @@ import (
 // FeeRuleProvider provides fee rule information for the matching pipeline.
 // This abstracts the Configuration context's FeeRuleRepository.
 type FeeRuleProvider interface {
+	// FindByContextID returns the fee rules for the context in ascending priority order.
 	FindByContextID(ctx context.Context, contextID uuid.UUID) ([]*fee.FeeRule, error)
 }
