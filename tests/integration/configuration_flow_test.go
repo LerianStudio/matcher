@@ -345,6 +345,158 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 		require.True(t, ok, "Expected 'name' to be a string in response: %v", getContextResp)
 		require.Equal(t, "E2E Test Context", nameVal)
 		t.Log("Verified Get Context")
+
+		// --- Step 9: Create Fee Schedule (prerequisite for fee rules) ---
+		schedulePayload := map[string]any{
+			"name":             "E2E Test Schedule",
+			"currency":         "USD",
+			"applicationOrder": "PARALLEL",
+			"roundingScale":    2,
+			"roundingMode":     "HALF_UP",
+			"items": []map[string]any{
+				{
+					"name":          "Processing Fee",
+					"priority":      1,
+					"structureType": "FLAT",
+					"structure": map[string]any{
+						"amount": "2.50",
+					},
+				},
+			},
+		}
+		scheduleResp := makeRequest(
+			t,
+			client,
+			"POST",
+			baseURL+"/v1/config/fee-schedules",
+			schedulePayload,
+			http.StatusCreated,
+		)
+		scheduleIDVal, ok := scheduleResp["id"].(string)
+		require.True(t, ok, "Expected 'id' to be a string in fee schedule response: %v", scheduleResp)
+		require.NotEmpty(t, scheduleIDVal)
+		scheduleID := scheduleIDVal
+		t.Logf("Created Fee Schedule: %s", scheduleID)
+		t.Cleanup(func() {
+			makeRequest(
+				t,
+				client,
+				"DELETE",
+				fmt.Sprintf("%s/v1/config/fee-schedules/%s", baseURL, scheduleID),
+				nil,
+				http.StatusNoContent,
+			)
+		})
+
+		// --- Step 10: Create Fee Rule ---
+		feeRulePayload := map[string]any{
+			"side":          "RIGHT",
+			"feeScheduleId": scheduleID,
+			"name":          "E2E Right-Side Rule",
+			"priority":      0,
+			"predicates": []map[string]any{
+				{
+					"field":    "institution",
+					"operator": "EQUALS",
+					"value":    "Itau",
+				},
+			},
+		}
+		feeRuleResp := makeRequest(
+			t,
+			client,
+			"POST",
+			fmt.Sprintf("%s/v1/config/contexts/%s/fee-rules", baseURL, contextID),
+			feeRulePayload,
+			http.StatusCreated,
+		)
+		feeRuleIDVal, ok := feeRuleResp["id"].(string)
+		require.True(t, ok, "Expected 'id' to be a string in fee rule response: %v", feeRuleResp)
+		require.NotEmpty(t, feeRuleIDVal)
+		feeRuleID := feeRuleIDVal
+		t.Logf("Created Fee Rule: %s", feeRuleID)
+
+		// Verify created values.
+		require.Equal(t, "RIGHT", feeRuleResp["side"])
+		require.Equal(t, "E2E Right-Side Rule", feeRuleResp["name"])
+		require.Equal(t, scheduleID, feeRuleResp["feeScheduleId"])
+
+		predicatesVal, ok := feeRuleResp["predicates"].([]any)
+		require.True(t, ok, "Expected 'predicates' to be a list in response: %v", feeRuleResp)
+		require.Len(t, predicatesVal, 1)
+
+		// --- Step 11: Read back Fee Rule ---
+		getFeeRuleResp := makeRequest(
+			t,
+			client,
+			"GET",
+			fmt.Sprintf("%s/v1/config/fee-rules/%s", baseURL, feeRuleID),
+			nil,
+			http.StatusOK,
+		)
+		require.Equal(t, feeRuleID, getFeeRuleResp["id"])
+		require.Equal(t, "RIGHT", getFeeRuleResp["side"])
+		require.Equal(t, "E2E Right-Side Rule", getFeeRuleResp["name"])
+		t.Log("Verified Get Fee Rule")
+
+		// --- Step 12: Update Fee Rule ---
+		updateFeeRulePayload := map[string]any{
+			"name":     "Updated Right-Side Rule",
+			"side":     "LEFT",
+			"priority": 5,
+		}
+		updateFeeRuleResp := makeRequest(
+			t,
+			client,
+			"PATCH",
+			fmt.Sprintf("%s/v1/config/fee-rules/%s", baseURL, feeRuleID),
+			updateFeeRulePayload,
+			http.StatusOK,
+		)
+		require.Equal(t, "Updated Right-Side Rule", updateFeeRuleResp["name"])
+		require.Equal(t, "LEFT", updateFeeRuleResp["side"])
+
+		// JSON numbers are float64.
+		updatedPriority, ok := updateFeeRuleResp["priority"].(float64)
+		require.True(t, ok, "Expected 'priority' to be a number: %v", updateFeeRuleResp)
+		require.Equal(t, float64(5), updatedPriority)
+		t.Log("Verified Update Fee Rule")
+
+		// --- Step 13: List Fee Rules for Context ---
+		listFeeRulesResp := makeRequest(
+			t,
+			client,
+			"GET",
+			fmt.Sprintf("%s/v1/config/contexts/%s/fee-rules", baseURL, contextID),
+			nil,
+			http.StatusOK,
+		)
+		feeRulesItems, ok := listFeeRulesResp["items"].([]any)
+		require.True(t, ok, "Expected 'items' in fee rules list: %v", listFeeRulesResp)
+		require.Len(t, feeRulesItems, 1)
+		t.Log("Verified List Fee Rules")
+
+		// --- Step 14: Delete Fee Rule ---
+		makeRequest(
+			t,
+			client,
+			"DELETE",
+			fmt.Sprintf("%s/v1/config/fee-rules/%s", baseURL, feeRuleID),
+			nil,
+			http.StatusNoContent,
+		)
+		t.Log("Deleted Fee Rule")
+
+		// Verify deletion — GET should 404.
+		makeRequest(
+			t,
+			client,
+			"GET",
+			fmt.Sprintf("%s/v1/config/fee-rules/%s", baseURL, feeRuleID),
+			nil,
+			http.StatusNotFound,
+		)
+		t.Log("Verified Fee Rule Deletion (404)")
 	})
 }
 

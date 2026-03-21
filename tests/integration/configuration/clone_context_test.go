@@ -298,6 +298,99 @@ func TestCloneContext_EmptyClone(t *testing.T) {
 	})
 }
 
+// TestCloneContext_SourceSidePreservation verifies that cloned sources preserve
+// their Side field (LEFT/RIGHT). This is H23 from the fee-rules-per-field review.
+func TestCloneContext_SourceSidePreservation(t *testing.T) {
+	t.Parallel()
+
+	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
+		uc := buildCloneUseCase(t, h)
+		ctx := h.Ctx()
+		provider := h.Provider()
+
+		// --- Build a context with TWO sources: one LEFT, one RIGHT ---
+		created, err := uc.CreateContext(ctx, h.Seed.TenantID, entities.CreateReconciliationContextInput{
+			Name:     "Side Preservation " + uuid.New().String()[:8],
+			Type:     value_objects.ContextTypeOneToOne,
+			Interval: "0 0 * * *",
+		})
+		require.NoError(t, err)
+
+		status := value_objects.ContextStatusActive
+		_, err = uc.UpdateContext(ctx, created.ID, entities.UpdateReconciliationContextInput{Status: &status})
+		require.NoError(t, err)
+
+		srcRepo, err := sourceRepo.NewRepository(provider)
+		require.NoError(t, err)
+
+		leftSrc, err := entities.NewReconciliationSource(ctx, created.ID, entities.CreateReconciliationSourceInput{
+			Name:   "Left Source",
+			Type:   value_objects.SourceTypeLedger,
+			Side:   fee.MatchingSideLeft,
+			Config: map[string]any{},
+		})
+		require.NoError(t, err)
+
+		createdLeft, err := srcRepo.Create(ctx, leftSrc)
+		require.NoError(t, err)
+
+		rightSrc, err := entities.NewReconciliationSource(ctx, created.ID, entities.CreateReconciliationSourceInput{
+			Name:   "Right Source",
+			Type:   value_objects.SourceTypeBank,
+			Side:   fee.MatchingSideRight,
+			Config: map[string]any{},
+		})
+		require.NoError(t, err)
+
+		createdRight, err := srcRepo.Create(ctx, rightSrc)
+		require.NoError(t, err)
+
+		// Also add a field map so clone actually carries sources.
+		fmRepo := fieldMapRepo.NewRepository(provider)
+
+		fmLeft, err := entities.NewFieldMap(ctx, created.ID, createdLeft.ID, entities.CreateFieldMapInput{
+			Mapping: map[string]any{"amount": "amount"},
+		})
+		require.NoError(t, err)
+		_, err = fmRepo.Create(ctx, fmLeft)
+		require.NoError(t, err)
+
+		fmRight, err := entities.NewFieldMap(ctx, created.ID, createdRight.ID, entities.CreateFieldMapInput{
+			Mapping: map[string]any{"amount": "amt"},
+		})
+		require.NoError(t, err)
+		_, err = fmRepo.Create(ctx, fmRight)
+		require.NoError(t, err)
+
+		// --- Clone ---
+		result, err := uc.CloneContext(ctx, configCommand.CloneContextInput{
+			SourceContextID: created.ID,
+			NewName:         "Cloned Sides " + uuid.New().String()[:8],
+			IncludeSources:  true,
+			IncludeRules:    false,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.GreaterOrEqual(t, result.SourcesCloned, 2)
+
+		// --- Verify cloned sources preserve Side ---
+		clonedSources, _, err := srcRepo.FindByContextID(ctx, result.Context.ID, "", 100)
+		require.NoError(t, err)
+		require.Len(t, clonedSources, 2)
+
+		// Build a map of name → side for easy assertion.
+		sideByName := make(map[string]fee.MatchingSide, len(clonedSources))
+		for _, s := range clonedSources {
+			sideByName[s.Name] = s.Side
+		}
+
+		require.Equal(t, fee.MatchingSideLeft, sideByName["Left Source"],
+			"cloned LEFT source should preserve Side=LEFT")
+		require.Equal(t, fee.MatchingSideRight, sideByName["Right Source"],
+			"cloned RIGHT source should preserve Side=RIGHT")
+	})
+}
+
 func TestCloneContext_RequiresNewName(t *testing.T) {
 	t.Parallel()
 
