@@ -53,8 +53,8 @@ func (stub *feeRuleRepositoryStub) Update(context.Context, *fee.FeeRule) error {
 func (stub *feeRuleRepositoryStub) UpdateWithTx(context.Context, *sql.Tx, *fee.FeeRule) error {
 	return nil
 }
-func (stub *feeRuleRepositoryStub) Delete(context.Context, uuid.UUID) error { return nil }
-func (stub *feeRuleRepositoryStub) DeleteWithTx(context.Context, *sql.Tx, uuid.UUID) error {
+func (stub *feeRuleRepositoryStub) Delete(context.Context, uuid.UUID, uuid.UUID) error { return nil }
+func (stub *feeRuleRepositoryStub) DeleteWithTx(context.Context, *sql.Tx, uuid.UUID, uuid.UUID) error {
 	return nil
 }
 

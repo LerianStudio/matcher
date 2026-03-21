@@ -305,11 +305,11 @@ func (stub *feeRuleRepoStub) UpdateWithTx(_ context.Context, _ *sql.Tx, _ *share
 	return errUpdateNotImplemented
 }
 
-func (stub *feeRuleRepoStub) Delete(_ context.Context, _ uuid.UUID) error {
+func (stub *feeRuleRepoStub) Delete(_ context.Context, _, _ uuid.UUID) error {
 	return errDeleteNotImplemented
 }
 
-func (stub *feeRuleRepoStub) DeleteWithTx(_ context.Context, _ *sql.Tx, _ uuid.UUID) error {
+func (stub *feeRuleRepoStub) DeleteWithTx(_ context.Context, _ *sql.Tx, _, _ uuid.UUID) error {
 	return errDeleteNotImplemented
 }
 

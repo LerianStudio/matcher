@@ -94,7 +94,7 @@ func (m *feeRuleMockRepo) UpdateWithTx(_ context.Context, _ *sql.Tx, rule *fee.F
 	return m.Update(context.Background(), rule)
 }
 
-func (m *feeRuleMockRepo) Delete(_ context.Context, id uuid.UUID) error {
+func (m *feeRuleMockRepo) Delete(_ context.Context, _ uuid.UUID, id uuid.UUID) error {
 	if m.deleteErr != nil {
 		return m.deleteErr
 	}
@@ -104,8 +104,8 @@ func (m *feeRuleMockRepo) Delete(_ context.Context, id uuid.UUID) error {
 	return nil
 }
 
-func (m *feeRuleMockRepo) DeleteWithTx(_ context.Context, _ *sql.Tx, id uuid.UUID) error {
-	return m.Delete(context.Background(), id)
+func (m *feeRuleMockRepo) DeleteWithTx(_ context.Context, _ *sql.Tx, _ uuid.UUID, id uuid.UUID) error {
+	return m.Delete(context.Background(), uuid.Nil, id)
 }
 
 // --- Helper ---

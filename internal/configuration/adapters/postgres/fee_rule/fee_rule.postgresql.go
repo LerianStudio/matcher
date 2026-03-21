@@ -356,8 +356,8 @@ func (repo *Repository) executeUpdate(
 	return true, nil
 }
 
-// Delete removes a fee rule by ID.
-func (repo *Repository) Delete(ctx stdctx.Context, id uuid.UUID) error {
+// Delete removes a fee rule by ID, scoped to a context for defense-in-depth.
+func (repo *Repository) Delete(ctx stdctx.Context, contextID, id uuid.UUID) error {
 	if repo == nil || repo.provider == nil {
 		return ErrRepoNotInitialized
 	}
@@ -368,7 +368,7 @@ func (repo *Repository) Delete(ctx stdctx.Context, id uuid.UUID) error {
 	defer span.End()
 
 	_, err := pgcommon.WithTenantTxProvider(ctx, repo.provider, func(tx *sql.Tx) (bool, error) {
-		return repo.executeDelete(ctx, tx, id)
+		return repo.executeDelete(ctx, tx, contextID, id)
 	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -386,8 +386,8 @@ func (repo *Repository) Delete(ctx stdctx.Context, id uuid.UUID) error {
 	return nil
 }
 
-// DeleteWithTx removes a fee rule by ID using the provided transaction.
-func (repo *Repository) DeleteWithTx(ctx stdctx.Context, tx *sql.Tx, id uuid.UUID) error {
+// DeleteWithTx removes a fee rule by ID using the provided transaction, scoped to a context.
+func (repo *Repository) DeleteWithTx(ctx stdctx.Context, tx *sql.Tx, contextID, id uuid.UUID) error {
 	if repo == nil || repo.provider == nil {
 		return ErrRepoNotInitialized
 	}
@@ -402,7 +402,7 @@ func (repo *Repository) DeleteWithTx(ctx stdctx.Context, tx *sql.Tx, id uuid.UUI
 	defer span.End()
 
 	_, err := pgcommon.WithTenantTxOrExistingProvider(ctx, repo.provider, tx, func(innerTx *sql.Tx) (bool, error) {
-		return repo.executeDelete(ctx, innerTx, id)
+		return repo.executeDelete(ctx, innerTx, contextID, id)
 	})
 	if err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
@@ -424,12 +424,14 @@ func (repo *Repository) DeleteWithTx(ctx stdctx.Context, tx *sql.Tx, id uuid.UUI
 func (repo *Repository) executeDelete(
 	ctx stdctx.Context,
 	tx *sql.Tx,
+	contextID uuid.UUID,
 	id uuid.UUID,
 ) (bool, error) {
 	res, err := tx.ExecContext(
 		ctx,
-		"DELETE FROM fee_rules WHERE id = $1",
+		"DELETE FROM fee_rules WHERE id = $1 AND context_id = $2",
 		id.String(),
+		contextID.String(),
 	)
 	if err != nil {
 		return false, fmt.Errorf("delete fee rule: %w", err)

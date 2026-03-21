@@ -606,15 +606,16 @@ func TestDelete_Success(t *testing.T) {
 	repo, mock, finish := setupMock(t)
 	defer finish()
 
+	contextID := uuid.New()
 	id := uuid.New()
 
 	mock.ExpectBegin()
-	mock.ExpectExec(regexp.QuoteMeta("DELETE FROM fee_rules WHERE id = $1")).
-		WithArgs(id.String()).
+	mock.ExpectExec(regexp.QuoteMeta("DELETE FROM fee_rules WHERE id = $1 AND context_id = $2")).
+		WithArgs(id.String(), contextID.String()).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 
-	err := repo.Delete(context.Background(), id)
+	err := repo.Delete(context.Background(), contextID, id)
 
 	require.NoError(t, err)
 }
@@ -625,15 +626,16 @@ func TestDelete_NotFound(t *testing.T) {
 	repo, mock, finish := setupMock(t)
 	defer finish()
 
+	contextID := uuid.New()
 	id := uuid.New()
 
 	mock.ExpectBegin()
-	mock.ExpectExec(regexp.QuoteMeta("DELETE FROM fee_rules WHERE id = $1")).
-		WithArgs(id.String()).
+	mock.ExpectExec(regexp.QuoteMeta("DELETE FROM fee_rules WHERE id = $1 AND context_id = $2")).
+		WithArgs(id.String(), contextID.String()).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectRollback()
 
-	err := repo.Delete(context.Background(), id)
+	err := repo.Delete(context.Background(), contextID, id)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, fee.ErrFeeRuleNotFound)
@@ -645,15 +647,16 @@ func TestDelete_ExecError(t *testing.T) {
 	repo, mock, finish := setupMock(t)
 	defer finish()
 
+	contextID := uuid.New()
 	id := uuid.New()
 
 	mock.ExpectBegin()
-	mock.ExpectExec(regexp.QuoteMeta("DELETE FROM fee_rules WHERE id = $1")).
-		WithArgs(id.String()).
+	mock.ExpectExec(regexp.QuoteMeta("DELETE FROM fee_rules WHERE id = $1 AND context_id = $2")).
+		WithArgs(id.String(), contextID.String()).
 		WillReturnError(errTestExec)
 	mock.ExpectRollback()
 
-	err := repo.Delete(context.Background(), id)
+	err := repo.Delete(context.Background(), contextID, id)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "delete fee rule")
@@ -664,7 +667,7 @@ func TestDelete_NilRepo(t *testing.T) {
 
 	var repo *Repository
 
-	err := repo.Delete(context.Background(), uuid.New())
+	err := repo.Delete(context.Background(), uuid.New(), uuid.New())
 
 	require.Error(t, err)
 	require.ErrorIs(t, err, ErrRepoNotInitialized)
@@ -675,7 +678,7 @@ func TestDelete_NilProvider(t *testing.T) {
 
 	repo := &Repository{provider: nil}
 
-	err := repo.Delete(context.Background(), uuid.New())
+	err := repo.Delete(context.Background(), uuid.New(), uuid.New())
 
 	require.Error(t, err)
 	require.ErrorIs(t, err, ErrRepoNotInitialized)
@@ -688,7 +691,7 @@ func TestDeleteWithTx_NilRepo(t *testing.T) {
 
 	var repo *Repository
 
-	err := repo.DeleteWithTx(context.Background(), nil, uuid.New())
+	err := repo.DeleteWithTx(context.Background(), nil, uuid.New(), uuid.New())
 
 	require.Error(t, err)
 	require.ErrorIs(t, err, ErrRepoNotInitialized)
@@ -700,7 +703,7 @@ func TestDeleteWithTx_NilTx(t *testing.T) {
 	provider := &testutil.MockInfrastructureProvider{}
 	repo := NewRepository(provider)
 
-	err := repo.DeleteWithTx(context.Background(), nil, uuid.New())
+	err := repo.DeleteWithTx(context.Background(), nil, uuid.New(), uuid.New())
 
 	require.Error(t, err)
 	require.ErrorIs(t, err, ErrTransactionRequired)
@@ -870,7 +873,7 @@ func TestProviderConnectionError(t *testing.T) {
 		provider := &testutil.MockInfrastructureProvider{PostgresErr: connErr}
 		repo := NewRepository(provider)
 
-		err := repo.Delete(context.Background(), uuid.New())
+		err := repo.Delete(context.Background(), uuid.New(), uuid.New())
 
 		require.Error(t, err)
 		require.ErrorIs(t, err, connErr)

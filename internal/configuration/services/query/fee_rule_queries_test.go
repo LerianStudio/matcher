@@ -81,12 +81,12 @@ func (m *feeRuleMockRepoQ) UpdateWithTx(_ context.Context, _ *sql.Tx, rule *fee.
 	return nil
 }
 
-func (m *feeRuleMockRepoQ) Delete(_ context.Context, id uuid.UUID) error {
+func (m *feeRuleMockRepoQ) Delete(_ context.Context, _ uuid.UUID, id uuid.UUID) error {
 	delete(m.rules, id)
 	return nil
 }
 
-func (m *feeRuleMockRepoQ) DeleteWithTx(_ context.Context, _ *sql.Tx, id uuid.UUID) error {
+func (m *feeRuleMockRepoQ) DeleteWithTx(_ context.Context, _ *sql.Tx, _ uuid.UUID, id uuid.UUID) error {
 	delete(m.rules, id)
 	return nil
 }

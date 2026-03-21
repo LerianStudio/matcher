@@ -61,6 +61,10 @@ func (uc *UseCase) CreateFeeRule(
 	ctx, span := tracer.Start(ctx, "command.create_fee_rule")
 	defer span.End()
 
+	// Soft limit: the count check is application-level and not atomic under concurrent creates.
+	// The unique (context_id, priority) constraint naturally serializes same-priority attempts,
+	// limiting the practical race window. Exceeding the limit by 1 under extreme concurrency is
+	// acceptable — the runtime also enforces the cap at match time (loadFeeRulesAndSchedules).
 	existingRules, err := uc.feeRuleRepo.FindByContextID(ctx, contextID)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to load fee rules for limit check", err)
@@ -173,11 +177,6 @@ func (uc *UseCase) UpdateFeeRule(
 	return entity, nil
 }
 
-// DeleteFeeRule removes a fee rule.
-func (uc *UseCase) DeleteFeeRule(ctx context.Context, feeRuleID uuid.UUID) error {
-	return uc.deleteFeeRule(ctx, uuid.Nil, feeRuleID)
-}
-
 // DeleteFeeRuleInContext removes a fee rule by ID after verifying it belongs to the provided context.
 func (uc *UseCase) DeleteFeeRuleInContext(ctx context.Context, contextID, feeRuleID uuid.UUID) error {
 	return uc.deleteFeeRule(ctx, contextID, feeRuleID)
@@ -210,7 +209,7 @@ func (uc *UseCase) deleteFeeRule(ctx context.Context, contextID, feeRuleID uuid.
 		return fee.ErrFeeRuleNotFound
 	}
 
-	if err := uc.feeRuleRepo.Delete(ctx, feeRuleID); err != nil {
+	if err := uc.feeRuleRepo.Delete(ctx, contextID, feeRuleID); err != nil {
 		if errors.Is(err, fee.ErrFeeRuleNotFound) {
 			return fee.ErrFeeRuleNotFound
 		}
