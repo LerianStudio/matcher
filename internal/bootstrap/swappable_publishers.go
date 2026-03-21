@@ -6,11 +6,17 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
 	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+)
+
+var (
+	errIngestionPublisherUnavailable = errors.New("ingestion publisher is unavailable")
+	errMatchPublisherUnavailable     = errors.New("match publisher is unavailable")
 )
 
 type swappableIngestionPublisher struct {
@@ -36,9 +42,14 @@ func (publisher *swappableIngestionPublisher) Swap(next sharedPorts.IngestionEve
 // PublishIngestionCompleted forwards the completion event to the current delegate.
 func (publisher *swappableIngestionPublisher) PublishIngestionCompleted(ctx context.Context, event *sharedDomain.IngestionCompletedEvent) error {
 	publisher.mu.RLock()
-	defer publisher.mu.RUnlock()
+	current := publisher.current
+	publisher.mu.RUnlock()
 
-	if err := publisher.current.PublishIngestionCompleted(ctx, event); err != nil {
+	if current == nil {
+		return errIngestionPublisherUnavailable
+	}
+
+	if err := current.PublishIngestionCompleted(ctx, event); err != nil {
 		return fmt.Errorf("publish ingestion completed event: %w", err)
 	}
 
@@ -48,9 +59,14 @@ func (publisher *swappableIngestionPublisher) PublishIngestionCompleted(ctx cont
 // PublishIngestionFailed forwards the failure event to the current delegate.
 func (publisher *swappableIngestionPublisher) PublishIngestionFailed(ctx context.Context, event *sharedDomain.IngestionFailedEvent) error {
 	publisher.mu.RLock()
-	defer publisher.mu.RUnlock()
+	current := publisher.current
+	publisher.mu.RUnlock()
 
-	if err := publisher.current.PublishIngestionFailed(ctx, event); err != nil {
+	if current == nil {
+		return errIngestionPublisherUnavailable
+	}
+
+	if err := current.PublishIngestionFailed(ctx, event); err != nil {
 		return fmt.Errorf("publish ingestion failed event: %w", err)
 	}
 
@@ -80,9 +96,14 @@ func (publisher *swappableMatchPublisher) Swap(next sharedDomain.MatchEventPubli
 // PublishMatchConfirmed forwards the confirmed event to the current delegate.
 func (publisher *swappableMatchPublisher) PublishMatchConfirmed(ctx context.Context, event *sharedDomain.MatchConfirmedEvent) error {
 	publisher.mu.RLock()
-	defer publisher.mu.RUnlock()
+	current := publisher.current
+	publisher.mu.RUnlock()
 
-	if err := publisher.current.PublishMatchConfirmed(ctx, event); err != nil {
+	if current == nil {
+		return errMatchPublisherUnavailable
+	}
+
+	if err := current.PublishMatchConfirmed(ctx, event); err != nil {
 		return fmt.Errorf("publish match confirmed event: %w", err)
 	}
 
@@ -92,9 +113,14 @@ func (publisher *swappableMatchPublisher) PublishMatchConfirmed(ctx context.Cont
 // PublishMatchUnmatched forwards the unmatched event to the current delegate.
 func (publisher *swappableMatchPublisher) PublishMatchUnmatched(ctx context.Context, event *sharedDomain.MatchUnmatchedEvent) error {
 	publisher.mu.RLock()
-	defer publisher.mu.RUnlock()
+	current := publisher.current
+	publisher.mu.RUnlock()
 
-	if err := publisher.current.PublishMatchUnmatched(ctx, event); err != nil {
+	if current == nil {
+		return errMatchPublisherUnavailable
+	}
+
+	if err := current.PublishMatchUnmatched(ctx, event); err != nil {
 		return fmt.Errorf("publish match unmatched event: %w", err)
 	}
 

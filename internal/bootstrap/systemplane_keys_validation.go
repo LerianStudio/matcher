@@ -34,6 +34,35 @@ func validateAbsoluteHTTPURL(value any) error {
 	return nil
 }
 
+// validateHTTPSEndpoint rejects non-empty values that do not use the https scheme.
+// Empty values pass validation to allow unconfigured (disabled) endpoints.
+func validateHTTPSEndpoint(value any) error {
+	rawValue, ok := value.(string)
+	if !ok {
+		return fmt.Errorf("endpoint must be a string: %w", domain.ErrValueInvalid)
+	}
+
+	trimmed := strings.TrimSpace(rawValue)
+	if trimmed == "" {
+		return nil
+	}
+
+	parsed, err := url.Parse(trimmed)
+	if err != nil {
+		return fmt.Errorf("endpoint must be a valid URL: %w", err)
+	}
+
+	if parsed == nil || !parsed.IsAbs() || parsed.Host == "" {
+		return fmt.Errorf("endpoint must be an absolute URL with scheme and host: %w", domain.ErrValueInvalid)
+	}
+
+	if !strings.EqualFold(parsed.Scheme, "https") {
+		return fmt.Errorf("endpoint must use https scheme, got %q: %w", parsed.Scheme, domain.ErrValueInvalid)
+	}
+
+	return nil
+}
+
 // Validators for systemplane key registration.
 
 // validatePositiveInt rejects zero and negative integers.

@@ -356,6 +356,11 @@ func TestValidateProductionConfig_AcceptsStrongCredentials(t *testing.T) {
 	cfg.RabbitMQ.AllowInsecureHealthCheck = false
 	cfg.Redis.Password = "redis-prod-pass"
 
+	// Production endpoint validation requires HTTPS for configured service URLs.
+	// The default config uses http://localhost:* which is rejected in production.
+	cfg.ObjectStorage.Endpoint = "https://s3.example.com"
+	cfg.Fetcher.URL = ""
+
 	err := cfg.Validate()
 	assert.NoError(t, err)
 }

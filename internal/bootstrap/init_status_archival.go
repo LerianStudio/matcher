@@ -234,6 +234,11 @@ func initArchivalComponents(
 		return nil, fmt.Errorf("create archival storage: %w", err)
 	}
 
+	// Create runtime wrapper BEFORE passing to routes so handler and worker share the same dynamic client.
+	if configGetter != nil && archivalStorage != nil {
+		archivalStorage = newRuntimeArchivalStorageClient(cfg, configGetter, archivalStorage)
+	}
+
 	if err := registerArchiveRoutesIfAvailable(routes, cfg, archiveRepo, archivalStorage, configGetter); err != nil {
 		return nil, err
 	}
@@ -244,10 +249,6 @@ func initArchivalComponents(
 
 	if cfg.Archival.Enabled && !createArchivalStorageAvailable(cfg) {
 		return nil, ErrArchivalStorageRequired
-	}
-
-	if configGetter != nil {
-		archivalStorage = newRuntimeArchivalStorageClient(cfg, configGetter, archivalStorage)
 	}
 
 	archivalDB, err := openArchivalDatabase(cfg)

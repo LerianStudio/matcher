@@ -16,6 +16,7 @@ import (
 	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
 	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
 
+	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 	tenantAdapters "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant/adapters"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
@@ -144,9 +145,16 @@ func (provider *dynamicInfrastructureProvider) BeginTx(ctx context.Context) (*sh
 		return nil, fmt.Errorf("begin postgres transaction: %w", err)
 	}
 
-	return sharedPorts.NewTxLease(tx, func() {
-		_ = tx.Rollback()
-	}), nil
+	if err := auth.ApplyTenantSchema(ctx, tx); err != nil {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil {
+			return nil, fmt.Errorf("apply tenant schema: %w",
+				errors.Join(err, fmt.Errorf("rollback: %w", rollbackErr)))
+		}
+
+		return nil, fmt.Errorf("apply tenant schema: %w", err)
+	}
+
+	return sharedPorts.NewTxLease(tx, nil), nil
 }
 
 // GetReplicaDB returns the active replica database lease when configured.

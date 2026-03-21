@@ -112,6 +112,7 @@ import (
 	sharedRabbitmq "github.com/LerianStudio/matcher/internal/shared/adapters/rabbitmq"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+	"github.com/LerianStudio/matcher/pkg/systemplane/adapters/changefeed"
 	systemplaneDomain "github.com/LerianStudio/matcher/pkg/systemplane/domain"
 	systemplaneService "github.com/LerianStudio/matcher/pkg/systemplane/service"
 )
@@ -699,26 +700,26 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 
 	spComponents, spErr := InitSystemplane(ctx, cfg, configManager, wm, logger, runtimeReloadObserver)
 	if spErr != nil {
-		logger.Log(ctx, libLog.LevelWarn, "systemplane initialization failed, continuing without systemplane",
-			libLog.String("error", spErr.Error()))
+		return nil, fmt.Errorf("systemplane initialization required: %w", spErr)
 	}
 
-	if spErr == nil {
-		// Start change feed subscriber that triggers supervisor reloads on store changes.
-		cancelChangeFeed, err = startChangeFeed(ctx, spComponents.ChangeFeed, spComponents.Supervisor, logger, spComponents.Manager.ApplyChangeSignal)
-		if err != nil {
-			logger.Log(ctx, libLog.LevelWarn, "systemplane change feed start failed",
-				libLog.String("error", err.Error()))
-		}
+	// Start change feed subscriber that triggers supervisor reloads on store changes.
+	// Wrap the raw feed with trailing-edge debounce to coalesce rapid signals
+	// (e.g., bulk config writes) into fewer supervisor reloads.
+	debouncedFeed := changefeed.NewDebouncedFeed(spComponents.ChangeFeed, changefeed.WithWindow(200*time.Millisecond))
+	cancelChangeFeed, err = startChangeFeed(ctx, debouncedFeed, spComponents.Supervisor, logger, spComponents.Manager.ApplyChangeSignal)
+	if err != nil {
+		logger.Log(ctx, libLog.LevelWarn, "systemplane change feed start failed",
+			libLog.String("error", err.Error()))
+	}
 
-		// Mount systemplane HTTP API (replaces the old config API routes).
-		// Pass routes.Protected so systemplane routes go through the same auth
-		// middleware chain (JWT validation, tenant extraction, permission check)
-		// as all other Matcher API routes.
-		if mountErr := MountSystemplaneAPI(app, authClient, routes.Protected, spComponents.Manager, cfg.Auth.Enabled, logger); mountErr != nil {
-			logger.Log(ctx, libLog.LevelWarn, "systemplane API mount failed",
-				libLog.String("error", mountErr.Error()))
-		}
+	// Mount systemplane HTTP API (replaces the old config API routes).
+	// Pass routes.Protected so systemplane routes go through the same auth
+	// middleware chain (JWT validation, tenant extraction, permission check)
+	// as all other Matcher API routes.
+	if mountErr := MountSystemplaneAPI(app, authClient, routes.Protected, spComponents.Manager, cfg.Auth.Enabled, logger); mountErr != nil {
+		logger.Log(ctx, libLog.LevelWarn, "systemplane API mount failed",
+			libLog.String("error", mountErr.Error()))
 	}
 
 	done()

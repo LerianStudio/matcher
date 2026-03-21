@@ -433,6 +433,43 @@ func (cfg *Config) validateProductionOptionalConfig(asserter *assert.Asserter) e
 		return fmt.Errorf("production config validation: %w", err)
 	}
 
+	if err := cfg.validateProductionEndpoints(asserter); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// validateProductionEndpoints enforces HTTPS for service URLs in production environments.
+func (cfg *Config) validateProductionEndpoints(asserter *assert.Asserter) error {
+	ctx := context.Background()
+
+	// Fetcher URL must use HTTPS in production when fetcher is enabled.
+	if cfg.Fetcher.Enabled && strings.TrimSpace(cfg.Fetcher.URL) != "" {
+		parsed, parseErr := url.Parse(strings.TrimSpace(cfg.Fetcher.URL))
+		if parseErr == nil && parsed != nil {
+			if err := asserter.That(ctx,
+				strings.EqualFold(parsed.Scheme, "https"),
+				"FETCHER_URL must use HTTPS in production",
+				"fetcher_url", cfg.Fetcher.URL); err != nil {
+				return fmt.Errorf("production config validation: %w", err)
+			}
+		}
+	}
+
+	// Object storage endpoint must use HTTPS in production when configured.
+	if strings.TrimSpace(cfg.ObjectStorage.Endpoint) != "" {
+		parsed, parseErr := url.Parse(strings.TrimSpace(cfg.ObjectStorage.Endpoint))
+		if parseErr == nil && parsed != nil {
+			if err := asserter.That(ctx,
+				strings.EqualFold(parsed.Scheme, "https"),
+				"OBJECT_STORAGE_ENDPOINT must use HTTPS in production",
+				"object_storage_endpoint", cfg.ObjectStorage.Endpoint); err != nil {
+				return fmt.Errorf("production config validation: %w", err)
+			}
+		}
+	}
+
 	return nil
 }
 

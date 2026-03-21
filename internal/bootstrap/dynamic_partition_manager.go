@@ -95,6 +95,10 @@ func (manager *dynamicPartitionManager) DropPartition(ctx context.Context, name 
 }
 
 func (manager *dynamicPartitionManager) current(ctx context.Context) (*governanceCommand.PartitionManager, func(), error) {
+	if manager == nil || manager.provider == nil {
+		return nil, nil, fmt.Errorf("partition manager: infrastructure provider not available")
+	}
+
 	lease, err := manager.provider.GetPostgresConnection(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("get postgres connection for partition manager: %w", err)

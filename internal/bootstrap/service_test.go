@@ -56,7 +56,7 @@ func (supervisor *orderingSupervisor) PublishSnapshot(context.Context, domain.Sn
 func (supervisor *orderingSupervisor) ReconcileCurrent(context.Context, domain.Snapshot, string) error {
 	return nil
 }
-func (supervisor *orderingSupervisor) Reload(context.Context, string) error { return nil }
+func (supervisor *orderingSupervisor) Reload(context.Context, string, ...string) error { return nil }
 func (supervisor *orderingSupervisor) Stop(context.Context) error {
 	*supervisor.order = append(*supervisor.order, "supervisor")
 	return supervisor.err

@@ -319,7 +319,9 @@ func (m *mockSupervisorForExtract) ReconcileCurrent(_ context.Context, _ domain.
 	return nil
 }
 
-func (m *mockSupervisorForExtract) Reload(_ context.Context, _ string) error { return nil }
+func (m *mockSupervisorForExtract) Reload(_ context.Context, _ string, _ ...string) error {
+	return nil
+}
 
 func (m *mockSupervisorForExtract) Stop(_ context.Context) error { return nil }
 
@@ -365,7 +367,7 @@ func (supervisor *reloadCountingSupervisor) PublishSnapshot(context.Context, dom
 func (supervisor *reloadCountingSupervisor) ReconcileCurrent(context.Context, domain.Snapshot, string) error {
 	return nil
 }
-func (supervisor *reloadCountingSupervisor) Reload(_ context.Context, reason string) error {
+func (supervisor *reloadCountingSupervisor) Reload(_ context.Context, reason string, _ ...string) error {
 	supervisor.reloads.Add(1)
 	supervisor.lastReason.Store(reason)
 	return nil
