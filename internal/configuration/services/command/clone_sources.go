@@ -38,7 +38,7 @@ func (uc *UseCase) cloneSourcesIntoResultWithTx(ctx context.Context, tx *sql.Tx,
 }
 
 func (uc *UseCase) cloneSourcesAndFieldMaps(ctx context.Context, tx *sql.Tx, sourceContextID, newContextID uuid.UUID) (sourcesCloned, fieldMapsCloned int, err error) {
-	sources, err := uc.fetchAllSources(ctx, sourceContextID)
+	sources, err := uc.fetchAllSourcesWithOptionalTx(ctx, tx, sourceContextID)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -52,7 +52,7 @@ func (uc *UseCase) cloneSourcesAndFieldMaps(ctx context.Context, tx *sql.Tx, sou
 		sourceIDs[i] = src.ID
 	}
 
-	fieldMapsExist, err := uc.fieldMapRepo.ExistsBySourceIDs(ctx, sourceIDs)
+	fieldMapsExist, err := uc.existsBySourceIDsWithOptionalTx(ctx, tx, sourceIDs)
 	if err != nil {
 		return 0, 0, fmt.Errorf("checking field maps existence: %w", err)
 	}
@@ -111,13 +111,17 @@ func (uc *UseCase) createSourceWithOptionalTx(ctx context.Context, tx *sql.Tx, s
 }
 
 func (uc *UseCase) cloneFieldMap(ctx context.Context, tx *sql.Tx, oldSourceID, newContextID, newSourceID uuid.UUID, now time.Time) (bool, error) {
-	fm, err := uc.fieldMapRepo.FindBySourceID(ctx, oldSourceID)
+	fm, err := uc.findBySourceIDWithOptionalTx(ctx, tx, oldSourceID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return false, nil
 		}
 
 		return false, fmt.Errorf("fetching field map for source %s: %w", oldSourceID, err)
+	}
+
+	if fm == nil {
+		return false, nil
 	}
 
 	newFieldMap := &entities.FieldMap{
@@ -170,6 +174,70 @@ func (uc *UseCase) fetchAllSources(ctx context.Context, contextID uuid.UUID) ([]
 	}
 
 	return allSources, nil
+}
+
+// fetchAllSourcesWithOptionalTx reads all sources, using the transaction when
+// available so the read is part of the same snapshot as the clone's FOR SHARE lock.
+func (uc *UseCase) fetchAllSourcesWithOptionalTx(ctx context.Context, tx *sql.Tx, contextID uuid.UUID) ([]*entities.ReconciliationSource, error) {
+	if tx == nil {
+		return uc.fetchAllSources(ctx, contextID)
+	}
+
+	txFinder, ok := uc.sourceRepo.(sourceTxFinder)
+	if !ok {
+		// Fallback: repository does not implement transactional read.
+		return uc.fetchAllSources(ctx, contextID)
+	}
+
+	var allSources []*entities.ReconciliationSource
+
+	cursor := ""
+	for {
+		sources, pagination, err := txFinder.FindByContextIDWithTx(ctx, tx, contextID, cursor, maxClonePaginationLimit)
+		if err != nil {
+			return nil, fmt.Errorf("fetching sources page with tx: %w", err)
+		}
+
+		allSources = append(allSources, sources...)
+
+		if pagination.Next == "" {
+			break
+		}
+
+		cursor = pagination.Next
+	}
+
+	return allSources, nil
+}
+
+// existsBySourceIDsWithOptionalTx checks field map existence, using the
+// transaction when available for snapshot consistency.
+func (uc *UseCase) existsBySourceIDsWithOptionalTx(ctx context.Context, tx *sql.Tx, sourceIDs []uuid.UUID) (map[uuid.UUID]bool, error) {
+	if tx == nil {
+		return uc.fieldMapRepo.ExistsBySourceIDs(ctx, sourceIDs)
+	}
+
+	txChecker, ok := uc.fieldMapRepo.(fieldMapTxExistsChecker)
+	if !ok {
+		return uc.fieldMapRepo.ExistsBySourceIDs(ctx, sourceIDs)
+	}
+
+	return txChecker.ExistsBySourceIDsWithTx(ctx, tx, sourceIDs)
+}
+
+// findBySourceIDWithOptionalTx reads a field map by source ID, using the
+// transaction when available for snapshot consistency.
+func (uc *UseCase) findBySourceIDWithOptionalTx(ctx context.Context, tx *sql.Tx, sourceID uuid.UUID) (*entities.FieldMap, error) {
+	if tx == nil {
+		return uc.fieldMapRepo.FindBySourceID(ctx, sourceID)
+	}
+
+	txFinder, ok := uc.fieldMapRepo.(fieldMapTxFinder)
+	if !ok {
+		return uc.fieldMapRepo.FindBySourceID(ctx, sourceID)
+	}
+
+	return txFinder.FindBySourceIDWithTx(ctx, tx, sourceID)
 }
 
 func cloneMap(ctx context.Context, src map[string]any) map[string]any {

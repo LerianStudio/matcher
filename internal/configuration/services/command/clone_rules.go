@@ -29,7 +29,7 @@ func (uc *UseCase) cloneFeeRulesWithTx(ctx context.Context, tx *sql.Tx, sourceCo
 }
 
 func (uc *UseCase) cloneMatchRulesInternal(ctx context.Context, tx *sql.Tx, sourceContextID, newContextID uuid.UUID) (int, error) {
-	rules, err := uc.fetchAllRules(ctx, sourceContextID)
+	rules, err := uc.fetchAllRulesWithOptionalTx(ctx, tx, sourceContextID)
 	if err != nil {
 		return 0, err
 	}
@@ -76,7 +76,7 @@ func (uc *UseCase) createMatchRuleWithOptionalTx(ctx context.Context, tx *sql.Tx
 }
 
 func (uc *UseCase) cloneFeeRulesInternal(ctx context.Context, tx *sql.Tx, sourceContextID, newContextID uuid.UUID) (int, error) {
-	rules, err := uc.feeRuleRepo.FindByContextID(ctx, sourceContextID)
+	rules, err := uc.findFeeRulesWithOptionalTx(ctx, tx, sourceContextID)
 	if err != nil {
 		return 0, fmt.Errorf("fetching fee rules: %w", err)
 	}
@@ -144,6 +144,54 @@ func (uc *UseCase) fetchAllRules(ctx context.Context, contextID uuid.UUID) (enti
 	}
 
 	return allRules, nil
+}
+
+// fetchAllRulesWithOptionalTx reads all match rules, using the transaction when
+// available so the read is part of the same snapshot as the clone's FOR SHARE lock.
+func (uc *UseCase) fetchAllRulesWithOptionalTx(ctx context.Context, tx *sql.Tx, contextID uuid.UUID) (entities.MatchRules, error) {
+	if tx == nil {
+		return uc.fetchAllRules(ctx, contextID)
+	}
+
+	txFinder, ok := uc.matchRuleRepo.(matchRuleTxFinder)
+	if !ok {
+		return uc.fetchAllRules(ctx, contextID)
+	}
+
+	var allRules entities.MatchRules
+
+	cursor := ""
+	for {
+		rules, pagination, err := txFinder.FindByContextIDWithTx(ctx, tx, contextID, cursor, maxClonePaginationLimit)
+		if err != nil {
+			return nil, fmt.Errorf("fetching rules page with tx: %w", err)
+		}
+
+		allRules = append(allRules, rules...)
+
+		if pagination.Next == "" {
+			break
+		}
+
+		cursor = pagination.Next
+	}
+
+	return allRules, nil
+}
+
+// findFeeRulesWithOptionalTx reads fee rules, using the transaction when
+// available for snapshot consistency.
+func (uc *UseCase) findFeeRulesWithOptionalTx(ctx context.Context, tx *sql.Tx, contextID uuid.UUID) ([]*fee.FeeRule, error) {
+	if tx == nil {
+		return uc.feeRuleRepo.FindByContextID(ctx, contextID)
+	}
+
+	txFinder, ok := uc.feeRuleRepo.(feeRuleTxFinder)
+	if !ok {
+		return uc.feeRuleRepo.FindByContextID(ctx, contextID)
+	}
+
+	return txFinder.FindByContextIDWithTx(ctx, tx, contextID)
 }
 
 func clonePredicates(predicates []fee.FieldPredicate) []fee.FieldPredicate {

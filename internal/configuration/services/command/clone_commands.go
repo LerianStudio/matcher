@@ -11,6 +11,7 @@ import (
 
 	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
@@ -27,6 +28,7 @@ var ErrCloneNameRequired = errors.New("new context name is required for clone")
 var ErrCloneProviderRequired = errors.New("repository does not support transactional create for clone")
 
 type (
+	// Transactional create interfaces for clone write operations.
 	contextTxCreator interface {
 		CreateWithTx(ctx context.Context, tx *sql.Tx, entity *entities.ReconciliationContext) (*entities.ReconciliationContext, error)
 	}
@@ -41,6 +43,25 @@ type (
 	}
 	feeRuleTxCreator interface {
 		CreateWithTx(ctx context.Context, tx *sql.Tx, rule *fee.FeeRule) error
+	}
+
+	// Transactional read interfaces for clone snapshot consistency.
+	// These enable child-record reads within the same transaction that
+	// holds the FOR SHARE lock, preventing inconsistent snapshots.
+	sourceTxFinder interface {
+		FindByContextIDWithTx(ctx context.Context, tx *sql.Tx, contextID uuid.UUID, cursor string, limit int) ([]*entities.ReconciliationSource, libHTTP.CursorPagination, error)
+	}
+	fieldMapTxExistsChecker interface {
+		ExistsBySourceIDsWithTx(ctx context.Context, tx *sql.Tx, sourceIDs []uuid.UUID) (map[uuid.UUID]bool, error)
+	}
+	fieldMapTxFinder interface {
+		FindBySourceIDWithTx(ctx context.Context, tx *sql.Tx, sourceID uuid.UUID) (*entities.FieldMap, error)
+	}
+	matchRuleTxFinder interface {
+		FindByContextIDWithTx(ctx context.Context, tx *sql.Tx, contextID uuid.UUID, cursor string, limit int) (entities.MatchRules, libHTTP.CursorPagination, error)
+	}
+	feeRuleTxFinder interface {
+		FindByContextIDWithTx(ctx context.Context, tx *sql.Tx, contextID uuid.UUID) ([]*fee.FeeRule, error)
 	}
 )
 
@@ -78,6 +99,13 @@ func (uc *UseCase) CloneContext(ctx context.Context, input CloneContextInput) (*
 		libOpentelemetry.HandleSpanError(span, "failed to load source context", wrappedErr)
 
 		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to load source context")
+
+		return nil, wrappedErr
+	}
+
+	if sourceContext == nil {
+		wrappedErr := fmt.Errorf("loading source context: %w", ErrContextNotFound)
+		libOpentelemetry.HandleSpanError(span, "source context not found", wrappedErr)
 
 		return nil, wrappedErr
 	}

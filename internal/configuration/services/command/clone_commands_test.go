@@ -5,6 +5,7 @@ package command
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"testing"
 
 	"github.com/google/uuid"
@@ -257,6 +258,146 @@ func TestCloneContext_IncludeRulesRequiresFeeRuleRepository(t *testing.T) {
 	})
 
 	assert.ErrorIs(t, err, ErrNilFeeRuleRepository)
+}
+
+func TestCloneContext_RollsBackWhenRuleCreationFails(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockCtxRepo := mocks.NewMockContextRepository(ctrl)
+	mockSrcRepo := mocks.NewMockSourceRepository(ctrl)
+	mockFMRepo := mocks.NewMockFieldMapRepository(ctrl)
+	mockRuleRepo := mocks.NewMockMatchRuleRepository(ctrl)
+	feeRuleRepo := newFeeRuleMockRepo()
+
+	sourceCtxID := uuid.New()
+	tenantID := uuid.New()
+	sourceID := uuid.New()
+
+	sourceContext := &entities.ReconciliationContext{
+		ID:       sourceCtxID,
+		TenantID: tenantID,
+		Name:     "Original",
+		Type:     value_objects.ContextType("1:1"),
+		Interval: "daily",
+		Status:   value_objects.ContextStatusActive,
+	}
+
+	sources := []*entities.ReconciliationSource{
+		{ID: sourceID, ContextID: sourceCtxID, Name: "Source A", Type: value_objects.SourceType("BANK")},
+	}
+
+	rules := entities.MatchRules{
+		{ID: uuid.New(), ContextID: sourceCtxID, Priority: 1, Type: "EXACT", Config: map[string]any{"field": "amount"}},
+	}
+
+	errRuleCreation := errors.New("rule creation failed: constraint violation")
+
+	// Happy path: context and sources created
+	mockCtxRepo.EXPECT().FindByID(gomock.Any(), sourceCtxID).Return(sourceContext, nil)
+	mockCtxRepo.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, e *entities.ReconciliationContext) (*entities.ReconciliationContext, error) {
+			return e, nil
+		})
+
+	// Sources: one page, no more
+	mockSrcRepo.EXPECT().FindByContextID(gomock.Any(), sourceCtxID, "", maxClonePaginationLimit).
+		Return(sources, libHTTP.CursorPagination{}, nil)
+
+	// No field maps
+	mockFMRepo.EXPECT().ExistsBySourceIDs(gomock.Any(), gomock.Len(1)).
+		Return(map[uuid.UUID]bool{sourceID: false}, nil)
+
+	// Source created successfully
+	mockSrcRepo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(nil, nil)
+
+	// Rules pagination: one page
+	mockRuleRepo.EXPECT().FindByContextID(gomock.Any(), sourceCtxID, "", maxClonePaginationLimit).
+		Return(rules, libHTTP.CursorPagination{}, nil)
+
+	// Rule creation FAILS – the error should propagate upward
+	mockRuleRepo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(nil, errRuleCreation)
+
+	uc, err := NewUseCase(mockCtxRepo, mockSrcRepo, mockFMRepo, mockRuleRepo, WithFeeRuleRepository(feeRuleRepo))
+	require.NoError(t, err)
+
+	result, err := uc.CloneContext(context.Background(), CloneContextInput{
+		SourceContextID: sourceCtxID,
+		NewName:         "Clone With Failure",
+		IncludeSources:  true,
+		IncludeRules:    true,
+	})
+
+	// The clone must fail; context + sources were created (non-transactional)
+	// but the error is propagated so the caller knows the clone is incomplete.
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "rule creation failed")
+}
+
+func TestCloneContext_SourceCreationFailsPropagatesError(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockCtxRepo := mocks.NewMockContextRepository(ctrl)
+	mockSrcRepo := mocks.NewMockSourceRepository(ctrl)
+	mockFMRepo := mocks.NewMockFieldMapRepository(ctrl)
+	mockRuleRepo := mocks.NewMockMatchRuleRepository(ctrl)
+
+	sourceCtxID := uuid.New()
+	tenantID := uuid.New()
+	sourceID := uuid.New()
+
+	sourceContext := &entities.ReconciliationContext{
+		ID:       sourceCtxID,
+		TenantID: tenantID,
+		Name:     "Original",
+		Type:     value_objects.ContextType("1:1"),
+		Interval: "daily",
+		Status:   value_objects.ContextStatusActive,
+	}
+
+	sources := []*entities.ReconciliationSource{
+		{ID: sourceID, ContextID: sourceCtxID, Name: "Source A", Type: value_objects.SourceType("BANK")},
+	}
+
+	errSourceCreation := errors.New("source creation failed: FK violation")
+
+	// Happy path: context found and created
+	mockCtxRepo.EXPECT().FindByID(gomock.Any(), sourceCtxID).Return(sourceContext, nil)
+	mockCtxRepo.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, e *entities.ReconciliationContext) (*entities.ReconciliationContext, error) {
+			return e, nil
+		})
+
+	// Sources: found one
+	mockSrcRepo.EXPECT().FindByContextID(gomock.Any(), sourceCtxID, "", maxClonePaginationLimit).
+		Return(sources, libHTTP.CursorPagination{}, nil)
+
+	// Field map existence check
+	mockFMRepo.EXPECT().ExistsBySourceIDs(gomock.Any(), gomock.Len(1)).
+		Return(map[uuid.UUID]bool{sourceID: false}, nil)
+
+	// Source creation FAILS
+	mockSrcRepo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(nil, errSourceCreation)
+
+	uc, err := NewUseCase(mockCtxRepo, mockSrcRepo, mockFMRepo, mockRuleRepo, WithFeeRuleRepository(newFeeRuleMockRepo()))
+	require.NoError(t, err)
+
+	result, err := uc.CloneContext(context.Background(), CloneContextInput{
+		SourceContextID: sourceCtxID,
+		NewName:         "Clone Source Failure",
+		IncludeSources:  true,
+		IncludeRules:    true,
+	})
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "source creation failed")
 }
 
 func TestCloneMap(t *testing.T) {
