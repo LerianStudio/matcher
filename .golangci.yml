@@ -264,6 +264,8 @@ linters:
               desc: "Hexagonal violation: HTTP handlers must use services, not postgres adapters directly (reporting)"
             - pkg: "github.com/LerianStudio/matcher/internal/outbox/adapters/postgres"
               desc: "Hexagonal violation: HTTP handlers must use services, not postgres adapters directly (outbox)"
+            - pkg: "github.com/LerianStudio/matcher/internal/discovery/adapters/postgres"
+              desc: "Hexagonal violation: HTTP handlers must use services, not postgres adapters directly (discovery)"
         # Cross-context port isolation: governance HTTP handlers must not reach into
         # reporting/ports. Scoped to governance only so reporting's own HTTP handlers
         # can legitimately use their own ports package.
@@ -300,7 +302,9 @@ linters:
             - pkg: "github.com/LerianStudio/matcher/internal/reporting"
               desc: "Cross-context violation: Configuration cannot import Reporting. Use shared/ports or shared kernel."
             - pkg: "github.com/LerianStudio/matcher/internal/outbox"
-              desc: "Cross-context violation: Configuration cannot import Outbox. Use shared/ports or shared kernel."
+              desc: "Cross-context violation: Configuration cannot import Outbox. Move OutboxRepository interface to shared/ports and inject via constructor."
+            - pkg: "github.com/LerianStudio/matcher/internal/discovery"
+              desc: "Cross-context violation: Configuration cannot import Discovery. Use shared/ports or shared kernel."
         cross-context-ingestion:
           list-mode: lax
           files:
@@ -323,6 +327,8 @@ linters:
               desc: "Cross-context violation: Ingestion cannot import Reporting. Use shared/ports or shared kernel."
             - pkg: "github.com/LerianStudio/matcher/internal/outbox"
               desc: "Cross-context violation: Ingestion cannot import Outbox. Move OutboxRepository interface to shared/ports and inject via constructor."
+            - pkg: "github.com/LerianStudio/matcher/internal/discovery"
+              desc: "Cross-context violation: Ingestion cannot import Discovery. Use shared/ports or shared kernel."
         cross-context-matching:
           list-mode: lax
           files:
@@ -346,6 +352,8 @@ linters:
               desc: "Cross-context violation: Matching cannot import Reporting. Use shared/ports or shared kernel."
             - pkg: "github.com/LerianStudio/matcher/internal/outbox"
               desc: "Cross-context violation: Matching cannot import Outbox. Move OutboxRepository interface to shared/ports and inject via constructor."
+            - pkg: "github.com/LerianStudio/matcher/internal/discovery"
+              desc: "Cross-context violation: Matching cannot import Discovery. Use shared/ports or shared kernel."
         # ===========================================
         # Outbox Context Isolation
         # The outbox is infrastructure — it must not depend on any business context.
@@ -370,6 +378,8 @@ linters:
               desc: "Cross-context violation: Outbox cannot import Governance directly."
             - pkg: "github.com/LerianStudio/matcher/internal/reporting"
               desc: "Cross-context violation: Outbox cannot import Reporting directly."
+            - pkg: "github.com/LerianStudio/matcher/internal/discovery"
+              desc: "Cross-context violation: Outbox cannot import Discovery directly."
         # ===========================================
         # Future Bounded Contexts (add as they're created)
         # ===========================================
@@ -393,6 +403,8 @@ linters:
               desc: "Cross-context violation: Exception cannot import Reporting. Use shared/ports or shared kernel."
             - pkg: "github.com/LerianStudio/matcher/internal/outbox"
               desc: "Cross-context violation: Exception cannot import Outbox. Use shared/ports or shared kernel."
+            - pkg: "github.com/LerianStudio/matcher/internal/discovery"
+              desc: "Cross-context violation: Exception cannot import Discovery. Use shared/ports or shared kernel."
         cross-context-governance:
           list-mode: lax
           files:
@@ -413,6 +425,8 @@ linters:
               desc: "Cross-context violation: Governance cannot import Reporting. Move ArchiveJobRepository/StorageProvider interfaces to shared/ports."
             - pkg: "github.com/LerianStudio/matcher/internal/outbox"
               desc: "Cross-context violation: Governance cannot import Outbox. Use shared/ports or shared kernel."
+            - pkg: "github.com/LerianStudio/matcher/internal/discovery"
+              desc: "Cross-context violation: Governance cannot import Discovery. Use shared/ports or shared kernel."
         # ===========================================
         # Reporting Context Isolation (NEW)
         # Reporting is a read-only projection context. It must not import from any
@@ -436,6 +450,31 @@ linters:
               desc: "Cross-context violation: Reporting cannot import Governance. Use shared/ports or shared kernel."
             - pkg: "github.com/LerianStudio/matcher/internal/outbox"
               desc: "Cross-context violation: Reporting cannot import Outbox. Use shared/ports or shared kernel."
+            - pkg: "github.com/LerianStudio/matcher/internal/discovery"
+              desc: "Cross-context violation: Reporting cannot import Discovery. Use shared/ports or shared kernel."
+        # ===========================================
+        # Discovery Context Isolation (NEW)
+        # Discovery context must not import other bounded contexts directly.
+        # ===========================================
+        cross-context-discovery:
+          list-mode: lax
+          files:
+            - "**/internal/discovery/**/*.go"
+          deny:
+            - pkg: "github.com/LerianStudio/matcher/internal/configuration"
+              desc: "Cross-context violation: Discovery cannot import Configuration. Use shared/ports or shared kernel."
+            - pkg: "github.com/LerianStudio/matcher/internal/ingestion"
+              desc: "Cross-context violation: Discovery cannot import Ingestion. Use shared/ports or shared kernel."
+            - pkg: "github.com/LerianStudio/matcher/internal/matching"
+              desc: "Cross-context violation: Discovery cannot import Matching. Use shared/ports or shared kernel."
+            - pkg: "github.com/LerianStudio/matcher/internal/exception"
+              desc: "Cross-context violation: Discovery cannot import Exception. Use shared/ports or shared kernel."
+            - pkg: "github.com/LerianStudio/matcher/internal/governance"
+              desc: "Cross-context violation: Discovery cannot import Governance. Use shared/ports or shared kernel."
+            - pkg: "github.com/LerianStudio/matcher/internal/reporting"
+              desc: "Cross-context violation: Discovery cannot import Reporting. Use shared/ports or shared kernel."
+            - pkg: "github.com/LerianStudio/matcher/internal/outbox"
+              desc: "Cross-context violation: Discovery cannot import Outbox. Use shared/ports or shared kernel."
         # ===========================================
         # Service Layer Must Not Import Adapters (NEW)
         # Use cases (command + query services) must program to port interfaces,
@@ -464,6 +503,8 @@ linters:
             - pkg: "github.com/LerianStudio/matcher/internal/reporting/adapters"
               desc: "Service layer cannot import adapters. Depend on port interfaces declared in ports/."
             - pkg: "github.com/LerianStudio/matcher/internal/outbox/adapters"
+              desc: "Service layer cannot import adapters. Depend on port interfaces declared in ports/."
+            - pkg: "github.com/LerianStudio/matcher/internal/discovery/adapters"
               desc: "Service layer cannot import adapters. Depend on port interfaces declared in ports/."
             # Shared adapter packages — also adapter implementations, not port interfaces:
             - pkg: "github.com/LerianStudio/matcher/internal/shared/adapters/postgres"
@@ -500,6 +541,8 @@ linters:
               desc: "DTO layer cannot import services. DTOs are pure data structures."
             - pkg: "github.com/LerianStudio/matcher/internal/outbox/services"
               desc: "DTO layer cannot import services. DTOs are pure data structures."
+            - pkg: "github.com/LerianStudio/matcher/internal/discovery/services"
+              desc: "DTO layer cannot import services. DTOs are pure data structures."
         # ===========================================
         # Worker Goroutines Must Not Import Adapters Directly (NEW)
         # Workers (services/worker/) orchestrate via service use cases and port
@@ -526,6 +569,8 @@ linters:
             - pkg: "github.com/LerianStudio/matcher/internal/reporting/adapters/postgres"
               desc: "Worker must not import postgres adapters directly. Use service use cases or port interfaces."
             - pkg: "github.com/LerianStudio/matcher/internal/outbox/adapters/postgres"
+              desc: "Worker must not import postgres adapters directly. Use service use cases or port interfaces."
+            - pkg: "github.com/LerianStudio/matcher/internal/discovery/adapters/postgres"
               desc: "Worker must not import postgres adapters directly. Use service use cases or port interfaces."
             # Shared adapter packages — also adapter implementations, not port interfaces:
             - pkg: "github.com/LerianStudio/matcher/internal/shared/adapters/redis"
