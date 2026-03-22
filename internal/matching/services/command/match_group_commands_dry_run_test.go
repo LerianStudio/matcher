@@ -17,6 +17,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/matching/ports"
 	outboxmocks "github.com/LerianStudio/matcher/internal/outbox/domain/repositories/mocks"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
 func TestRunMatch_DryRun_DoesNotPersistOrMarkTransactions(t *testing.T) {
@@ -33,8 +34,8 @@ func TestRunMatch_DryRun_DoesNotPersistOrMarkTransactions(t *testing.T) {
 		Active: true,
 	}
 	sources := []*ports.SourceInfo{
-		{ID: ledgerSourceID, Type: ports.SourceTypeLedger},
-		{ID: rightSourceID, Type: ports.SourceTypeFile},
+		{ID: ledgerSourceID, Type: ports.SourceTypeLedger, Side: fee.MatchingSideLeft},
+		{ID: rightSourceID, Type: ports.SourceTypeFile, Side: fee.MatchingSideRight},
 	}
 
 	rule := &shared.MatchRule{

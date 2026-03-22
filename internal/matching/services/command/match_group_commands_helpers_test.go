@@ -335,7 +335,7 @@ func TestBuildSourceTypeMap_SkipsNilSources(t *testing.T) {
 	id := uuid.MustParse("00000000-0000-0000-0000-000000100020")
 	sources := []*ports.SourceInfo{
 		nil,
-		{ID: id, Type: ports.SourceTypeLedger},
+		{ID: id, Type: ports.SourceTypeLedger, Side: fee.MatchingSideLeft},
 		nil,
 	}
 	result := buildSourceTypeMap(sources)
@@ -1371,6 +1371,10 @@ func TestLoadFeeRulesAndSchedules_MissingScheduleReference(t *testing.T) {
 
 	leftRules, rightRules, allSchedules, err := uc.loadFeeRulesAndSchedules(context.Background(), contextID)
 	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrFeeRulesReferenceMissingSchedules,
+		"should wrap the missing-schedules sentinel error")
+	assert.Contains(t, err.Error(), "1 missing references",
+		"error message should report the count of missing schedule references")
 	assert.Nil(t, leftRules)
 	assert.Nil(t, rightRules)
 	assert.Nil(t, allSchedules)

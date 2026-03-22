@@ -1089,6 +1089,78 @@ func TestHandleRunMatchError(t *testing.T) {
 	}
 }
 
+func TestHandleRunMatchError_FeeRulesMissing_Returns422(t *testing.T) {
+	t.Parallel()
+
+	app := fiber.New()
+	app.Get("/test", func(c *fiber.Ctx) error {
+		ctx := c.UserContext()
+		logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
+		if tracer == nil {
+			tracer = noop.NewTracerProvider().Tracer("test")
+		}
+		_, span := tracer.Start(ctx, "test")
+		defer span.End()
+		return handleRunMatchError(ctx, c, span, logger, command.ErrFeeRulesRequiredForNormalization)
+	})
+
+	ctx := libCommons.ContextWithTracer(
+		context.Background(),
+		noop.NewTracerProvider().Tracer("test"),
+	)
+	app.Use(func(c *fiber.Ctx) error {
+		c.SetUserContext(ctx)
+		return c.Next()
+	})
+
+	request := httptest.NewRequest(http.MethodGet, "/test", nil)
+	resp, err := app.Test(request)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, fiber.StatusUnprocessableEntity, resp.StatusCode)
+
+	var errResp sharedhttp.ErrorResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
+	require.Equal(t, "fee_rules_missing", errResp.Title)
+}
+
+func TestHandleRunMatchError_FeeRulesMisconfigured_Returns422(t *testing.T) {
+	t.Parallel()
+
+	app := fiber.New()
+	app.Get("/test", func(c *fiber.Ctx) error {
+		ctx := c.UserContext()
+		logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
+		if tracer == nil {
+			tracer = noop.NewTracerProvider().Tracer("test")
+		}
+		_, span := tracer.Start(ctx, "test")
+		defer span.End()
+		return handleRunMatchError(ctx, c, span, logger, command.ErrFeeRulesReferenceMissingSchedules)
+	})
+
+	ctx := libCommons.ContextWithTracer(
+		context.Background(),
+		noop.NewTracerProvider().Tracer("test"),
+	)
+	app.Use(func(c *fiber.Ctx) error {
+		c.SetUserContext(ctx)
+		return c.Next()
+	})
+
+	request := httptest.NewRequest(http.MethodGet, "/test", nil)
+	resp, err := app.Test(request)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, fiber.StatusUnprocessableEntity, resp.StatusCode)
+
+	var errResp sharedhttp.ErrorResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
+	require.Equal(t, "fee_rules_misconfigured", errResp.Title)
+}
+
 func TestListMatchRunsHandler_SortOrderAsc(t *testing.T) {
 	t.Parallel()
 
@@ -1296,7 +1368,7 @@ func TestGetMatchRunResultsHandler_ContextNotActive(t *testing.T) {
 	require.Equal(t, "context_not_active", errResp.Title)
 }
 
-func TestRunMatchHandler_NoPrimarySourceIDFieldNeeded(t *testing.T) {
+func TestRunMatchHandler_RunMatchWithoutPrimarySourceID(t *testing.T) {
 	t.Parallel()
 
 	tenantID := uuid.New()
