@@ -22,13 +22,26 @@ import (
 //
 // This test ensures the rule-based fee lookup path is exercised during
 // match execution, producing fee variance records when applicable.
+//
+// TODO(fee-rules): Implement this test when a full integration test harness for fee
+// rules is available. The prerequisite chain (context → source × 2 → fee schedule →
+// fee rule with predicates → ingested transactions → match run) requires either:
+//   - A shared test helper that provisions the complete fee rule prerequisite stack, or
+//   - A docker-compose-backed E2E harness that seeds the database programmatically.
+//
+// The unit-test coverage for fee normalization error paths lives in:
+//   - match_group_commands_run_test.go: TestRunMatch_FeeNormalizationEnabledButNoFeeRules
+//   - match_group_commands_run_test.go: TestRunMatch_FeeRulesReferenceMissingSchedules
+//   - match_group_commands_helpers_test.go: TestLoadFeeRulesAndSchedules_*
+//
+// See setupFeeVariancePrereqs in fee_verification_test.go for the persistence-level
+// equivalent; this test should exercise the orchestration layer (RunMatch) instead.
 func TestFeeRuleNormalization_PipelineIntegration(t *testing.T) {
 	t.Parallel()
 
-	t.Skip("requires fee rule harness setup: " +
-		"the integration test harness does not yet provide helpers for the full " +
+	t.Skip("blocked: integration test harness does not yet provide helpers for the full " +
 		"fee rule prerequisite chain (context → source × 2 → schedule → rule → " +
 		"ingested transactions → match run). " +
-		"See setupFeeVariancePrereqs in fee_verification_test.go for the persistence-level " +
-		"equivalent; this test should exercise the orchestration layer (RunMatch) instead.")
+		"Unit-test coverage for error branches exists in match_group_commands_run_test.go " +
+		"and match_group_commands_helpers_test.go.")
 }

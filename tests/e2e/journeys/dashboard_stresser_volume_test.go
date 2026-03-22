@@ -67,6 +67,7 @@ func TestDashboardStresser_HighVolume(t *testing.T) {
 				reconciliationContext.ID,
 				"ledger",
 				"LEDGER",
+				"LEFT",
 				shouldSkipCleanup(),
 			)
 			bankSource := createSourceWithoutCleanup(
@@ -75,6 +76,7 @@ func TestDashboardStresser_HighVolume(t *testing.T) {
 				reconciliationContext.ID,
 				"bank",
 				"BANK",
+				"RIGHT",
 				shouldSkipCleanup(),
 			)
 			gatewaySource := createSourceWithoutCleanup(
@@ -83,6 +85,7 @@ func TestDashboardStresser_HighVolume(t *testing.T) {
 				reconciliationContext.ID,
 				"gateway",
 				"GATEWAY",
+				"RIGHT",
 				shouldSkipCleanup(),
 			)
 

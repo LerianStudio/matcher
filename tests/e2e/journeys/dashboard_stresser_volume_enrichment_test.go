@@ -850,11 +850,11 @@ func runDashboardStresserHighVolumeEnrichment(
 		endpointFailures["CloneContext"] = err.Error()
 	} else {
 		clonedContextID = cloneResp.Context.ID
-		tc.Logf("  CloneContext: %s (sources=%d, rules=%d, fieldMaps=%d)",
-			cloneResp.Context.ID, cloneResp.SourcesCloned, cloneResp.RulesCloned, cloneResp.FieldMapsCloned)
+		tc.Logf("  CloneContext: %s (sources=%d, rules=%d, feeRules=%d, fieldMaps=%d)",
+			cloneResp.Context.ID, cloneResp.SourcesCloned, cloneResp.RulesCloned, cloneResp.FeeRulesCloned, cloneResp.FieldMapsCloned)
 		enrichedEndpoints++
 
-		// Clean up cloned context (must delete children first: field maps → rules + sources → context)
+		// Clean up cloned context (must delete children first: field maps → fee rules → match rules → sources → context)
 		if !shouldSkipCleanup() {
 			deleteClonedContext(ctx, tc, apiClient, clonedContextID, endpointFailures, &enrichedEndpoints)
 		}

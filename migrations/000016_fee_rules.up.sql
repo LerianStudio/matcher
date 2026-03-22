@@ -32,8 +32,7 @@ CREATE TABLE fee_rules (
     CONSTRAINT uq_fee_rules_context_name UNIQUE (context_id, name)
 );
 
--- Primary lookup path: all rules for a context, ordered by priority.
-CREATE INDEX idx_fee_rules_context ON fee_rules(context_id);
-
 -- Referential integrity check path: which rules reference a given schedule.
+-- Note: context_id lookups are already served by the leading column of
+-- uq_fee_rules_context_priority and uq_fee_rules_context_name.
 CREATE INDEX idx_fee_rules_schedule ON fee_rules(fee_schedule_id);

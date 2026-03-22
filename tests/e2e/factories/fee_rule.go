@@ -48,12 +48,6 @@ func (b *FeeRuleBuilder) WithName(name string) *FeeRuleBuilder {
 	return b
 }
 
-// WithRawName sets the fee rule name without prefixing.
-func (b *FeeRuleBuilder) WithRawName(name string) *FeeRuleBuilder {
-	b.req.Name = name
-	return b
-}
-
 // WithSide sets the fee rule side.
 func (b *FeeRuleBuilder) WithSide(side string) *FeeRuleBuilder {
 	b.req.Side = side

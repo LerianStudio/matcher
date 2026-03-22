@@ -20,8 +20,8 @@ func shouldSkipCleanup() bool {
 }
 
 // cleanupContextChildren deletes all children of a context in the correct dependency order:
-// field maps → rules → sources. All errors are logged as warnings but do not halt the cascade,
-// ensuring best-effort cleanup even when individual deletions fail.
+// field maps → fee rules → match rules → sources. All errors are logged as warnings but do not
+// halt the cascade, ensuring best-effort cleanup even when individual deletions fail.
 func cleanupContextChildren(
 	ctx context.Context,
 	tc *e2e.TestContext,
@@ -45,7 +45,21 @@ func cleanupContextChildren(
 		}
 	}
 
-	// 2. Delete rules
+	// 2. Delete fee rules
+	feeRules, feeRulesErr := apiClient.Configuration.ListFeeRules(ctx, contextID)
+	if feeRulesErr != nil {
+		tc.Logf("  warn: failed to list fee rules for cleanup: %v", feeRulesErr)
+	}
+
+	if feeRules != nil {
+		for _, fr := range feeRules {
+			if delErr := apiClient.Configuration.DeleteFeeRule(ctx, fr.ID); delErr != nil {
+				tc.Logf("  warn: failed to delete fee rule %s: %v", fr.ID, delErr)
+			}
+		}
+	}
+
+	// 3. Delete match rules
 	rules, rulesErr := apiClient.Configuration.ListMatchRules(ctx, contextID)
 	if rulesErr != nil {
 		tc.Logf("  warn: failed to list rules for cleanup: %v", rulesErr)
@@ -59,7 +73,7 @@ func cleanupContextChildren(
 		}
 	}
 
-	// 3. Delete sources (after field maps are removed)
+	// 4. Delete sources (after field maps and rules are removed)
 	if sources != nil {
 		for _, src := range sources {
 			if delErr := apiClient.Configuration.DeleteSource(ctx, contextID, src.ID); delErr != nil {
@@ -70,7 +84,7 @@ func cleanupContextChildren(
 }
 
 // deleteClonedContext deletes a cloned context and all its children in the correct order:
-// field maps → rules → sources → context.
+// field maps → fee rules → match rules → sources → context.
 func deleteClonedContext(
 	ctx context.Context,
 	tc *e2e.TestContext,
@@ -209,15 +223,31 @@ func createContextWithoutCleanup(
 	return builder.MustCreate(ctx)
 }
 
-// Helper to create source without cleanup when E2E_KEEP_DATA is set
+// Helper to create source without cleanup when E2E_KEEP_DATA is set.
+// When skipCleanup is true we call the API directly (no cleanup registration)
+// but still resolve the side through the builder so preserved-data runs send
+// a valid LEFT/RIGHT value.
+//
+// GetRequest() now calls resolveSide() internally, which advances the
+// per-context counter and ensures auto-assignment works correctly even
+// when Create() is bypassed.
 func createSourceWithoutCleanup(
 	ctx context.Context,
 	f *factories.Factories,
-	contextID, name, sourceType string,
+	contextID, name, sourceType, side string,
 	skipCleanup bool,
 ) *client.Source {
 	builder := f.Source.NewSource(contextID).WithName(name).WithType(sourceType)
+	if side != "" {
+		if side == "LEFT" {
+			builder = builder.Left()
+		} else {
+			builder = builder.Right()
+		}
+	}
 	if skipCleanup {
+		// GetRequest resolves the side and advances the counter, so the
+		// factory stays consistent even when we bypass Create().
 		req := builder.GetRequest()
 		created, err := f.Source.Client().Configuration.CreateSource(
 			ctx,

@@ -476,6 +476,40 @@ func TestMatchingModes_SideBasedDirectionalAssignment(t *testing.T) {
 				require.Len(t, group.Items, 2)
 			}
 
+			// H-T6: Verify directionality — each match group must pair a LEFT
+			// (bank) transaction with a RIGHT (gateway) transaction, never
+			// two transactions from the same side.
+			//
+			// MatchItem only exposes TransactionID, so we build a lookup from
+			// transaction ID → source ID via the ingestion job listings, then
+			// confirm every group contains exactly one item per source.
+			bankTxs, err := client.Ingestion.ListTransactionsByJob(ctx, reconciliationContext.ID, bankJob.ID)
+			require.NoError(t, err, "should list bank transactions")
+			gatewayTxs, err := client.Ingestion.ListTransactionsByJob(ctx, reconciliationContext.ID, gatewayJob.ID)
+			require.NoError(t, err, "should list gateway transactions")
+
+			txSourceMap := make(map[string]string, len(bankTxs)+len(gatewayTxs))
+			for _, tx := range bankTxs {
+				txSourceMap[tx.ID] = bankSource.ID
+			}
+			for _, tx := range gatewayTxs {
+				txSourceMap[tx.ID] = gatewaySource.ID
+			}
+
+			for i, group := range groups {
+				sourcesInGroup := make(map[string]int, 2)
+				for _, item := range group.Items {
+					srcID, ok := txSourceMap[item.TransactionID]
+					require.True(t, ok, "group[%d] item tx %s should map to a known source", i, item.TransactionID)
+					sourcesInGroup[srcID]++
+				}
+				assert.Equal(t, 1, sourcesInGroup[bankSource.ID],
+					"group[%d] should contain exactly 1 LEFT (bank) transaction", i)
+				assert.Equal(t, 1, sourcesInGroup[gatewaySource.ID],
+					"group[%d] should contain exactly 1 RIGHT (gateway) transaction", i)
+			}
+
+			tc.Logf("✓ H-T6: Directionality verified — every group pairs one LEFT + one RIGHT transaction")
 			tc.Logf("Side-based matching completed successfully")
 		},
 	)
