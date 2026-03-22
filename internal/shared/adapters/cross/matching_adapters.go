@@ -13,9 +13,12 @@ import (
 	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 
+	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	configRepositories "github.com/LerianStudio/matcher/internal/configuration/domain/repositories"
 	matchingPorts "github.com/LerianStudio/matcher/internal/matching/ports"
+	"github.com/LerianStudio/matcher/internal/shared/constants"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
 // MatchRuleProviderAdapter wraps a configuration MatchRuleRepository
@@ -44,17 +47,9 @@ func (adapter *MatchRuleProviderAdapter) ListByContextID(
 		return nil, ErrMatchRuleRepositoryRequired
 	}
 
-	rules, _, err := adapter.repo.FindByContextID(ctx, contextID, "", maxInternalLimit)
+	rules, err := collectAllMatchRules(ctx, adapter.repo, contextID)
 	if err != nil {
-		return nil, fmt.Errorf("find match rules by context: %w", err)
-	}
-
-	if len(rules) >= maxInternalLimit {
-		logger, _, _, _ := libCommons.NewTrackingFromContext(ctx)
-		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf(
-			"match rules result may be truncated: returned %d items (limit %d) for context_id=%s",
-			len(rules), maxInternalLimit, contextID.String(),
-		))
+		return nil, err
 	}
 
 	if len(rules) == 0 {
@@ -86,6 +81,12 @@ var (
 	ErrContextRepositoryRequired = errors.New("context repository is required")
 	// ErrSourceRepositoryRequired is returned when the source repository is nil.
 	ErrSourceRepositoryRequired = errors.New("source repository is required")
+	// ErrFeeRuleRepositoryRequired is returned when the fee rule repository is nil.
+	ErrFeeRuleRepositoryRequired = errors.New("fee rule repository is required")
+	// ErrMatchRulePaginationCursorDidNotAdvance is returned when a paginated match rule query loops.
+	ErrMatchRulePaginationCursorDidNotAdvance = errors.New("match rule pagination cursor did not advance")
+	// ErrSourcePaginationCursorDidNotAdvance is returned when a paginated source query loops.
+	ErrSourcePaginationCursorDidNotAdvance = errors.New("source pagination cursor did not advance")
 )
 
 // NewContextProviderAdapter creates a new adapter for ContextRepository.
@@ -157,17 +158,9 @@ func (adapter *SourceProviderAdapter) FindByContextID(
 		return nil, ErrSourceRepositoryRequired
 	}
 
-	sources, _, err := adapter.repo.FindByContextID(ctx, contextID, "", maxInternalLimit)
+	sources, err := collectAllSources(ctx, adapter.repo, contextID)
 	if err != nil {
-		return nil, fmt.Errorf("find sources by context: %w", err)
-	}
-
-	if len(sources) >= maxInternalLimit {
-		logger, _, _, _ := libCommons.NewTrackingFromContext(ctx)
-		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf(
-			"sources result may be truncated: returned %d items (limit %d) for context_id=%s",
-			len(sources), maxInternalLimit, contextID.String(),
-		))
+		return nil, err
 	}
 
 	result := make([]*matchingPorts.SourceInfo, 0, len(sources))
@@ -181,21 +174,124 @@ func (adapter *SourceProviderAdapter) FindByContextID(
 		// matching context does not validate SourceType values — it is only used as metadata.
 		// If matching starts validating SourceType, a proper mapping should be introduced.
 		result = append(result, &matchingPorts.SourceInfo{
-			ID:            src.ID,
-			Type:          matchingPorts.SourceType(src.Type.String()),
-			FeeScheduleID: src.FeeScheduleID,
+			ID:   src.ID,
+			Type: matchingPorts.SourceType(src.Type.String()),
+			Side: src.Side,
 		})
 	}
 
 	return result, nil
 }
 
+// FeeRuleProviderAdapter wraps a configuration FeeRuleRepository
+// to implement the matching ports.FeeRuleProvider interface.
+type FeeRuleProviderAdapter struct {
+	repo configRepositories.FeeRuleRepository
+}
+
+// NewFeeRuleProviderAdapter creates a new adapter for FeeRuleRepository.
+func NewFeeRuleProviderAdapter(
+	repo configRepositories.FeeRuleRepository,
+) (*FeeRuleProviderAdapter, error) {
+	if repo == nil {
+		return nil, ErrFeeRuleRepositoryRequired
+	}
+
+	return &FeeRuleProviderAdapter{repo: repo}, nil
+}
+
+// FindByContextID retrieves fee rules for a context via the configuration repository.
+func (adapter *FeeRuleProviderAdapter) FindByContextID(
+	ctx context.Context,
+	contextID uuid.UUID,
+) ([]*fee.FeeRule, error) {
+	if adapter == nil || adapter.repo == nil {
+		return nil, ErrFeeRuleRepositoryRequired
+	}
+
+	return adapter.repo.FindByContextID(ctx, contextID)
+}
+
+func collectAllMatchRules(
+	ctx context.Context,
+	repo configRepositories.MatchRuleRepository,
+	contextID uuid.UUID,
+) (shared.MatchRules, error) {
+	allRules := make(shared.MatchRules, 0)
+	cursor := ""
+
+	for {
+		rules, pagination, err := repo.FindByContextID(ctx, contextID, cursor, maxInternalLimit)
+		if err != nil {
+			return nil, fmt.Errorf("find match rules by context: %w", err)
+		}
+
+		for _, rule := range rules {
+			if rule == nil {
+				continue
+			}
+
+			allRules = append(allRules, rule)
+		}
+
+		if pagination.Next == "" {
+			break
+		}
+
+		if pagination.Next == cursor {
+			return nil, fmt.Errorf("find match rules by context: %w", ErrMatchRulePaginationCursorDidNotAdvance)
+		}
+
+		cursor = pagination.Next
+	}
+
+	return allRules, nil
+}
+
+func collectAllSources(
+	ctx context.Context,
+	repo configRepositories.SourceRepository,
+	contextID uuid.UUID,
+) ([]*configEntities.ReconciliationSource, error) {
+	logger, _, _, _ := libCommons.NewTrackingFromContext(ctx) //nolint:dogsled // only logger needed here
+	allSources := make([]*configEntities.ReconciliationSource, 0)
+	cursor := ""
+
+	for {
+		sources, pagination, err := repo.FindByContextID(ctx, contextID, cursor, maxInternalLimit)
+		if err != nil {
+			return nil, fmt.Errorf("find sources by context: %w", err)
+		}
+
+		allSources = append(allSources, sources...)
+
+		if pagination.Next == "" {
+			break
+		}
+
+		if pagination.Next == cursor {
+			return nil, fmt.Errorf("find sources by context: %w", ErrSourcePaginationCursorDidNotAdvance)
+		}
+
+		logger.Log(ctx, libLog.LevelDebug, fmt.Sprintf(
+			"loading additional sources page for context_id=%s with cursor=%s",
+			contextID.String(),
+			pagination.Next,
+		))
+
+		cursor = pagination.Next
+	}
+
+	return allSources, nil
+}
+
 const (
-	maxInternalLimit = 1000
+	maxInternalLimit = constants.MaximumPaginationLimit
 )
 
 var (
 	_ matchingPorts.MatchRuleProvider = (*MatchRuleProviderAdapter)(nil)
 	_ matchingPorts.ContextProvider   = (*ContextProviderAdapter)(nil)
 	_ matchingPorts.SourceProvider    = (*SourceProviderAdapter)(nil)
+	_ matchingPorts.FeeRuleProvider   = (*FeeRuleProviderAdapter)(nil)
 )

@@ -31,15 +31,18 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/configuration/services/command"
 	"github.com/LerianStudio/matcher/internal/configuration/services/query"
+	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	"github.com/LerianStudio/matcher/internal/shared/testutil"
 )
 
 type handlerFixture struct {
-	handler       *Handler
-	contextRepo   *contextRepository
-	sourceRepo    *sourceRepository
-	fieldMapRepo  *fieldMapRepository
-	matchRuleRepo *matchRuleRepository
+	handler         *Handler
+	contextRepo     *contextRepository
+	sourceRepo      *sourceRepository
+	fieldMapRepo    *fieldMapRepository
+	matchRuleRepo   *matchRuleRepository
+	feeRuleRepo     *feeRuleRepository
+	feeScheduleRepo *feeScheduleRepository
 }
 
 func newHandlerFixture(t *testing.T) *handlerFixture {
@@ -49,22 +52,40 @@ func newHandlerFixture(t *testing.T) *handlerFixture {
 	sourceRepo := newSourceRepository()
 	fieldMapRepo := newFieldMapRepository()
 	matchRuleRepo := newMatchRuleRepository()
+	feeRuleRepo := newFeeRuleRepository()
+	feeScheduleRepo := newFeeScheduleRepository()
 
-	commandUseCase, err := command.NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
+	commandUseCase, err := command.NewUseCase(
+		contextRepo,
+		sourceRepo,
+		fieldMapRepo,
+		matchRuleRepo,
+		command.WithFeeRuleRepository(feeRuleRepo),
+		command.WithFeeScheduleRepository(feeScheduleRepo),
+	)
 	require.NoError(t, err)
 
-	queryUseCase, err := query.NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
+	queryUseCase, err := query.NewUseCase(
+		contextRepo,
+		sourceRepo,
+		fieldMapRepo,
+		matchRuleRepo,
+		query.WithFeeRuleRepository(feeRuleRepo),
+		query.WithFeeScheduleRepository(feeScheduleRepo),
+	)
 	require.NoError(t, err)
 
 	handler, err := NewHandler(commandUseCase, queryUseCase, false)
 	require.NoError(t, err)
 
 	return &handlerFixture{
-		handler:       handler,
-		contextRepo:   contextRepo,
-		sourceRepo:    sourceRepo,
-		fieldMapRepo:  fieldMapRepo,
-		matchRuleRepo: matchRuleRepo,
+		handler:         handler,
+		contextRepo:     contextRepo,
+		sourceRepo:      sourceRepo,
+		fieldMapRepo:    fieldMapRepo,
+		matchRuleRepo:   matchRuleRepo,
+		feeRuleRepo:     feeRuleRepo,
+		feeScheduleRepo: feeScheduleRepo,
 	}
 }
 
@@ -97,6 +118,7 @@ func (fixture *handlerFixture) seedSource(
 	input := entities.CreateReconciliationSourceInput{
 		Name: "Test Source",
 		Type: value_objects.SourceTypeLedger,
+		Side: fee.MatchingSideLeft,
 	}
 	sourceEntity, err := entities.NewReconciliationSource(context.Background(), contextID, input)
 	require.NoError(t, err)
@@ -124,6 +146,49 @@ func (fixture *handlerFixture) seedFieldMap(
 	require.NoError(t, err)
 
 	return stored
+}
+
+func (fixture *handlerFixture) seedFeeSchedule(
+	t *testing.T,
+	tenantID uuid.UUID,
+) *fee.FeeSchedule {
+	t.Helper()
+
+	schedule, err := fee.NewFeeSchedule(context.Background(), fee.NewFeeScheduleInput{
+		TenantID:         tenantID,
+		Name:             "Test Fee Schedule",
+		Currency:         "USD",
+		ApplicationOrder: fee.ApplicationOrderParallel,
+		RoundingScale:    2,
+		RoundingMode:     fee.RoundingModeHalfUp,
+		Items: []fee.FeeScheduleItemInput{{
+			Name:      "Processing",
+			Priority:  1,
+			Structure: fee.FlatFee{},
+		}},
+	})
+	require.NoError(t, err)
+
+	stored, err := fixture.feeScheduleRepo.Create(context.Background(), schedule)
+	require.NoError(t, err)
+
+	return stored
+}
+
+func (fixture *handlerFixture) seedFeeRule(
+	t *testing.T,
+	contextID, feeScheduleID uuid.UUID,
+	name string,
+	side fee.MatchingSide,
+	priority int,
+) *fee.FeeRule {
+	t.Helper()
+
+	rule, err := fee.NewFeeRule(context.Background(), contextID, feeScheduleID, side, name, priority, nil)
+	require.NoError(t, err)
+	require.NoError(t, fixture.feeRuleRepo.Create(context.Background(), rule))
+
+	return rule
 }
 
 func (fixture *handlerFixture) seedMatchRule(
@@ -274,6 +339,20 @@ func requireConflictResponse(
 	var payload map[string]any
 	require.NoError(t, json.NewDecoder(response.Body).Decode(&payload))
 	require.Equal(t, float64(409), payload["code"])
+	require.Equal(t, expectedTitle, payload["title"])
+	require.Equal(t, expectedMessage, payload["message"])
+}
+
+func requireBadRequestResponse(
+	t *testing.T,
+	response *http.Response,
+	expectedTitle, expectedMessage string,
+) {
+	t.Helper()
+
+	var payload map[string]any
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&payload))
+	require.Equal(t, float64(400), payload["code"])
 	require.Equal(t, expectedTitle, payload["title"])
 	require.Equal(t, expectedMessage, payload["message"])
 }
@@ -946,6 +1025,7 @@ func makeCreateSourceTestCase(t *testing.T, tenantID uuid.UUID) sourceHandlerTes
 		payload: entities.CreateReconciliationSourceInput{
 			Name: "Source A",
 			Type: value_objects.SourceTypeLedger,
+			Side: fee.MatchingSideLeft,
 		},
 		registerRoute: func(app *fiber.App, handler *Handler) {
 			app.Post("/api/v1/contexts/:contextId/sources", handler.CreateSource)

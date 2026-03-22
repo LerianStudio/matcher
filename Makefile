@@ -171,6 +171,7 @@ help:
 	@echo "Migration Commands:"
 	@echo "  make migrate-up                  - Apply database migrations"
 	@echo "  make migrate-down                - Roll back last migration"
+	@echo "  make migrate-to VERSION=<n>      - Migrate to a specific version"
 	@echo "  make migrate-create NAME=<name>  - Create new migration files"
 	@echo ""
 	@echo ""
@@ -511,7 +512,7 @@ generate-docs:
 # Migration Commands
 #-------------------------------------------------------
 
-.PHONY: check-db-safety migrate-up migrate-down migrate-create
+.PHONY: check-db-safety migrate-up migrate-down migrate-to migrate-create
 
 check-db-safety:
 	@set -eu; \
@@ -550,6 +551,17 @@ migrate-down: check-db-safety
 	$(call check_command,migrate,"https://github.com/golang-migrate/migrate")
 	@migrate -path $(MIGRATE_PATH) -database "$(DATABASE_URL)" down 1
 	@echo "[ok] Migration rolled back successfully"
+
+migrate-to: check-db-safety
+	$(call print_title,Migrating to specific version)
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Error: VERSION not specified."; \
+		echo "Usage: make migrate-to VERSION=<version_number>"; \
+		exit 1; \
+	fi
+	$(call check_command,migrate,"https://github.com/golang-migrate/migrate")
+	@migrate -path $(MIGRATE_PATH) -database "$(DATABASE_URL)" goto $(VERSION)
+	@echo "[ok] Migrated to version $(VERSION) successfully"
 
 migrate-create:
 	$(call print_title,Creating new migration)

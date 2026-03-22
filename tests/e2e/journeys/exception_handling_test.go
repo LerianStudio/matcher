@@ -93,7 +93,7 @@ func TestException_CreatedForUnmatchedTransactions(t *testing.T) {
 			)
 
 			// Run matching - these should NOT match
-			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -193,7 +193,7 @@ func TestException_StatusTransitions(t *testing.T) {
 			)
 
 			// Run matching
-			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -310,7 +310,7 @@ func TestException_ForceMatchWorkflow(t *testing.T) {
 				e2e.WaitForJobComplete(ctx, tc, apiClient, reconciliationContext.ID, bankJob.ID),
 			)
 
-			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -486,7 +486,7 @@ func TestException_AdjustEntryWorkflow(t *testing.T) {
 				e2e.WaitForJobComplete(ctx, tc, apiClient, reconciliationContext.ID, ledgerJob.ID),
 			)
 
-			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -653,7 +653,7 @@ func TestException_FilterByStatus(t *testing.T) {
 				e2e.WaitForJobComplete(ctx, tc, apiClient, reconciliationContext.ID, ledgerJob.ID),
 			)
 
-			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -804,7 +804,7 @@ func TestException_Pagination(t *testing.T) {
 				e2e.WaitForJobComplete(ctx, tc, apiClient, reconciliationContext.ID, ledgerJob.ID),
 			)
 
-			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -908,7 +908,7 @@ func TestException_HistoryAuditTrail(t *testing.T) {
 				e2e.WaitForJobComplete(ctx, tc, apiClient, reconciliationContext.ID, ledgerJob.ID),
 			)
 
-			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -1033,7 +1033,7 @@ func TestException_ResolveAlreadyResolved(t *testing.T) {
 				e2e.WaitForJobComplete(ctx, tc, apiClient, reconciliationContext.ID, ledgerJob.ID),
 			)
 
-			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,

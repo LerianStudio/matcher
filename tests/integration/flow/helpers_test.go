@@ -20,6 +20,7 @@ import (
 	configSourceRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/source"
 	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	configVO "github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	tenantAdapters "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant/adapters"
 	"github.com/LerianStudio/matcher/tests/integration"
 	"github.com/LerianStudio/matcher/tests/integration/server"
@@ -613,6 +614,7 @@ func createMultiRuleFlowTestConfig(
 		configEntities.CreateReconciliationSourceInput{
 			Name:   "Multi-Rule Test Bank Source",
 			Type:   configVO.SourceTypeBank,
+			Side:   sharedfee.MatchingSideRight,
 			Config: map[string]any{"format": "csv"},
 		},
 	)
@@ -829,6 +831,7 @@ func SetupFlowTestConfigWithOptionsGeneric(
 		configEntities.CreateReconciliationSourceInput{
 			Name:   "HTTP Flow Test Bank Source",
 			Type:   configVO.SourceTypeBank,
+			Side:   sharedfee.MatchingSideRight,
 			Config: map[string]any{"format": "csv"},
 		},
 	)

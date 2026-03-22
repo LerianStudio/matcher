@@ -21,6 +21,7 @@ import (
 	matchingVO "github.com/LerianStudio/matcher/internal/matching/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/matching/services/command"
 	sharedpagination "github.com/LerianStudio/matcher/internal/shared/adapters/http"
+	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
 // RunMatch triggers a matching run for a context.
@@ -76,23 +77,12 @@ func (handler *Handler) RunMatch(fiberCtx *fiber.Ctx) error {
 		return badRequest(ctx, fiberCtx, span, logger, "invalid match run mode", err)
 	}
 
-	var primarySourceIDStr string
-	if payload.PrimarySourceID != nil {
-		primarySourceIDStr = strings.TrimSpace(*payload.PrimarySourceID)
-	}
-
-	primarySourceID, err := parseOptionalUUID(primarySourceIDStr)
-	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid primarySourceId", err)
-	}
-
 	run, _, err := handler.command.RunMatch(
 		ctx,
 		command.RunMatchInput{
-			TenantID:        tenantID,
-			ContextID:       contextID,
-			Mode:            mode,
-			PrimarySourceID: primarySourceID,
+			TenantID:  tenantID,
+			ContextID: contextID,
+			Mode:      mode,
 		},
 	)
 	if err != nil {
@@ -399,12 +389,41 @@ func (handler *Handler) GetMatchRunResults(fiberCtx *fiber.Ctx) error {
 	return nil
 }
 
+// runMatchBadRequestErrors maps bad-request sentinel errors to human-readable messages.
+var runMatchBadRequestErrors = []struct {
+	err error
+	msg string
+}{
+	{command.ErrNoSourcesConfigured, "no sources configured for context"},
+	{command.ErrAtLeastTwoSourcesRequired, "at least two sources are required"},
+	{command.ErrSourceSideRequiredForMatching, "all sources must declare side LEFT or RIGHT before matching"},
+	{command.ErrOneToOneRequiresExactlyOneLeftSource, "1:1 contexts require exactly one LEFT source"},
+	{command.ErrOneToOneRequiresExactlyOneRightSource, "1:1 contexts require exactly one RIGHT source"},
+	{command.ErrOneToManyRequiresExactlyOneLeftSource, "1:N contexts require exactly one LEFT source"},
+	{command.ErrAtLeastOneRightSourceRequired, "at least one RIGHT source is required"},
+	{command.ErrMatchRunModeRequired, "match run mode is required"},
+}
+
 // isRunMatchBadRequestError returns true if err is a client-side (bad request) error.
 func isRunMatchBadRequestError(err error) bool {
-	return errors.Is(err, command.ErrNoSourcesConfigured) ||
-		errors.Is(err, command.ErrAtLeastTwoSourcesRequired) ||
-		errors.Is(err, command.ErrPrimarySourceNotInContext) ||
-		errors.Is(err, command.ErrMatchRunModeRequired)
+	for _, entry := range runMatchBadRequestErrors {
+		if errors.Is(err, entry.err) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// runMatchBadRequestMessage returns the message for a bad-request error, or a fallback.
+func runMatchBadRequestMessage(err error) string {
+	for _, entry := range runMatchBadRequestErrors {
+		if errors.Is(err, entry.err) {
+			return entry.msg
+		}
+	}
+
+	return "bad request"
 }
 
 // mapRunMatchErrorToResponse maps known errors to appropriate HTTP responses.
@@ -420,14 +439,29 @@ func mapRunMatchErrorToResponse(
 		return writeNotFound(fiberCtx, "context not found")
 	case errors.Is(err, command.ErrContextNotActive):
 		return libHTTP.RespondError(fiberCtx, fiber.StatusForbidden, "context_not_active", "context is not active")
-	case errors.Is(err, command.ErrNoSourcesConfigured):
-		return badRequest(ctx, fiberCtx, span, logger, "no sources configured for context", err)
-	case errors.Is(err, command.ErrAtLeastTwoSourcesRequired):
-		return badRequest(ctx, fiberCtx, span, logger, "at least two sources are required", err)
-	case errors.Is(err, command.ErrPrimarySourceNotInContext):
-		return badRequest(ctx, fiberCtx, span, logger, "primary source ID not found in context sources", err)
-	case errors.Is(err, command.ErrMatchRunModeRequired):
-		return badRequest(ctx, fiberCtx, span, logger, "match run mode is required", err)
+	case isRunMatchBadRequestError(err):
+		return badRequest(ctx, fiberCtx, span, logger, runMatchBadRequestMessage(err), err)
+	case errors.Is(err, command.ErrFeeRulesReferenceMissingSchedules):
+		return libHTTP.RespondError(
+			fiberCtx,
+			fiber.StatusUnprocessableEntity,
+			"fee_rules_misconfigured",
+			"fee rules reference fee schedules that do not exist",
+		)
+	case errors.Is(err, command.ErrFeeRulesRequiredForNormalization):
+		return libHTTP.RespondError(
+			fiberCtx,
+			fiber.StatusUnprocessableEntity,
+			"fee_rules_missing",
+			"fee normalization is enabled but no fee rules are configured for this context",
+		)
+	case errors.Is(err, sharedfee.ErrFeeRuleCountLimitExceeded):
+		return libHTTP.RespondError(
+			fiberCtx,
+			fiber.StatusUnprocessableEntity,
+			"fee_rules_misconfigured",
+			"fee rule count exceeds the maximum allowed per context",
+		)
 	case errors.Is(err, command.ErrMatchRunLocked):
 		return libHTTP.RespondError(
 			fiberCtx,

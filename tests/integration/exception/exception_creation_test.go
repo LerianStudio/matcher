@@ -39,10 +39,9 @@ func TestIntegrationExceptionFromUnmatched(t *testing.T) {
 			"MATCH-REF-001", decimal.NewFromFloat(100.00), "USD")
 
 		result, _, err := wired.MatchingUC.RunMatch(ctx, matchingCommand.RunMatchInput{
-			TenantID:        h.Seed.TenantID,
-			ContextID:       seed.ContextID,
-			Mode:            matchingVO.MatchRunModeCommit,
-			PrimarySourceID: nil,
+			TenantID:  h.Seed.TenantID,
+			ContextID: seed.ContextID,
+			Mode:      matchingVO.MatchRunModeCommit,
 		})
 		require.NoError(t, err)
 		require.NotNil(t, result)
@@ -95,10 +94,9 @@ func TestIntegrationExceptionFromUnmatched_WithReason(t *testing.T) {
 			"ORPHAN-WITH-REASON", decimal.NewFromFloat(500.00), "JPY")
 
 		result, _, err := wired.MatchingUC.RunMatch(ctx, matchingCommand.RunMatchInput{
-			TenantID:        h.Seed.TenantID,
-			ContextID:       seed.ContextID,
-			Mode:            matchingVO.MatchRunModeCommit,
-			PrimarySourceID: nil,
+			TenantID:  h.Seed.TenantID,
+			ContextID: seed.ContextID,
+			Mode:      matchingVO.MatchRunModeCommit,
 		})
 		require.NoError(t, err)
 		require.NotNil(t, result)
@@ -132,10 +130,9 @@ func TestIntegrationExceptionFromUnmatched_Idempotent(t *testing.T) {
 			"ORPHAN-IDEMPOTENT-"+uuid.New().String()[:8], decimal.NewFromFloat(150.00), "CHF")
 
 		result1, _, err := wired.MatchingUC.RunMatch(ctx, matchingCommand.RunMatchInput{
-			TenantID:        h.Seed.TenantID,
-			ContextID:       seed.ContextID,
-			Mode:            matchingVO.MatchRunModeCommit,
-			PrimarySourceID: nil,
+			TenantID:  h.Seed.TenantID,
+			ContextID: seed.ContextID,
+			Mode:      matchingVO.MatchRunModeCommit,
 		})
 		require.NoError(t, err)
 		require.Equal(t, matchingVO.MatchRunStatusCompleted, result1.Status)
@@ -146,10 +143,9 @@ func TestIntegrationExceptionFromUnmatched_Idempotent(t *testing.T) {
 		originalID := exc1.ID
 
 		result2, _, err := wired.MatchingUC.RunMatch(ctx, matchingCommand.RunMatchInput{
-			TenantID:        h.Seed.TenantID,
-			ContextID:       seed.ContextID,
-			Mode:            matchingVO.MatchRunModeCommit,
-			PrimarySourceID: nil,
+			TenantID:  h.Seed.TenantID,
+			ContextID: seed.ContextID,
+			Mode:      matchingVO.MatchRunModeCommit,
 		})
 		require.NoError(t, err)
 		require.Equal(t, matchingVO.MatchRunStatusCompleted, result2.Status)
@@ -178,10 +174,9 @@ func TestIntegrationExceptionSeverityBoundaryConditions(t *testing.T) {
 				"BOUNDARY-1000-"+uuid.New().String()[:8], decimal.NewFromFloat(1000.00), "USD")
 
 			result, _, err := wired.MatchingUC.RunMatch(ctx, matchingCommand.RunMatchInput{
-				TenantID:        h.Seed.TenantID,
-				ContextID:       seed.ContextID,
-				Mode:            matchingVO.MatchRunModeCommit,
-				PrimarySourceID: nil,
+				TenantID:  h.Seed.TenantID,
+				ContextID: seed.ContextID,
+				Mode:      matchingVO.MatchRunModeCommit,
 			})
 			require.NoError(t, err)
 			require.Equal(t, matchingVO.MatchRunStatusCompleted, result.Status)
@@ -203,10 +198,9 @@ func TestIntegrationExceptionSeverityBoundaryConditions(t *testing.T) {
 				"BOUNDARY-999-"+uuid.New().String()[:8], decimal.NewFromFloat(999.99), "USD")
 
 			result, _, err := wired.MatchingUC.RunMatch(ctx, matchingCommand.RunMatchInput{
-				TenantID:        h.Seed.TenantID,
-				ContextID:       seed.ContextID,
-				Mode:            matchingVO.MatchRunModeCommit,
-				PrimarySourceID: nil,
+				TenantID:  h.Seed.TenantID,
+				ContextID: seed.ContextID,
+				Mode:      matchingVO.MatchRunModeCommit,
 			})
 			require.NoError(t, err)
 			require.Equal(t, matchingVO.MatchRunStatusCompleted, result.Status)
@@ -240,10 +234,9 @@ func TestIntegrationExceptionSeverityBoundaryConditions(t *testing.T) {
 			require.NoError(t, err)
 
 			result, _, err := wired.MatchingUC.RunMatch(ctx, matchingCommand.RunMatchInput{
-				TenantID:        h.Seed.TenantID,
-				ContextID:       seed.ContextID,
-				Mode:            matchingVO.MatchRunModeCommit,
-				PrimarySourceID: nil,
+				TenantID:  h.Seed.TenantID,
+				ContextID: seed.ContextID,
+				Mode:      matchingVO.MatchRunModeCommit,
 			})
 			require.NoError(t, err)
 			require.Equal(t, matchingVO.MatchRunStatusCompleted, result.Status)
@@ -298,10 +291,9 @@ func TestIntegrationExceptionFromUnmatched_NoExceptionsForFullMatch(t *testing.T
 		require.NotNil(t, bankJob)
 
 		result, _, err := wired.MatchingUC.RunMatch(ctx, matchingCommand.RunMatchInput{
-			TenantID:        h.Seed.TenantID,
-			ContextID:       seed.ContextID,
-			Mode:            matchingVO.MatchRunModeCommit,
-			PrimarySourceID: nil,
+			TenantID:  h.Seed.TenantID,
+			ContextID: seed.ContextID,
+			Mode:      matchingVO.MatchRunModeCommit,
 		})
 		require.NoError(t, err)
 		require.Equal(t, matchingVO.MatchRunStatusCompleted, result.Status)

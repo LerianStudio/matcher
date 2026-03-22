@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
 func testNewContextError(
@@ -85,7 +86,7 @@ func TestNewReconciliationContext(t *testing.T) {
 			Type:     value_objects.ContextTypeOneToOne,
 			Interval: "0 0 * * *",
 			Sources: []CreateContextSourceInput{
-				{Name: "Bank", Type: value_objects.SourceTypeBank},
+				{Name: "Bank", Type: value_objects.SourceTypeBank, Side: sharedfee.MatchingSideLeft},
 			},
 			Rules: []CreateMatchRuleInput{
 				{Priority: 1, Type: value_objects.RuleTypeExact, Config: map[string]any{"matchAmount": true}},

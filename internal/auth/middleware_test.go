@@ -7,7 +7,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -811,19 +810,9 @@ func TestProtectedGroup_NilExtractor(t *testing.T) {
 	app := fiber.New()
 	client := authMiddleware.NewAuthClient("", false, nil)
 
-	protected := ProtectedGroupWithMiddleware(app, client, nil, "resource", "read")
-	protected.Get("/secure", func(c *fiber.Ctx) error {
-		return c.SendStatus(http.StatusOK)
-	})
-
-	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/secure", http.NoBody))
-	require.NoError(t, err)
-
-	bodyBytes, readErr := io.ReadAll(resp.Body)
-	require.NoError(t, readErr)
-	require.NoError(t, resp.Body.Close())
-	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
-	assert.Contains(t, string(bodyBytes), "tenant extractor not initialized")
+	_, err := ProtectedGroupWithActionsWithMiddleware(app, client, nil, "resource", []string{"read"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrNilTenantExtractor)
 }
 
 func TestAuthorize_NilClient(t *testing.T) {

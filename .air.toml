@@ -9,7 +9,7 @@ tmp_dir = "tmp"
 # Binary output path
 entrypoint = "./tmp/main"
 # Build command
-cmd = "go build -mod=vendor -o ./tmp/main ./cmd/matcher"
+cmd = "go build -mod=mod -o ./tmp/main ./cmd/matcher"
 # Watch these extensions
 include_ext = ["go", "tpl", "tmpl", "html", "sql"]
 # Limit watch scope to source directories only

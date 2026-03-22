@@ -81,8 +81,8 @@ func TestRunMatch_OrchestrationCommit(t *testing.T) {
 		Active: true,
 	}
 	sources := []*ports.SourceInfo{
-		{ID: ledgerSourceID, Type: ports.SourceTypeLedger},
-		{ID: rightSourceID, Type: ports.SourceTypeFile},
+		{ID: ledgerSourceID, Type: ports.SourceTypeLedger, Side: fee.MatchingSideLeft},
+		{ID: rightSourceID, Type: ports.SourceTypeFile, Side: fee.MatchingSideRight},
 	}
 
 	txRepo := &stubTxRepo{transactions: []*shared.Transaction{leftTx, rightTx}}
@@ -109,6 +109,7 @@ func TestRunMatch_OrchestrationCommit(t *testing.T) {
 		InfraProvider:    &stubInfraProviderForRun{},
 		AuditLogRepo:     &stubAuditLogRepoForRun{},
 		FeeScheduleRepo:  &mockFeeScheduleRepo{},
+		FeeRuleProvider:  &mockFeeRuleProvider{},
 	})
 	require.NoError(t, err)
 
@@ -186,8 +187,8 @@ func TestRunMatch_OutboxEventContent(t *testing.T) {
 		Active: true,
 	}
 	sources := []*ports.SourceInfo{
-		{ID: ledgerSourceID, Type: ports.SourceTypeLedger},
-		{ID: rightSourceID, Type: ports.SourceTypeFile},
+		{ID: ledgerSourceID, Type: ports.SourceTypeLedger, Side: fee.MatchingSideLeft},
+		{ID: rightSourceID, Type: ports.SourceTypeFile, Side: fee.MatchingSideRight},
 	}
 
 	outboxRepoEvents := make([]*outboxEntities.OutboxEvent, 0)
@@ -222,6 +223,7 @@ func TestRunMatch_OutboxEventContent(t *testing.T) {
 		InfraProvider:    &stubInfraProviderForRun{},
 		AuditLogRepo:     &stubAuditLogRepoForRun{},
 		FeeScheduleRepo:  &mockFeeScheduleRepo{},
+		FeeRuleProvider:  &mockFeeRuleProvider{},
 	})
 	require.NoError(t, err)
 
@@ -283,8 +285,8 @@ func TestRunMatch_PersistFailureRunsFinalize(t *testing.T) {
 		Active: true,
 	}
 	sources := []*ports.SourceInfo{
-		{ID: ledgerSourceID, Type: ports.SourceTypeLedger},
-		{ID: rightSourceID, Type: ports.SourceTypeFile},
+		{ID: ledgerSourceID, Type: ports.SourceTypeLedger, Side: fee.MatchingSideLeft},
+		{ID: rightSourceID, Type: ports.SourceTypeFile, Side: fee.MatchingSideRight},
 	}
 
 	leftTx := &shared.Transaction{
@@ -344,6 +346,7 @@ func TestRunMatch_PersistFailureRunsFinalize(t *testing.T) {
 		InfraProvider:    &stubInfraProviderForRun{},
 		AuditLogRepo:     &stubAuditLogRepoForRun{},
 		FeeScheduleRepo:  &mockFeeScheduleRepo{},
+		FeeRuleProvider:  &mockFeeRuleProvider{},
 	})
 	require.NoError(t, err)
 
@@ -407,8 +410,8 @@ func TestRunMatch_Locking(t *testing.T) {
 		Active: true,
 	}
 	sources := []*ports.SourceInfo{
-		{ID: ledgerSourceID, Type: ports.SourceTypeLedger},
-		{ID: rightSourceID, Type: ports.SourceTypeFile},
+		{ID: ledgerSourceID, Type: ports.SourceTypeLedger, Side: fee.MatchingSideLeft},
+		{ID: rightSourceID, Type: ports.SourceTypeFile, Side: fee.MatchingSideRight},
 	}
 
 	lockManager := &stubLockManager{}
@@ -436,6 +439,7 @@ func TestRunMatch_Locking(t *testing.T) {
 		InfraProvider:    &stubInfraProviderForRun{},
 		AuditLogRepo:     &stubAuditLogRepoForRun{},
 		FeeScheduleRepo:  &mockFeeScheduleRepo{},
+		FeeRuleProvider:  &mockFeeRuleProvider{},
 	})
 	require.NoError(t, err)
 
@@ -514,8 +518,8 @@ func TestRunMatch_UsesBaseAmountForExpected(t *testing.T) {
 		Active: true,
 	}
 	sources := []*ports.SourceInfo{
-		{ID: ledgerSourceID, Type: ports.SourceTypeLedger},
-		{ID: rightSourceID, Type: ports.SourceTypeFile},
+		{ID: ledgerSourceID, Type: ports.SourceTypeLedger, Side: fee.MatchingSideLeft},
+		{ID: rightSourceID, Type: ports.SourceTypeFile, Side: fee.MatchingSideRight},
 	}
 
 	txRepo := &stubTxRepo{transactions: []*shared.Transaction{leftTx, rightTx}}
@@ -543,6 +547,7 @@ func TestRunMatch_UsesBaseAmountForExpected(t *testing.T) {
 		InfraProvider:    &stubInfraProviderForRun{},
 		AuditLogRepo:     &stubAuditLogRepoForRun{},
 		FeeScheduleRepo:  &mockFeeScheduleRepo{},
+		FeeRuleProvider:  &mockFeeRuleProvider{},
 	})
 	require.NoError(t, err)
 
@@ -612,8 +617,8 @@ func TestRunMatch_InvalidProposalIsSkipped(t *testing.T) {
 		Active: true,
 	}
 	sources := []*ports.SourceInfo{
-		{ID: ledgerSourceID, Type: ports.SourceTypeLedger},
-		{ID: rightSourceID, Type: ports.SourceTypeFile},
+		{ID: ledgerSourceID, Type: ports.SourceTypeLedger, Side: fee.MatchingSideLeft},
+		{ID: rightSourceID, Type: ports.SourceTypeFile, Side: fee.MatchingSideRight},
 	}
 
 	txRepo := &stubTxRepo{transactions: []*shared.Transaction{leftTx, rightTx}}
@@ -641,6 +646,7 @@ func TestRunMatch_InvalidProposalIsSkipped(t *testing.T) {
 		InfraProvider:    &stubInfraProviderForRun{},
 		AuditLogRepo:     &stubAuditLogRepoForRun{},
 		FeeScheduleRepo:  &mockFeeScheduleRepo{},
+		FeeRuleProvider:  &mockFeeRuleProvider{},
 	})
 	require.NoError(t, err)
 
@@ -729,8 +735,8 @@ func TestRunMatch_LockFailure(t *testing.T) {
 		Active: true,
 	}
 	sources := []*ports.SourceInfo{
-		{ID: ledgerSourceID, Type: ports.SourceTypeLedger},
-		{ID: rightSourceID, Type: ports.SourceTypeFile},
+		{ID: ledgerSourceID, Type: ports.SourceTypeLedger, Side: fee.MatchingSideLeft},
+		{ID: rightSourceID, Type: ports.SourceTypeFile, Side: fee.MatchingSideRight},
 	}
 
 	txRepo := &stubTxRepo{transactions: []*shared.Transaction{leftTx, rightTx}}
@@ -758,6 +764,7 @@ func TestRunMatch_LockFailure(t *testing.T) {
 		InfraProvider:    &stubInfraProviderForRun{},
 		AuditLogRepo:     &stubAuditLogRepoForRun{},
 		FeeScheduleRepo:  &mockFeeScheduleRepo{},
+		FeeRuleProvider:  &mockFeeRuleProvider{},
 	})
 	require.NoError(t, err)
 
@@ -825,8 +832,8 @@ func TestRunMatch_SkipsProposalWithMissingTransaction(t *testing.T) {
 		Active: true,
 	}
 	sources := []*ports.SourceInfo{
-		{ID: ledgerSourceID, Type: ports.SourceTypeLedger},
-		{ID: rightSourceID, Type: ports.SourceTypeFile},
+		{ID: ledgerSourceID, Type: ports.SourceTypeLedger, Side: fee.MatchingSideLeft},
+		{ID: rightSourceID, Type: ports.SourceTypeFile, Side: fee.MatchingSideRight},
 	}
 
 	matchRunRepo := &stubMatchRunRepo{}
@@ -854,6 +861,7 @@ func TestRunMatch_SkipsProposalWithMissingTransaction(t *testing.T) {
 		InfraProvider:    &stubInfraProviderForRun{},
 		AuditLogRepo:     &stubAuditLogRepoForRun{},
 		FeeScheduleRepo:  &mockFeeScheduleRepo{},
+		FeeRuleProvider:  &mockFeeRuleProvider{},
 	})
 	require.NoError(t, err)
 
@@ -953,8 +961,8 @@ func TestRunMatch_SkipsProposalWithMissingBaseCurrency(t *testing.T) {
 		Active: true,
 	}
 	sources := []*ports.SourceInfo{
-		{ID: ledgerSourceID, Type: ports.SourceTypeLedger},
-		{ID: rightSourceID, Type: ports.SourceTypeFile},
+		{ID: ledgerSourceID, Type: ports.SourceTypeLedger, Side: fee.MatchingSideLeft},
+		{ID: rightSourceID, Type: ports.SourceTypeFile, Side: fee.MatchingSideRight},
 	}
 
 	matchRunRepo := &stubMatchRunRepo{}
@@ -982,6 +990,7 @@ func TestRunMatch_SkipsProposalWithMissingBaseCurrency(t *testing.T) {
 		InfraProvider:    &stubInfraProviderForRun{},
 		AuditLogRepo:     &stubAuditLogRepoForRun{},
 		FeeScheduleRepo:  &mockFeeScheduleRepo{},
+		FeeRuleProvider:  &mockFeeRuleProvider{},
 	})
 	require.NoError(t, err)
 
@@ -1060,8 +1069,8 @@ func TestRunMatch_NoTransactions(t *testing.T) {
 		Active: true,
 	}
 	sources := []*ports.SourceInfo{
-		{ID: ledgerSourceID, Type: ports.SourceTypeLedger},
-		{ID: rightSourceID, Type: ports.SourceTypeFile},
+		{ID: ledgerSourceID, Type: ports.SourceTypeLedger, Side: fee.MatchingSideLeft},
+		{ID: rightSourceID, Type: ports.SourceTypeFile, Side: fee.MatchingSideRight},
 	}
 
 	txRepo := &stubTxRepo{transactions: nil}
@@ -1089,6 +1098,7 @@ func TestRunMatch_NoTransactions(t *testing.T) {
 		InfraProvider:    &stubInfraProviderForRun{},
 		AuditLogRepo:     &stubAuditLogRepoForRun{},
 		FeeScheduleRepo:  &mockFeeScheduleRepo{},
+		FeeRuleProvider:  &mockFeeRuleProvider{},
 	})
 	require.NoError(t, err)
 
@@ -1149,8 +1159,8 @@ func TestRunMatch_NoTransactionsCommitCreatesExceptions(t *testing.T) {
 		Active: true,
 	}
 	sources := []*ports.SourceInfo{
-		{ID: ledgerSourceID, Type: ports.SourceTypeLedger},
-		{ID: rightSourceID, Type: ports.SourceTypeFile},
+		{ID: ledgerSourceID, Type: ports.SourceTypeLedger, Side: fee.MatchingSideLeft},
+		{ID: rightSourceID, Type: ports.SourceTypeFile, Side: fee.MatchingSideRight},
 	}
 
 	leftTx := &shared.Transaction{
@@ -1195,6 +1205,7 @@ func TestRunMatch_NoTransactionsCommitCreatesExceptions(t *testing.T) {
 		InfraProvider:    &stubInfraProviderForRun{},
 		AuditLogRepo:     &stubAuditLogRepoForRun{},
 		FeeScheduleRepo:  &mockFeeScheduleRepo{},
+		FeeRuleProvider:  &mockFeeRuleProvider{},
 	})
 	require.NoError(t, err)
 
@@ -1426,8 +1437,8 @@ func TestRunMatch_CallOrderCommit(t *testing.T) {
 		Active: true,
 	}
 	sources := []*ports.SourceInfo{
-		{ID: ledgerSourceID, Type: ports.SourceTypeLedger},
-		{ID: rightSourceID, Type: ports.SourceTypeFile},
+		{ID: ledgerSourceID, Type: ports.SourceTypeLedger, Side: fee.MatchingSideLeft},
+		{ID: rightSourceID, Type: ports.SourceTypeFile, Side: fee.MatchingSideRight},
 	}
 
 	order := make([]string, 0)
@@ -1458,6 +1469,7 @@ func TestRunMatch_CallOrderCommit(t *testing.T) {
 		InfraProvider:    &stubInfraProviderForRun{},
 		AuditLogRepo:     &stubAuditLogRepoForRun{},
 		FeeScheduleRepo:  &mockFeeScheduleRepo{},
+		FeeRuleProvider:  &mockFeeRuleProvider{},
 	})
 	require.NoError(t, err)
 
@@ -1539,8 +1551,8 @@ func TestRunMatch_LockingArgs_IDsAndTTL(t *testing.T) {
 		Active: true,
 	}
 	sources := []*ports.SourceInfo{
-		{ID: ledgerSourceID, Type: ports.SourceTypeLedger},
-		{ID: rightSourceID, Type: ports.SourceTypeFile},
+		{ID: ledgerSourceID, Type: ports.SourceTypeLedger, Side: fee.MatchingSideLeft},
+		{ID: rightSourceID, Type: ports.SourceTypeFile, Side: fee.MatchingSideRight},
 	}
 
 	txRepo := &stubTxRepo{transactions: []*shared.Transaction{leftTx, rightTx}}
@@ -1569,6 +1581,7 @@ func TestRunMatch_LockingArgs_IDsAndTTL(t *testing.T) {
 		InfraProvider:    &stubInfraProviderForRun{},
 		AuditLogRepo:     &stubAuditLogRepoForRun{},
 		FeeScheduleRepo:  &mockFeeScheduleRepo{},
+		FeeRuleProvider:  &mockFeeRuleProvider{},
 	})
 	require.NoError(t, err)
 
@@ -1588,6 +1601,157 @@ func TestRunMatch_LockingArgs_IDsAndTTL(t *testing.T) {
 	require.Equal(t, 15*time.Minute, lockManager.gotTTL)
 
 	require.Empty(t, lockManager.gotIDs)
+}
+
+func TestRunMatch_FeeNormalizationEnabledButNoFeeRules(t *testing.T) {
+	t.Parallel()
+
+	contextID := uuid.MustParse("00000000-0000-0000-0000-00000000f001")
+	tenantID := uuid.MustParse("00000000-0000-0000-0000-00000000f002")
+	ledgerSourceID := uuid.MustParse("00000000-0000-0000-0000-00000000f003")
+	rightSourceID := uuid.MustParse("00000000-0000-0000-0000-00000000f004")
+
+	rule := &shared.MatchRule{
+		ID:        uuid.MustParse("00000000-0000-0000-0000-00000000f005"),
+		ContextID: contextID,
+		Priority:  1,
+		Type:      shared.RuleTypeExact,
+		Config: map[string]any{
+			"matchAmount":   true,
+			"matchCurrency": true,
+		},
+	}
+
+	feeNorm := string(fee.NormalizationModeNet)
+
+	ctxInfo := &ports.ReconciliationContextInfo{
+		ID:               contextID,
+		Type:             shared.ContextTypeOneToOne,
+		Active:           true,
+		FeeNormalization: &feeNorm,
+	}
+	sources := []*ports.SourceInfo{
+		{ID: ledgerSourceID, Type: ports.SourceTypeLedger, Side: fee.MatchingSideLeft},
+		{ID: rightSourceID, Type: ports.SourceTypeFile, Side: fee.MatchingSideRight},
+	}
+
+	// Fee rule provider returns NO rules → triggers ErrFeeRulesRequiredForNormalization.
+	feeRuleProvider := &stubFeeRuleProviderWithResult{rules: nil}
+
+	uc, err := New(UseCaseDeps{
+		ContextProvider:  stubContextProvider{contextInfo: ctxInfo},
+		SourceProvider:   stubSourceProvider{sources: sources},
+		RuleProvider:     stubRuleProvider{rules: shared.MatchRules{rule}},
+		TxRepo:           &stubTxRepo{transactions: nil},
+		LockManager:      &stubLockManager{},
+		MatchRunRepo:     &stubMatchRunRepo{},
+		MatchGroupRepo:   &stubMatchGroupRepo{},
+		MatchItemRepo:    &stubMatchItemRepo{},
+		ExceptionCreator: &stubExceptionCreator{},
+		OutboxRepo:       newMockOutboxRepository(t, nil),
+		RateRepo:         &stubRateRepo{},
+		FeeVarianceRepo:  &stubFeeVarianceRepo{},
+		AdjustmentRepo:   &stubAdjustmentRepo{},
+		InfraProvider:    &stubInfraProviderForRun{},
+		AuditLogRepo:     &stubAuditLogRepoForRun{},
+		FeeScheduleRepo:  &mockFeeScheduleRepo{},
+		FeeRuleProvider:  feeRuleProvider,
+	})
+	require.NoError(t, err)
+
+	_, _, err = uc.RunMatch(
+		context.WithValue(context.Background(), auth.TenantIDKey, tenantID.String()),
+		RunMatchInput{
+			TenantID:  tenantID,
+			ContextID: contextID,
+			Mode:      matchingVO.MatchRunModeCommit,
+		},
+	)
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrFeeRulesRequiredForNormalization)
+}
+
+func TestRunMatch_FeeRulesReferenceMissingSchedules(t *testing.T) {
+	t.Parallel()
+
+	contextID := uuid.MustParse("00000000-0000-0000-0000-00000000f011")
+	tenantID := uuid.MustParse("00000000-0000-0000-0000-00000000f012")
+	ledgerSourceID := uuid.MustParse("00000000-0000-0000-0000-00000000f013")
+	rightSourceID := uuid.MustParse("00000000-0000-0000-0000-00000000f014")
+	missingScheduleID := uuid.MustParse("00000000-0000-0000-0000-00000000f015")
+
+	rule := &shared.MatchRule{
+		ID:        uuid.MustParse("00000000-0000-0000-0000-00000000f016"),
+		ContextID: contextID,
+		Priority:  1,
+		Type:      shared.RuleTypeExact,
+		Config: map[string]any{
+			"matchAmount":   true,
+			"matchCurrency": true,
+		},
+	}
+
+	feeNorm := string(fee.NormalizationModeNet)
+
+	ctxInfo := &ports.ReconciliationContextInfo{
+		ID:               contextID,
+		Type:             shared.ContextTypeOneToOne,
+		Active:           true,
+		FeeNormalization: &feeNorm,
+	}
+	sources := []*ports.SourceInfo{
+		{ID: ledgerSourceID, Type: ports.SourceTypeLedger, Side: fee.MatchingSideLeft},
+		{ID: rightSourceID, Type: ports.SourceTypeFile, Side: fee.MatchingSideRight},
+	}
+
+	// Fee rules exist but reference a schedule that does not exist.
+	feeRuleProvider := &stubFeeRuleProviderWithResult{
+		rules: []*fee.FeeRule{{
+			ID:            uuid.MustParse("00000000-0000-0000-0000-00000000f017"),
+			ContextID:     contextID,
+			Side:          fee.MatchingSideLeft,
+			FeeScheduleID: missingScheduleID,
+			Name:          "Left rule",
+			Priority:      1,
+		}},
+	}
+
+	// Schedule repo returns empty map → count mismatch triggers ErrFeeRulesReferenceMissingSchedules.
+	feeScheduleRepo := &stubFeeScheduleRepoWithResult{
+		schedules: map[uuid.UUID]*fee.FeeSchedule{},
+	}
+
+	uc, err := New(UseCaseDeps{
+		ContextProvider:  stubContextProvider{contextInfo: ctxInfo},
+		SourceProvider:   stubSourceProvider{sources: sources},
+		RuleProvider:     stubRuleProvider{rules: shared.MatchRules{rule}},
+		TxRepo:           &stubTxRepo{transactions: nil},
+		LockManager:      &stubLockManager{},
+		MatchRunRepo:     &stubMatchRunRepo{},
+		MatchGroupRepo:   &stubMatchGroupRepo{},
+		MatchItemRepo:    &stubMatchItemRepo{},
+		ExceptionCreator: &stubExceptionCreator{},
+		OutboxRepo:       newMockOutboxRepository(t, nil),
+		RateRepo:         &stubRateRepo{},
+		FeeVarianceRepo:  &stubFeeVarianceRepo{},
+		AdjustmentRepo:   &stubAdjustmentRepo{},
+		InfraProvider:    &stubInfraProviderForRun{},
+		AuditLogRepo:     &stubAuditLogRepoForRun{},
+		FeeScheduleRepo:  feeScheduleRepo,
+		FeeRuleProvider:  feeRuleProvider,
+	})
+	require.NoError(t, err)
+
+	_, _, err = uc.RunMatch(
+		context.WithValue(context.Background(), auth.TenantIDKey, tenantID.String()),
+		RunMatchInput{
+			TenantID:  tenantID,
+			ContextID: contextID,
+			Mode:      matchingVO.MatchRunModeCommit,
+		},
+	)
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrFeeRulesReferenceMissingSchedules)
 }
 
 func uuidStrings(ids []uuid.UUID) []string {
@@ -1668,7 +1832,14 @@ func (s stubSourceProvider) FindByContextID(
 	_ context.Context,
 	_ uuid.UUID,
 ) ([]*ports.SourceInfo, error) {
-	return s.sources, s.err
+	if s.err != nil {
+		return s.sources, s.err
+	}
+
+	// Return sources as-is — test data must provide explicit LEFT/RIGHT sides
+	// to reflect production behavior. The production adapter always sets side
+	// from the database; tests should not silently auto-repair missing sides.
+	return s.sources, nil
 }
 
 type stubRuleProvider struct {
@@ -2380,8 +2551,8 @@ func TestRunMatch_ContextCancelled(t *testing.T) {
 		Active: true,
 	}
 	sources := []*ports.SourceInfo{
-		{ID: ledgerSourceID, Type: ports.SourceTypeLedger},
-		{ID: rightSourceID, Type: ports.SourceTypeFile},
+		{ID: ledgerSourceID, Type: ports.SourceTypeLedger, Side: fee.MatchingSideLeft},
+		{ID: rightSourceID, Type: ports.SourceTypeFile, Side: fee.MatchingSideRight},
 	}
 
 	txRepo := &stubTxRepo{transactions: []*shared.Transaction{leftTx, rightTx}}
@@ -2409,6 +2580,7 @@ func TestRunMatch_ContextCancelled(t *testing.T) {
 		InfraProvider:    &stubInfraProviderForRun{},
 		AuditLogRepo:     &stubAuditLogRepoForRun{},
 		FeeScheduleRepo:  &mockFeeScheduleRepo{},
+		FeeRuleProvider:  &mockFeeRuleProvider{},
 	})
 	require.NoError(t, err)
 

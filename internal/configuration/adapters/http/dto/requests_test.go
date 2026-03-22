@@ -15,6 +15,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
 func TestCreateContextRequest_ToDomainInput(t *testing.T) {
@@ -92,19 +93,16 @@ func TestCreateContextRequest_ToDomainInput(t *testing.T) {
 	t.Run("with nested sources and rules", func(t *testing.T) {
 		t.Parallel()
 
-		feeScheduleID := uuid.MustParse("970e8400-e29b-41d4-a716-446655440000").String()
-
 		req := CreateContextRequest{
 			Name:     "Context With Nested",
 			Type:     "1:N",
 			Interval: "daily",
 			Sources: []CreateContextSourceRequest{
 				{
-					Name:          "Bank Source",
-					Type:          "BANK",
-					Config:        map[string]any{"format": "csv"},
-					FeeScheduleID: &feeScheduleID,
-					Mapping:       map[string]any{"amount": "amt"},
+					Name:    "Bank Source",
+					Type:    "BANK",
+					Config:  map[string]any{"format": "csv"},
+					Mapping: map[string]any{"amount": "amt"},
 				},
 			},
 			Rules: []CreateMatchRuleRequest{
@@ -121,33 +119,7 @@ func TestCreateContextRequest_ToDomainInput(t *testing.T) {
 		require.Len(t, input.Sources, 1)
 		require.Len(t, input.Rules, 1)
 		assert.Equal(t, "Bank Source", input.Sources[0].Name)
-		require.NotNil(t, input.Sources[0].FeeScheduleID)
-		assert.Equal(t, feeScheduleID, input.Sources[0].FeeScheduleID.String())
 		assert.Equal(t, shared.RuleType("EXACT"), input.Rules[0].Type)
-	})
-
-	t.Run("invalid feeScheduleId in nested source returns wrapped error", func(t *testing.T) {
-		t.Parallel()
-
-		invalidFeeScheduleID := "invalid-uuid"
-
-		req := CreateContextRequest{
-			Name:     "Context With Invalid Source",
-			Type:     "1:1",
-			Interval: "daily",
-			Sources: []CreateContextSourceRequest{
-				{
-					Name:          "Broken Source",
-					Type:          "BANK",
-					FeeScheduleID: &invalidFeeScheduleID,
-				},
-			},
-		}
-
-		_, err := req.ToDomainInput()
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid source")
-		assert.Contains(t, err.Error(), "invalid feeScheduleId")
 	})
 
 	t.Run("inline rule config above max size returns error", func(t *testing.T) {
@@ -178,36 +150,46 @@ func TestCreateContextSourceRequest_ToDomainInput(t *testing.T) {
 	t.Run("valid input", func(t *testing.T) {
 		t.Parallel()
 
-		feeScheduleID := uuid.MustParse("870e8400-e29b-41d4-a716-446655440000").String()
 		req := CreateContextSourceRequest{
-			Name:          "Gateway Source",
-			Type:          "GATEWAY",
-			Config:        map[string]any{"url": "https://gateway"},
-			FeeScheduleID: &feeScheduleID,
-			Mapping:       map[string]any{"externalId": "id"},
+			Name:    "Gateway Source",
+			Type:    "GATEWAY",
+			Config:  map[string]any{"url": "https://gateway"},
+			Mapping: map[string]any{"externalId": "id"},
 		}
 
 		input, err := req.ToDomainInput()
 		require.NoError(t, err)
+		assert.Equal(t, "Gateway Source", input.Name)
 		assert.Equal(t, value_objects.SourceType("GATEWAY"), input.Type)
-		require.NotNil(t, input.FeeScheduleID)
-		assert.Equal(t, feeScheduleID, input.FeeScheduleID.String())
 		assert.Equal(t, "id", input.Mapping["externalId"])
 	})
 
-	t.Run("invalid feeScheduleId", func(t *testing.T) {
+	t.Run("whitespace-only name returns error", func(t *testing.T) {
 		t.Parallel()
 
-		invalidFeeScheduleID := "invalid"
 		req := CreateContextSourceRequest{
-			Name:          "Broken Source",
-			Type:          "BANK",
-			FeeScheduleID: &invalidFeeScheduleID,
+			Name: "   ",
+			Type: "BANK",
+			Side: "LEFT",
 		}
 
 		_, err := req.ToDomainInput()
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid feeScheduleId")
+		assert.ErrorIs(t, err, ErrNameWhitespaceOnly)
+	})
+
+	t.Run("trims whitespace from name", func(t *testing.T) {
+		t.Parallel()
+
+		req := CreateContextSourceRequest{
+			Name: "  Inline Source  ",
+			Type: "BANK",
+			Side: "LEFT",
+		}
+
+		input, err := req.ToDomainInput()
+		require.NoError(t, err)
+		assert.Equal(t, "Inline Source", input.Name)
 	})
 }
 
@@ -246,6 +228,7 @@ func TestCreateContextRequest_Validation_SourcesAndRulesBoundary(t *testing.T) {
 			sources[i] = CreateContextSourceRequest{
 				Name: fmt.Sprintf("Source %d", i+1),
 				Type: "BANK",
+				Side: "LEFT",
 			}
 		}
 
@@ -268,6 +251,7 @@ func TestCreateContextRequest_Validation_SourcesAndRulesBoundary(t *testing.T) {
 			sources[i] = CreateContextSourceRequest{
 				Name: fmt.Sprintf("Source %d", i+1),
 				Type: "BANK",
+				Side: "LEFT",
 			}
 		}
 
@@ -426,16 +410,14 @@ func TestUpdateContextRequest_StatusValidation_RejectsDraft(t *testing.T) {
 func TestCreateSourceRequest_ToDomainInput(t *testing.T) {
 	t.Parallel()
 
-	t.Run("with fee schedule id", func(t *testing.T) {
+	t.Run("with all fields", func(t *testing.T) {
 		t.Parallel()
 
-		feeID := uuid.MustParse("770e8400-e29b-41d4-a716-446655440000").String()
-
 		req := CreateSourceRequest{
-			Name:          "Primary Bank",
-			Type:          "BANK",
-			Config:        map[string]any{"key": "value"},
-			FeeScheduleID: &feeID,
+			Name:   "Primary Bank",
+			Type:   "BANK",
+			Side:   "LEFT",
+			Config: map[string]any{"key": "value"},
 		}
 
 		input, err := req.ToDomainInput()
@@ -443,9 +425,8 @@ func TestCreateSourceRequest_ToDomainInput(t *testing.T) {
 
 		assert.Equal(t, "Primary Bank", input.Name)
 		assert.Equal(t, value_objects.SourceType("BANK"), input.Type)
+		assert.Equal(t, sharedfee.MatchingSideLeft, input.Side)
 		assert.Equal(t, map[string]any{"key": "value"}, input.Config)
-		assert.NotNil(t, input.FeeScheduleID)
-		assert.Equal(t, feeID, input.FeeScheduleID.String())
 	})
 
 	t.Run("without optional fields", func(t *testing.T) {
@@ -454,27 +435,41 @@ func TestCreateSourceRequest_ToDomainInput(t *testing.T) {
 		req := CreateSourceRequest{
 			Name: "Minimal",
 			Type: "LEDGER",
+			Side: "RIGHT",
 		}
 
 		input, err := req.ToDomainInput()
 		assert.NoError(t, err)
-		assert.Nil(t, input.FeeScheduleID)
 		assert.Nil(t, input.Config)
+		assert.Equal(t, sharedfee.MatchingSideRight, input.Side)
 	})
 
-	t.Run("invalid uuid in feeScheduleId returns error", func(t *testing.T) {
+	t.Run("whitespace-only name returns error", func(t *testing.T) {
 		t.Parallel()
 
-		invalid := "not-a-uuid"
 		req := CreateSourceRequest{
-			Name:          "Test",
-			Type:          "BANK",
-			FeeScheduleID: &invalid,
+			Name: "   ",
+			Type: "BANK",
+			Side: "LEFT",
 		}
 
 		_, err := req.ToDomainInput()
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid feeScheduleId")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrNameWhitespaceOnly)
+	})
+
+	t.Run("trims leading and trailing whitespace from name", func(t *testing.T) {
+		t.Parallel()
+
+		req := CreateSourceRequest{
+			Name: "  Bank Source  ",
+			Type: "BANK",
+			Side: "LEFT",
+		}
+
+		input, err := req.ToDomainInput()
+		require.NoError(t, err)
+		assert.Equal(t, "Bank Source", input.Name)
 	})
 }
 
@@ -486,31 +481,60 @@ func TestUpdateSourceRequest_ToDomainInput(t *testing.T) {
 
 		name := "Updated"
 		typ := "GATEWAY"
-		feeID := uuid.MustParse("880e8400-e29b-41d4-a716-446655440000").String()
+		side := "RIGHT"
 
 		req := UpdateSourceRequest{
-			Name:          &name,
-			Type:          &typ,
-			FeeScheduleID: &feeID,
+			Name: &name,
+			Type: &typ,
+			Side: &side,
 		}
 
 		input, err := req.ToDomainInput()
 		assert.NoError(t, err)
 
-		assert.Equal(t, &name, input.Name)
+		assert.NotNil(t, input.Name)
+		assert.Equal(t, "Updated", *input.Name)
 		assert.NotNil(t, input.Type)
 		assert.Equal(t, value_objects.SourceType("GATEWAY"), *input.Type)
-		assert.NotNil(t, input.FeeScheduleID)
+		assert.NotNil(t, input.Side)
+		assert.Equal(t, sharedfee.MatchingSideRight, *input.Side)
 	})
 
-	t.Run("invalid uuid in feeScheduleId returns error", func(t *testing.T) {
+	t.Run("whitespace-only name returns error", func(t *testing.T) {
 		t.Parallel()
 
-		invalid := "not-a-uuid"
-		req := UpdateSourceRequest{FeeScheduleID: &invalid}
+		wsName := "   \t\n  "
+		req := UpdateSourceRequest{
+			Name: &wsName,
+		}
+
 		_, err := req.ToDomainInput()
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid feeScheduleId")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrNameWhitespaceOnly)
+	})
+
+	t.Run("trims leading and trailing whitespace from name", func(t *testing.T) {
+		t.Parallel()
+
+		name := "  Trimmed Source  "
+		req := UpdateSourceRequest{
+			Name: &name,
+		}
+
+		input, err := req.ToDomainInput()
+		require.NoError(t, err)
+		require.NotNil(t, input.Name)
+		assert.Equal(t, "Trimmed Source", *input.Name)
+	})
+
+	t.Run("nil name stays nil", func(t *testing.T) {
+		t.Parallel()
+
+		req := UpdateSourceRequest{}
+
+		input, err := req.ToDomainInput()
+		require.NoError(t, err)
+		assert.Nil(t, input.Name)
 	})
 }
 

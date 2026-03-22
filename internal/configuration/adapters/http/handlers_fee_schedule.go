@@ -257,6 +257,7 @@ func (handler *Handler) UpdateFeeSchedule(fiberCtx *fiber.Ctx) error {
 // @Failure 401 {object} ErrorResponse "Unauthorized"
 // @Failure 403 {object} ErrorResponse "Forbidden"
 // @Failure 404 {object} ErrorResponse "Fee schedule not found"
+// @Failure      409         {object}  ErrorResponse  "Conflict: fee schedule is still referenced by fee rules"
 // @Failure 500 {object} ErrorResponse "Internal server error"
 // @Router /v1/fee-schedules/{scheduleId} [delete]
 func (handler *Handler) DeleteFeeSchedule(fiberCtx *fiber.Ctx) error {
@@ -280,6 +281,15 @@ func (handler *Handler) DeleteFeeSchedule(fiberCtx *fiber.Ctx) error {
 
 		if errors.Is(err, fee.ErrFeeScheduleNotFound) {
 			return writeNotFound(fiberCtx, "fee schedule not found")
+		}
+
+		if errors.Is(err, command.ErrFeeScheduleReferencedByFeeRule) {
+			return libHTTP.RespondError(
+				fiberCtx,
+				fiber.StatusConflict,
+				"fee_schedule_in_use",
+				"fee schedule is still referenced by fee rules",
+			)
 		}
 
 		return writeServiceError(fiberCtx, err)

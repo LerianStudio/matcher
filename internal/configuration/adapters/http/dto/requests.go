@@ -4,19 +4,22 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
-// Sentinel errors for JSON field validation.
+// Sentinel errors for DTO validation.
 var (
 	ErrJSONFieldTooLarge  = errors.New("JSON field exceeds maximum size")
 	ErrJSONNestingTooDeep = errors.New("JSON field exceeds maximum nesting depth")
 	ErrJSONTooManyKeys    = errors.New("JSON field exceeds maximum key count")
+	ErrNameWhitespaceOnly = errors.New("name must contain non-whitespace characters")
 )
 
 const (
@@ -45,11 +48,11 @@ type CreateContextRequest struct {
 // CreateContextSourceRequest represents a source created inline with a context.
 // @Description Request payload for creating a source inline with a context
 type CreateContextSourceRequest struct {
-	Name          string         `json:"name"                    validate:"required,max=50" example:"Primary Bank Account"               minLength:"1" maxLength:"50"`
-	Type          string         `json:"type"                    validate:"required,oneof=LEDGER BANK GATEWAY CUSTOM FETCHER" example:"BANK"                              enums:"LEDGER,BANK,GATEWAY,CUSTOM,FETCHER"`
-	Config        map[string]any `json:"config"`
-	FeeScheduleID *string        `json:"feeScheduleId,omitempty" validate:"omitempty,uuid" example:"550e8400-e29b-41d4-a716-446655440000" format:"uuid"`
-	Mapping       map[string]any `json:"mapping,omitempty"       validate:"omitempty"   swaggertype:"object"`
+	Name    string         `json:"name"              validate:"required,max=50"                         example:"Primary Bank Account" minLength:"1" maxLength:"50"`
+	Type    string         `json:"type"              validate:"required,oneof=LEDGER BANK GATEWAY CUSTOM FETCHER" example:"BANK"        enums:"LEDGER,BANK,GATEWAY,CUSTOM,FETCHER"`
+	Side    string         `json:"side"              validate:"required,oneof=LEFT RIGHT"                example:"LEFT"        enums:"LEFT,RIGHT"`
+	Config  map[string]any `json:"config"`
+	Mapping map[string]any `json:"mapping,omitempty" validate:"omitempty" swaggertype:"object"`
 }
 
 // ToDomainInput converts the API request to a domain input struct.
@@ -103,6 +106,11 @@ func (req *CreateContextRequest) ToDomainInput() (entities.CreateReconciliationC
 
 // ToDomainInput converts the API request to a domain input struct.
 func (req *CreateContextSourceRequest) ToDomainInput() (entities.CreateContextSourceInput, error) {
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		return entities.CreateContextSourceInput{}, ErrNameWhitespaceOnly
+	}
+
 	if err := validateJSONField("source.config", req.Config); err != nil {
 		return entities.CreateContextSourceInput{}, err
 	}
@@ -111,23 +119,13 @@ func (req *CreateContextSourceRequest) ToDomainInput() (entities.CreateContextSo
 		return entities.CreateContextSourceInput{}, err
 	}
 
-	input := entities.CreateContextSourceInput{
-		Name:    req.Name,
+	return entities.CreateContextSourceInput{
+		Name:    name,
 		Type:    value_objects.SourceType(req.Type),
+		Side:    sharedfee.MatchingSide(req.Side),
 		Config:  req.Config,
 		Mapping: req.Mapping,
-	}
-
-	if req.FeeScheduleID != nil {
-		parsed, err := uuid.Parse(*req.FeeScheduleID)
-		if err != nil {
-			return entities.CreateContextSourceInput{}, fmt.Errorf("invalid feeScheduleId: %w", err)
-		}
-
-		input.FeeScheduleID = &parsed
-	}
-
-	return input, nil
+	}, nil
 }
 
 // UpdateContextRequest is the API request body for updating a reconciliation context.
@@ -183,44 +181,39 @@ func (req *UpdateContextRequest) ToDomainInput() (entities.UpdateReconciliationC
 // CreateSourceRequest is the API request body for creating a reconciliation source.
 // @Description Request payload for creating a reconciliation source
 type CreateSourceRequest struct {
-	Name          string         `json:"name"                    validate:"required,max=50" example:"Primary Bank Account"               minLength:"1" maxLength:"50"`
-	Type          string         `json:"type"                    validate:"required,oneof=LEDGER BANK GATEWAY CUSTOM FETCHER" example:"BANK"                              enums:"LEDGER,BANK,GATEWAY,CUSTOM,FETCHER"`
-	Config        map[string]any `json:"config"`
-	FeeScheduleID *string        `json:"feeScheduleId,omitempty" validate:"omitempty,uuid" example:"550e8400-e29b-41d4-a716-446655440000" format:"uuid"`
+	Name   string         `json:"name"   validate:"required,max=50"                         example:"Primary Bank Account" minLength:"1" maxLength:"50"`
+	Type   string         `json:"type"   validate:"required,oneof=LEDGER BANK GATEWAY CUSTOM FETCHER" example:"BANK"        enums:"LEDGER,BANK,GATEWAY,CUSTOM,FETCHER"`
+	Side   string         `json:"side"   validate:"required,oneof=LEFT RIGHT"                example:"LEFT"        enums:"LEFT,RIGHT"`
+	Config map[string]any `json:"config"`
 }
 
 // ToDomainInput converts the API request to a domain input struct.
 // Callers must validate the request (via ParseBodyAndValidate) before calling this method.
 func (req *CreateSourceRequest) ToDomainInput() (entities.CreateReconciliationSourceInput, error) {
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		return entities.CreateReconciliationSourceInput{}, ErrNameWhitespaceOnly
+	}
+
 	if err := validateJSONField("source.config", req.Config); err != nil {
 		return entities.CreateReconciliationSourceInput{}, err
 	}
 
-	input := entities.CreateReconciliationSourceInput{
-		Name:   req.Name,
+	return entities.CreateReconciliationSourceInput{
+		Name:   name,
 		Type:   value_objects.SourceType(req.Type),
+		Side:   sharedfee.MatchingSide(req.Side),
 		Config: req.Config,
-	}
-
-	if req.FeeScheduleID != nil {
-		parsed, err := uuid.Parse(*req.FeeScheduleID)
-		if err != nil {
-			return entities.CreateReconciliationSourceInput{}, fmt.Errorf("invalid feeScheduleId: %w", err)
-		}
-
-		input.FeeScheduleID = &parsed
-	}
-
-	return input, nil
+	}, nil
 }
 
 // UpdateSourceRequest is the API request body for updating a reconciliation source.
 // @Description Request payload for updating a reconciliation source
 type UpdateSourceRequest struct {
-	Name          *string        `json:"name,omitempty"            validate:"omitempty,max=50" example:"Secondary Bank Account" maxLength:"50"`
-	Type          *string        `json:"type,omitempty"            validate:"omitempty,oneof=LEDGER BANK GATEWAY CUSTOM FETCHER" example:"LEDGER"  enums:"LEDGER,BANK,GATEWAY,CUSTOM,FETCHER"`
-	Config        map[string]any `json:"config,omitempty"`
-	FeeScheduleID *string        `json:"feeScheduleId,omitempty"   validate:"omitempty,uuid"   example:"550e8400-e29b-41d4-a716-446655440000" format:"uuid"`
+	Name   *string        `json:"name,omitempty"   validate:"omitempty,max=50"                         example:"Secondary Bank Account" maxLength:"50"`
+	Type   *string        `json:"type,omitempty"   validate:"omitempty,oneof=LEDGER BANK GATEWAY CUSTOM FETCHER" example:"LEDGER"        enums:"LEDGER,BANK,GATEWAY,CUSTOM,FETCHER"`
+	Side   *string        `json:"side,omitempty"   validate:"omitempty,oneof=LEFT RIGHT"                example:"RIGHT"         enums:"LEFT,RIGHT"`
+	Config map[string]any `json:"config,omitempty"`
 }
 
 // ToDomainInput converts the API request to a domain input struct.
@@ -231,8 +224,16 @@ func (req *UpdateSourceRequest) ToDomainInput() (entities.UpdateReconciliationSo
 	}
 
 	input := entities.UpdateReconciliationSourceInput{
-		Name:   req.Name,
 		Config: req.Config,
+	}
+
+	if req.Name != nil {
+		trimmed := strings.TrimSpace(*req.Name)
+		if trimmed == "" {
+			return entities.UpdateReconciliationSourceInput{}, ErrNameWhitespaceOnly
+		}
+
+		input.Name = &trimmed
 	}
 
 	if req.Type != nil {
@@ -240,13 +241,9 @@ func (req *UpdateSourceRequest) ToDomainInput() (entities.UpdateReconciliationSo
 		input.Type = &st
 	}
 
-	if req.FeeScheduleID != nil {
-		parsed, err := uuid.Parse(*req.FeeScheduleID)
-		if err != nil {
-			return entities.UpdateReconciliationSourceInput{}, fmt.Errorf("invalid feeScheduleId: %w", err)
-		}
-
-		input.FeeScheduleID = &parsed
+	if req.Side != nil {
+		side := sharedfee.MatchingSide(*req.Side)
+		input.Side = &side
 	}
 
 	return input, nil

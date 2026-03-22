@@ -22,6 +22,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	configPorts "github.com/LerianStudio/matcher/internal/configuration/ports"
 	portMocks "github.com/LerianStudio/matcher/internal/configuration/ports/mocks"
+	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 )
 
@@ -40,6 +41,7 @@ var (
 	errFindBySourceNotImplemented      = errors.New("find by source not implemented")
 	errFindByPriorityNotImplemented    = errors.New("find by priority not implemented")
 	errReorderNotImplemented           = errors.New("reorder not implemented")
+	errFindFeeRulesNotImplemented      = errors.New("find fee rules not implemented")
 )
 
 type contextRepoStub struct {
@@ -269,6 +271,46 @@ type matchRuleRepoStub struct {
 	updateFn                 func(context.Context, *entities.MatchRule) (*entities.MatchRule, error)
 	deleteFn                 func(context.Context, uuid.UUID, uuid.UUID) error
 	reorderFn                func(context.Context, uuid.UUID, []uuid.UUID) error
+}
+
+type feeRuleRepoStub struct {
+	findByContextIDFn func(context.Context, uuid.UUID) ([]*sharedfee.FeeRule, error)
+}
+
+func (stub *feeRuleRepoStub) Create(_ context.Context, _ *sharedfee.FeeRule) error {
+	return errCreateNotImplemented
+}
+
+func (stub *feeRuleRepoStub) CreateWithTx(_ context.Context, _ *sql.Tx, _ *sharedfee.FeeRule) error {
+	return errCreateNotImplemented
+}
+
+func (stub *feeRuleRepoStub) FindByID(_ context.Context, _ uuid.UUID) (*sharedfee.FeeRule, error) {
+	return nil, errFindByIDNotImplemented
+}
+
+func (stub *feeRuleRepoStub) FindByContextID(ctx context.Context, contextID uuid.UUID) ([]*sharedfee.FeeRule, error) {
+	if stub.findByContextIDFn != nil {
+		return stub.findByContextIDFn(ctx, contextID)
+	}
+
+	return nil, errFindFeeRulesNotImplemented
+}
+
+func (stub *feeRuleRepoStub) Update(_ context.Context, _ *sharedfee.FeeRule) error {
+	return errUpdateNotImplemented
+}
+
+func (stub *feeRuleRepoStub) UpdateWithTx(_ context.Context, _ *sql.Tx, _ *sharedfee.FeeRule) error {
+	return errUpdateNotImplemented
+}
+
+func (stub *feeRuleRepoStub) Delete(_ context.Context, _, _ uuid.UUID) error {
+	return errDeleteNotImplemented
+}
+
+func (stub *feeRuleRepoStub) DeleteWithTx(_ context.Context, _ *sql.Tx, _, _ uuid.UUID) error {
+	return errDeleteNotImplemented
 }
 
 func (stub *matchRuleRepoStub) Create(
@@ -575,7 +617,7 @@ func TestCreateContext_InlineCreateWithoutInfrastructureProvider(t *testing.T) {
 		Type:     value_objects.ContextTypeOneToOne,
 		Interval: "0 0 * * *",
 		Sources: []entities.CreateContextSourceInput{
-			{Name: "Bank", Type: value_objects.SourceTypeBank},
+			{Name: "Bank", Type: value_objects.SourceTypeBank, Side: sharedfee.MatchingSideLeft},
 		},
 	})
 	require.ErrorIs(t, err, ErrInlineCreateRequiresInfrastructure)
@@ -684,6 +726,7 @@ func TestCreateContext_TransactionalInlineCreate_Success(t *testing.T) {
 			{
 				Name:    "Bank",
 				Type:    value_objects.SourceTypeBank,
+				Side:    sharedfee.MatchingSideLeft,
 				Mapping: map[string]any{"amount": "col_amount"},
 			},
 		},
@@ -765,6 +808,7 @@ func TestCreateContext_TransactionalInlineCreate_EmptyMappingSkipsFieldMap(t *te
 			{
 				Name:    "Bank",
 				Type:    value_objects.SourceTypeBank,
+				Side:    sharedfee.MatchingSideLeft,
 				Mapping: map[string]any{},
 			},
 		},
@@ -859,6 +903,7 @@ func TestCreateContext_TransactionalInlineCreate_SourceCreateError(t *testing.T)
 		Sources: []entities.CreateContextSourceInput{{
 			Name: "Bank",
 			Type: value_objects.SourceTypeBank,
+			Side: sharedfee.MatchingSideLeft,
 		}},
 	})
 	require.Error(t, err)
@@ -917,6 +962,7 @@ func TestCreateContext_TransactionalInlineCreate_FieldMapCreateError(t *testing.
 		Sources: []entities.CreateContextSourceInput{{
 			Name:    "Bank",
 			Type:    value_objects.SourceTypeBank,
+			Side:    sharedfee.MatchingSideLeft,
 			Mapping: map[string]any{"amount": "col_amount"},
 		}},
 	})
@@ -1083,8 +1129,8 @@ func TestCreateContext_TransactionalInlineCreate_MixedMappings(t *testing.T) {
 		Type:     value_objects.ContextTypeOneToOne,
 		Interval: "0 0 * * *",
 		Sources: []entities.CreateContextSourceInput{
-			{Name: "Bank A", Type: value_objects.SourceTypeBank, Mapping: map[string]any{"amount": "col_amount"}},
-			{Name: "Bank B", Type: value_objects.SourceTypeBank, Mapping: map[string]any{}},
+			{Name: "Bank A", Type: value_objects.SourceTypeBank, Side: sharedfee.MatchingSideLeft, Mapping: map[string]any{"amount": "col_amount"}},
+			{Name: "Bank B", Type: value_objects.SourceTypeBank, Side: sharedfee.MatchingSideRight, Mapping: map[string]any{}},
 		},
 	})
 	require.NoError(t, err)
@@ -1126,7 +1172,7 @@ func TestCreateContext_TransactionalInlineCreate_ContextRepoReturnsNilEntity(t *
 		Name:     "Nil Context",
 		Type:     value_objects.ContextTypeOneToOne,
 		Interval: "0 0 * * *",
-		Sources:  []entities.CreateContextSourceInput{{Name: "Bank", Type: value_objects.SourceTypeBank}},
+		Sources:  []entities.CreateContextSourceInput{{Name: "Bank", Type: value_objects.SourceTypeBank, Side: sharedfee.MatchingSideLeft}},
 	})
 	require.ErrorIs(t, err, ErrCreateContextReturnedNil)
 	require.NoError(t, mock.ExpectationsWereMet())
@@ -1172,7 +1218,7 @@ func TestCreateContext_TransactionalInlineCreate_SourceRepoReturnsNilEntity(t *t
 		Name:     "Nil Source",
 		Type:     value_objects.ContextTypeOneToOne,
 		Interval: "0 0 * * *",
-		Sources:  []entities.CreateContextSourceInput{{Name: "Bank", Type: value_objects.SourceTypeBank}},
+		Sources:  []entities.CreateContextSourceInput{{Name: "Bank", Type: value_objects.SourceTypeBank, Side: sharedfee.MatchingSideLeft}},
 	})
 	require.ErrorIs(t, err, ErrCreateSourceReturnedNil)
 	require.NoError(t, mock.ExpectationsWereMet())
@@ -1204,7 +1250,7 @@ func TestCreateContext_TransactionalInlineCreate_MissingTxSupport(t *testing.T) 
 		Name:     "Tx Unsupported",
 		Type:     value_objects.ContextTypeOneToOne,
 		Interval: "0 0 * * *",
-		Sources:  []entities.CreateContextSourceInput{{Name: "Bank", Type: value_objects.SourceTypeBank}},
+		Sources:  []entities.CreateContextSourceInput{{Name: "Bank", Type: value_objects.SourceTypeBank, Side: sharedfee.MatchingSideLeft}},
 	})
 	require.Error(t, err)
 	require.ErrorIs(t, err, ErrCreateContextTxSupportRequired)
@@ -1295,7 +1341,7 @@ func TestCreateContext_WithAuditPublisher_IncludesInlineCounts(t *testing.T) {
 		Name:     "Audited Context",
 		Type:     value_objects.ContextTypeOneToOne,
 		Interval: "0 0 * * *",
-		Sources:  []entities.CreateContextSourceInput{{Name: "Bank", Type: value_objects.SourceTypeBank}},
+		Sources:  []entities.CreateContextSourceInput{{Name: "Bank", Type: value_objects.SourceTypeBank, Side: sharedfee.MatchingSideLeft}},
 		Rules: []entities.CreateMatchRuleInput{{
 			Priority: 1,
 			Type:     value_objects.RuleTypeExact,
@@ -2255,6 +2301,115 @@ func TestDeleteContext_BlockedBySchedules(t *testing.T) {
 	require.ErrorIs(t, err, ErrContextHasChildEntities)
 }
 
+func TestDeleteContext_BlockedByFeeRules(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+
+	mockCtxRepo := repoMocks.NewMockContextRepository(ctrl)
+	mockSrcRepo := repoMocks.NewMockSourceRepository(ctrl)
+	mockFmRepo := repoMocks.NewMockFieldMapRepository(ctrl)
+	mockMrRepo := repoMocks.NewMockMatchRuleRepository(ctrl)
+
+	tenantID := uuid.New()
+	existing, err := entities.NewReconciliationContext(
+		context.Background(),
+		tenantID,
+		entities.CreateReconciliationContextInput{
+			Name:     "Has Fee Rules",
+			Type:     value_objects.ContextTypeOneToOne,
+			Interval: "0 0 * * *",
+		},
+	)
+	require.NoError(t, err)
+
+	mockCtxRepo.EXPECT().
+		FindByID(gomock.Any(), existing.ID).
+		Return(existing, nil)
+
+	mockSrcRepo.EXPECT().
+		FindByContextID(gomock.Any(), existing.ID, "", 1).
+		Return(nil, libHTTP.CursorPagination{}, nil)
+
+	mockMrRepo.EXPECT().
+		FindByContextID(gomock.Any(), existing.ID, "", 1).
+		Return(nil, libHTTP.CursorPagination{}, nil)
+
+	feeRuleRepo := &feeRuleRepoStub{
+		findByContextIDFn: func(_ context.Context, _ uuid.UUID) ([]*sharedfee.FeeRule, error) {
+			return []*sharedfee.FeeRule{{ID: uuid.New(), ContextID: existing.ID}}, nil
+		},
+	}
+
+	uc, err := NewUseCase(
+		mockCtxRepo,
+		mockSrcRepo,
+		mockFmRepo,
+		mockMrRepo,
+		WithFeeRuleRepository(feeRuleRepo),
+	)
+	require.NoError(t, err)
+
+	err = uc.DeleteContext(context.Background(), existing.ID)
+	require.ErrorIs(t, err, ErrContextHasChildEntities)
+}
+
+func TestDeleteContext_FeeRuleCheckError(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+
+	mockCtxRepo := repoMocks.NewMockContextRepository(ctrl)
+	mockSrcRepo := repoMocks.NewMockSourceRepository(ctrl)
+	mockFmRepo := repoMocks.NewMockFieldMapRepository(ctrl)
+	mockMrRepo := repoMocks.NewMockMatchRuleRepository(ctrl)
+
+	tenantID := uuid.New()
+	existing, err := entities.NewReconciliationContext(
+		context.Background(),
+		tenantID,
+		entities.CreateReconciliationContextInput{
+			Name:     "Fee Rule Error",
+			Type:     value_objects.ContextTypeOneToOne,
+			Interval: "0 0 * * *",
+		},
+	)
+	require.NoError(t, err)
+
+	mockCtxRepo.EXPECT().
+		FindByID(gomock.Any(), existing.ID).
+		Return(existing, nil)
+
+	mockSrcRepo.EXPECT().
+		FindByContextID(gomock.Any(), existing.ID, "", 1).
+		Return(nil, libHTTP.CursorPagination{}, nil)
+
+	mockMrRepo.EXPECT().
+		FindByContextID(gomock.Any(), existing.ID, "", 1).
+		Return(nil, libHTTP.CursorPagination{}, nil)
+
+	checkErr := errors.New("fee rule repo unavailable")
+	feeRuleRepo := &feeRuleRepoStub{
+		findByContextIDFn: func(_ context.Context, _ uuid.UUID) ([]*sharedfee.FeeRule, error) {
+			return nil, checkErr
+		},
+	}
+
+	uc, err := NewUseCase(
+		mockCtxRepo,
+		mockSrcRepo,
+		mockFmRepo,
+		mockMrRepo,
+		WithFeeRuleRepository(feeRuleRepo),
+	)
+	require.NoError(t, err)
+
+	err = uc.DeleteContext(context.Background(), existing.ID)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "checking context fee rules")
+	require.ErrorIs(t, err, checkErr)
+}
+
 func TestDeleteContext_ScheduleCheckError(t *testing.T) {
 	t.Parallel()
 
@@ -2365,9 +2520,9 @@ func TestCreateContext_TransactionalInlineCreate_AllSourcesWithMappings(t *testi
 		Type:     value_objects.ContextTypeOneToOne,
 		Interval: "0 0 * * *",
 		Sources: []entities.CreateContextSourceInput{
-			{Name: "Bank A", Type: value_objects.SourceTypeBank, Mapping: map[string]any{"amount": "col_amount"}},
-			{Name: "Bank B", Type: value_objects.SourceTypeBank, Mapping: map[string]any{"date": "col_date"}},
-			{Name: "Bank C", Type: value_objects.SourceTypeBank, Mapping: map[string]any{"ref": "col_ref"}},
+			{Name: "Bank A", Type: value_objects.SourceTypeBank, Side: sharedfee.MatchingSideLeft, Mapping: map[string]any{"amount": "col_amount"}},
+			{Name: "Bank B", Type: value_objects.SourceTypeBank, Side: sharedfee.MatchingSideRight, Mapping: map[string]any{"date": "col_date"}},
+			{Name: "Bank C", Type: value_objects.SourceTypeBank, Side: sharedfee.MatchingSideRight, Mapping: map[string]any{"ref": "col_ref"}},
 		},
 	})
 	require.NoError(t, err)
@@ -2412,6 +2567,7 @@ func TestCreateContext_TransactionalInlineCreate_BeginTxError(t *testing.T) {
 		Sources: []entities.CreateContextSourceInput{{
 			Name: "Bank",
 			Type: value_objects.SourceTypeBank,
+			Side: sharedfee.MatchingSideLeft,
 		}},
 	})
 	require.Error(t, err)
@@ -2478,6 +2634,7 @@ func TestCreateContext_TransactionalInlineCreate_NilMappingSkipsFieldMap(t *test
 			{
 				Name:    "Bank",
 				Type:    value_objects.SourceTypeBank,
+				Side:    sharedfee.MatchingSideLeft,
 				Mapping: nil, // explicitly nil — distinct from map[string]any{}
 			},
 		},
@@ -2534,8 +2691,8 @@ func TestCreateContext_TransactionalInlineCreate_SecondSourceCreateError(t *test
 		Type:     value_objects.ContextTypeOneToOne,
 		Interval: "0 0 * * *",
 		Sources: []entities.CreateContextSourceInput{
-			{Name: "Bank A", Type: value_objects.SourceTypeBank},
-			{Name: "Bank B", Type: value_objects.SourceTypeBank},
+			{Name: "Bank A", Type: value_objects.SourceTypeBank, Side: sharedfee.MatchingSideLeft},
+			{Name: "Bank B", Type: value_objects.SourceTypeBank, Side: sharedfee.MatchingSideRight},
 		},
 	})
 	require.Error(t, err)

@@ -25,7 +25,7 @@ import (
 // Routes holds the configured API route groups.
 type Routes struct {
 	API       fiber.Router
-	Protected func(resource, action string) fiber.Router
+	Protected func(resource string, actions ...string) fiber.Router
 }
 
 // RegisterRoutes configures health endpoints and API route groups with authentication.
@@ -92,23 +92,32 @@ func RegisterRoutes(
 		},
 	)
 
-	var protected func(resource, action string) fiber.Router
+	var protected func(resource string, actions ...string) fiber.Router
 
 	rateLimiter := NewRateLimiter(cfg, rateLimitStorage)
 	if configGetter != nil {
 		rateLimiter = NewDynamicRateLimiter(configGetter, rateLimitStorage)
 	}
 
-	protected = func(resource, action string) fiber.Router {
-		return auth.ProtectedGroupWithMiddleware(
+	protected = func(resource string, actions ...string) fiber.Router {
+		group, err := auth.ProtectedGroupWithActionsWithMiddleware(
 			app,
 			authClient,
 			tenantExtractor,
 			resource,
-			action,
+			actions,
 			idempotencyMiddleware,
 			rateLimiter,
 		)
+		if err != nil {
+			// This closure is called during route registration at startup,
+			// not at request time. tenantExtractor is validated non-nil above
+			// and actions are hardcoded string literals in every call site,
+			// so an error here indicates a programmer bug in route definitions.
+			panic(fmt.Sprintf("protected route registration failed for resource=%q actions=%v: %v", resource, actions, err))
+		}
+
+		return group
 	}
 
 	return &Routes{

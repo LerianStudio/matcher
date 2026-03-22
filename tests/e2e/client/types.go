@@ -31,11 +31,11 @@ type CreateContextRequest struct {
 
 // CreateContextInlineSourceRequest is an inline source payload for context creation.
 type CreateContextInlineSourceRequest struct {
-	Name          string         `json:"name"`
-	Type          string         `json:"type"`
-	Config        map[string]any `json:"config,omitempty"`
-	FeeScheduleID *string        `json:"feeScheduleId,omitempty"`
-	Mapping       map[string]any `json:"mapping,omitempty"`
+	Name    string         `json:"name"`
+	Type    string         `json:"type"`
+	Side    string         `json:"side"`
+	Config  map[string]any `json:"config,omitempty"`
+	Mapping map[string]any `json:"mapping,omitempty"`
 }
 
 // CreateContextInlineRuleRequest is an inline rule payload for context creation.
@@ -55,27 +55,28 @@ type UpdateContextRequest struct {
 
 // Source represents a reconciliation source.
 type Source struct {
-	ID            string         `json:"id"`
-	ContextID     string         `json:"contextId"`
-	Name          string         `json:"name"`
-	Type          string         `json:"type"`
-	Config        map[string]any `json:"config,omitempty"`
-	FeeScheduleID string         `json:"feeScheduleId,omitempty"`
-	CreatedAt     time.Time      `json:"createdAt"`
-	UpdatedAt     time.Time      `json:"updatedAt"`
+	ID        string         `json:"id"`
+	ContextID string         `json:"contextId"`
+	Name      string         `json:"name"`
+	Type      string         `json:"type"`
+	Side      string         `json:"side"`
+	Config    map[string]any `json:"config,omitempty"`
+	CreatedAt time.Time      `json:"createdAt"`
+	UpdatedAt time.Time      `json:"updatedAt"`
 }
 
 // CreateSourceRequest is the payload for creating a source.
 type CreateSourceRequest struct {
-	Name          string         `json:"name"`
-	Type          string         `json:"type"`
-	Config        map[string]any `json:"config,omitempty"`
-	FeeScheduleID string         `json:"feeScheduleId,omitempty"`
+	Name   string         `json:"name"`
+	Type   string         `json:"type"`
+	Side   string         `json:"side"`
+	Config map[string]any `json:"config,omitempty"`
 }
 
 // UpdateSourceRequest is the payload for updating a source.
 type UpdateSourceRequest struct {
 	Name   *string        `json:"name,omitempty"`
+	Side   *string        `json:"side,omitempty"`
 	Config map[string]any `json:"config,omitempty"`
 }
 
@@ -97,6 +98,53 @@ type CreateFieldMapRequest struct {
 // UpdateFieldMapRequest is the payload for updating a field map.
 type UpdateFieldMapRequest struct {
 	Mapping map[string]any `json:"mapping"`
+}
+
+// FeeRuleResponse represents a fee rule.
+type FeeRuleResponse struct {
+	ID            string                     `json:"id"`
+	ContextID     string                     `json:"contextId"`
+	Side          string                     `json:"side"`
+	FeeScheduleID string                     `json:"feeScheduleId"`
+	Name          string                     `json:"name"`
+	Priority      int                        `json:"priority"`
+	Predicates    []FeeRulePredicateResponse `json:"predicates"`
+	CreatedAt     time.Time                  `json:"createdAt"`
+	UpdatedAt     time.Time                  `json:"updatedAt"`
+}
+
+// FeeRulePredicateResponse represents a fee rule predicate.
+type FeeRulePredicateResponse struct {
+	Field    string   `json:"field"`
+	Operator string   `json:"operator"`
+	Value    string   `json:"value,omitempty"`
+	Values   []string `json:"values,omitempty"`
+}
+
+// CreateFeeRuleRequest is the payload for creating a fee rule.
+type CreateFeeRuleRequest struct {
+	Side          string                          `json:"side"`
+	FeeScheduleID string                          `json:"feeScheduleId"`
+	Name          string                          `json:"name"`
+	Priority      int                             `json:"priority"`
+	Predicates    []CreateFeeRulePredicateRequest `json:"predicates,omitempty"`
+}
+
+// CreateFeeRulePredicateRequest is a single predicate in a fee rule create request.
+type CreateFeeRulePredicateRequest struct {
+	Field    string   `json:"field"`
+	Operator string   `json:"operator"`
+	Value    string   `json:"value,omitempty"`
+	Values   []string `json:"values,omitempty"`
+}
+
+// UpdateFeeRuleRequest is the payload for updating a fee rule.
+type UpdateFeeRuleRequest struct {
+	Side          *string                          `json:"side,omitempty"`
+	FeeScheduleID *string                          `json:"feeScheduleId,omitempty"`
+	Name          *string                          `json:"name,omitempty"`
+	Priority      *int                             `json:"priority,omitempty"`
+	Predicates    *[]CreateFeeRulePredicateRequest `json:"predicates,omitempty"`
 }
 
 // MatchRule represents a matching rule.
@@ -175,8 +223,7 @@ type MatchRun struct {
 
 // RunMatchRequest is the payload for triggering a match run.
 type RunMatchRequest struct {
-	Mode            string  `json:"mode"`
-	PrimarySourceID *string `json:"primarySourceId,omitempty"`
+	Mode string `json:"mode"`
 }
 
 // RunMatchResponse is the response from triggering a match run.
@@ -522,19 +569,18 @@ type DashboardMetricsResponse struct {
 
 // CloneContextRequest is the payload for cloning a context.
 type CloneContextRequest struct {
-	Name                string `json:"name"`
-	IncludeSources      *bool  `json:"includeSources,omitempty"`
-	IncludeRules        *bool  `json:"includeRules,omitempty"`
-	IncludeFeeSchedules *bool  `json:"includeFeeSchedules,omitempty"`
+	Name           string `json:"name"`
+	IncludeSources *bool  `json:"includeSources,omitempty"`
+	IncludeRules   *bool  `json:"includeRules,omitempty"`
 }
 
 // CloneContextResponse is the response from cloning a context.
 type CloneContextResponse struct {
-	Context            Context `json:"context"`
-	SourcesCloned      int     `json:"sourcesCloned"`
-	RulesCloned        int     `json:"rulesCloned"`
-	FieldMapsCloned    int     `json:"fieldMapsCloned"`
-	FeeSchedulesCloned int     `json:"feeSchedulesCloned"`
+	Context         Context `json:"context"`
+	SourcesCloned   int     `json:"sourcesCloned"`
+	RulesCloned     int     `json:"rulesCloned"`
+	FeeRulesCloned  int     `json:"feeRulesCloned"`
+	FieldMapsCloned int     `json:"fieldMapsCloned"`
 }
 
 // ScheduleResponse represents a reconciliation schedule.

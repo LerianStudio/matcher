@@ -106,7 +106,7 @@ func TestFullReconciliation_OneToOneExactMatch(t *testing.T) {
 
 			// Step 7: Trigger matching
 			tc.Logf("Step 7: Triggering matching")
-			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			tc.Logf("Match run started: %s", matchResp.RunID)
 
@@ -215,7 +215,7 @@ func TestFullReconciliation_DryRunThenCommit(t *testing.T) {
 
 			// Step 1: Run dry run
 			tc.Logf("Running DRY_RUN matching")
-			dryRunResp, err := client.Matching.RunMatchDryRun(ctx, reconciliationContext.ID, "")
+			dryRunResp, err := client.Matching.RunMatchDryRun(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 
 			err = e2e.WaitForMatchRunComplete(
@@ -238,7 +238,7 @@ func TestFullReconciliation_DryRunThenCommit(t *testing.T) {
 
 			// Step 2: Run commit
 			tc.Logf("Running COMMIT matching")
-			commitResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			commitResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 
 			err = e2e.WaitForMatchRunComplete(

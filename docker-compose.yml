@@ -156,7 +156,7 @@ services:
       SYSTEMPLANE_SECRET_MASTER_KEY: ${SYSTEMPLANE_SECRET_MASTER_KEY:-+PnwgNy8bL3HGT1rOXp47PqyGcPywXH/epgmSVwPkL0=}
       # Build settings
       CGO_ENABLED: "0"
-      GOFLAGS: "-mod=vendor"
+      GOFLAGS: "-mod=mod"
     ports:
       - "4018:4018"
     volumes:

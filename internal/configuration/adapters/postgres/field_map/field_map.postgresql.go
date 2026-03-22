@@ -239,6 +239,111 @@ func (repo *Repository) FindBySourceID(
 	return result, nil
 }
 
+// FindBySourceIDWithTx retrieves a field map by its source ID using an existing transaction.
+// This enables consistent snapshot reads when the caller already holds a transaction.
+func (repo *Repository) FindBySourceIDWithTx(
+	ctx stdctx.Context,
+	tx *sql.Tx,
+	sourceID uuid.UUID,
+) (*entities.FieldMap, error) {
+	if repo == nil || repo.provider == nil {
+		return nil, ErrRepoNotInitialized
+	}
+
+	if tx == nil {
+		return nil, ErrTransactionRequired
+	}
+
+	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
+
+	ctx, span := tracer.Start(ctx, "postgres.find_field_map_by_source_with_tx")
+	defer span.End()
+
+	result, err := common.WithTenantTxOrExistingProvider(
+		ctx,
+		repo.provider,
+		tx,
+		func(innerTx *sql.Tx) (*entities.FieldMap, error) {
+			row := innerTx.QueryRowContext(
+				ctx,
+				"SELECT "+fieldMapColumns+" FROM field_maps WHERE source_id = $1 ORDER BY version DESC LIMIT 1",
+				sourceID.String(),
+			)
+
+			return scanFieldMap(row)
+		},
+	)
+	if err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			libOpentelemetry.HandleSpanError(span, "failed to find field map by source with tx", err)
+
+			logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to find field map by source with tx")
+		}
+
+		return nil, fmt.Errorf("find field map by source with tx: %w", err)
+	}
+
+	return result, nil
+}
+
+// ExistsBySourceIDsWithTx checks which source IDs have field maps using an existing transaction.
+// This enables consistent snapshot reads when the caller already holds a transaction.
+func (repo *Repository) ExistsBySourceIDsWithTx(
+	ctx stdctx.Context,
+	tx *sql.Tx,
+	sourceIDs []uuid.UUID,
+) (map[uuid.UUID]bool, error) {
+	if repo == nil || repo.provider == nil {
+		return nil, ErrRepoNotInitialized
+	}
+
+	if tx == nil {
+		return nil, ErrTransactionRequired
+	}
+
+	result := make(map[uuid.UUID]bool, len(sourceIDs))
+	if len(sourceIDs) == 0 {
+		return result, nil
+	}
+
+	deduped := dedupeSourceIDs(sourceIDs)
+
+	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
+
+	ctx, span := tracer.Start(ctx, "postgres.exists_field_maps_by_source_ids_with_tx")
+	defer span.End()
+
+	result, err := common.WithTenantTxOrExistingProvider(
+		ctx,
+		repo.provider,
+		tx,
+		func(innerTx *sql.Tx) (map[uuid.UUID]bool, error) {
+			existsMap := make(map[uuid.UUID]bool, len(deduped))
+
+			for start := 0; start < len(deduped); start += existsBySourceIDsBatchSize {
+				end := min(start+existsBySourceIDsBatchSize, len(deduped))
+
+				batch := deduped[start:end]
+
+				if err := repo.existsBySourceIDsBatch(ctx, innerTx, batch, existsMap); err != nil {
+					return nil, err
+				}
+			}
+
+			return existsMap, nil
+		},
+	)
+	if err != nil {
+		libOpentelemetry.HandleSpanError(span, "failed to check field maps existence with tx", err)
+
+		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to check field maps existence with tx")
+
+		return nil, fmt.Errorf("check field maps existence by source ids with tx: %w", err)
+	}
+
+	return result, nil
+}
+
 // Update modifies an existing field map.
 func (repo *Repository) Update(
 	ctx stdctx.Context,

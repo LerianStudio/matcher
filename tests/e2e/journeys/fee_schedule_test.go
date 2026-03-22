@@ -321,12 +321,11 @@ func TestFeeSchedule_NetNormalization_OneToOneExact(t *testing.T) {
 				WithFeeNormalization("NET").
 				MustCreate(ctx)
 
-			// Step 3: Create sources — gateway (gross, with fee schedule) and ledger (net, no schedule)
+			// Step 3: Create sources — gateway (gross) and ledger (net).
 			tc.Logf("Step 3: Creating sources")
 			gatewaySource := f.Source.NewSource(reconciliationContext.ID).
 				WithName("gateway").
 				AsGateway().
-				WithFeeScheduleID(schedule.ID).
 				MustCreate(ctx)
 
 			bankSource := f.Source.NewSource(reconciliationContext.ID).
@@ -341,6 +340,14 @@ func TestFeeSchedule_NetNormalization_OneToOneExact(t *testing.T) {
 				MustCreate(ctx)
 			f.Source.NewFieldMap(reconciliationContext.ID, bankSource.ID).
 				WithStandardMapping().
+				MustCreate(ctx)
+
+			// Step 4.5: Create a LEFT fee rule so only gateway transactions are normalized.
+			f.FeeRule.NewFeeRule(reconciliationContext.ID).
+				WithName("gateway-net").
+				Left().
+				WithFeeScheduleID(schedule.ID).
+				WithPriority(1).
 				MustCreate(ctx)
 
 			// Step 5: Create tolerance match rule
@@ -384,7 +391,7 @@ func TestFeeSchedule_NetNormalization_OneToOneExact(t *testing.T) {
 
 			// Step 8: Run matching
 			tc.Logf("Step 8: Running matching")
-			matchResp, err := c.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := c.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(t, e2e.WaitForMatchRunComplete(ctx, tc, c, reconciliationContext.ID, matchResp.RunID))
 
@@ -400,8 +407,11 @@ func TestFeeSchedule_NetNormalization_OneToOneExact(t *testing.T) {
 
 			// With NET normalization: gateway $100 becomes $98.50 internally,
 			// which matches bank $98.50. All 3 should match.
-			require.GreaterOrEqual(t, len(groups), 3,
+			require.Len(t, groups, 3,
 				"all 3 transactions should match when fees are normalized to net")
+			for _, group := range groups {
+				require.Len(t, group.Items, 2)
+			}
 
 			tc.Logf("PASS: NET normalization matching — 3 gross/net pairs matched")
 		},
@@ -455,7 +465,6 @@ func TestFeeSchedule_CascadingNormalization(t *testing.T) {
 			gatewaySource := f.Source.NewSource(reconciliationContext.ID).
 				WithName("gateway").
 				AsGateway().
-				WithFeeScheduleID(schedule.ID).
 				MustCreate(ctx)
 			bankSource := f.Source.NewSource(reconciliationContext.ID).
 				WithName("bank").
@@ -467,6 +476,13 @@ func TestFeeSchedule_CascadingNormalization(t *testing.T) {
 				WithStandardMapping().MustCreate(ctx)
 			f.Source.NewFieldMap(reconciliationContext.ID, bankSource.ID).
 				WithStandardMapping().MustCreate(ctx)
+
+			f.FeeRule.NewFeeRule(reconciliationContext.ID).
+				WithName("gateway-cascading").
+				Left().
+				WithFeeScheduleID(schedule.ID).
+				WithPriority(1).
+				MustCreate(ctx)
 
 			// Tolerance rule
 			f.Rule.NewRule(reconciliationContext.ID).
@@ -495,15 +511,16 @@ func TestFeeSchedule_CascadingNormalization(t *testing.T) {
 
 			// Step 5: Match
 			tc.Logf("Step 5: Running matching")
-			matchResp, err := c.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := c.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(t, e2e.WaitForMatchRunComplete(ctx, tc, c, reconciliationContext.ID, matchResp.RunID))
 
 			// Step 6: Verify
 			groups, err := c.Matching.GetMatchRunResults(ctx, reconciliationContext.ID, matchResp.RunID)
 			require.NoError(t, err)
-			require.GreaterOrEqual(t, len(groups), 1,
+			require.Len(t, groups, 1,
 				"cascading-normalized gateway $500 should match bank $485.10")
+			require.Len(t, groups[0].Items, 2)
 
 			tc.Logf("PASS: Cascading normalization matching — gross $500 matched net $485.10")
 		},
@@ -515,14 +532,14 @@ func TestFeeSchedule_CascadingNormalization(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // TestFeeSchedule_NoNormalization tests that when feeNormalization is empty,
-// fee schedules on sources don't affect matching (amounts pass through as-is).
+// fee rules do not alter matching amounts (transactions pass through as-is).
 func TestFeeSchedule_NoNormalization(t *testing.T) {
 	e2e.RunE2EWithTimeout(t, 3*time.Minute,
 		func(t *testing.T, tc *e2e.TestContext, c *e2e.Client) {
 			ctx := context.Background()
 			f := factories.New(tc, c)
 
-			// Fee schedule exists but normalization is disabled on context
+			// Fee schedule and fee rule exist, but normalization is disabled on the context.
 			schedule := f.FeeSchedule.NewFeeSchedule().
 				WithName("no-norm").
 				WithCurrency("USD").
@@ -538,7 +555,6 @@ func TestFeeSchedule_NoNormalization(t *testing.T) {
 			gatewaySource := f.Source.NewSource(reconciliationContext.ID).
 				WithName("gateway").
 				AsGateway().
-				WithFeeScheduleID(schedule.ID).
 				MustCreate(ctx)
 			bankSource := f.Source.NewSource(reconciliationContext.ID).
 				WithName("bank").
@@ -549,6 +565,13 @@ func TestFeeSchedule_NoNormalization(t *testing.T) {
 				WithStandardMapping().MustCreate(ctx)
 			f.Source.NewFieldMap(reconciliationContext.ID, bankSource.ID).
 				WithStandardMapping().MustCreate(ctx)
+
+			f.FeeRule.NewFeeRule(reconciliationContext.ID).
+				WithName("no-norm-rule").
+				Any().
+				WithFeeScheduleID(schedule.ID).
+				WithPriority(1).
+				MustCreate(ctx)
 
 			// Exact match rule — amounts must be exactly equal
 			f.Rule.NewRule(reconciliationContext.ID).
@@ -574,14 +597,15 @@ func TestFeeSchedule_NoNormalization(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, e2e.WaitForJobComplete(ctx, tc, c, reconciliationContext.ID, bankJob.ID))
 
-			matchResp, err := c.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := c.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(t, e2e.WaitForMatchRunComplete(ctx, tc, c, reconciliationContext.ID, matchResp.RunID))
 
 			groups, err := c.Matching.GetMatchRunResults(ctx, reconciliationContext.ID, matchResp.RunID)
 			require.NoError(t, err)
-			require.GreaterOrEqual(t, len(groups), 1,
+			require.Len(t, groups, 1,
 				"exact same amounts should match when normalization is disabled")
+			require.Len(t, groups[0].Items, 2)
 
 			tc.Logf("PASS: No normalization — raw amounts compared, $100 == $100")
 		},
@@ -601,7 +625,7 @@ func TestFeeSchedule_CurrencyMismatchPassthrough(t *testing.T) {
 			ctx := context.Background()
 			f := factories.New(tc, c)
 
-			// USD fee schedule — should NOT apply to EUR transactions
+			// USD fee schedule — should NOT apply to EUR transactions even when a fee rule points to it.
 			schedule := f.FeeSchedule.NewFeeSchedule().
 				WithName("usd-only").
 				WithCurrency("USD").
@@ -618,7 +642,6 @@ func TestFeeSchedule_CurrencyMismatchPassthrough(t *testing.T) {
 			gatewaySource := f.Source.NewSource(reconciliationContext.ID).
 				WithName("gateway").
 				AsGateway().
-				WithFeeScheduleID(schedule.ID).
 				MustCreate(ctx)
 			bankSource := f.Source.NewSource(reconciliationContext.ID).
 				WithName("bank").
@@ -629,6 +652,13 @@ func TestFeeSchedule_CurrencyMismatchPassthrough(t *testing.T) {
 				WithStandardMapping().MustCreate(ctx)
 			f.Source.NewFieldMap(reconciliationContext.ID, bankSource.ID).
 				WithStandardMapping().MustCreate(ctx)
+
+			f.FeeRule.NewFeeRule(reconciliationContext.ID).
+				WithName("usd-only-rule").
+				Any().
+				WithFeeScheduleID(schedule.ID).
+				WithPriority(1).
+				MustCreate(ctx)
 
 			f.Rule.NewRule(reconciliationContext.ID).
 				Exact().WithExactConfig(true, true).MustCreate(ctx)
@@ -653,14 +683,15 @@ func TestFeeSchedule_CurrencyMismatchPassthrough(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, e2e.WaitForJobComplete(ctx, tc, c, reconciliationContext.ID, bankJob.ID))
 
-			matchResp, err := c.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := c.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(t, e2e.WaitForMatchRunComplete(ctx, tc, c, reconciliationContext.ID, matchResp.RunID))
 
 			groups, err := c.Matching.GetMatchRunResults(ctx, reconciliationContext.ID, matchResp.RunID)
 			require.NoError(t, err)
-			require.GreaterOrEqual(t, len(groups), 1,
+			require.Len(t, groups, 1,
 				"EUR transactions should match exactly when USD fee schedule is skipped")
+			require.Len(t, groups[0].Items, 2)
 
 			tc.Logf("PASS: Currency mismatch — USD fee schedule ignored for EUR transactions")
 		},
@@ -668,18 +699,18 @@ func TestFeeSchedule_CurrencyMismatchPassthrough(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Multiple Fee Schedules — Per-Source
+// Multiple Fee Schedules — Per-Side Rules
 // ---------------------------------------------------------------------------
 
-// TestFeeSchedule_PerSourceSchedules tests that different sources can have
-// different fee schedules, and both are normalized correctly during matching.
-func TestFeeSchedule_PerSourceSchedules(t *testing.T) {
+// TestFeeSchedule_PerSideFeeRules tests that different sides can use
+// different fee schedules through LEFT/RIGHT fee rules.
+func TestFeeSchedule_PerSideFeeRules(t *testing.T) {
 	e2e.RunE2EWithTimeout(t, 3*time.Minute,
 		func(t *testing.T, tc *e2e.TestContext, c *e2e.Client) {
 			ctx := context.Background()
 			f := factories.New(tc, c)
 
-			// Gateway A: 2% fee. For $100 gross → net = $98.00
+			// Left side: 2% fee. For $100 gross -> net = $98.00
 			scheduleA := f.FeeSchedule.NewFeeSchedule().
 				WithName("gateway-a-fees").
 				WithCurrency("USD").
@@ -687,7 +718,7 @@ func TestFeeSchedule_PerSourceSchedules(t *testing.T) {
 				WithPercentageFee("processing", 1, "0.02").
 				MustCreate(ctx)
 
-			// Gateway B: 3% fee. For $100 gross → net = $97.00
+			// Right side: 3% fee. For $100 gross -> net = $97.00
 			scheduleB := f.FeeSchedule.NewFeeSchedule().
 				WithName("gateway-b-fees").
 				WithCurrency("USD").
@@ -704,13 +735,11 @@ func TestFeeSchedule_PerSourceSchedules(t *testing.T) {
 			gatewayA := f.Source.NewSource(reconciliationContext.ID).
 				WithName("gateway-a").
 				AsLedger().
-				WithFeeScheduleID(scheduleA.ID).
 				MustCreate(ctx)
 
 			gatewayB := f.Source.NewSource(reconciliationContext.ID).
 				WithName("gateway-b").
 				AsGateway().
-				WithFeeScheduleID(scheduleB.ID).
 				MustCreate(ctx)
 
 			f.Source.NewFieldMap(reconciliationContext.ID, gatewayA.ID).
@@ -718,11 +747,24 @@ func TestFeeSchedule_PerSourceSchedules(t *testing.T) {
 			f.Source.NewFieldMap(reconciliationContext.ID, gatewayB.ID).
 				WithStandardMapping().MustCreate(ctx)
 
+			f.FeeRule.NewFeeRule(reconciliationContext.ID).
+				WithName("gateway-a-left").
+				Left().
+				WithFeeScheduleID(scheduleA.ID).
+				WithPriority(1).
+				MustCreate(ctx)
+			f.FeeRule.NewFeeRule(reconciliationContext.ID).
+				WithName("gateway-b-right").
+				Right().
+				WithFeeScheduleID(scheduleB.ID).
+				WithPriority(2).
+				MustCreate(ctx)
+
 			// Tolerance rule to handle sub-cent differences
 			f.Rule.NewRule(reconciliationContext.ID).
 				Tolerance().WithToleranceConfig("0.01").MustCreate(ctx)
 
-			// Gateway A reports $100 gross (net = $98.00)
+			// Left side reports $100 gross (net = $98.00)
 			csvA := factories.NewCSVBuilder(tc.NamePrefix()).
 				AddRow("MS-001", "100.00", "USD", "2026-02-01", "gw-a-payment").
 				Build()
@@ -732,7 +774,7 @@ func TestFeeSchedule_PerSourceSchedules(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, e2e.WaitForJobComplete(ctx, tc, c, reconciliationContext.ID, jobA.ID))
 
-			// Gateway B reports $100 gross (net = $97.00) — different fee!
+			// Right side reports $100 gross (net = $97.00) - different fee.
 			csvB := factories.NewCSVBuilder(tc.NamePrefix()).
 				AddRow("MS-002", "100.00", "USD", "2026-02-01", "gw-b-payment").
 				Build()
@@ -742,9 +784,9 @@ func TestFeeSchedule_PerSourceSchedules(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, e2e.WaitForJobComplete(ctx, tc, c, reconciliationContext.ID, jobB.ID))
 
-			// Run matching — both gross $100 but different net amounts
+			// Run matching - both gross $100 but different net amounts.
 			// Should NOT match each other (98 != 97)
-			matchResp, err := c.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := c.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(t, e2e.WaitForMatchRunComplete(ctx, tc, c, reconciliationContext.ID, matchResp.RunID))
 
@@ -752,13 +794,13 @@ func TestFeeSchedule_PerSourceSchedules(t *testing.T) {
 			require.NoError(t, err)
 
 			// Both report $100 gross, but after normalization:
-			// Gateway A: $98.00 net, Gateway B: $97.00 net
-			// With tolerance 0.01, these should NOT match (difference = $1.00)
-			tc.Logf("Match groups found: %d (expecting 0 — $98 vs $97 exceeds tolerance)", len(groups))
+			// Left side: $98.00 net, right side: $97.00 net.
+			// With tolerance 0.01, these should NOT match (difference = $1.00).
+			tc.Logf("Match groups found: %d (expecting 0 - $98 vs $97 exceeds tolerance)", len(groups))
 			assert.Equal(t, 0, len(groups),
-				"per-source normalization should produce different net amounts that don't match")
+				"per-side normalization should produce different net amounts that don't match")
 
-			tc.Logf("PASS: Per-source fee schedules produce different net amounts")
+			tc.Logf("PASS: Per-side fee rules produce different net amounts")
 		},
 	)
 }

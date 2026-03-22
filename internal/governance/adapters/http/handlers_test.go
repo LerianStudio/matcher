@@ -85,11 +85,11 @@ func TestRegisterRoutes(t *testing.T) {
 		app := fiber.New()
 		protectedCalled := false
 
-		protected := func(resource, action string) fiber.Router {
+		protected := func(resource string, actions ...string) fiber.Router {
 			protectedCalled = true
 
 			require.Equal(t, "governance", resource)
-			require.Equal(t, "audit:read", action)
+			require.Equal(t, []string{"audit:read"}, actions)
 
 			return app
 		}
@@ -116,7 +116,7 @@ func TestRegisterRoutes(t *testing.T) {
 		t.Parallel()
 
 		app := fiber.New()
-		protected := func(resource, action string) fiber.Router {
+		protected := func(resource string, actions ...string) fiber.Router {
 			return app
 		}
 

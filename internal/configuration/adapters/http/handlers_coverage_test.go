@@ -280,14 +280,13 @@ func TestCloneContext_Success(t *testing.T) {
 	contextEntity := fixture.seedContext(t, tenantID)
 	fixture.seedSource(t, contextEntity.ID)
 	fixture.seedMatchRule(t, contextEntity.ID, 1)
+	schedule := fixture.seedFeeSchedule(t, tenantID)
+	fixture.seedFeeRule(t, contextEntity.ID, schedule.ID, "cloned-fee-rule", fee.MatchingSideAny, 1)
 
 	app.Post("/v1/contexts/:contextId/clone", fixture.handler.CloneContext)
 
-	// Disable fee schedule cloning since no fee schedule repo is wired
-	noFeeSchedules := false
 	payload := dto.CloneContextRequest{
-		Name:                "Cloned Context",
-		IncludeFeeSchedules: &noFeeSchedules,
+		Name: "Cloned Context",
 	}
 
 	requestPath := replacePathParams(
@@ -306,6 +305,7 @@ func TestCloneContext_Success(t *testing.T) {
 	assert.Equal(t, "Cloned Context", response.Context.Name)
 	assert.Equal(t, 1, response.SourcesCloned)
 	assert.Equal(t, 1, response.RulesCloned)
+	assert.Equal(t, 1, response.FeeRulesCloned)
 }
 
 func TestCloneContext_InvalidPayload(t *testing.T) {
@@ -407,10 +407,9 @@ func TestCloneContext_WithBoolDefaults(t *testing.T) {
 
 	falseVal := false
 	payload := dto.CloneContextRequest{
-		Name:                "Cloned NoSources",
-		IncludeSources:      &falseVal,
-		IncludeRules:        &falseVal,
-		IncludeFeeSchedules: &falseVal,
+		Name:           "Cloned NoSources",
+		IncludeSources: &falseVal,
+		IncludeRules:   &falseVal,
 	}
 
 	requestPath := replacePathParams(
@@ -429,6 +428,7 @@ func TestCloneContext_WithBoolDefaults(t *testing.T) {
 	assert.Equal(t, "Cloned NoSources", response.Context.Name)
 	assert.Equal(t, 0, response.SourcesCloned)
 	assert.Equal(t, 0, response.RulesCloned)
+	assert.Equal(t, 0, response.FeeRulesCloned)
 }
 
 // ─── UpdateFieldMap error path tests ──────────────────────────

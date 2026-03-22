@@ -11,13 +11,14 @@ import (
 
 // SourceFactory creates reconciliation sources for tests.
 type SourceFactory struct {
-	tc     *e2e.TestContext
-	client *e2e.Client
+	tc                 *e2e.TestContext
+	client             *e2e.Client
+	sideCountByContext map[string]int
 }
 
 // NewSourceFactory creates a new source factory.
 func NewSourceFactory(tc *e2e.TestContext, c *e2e.Client) *SourceFactory {
-	return &SourceFactory{tc: tc, client: c}
+	return &SourceFactory{tc: tc, client: c, sideCountByContext: make(map[string]int)}
 }
 
 // Client returns the underlying API client.
@@ -27,9 +28,10 @@ func (f *SourceFactory) Client() *e2e.Client {
 
 // SourceBuilder builds source creation requests.
 type SourceBuilder struct {
-	factory   *SourceFactory
-	contextID string
-	req       client.CreateSourceRequest
+	factory      *SourceFactory
+	contextID    string
+	req          client.CreateSourceRequest
+	sideResolved bool
 }
 
 // NewSource starts building a new source.
@@ -57,8 +59,12 @@ func (b *SourceBuilder) WithRawName(name string) *SourceBuilder {
 	return b
 }
 
-// GetRequest returns the underlying request for inspection.
+// GetRequest resolves any auto-assigned side, advances the counter,
+// and returns the underlying request for inspection. This ensures
+// callers that bypass Create() (e.g., createSourceWithoutCleanup)
+// still produce a valid side and keep the counter consistent.
 func (b *SourceBuilder) GetRequest() client.CreateSourceRequest {
+	b.resolveSide()
 	return b.req
 }
 
@@ -83,9 +89,15 @@ func (b *SourceBuilder) AsGateway() *SourceBuilder {
 	return b.WithType("GATEWAY")
 }
 
-// WithFeeScheduleID sets the fee schedule ID for the source.
-func (b *SourceBuilder) WithFeeScheduleID(id string) *SourceBuilder {
-	b.req.FeeScheduleID = id
+// Left configures the source as the LEFT side.
+func (b *SourceBuilder) Left() *SourceBuilder {
+	b.req.Side = "LEFT"
+	return b
+}
+
+// Right configures the source as the RIGHT side.
+func (b *SourceBuilder) Right() *SourceBuilder {
+	b.req.Side = "RIGHT"
 	return b
 }
 
@@ -97,6 +109,8 @@ func (b *SourceBuilder) WithConfig(config map[string]any) *SourceBuilder {
 
 // Create creates the source and registers cleanup.
 func (b *SourceBuilder) Create(ctx context.Context) (*client.Source, error) {
+	b.resolveSide()
+
 	created, err := b.factory.client.Configuration.CreateSource(ctx, b.contextID, b.req)
 	if err != nil {
 		return nil, err
@@ -112,6 +126,27 @@ func (b *SourceBuilder) Create(ctx context.Context) (*client.Source, error) {
 
 	b.factory.tc.Logf("Created source: %s (%s)", created.Name, created.ID)
 	return created, nil
+}
+
+// resolveSide assigns LEFT/RIGHT when no explicit side was set and
+// advances the per-context counter so the next auto-assigned source
+// gets the opposite side. The counter is incremented at most once per
+// builder instance (tracked by sideResolved) so calling resolveSide
+// from both GetRequest and Create is safe.
+func (b *SourceBuilder) resolveSide() {
+	if b.sideResolved {
+		return
+	}
+	b.sideResolved = true
+
+	if b.req.Side == "" {
+		if b.factory.sideCountByContext[b.contextID] == 0 {
+			b.req.Side = "LEFT"
+		} else {
+			b.req.Side = "RIGHT"
+		}
+	}
+	b.factory.sideCountByContext[b.contextID]++
 }
 
 // MustCreate creates the source and panics on error.

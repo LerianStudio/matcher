@@ -15,6 +15,7 @@ import (
 	sourceRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/source"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
@@ -68,6 +69,7 @@ func TestSourceRepository_ForeignKeyConstraint(t *testing.T) {
 			entities.CreateReconciliationSourceInput{
 				Name:   "Orphan Source",
 				Type:   value_objects.SourceTypeLedger,
+				Side:   sharedfee.MatchingSideLeft,
 				Config: map[string]any{},
 			},
 		)
@@ -150,6 +152,7 @@ func TestContextRepository_DeleteWithSources_CascadeDeletesChildren(t *testing.T
 			entities.CreateReconciliationSourceInput{
 				Name:   "Child Source",
 				Type:   value_objects.SourceTypeLedger,
+				Side:   sharedfee.MatchingSideLeft,
 				Config: map[string]any{},
 			},
 		)
@@ -179,6 +182,7 @@ func TestSourceRepository_DeleteWithFieldMaps_CascadeDeletesChildren(t *testing.
 			entities.CreateReconciliationSourceInput{
 				Name:   "Source With FieldMap",
 				Type:   value_objects.SourceTypeLedger,
+				Side:   sharedfee.MatchingSideLeft,
 				Config: map[string]any{},
 			},
 		)
@@ -277,6 +281,7 @@ func TestSourceRepository_EmptyConfig(t *testing.T) {
 			entities.CreateReconciliationSourceInput{
 				Name:   "Empty Config Source",
 				Type:   value_objects.SourceTypeLedger,
+				Side:   sharedfee.MatchingSideLeft,
 				Config: map[string]any{},
 			},
 		)
@@ -313,6 +318,7 @@ func TestSourceRepository_ComplexConfig(t *testing.T) {
 			entities.CreateReconciliationSourceInput{
 				Name:   "Complex Config Source",
 				Type:   value_objects.SourceTypeBank,
+				Side:   sharedfee.MatchingSideRight,
 				Config: complexConfig,
 			},
 		)
@@ -339,6 +345,7 @@ func TestFieldMapRepository_ComplexMapping(t *testing.T) {
 			entities.CreateReconciliationSourceInput{
 				Name:   "Complex Mapping Source",
 				Type:   value_objects.SourceTypeLedger,
+				Side:   sharedfee.MatchingSideLeft,
 				Config: map[string]any{},
 			},
 		)

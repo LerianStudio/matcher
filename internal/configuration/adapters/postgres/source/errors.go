@@ -13,6 +13,8 @@ var (
 	ErrSourceEntityIDRequired = errors.New("source entity ID is required")
 	ErrSourceModelRequired    = errors.New("source model is required")
 	ErrRepoNotInitialized     = errors.New("source repository not initialized")
+	ErrInvalidPaginationOrder = errors.New("invalid pagination order")
+	ErrInvalidPaginationOp    = errors.New("invalid pagination operator")
 	ErrConnectionRequired     = pgcommon.ErrConnectionRequired
 	ErrTransactionRequired    = pgcommon.ErrTransactionRequired
 )

@@ -79,10 +79,6 @@ var (
 // RunMatchRequest defines the payload to trigger a matching run.
 type RunMatchRequest struct {
 	Mode string `json:"mode" validate:"required,oneof=DRY_RUN COMMIT" example:"DRY_RUN" enums:"DRY_RUN,COMMIT"`
-	// PrimarySourceID optionally specifies which source is the reference (left) side.
-	// If provided, directed matching: this source -> left, others -> right.
-	// If omitted, symmetric matching: sources compared freely (first source used as left internally).
-	PrimarySourceID *string `json:"primarySourceId,omitempty" validate:"-" example:"550e8400-e29b-41d4-a716-446655440000" format:"uuid" swaggertype:"string" extensions:"x-nullable" description:"Optional source ID for directed matching. If set, this source becomes the reference (left) side; if omitted or null, symmetric matching is used."`
 }
 
 // RunMatchResponse defines the response payload for a matching run.

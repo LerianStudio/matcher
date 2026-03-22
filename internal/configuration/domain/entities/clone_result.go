@@ -14,11 +14,11 @@ var ErrCloneResultContextRequired = errors.New("cloned context is required")
 
 // CloneResult holds the outcome of a context clone operation.
 type CloneResult struct {
-	Context            *ReconciliationContext
-	SourcesCloned      int
-	RulesCloned        int
-	FieldMapsCloned    int
-	FeeSchedulesCloned int
+	Context         *ReconciliationContext
+	SourcesCloned   int
+	RulesCloned     int
+	FeeRulesCloned  int
+	FieldMapsCloned int
 }
 
 // NewCloneResult creates a clone result anchored to the cloned context.

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/LerianStudio/matcher/tests/e2e"
@@ -38,6 +39,10 @@ func TestMatchingModes_OneToMany(t *testing.T) {
 				WithName("bank").
 				AsBank().
 				MustCreate(ctx)
+
+			// H19: Auto-assigned sides should also be deterministic (first=LEFT, second=RIGHT).
+			assert.Equal(t, "LEFT", ledgerSource.Side, "first auto-assigned source should be LEFT")
+			assert.Equal(t, "RIGHT", bankSource.Side, "second auto-assigned source should be RIGHT")
 
 			f.Source.NewFieldMap(reconciliationContext.ID, ledgerSource.ID).
 				WithStandardMapping().
@@ -89,7 +94,7 @@ func TestMatchingModes_OneToMany(t *testing.T) {
 			)
 
 			// Run matching
-			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -195,7 +200,7 @@ func TestMatchingModes_ManyToMany(t *testing.T) {
 			)
 
 			// Run matching
-			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -296,7 +301,7 @@ func TestMatchingModes_ToleranceMatching(t *testing.T) {
 			)
 
 			// Run matching
-			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -328,12 +333,9 @@ func TestMatchingModes_ToleranceMatching(t *testing.T) {
 	)
 }
 
-// TestMatchingModes_DirectedPrimarySource tests directed matching where a primary
-// source ID is specified. In directed mode, the matcher treats the primary source
-// as the anchor: its transactions are the "left side" and all other sources form
-// the "right side". This test verifies that passing a real source ID (instead of
-// an empty string) correctly triggers asymmetric matching and produces valid results.
-func TestMatchingModes_DirectedPrimarySource(t *testing.T) {
+// TestMatchingModes_SideBasedDirectionalAssignment verifies that matching direction
+// is driven by persisted source sides instead of a caller-supplied primary source.
+func TestMatchingModes_SideBasedDirectionalAssignment(t *testing.T) {
 	e2e.RunE2EWithTimeout(
 		t,
 		2*time.Minute,
@@ -341,24 +343,41 @@ func TestMatchingModes_DirectedPrimarySource(t *testing.T) {
 			ctx := context.Background()
 			f := factories.New(tc, client)
 
-			// Step 1: Create reconciliation context with 1:1 matching
-			tc.Logf("Step 1: Creating reconciliation context for directed matching")
+			// Step 1: Create reconciliation context with 1:1 matching.
+			tc.Logf("Step 1: Creating reconciliation context for side-based matching")
 			reconciliationContext := f.Context.NewContext().
-				WithName("directed-match").
+				WithName("side-based-match").
 				OneToOne().
 				MustCreate(ctx)
 
-			// Step 2: Create two sources — bank and gateway
-			tc.Logf("Step 2: Creating sources (bank + gateway)")
+			// Step 2: Create two sources with explicit sides.
+			tc.Logf("Step 2: Creating LEFT/RIGHT sources (bank + gateway)")
 			bankSource := f.Source.NewSource(reconciliationContext.ID).
 				WithName("bank").
 				AsBank().
+				Left().
 				MustCreate(ctx)
 
 			gatewaySource := f.Source.NewSource(reconciliationContext.ID).
 				WithName("gateway").
 				AsGateway().
+				Right().
 				MustCreate(ctx)
+
+			// H19: Verify explicit side assignment is persisted and returned from API.
+			assert.Equal(t, "LEFT", bankSource.Side, "bank source should be LEFT from create response")
+			assert.Equal(t, "RIGHT", gatewaySource.Side, "gateway source should be RIGHT from create response")
+
+			// Verify side provenance round-trips through the GET API.
+			fetchedBank, err := client.Configuration.GetSource(ctx, reconciliationContext.ID, bankSource.ID)
+			require.NoError(t, err, "should fetch bank source")
+			assert.Equal(t, "LEFT", fetchedBank.Side, "bank source should remain LEFT after GET")
+
+			fetchedGateway, err := client.Configuration.GetSource(ctx, reconciliationContext.ID, gatewaySource.ID)
+			require.NoError(t, err, "should fetch gateway source")
+			assert.Equal(t, "RIGHT", fetchedGateway.Side, "gateway source should remain RIGHT after GET")
+
+			tc.Logf("✓ H19: Side provenance verified — bank=LEFT, gateway=RIGHT")
 
 			// Step 3: Create field maps for both sources
 			tc.Logf("Step 3: Creating field maps")
@@ -378,7 +397,7 @@ func TestMatchingModes_DirectedPrimarySource(t *testing.T) {
 				WithExactConfig(true, true).
 				MustCreate(ctx)
 
-			// Step 5: Upload bank transactions (this will be our primary source)
+			// Step 5: Upload bank transactions for the LEFT source.
 			tc.Logf("Step 5: Uploading bank transactions")
 			bankCSV := factories.NewCSVBuilder(tc.NamePrefix()).
 				AddRow("DIR-001", "100.00", "USD", "2026-01-15", "wire transfer").
@@ -420,14 +439,10 @@ func TestMatchingModes_DirectedPrimarySource(t *testing.T) {
 				e2e.WaitForJobComplete(ctx, tc, client, reconciliationContext.ID, gatewayJob.ID),
 			)
 
-			// Step 7: Run directed matching with bank as the primary source
-			tc.Logf("Step 7: Running directed matching with bank source as primary (%s)", bankSource.ID)
-			matchResp, err := client.Matching.RunMatchCommit(
-				ctx,
-				reconciliationContext.ID,
-				bankSource.ID, // <-- the key difference: non-empty primarySourceID
-			)
-			require.NoError(t, err, "directed match run should be accepted")
+			// Step 7: Run matching with bank configured as LEFT and gateway as RIGHT.
+			tc.Logf("Step 7: Running side-based matching with bank=%s LEFT and gateway=%s RIGHT", bankSource.ID, gatewaySource.ID)
+			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
+			require.NoError(t, err, "side-based match run should be accepted")
 			tc.Logf("Match run started: %s", matchResp.RunID)
 
 			err = e2e.WaitForMatchRunComplete(
@@ -437,17 +452,17 @@ func TestMatchingModes_DirectedPrimarySource(t *testing.T) {
 				reconciliationContext.ID,
 				matchResp.RunID,
 			)
-			require.NoError(t, err, "directed match run should complete")
+			require.NoError(t, err, "side-based match run should complete")
 
-			// Step 8: Verify the match run completed and produced groups
-			tc.Logf("Step 8: Verifying directed match results")
+			// Step 8: Verify the match run completed and produced groups.
+			tc.Logf("Step 8: Verifying side-based match results")
 			matchRun, err := client.Matching.GetMatchRun(
 				ctx,
 				reconciliationContext.ID,
 				matchResp.RunID,
 			)
 			require.NoError(t, err)
-			require.Equal(t, "COMPLETED", matchRun.Status, "directed match run should be COMPLETED")
+			require.Equal(t, "COMPLETED", matchRun.Status, "side-based match run should be COMPLETED")
 
 			groups, err := client.Matching.GetMatchRunResults(
 				ctx,
@@ -455,39 +470,47 @@ func TestMatchingModes_DirectedPrimarySource(t *testing.T) {
 				matchResp.RunID,
 			)
 			require.NoError(t, err)
-			tc.Logf("Directed match produced %d match groups", len(groups))
-			require.GreaterOrEqual(t, len(groups), 3,
-				"directed matching with bank as primary should produce at least 3 match groups")
+			tc.Logf("Side-based match produced %d match groups", len(groups))
+			require.Len(t, groups, 3, "three bank/gateway pairs should match when sides are configured explicitly")
+			for _, group := range groups {
+				require.Len(t, group.Items, 2)
+			}
 
-			// Step 9: Run directed matching with gateway as primary (second direction)
-			tc.Logf("Step 9: Running directed matching with gateway source as primary (%s)", gatewaySource.ID)
-			matchResp2, err := client.Matching.RunMatchCommit(
-				ctx,
-				reconciliationContext.ID,
-				gatewaySource.ID, // <-- gateway as primary this time
-			)
-			require.NoError(t, err, "second directed match run should be accepted")
-			tc.Logf("Second match run started: %s", matchResp2.RunID)
+			// H-T6: Verify directionality — each match group must pair a LEFT
+			// (bank) transaction with a RIGHT (gateway) transaction, never
+			// two transactions from the same side.
+			//
+			// MatchItem only exposes TransactionID, so we build a lookup from
+			// transaction ID → source ID via the ingestion job listings, then
+			// confirm every group contains exactly one item per source.
+			bankTxs, err := client.Ingestion.ListTransactionsByJob(ctx, reconciliationContext.ID, bankJob.ID)
+			require.NoError(t, err, "should list bank transactions")
+			gatewayTxs, err := client.Ingestion.ListTransactionsByJob(ctx, reconciliationContext.ID, gatewayJob.ID)
+			require.NoError(t, err, "should list gateway transactions")
 
-			err = e2e.WaitForMatchRunComplete(
-				ctx,
-				tc,
-				client,
-				reconciliationContext.ID,
-				matchResp2.RunID,
-			)
-			require.NoError(t, err, "second directed match run should complete")
+			txSourceMap := make(map[string]string, len(bankTxs)+len(gatewayTxs))
+			for _, tx := range bankTxs {
+				txSourceMap[tx.ID] = bankSource.ID
+			}
+			for _, tx := range gatewayTxs {
+				txSourceMap[tx.ID] = gatewaySource.ID
+			}
 
-			matchRun2, err := client.Matching.GetMatchRun(
-				ctx,
-				reconciliationContext.ID,
-				matchResp2.RunID,
-			)
-			require.NoError(t, err)
-			require.Equal(t, "COMPLETED", matchRun2.Status,
-				"directed match with gateway as primary should also be COMPLETED")
+			for i, group := range groups {
+				sourcesInGroup := make(map[string]int, 2)
+				for _, item := range group.Items {
+					srcID, ok := txSourceMap[item.TransactionID]
+					require.True(t, ok, "group[%d] item tx %s should map to a known source", i, item.TransactionID)
+					sourcesInGroup[srcID]++
+				}
+				assert.Equal(t, 1, sourcesInGroup[bankSource.ID],
+					"group[%d] should contain exactly 1 LEFT (bank) transaction", i)
+				assert.Equal(t, 1, sourcesInGroup[gatewaySource.ID],
+					"group[%d] should contain exactly 1 RIGHT (gateway) transaction", i)
+			}
 
-			tc.Logf("Directed matching completed successfully from both directions")
+			tc.Logf("✓ H-T6: Directionality verified — every group pairs one LEFT + one RIGHT transaction")
+			tc.Logf("Side-based matching completed successfully")
 		},
 	)
 }
@@ -564,7 +587,7 @@ func TestMatchingModes_PercentTolerance(t *testing.T) {
 			)
 
 			// Run matching
-			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,

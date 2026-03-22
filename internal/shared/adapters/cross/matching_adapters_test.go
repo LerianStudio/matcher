@@ -17,14 +17,46 @@ import (
 	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
 	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
+	configRepositories "github.com/LerianStudio/matcher/internal/configuration/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/repositories/mocks"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	matchingPorts "github.com/LerianStudio/matcher/internal/matching/ports"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
 // errTestRepo is a sentinel error used for testing repository failure scenarios.
 var errTestRepo = errors.New("database error")
+
+type feeRuleRepositoryStub struct {
+	rules []*fee.FeeRule
+	err   error
+}
+
+var _ configRepositories.FeeRuleRepository = (*feeRuleRepositoryStub)(nil)
+
+func (stub *feeRuleRepositoryStub) Create(context.Context, *fee.FeeRule) error { return nil }
+func (stub *feeRuleRepositoryStub) CreateWithTx(context.Context, *sql.Tx, *fee.FeeRule) error {
+	return nil
+}
+func (stub *feeRuleRepositoryStub) FindByID(context.Context, uuid.UUID) (*fee.FeeRule, error) {
+	return nil, nil
+}
+func (stub *feeRuleRepositoryStub) FindByContextID(context.Context, uuid.UUID) ([]*fee.FeeRule, error) {
+	if stub.err != nil {
+		return nil, stub.err
+	}
+
+	return stub.rules, nil
+}
+func (stub *feeRuleRepositoryStub) Update(context.Context, *fee.FeeRule) error { return nil }
+func (stub *feeRuleRepositoryStub) UpdateWithTx(context.Context, *sql.Tx, *fee.FeeRule) error {
+	return nil
+}
+func (stub *feeRuleRepositoryStub) Delete(context.Context, uuid.UUID, uuid.UUID) error { return nil }
+func (stub *feeRuleRepositoryStub) DeleteWithTx(context.Context, *sql.Tx, uuid.UUID, uuid.UUID) error {
+	return nil
+}
 
 func TestNewMatchRuleProviderAdapter_NilRepo(t *testing.T) {
 	t.Parallel()
@@ -131,6 +163,42 @@ func TestMatchRuleProviderAdapter_ListByContextID_EmptyRules(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Empty(t, result)
+}
+
+func TestMatchRuleProviderAdapter_ListByContextID_PaginatesAllRules(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRepo := mocks.NewMockMatchRuleRepository(ctrl)
+	adapter, err := NewMatchRuleProviderAdapter(mockRepo)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	contextID := uuid.New()
+	now := time.Now().UTC()
+
+	pageOne := configEntities.MatchRules{
+		&shared.MatchRule{ID: uuid.New(), ContextID: contextID, Priority: 1, Type: shared.RuleTypeExact, CreatedAt: now, UpdatedAt: now},
+	}
+	pageTwo := configEntities.MatchRules{
+		&shared.MatchRule{ID: uuid.New(), ContextID: contextID, Priority: 2, Type: shared.RuleTypeTolerance, CreatedAt: now, UpdatedAt: now},
+	}
+
+	mockRepo.EXPECT().
+		FindByContextID(ctx, contextID, "", maxInternalLimit).
+		Return(pageOne, libHTTP.CursorPagination{Next: "cursor-2"}, nil)
+	mockRepo.EXPECT().
+		FindByContextID(ctx, contextID, "cursor-2", maxInternalLimit).
+		Return(pageTwo, libHTTP.CursorPagination{}, nil)
+
+	result, err := adapter.ListByContextID(ctx, contextID)
+
+	require.NoError(t, err)
+	require.Len(t, result, 2)
+	assert.Equal(t, pageOne[0].ID, result[0].ID)
+	assert.Equal(t, pageTwo[0].ID, result[1].ID)
 }
 
 func TestMatchRuleProviderAdapter_ListByContextID_Error(t *testing.T) {
@@ -267,6 +335,60 @@ func TestNewSourceProviderAdapter_ValidRepo(t *testing.T) {
 	assert.Equal(t, mockRepo, adapter.repo)
 }
 
+func TestNewFeeRuleProviderAdapter_NilRepo(t *testing.T) {
+	t.Parallel()
+
+	adapter, err := NewFeeRuleProviderAdapter(nil)
+	require.ErrorIs(t, err, ErrFeeRuleRepositoryRequired)
+	assert.Nil(t, adapter)
+}
+
+func TestFeeRuleProviderAdapter_FindByContextID_Success(t *testing.T) {
+	t.Parallel()
+
+	contextID := uuid.New()
+	rules := []*fee.FeeRule{{ID: uuid.New(), ContextID: contextID, Name: "fee-rule"}}
+	adapter, err := NewFeeRuleProviderAdapter(&feeRuleRepositoryStub{rules: rules})
+	require.NoError(t, err)
+
+	result, err := adapter.FindByContextID(context.Background(), contextID)
+	require.NoError(t, err)
+	assert.Len(t, result, 1)
+	assert.Equal(t, rules[0].ID, result[0].ID)
+}
+
+func TestFeeRuleProviderAdapter_FindByContextID_Empty(t *testing.T) {
+	t.Parallel()
+
+	adapter, err := NewFeeRuleProviderAdapter(&feeRuleRepositoryStub{rules: nil})
+	require.NoError(t, err)
+
+	result, err := adapter.FindByContextID(context.Background(), uuid.New())
+	require.NoError(t, err)
+	assert.Nil(t, result)
+}
+
+func TestFeeRuleProviderAdapter_FindByContextID_Error(t *testing.T) {
+	t.Parallel()
+
+	adapter, err := NewFeeRuleProviderAdapter(&feeRuleRepositoryStub{err: errTestRepo})
+	require.NoError(t, err)
+
+	result, err := adapter.FindByContextID(context.Background(), uuid.New())
+	require.ErrorIs(t, err, errTestRepo)
+	assert.Nil(t, result)
+}
+
+func TestFeeRuleProviderAdapter_FindByContextID_NilAdapter(t *testing.T) {
+	t.Parallel()
+
+	var adapter *FeeRuleProviderAdapter
+
+	result, err := adapter.FindByContextID(context.Background(), uuid.New())
+	require.ErrorIs(t, err, ErrFeeRuleRepositoryRequired)
+	assert.Nil(t, result)
+}
+
 func TestSourceProviderAdapter_FindByContextID_NilAdapter(t *testing.T) {
 	t.Parallel()
 
@@ -302,6 +424,7 @@ func TestSourceProviderAdapter_FindByContextID_Success(t *testing.T) {
 			ContextID: contextID,
 			Name:      "Source 1",
 			Type:      value_objects.SourceTypeLedger,
+			Side:      fee.MatchingSideLeft,
 			Config:    map[string]any{},
 			CreatedAt: now,
 			UpdatedAt: now,
@@ -311,6 +434,7 @@ func TestSourceProviderAdapter_FindByContextID_Success(t *testing.T) {
 			ContextID: contextID,
 			Name:      "Source 2",
 			Type:      value_objects.SourceTypeBank,
+			Side:      fee.MatchingSideRight,
 			Config:    map[string]any{},
 			CreatedAt: now,
 			UpdatedAt: now,
@@ -327,8 +451,62 @@ func TestSourceProviderAdapter_FindByContextID_Success(t *testing.T) {
 	require.Len(t, result, 2)
 	assert.Equal(t, sources[0].ID, result[0].ID)
 	assert.Equal(t, matchingPorts.SourceType(sources[0].Type.String()), result[0].Type)
+	assert.Equal(t, sources[0].Side, result[0].Side)
 	assert.Equal(t, sources[1].ID, result[1].ID)
 	assert.Equal(t, matchingPorts.SourceType(sources[1].Type.String()), result[1].Type)
+	assert.Equal(t, sources[1].Side, result[1].Side)
+}
+
+func TestSourceProviderAdapter_FindByContextID_PaginatesAllSources(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRepo := mocks.NewMockSourceRepository(ctrl)
+	adapter, err := NewSourceProviderAdapter(mockRepo)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	contextID := uuid.New()
+	now := time.Now().UTC()
+
+	pageOne := []*configEntities.ReconciliationSource{{
+		ID:        uuid.New(),
+		ContextID: contextID,
+		Name:      "Source 1",
+		Type:      value_objects.SourceTypeLedger,
+		Side:      fee.MatchingSideLeft,
+		Config:    map[string]any{},
+		CreatedAt: now,
+		UpdatedAt: now,
+	}}
+	pageTwo := []*configEntities.ReconciliationSource{{
+		ID:        uuid.New(),
+		ContextID: contextID,
+		Name:      "Source 2",
+		Type:      value_objects.SourceTypeBank,
+		Side:      fee.MatchingSideRight,
+		Config:    map[string]any{},
+		CreatedAt: now,
+		UpdatedAt: now,
+	}}
+
+	mockRepo.EXPECT().
+		FindByContextID(ctx, contextID, "", maxInternalLimit).
+		Return(pageOne, libHTTP.CursorPagination{Next: "cursor-2"}, nil)
+	mockRepo.EXPECT().
+		FindByContextID(ctx, contextID, "cursor-2", maxInternalLimit).
+		Return(pageTwo, libHTTP.CursorPagination{}, nil)
+
+	result, err := adapter.FindByContextID(ctx, contextID)
+
+	require.NoError(t, err)
+	require.Len(t, result, 2)
+	assert.Equal(t, pageOne[0].ID, result[0].ID)
+	assert.Equal(t, pageOne[0].Side, result[0].Side)
+	assert.Equal(t, pageTwo[0].ID, result[1].ID)
+	assert.Equal(t, pageTwo[0].Side, result[1].Side)
 }
 
 func TestSourceProviderAdapter_FindByContextID_SkipsNilSources(t *testing.T) {

@@ -55,15 +55,14 @@ definitions:
         type: string
     type: object
   github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CloneContextRequest:
-    description: Request payload for cloning a context with its configuration
+    description: Request payload for cloning a context with its configuration. When
+      sources are included, their LEFT/RIGHT side assignments and field maps are preserved.
+      When rules are included, both match rules and fee rules are cloned, and cloned
+      fee rules keep referencing the same fee schedules as the source context.
     properties:
-      includeFeeSchedules:
-        description: 'Whether to clone fee schedules (true) or keep original references
-          (false) (default: true)'
-        example: true
-        type: boolean
       includeRules:
-        description: 'Whether to include match rules in the clone (default: true)'
+        description: 'Whether to include match rules and fee rules in the clone (default:
+          true)'
         example: true
         type: boolean
       includeSources:
@@ -81,14 +80,15 @@ definitions:
     - name
     type: object
   github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CloneContextResponse:
-    description: Result of cloning a reconciliation context
+    description: Result of cloning a reconciliation context, including counts for
+      cloned sources, match rules, fee rules, and field maps.
     properties:
       context:
         allOf:
         - $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.ReconciliationContextResponse'
         description: The newly created context
-      feeSchedulesCloned:
-        description: Number of fee schedules cloned
+      feeRulesCloned:
+        description: Number of fee rules cloned
         example: 2
         type: integer
       fieldMapsCloned:
@@ -164,16 +164,18 @@ definitions:
       config:
         additionalProperties: {}
         type: object
-      feeScheduleId:
-        example: 550e8400-e29b-41d4-a716-446655440000
-        format: uuid
-        type: string
       mapping:
         type: object
       name:
         example: Primary Bank Account
         maxLength: 50
         minLength: 1
+        type: string
+      side:
+        enum:
+        - LEFT
+        - RIGHT
+        example: LEFT
         type: string
       type:
         enum:
@@ -186,7 +188,41 @@ definitions:
         type: string
     required:
     - name
+    - side
     - type
+    type: object
+  github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateFeeRuleRequest:
+    properties:
+      feeScheduleId:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+      name:
+        example: BB Right-Side Rule
+        maxLength: 100
+        minLength: 1
+        type: string
+      predicates:
+        items:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldPredicateRequest'
+        maxItems: 50
+        type: array
+      priority:
+        description: Priority must be unique within the context. LEFT, RIGHT, and
+          ANY rules share the same priority space.
+        example: 0
+        minimum: 0
+        type: integer
+      side:
+        enum:
+        - LEFT
+        - RIGHT
+        - ANY
+        example: RIGHT
+        type: string
+    required:
+    - feeScheduleId
+    - name
+    - side
     type: object
   github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateFeeScheduleItemRequest:
     properties:
@@ -302,14 +338,16 @@ definitions:
       config:
         additionalProperties: {}
         type: object
-      feeScheduleId:
-        example: 550e8400-e29b-41d4-a716-446655440000
-        format: uuid
-        type: string
       name:
         example: Primary Bank Account
         maxLength: 50
         minLength: 1
+        type: string
+      side:
+        enum:
+        - LEFT
+        - RIGHT
+        example: LEFT
         type: string
       type:
         enum:
@@ -322,7 +360,43 @@ definitions:
         type: string
     required:
     - name
+    - side
     - type
+    type: object
+  github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeRuleResponse:
+    properties:
+      contextId:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+      createdAt:
+        example: "2025-01-15T10:30:00Z"
+        type: string
+      feeScheduleId:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+      id:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+      name:
+        example: BB Right-Side Rule
+        type: string
+      predicates:
+        items:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldPredicateResponse'
+        type: array
+      priority:
+        example: 0
+        type: integer
+      side:
+        enum:
+        - LEFT
+        - RIGHT
+        - ANY
+        example: RIGHT
+        type: string
+      updatedAt:
+        example: "2025-01-15T10:30:00Z"
+        type: string
     type: object
   github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeScheduleItemResponse:
     properties:
@@ -427,6 +501,52 @@ definitions:
         description: Version number for optimistic locking
         example: 1
         type: integer
+    type: object
+  github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldPredicateRequest:
+    properties:
+      field:
+        example: institution
+        maxLength: 255
+        type: string
+      operator:
+        enum:
+        - EQUALS
+        - IN
+        - EXISTS
+        example: EQUALS
+        type: string
+      value:
+        example: Banco do Brasil
+        maxLength: 1024
+        type: string
+      values:
+        items:
+          type: string
+        maxItems: 100
+        type: array
+    required:
+    - field
+    - operator
+    type: object
+  github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldPredicateResponse:
+    properties:
+      field:
+        example: institution
+        type: string
+      operator:
+        enum:
+        - EQUALS
+        - IN
+        - EXISTS
+        example: EQUALS
+        type: string
+      value:
+        example: Banco do Brasil
+        type: string
+      values:
+        items:
+          type: string
+        type: array
     type: object
   github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.MatchRuleResponse:
     description: Matching rule within a reconciliation context
@@ -549,10 +669,6 @@ definitions:
         description: Creation timestamp in RFC3339 format
         example: "2025-01-15T10:30:00Z"
         type: string
-      feeScheduleId:
-        description: Fee schedule ID associated with this source
-        example: 550e8400-e29b-41d4-a716-446655440000
-        type: string
       id:
         description: Unique identifier for the source
         example: 550e8400-e29b-41d4-a716-446655440000
@@ -560,6 +676,13 @@ definitions:
       name:
         description: Name of the source
         example: Primary Bank Account
+        type: string
+      side:
+        description: Matching side configured for the source
+        enum:
+        - LEFT
+        - RIGHT
+        example: LEFT
         type: string
       type:
         description: Type of the source
@@ -670,10 +793,6 @@ definitions:
         description: Creation timestamp in RFC3339 format
         example: "2025-01-15T10:30:00Z"
         type: string
-      feeScheduleId:
-        description: Fee schedule ID associated with this source
-        example: 550e8400-e29b-41d4-a716-446655440000
-        type: string
       hasFieldMaps:
         description: Indicates if field maps are configured for this source
         example: true
@@ -685,6 +804,13 @@ definitions:
       name:
         description: Name of the source
         example: Primary Bank Account
+        type: string
+      side:
+        description: Matching side configured for the source
+        enum:
+        - LEFT
+        - RIGHT
+        example: LEFT
         type: string
       type:
         description: Type of the source
@@ -743,6 +869,32 @@ definitions:
         - 1:N
         - N:M
         example: 1:N
+        type: string
+    type: object
+  github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.UpdateFeeRuleRequest:
+    properties:
+      feeScheduleId:
+        type: string
+      name:
+        example: Updated Rule
+        maxLength: 100
+        type: string
+      predicates:
+        items:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldPredicateRequest'
+        maxItems: 50
+        type: array
+      priority:
+        description: Priority must remain unique within the context. LEFT, RIGHT,
+          and ANY rules share the same priority space.
+        minimum: 0
+        type: integer
+      side:
+        enum:
+        - LEFT
+        - RIGHT
+        - ANY
+        example: LEFT
         type: string
     type: object
   github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.UpdateFeeScheduleRequest:
@@ -811,13 +963,15 @@ definitions:
       config:
         additionalProperties: {}
         type: object
-      feeScheduleId:
-        example: 550e8400-e29b-41d4-a716-446655440000
-        format: uuid
-        type: string
       name:
         example: Secondary Bank Account
         maxLength: 50
+        type: string
+      side:
+        enum:
+        - LEFT
+        - RIGHT
+        example: RIGHT
         type: string
       type:
         enum:
@@ -2920,15 +3074,6 @@ definitions:
         - COMMIT
         example: DRY_RUN
         type: string
-      primarySourceId:
-        description: |-
-          PrimarySourceID optionally specifies which source is the reference (left) side.
-          If provided, directed matching: this source -> left, others -> right.
-          If omitted, symmetric matching: sources compared freely (first source used as left internally).
-        example: 550e8400-e29b-41d4-a716-446655440000
-        format: uuid
-        type: string
-        x-nullable: true
     required:
     - mode
     type: object
@@ -3291,7 +3436,7 @@ paths:
       summary: Readiness check
       tags:
       - Health
-  /v1/contexts:
+  /v1/config/contexts:
     get:
       description: Returns a cursor-paginated list of reconciliation contexts, optionally
         filtered by type and status.
@@ -3405,7 +3550,7 @@ paths:
       summary: Create a reconciliation context
       tags:
       - Configuration Contexts
-  /v1/contexts/{contextId}:
+  /v1/config/contexts/{contextId}:
     delete:
       description: Removes a reconciliation context by ID.
       operationId: deleteContext
@@ -3552,12 +3697,13 @@ paths:
       summary: Update a reconciliation context
       tags:
       - Configuration Contexts
-  /v1/contexts/{contextId}/clone:
+  /v1/config/contexts/{contextId}/clone:
     post:
       consumes:
       - application/json
       description: Creates a deep copy of a reconciliation context including its sources,
-        field maps, match rules, and optionally fee schedules.
+        field maps, match rules, and fee rules. Referenced fee schedules are reused
+        by cloned fee rules.
       operationId: cloneContext
       parameters:
       - description: Request ID for tracing
@@ -3612,10 +3758,11 @@ paths:
       summary: Clone a reconciliation context
       tags:
       - Configuration Contexts
-  /v1/contexts/{contextId}/export-jobs:
+  /v1/config/contexts/{contextId}/fee-rules:
     get:
-      description: Lists export jobs for a specific reconciliation context.
-      operationId: listExportJobsByContext
+      description: Returns all fee rules for a reconciliation context, ordered by
+        priority.
+      operationId: listFeeRules
       parameters:
       - description: Request ID for tracing
         in: header
@@ -3627,59 +3774,56 @@ paths:
         name: contextId
         required: true
         type: string
-      - description: Pagination cursor from previous response
-        in: query
-        name: cursor
-        type: string
-      - default: 20
-        description: Maximum number of records to return
-        in: query
-        maximum: 200
-        minimum: 1
-        name: limit
-        type: integer
       produces:
       - application/json
       responses:
         "200":
-          description: OK
+          description: List of fee rules
           schema:
-            $ref: '#/definitions/internal_reporting_adapters_http.ExportJobListResponse'
+            items:
+              $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeRuleResponse'
+            type: array
         "400":
-          description: Invalid query parameters
+          description: Invalid context ID format
           schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "404":
           description: Context not found
           schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: List export jobs by context
+      summary: List fee rules
       tags:
-      - Export Jobs
+      - Configuration Fee Rules
     post:
       consumes:
       - application/json
-      description: Creates an async export job for large report exports (CSV, JSON,
-        XML).
-      operationId: createExportJob
+      description: Creates a new fee rule that maps transaction metadata to a fee
+        schedule within a context. Priority must be unique within a context across
+        all sides (LEFT, RIGHT, and ANY rules share the same priority space). The
+        caller must also be allowed to read the referenced fee schedule.
+      operationId: createFeeRule
       parameters:
       - description: Request ID for tracing
         in: header
         name: X-Request-Id
+        type: string
+      - description: Idempotency key for safe retries
+        in: header
+        name: X-Idempotency-Key
         type: string
       - description: Context ID
         format: uuid
@@ -3687,53 +3831,49 @@ paths:
         name: contextId
         required: true
         type: string
-      - description: Export job parameters
+      - description: Fee rule creation payload
         in: body
-        name: request
+        name: feeRule
         required: true
         schema:
-          $ref: '#/definitions/internal_reporting_adapters_http.CreateExportJobRequest'
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateFeeRuleRequest'
       produces:
       - application/json
       responses:
-        "202":
-          description: Accepted
+        "201":
+          description: Successfully created fee rule
           schema:
-            $ref: '#/definitions/internal_reporting_adapters_http.CreateExportJobResponse'
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeRuleResponse'
         "400":
           description: Invalid request payload
           schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "404":
           description: Context not found
           schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "409":
-          description: 'Conflict: duplicate resource or idempotency key in progress'
+          description: 'Conflict: duplicate priority or name'
           schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
-        "503":
-          description: Export worker disabled
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Create an export job
+      summary: Create a fee rule
       tags:
-      - Export Jobs
-  /v1/contexts/{contextId}/rules:
+      - Configuration Fee Rules
+  /v1/config/contexts/{contextId}/rules:
     get:
       description: Returns a cursor-paginated list of match rules under a context,
         optionally filtered by type.
@@ -3858,7 +3998,7 @@ paths:
       summary: Create a match rule
       tags:
       - Configuration Match Rules
-  /v1/contexts/{contextId}/rules/{ruleId}:
+  /v1/config/contexts/{contextId}/rules/{ruleId}:
     delete:
       description: Removes a match rule by ID.
       operationId: deleteMatchRule
@@ -4023,7 +4163,7 @@ paths:
       summary: Update a match rule
       tags:
       - Configuration Match Rules
-  /v1/contexts/{contextId}/rules/reorder:
+  /v1/config/contexts/{contextId}/rules/reorder:
     post:
       consumes:
       - application/json
@@ -4076,6 +4216,789 @@ paths:
       summary: Reorder match rules
       tags:
       - Configuration Match Rules
+  /v1/config/contexts/{contextId}/sources:
+    get:
+      description: Returns a cursor-paginated list of reconciliation sources under
+        a context, optionally filtered by type.
+      operationId: listSources
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Context ID
+        format: uuid
+        in: path
+        name: contextId
+        required: true
+        type: string
+      - default: 20
+        description: Maximum number of records to return
+        in: query
+        maximum: 200
+        minimum: 1
+        name: limit
+        type: integer
+      - description: Cursor for pagination (opaque)
+        in: query
+        name: cursor
+        type: string
+      - description: Filter by source type
+        enum:
+        - LEDGER
+        - BANK
+        - GATEWAY
+        - CUSTOM
+        - FETCHER
+        in: query
+        name: type
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of sources with cursor pagination
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ListSourcesResponse'
+        "400":
+          description: Invalid query parameters
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "404":
+          description: Context not found
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List reconciliation sources
+      tags:
+      - Configuration Sources
+    post:
+      consumes:
+      - application/json
+      description: Creates a new reconciliation source under a context.
+      operationId: createSource
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Context ID
+        format: uuid
+        in: path
+        name: contextId
+        required: true
+        type: string
+      - description: Source creation payload
+        in: body
+        name: source
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateSourceRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Successfully created source
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.ReconciliationSourceResponse'
+        "400":
+          description: Invalid request payload
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "404":
+          description: Context not found
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "409":
+          description: 'Conflict: duplicate resource or idempotency key in progress'
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a reconciliation source
+      tags:
+      - Configuration Sources
+  /v1/config/contexts/{contextId}/sources/{sourceId}:
+    delete:
+      description: Removes a reconciliation source by ID.
+      operationId: deleteSource
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Context ID
+        format: uuid
+        in: path
+        name: contextId
+        required: true
+        type: string
+      - description: Source ID
+        format: uuid
+        in: path
+        name: sourceId
+        required: true
+        type: string
+      responses:
+        "204":
+          description: Source successfully deleted
+        "400":
+          description: Invalid source ID format
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "404":
+          description: Source not found
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a reconciliation source
+      tags:
+      - Configuration Sources
+    get:
+      description: Returns a reconciliation source by ID.
+      operationId: getSource
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Context ID
+        format: uuid
+        in: path
+        name: contextId
+        required: true
+        type: string
+      - description: Source ID
+        format: uuid
+        in: path
+        name: sourceId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully retrieved source
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.ReconciliationSourceResponse'
+        "400":
+          description: Invalid source ID format
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "404":
+          description: Source not found
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a reconciliation source
+      tags:
+      - Configuration Sources
+    patch:
+      consumes:
+      - application/json
+      description: Updates fields on a reconciliation source by ID.
+      operationId: updateSource
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Context ID
+        format: uuid
+        in: path
+        name: contextId
+        required: true
+        type: string
+      - description: Source ID
+        format: uuid
+        in: path
+        name: sourceId
+        required: true
+        type: string
+      - description: Source updates
+        in: body
+        name: source
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.UpdateSourceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully updated source
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.ReconciliationSourceResponse'
+        "400":
+          description: Invalid request payload
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "404":
+          description: Source not found
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "409":
+          description: 'Conflict: duplicate resource or idempotency key in progress'
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a reconciliation source
+      tags:
+      - Configuration Sources
+  /v1/config/contexts/{contextId}/sources/{sourceId}/field-maps:
+    get:
+      description: Returns the field map for a source within a context.
+      operationId: getFieldMapBySource
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Context ID
+        format: uuid
+        in: path
+        name: contextId
+        required: true
+        type: string
+      - description: Source ID
+        format: uuid
+        in: path
+        name: sourceId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully retrieved field map
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldMapResponse'
+        "400":
+          description: Invalid source ID format
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "404":
+          description: Field map not found
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a field map by source
+      tags:
+      - Configuration Field Maps
+    post:
+      consumes:
+      - application/json
+      description: Creates a field map for a source within a context.
+      operationId: createFieldMap
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Context ID
+        format: uuid
+        in: path
+        name: contextId
+        required: true
+        type: string
+      - description: Source ID
+        format: uuid
+        in: path
+        name: sourceId
+        required: true
+        type: string
+      - description: Field map creation payload
+        in: body
+        name: fieldMap
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateFieldMapRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Successfully created field map
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldMapResponse'
+        "400":
+          description: Invalid request payload
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "404":
+          description: Context or source not found
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "409":
+          description: 'Conflict: duplicate resource or idempotency key in progress'
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a field map
+      tags:
+      - Configuration Field Maps
+  /v1/config/fee-rules/{feeRuleId}:
+    delete:
+      description: Removes a fee rule by ID.
+      operationId: deleteFeeRule
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Fee Rule ID
+        format: uuid
+        in: path
+        name: feeRuleId
+        required: true
+        type: string
+      responses:
+        "204":
+          description: Fee rule successfully deleted
+        "400":
+          description: Invalid fee rule ID format
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "404":
+          description: Fee rule not found
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a fee rule
+      tags:
+      - Configuration Fee Rules
+    get:
+      description: Returns a fee rule by ID.
+      operationId: getFeeRule
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Fee Rule ID
+        format: uuid
+        in: path
+        name: feeRuleId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully retrieved fee rule
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeRuleResponse'
+        "400":
+          description: Invalid fee rule ID format
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "404":
+          description: Fee rule not found
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a fee rule
+      tags:
+      - Configuration Fee Rules
+    patch:
+      consumes:
+      - application/json
+      description: Updates fields on a fee rule by ID. If the referenced fee schedule
+        changes, the caller must also be allowed to read that fee schedule.
+      operationId: updateFeeRule
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Idempotency key for safe retries
+        in: header
+        name: X-Idempotency-Key
+        type: string
+      - description: Fee Rule ID
+        format: uuid
+        in: path
+        name: feeRuleId
+        required: true
+        type: string
+      - description: Fee rule updates
+        in: body
+        name: feeRule
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.UpdateFeeRuleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully updated fee rule
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeRuleResponse'
+        "400":
+          description: Invalid request payload
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "404":
+          description: Fee rule not found
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "409":
+          description: 'Conflict: duplicate priority or name'
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a fee rule
+      tags:
+      - Configuration Fee Rules
+  /v1/config/field-maps/{fieldMapId}:
+    delete:
+      description: Removes a field map by ID.
+      operationId: deleteFieldMap
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Field map ID
+        format: uuid
+        in: path
+        name: fieldMapId
+        required: true
+        type: string
+      responses:
+        "204":
+          description: Field map successfully deleted
+        "400":
+          description: Invalid field map ID format
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "404":
+          description: Field map not found
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a field map
+      tags:
+      - Configuration Field Maps
+    patch:
+      consumes:
+      - application/json
+      description: Updates fields on a field map by ID.
+      operationId: updateFieldMap
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Field map ID
+        format: uuid
+        in: path
+        name: fieldMapId
+        required: true
+        type: string
+      - description: Field map updates
+        in: body
+        name: fieldMap
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.UpdateFieldMapRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully updated field map
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldMapResponse'
+        "400":
+          description: Invalid request payload
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "404":
+          description: Field map not found
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "409":
+          description: 'Conflict: duplicate resource or idempotency key in progress'
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a field map
+      tags:
+      - Configuration Field Maps
+  /v1/contexts/{contextId}/export-jobs:
+    get:
+      description: Lists export jobs for a specific reconciliation context.
+      operationId: listExportJobsByContext
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Context ID
+        format: uuid
+        in: path
+        name: contextId
+        required: true
+        type: string
+      - description: Pagination cursor from previous response
+        in: query
+        name: cursor
+        type: string
+      - default: 20
+        description: Maximum number of records to return
+        in: query
+        maximum: 200
+        minimum: 1
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_reporting_adapters_http.ExportJobListResponse'
+        "400":
+          description: Invalid query parameters
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+        "404":
+          description: Context not found
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List export jobs by context
+      tags:
+      - Export Jobs
+    post:
+      consumes:
+      - application/json
+      description: Creates an async export job for large report exports (CSV, JSON,
+        XML).
+      operationId: createExportJob
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Context ID
+        format: uuid
+        in: path
+        name: contextId
+        required: true
+        type: string
+      - description: Export job parameters
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_reporting_adapters_http.CreateExportJobRequest'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/internal_reporting_adapters_http.CreateExportJobResponse'
+        "400":
+          description: Invalid request payload
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+        "404":
+          description: Context not found
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+        "409":
+          description: 'Conflict: duplicate resource or idempotency key in progress'
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+        "503":
+          description: Export worker disabled
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create an export job
+      tags:
+      - Export Jobs
   /v1/contexts/{contextId}/schedules:
     get:
       description: Returns all schedules for a reconciliation context.
@@ -4348,415 +5271,6 @@ paths:
       summary: Update a reconciliation schedule
       tags:
       - Configuration Schedules
-  /v1/contexts/{contextId}/sources:
-    get:
-      description: Returns a cursor-paginated list of reconciliation sources under
-        a context, optionally filtered by type.
-      operationId: listSources
-      parameters:
-      - description: Request ID for tracing
-        in: header
-        name: X-Request-Id
-        type: string
-      - description: Context ID
-        format: uuid
-        in: path
-        name: contextId
-        required: true
-        type: string
-      - default: 20
-        description: Maximum number of records to return
-        in: query
-        maximum: 200
-        minimum: 1
-        name: limit
-        type: integer
-      - description: Cursor for pagination (opaque)
-        in: query
-        name: cursor
-        type: string
-      - description: Filter by source type
-        enum:
-        - LEDGER
-        - BANK
-        - GATEWAY
-        - CUSTOM
-        - FETCHER
-        in: query
-        name: type
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: List of sources with cursor pagination
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ListSourcesResponse'
-        "400":
-          description: Invalid query parameters
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "404":
-          description: Context not found
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: List reconciliation sources
-      tags:
-      - Configuration Sources
-    post:
-      consumes:
-      - application/json
-      description: Creates a new reconciliation source under a context.
-      operationId: createSource
-      parameters:
-      - description: Request ID for tracing
-        in: header
-        name: X-Request-Id
-        type: string
-      - description: Context ID
-        format: uuid
-        in: path
-        name: contextId
-        required: true
-        type: string
-      - description: Source creation payload
-        in: body
-        name: source
-        required: true
-        schema:
-          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateSourceRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Successfully created source
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.ReconciliationSourceResponse'
-        "400":
-          description: Invalid request payload
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "404":
-          description: Context not found
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "409":
-          description: 'Conflict: duplicate resource or idempotency key in progress'
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Create a reconciliation source
-      tags:
-      - Configuration Sources
-  /v1/contexts/{contextId}/sources/{sourceId}:
-    delete:
-      description: Removes a reconciliation source by ID.
-      operationId: deleteSource
-      parameters:
-      - description: Request ID for tracing
-        in: header
-        name: X-Request-Id
-        type: string
-      - description: Context ID
-        format: uuid
-        in: path
-        name: contextId
-        required: true
-        type: string
-      - description: Source ID
-        format: uuid
-        in: path
-        name: sourceId
-        required: true
-        type: string
-      responses:
-        "204":
-          description: Source successfully deleted
-        "400":
-          description: Invalid source ID format
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "404":
-          description: Source not found
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Delete a reconciliation source
-      tags:
-      - Configuration Sources
-    get:
-      description: Returns a reconciliation source by ID.
-      operationId: getSource
-      parameters:
-      - description: Request ID for tracing
-        in: header
-        name: X-Request-Id
-        type: string
-      - description: Context ID
-        format: uuid
-        in: path
-        name: contextId
-        required: true
-        type: string
-      - description: Source ID
-        format: uuid
-        in: path
-        name: sourceId
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: Successfully retrieved source
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.ReconciliationSourceResponse'
-        "400":
-          description: Invalid source ID format
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "404":
-          description: Source not found
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Get a reconciliation source
-      tags:
-      - Configuration Sources
-    patch:
-      consumes:
-      - application/json
-      description: Updates fields on a reconciliation source by ID.
-      operationId: updateSource
-      parameters:
-      - description: Request ID for tracing
-        in: header
-        name: X-Request-Id
-        type: string
-      - description: Context ID
-        format: uuid
-        in: path
-        name: contextId
-        required: true
-        type: string
-      - description: Source ID
-        format: uuid
-        in: path
-        name: sourceId
-        required: true
-        type: string
-      - description: Source updates
-        in: body
-        name: source
-        required: true
-        schema:
-          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.UpdateSourceRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: Successfully updated source
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.ReconciliationSourceResponse'
-        "400":
-          description: Invalid request payload
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "404":
-          description: Source not found
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "409":
-          description: 'Conflict: duplicate resource or idempotency key in progress'
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Update a reconciliation source
-      tags:
-      - Configuration Sources
-  /v1/contexts/{contextId}/sources/{sourceId}/field-maps:
-    get:
-      description: Returns the field map for a source within a context.
-      operationId: getFieldMapBySource
-      parameters:
-      - description: Request ID for tracing
-        in: header
-        name: X-Request-Id
-        type: string
-      - description: Context ID
-        format: uuid
-        in: path
-        name: contextId
-        required: true
-        type: string
-      - description: Source ID
-        format: uuid
-        in: path
-        name: sourceId
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: Successfully retrieved field map
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldMapResponse'
-        "400":
-          description: Invalid source ID format
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "404":
-          description: Field map not found
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Get a field map by source
-      tags:
-      - Configuration Field Maps
-    post:
-      consumes:
-      - application/json
-      description: Creates a field map for a source within a context.
-      operationId: createFieldMap
-      parameters:
-      - description: Request ID for tracing
-        in: header
-        name: X-Request-Id
-        type: string
-      - description: Context ID
-        format: uuid
-        in: path
-        name: contextId
-        required: true
-        type: string
-      - description: Source ID
-        format: uuid
-        in: path
-        name: sourceId
-        required: true
-        type: string
-      - description: Field map creation payload
-        in: body
-        name: fieldMap
-        required: true
-        schema:
-          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateFieldMapRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Successfully created field map
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldMapResponse'
-        "400":
-          description: Invalid request payload
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "404":
-          description: Context or source not found
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "409":
-          description: 'Conflict: duplicate resource or idempotency key in progress'
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Create a field map
-      tags:
-      - Configuration Field Maps
   /v1/discovery/connections:
     get:
       description: Returns all discovered Fetcher database connections.
@@ -6592,6 +7106,10 @@ paths:
           description: Fee schedule not found
           schema:
             $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
+        "409":
+          description: 'Conflict: fee schedule is still referenced by fee rules'
+          schema:
+            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
         "500":
           description: Internal server error
           schema:
@@ -6764,107 +7282,6 @@ paths:
       summary: Simulate fee calculation
       tags:
       - Configuration Fee Schedules
-  /v1/field-maps/{fieldMapId}:
-    delete:
-      description: Removes a field map by ID.
-      operationId: deleteFieldMap
-      parameters:
-      - description: Request ID for tracing
-        in: header
-        name: X-Request-Id
-        type: string
-      - description: Field map ID
-        format: uuid
-        in: path
-        name: fieldMapId
-        required: true
-        type: string
-      responses:
-        "204":
-          description: Field map successfully deleted
-        "400":
-          description: Invalid field map ID format
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "404":
-          description: Field map not found
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Delete a field map
-      tags:
-      - Configuration Field Maps
-    patch:
-      consumes:
-      - application/json
-      description: Updates fields on a field map by ID.
-      operationId: updateFieldMap
-      parameters:
-      - description: Request ID for tracing
-        in: header
-        name: X-Request-Id
-        type: string
-      - description: Field map ID
-        format: uuid
-        in: path
-        name: fieldMapId
-        required: true
-        type: string
-      - description: Field map updates
-        in: body
-        name: fieldMap
-        required: true
-        schema:
-          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.UpdateFieldMapRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: Successfully updated field map
-          schema:
-            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldMapResponse'
-        "400":
-          description: Invalid request payload
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "404":
-          description: Field map not found
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "409":
-          description: 'Conflict: duplicate resource or idempotency key in progress'
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/internal_configuration_adapters_http.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Update a field map
-      tags:
-      - Configuration Field Maps
   /v1/governance/actor-mappings/{actorId}:
     delete:
       description: Permanently removes an actor mapping for GDPR right-to-erasure

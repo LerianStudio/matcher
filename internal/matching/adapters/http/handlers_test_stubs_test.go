@@ -730,6 +730,16 @@ func (r *runMatchFeeScheduleRepo) GetByIDs(
 	return nil, nil
 }
 
+// runMatchFeeRuleProvider is a minimal stub for fee rule provider in tests.
+type runMatchFeeRuleProvider struct{}
+
+func (r *runMatchFeeRuleProvider) FindByContextID(
+	_ context.Context,
+	_ uuid.UUID,
+) ([]*matchingFee.FeeRule, error) {
+	return nil, nil
+}
+
 // stubMatchItemRepo is a minimal stub for match item repository in tests.
 type stubMatchItemRepo struct{}
 
@@ -781,8 +791,8 @@ func newRunMatchUseCase(
 	t.Helper()
 
 	sourceProvider := &runMatchSourceProvider{sources: []*ports.SourceInfo{
-		{ID: uuid.New(), Type: ports.SourceTypeLedger},
-		{ID: uuid.New(), Type: ports.SourceTypeAPI},
+		{ID: uuid.New(), Type: ports.SourceTypeLedger, Side: matchingFee.MatchingSideLeft},
+		{ID: uuid.New(), Type: ports.SourceTypeAPI, Side: matchingFee.MatchingSideRight},
 	}}
 
 	ruleProvider := &runMatchRuleProvider{rules: shared.MatchRules{}}
@@ -799,6 +809,7 @@ func newRunMatchUseCase(
 	infraProvider := &runMatchInfraProvider{}
 	auditLogRepo := &runMatchAuditLogRepo{}
 	feeScheduleRepo := &runMatchFeeScheduleRepo{}
+	feeRuleProvider := &runMatchFeeRuleProvider{}
 
 	uc, err := command.New(command.UseCaseDeps{
 		ContextProvider:  ctxProvider,
@@ -817,6 +828,7 @@ func newRunMatchUseCase(
 		InfraProvider:    infraProvider,
 		AuditLogRepo:     auditLogRepo,
 		FeeScheduleRepo:  feeScheduleRepo,
+		FeeRuleProvider:  feeRuleProvider,
 	})
 	require.NoError(t, err)
 

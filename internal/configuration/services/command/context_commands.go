@@ -274,10 +274,10 @@ func createInlineSources(
 ) error {
 	for _, srcInput := range sources {
 		srcEntity, srcErr := entities.NewReconciliationSource(ctx, contextID, entities.CreateReconciliationSourceInput{
-			Name:          srcInput.Name,
-			Type:          srcInput.Type,
-			Config:        srcInput.Config,
-			FeeScheduleID: srcInput.FeeScheduleID,
+			Name:   srcInput.Name,
+			Type:   srcInput.Type,
+			Side:   srcInput.Side,
+			Config: srcInput.Config,
 		})
 		if srcErr != nil {
 			return fmt.Errorf("invalid source input: %w", srcErr)
@@ -504,7 +504,7 @@ func (uc *UseCase) DeleteContext(ctx context.Context, contextID uuid.UUID) error
 }
 
 // checkContextChildren verifies that no child entities (sources, match rules,
-// or schedules) reference the given context. Returns ErrContextHasChildEntities
+// fee rules, or schedules) reference the given context. Returns ErrContextHasChildEntities
 // if any children exist. This is a guard against accidental data loss.
 func (uc *UseCase) checkContextChildren(ctx context.Context, contextID uuid.UUID) error {
 	// Check for associated sources.
@@ -525,6 +525,18 @@ func (uc *UseCase) checkContextChildren(ctx context.Context, contextID uuid.UUID
 
 	if len(rules) > 0 {
 		return ErrContextHasChildEntities
+	}
+
+	// Check for associated fee rules (optional dependency).
+	if uc.feeRuleRepo != nil {
+		feeRules, err := uc.feeRuleRepo.FindByContextID(ctx, contextID)
+		if err != nil {
+			return fmt.Errorf("checking context fee rules: %w", err)
+		}
+
+		if len(feeRules) > 0 {
+			return ErrContextHasChildEntities
+		}
 	}
 
 	// Check for associated schedules (optional dependency).

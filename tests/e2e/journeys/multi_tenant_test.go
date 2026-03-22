@@ -320,7 +320,7 @@ func TestMultiTenant_MatchRunIsolation(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, e2e.WaitForJobComplete(ctx, tc, apiClient, contextA.ID, bankJob.ID))
 
-			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, contextA.ID, "")
+			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, contextA.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -347,6 +347,104 @@ func TestMultiTenant_MatchRunIsolation(t *testing.T) {
 			apiClient.SetTenantID(tc.Config().DefaultTenantID)
 
 			tc.Logf("✓ Match run tenant isolation verified")
+		},
+	)
+}
+
+// TestMultiTenant_FeeRuleIsolation verifies that fee rules are tenant-isolated.
+// Fee rules support direct-access endpoints (GET/PATCH/DELETE /fee-rules/{id})
+// that don't carry a context ID in the path. Cross-tenant protection relies on
+// the handler's contextVerifier confirming the fee rule's parent context belongs
+// to the requesting tenant, plus schema-per-tenant isolation at the DB layer.
+func TestMultiTenant_FeeRuleIsolation(t *testing.T) {
+	skipIfAuthDisabled(t)
+	e2e.RunE2EWithTimeout(
+		t,
+		2*time.Minute,
+		func(t *testing.T, tc *e2e.TestContext, apiClient *e2e.Client) {
+			ctx := context.Background()
+
+			tenantA := uuid.New().String()
+			tenantB := uuid.New().String()
+
+			// Create context, fee schedule, and fee rule as Tenant A
+			apiClient.SetTenantID(tenantA)
+			f := factories.New(tc, apiClient)
+
+			contextA := f.Context.NewContext().WithName("fee-rule-isolation").MustCreate(ctx)
+			scheduleA := f.FeeSchedule.NewFeeSchedule().
+				WithName("isolation-schedule").
+				WithCurrency("USD").
+				Parallel().
+				WithFlatFee("flat", 1, "1.00").
+				MustCreate(ctx)
+			feeRuleA := f.FeeRule.NewFeeRule(contextA.ID).
+				WithName("isolated-fee-rule").
+				Left().
+				WithFeeScheduleID(scheduleA.ID).
+				WithPriority(1).
+				WithEqualsPredicate("brand", "visa").
+				MustCreate(ctx)
+
+			// Verify Tenant A can access their own fee rule via direct endpoint
+			fetched, err := apiClient.Configuration.GetFeeRule(ctx, feeRuleA.ID)
+			require.NoError(t, err)
+			require.Equal(t, feeRuleA.ID, fetched.ID)
+			tc.Logf("Tenant A can access their own fee rule: %s", feeRuleA.ID)
+
+			// Switch to Tenant B
+			apiClient.SetTenantID(tenantB)
+
+			// Tenant B trying to GET Tenant A's fee rule directly should fail
+			_, err = apiClient.Configuration.GetFeeRule(ctx, feeRuleA.ID)
+			require.Error(t, err, "Tenant B should not be able to GET Tenant A's fee rule")
+
+			var apiErr *client.APIError
+			if errors.As(err, &apiErr) {
+				require.True(t, apiErr.IsNotFound() || apiErr.StatusCode == 403,
+					"Should return 404 or 403, got %d", apiErr.StatusCode)
+			}
+			tc.Logf("Tenant B correctly denied GET access to Tenant A's fee rule")
+
+			// Tenant B trying to UPDATE Tenant A's fee rule should fail
+			newName := tc.UniqueName("hijacked")
+			_, err = apiClient.Configuration.UpdateFeeRule(ctx, feeRuleA.ID, client.UpdateFeeRuleRequest{
+				Name: &newName,
+			})
+			require.Error(t, err, "Tenant B should not be able to UPDATE Tenant A's fee rule")
+
+			if errors.As(err, &apiErr) {
+				require.True(t, apiErr.IsNotFound() || apiErr.StatusCode == 403,
+					"Update should return 404 or 403, got %d", apiErr.StatusCode)
+			}
+			tc.Logf("Tenant B correctly denied UPDATE access to Tenant A's fee rule")
+
+			// Tenant B trying to DELETE Tenant A's fee rule should fail
+			err = apiClient.Configuration.DeleteFeeRule(ctx, feeRuleA.ID)
+			require.Error(t, err, "Tenant B should not be able to DELETE Tenant A's fee rule")
+
+			if errors.As(err, &apiErr) {
+				require.True(t, apiErr.IsNotFound() || apiErr.StatusCode == 403,
+					"Delete should return 404 or 403, got %d", apiErr.StatusCode)
+			}
+			tc.Logf("Tenant B correctly denied DELETE access to Tenant A's fee rule")
+
+			// Tenant B trying to LIST fee rules in Tenant A's context should fail
+			_, err = apiClient.Configuration.ListFeeRules(ctx, contextA.ID)
+			require.Error(t, err, "Tenant B should not be able to list Tenant A's fee rules")
+			tc.Logf("Tenant B correctly denied LIST access to Tenant A's fee rules")
+
+			// Switch back to Tenant A and verify the fee rule is intact
+			apiClient.SetTenantID(tenantA)
+			intact, err := apiClient.Configuration.GetFeeRule(ctx, feeRuleA.ID)
+			require.NoError(t, err)
+			require.Equal(t, "isolated-fee-rule", intact.Name,
+				"fee rule must be unmodified after cross-tenant access attempts")
+
+			// Reset to default tenant
+			apiClient.SetTenantID(tc.Config().DefaultTenantID)
+
+			tc.Logf("✓ Fee rule tenant isolation verified (GET/UPDATE/DELETE/LIST)")
 		},
 	)
 }

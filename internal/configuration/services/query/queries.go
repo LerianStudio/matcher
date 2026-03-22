@@ -23,6 +23,7 @@ type UseCase struct {
 	fieldMapRepo    repositories.FieldMapRepository
 	matchRuleRepo   repositories.MatchRuleRepository
 	feeScheduleRepo configPorts.FeeScheduleRepository
+	feeRuleRepo     repositories.FeeRuleRepository
 	scheduleRepo    configPorts.ScheduleRepository
 }
 
@@ -34,6 +35,15 @@ func WithFeeScheduleRepository(repo configPorts.FeeScheduleRepository) QueryUseC
 	return func(uc *UseCase) {
 		if repo != nil {
 			uc.feeScheduleRepo = repo
+		}
+	}
+}
+
+// WithFeeRuleRepository sets the fee rule repository for the query use case.
+func WithFeeRuleRepository(repo repositories.FeeRuleRepository) QueryUseCaseOption {
+	return func(uc *UseCase) {
+		if repo != nil {
+			uc.feeRuleRepo = repo
 		}
 	}
 }

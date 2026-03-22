@@ -102,7 +102,7 @@ func TestJSONIngestion_BasicFlow(t *testing.T) {
 			require.Equal(t, 2, bankJobStatus.TotalRows)
 
 			// Run matching
-			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -234,7 +234,7 @@ func TestJSONIngestion_MixedFormats(t *testing.T) {
 			)
 
 			// Run matching
-			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,

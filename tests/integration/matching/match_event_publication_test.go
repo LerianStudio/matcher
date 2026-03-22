@@ -53,10 +53,9 @@ func TestIntegrationE4T9_MatchConfirmedOutboxAndDispatch(t *testing.T) {
 		require.NoError(t, err)
 
 		_, groups, err := wired.MatchingUC.RunMatch(ctx, matchingCommand.RunMatchInput{
-			TenantID:        h.Seed.TenantID,
-			ContextID:       seed.ContextID,
-			Mode:            matchingVO.MatchRunModeCommit,
-			PrimarySourceID: nil,
+			TenantID:  h.Seed.TenantID,
+			ContextID: seed.ContextID,
+			Mode:      matchingVO.MatchRunModeCommit,
 		})
 		require.NoError(t, err)
 		require.Len(t, groups, 1)

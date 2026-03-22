@@ -17,7 +17,7 @@ var (
 // RegisterRoutes registers all configuration routes with the provided router.
 //
 //nolint:funlen // route registration is a single declarative block
-func RegisterRoutes(protected func(resource, action string) fiber.Router, handler *Handler) error {
+func RegisterRoutes(protected func(resource string, actions ...string) fiber.Router, handler *Handler) error {
 	if protected == nil {
 		return ErrProtectedRouteHelperRequired
 	}
@@ -140,6 +140,32 @@ func RegisterRoutes(protected func(resource, action string) fiber.Router, handle
 		auth.ResourceConfiguration,
 		auth.ActionFeeScheduleRead,
 	).Post("/v1/fee-schedules/:scheduleId/simulate", handler.SimulateFeeSchedule)
+
+	// Fee rule routes
+	// Create/update require fee-schedule:read in addition to fee-rule permissions
+	// because the caller must be allowed to reference the target schedule.
+	protected(
+		auth.ResourceConfiguration,
+		auth.ActionFeeRuleCreate,
+		auth.ActionFeeScheduleRead,
+	).Post("/v1/config/contexts/:contextId/fee-rules", handler.CreateFeeRule)
+	protected(
+		auth.ResourceConfiguration,
+		auth.ActionFeeRuleRead,
+	).Get("/v1/config/contexts/:contextId/fee-rules", handler.ListFeeRules)
+	protected(
+		auth.ResourceConfiguration,
+		auth.ActionFeeRuleRead,
+	).Get("/v1/config/fee-rules/:feeRuleId", handler.GetFeeRule)
+	protected(
+		auth.ResourceConfiguration,
+		auth.ActionFeeRuleUpdate,
+		auth.ActionFeeScheduleRead,
+	).Patch("/v1/config/fee-rules/:feeRuleId", handler.UpdateFeeRule)
+	protected(
+		auth.ResourceConfiguration,
+		auth.ActionFeeRuleDelete,
+	).Delete("/v1/config/fee-rules/:feeRuleId", handler.DeleteFeeRule)
 
 	// Schedule routes
 	protected(

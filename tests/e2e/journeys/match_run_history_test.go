@@ -79,7 +79,7 @@ func TestMatchRunHistory_MultipleRuns(t *testing.T) {
 					e2e.WaitForJobComplete(ctx, tc, client, reconciliationContext.ID, bankJob.ID),
 				)
 
-				matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+				matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 				require.NoError(t, err)
 				require.NoError(
 					t,
@@ -171,7 +171,7 @@ func TestMatchRunHistory_DryRunDoesNotPersist(t *testing.T) {
 				e2e.WaitForJobComplete(ctx, tc, client, reconciliationContext.ID, bankJob.ID),
 			)
 
-			dryRunResp, err := client.Matching.RunMatchDryRun(ctx, reconciliationContext.ID, "")
+			dryRunResp, err := client.Matching.RunMatchDryRun(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -192,7 +192,7 @@ func TestMatchRunHistory_DryRunDoesNotPersist(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, "DRY_RUN", dryRun.Mode)
 
-			commitResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			commitResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -283,7 +283,7 @@ func TestMatchRunHistory_RunModes(t *testing.T) {
 				e2e.WaitForJobComplete(ctx, tc, client, reconciliationContext.ID, bankJob.ID),
 			)
 
-			dryRunResp, err := client.Matching.RunMatchDryRun(ctx, reconciliationContext.ID, "")
+			dryRunResp, err := client.Matching.RunMatchDryRun(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -304,7 +304,7 @@ func TestMatchRunHistory_RunModes(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, "DRY_RUN", dryRun.Mode)
 
-			commitResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			commitResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -401,7 +401,7 @@ func TestMatchRunHistory_GetRunDetails(t *testing.T) {
 				e2e.WaitForJobComplete(ctx, tc, client, reconciliationContext.ID, bankJob.ID),
 			)
 
-			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
