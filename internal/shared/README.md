@@ -22,7 +22,7 @@ internal/shared/
 │   │   ├── common/      # Shared SQL utilities (cursor, nullable, tx, read helpers)
 │   │   └── outbox/      # Shared outbox repository implementation
 │   └── rabbitmq/        # Confirmable publisher, DLQ, constants
-├── constants/           # System-wide constants (application name)
+├── constants/           # System-wide constants (application name, pagination defaults)
 ├── domain/
 │   ├── events.go        # Shared event types
 │   ├── exception/       # Shared exception severity definitions
@@ -93,11 +93,18 @@ Shared event type constants used across bounded contexts for outbox event public
 - **SingleTenantProvider**: Default tenant provider for single-tenant deployments.
 - **Common SQL Utilities**: Cursor pagination, nullable type helpers, transaction wrappers, and read helpers.
 
+### Sanitization
+
+- **CSV Formula Injection Prevention**: `sanitize/formula.go` prevents CSV formula injection attacks by escaping dangerous characters in exported data.
+
 ### Ports
 
 - **InfrastructureProvider**: Interface for accessing database connections and tenant-aware transaction providers.
 - **MatchTrigger**: Interface for triggering auto-matching after ingestion completes.
-- **TransactionProvider**: Interface for accessing transactions across contexts.
+- **ObjectStorage**: Interface for S3-compatible object storage operations.
+- **Fetcher**: Interface for external fetcher service communication.
+- **TenantLister**: Interface for listing available tenants.
+- **TxRunner**: Interface for transaction execution.
 
 ## Usage Policy
 

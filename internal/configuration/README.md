@@ -23,9 +23,11 @@ This context implements a **Hexagonal Architecture** with **CQRS** (Command Quer
 2.  **Source**: Represents an input data stream (e.g., "Bank CSV", "Internal Ledger API").
     -   Types: `Ingestion` (External), `Ledger` (Internal).
 3.  **FieldMap**: Defines how raw source fields map to the canonical internal format.
+    -   Note: A canonical `FieldMap` type also exists in `internal/shared/domain/` (the shared kernel version is authoritative for cross-context use; this context's version is for configuration-specific behavior).
 4.  **MatchRule**: Ordered list of logic to identify matching sets of transactions.
 5.  **FeeSchedule**: Fee rates and tolerances for fee verification during matching.
 6.  **ReconciliationSchedule**: Cron-based scheduling for automated reconciliation runs.
+7.  **CloneResult**: Value object returned by the context clone operation, containing the new context ID and a summary of all cloned child entities (sources, field maps, rules, schedules).
 
 ## Architecture
 
@@ -40,6 +42,7 @@ internal/configuration/
 │   └── postgres/        # Repository Implementations
 │       ├── common/      # Shared transaction utilities
 │       ├── context/     # ReconciliationContext repository
+│       ├── fee_rule/    # FeeRule repository
 │       ├── field_map/   # FieldMap repository
 │       ├── match_rule/  # MatchRule repository
 │       ├── schedule/    # ReconciliationSchedule repository
@@ -59,7 +62,25 @@ internal/configuration/
 
 The service layer is explicitly split:
 -   **Command UseCase**: Handles side-effects. Validates inputs and updates state via repositories.
+    -   `commands.go` — UseCase struct, constructor, shared errors.
+    -   `context_commands.go` — Context CRUD operations.
+    -   `source_commands.go` — Source CRUD operations.
+    -   `field_map_commands.go` — FieldMap CRUD operations.
+    -   `match_rule_commands.go` — MatchRule CRUD and reorder operations.
+    -   `fee_schedule_commands.go` — FeeSchedule CRUD and simulation.
+    -   `fee_rule_commands.go` — FeeRule CRUD operations.
+    -   `schedule_commands.go` — ReconciliationSchedule CRUD operations.
+    -   Clone operations are split across multiple files: `clone_commands.go` (orchestrator), `clone_sources.go` (source + field map cloning), `clone_rules.go` (match rule cloning), `clone_context_creation.go` (new context assembly).
+    -   `tx_helpers.go` — Shared transactional helper utilities.
 -   **Query UseCase**: Handles data retrieval.
+    -   `queries.go` — UseCase struct and constructor.
+    -   `context_queries.go` — Context get/list.
+    -   `source_queries.go` — Source get/list.
+    -   `field_map_queries.go` — FieldMap get/list.
+    -   `match_rule_queries.go` — MatchRule get/list.
+    -   `fee_schedule_queries.go` — FeeSchedule get/list.
+    -   `fee_rule_queries.go` — FeeRule get/list.
+    -   `schedule_queries.go` — ReconciliationSchedule get/list.
 
 ### Multi-Tenancy
 
@@ -98,6 +119,11 @@ The context exposes a RESTful API protected by the Auth layer:
 | | PATCH | `/v1/fee-schedules/:scheduleId` | Update a fee schedule |
 | | DELETE | `/v1/fee-schedules/:scheduleId` | Delete a fee schedule |
 | | POST | `/v1/fee-schedules/:scheduleId/simulate` | Simulate fee calculation |
+| **FeeRule** | POST | `/v1/fee-schedules/:scheduleId/rules` | Create a fee rule |
+| | GET | `/v1/fee-schedules/:scheduleId/rules` | List fee rules |
+| | GET | `/v1/fee-schedules/:scheduleId/rules/:ruleId` | Get a fee rule |
+| | PATCH | `/v1/fee-schedules/:scheduleId/rules/:ruleId` | Update a fee rule |
+| | DELETE | `/v1/fee-schedules/:scheduleId/rules/:ruleId` | Delete a fee rule |
 | **Schedule** | POST | `/v1/contexts/:contextId/schedules` | Create a reconciliation schedule |
 | | GET | `/v1/contexts/:contextId/schedules` | List schedules |
 | | GET | `/v1/contexts/:contextId/schedules/:scheduleId` | Get a schedule |

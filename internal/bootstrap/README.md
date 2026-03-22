@@ -12,6 +12,10 @@ This package handles:
 4. **Server Setup**: Fiber server with standardized middleware and error handling.
 5. **Routing & Auth**: `/health`, `/ready`, and protected `/api` routes.
 6. **Lifecycle**: service startup/shutdown via `lib-commons` launcher.
+7. **Systemplane**: Runtime configuration authority with hot-reloadable settings, change history, and schema.
+8. **Dynamic Infrastructure**: Runtime switching of database connections, Redis, object storage, and partition management.
+9. **Worker Management**: Lifecycle management for background workers (outbox dispatcher, archival, scheduling, export, cleanup, discovery).
+10. **Rate Limiting**: Static and dynamic rate limiting with configurable policies.
 
 ## Components
 
@@ -55,8 +59,9 @@ Readiness uses `HealthDependencies`. Redis is optional by default; dependencies 
 8. Initialize ingestion module (requires outbox repo + ingestion publisher).
 9. Initialize matching module (requires outbox repo + matching publisher).
 10. Initialize reporting/governance/exception modules.
-11. Create the outbox dispatcher (requires outbox repo + publishers).
-12. Construct the `Service` (server + outbox runner).
+11. Initialize discovery module (requires fetcher client + schema cache).
+12. Create the outbox dispatcher (requires outbox repo + publishers).
+13. Construct the `Service` (server + outbox runner).
 
 The init order is explicit because several modules share infrastructure or publish to the outbox:
 - `outboxRepo` is instantiated once from `internal/outbox/adapters/postgres` and shared across modules.
@@ -76,6 +81,39 @@ Exports PostgreSQL connection pool metrics (open connections, in-use, idle, wait
 ### Migration Management (`migrations.go`)
 
 `RunMigrations` applies pending schema migrations using golang-migrate. Supports dirty state recovery (`RecoverDirtyMigrationState`) for environments where a previous migration was interrupted.
+
+### Systemplane Integration
+
+The systemplane (`pkg/systemplane`) is integrated during bootstrap to provide runtime configuration authority:
+
+- **Config Manager**: Wraps the systemplane service to provide `configManager.Get()` for runtime config reads.
+- **Key Registry**: All configurable keys are registered with types, defaults, scopes, and mutability metadata.
+- **Reconcilers**: HTTP, publisher, and worker reconcilers apply config changes at runtime without restart.
+- **Change Feed**: PostgreSQL LISTEN/NOTIFY or MongoDB change streams propagate config changes.
+
+Key categories registered: application/server, archival, messaging, PostgreSQL, runtime HTTP, runtime services, storage/export, tenancy, and workers.
+
+### Dynamic Infrastructure
+
+Runtime-switchable infrastructure adapters:
+- `dynamic_infrastructure_provider.go`: Database connection switching.
+- `dynamic_redis_storage.go`: Redis connection management.
+- `dynamic_object_storage.go`: Object storage (S3/SeaweedFS) switching.
+- `dynamic_partition_manager.go`: Partition management.
+- `dynamic_discovery_runtime.go`: Discovery context runtime.
+- `dynamic_fetcher_client.go`: Fetcher client configuration.
+
+### Worker Manager
+
+`worker_manager.go` manages the lifecycle of all background workers:
+- Outbox dispatcher
+- Archival worker (governance)
+- Scheduler worker (configuration)
+- Export worker (reporting)
+- Cleanup worker (reporting)
+- Discovery worker and extraction poller
+
+Workers can be started, stopped, and reconfigured at runtime through systemplane.
 
 ## Usage
 

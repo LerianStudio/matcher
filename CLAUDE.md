@@ -5,7 +5,7 @@ This file helps AI agents work effectively in the Matcher codebase. It complemen
 ## Quick Reference
 
 **Project**: Transaction reconciliation engine for Lerian Studio ecosystem  
-**Language**: Go 1.25.6  
+**Language**: Go 1.26.0  
 **Pattern**: Modular monolith with DDD + Hexagonal Architecture + CQRS-light  
 **Database**: PostgreSQL 17 with schema-per-tenant isolation  
 **Testing**: TDD required; testify + sqlmock + testcontainers
@@ -66,11 +66,12 @@ make generate-docs    # Generate Swagger docs
 
 ```
 internal/
-├── configuration/    # Reconciliation contexts, sources, match rules, fee schedules
+├── configuration/    # Reconciliation contexts, sources, match rules, fee schedules/rules, scheduling
+├── discovery/        # External data source discovery, schema detection, extraction management
 ├── ingestion/        # File parsing, normalization, deduplication
 ├── matching/         # Match orchestration, rule execution, fee verification, confidence scoring
 ├── exception/        # Exception lifecycle, disputes, evidence, resolutions
-├── governance/       # Immutable audit logs
+├── governance/       # Immutable audit logs, hash chains, archival
 ├── reporting/        # Dashboard analytics, export jobs, variance reports, archival
 ├── outbox/           # Reliable event publication
 └── shared/           # Shared kernel: cross-context domain types + port abstractions
@@ -520,20 +521,32 @@ Matcher uses **zero-config defaults** — all configuration has sensible default
   - Redis: `libRedis.New()`
   - Messaging: `libRabbitmq.New()`
 
-### Internal Packages
+### lib-commons Packages (used as `pkg/assert`, `pkg/runtime` in docs)
 
-- **pkg/assert**: Safe assertions without panics
+- **lib-commons/v4/commons/assert**: Safe assertions without panics
   - `asserter.That(ctx, condition, "msg", kv...)` → error
   - `asserter.NotEmpty(ctx, value, "msg")` → error
   - `asserter.NotNil(ctx, value, "msg")` → error
 
-- **pkg/runtime**: Panic recovery and runtime observability
+- **lib-commons/v4/commons/runtime**: Panic recovery and runtime observability
   - `runtime.RecoverAndLog(logger, name)` for deferred panic handling with logging
   - `runtime.RecoverAndLogWithContext(ctx, logger, component, name)` for context-aware recovery with metrics/tracing
   - `runtime.RecoverAndCrash(logger, name)` for critical paths that must crash on panic
   - `runtime.RecoverWithPolicy(logger, name, policy)` for configurable recovery policies (`CrashProcess` or log-and-continue)
   - `runtime.HandlePanicValue(ctx, logger, panicValue, component, name)` for framework-recovered panics (e.g., Fiber middleware)
   - All `*WithContext` variants record metrics, span events, and error reports
+
+### Internal Packages (`pkg/`)
+
+- **pkg/systemplane**: Runtime configuration authority (control plane)
+  - Registry, service manager, supervisor, reconcilers
+  - PostgreSQL and MongoDB store adapters
+  - Change feed adapters (PostgreSQL LISTEN/NOTIFY, MongoDB change streams)
+  - Fiber HTTP handler for `/v1/system/configs` API
+
+- **pkg/chanutil**: Safe channel utilities for goroutine communication
+
+- **pkg/storageopt**: Functional options for object storage operations
 
 ## Linting & Security
 
