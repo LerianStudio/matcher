@@ -200,7 +200,7 @@ func TestMountSystemplaneAPI_ProtectedRoutesServeRequests(t *testing.T) {
 		}, nil
 	}
 
-	protected := func(_, _ string) fiber.Router { return app.Group("") }
+	protected := func(_ string, _ ...string) fiber.Router { return app.Group("") }
 	err := MountSystemplaneAPI(app, nil, protected, manager, false, &libLog.NopLogger{})
 	require.NoError(t, err)
 
@@ -247,7 +247,11 @@ func TestMountSystemplaneAPI_HistoryRoutesUseExpectedPermissions(t *testing.T) {
 	}
 
 	var bindings []routeBinding
-	protected := func(resource, action string) fiber.Router {
+	protected := func(resource string, actions ...string) fiber.Router {
+		action := ""
+		if len(actions) > 0 {
+			action = actions[0]
+		}
 		bindings = append(bindings, routeBinding{resource: resource, action: action})
 		return app.Group("")
 	}
@@ -266,7 +270,7 @@ func TestMountSystemplaneAPI_GlobalSettingsHistoryRequiresElevatedAuth(t *testin
 	defer func() { _ = app.Shutdown() }()
 
 	authClient := authMiddleware.NewAuthClient("http://auth.example", true, nil)
-	protected := func(_, _ string) fiber.Router { return app.Group("") }
+	protected := func(_ string, _ ...string) fiber.Router { return app.Group("") }
 	err := MountSystemplaneAPI(app, authClient, protected, &mockManagerForMount{}, true, &libLog.NopLogger{})
 	require.NoError(t, err)
 

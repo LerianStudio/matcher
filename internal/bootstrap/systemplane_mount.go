@@ -35,7 +35,7 @@ var (
 func MountSystemplaneAPI(
 	app *fiber.App,
 	authClient *authMiddleware.AuthClient,
-	protected func(resource, action string) fiber.Router,
+	protected func(resource string, actions ...string) fiber.Router,
 	manager service.Manager,
 	authEnabled bool,
 	logger libLog.Logger,
@@ -81,7 +81,7 @@ func MountSystemplaneAPI(
 // code runs, matching the security model of all other Matcher API routes.
 func mountSystemplaneRoutesProtected(
 	authClient *authMiddleware.AuthClient,
-	protected func(resource, action string) fiber.Router,
+	protected func(resource string, actions ...string) fiber.Router,
 	handler *fiberhttp.Handler,
 ) {
 	// Configs routes — admin/system runtime configuration.

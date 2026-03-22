@@ -82,7 +82,7 @@ func TestRegisterRoutes_DomainNativePathsExist_LegacyPathsAbsent(t *testing.T) {
 	app := fiber.New()
 	defer func() { _ = app.Shutdown() }()
 
-	protected := func(_, _ string) fiber.Router {
+	protected := func(_ string, _ ...string) fiber.Router {
 		return app
 	}
 	handler := &Handler{}

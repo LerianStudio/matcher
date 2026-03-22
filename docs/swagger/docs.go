@@ -72,7 +72,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/contexts": {
+        "/v1/config/contexts": {
             "get": {
                 "security": [
                     {
@@ -242,7 +242,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/contexts/{contextId}": {
+        "/v1/config/contexts/{contextId}": {
             "get": {
                 "security": [
                     {
@@ -466,14 +466,14 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/contexts/{contextId}/clone": {
+        "/v1/config/contexts/{contextId}/clone": {
             "post": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
                 ],
-                "description": "Creates a deep copy of a reconciliation context including its sources, field maps, match rules, and optionally fee schedules.",
+                "description": "Creates a deep copy of a reconciliation context including its sources, field maps, match rules, and fee rules. Referenced fee schedules are reused by cloned fee rules.",
                 "consumes": [
                     "application/json"
                 ],
@@ -556,22 +556,22 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/contexts/{contextId}/export-jobs": {
+        "/v1/config/contexts/{contextId}/fee-rules": {
             "get": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
                 ],
-                "description": "Lists export jobs for a specific reconciliation context.",
+                "description": "Returns all fee rules for a reconciliation context, ordered by priority.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "Export Jobs"
+                    "Configuration Fee Rules"
                 ],
-                "summary": "List export jobs by context",
-                "operationId": "listExportJobsByContext",
+                "summary": "List fee rules",
+                "operationId": "listFeeRules",
                 "parameters": [
                     {
                         "type": "string",
@@ -586,58 +586,46 @@ const docTemplate = `{
                         "name": "contextId",
                         "in": "path",
                         "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Pagination cursor from previous response",
-                        "name": "cursor",
-                        "in": "query"
-                    },
-                    {
-                        "maximum": 200,
-                        "minimum": 1,
-                        "type": "integer",
-                        "default": 20,
-                        "description": "Maximum number of records to return",
-                        "name": "limit",
-                        "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "List of fee rules",
                         "schema": {
-                            "$ref": "#/definitions/internal_reporting_adapters_http.ExportJobListResponse"
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeRuleResponse"
+                            }
                         }
                     },
                     "400": {
-                        "description": "Invalid query parameters",
+                        "description": "Invalid context ID format",
                         "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Context not found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -648,7 +636,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Creates an async export job for large report exports (CSV, JSON, XML).",
+                "description": "Creates a new fee rule that maps transaction metadata to a fee schedule within a context. Priority must be unique within a context across all sides (LEFT, RIGHT, and ANY rules share the same priority space). The caller must also be allowed to read the referenced fee schedule.",
                 "consumes": [
                     "application/json"
                 ],
@@ -656,15 +644,21 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "Export Jobs"
+                    "Configuration Fee Rules"
                 ],
-                "summary": "Create an export job",
-                "operationId": "createExportJob",
+                "summary": "Create a fee rule",
+                "operationId": "createFeeRule",
                 "parameters": [
                     {
                         "type": "string",
                         "description": "Request ID for tracing",
                         "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Idempotency key for safe retries",
+                        "name": "X-Idempotency-Key",
                         "in": "header"
                     },
                     {
@@ -676,68 +670,62 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "Export job parameters",
-                        "name": "request",
+                        "description": "Fee rule creation payload",
+                        "name": "feeRule",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_reporting_adapters_http.CreateExportJobRequest"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateFeeRuleRequest"
                         }
                     }
                 ],
                 "responses": {
-                    "202": {
-                        "description": "Accepted",
+                    "201": {
+                        "description": "Successfully created fee rule",
                         "schema": {
-                            "$ref": "#/definitions/internal_reporting_adapters_http.CreateExportJobResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeRuleResponse"
                         }
                     },
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Context not found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "409": {
-                        "description": "Conflict: duplicate resource or idempotency key in progress",
+                        "description": "Conflict: duplicate priority or name",
                         "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
-                        }
-                    },
-                    "503": {
-                        "description": "Export worker disabled",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     }
                 }
             }
         },
-        "/v1/contexts/{contextId}/rules": {
+        "/v1/config/contexts/{contextId}/rules": {
             "get": {
                 "security": [
                     {
@@ -923,7 +911,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/contexts/{contextId}/rules/reorder": {
+        "/v1/config/contexts/{contextId}/rules/reorder": {
             "post": {
                 "security": [
                     {
@@ -1004,7 +992,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/contexts/{contextId}/rules/{ruleId}": {
+        "/v1/config/contexts/{contextId}/rules/{ruleId}": {
             "get": {
                 "security": [
                     {
@@ -1247,6 +1235,1183 @@ const docTemplate = `{
                         "description": "Internal server error",
                         "schema": {
                             "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/config/contexts/{contextId}/sources": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns a cursor-paginated list of reconciliation sources under a context, optionally filtered by type.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Configuration Sources"
+                ],
+                "summary": "List reconciliation sources",
+                "operationId": "listSources",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Context ID",
+                        "name": "contextId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "maximum": 200,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 20,
+                        "description": "Maximum number of records to return",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cursor for pagination (opaque)",
+                        "name": "cursor",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "LEDGER",
+                            "BANK",
+                            "GATEWAY",
+                            "CUSTOM",
+                            "FETCHER"
+                        ],
+                        "type": "string",
+                        "description": "Filter by source type",
+                        "name": "type",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of sources with cursor pagination",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ListSourcesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid query parameters",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Context not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Creates a new reconciliation source under a context.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Configuration Sources"
+                ],
+                "summary": "Create a reconciliation source",
+                "operationId": "createSource",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Context ID",
+                        "name": "contextId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Source creation payload",
+                        "name": "source",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateSourceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Successfully created source",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.ReconciliationSourceResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request payload",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Context not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict: duplicate resource or idempotency key in progress",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/config/contexts/{contextId}/sources/{sourceId}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns a reconciliation source by ID.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Configuration Sources"
+                ],
+                "summary": "Get a reconciliation source",
+                "operationId": "getSource",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Context ID",
+                        "name": "contextId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Source ID",
+                        "name": "sourceId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully retrieved source",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.ReconciliationSourceResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid source ID format",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Source not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Removes a reconciliation source by ID.",
+                "tags": [
+                    "Configuration Sources"
+                ],
+                "summary": "Delete a reconciliation source",
+                "operationId": "deleteSource",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Context ID",
+                        "name": "contextId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Source ID",
+                        "name": "sourceId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Source successfully deleted"
+                    },
+                    "400": {
+                        "description": "Invalid source ID format",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Source not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Updates fields on a reconciliation source by ID.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Configuration Sources"
+                ],
+                "summary": "Update a reconciliation source",
+                "operationId": "updateSource",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Context ID",
+                        "name": "contextId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Source ID",
+                        "name": "sourceId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Source updates",
+                        "name": "source",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.UpdateSourceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully updated source",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.ReconciliationSourceResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request payload",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Source not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict: duplicate resource or idempotency key in progress",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/config/contexts/{contextId}/sources/{sourceId}/field-maps": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the field map for a source within a context.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Configuration Field Maps"
+                ],
+                "summary": "Get a field map by source",
+                "operationId": "getFieldMapBySource",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Context ID",
+                        "name": "contextId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Source ID",
+                        "name": "sourceId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully retrieved field map",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldMapResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid source ID format",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Field map not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Creates a field map for a source within a context.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Configuration Field Maps"
+                ],
+                "summary": "Create a field map",
+                "operationId": "createFieldMap",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Context ID",
+                        "name": "contextId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Source ID",
+                        "name": "sourceId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Field map creation payload",
+                        "name": "fieldMap",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateFieldMapRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Successfully created field map",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldMapResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request payload",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Context or source not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict: duplicate resource or idempotency key in progress",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/config/fee-rules/{feeRuleId}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns a fee rule by ID.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Configuration Fee Rules"
+                ],
+                "summary": "Get a fee rule",
+                "operationId": "getFeeRule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Fee Rule ID",
+                        "name": "feeRuleId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully retrieved fee rule",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeRuleResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid fee rule ID format",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Fee rule not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Removes a fee rule by ID.",
+                "tags": [
+                    "Configuration Fee Rules"
+                ],
+                "summary": "Delete a fee rule",
+                "operationId": "deleteFeeRule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Fee Rule ID",
+                        "name": "feeRuleId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Fee rule successfully deleted"
+                    },
+                    "400": {
+                        "description": "Invalid fee rule ID format",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Fee rule not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Updates fields on a fee rule by ID. If the referenced fee schedule changes, the caller must also be allowed to read that fee schedule.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Configuration Fee Rules"
+                ],
+                "summary": "Update a fee rule",
+                "operationId": "updateFeeRule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Idempotency key for safe retries",
+                        "name": "X-Idempotency-Key",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Fee Rule ID",
+                        "name": "feeRuleId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Fee rule updates",
+                        "name": "feeRule",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.UpdateFeeRuleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully updated fee rule",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeRuleResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request payload",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Fee rule not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict: duplicate priority or name",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/config/field-maps/{fieldMapId}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Removes a field map by ID.",
+                "tags": [
+                    "Configuration Field Maps"
+                ],
+                "summary": "Delete a field map",
+                "operationId": "deleteFieldMap",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Field map ID",
+                        "name": "fieldMapId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Field map successfully deleted"
+                    },
+                    "400": {
+                        "description": "Invalid field map ID format",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Field map not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Updates fields on a field map by ID.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Configuration Field Maps"
+                ],
+                "summary": "Update a field map",
+                "operationId": "updateFieldMap",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Field map ID",
+                        "name": "fieldMapId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Field map updates",
+                        "name": "fieldMap",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.UpdateFieldMapRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully updated field map",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldMapResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request payload",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Field map not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict: duplicate resource or idempotency key in progress",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/contexts/{contextId}/export-jobs": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Lists export jobs for a specific reconciliation context.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Export Jobs"
+                ],
+                "summary": "List export jobs by context",
+                "operationId": "listExportJobsByContext",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Context ID",
+                        "name": "contextId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Pagination cursor from previous response",
+                        "name": "cursor",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 200,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 20,
+                        "description": "Maximum number of records to return",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_reporting_adapters_http.ExportJobListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid query parameters",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Context not found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Creates an async export job for large report exports (CSV, JSON, XML).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Export Jobs"
+                ],
+                "summary": "Create an export job",
+                "operationId": "createExportJob",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Context ID",
+                        "name": "contextId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Export job parameters",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_reporting_adapters_http.CreateExportJobRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/internal_reporting_adapters_http.CreateExportJobResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request payload",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Context not found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict: duplicate resource or idempotency key in progress",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Export worker disabled",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -1644,618 +2809,6 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Schedule not found",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "409": {
-                        "description": "Conflict: duplicate resource or idempotency key in progress",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/contexts/{contextId}/sources": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Returns a cursor-paginated list of reconciliation sources under a context, optionally filtered by type.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Configuration Sources"
-                ],
-                "summary": "List reconciliation sources",
-                "operationId": "listSources",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Request ID for tracing",
-                        "name": "X-Request-Id",
-                        "in": "header"
-                    },
-                    {
-                        "type": "string",
-                        "format": "uuid",
-                        "description": "Context ID",
-                        "name": "contextId",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "maximum": 200,
-                        "minimum": 1,
-                        "type": "integer",
-                        "default": 20,
-                        "description": "Maximum number of records to return",
-                        "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Cursor for pagination (opaque)",
-                        "name": "cursor",
-                        "in": "query"
-                    },
-                    {
-                        "enum": [
-                            "LEDGER",
-                            "BANK",
-                            "GATEWAY",
-                            "CUSTOM",
-                            "FETCHER"
-                        ],
-                        "type": "string",
-                        "description": "Filter by source type",
-                        "name": "type",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "List of sources with cursor pagination",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ListSourcesResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid query parameters",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Context not found",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Creates a new reconciliation source under a context.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Configuration Sources"
-                ],
-                "summary": "Create a reconciliation source",
-                "operationId": "createSource",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Request ID for tracing",
-                        "name": "X-Request-Id",
-                        "in": "header"
-                    },
-                    {
-                        "type": "string",
-                        "format": "uuid",
-                        "description": "Context ID",
-                        "name": "contextId",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Source creation payload",
-                        "name": "source",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateSourceRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Successfully created source",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.ReconciliationSourceResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid request payload",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Context not found",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "409": {
-                        "description": "Conflict: duplicate resource or idempotency key in progress",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/contexts/{contextId}/sources/{sourceId}": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Returns a reconciliation source by ID.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Configuration Sources"
-                ],
-                "summary": "Get a reconciliation source",
-                "operationId": "getSource",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Request ID for tracing",
-                        "name": "X-Request-Id",
-                        "in": "header"
-                    },
-                    {
-                        "type": "string",
-                        "format": "uuid",
-                        "description": "Context ID",
-                        "name": "contextId",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "format": "uuid",
-                        "description": "Source ID",
-                        "name": "sourceId",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Successfully retrieved source",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.ReconciliationSourceResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid source ID format",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Source not found",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Removes a reconciliation source by ID.",
-                "tags": [
-                    "Configuration Sources"
-                ],
-                "summary": "Delete a reconciliation source",
-                "operationId": "deleteSource",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Request ID for tracing",
-                        "name": "X-Request-Id",
-                        "in": "header"
-                    },
-                    {
-                        "type": "string",
-                        "format": "uuid",
-                        "description": "Context ID",
-                        "name": "contextId",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "format": "uuid",
-                        "description": "Source ID",
-                        "name": "sourceId",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "Source successfully deleted"
-                    },
-                    "400": {
-                        "description": "Invalid source ID format",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Source not found",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "patch": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Updates fields on a reconciliation source by ID.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Configuration Sources"
-                ],
-                "summary": "Update a reconciliation source",
-                "operationId": "updateSource",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Request ID for tracing",
-                        "name": "X-Request-Id",
-                        "in": "header"
-                    },
-                    {
-                        "type": "string",
-                        "format": "uuid",
-                        "description": "Context ID",
-                        "name": "contextId",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "format": "uuid",
-                        "description": "Source ID",
-                        "name": "sourceId",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Source updates",
-                        "name": "source",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.UpdateSourceRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Successfully updated source",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.ReconciliationSourceResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid request payload",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Source not found",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "409": {
-                        "description": "Conflict: duplicate resource or idempotency key in progress",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/contexts/{contextId}/sources/{sourceId}/field-maps": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Returns the field map for a source within a context.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Configuration Field Maps"
-                ],
-                "summary": "Get a field map by source",
-                "operationId": "getFieldMapBySource",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Request ID for tracing",
-                        "name": "X-Request-Id",
-                        "in": "header"
-                    },
-                    {
-                        "type": "string",
-                        "format": "uuid",
-                        "description": "Context ID",
-                        "name": "contextId",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "format": "uuid",
-                        "description": "Source ID",
-                        "name": "sourceId",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Successfully retrieved field map",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldMapResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid source ID format",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Field map not found",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Creates a field map for a source within a context.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Configuration Field Maps"
-                ],
-                "summary": "Create a field map",
-                "operationId": "createFieldMap",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Request ID for tracing",
-                        "name": "X-Request-Id",
-                        "in": "header"
-                    },
-                    {
-                        "type": "string",
-                        "format": "uuid",
-                        "description": "Context ID",
-                        "name": "contextId",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "format": "uuid",
-                        "description": "Source ID",
-                        "name": "sourceId",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Field map creation payload",
-                        "name": "fieldMap",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateFieldMapRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Successfully created field map",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldMapResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid request payload",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Context or source not found",
                         "schema": {
                             "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
@@ -5101,6 +5654,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
+                    "409": {
+                        "description": "Conflict: fee schedule is still referenced by fee rules",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
@@ -5275,160 +5834,6 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Fee schedule not found",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/field-maps/{fieldMapId}": {
-            "delete": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Removes a field map by ID.",
-                "tags": [
-                    "Configuration Field Maps"
-                ],
-                "summary": "Delete a field map",
-                "operationId": "deleteFieldMap",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Request ID for tracing",
-                        "name": "X-Request-Id",
-                        "in": "header"
-                    },
-                    {
-                        "type": "string",
-                        "format": "uuid",
-                        "description": "Field map ID",
-                        "name": "fieldMapId",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "Field map successfully deleted"
-                    },
-                    "400": {
-                        "description": "Invalid field map ID format",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Field map not found",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "patch": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Updates fields on a field map by ID.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Configuration Field Maps"
-                ],
-                "summary": "Update a field map",
-                "operationId": "updateFieldMap",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Request ID for tracing",
-                        "name": "X-Request-Id",
-                        "in": "header"
-                    },
-                    {
-                        "type": "string",
-                        "format": "uuid",
-                        "description": "Field map ID",
-                        "name": "fieldMapId",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Field map updates",
-                        "name": "fieldMap",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.UpdateFieldMapRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Successfully updated field map",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldMapResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid request payload",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Field map not found",
-                        "schema": {
-                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
-                        }
-                    },
-                    "409": {
-                        "description": "Conflict: duplicate resource or idempotency key in progress",
                         "schema": {
                             "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
@@ -10109,19 +10514,14 @@ const docTemplate = `{
             }
         },
         "github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CloneContextRequest": {
-            "description": "Request payload for cloning a context with its configuration",
+            "description": "Request payload for cloning a context with its configuration. When sources are included, their LEFT/RIGHT side assignments and field maps are preserved. When rules are included, both match rules and fee rules are cloned, and cloned fee rules keep referencing the same fee schedules as the source context.",
             "type": "object",
             "required": [
                 "name"
             ],
             "properties": {
-                "includeFeeSchedules": {
-                    "description": "Whether to clone fee schedules (true) or keep original references (false) (default: true)",
-                    "type": "boolean",
-                    "example": true
-                },
                 "includeRules": {
-                    "description": "Whether to include match rules in the clone (default: true)",
+                    "description": "Whether to include match rules and fee rules in the clone (default: true)",
                     "type": "boolean",
                     "example": true
                 },
@@ -10140,7 +10540,7 @@ const docTemplate = `{
             }
         },
         "github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CloneContextResponse": {
-            "description": "Result of cloning a reconciliation context",
+            "description": "Result of cloning a reconciliation context, including counts for cloned sources, match rules, fee rules, and field maps.",
             "type": "object",
             "properties": {
                 "context": {
@@ -10151,8 +10551,8 @@ const docTemplate = `{
                         }
                     ]
                 },
-                "feeSchedulesCloned": {
-                    "description": "Number of fee schedules cloned",
+                "feeRulesCloned": {
+                    "description": "Number of fee rules cloned",
                     "type": "integer",
                     "example": 2
                 },
@@ -10249,17 +10649,13 @@ const docTemplate = `{
             "type": "object",
             "required": [
                 "name",
+                "side",
                 "type"
             ],
             "properties": {
                 "config": {
                     "type": "object",
                     "additionalProperties": {}
-                },
-                "feeScheduleId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "example": "550e8400-e29b-41d4-a716-446655440000"
                 },
                 "mapping": {
                     "type": "object"
@@ -10269,6 +10665,14 @@ const docTemplate = `{
                     "maxLength": 50,
                     "minLength": 1,
                     "example": "Primary Bank Account"
+                },
+                "side": {
+                    "type": "string",
+                    "enum": [
+                        "LEFT",
+                        "RIGHT"
+                    ],
+                    "example": "LEFT"
                 },
                 "type": {
                     "type": "string",
@@ -10280,6 +10684,48 @@ const docTemplate = `{
                         "FETCHER"
                     ],
                     "example": "BANK"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateFeeRuleRequest": {
+            "type": "object",
+            "required": [
+                "feeScheduleId",
+                "name",
+                "side"
+            ],
+            "properties": {
+                "feeScheduleId": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "example": "BB Right-Side Rule"
+                },
+                "predicates": {
+                    "type": "array",
+                    "maxItems": 50,
+                    "items": {
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldPredicateRequest"
+                    }
+                },
+                "priority": {
+                    "description": "Priority must be unique within the context. LEFT, RIGHT, and ANY rules share the same priority space.",
+                    "type": "integer",
+                    "minimum": 0,
+                    "example": 0
+                },
+                "side": {
+                    "type": "string",
+                    "enum": [
+                        "LEFT",
+                        "RIGHT",
+                        "ANY"
+                    ],
+                    "example": "RIGHT"
                 }
             }
         },
@@ -10432,6 +10878,7 @@ const docTemplate = `{
             "type": "object",
             "required": [
                 "name",
+                "side",
                 "type"
             ],
             "properties": {
@@ -10439,16 +10886,19 @@ const docTemplate = `{
                     "type": "object",
                     "additionalProperties": {}
                 },
-                "feeScheduleId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "example": "550e8400-e29b-41d4-a716-446655440000"
-                },
                 "name": {
                     "type": "string",
                     "maxLength": 50,
                     "minLength": 1,
                     "example": "Primary Bank Account"
+                },
+                "side": {
+                    "type": "string",
+                    "enum": [
+                        "LEFT",
+                        "RIGHT"
+                    ],
+                    "example": "LEFT"
                 },
                 "type": {
                     "type": "string",
@@ -10460,6 +10910,54 @@ const docTemplate = `{
                         "FETCHER"
                     ],
                     "example": "BANK"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeRuleResponse": {
+            "type": "object",
+            "properties": {
+                "contextId": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                "createdAt": {
+                    "type": "string",
+                    "example": "2025-01-15T10:30:00Z"
+                },
+                "feeScheduleId": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                "id": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "BB Right-Side Rule"
+                },
+                "predicates": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldPredicateResponse"
+                    }
+                },
+                "priority": {
+                    "type": "integer",
+                    "example": 0
+                },
+                "side": {
+                    "type": "string",
+                    "enum": [
+                        "LEFT",
+                        "RIGHT",
+                        "ANY"
+                    ],
+                    "example": "RIGHT"
+                },
+                "updatedAt": {
+                    "type": "string",
+                    "example": "2025-01-15T10:30:00Z"
                 }
             }
         },
@@ -10598,6 +11096,69 @@ const docTemplate = `{
                     "description": "Version number for optimistic locking",
                     "type": "integer",
                     "example": 1
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldPredicateRequest": {
+            "type": "object",
+            "required": [
+                "field",
+                "operator"
+            ],
+            "properties": {
+                "field": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "example": "institution"
+                },
+                "operator": {
+                    "type": "string",
+                    "enum": [
+                        "EQUALS",
+                        "IN",
+                        "EXISTS"
+                    ],
+                    "example": "EQUALS"
+                },
+                "value": {
+                    "type": "string",
+                    "maxLength": 1024,
+                    "example": "Banco do Brasil"
+                },
+                "values": {
+                    "type": "array",
+                    "maxItems": 100,
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldPredicateResponse": {
+            "type": "object",
+            "properties": {
+                "field": {
+                    "type": "string",
+                    "example": "institution"
+                },
+                "operator": {
+                    "type": "string",
+                    "enum": [
+                        "EQUALS",
+                        "IN",
+                        "EXISTS"
+                    ],
+                    "example": "EQUALS"
+                },
+                "value": {
+                    "type": "string",
+                    "example": "Banco do Brasil"
+                },
+                "values": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -10754,11 +11315,6 @@ const docTemplate = `{
                     "type": "string",
                     "example": "2025-01-15T10:30:00Z"
                 },
-                "feeScheduleId": {
-                    "description": "Fee schedule ID associated with this source",
-                    "type": "string",
-                    "example": "550e8400-e29b-41d4-a716-446655440000"
-                },
                 "id": {
                     "description": "Unique identifier for the source",
                     "type": "string",
@@ -10768,6 +11324,15 @@ const docTemplate = `{
                     "description": "Name of the source",
                     "type": "string",
                     "example": "Primary Bank Account"
+                },
+                "side": {
+                    "description": "Matching side configured for the source",
+                    "type": "string",
+                    "enum": [
+                        "LEFT",
+                        "RIGHT"
+                    ],
+                    "example": "LEFT"
                 },
                 "type": {
                     "description": "Type of the source",
@@ -10914,11 +11479,6 @@ const docTemplate = `{
                     "type": "string",
                     "example": "2025-01-15T10:30:00Z"
                 },
-                "feeScheduleId": {
-                    "description": "Fee schedule ID associated with this source",
-                    "type": "string",
-                    "example": "550e8400-e29b-41d4-a716-446655440000"
-                },
                 "hasFieldMaps": {
                     "description": "Indicates if field maps are configured for this source",
                     "type": "boolean",
@@ -10933,6 +11493,15 @@ const docTemplate = `{
                     "description": "Name of the source",
                     "type": "string",
                     "example": "Primary Bank Account"
+                },
+                "side": {
+                    "description": "Matching side configured for the source",
+                    "type": "string",
+                    "enum": [
+                        "LEFT",
+                        "RIGHT"
+                    ],
+                    "example": "LEFT"
                 },
                 "type": {
                     "description": "Type of the source",
@@ -11008,6 +11577,40 @@ const docTemplate = `{
                         "N:M"
                     ],
                     "example": "1:N"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.UpdateFeeRuleRequest": {
+            "type": "object",
+            "properties": {
+                "feeScheduleId": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 100,
+                    "example": "Updated Rule"
+                },
+                "predicates": {
+                    "type": "array",
+                    "maxItems": 50,
+                    "items": {
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldPredicateRequest"
+                    }
+                },
+                "priority": {
+                    "description": "Priority must remain unique within the context. LEFT, RIGHT, and ANY rules share the same priority space.",
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "side": {
+                    "type": "string",
+                    "enum": [
+                        "LEFT",
+                        "RIGHT",
+                        "ANY"
+                    ],
+                    "example": "LEFT"
                 }
             }
         },
@@ -11100,15 +11703,18 @@ const docTemplate = `{
                     "type": "object",
                     "additionalProperties": {}
                 },
-                "feeScheduleId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "example": "550e8400-e29b-41d4-a716-446655440000"
-                },
                 "name": {
                     "type": "string",
                     "maxLength": 50,
                     "example": "Secondary Bank Account"
+                },
+                "side": {
+                    "type": "string",
+                    "enum": [
+                        "LEFT",
+                        "RIGHT"
+                    ],
+                    "example": "RIGHT"
                 },
                 "type": {
                     "type": "string",
@@ -13935,13 +14541,6 @@ const docTemplate = `{
                         "COMMIT"
                     ],
                     "example": "DRY_RUN"
-                },
-                "primarySourceId": {
-                    "description": "PrimarySourceID optionally specifies which source is the reference (left) side.\nIf provided, directed matching: this source -\u003e left, others -\u003e right.\nIf omitted, symmetric matching: sources compared freely (first source used as left internally).",
-                    "type": "string",
-                    "format": "uuid",
-                    "x-nullable": true,
-                    "example": "550e8400-e29b-41d4-a716-446655440000"
                 }
             }
         },
