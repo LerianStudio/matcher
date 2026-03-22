@@ -1,4 +1,33 @@
-## [1.1.1-beta.1](https://github.com/LerianStudio/matcher/compare/v1.1.0...v1.1.1-beta.1) (2026-03-22)
+# Matcher Changelog
+
+## [1.1.0](https://github.com/LerianStudio/matcher/releases/tag/v1.1.0)
+
+- **Features**
+  - Introduced fee rules for predicate-based fee calculation.
+  - Added fee rule CRUD endpoints and persistence.
+  - Implemented predicate value type coercion and size constraints.
+  - Added fee rule domain model with predicate-based schedule resolution.
+  - Enforced fee rule limits in create/update/delete operations.
+
+- **Fixes**
+  - Improved fee rule validation and field predicates.
+  - Hardened clone functionality with validation and locks.
+  - Added fail-fast guard for missing fee-rule provider.
+  - Scoped fee-rule delete by context_id for defense-in-depth.
+  - Improved error handling for fee rule validation and migration.
+
+- **Improvements**
+  - Split rule execution into focused modules.
+  - Decomposed match group commands into focused modules.
+  - Replaced source-level fee schedules with rule-based resolution.
+  - Validated fee rule predicates at HTTP layer and improved persistence.
+  - Enhanced fee rule validation, error handling, and migration.
+
+Contributors: @bedatty, @dependabot[bot], @ferr3ira-gabriel, @ferr3ira.gabriel, @fred, @gandalf, @lucas.bedatty
+
+[Compare changes](https://github.com/LerianStudio/matcher/compare/v1.0.0...v1.1.0)
+
+---
 
 ## [1.1.0](https://github.com/LerianStudio/matcher/compare/v1.0.0...v1.1.0) (2026-03-22)
 
@@ -391,3 +420,4 @@
 * **e2e:** resolve dashboard stresser flakiness with unique names ([7e93cfc](https://github.com/LerianStudio/matcher/commit/7e93cfcc13d9d074eceebe09b39e9f8b7f7f42ed))
 
 ## 1.0.0 (2026-02-19)
+
