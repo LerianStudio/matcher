@@ -164,7 +164,9 @@ func TestRunMigrations_DiscoverySlice_ApplyRollbackAndReapply(t *testing.T) {
 		migrator, err := newMigrator(db, "matcher_test", "migrations")
 		require.NoError(t, err)
 		defer func() {
-			require.NoError(t, closeMigrator(migrator))
+			if migrator != nil {
+				require.NoError(t, closeMigrator(migrator))
+			}
 		}()
 
 		stepper, ok := migrator.(interface{ Steps(int) error })
@@ -198,7 +200,9 @@ func TestRunMigrations_DiscoverySlice_ApplyRollbackAndReapply(t *testing.T) {
 		migrator, err := newMigrator(rollbackDB, "matcher_test", "migrations")
 		require.NoError(t, err)
 		defer func() {
-			require.NoError(t, closeMigrator(migrator))
+			if migrator != nil {
+				require.NoError(t, closeMigrator(migrator))
+			}
 		}()
 
 		stepper, ok := migrator.(interface{ Steps(int) error })
@@ -256,7 +260,9 @@ func TestMigrations_017_AddsNullableSideColumn(t *testing.T) {
 	migrator, err := newMigrator(db, "matcher_side_test", "migrations")
 	require.NoError(t, err)
 	defer func() {
-		require.NoError(t, closeMigrator(migrator))
+		if migrator != nil {
+			require.NoError(t, closeMigrator(migrator))
+		}
 	}()
 
 	stepper, ok := migrator.(interface{ Steps(int) error })
@@ -445,6 +451,184 @@ func mustInsertReconciliationSource(t *testing.T, ctx context.Context, db *sql.D
 	return sourceID
 }
 
+// columnExists returns true when the given column exists on the named table.
+func columnExists(t *testing.T, ctx context.Context, db *sql.DB, table, column string) bool {
+	t.Helper()
+
+	var exists bool
+	err := db.QueryRowContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM information_schema.columns
+			WHERE table_name = $1 AND column_name = $2
+		)`, table, column).Scan(&exists)
+	require.NoError(t, err)
+
+	return exists
+}
+
 func uniqueName(prefix string) string {
 	return fmt.Sprintf("%s-%d", prefix, time.Now().UnixNano())
+}
+
+// TestMigrations_016_FeeRulesBlocker verifies the pre-launch hard cutover guard:
+//
+//  1. Migration 016 refuses to run when reconciliation_sources have a non-NULL
+//     fee_schedule_id (the blocker SELECT … current_setting pattern).
+//  2. After clearing the legacy column, migration 016 succeeds and creates the
+//     fee_rules table with the expected constraints and index.
+func TestMigrations_016_FeeRulesBlocker(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	pgContainer, err := postgres.Run(ctx,
+		"postgres:17-alpine",
+		postgres.WithDatabase("matcher_016_test"),
+		postgres.WithUsername("matcher"),
+		postgres.WithPassword("matcher_test"),
+		testcontainers.WithWaitStrategy(
+			wait.ForAll(
+				wait.ForLog("database system is ready to accept connections").WithOccurrence(2),
+				wait.ForListeningPort("5432/tcp"),
+			).WithStartupTimeout(90*time.Second),
+		),
+	)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, pgContainer.Terminate(context.Background()))
+	}()
+
+	dsn, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
+	require.NoError(t, err)
+
+	db, err := sql.Open("pgx", dsn)
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, db.PingContext(ctx))
+
+	// Step to migration 015 (all migrations before 016).
+	migrator, err := newMigrator(db, "matcher_016_test", "migrations")
+	require.NoError(t, err)
+	defer func() {
+		if migrator != nil {
+			require.NoError(t, closeMigrator(migrator))
+		}
+	}()
+
+	stepper, ok := migrator.(interface{ Steps(int) error })
+	require.True(t, ok, "migrator must support stepping")
+
+	require.NoError(t, stepper.Steps(15))
+
+	t.Run("blocks when sources have non-NULL fee_schedule_id", func(t *testing.T) {
+		// Insert a fee schedule so we can reference it.
+		var scheduleID string
+		err := db.QueryRowContext(ctx, `
+			INSERT INTO fee_schedules (name, type, rates) 
+			VALUES ($1, 'FLAT', '[]'::jsonb)
+			RETURNING id`, uniqueName("sched")).Scan(&scheduleID)
+		require.NoError(t, err)
+
+		// Insert a context + source WITH a fee_schedule_id (non-NULL).
+		contextID := mustInsertReconciliationContext(t, ctx, db)
+		_, err = db.ExecContext(ctx, `
+			INSERT INTO reconciliation_sources (context_id, name, type, side, config, fee_schedule_id)
+			VALUES ($1, $2, 'LEDGER', 'LEFT', '{}'::jsonb, $3)`,
+			contextID, uniqueName("src-with-fee"), scheduleID)
+		require.NoError(t, err)
+
+		// Migration 016 must refuse to run.
+		err = stepper.Steps(1)
+		require.Error(t, err, "migration 016 must block when sources have non-NULL fee_schedule_id")
+		assert.Contains(t, err.Error(), "migration_000016_blocked")
+	})
+
+	t.Run("succeeds when fee_schedule_id is NULL on all sources", func(t *testing.T) {
+		// Clear legacy bindings.
+		_, err := db.ExecContext(ctx, `UPDATE reconciliation_sources SET fee_schedule_id = NULL`)
+		require.NoError(t, err)
+
+		// Reset dirty state from the failed migration.
+		require.NoError(t, closeMigrator(migrator))
+
+		migrator, err = newMigrator(db, "matcher_016_test", "migrations")
+		require.NoError(t, err)
+
+		forcer, ok := migrator.(interface{ Force(int) error })
+		require.True(t, ok, "migrator must support Force for dirty recovery")
+		require.NoError(t, forcer.Force(15))
+
+		stepper, ok = migrator.(interface{ Steps(int) error })
+		require.True(t, ok)
+
+		require.NoError(t, stepper.Steps(1), "migration 016 must succeed after clearing fee_schedule_id")
+
+		// Verify fee_rules table exists with expected structure.
+		assert.True(t, tableExists(t, ctx, db, "fee_rules"))
+		assert.True(t, indexExists(t, ctx, db, "idx_fee_rules_schedule"))
+	})
+}
+
+// TestMigrations_019_DropLegacySourceFeeSchedule verifies that migration 019
+// successfully drops the fee_schedule_id column from reconciliation_sources.
+func TestMigrations_019_DropLegacySourceFeeSchedule(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	pgContainer, err := postgres.Run(ctx,
+		"postgres:17-alpine",
+		postgres.WithDatabase("matcher_019_test"),
+		postgres.WithUsername("matcher"),
+		postgres.WithPassword("matcher_test"),
+		testcontainers.WithWaitStrategy(
+			wait.ForAll(
+				wait.ForLog("database system is ready to accept connections").WithOccurrence(2),
+				wait.ForListeningPort("5432/tcp"),
+			).WithStartupTimeout(90*time.Second),
+		),
+	)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, pgContainer.Terminate(context.Background()))
+	}()
+
+	dsn, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
+	require.NoError(t, err)
+
+	logger := &libLog.NopLogger{}
+
+	// Apply all 19 migrations (fee_schedule_id exists at 015, 016–018 add fee_rules + side).
+	require.NoError(t, RunMigrations(ctx, dsn, "matcher_019_test", "migrations", logger, false))
+
+	db, err := sql.Open("pgx", dsn)
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, db.PingContext(ctx))
+
+	t.Run("fee_schedule_id column is dropped from sources", func(t *testing.T) {
+		assert.False(t, columnExists(t, ctx, db, "reconciliation_sources", "fee_schedule_id"),
+			"migration 019 must drop fee_schedule_id from reconciliation_sources")
+	})
+
+	t.Run("rollback restores fee_schedule_id column", func(t *testing.T) {
+		migrator, err := newMigrator(db, "matcher_019_test", "migrations")
+		require.NoError(t, err)
+		defer func() {
+			if migrator != nil {
+				require.NoError(t, closeMigrator(migrator))
+			}
+		}()
+
+		stepper, ok := migrator.(interface{ Steps(int) error })
+		require.True(t, ok, "migrator must support stepping for rollback verification")
+
+		// Roll back migration 019.
+		require.NoError(t, stepper.Steps(-1))
+
+		assert.True(t, columnExists(t, ctx, db, "reconciliation_sources", "fee_schedule_id"),
+			"rollback of migration 019 must restore fee_schedule_id column")
+	})
 }

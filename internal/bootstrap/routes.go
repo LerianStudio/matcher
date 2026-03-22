@@ -100,7 +100,7 @@ func RegisterRoutes(
 	}
 
 	protected = func(resource string, actions ...string) fiber.Router {
-		return auth.ProtectedGroupWithActionsWithMiddleware(
+		group, err := auth.ProtectedGroupWithActionsWithMiddleware(
 			app,
 			authClient,
 			tenantExtractor,
@@ -109,6 +109,15 @@ func RegisterRoutes(
 			idempotencyMiddleware,
 			rateLimiter,
 		)
+		if err != nil {
+			// This closure is called during route registration at startup,
+			// not at request time. tenantExtractor is validated non-nil above
+			// and actions are hardcoded string literals in every call site,
+			// so an error here indicates a programmer bug in route definitions.
+			panic(fmt.Sprintf("protected route registration failed for resource=%q actions=%v: %v", resource, actions, err))
+		}
+
+		return group
 	}
 
 	return &Routes{
