@@ -1,3 +1,32 @@
+## [1.1.0-beta.21](https://github.com/LerianStudio/matcher/compare/v1.1.0-beta.20...v1.1.0-beta.21) (2026-03-22)
+
+
+### Features
+
+* **fee:** add fee rule count limits and predicate validation constraints ([df2f76b](https://github.com/LerianStudio/matcher/commit/df2f76bbdb7eb7494ec123db92893ecaf13f2881))
+* **configuration:** add fee rule CRUD endpoints and persistence ([0f5c8eb](https://github.com/LerianStudio/matcher/commit/0f5c8ebbcfe65344d6df0ada206436b24fa591c2))
+* **fee:** add fee rule domain model with predicate-based schedule resolution ([dcd48ea](https://github.com/LerianStudio/matcher/commit/dcd48eae45a5c4050d018a193f5913ff816f7806))
+* **configuration:** add fee rule tests and improve swagger docs ([e1d2f59](https://github.com/LerianStudio/matcher/commit/e1d2f5997ceea758025b4f412258389e211875ef))
+* **configuration:** add matching side to reconciliation sources ([9527e9e](https://github.com/LerianStudio/matcher/commit/9527e9e5d85ac30e26ca930f7540cd90b1600d87))
+* **fee:** add predicate size constraints and require explicit priority ([18cb756](https://github.com/LerianStudio/matcher/commit/18cb7567a86a0c2ceaf49d5c5e675b49d98236d9))
+* **configuration:** enforce fee rule limits in create/update/delete operations ([d126954](https://github.com/LerianStudio/matcher/commit/d126954c737d0d0042edfa905bdb08f145c06cfe))
+* **fee:** enhance fee rule validation, error handling, and migration ([8d40fb2](https://github.com/LerianStudio/matcher/commit/8d40fb227306596aea50f1a4707509a6016a963b))
+* **configuration:** harden clone functionality with validation and locks ([4bfca34](https://github.com/LerianStudio/matcher/commit/4bfca346d4414a5b45fee1795c9030606189ba32))
+* **fee:** improve predicate value type coercion ([3253ab8](https://github.com/LerianStudio/matcher/commit/3253ab85c7686280db9b65c469524e8545f0c9fa))
+* **config:** introduce fee rules for predicate-based fee calculation ([905a860](https://github.com/LerianStudio/matcher/commit/905a8609a9da1607782f9cca15fc4e16b76f0967))
+* **configuration:** validate fee rule predicates at HTTP layer and improve persistence ([3c75b5e](https://github.com/LerianStudio/matcher/commit/3c75b5e477acd04fb7df6f26fa58f9579de59d08))
+* **bootstrap:** wire fee rule repository into configuration use cases ([32e5172](https://github.com/LerianStudio/matcher/commit/32e51724dcdf0c7a987bb5daa9138e61bea79f8d))
+
+
+### Bug Fixes
+
+* **matching:** add fail-fast guard for missing fee-rule provider ([e5930d2](https://github.com/LerianStudio/matcher/commit/e5930d28b071c8c9fd1da37a422b78f789f97c95))
+* **cross:** add typed-nil panic guard, boundary error mapping, and auth empty-action guard ([8555f58](https://github.com/LerianStudio/matcher/commit/8555f58db5dd48d7f26597ded604bde3d5ad8439))
+* **configuration:** harden clone with FOR SHARE lock and input validation ([5f13a39](https://github.com/LerianStudio/matcher/commit/5f13a39a0ce428cea6da67a1c81931b750f08cdf))
+* **cross:** implement cursor pagination for match rules and sources ([8819878](https://github.com/LerianStudio/matcher/commit/88198784e3b066619b4bd541ea18c1af3eca0a3e))
+* **configuration:** improve fee rule validation and field predicates ([c37306d](https://github.com/LerianStudio/matcher/commit/c37306d33b103425867a4eabbabba064da63dbbf))
+* **configuration:** scope fee-rule delete by context_id for defense-in-depth ([30ccd9b](https://github.com/LerianStudio/matcher/commit/30ccd9b7a28b8a61c123a2af7fc0b57f5a383088))
+
 ## [1.1.0-beta.20](https://github.com/LerianStudio/matcher/compare/v1.1.0-beta.19...v1.1.0-beta.20) (2026-03-21)
 
 
