@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	authMiddleware "github.com/LerianStudio/lib-auth/v2/auth/middleware"
-	libCommonsLog "github.com/LerianStudio/lib-commons/v2/commons/log"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/auth"
@@ -52,10 +52,7 @@ func TestConfigRoutes_AuthEnforced(t *testing.T) {
 	)
 	defer authServer.Close()
 
-	// Bridge: lib-auth requires lib-commons log types.
-	logger := &libCommonsLog.NoneLogger{}
-
-	var loggerInterface libCommonsLog.Logger = logger
+	var loggerInterface libLog.Logger = libLog.NewNop()
 
 	authClient := authMiddleware.NewAuthClient(authServer.URL, true, &loggerInterface)
 	extractor, err := auth.NewTenantExtractor(

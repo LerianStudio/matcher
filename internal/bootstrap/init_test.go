@@ -22,7 +22,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libCommonsLog "github.com/LerianStudio/lib-commons/v2/commons/log"
 	libAssert "github.com/LerianStudio/lib-commons/v4/commons/assert"
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
@@ -565,7 +564,7 @@ func TestInitializeAuthBoundaryLogger(t *testing.T) {
 	})
 
 	t.Run("wraps initializer error", func(t *testing.T) {
-		initializeAuthBoundaryLoggerFn = func() (libCommonsLog.Logger, error) {
+		initializeAuthBoundaryLoggerFn = func() (libLog.Logger, error) {
 			return nil, errMatchRuleAdapterRequired
 		}
 
@@ -578,8 +577,8 @@ func TestInitializeAuthBoundaryLogger(t *testing.T) {
 	})
 
 	t.Run("returns logger on success", func(t *testing.T) {
-		expectedLogger := &libCommonsLog.NoneLogger{}
-		initializeAuthBoundaryLoggerFn = func() (libCommonsLog.Logger, error) {
+		expectedLogger := libLog.NewNop()
+		initializeAuthBoundaryLoggerFn = func() (libLog.Logger, error) {
 			return expectedLogger, nil
 		}
 
@@ -590,7 +589,7 @@ func TestInitializeAuthBoundaryLogger(t *testing.T) {
 	})
 
 	t.Run("returns error when initializer yields nil logger", func(t *testing.T) {
-		initializeAuthBoundaryLoggerFn = func() (libCommonsLog.Logger, error) {
+		initializeAuthBoundaryLoggerFn = func() (libLog.Logger, error) {
 			return nil, nil
 		}
 

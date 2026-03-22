@@ -29,10 +29,6 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/LerianStudio/lib-auth/v2/auth/middleware"
-	// Bridge: lib-auth/v2 still depends on lib-commons/v2 log types.
-	// Keep v2 imports for the auth boundary until lib-auth migrates to v4.
-	authLog "github.com/LerianStudio/lib-commons/v2/commons/log"
-	authZap "github.com/LerianStudio/lib-commons/v2/commons/zap"
 	"github.com/LerianStudio/lib-commons/v4/commons/assert"
 	"github.com/LerianStudio/lib-commons/v4/commons/errgroup"
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
@@ -208,8 +204,8 @@ var (
 		return publisher.Close()
 	}
 
-	initializeAuthBoundaryLoggerFn = func() (authLog.Logger, error) {
-		return authZap.InitializeLogger(), nil //nolint:staticcheck // InitializeLoggerWithError not available in lib-auth/v2
+	initializeAuthBoundaryLoggerFn = func() (libLog.Logger, error) {
+		return libZap.New(libZap.Config{})
 	}
 
 	newS3ClientFn = reportingStorage.NewS3Client
@@ -857,7 +853,7 @@ func initTelemetryAndMetrics(ctx context.Context, cfg *Config, logger libLog.Log
 }
 
 // createAuthClient builds the authentication middleware client with a bridge logger
-// for the auth boundary that still depends on lib-commons v2 types.
+// for the auth boundary.
 func createAuthClient(ctx context.Context, cfg *Config, logger libLog.Logger) *middleware.AuthClient {
 	authLogger, authLoggerErr := initializeAuthBoundaryLogger()
 	if authLoggerErr != nil {
@@ -867,7 +863,7 @@ func createAuthClient(ctx context.Context, cfg *Config, logger libLog.Logger) *m
 			fmt.Sprintf("failed to initialize auth boundary logger, using no-op logger: %v", authLoggerErr),
 		)
 
-		authLogger = &authLog.NoneLogger{}
+		authLogger = libLog.NewNop()
 	}
 
 	return middleware.NewAuthClient(cfg.Auth.Host, cfg.Auth.Enabled, &authLogger)
@@ -1535,7 +1531,7 @@ func createRabbitMQConnection(cfg *Config, logger libLog.Logger) *libRabbitmq.Ra
 	}
 }
 
-func initializeAuthBoundaryLogger() (authLog.Logger, error) {
+func initializeAuthBoundaryLogger() (libLog.Logger, error) {
 	authLogger, authLoggerErr := initializeAuthBoundaryLoggerFn()
 	if authLoggerErr != nil {
 		return nil, fmt.Errorf("initialize auth boundary logger: %w", authLoggerErr)
