@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -83,20 +83,9 @@ func (cs *ChaosServer) DispatchOutbox(t *testing.T) int {
 // until no more events are processed or maxIterations is reached.
 func (cs *ChaosServer) DispatchOutboxUntilEmpty(t *testing.T, maxIterations int) int {
 	t.Helper()
-
-	total := 0
-
-	for range maxIterations {
-		processed := cs.DispatchOutbox(t)
-		if processed == 0 {
-			break
-		}
-
-		total += processed
-		time.Sleep(50 * time.Millisecond)
-	}
-
-	return total
+	return dispatchOutboxUntilEmpty(maxIterations, time.Sleep, func() int {
+		return cs.DispatchOutbox(t)
+	})
 }
 
 // --------------------------------------------------------------------------
@@ -189,7 +178,7 @@ func (cs *ChaosServer) DoGet(t *testing.T, path string) (*http.Response, []byte)
 func (cs *ChaosServer) CreateFieldMap(t *testing.T, contextID, sourceID uuid.UUID) {
 	t.Helper()
 
-	path := fmt.Sprintf("/v1/config/contexts/%s/sources/%s/field-maps", contextID, sourceID)
+	path := fmt.Sprintf("/v1/contexts/%s/sources/%s/field-maps", contextID, sourceID)
 
 	resp, body := cs.DoJSON(t, http.MethodPost, path, map[string]any{
 		"mapping": map[string]string{
@@ -208,7 +197,7 @@ func (cs *ChaosServer) CreateFieldMap(t *testing.T, contextID, sourceID uuid.UUI
 func (cs *ChaosServer) CreateMatchRule(t *testing.T, contextID uuid.UUID) {
 	t.Helper()
 
-	path := fmt.Sprintf("/v1/config/contexts/%s/rules", contextID)
+	path := fmt.Sprintf("/v1/contexts/%s/rules", contextID)
 
 	resp, body := cs.DoJSON(t, http.MethodPost, path, map[string]any{
 		"priority": 1,
@@ -253,15 +242,4 @@ func (cs *ChaosServer) TriggerMatchRun(
 	})
 
 	return resp.StatusCode, body
-}
-
-// BuildCSVContent generates a simple CSV for chaos testing.
-func BuildCSVContent(rows int) string {
-	csv := "external_id,date,amount,currency\n"
-
-	for i := range rows {
-		csv += fmt.Sprintf("CHAOS-%05d,2025-01-15,%d.00,USD\n", i, (i+1)*100)
-	}
-
-	return csv
 }

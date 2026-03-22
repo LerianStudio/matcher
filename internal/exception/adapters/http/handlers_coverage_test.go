@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/dispute"
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
@@ -158,6 +158,7 @@ func newHandlersWithQueryOptions(
 		&command.CallbackUseCase{},
 		exceptionProvider,
 		disputeProvider,
+		false,
 	)
 	require.NoError(t, err)
 
@@ -184,6 +185,7 @@ func TestNewHandlers_NilCommentUseCase(t *testing.T) {
 		&command.CallbackUseCase{},
 		exceptionProvider,
 		disputeProvider,
+		false,
 	)
 
 	assert.Nil(t, handlers)

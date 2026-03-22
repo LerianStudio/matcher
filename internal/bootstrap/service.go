@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 package bootstrap
 
 import (
@@ -5,18 +9,14 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync/atomic"
 	"time"
 
-	"github.com/LerianStudio/lib-auth/v2/auth/middleware"
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	"github.com/LerianStudio/lib-uncommons/v2/uncommons/runtime"
-	libZap "github.com/LerianStudio/lib-uncommons/v2/uncommons/zap"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
+	libZap "github.com/LerianStudio/lib-commons/v4/commons/zap"
 
-	"github.com/LerianStudio/matcher/internal/auth"
-	configWorker "github.com/LerianStudio/matcher/internal/configuration/services/worker"
-	governanceWorker "github.com/LerianStudio/matcher/internal/governance/services/worker"
-	reportingWorker "github.com/LerianStudio/matcher/internal/reporting/services/worker"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
 
@@ -24,50 +24,55 @@ import (
 // to finish after requesting stop, before closing infrastructure connections.
 const defaultShutdownGracePeriod = 5 * time.Second
 
-const defaultWorkerStartWaitTimeout = 30 * time.Second
-
-var (
-	errWorkerStartContextCanceled = errors.New("worker start canceled")
-	errWorkerPanicked             = errors.New("worker panicked")
-	errWorkerStartFuncNil         = errors.New("worker start function is nil")
-	errWorkerStartTimeout         = errors.New("worker start timed out")
-)
-
 // Service is the main application container that orchestrates all components.
 type Service struct {
 	*Server
 	libLog.Logger
-	Config *Config
-	Routes *Routes
+	Config        *Config
+	Routes        *Routes
+	ConfigManager *ConfigManager
 
-	authClient         *middleware.AuthClient
-	tenantExtractor    *auth.TenantExtractor
 	outboxRunner       libCommons.App
 	dbMetricsCollector *DBMetricsCollector
-	exportWorker       *reportingWorker.ExportWorker
-	cleanupWorker      *reportingWorker.CleanupWorker
-	archivalWorker     *governanceWorker.ArchivalWorker
-	schedulerWorker    *configWorker.SchedulerWorker
+	workerManager      *WorkerManager
 	connectionManager  connectionCloser
 	cleanupFuncs       []func()
+	readinessState     *readinessState
+
+	// Systemplane components for centralized runtime configuration.
+	// These are nil when systemplane initialization fails (graceful degradation).
+	spComponents     *SystemplaneComponents
+	cancelChangeFeed context.CancelFunc
+}
+
+type readinessState struct {
+	draining atomic.Bool
+}
+
+func (state *readinessState) beginDraining() {
+	if state == nil {
+		return
+	}
+
+	state.draining.Store(true)
+}
+
+func (state *readinessState) isDraining() bool {
+	if state == nil {
+		return false
+	}
+
+	return state.draining.Load()
 }
 
 type connectionCloser interface {
 	Close() error
 }
 
-type workerStartEntry struct {
-	name          string
-	start         func(context.Context) error
-	stop          func() error
-	critical      bool
-	onSoftFailure func()
-}
-
-type workerStartResult struct {
-	name     string
-	err      error
-	critical bool
+// stoppable is a lifecycle interface for components that can be stopped
+// during graceful shutdown (e.g., the outbox dispatcher).
+type stoppable interface {
+	Stop()
 }
 
 // GetOutboxRunner returns the outbox dispatcher as a libCommons.App.
@@ -112,8 +117,12 @@ func (svc *Service) Run() error {
 		svc.dbMetricsCollector.Start(ctx)
 	}
 
-	if err := svc.startWorkers(ctx); err != nil {
-		return err
+	activeCfg := svc.resolveActiveConfig()
+
+	if svc.workerManager != nil {
+		if err := svc.workerManager.Start(ctx, activeCfg); err != nil {
+			return err
+		}
 	}
 
 	opts := []libCommons.LauncherOption{
@@ -129,280 +138,20 @@ func (svc *Service) Run() error {
 	return nil
 }
 
-// startWorkers starts all background workers in parallel.
-// Non-critical workers that fail to start are disabled with a warning.
-// Critical workers (those explicitly enabled via config) cause a startup error.
-//
-// Workers are independent of each other, so starting them in parallel reduces
-// the total startup time by the latency of the slowest worker rather than the sum.
-func (svc *Service) startWorkers(ctx context.Context) error {
-	// Collect workers to start — skip nil workers.
-	var entries []workerStartEntry
-
-	if svc.exportWorker != nil {
-		entries = append(entries, workerStartEntry{
-			name:          "export",
-			start:         svc.exportWorker.Start,
-			stop:          svc.exportWorker.Stop,
-			critical:      svc.Config != nil && svc.Config.ExportWorker.Enabled,
-			onSoftFailure: func() { svc.exportWorker = nil },
-		})
+func (svc *Service) resolveActiveConfig() *Config {
+	activeCfg := svc.Config
+	if svc.ConfigManager == nil {
+		return activeCfg
 	}
 
-	if svc.cleanupWorker != nil {
-		entries = append(entries, workerStartEntry{
-			name:          "cleanup",
-			start:         svc.cleanupWorker.Start,
-			stop:          svc.cleanupWorker.Stop,
-			critical:      svc.Config != nil && svc.Config.CleanupWorker.Enabled,
-			onSoftFailure: func() { svc.cleanupWorker = nil },
-		})
+	managedCfg := svc.ConfigManager.Get()
+	if managedCfg == nil {
+		return activeCfg
 	}
 
-	if svc.archivalWorker != nil {
-		entries = append(entries, workerStartEntry{
-			name:          "archival",
-			start:         svc.archivalWorker.Start,
-			stop:          svc.archivalWorker.Stop,
-			critical:      svc.Config != nil && svc.Config.Archival.Enabled,
-			onSoftFailure: func() { svc.archivalWorker = nil },
-		})
-	}
+	svc.Config = managedCfg
 
-	if svc.schedulerWorker != nil {
-		entries = append(entries, workerStartEntry{
-			name:          "scheduler",
-			start:         svc.schedulerWorker.Start,
-			stop:          svc.schedulerWorker.Stop,
-			critical:      false, // scheduler is always non-critical
-			onSoftFailure: func() { svc.schedulerWorker = nil },
-		})
-	}
-
-	if len(entries) == 0 {
-		return nil
-	}
-
-	collected := startWorkerEntries(ctx, svc.Logger, entries)
-
-	return svc.processWorkerStartResults(ctx, entries, collected)
-}
-
-func (svc *Service) processWorkerStartResults(
-	ctx context.Context,
-	entries []workerStartEntry,
-	collected []workerStartResult,
-) error {
-	startedWorkers := collectStartedWorkers(collected)
-
-	criticalFailures := collectCriticalWorkerFailures(collected)
-	if len(criticalFailures) > 0 {
-		rollbackErr := svc.stopStartedWorkers(entries, startedWorkers)
-
-		criticalErrors := make([]error, 0, len(criticalFailures))
-		for _, criticalFailure := range criticalFailures {
-			criticalErrors = append(criticalErrors,
-				fmt.Errorf("%s worker enabled but failed to start: %w", criticalFailure.name, criticalFailure.err),
-			)
-		}
-
-		criticalErr := errors.Join(criticalErrors...)
-
-		if rollbackErr != nil {
-			svc.Log(ctx, libLog.LevelWarn, fmt.Sprintf("failed to rollback started workers after critical startup failures: %v", rollbackErr))
-
-			return errors.Join(criticalErr, fmt.Errorf("rollback started workers: %w", rollbackErr))
-		}
-
-		return criticalErr
-	}
-
-	// Process non-critical failures: log and disable.
-	for _, result := range collected {
-		if result.err == nil {
-			continue
-		}
-
-		svc.Log(ctx, libLog.LevelWarn, fmt.Sprintf("%s worker failed to start (continuing without it): %v", result.name, result.err))
-
-		// Find the matching entry and nil-out the worker.
-		for _, entry := range entries {
-			if entry.name == result.name {
-				if entry.onSoftFailure != nil {
-					entry.onSoftFailure()
-				}
-
-				break
-			}
-		}
-	}
-
-	return nil
-}
-
-func collectStartedWorkers(collected []workerStartResult) map[string]struct{} {
-	startedWorkers := make(map[string]struct{}, len(collected))
-	for _, result := range collected {
-		if result.err == nil {
-			startedWorkers[result.name] = struct{}{}
-		}
-	}
-
-	return startedWorkers
-}
-
-func collectCriticalWorkerFailures(collected []workerStartResult) []workerStartResult {
-	failures := make([]workerStartResult, 0)
-
-	for _, result := range collected {
-		if result.critical && result.err != nil {
-			failures = append(failures, result)
-		}
-	}
-
-	return failures
-}
-
-func (svc *Service) stopStartedWorkers(
-	entries []workerStartEntry,
-	startedWorkers map[string]struct{},
-) error {
-	var stopErrors []error
-
-	for _, entry := range entries {
-		if _, ok := startedWorkers[entry.name]; !ok {
-			continue
-		}
-
-		if entry.stop != nil {
-			if err := entry.stop(); err != nil {
-				stopErrors = append(stopErrors, fmt.Errorf("stop %s worker after startup rollback: %w", entry.name, err))
-			}
-		}
-
-		if entry.onSoftFailure != nil {
-			entry.onSoftFailure()
-		}
-	}
-
-	if len(stopErrors) > 0 {
-		return errors.Join(stopErrors...)
-	}
-
-	return nil
-}
-
-func startWorkerEntries(
-	ctx context.Context,
-	logger libLog.Logger,
-	entries []workerStartEntry,
-) []workerStartResult {
-	results := make(chan workerStartResult, len(entries))
-
-	for _, entry := range entries {
-		runtime.SafeGoWithContextAndComponent(
-			ctx,
-			logger,
-			constants.ApplicationName,
-			"worker.start."+entry.name,
-			runtime.KeepRunning,
-			func(workerCtx context.Context) {
-				result := workerStartResult{
-					name:     entry.name,
-					critical: entry.critical,
-				}
-
-				defer func() {
-					if recovered := recover(); recovered != nil {
-						result.err = fmt.Errorf("panic starting %s worker (%v): %w", entry.name, recovered, errWorkerPanicked)
-					}
-
-					results <- result
-				}()
-
-				if entry.start == nil {
-					result.err = errWorkerStartFuncNil
-
-					return
-				}
-
-				result.err = entry.start(workerCtx)
-			},
-		)
-	}
-
-	timeout := resolveWorkerStartWaitTimeout(ctx)
-
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-
-	collected := make([]workerStartResult, 0, len(entries))
-	for len(collected) < len(entries) {
-		select {
-		case result := <-results:
-			collected = append(collected, result)
-		case <-timer.C:
-			return appendMissingWorkerResults(
-				entries,
-				collected,
-				fmt.Errorf("worker start timed out after %v: %w", timeout, errWorkerStartTimeout),
-			)
-		case <-ctx.Done():
-			return appendMissingWorkerResults(
-				entries,
-				collected,
-				fmt.Errorf("%w: %w", errWorkerStartContextCanceled, ctx.Err()),
-			)
-		}
-	}
-
-	return collected
-}
-
-func resolveWorkerStartWaitTimeout(ctx context.Context) time.Duration {
-	timeout := defaultWorkerStartWaitTimeout
-
-	if deadline, ok := ctx.Deadline(); ok {
-		remaining := time.Until(deadline)
-		if remaining > 0 && remaining < timeout {
-			timeout = remaining
-		}
-	}
-
-	if timeout <= 0 {
-		return time.Millisecond
-	}
-
-	return timeout
-}
-
-func appendMissingWorkerResults(
-	entries []workerStartEntry,
-	collected []workerStartResult,
-	err error,
-) []workerStartResult {
-	if len(collected) >= len(entries) {
-		return collected
-	}
-
-	received := make(map[string]struct{}, len(collected))
-	for _, result := range collected {
-		received[result.name] = struct{}{}
-	}
-
-	for _, entry := range entries {
-		if _, ok := received[entry.name]; ok {
-			continue
-		}
-
-		collected = append(collected, workerStartResult{
-			name:     entry.name,
-			critical: entry.critical,
-			err:      err,
-		})
-	}
-
-	return collected
+	return managedCfg
 }
 
 // Shutdown gracefully shuts down the service, including the HTTP server and telemetry.
@@ -411,10 +160,14 @@ func (svc *Service) Shutdown(ctx context.Context) error {
 		return nil
 	}
 
+	ctx = fallbackContext(ctx)
+
 	logger := svc.Logger
 	if logger == nil {
 		logger = &libLog.NopLogger{}
 	}
+
+	svc.readinessState.beginDraining()
 
 	svc.stopBackgroundWorkers(ctx, logger)
 
@@ -444,40 +197,85 @@ func (svc *Service) Shutdown(ctx context.Context) error {
 }
 
 // stopBackgroundWorkers stops all background workers and the outbox runner.
+//
+// Shutdown ordering contract:
+// 1. ConfigManager.Stop() — prevents config mutations during shutdown
+// 2. Systemplane change feed — stop change feed before supervisor
+// 3. Systemplane supervisor — stop config supervisory loop
+// 4. WorkerManager.Stop() — stops all managed workers
+// 5. Standalone workers — stops workers not yet migrated to WorkerManager
+// This order is CRITICAL: stopping ConfigManager first prevents the
+// config-change subscriber from restarting workers while we're shutting them down.
+// Systemplane change feed stops before the supervisor to prevent reload triggers
+// during shutdown.
 func (svc *Service) stopBackgroundWorkers(ctx context.Context, logger libLog.Logger) {
-	if svc.exportWorker != nil {
-		if err := svc.exportWorker.Stop(); err != nil { //nolint:contextcheck // Stop() is defined without ctx in worker package
-			logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("failed to stop export worker: %v", err))
-		}
+	// Step 1: Stop ConfigManager first (see ordering contract above).
+	if svc.ConfigManager != nil {
+		svc.ConfigManager.Stop()
 	}
 
-	if svc.cleanupWorker != nil {
-		if err := svc.cleanupWorker.Stop(); err != nil { //nolint:contextcheck // Stop() is defined without ctx in worker package
-			logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("failed to stop cleanup worker: %v", err))
-		}
-	}
+	// Step 2: Stop systemplane change feed and supervisor.
+	svc.stopSystemplane(ctx, logger)
 
-	if svc.archivalWorker != nil {
-		if err := svc.archivalWorker.Stop(); err != nil { //nolint:contextcheck // Stop() is defined without ctx in worker package
-			logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("failed to stop archival worker: %v", err))
-		}
-	}
-
-	if svc.schedulerWorker != nil {
-		if err := svc.schedulerWorker.Stop(); err != nil { //nolint:contextcheck // Stop() is defined without ctx in worker package
-			logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("failed to stop scheduler worker: %v", err))
-		}
-	}
+	_ = svc.stopWorkerManager(ctx, logger)
 
 	if svc.dbMetricsCollector != nil {
 		svc.dbMetricsCollector.Stop()
 	}
 
-	if svc.outboxRunner != nil {
-		if stoppable, ok := svc.outboxRunner.(interface{ Stop() }); ok {
-			stoppable.Stop()
+	if outbox := svc.outboxStoppable(); outbox != nil {
+		outbox.Stop()
+	}
+}
+
+// stopSystemplane gracefully shuts down the systemplane components.
+// The ordering matters: change feed stops first to prevent triggering reloads,
+// then the supervisor stops, and finally the backend connection is closed.
+func (svc *Service) stopSystemplane(ctx context.Context, logger libLog.Logger) {
+	if svc.cancelChangeFeed != nil {
+		svc.cancelChangeFeed()
+	}
+
+	if svc.spComponents == nil {
+		return
+	}
+
+	if svc.spComponents.Supervisor != nil {
+		if err := svc.spComponents.Supervisor.Stop(ctx); err != nil {
+			logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("systemplane supervisor stop failed: %v", err))
 		}
 	}
+
+	if svc.spComponents.Backend != nil {
+		if err := svc.spComponents.Backend.Close(); err != nil {
+			logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("systemplane backend close failed: %v", err))
+		}
+	}
+}
+
+func (svc *Service) stopWorkerManager(ctx context.Context, logger libLog.Logger) bool {
+	if svc.workerManager == nil {
+		return false
+	}
+
+	if err := svc.workerManager.Stop(); err != nil {
+		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("failed to stop worker manager: %v", err))
+	}
+
+	return true
+}
+
+func (svc *Service) outboxStoppable() stoppable {
+	if svc.outboxRunner == nil {
+		return nil
+	}
+
+	s, ok := svc.outboxRunner.(stoppable)
+	if !ok {
+		return nil
+	}
+
+	return s
 }
 
 // shutdownServerAndConnections shuts down the HTTP server and closes all connections.

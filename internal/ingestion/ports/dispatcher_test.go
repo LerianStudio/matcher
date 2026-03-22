@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/LerianStudio/lib-uncommons/v2/uncommons"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
 )
 
 func TestDispatcherInterfaceCompiles(t *testing.T) {
@@ -22,7 +22,7 @@ type mockDispatcher struct {
 	stopped bool
 }
 
-func (m *mockDispatcher) Run(_ *uncommons.Launcher) error {
+func (m *mockDispatcher) Run(_ *libCommons.Launcher) error {
 	m.running = true
 	return nil
 }

@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 //go:build unit
 
 package bootstrap
@@ -7,7 +11,6 @@ import (
 	"errors"
 	"net"
 	"net/http"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,9 +20,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 )
 
@@ -28,8 +32,36 @@ type mockApp struct{}
 
 func (m *mockApp) Run(_ *libCommons.Launcher) error { return nil }
 
-var errWorkerStart = errors.New("worker start failed")
-var errWorkerStop = errors.New("worker stop failed")
+type orderingCloser struct {
+	order *[]string
+	name  string
+	err   error
+}
+
+func (closer *orderingCloser) Close() error {
+	*closer.order = append(*closer.order, closer.name)
+	return closer.err
+}
+
+type orderingSupervisor struct {
+	order *[]string
+	err   error
+}
+
+func (supervisor *orderingSupervisor) Current() domain.RuntimeBundle { return nil }
+func (supervisor *orderingSupervisor) Snapshot() domain.Snapshot     { return domain.Snapshot{} }
+func (supervisor *orderingSupervisor) PublishSnapshot(context.Context, domain.Snapshot, string) error {
+	return nil
+}
+
+func (supervisor *orderingSupervisor) ReconcileCurrent(context.Context, domain.Snapshot, string) error {
+	return nil
+}
+func (supervisor *orderingSupervisor) Reload(context.Context, string, ...string) error { return nil }
+func (supervisor *orderingSupervisor) Stop(context.Context) error {
+	*supervisor.order = append(*supervisor.order, "supervisor")
+	return supervisor.err
+}
 
 func TestServiceRun(t *testing.T) {
 	t.Parallel()
@@ -126,6 +158,22 @@ func TestServiceShutdown(t *testing.T) {
 	})
 }
 
+func TestService_stopSystemplane_OrdersCancellationBeforeShutdown(t *testing.T) {
+	t.Parallel()
+
+	order := []string{}
+	svc := &Service{
+		cancelChangeFeed: func() { order = append(order, "cancel") },
+		spComponents: &SystemplaneComponents{
+			Supervisor: &orderingSupervisor{order: &order},
+			Backend:    &orderingCloser{order: &order, name: "backend"},
+		},
+	}
+
+	svc.stopSystemplane(context.Background(), &libLog.NopLogger{})
+	assert.Equal(t, []string{"cancel", "supervisor", "backend"}, order)
+}
+
 func TestServiceShutdownWithWorkers(t *testing.T) {
 	t.Parallel()
 
@@ -165,216 +213,6 @@ func TestServiceRun_NilService(t *testing.T) {
 
 		assert.NoError(t, err, "nil service should return nil error from Run()")
 	})
-}
-
-func TestStartWorkerEntries_CapturesErrorsAndPanics(t *testing.T) {
-	t.Parallel()
-
-	entries := []workerStartEntry{
-		{
-			name: "ok",
-			start: func(context.Context) error {
-				return nil
-			},
-		},
-		{
-			name: "error",
-			start: func(context.Context) error {
-				return errWorkerStart
-			},
-		},
-		{
-			name: "panic",
-			start: func(context.Context) error {
-				panic("boom")
-			},
-		},
-	}
-
-	results := startWorkerEntries(context.Background(), &libLog.NopLogger{}, entries)
-
-	require.Len(t, results, 3)
-
-	resultByName := make(map[string]workerStartResult, len(results))
-	for _, result := range results {
-		resultByName[result.name] = result
-	}
-
-	require.NoError(t, resultByName["ok"].err)
-	require.ErrorIs(t, resultByName["error"].err, errWorkerStart)
-	require.Error(t, resultByName["panic"].err)
-	assert.Contains(t, resultByName["panic"].err.Error(), "panic starting panic worker")
-}
-
-func TestServiceStartWorkers_FailureSemantics(t *testing.T) {
-	t.Parallel()
-
-	t.Run("returns error when critical worker fails", func(t *testing.T) {
-		t.Parallel()
-
-		var softFailureCalled atomic.Bool
-
-		var rollbackStopCalled atomic.Bool
-
-		svc := &Service{Logger: &libLog.NopLogger{}}
-
-		entries := []workerStartEntry{
-			{
-				name: "started",
-				stop: func() error {
-					rollbackStopCalled.Store(true)
-
-					return nil
-				},
-			},
-			{
-				name:     "critical",
-				critical: true,
-				start: func(context.Context) error {
-					return errWorkerStart
-				},
-				onSoftFailure: func() {
-					softFailureCalled.Store(true)
-				},
-			},
-		}
-
-		results := []workerStartResult{
-			{name: "started", critical: false, err: nil},
-			{name: "critical", critical: true, err: errWorkerStart},
-		}
-
-		err := svc.processWorkerStartResults(context.Background(), entries, results)
-
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "critical worker enabled but failed to start")
-		assert.False(t, softFailureCalled.Load())
-		assert.True(t, rollbackStopCalled.Load())
-	})
-
-	t.Run("rolls back started workers even when critical result arrives first", func(t *testing.T) {
-		t.Parallel()
-
-		var rollbackStopCalled atomic.Bool
-
-		svc := &Service{Logger: &libLog.NopLogger{}}
-
-		entries := []workerStartEntry{
-			{
-				name: "started",
-				stop: func() error {
-					rollbackStopCalled.Store(true)
-
-					return nil
-				},
-			},
-			{
-				name:     "critical",
-				critical: true,
-			},
-		}
-
-		results := []workerStartResult{
-			{name: "critical", critical: true, err: errWorkerStart},
-			{name: "started", critical: false, err: nil},
-		}
-
-		err := svc.processWorkerStartResults(context.Background(), entries, results)
-
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "critical worker enabled but failed to start")
-		assert.True(t, rollbackStopCalled.Load())
-	})
-
-	t.Run("returns rollback error when stopping started worker fails", func(t *testing.T) {
-		t.Parallel()
-
-		svc := &Service{Logger: &libLog.NopLogger{}}
-
-		entries := []workerStartEntry{
-			{
-				name: "started",
-				stop: func() error {
-					return errWorkerStop
-				},
-			},
-			{
-				name:     "critical",
-				critical: true,
-			},
-		}
-
-		results := []workerStartResult{
-			{name: "started", critical: false, err: nil},
-			{name: "critical", critical: true, err: errWorkerStart},
-		}
-
-		err := svc.processWorkerStartResults(context.Background(), entries, results)
-
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "critical worker enabled but failed to start")
-		assert.ErrorIs(t, err, errWorkerStop)
-	})
-
-	t.Run("disables non-critical worker on failure", func(t *testing.T) {
-		t.Parallel()
-
-		var softFailureCalled atomic.Bool
-
-		svc := &Service{Logger: &libLog.NopLogger{}}
-
-		entries := []workerStartEntry{
-			{
-				name:     "noncritical",
-				critical: false,
-				start: func(context.Context) error {
-					return errWorkerStart
-				},
-				onSoftFailure: func() {
-					softFailureCalled.Store(true)
-				},
-			},
-		}
-
-		results := []workerStartResult{{name: "noncritical", critical: false, err: errWorkerStart}}
-
-		err := svc.processWorkerStartResults(context.Background(), entries, results)
-
-		require.NoError(t, err)
-		assert.True(t, softFailureCalled.Load())
-	})
-
-	t.Run("reports all critical worker failures", func(t *testing.T) {
-		t.Parallel()
-
-		svc := &Service{Logger: &libLog.NopLogger{}}
-
-		entries := []workerStartEntry{
-			{name: "critical-a", critical: true},
-			{name: "critical-b", critical: true},
-		}
-
-		results := []workerStartResult{
-			{name: "critical-a", critical: true, err: errors.New("failure A")},
-			{name: "critical-b", critical: true, err: errors.New("failure B")},
-		}
-
-		err := svc.processWorkerStartResults(context.Background(), entries, results)
-
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "critical-a worker enabled but failed to start")
-		assert.Contains(t, err.Error(), "critical-b worker enabled but failed to start")
-	})
-}
-
-func TestServiceStartWorkers_ZeroWorkers(t *testing.T) {
-	t.Parallel()
-
-	svc := &Service{Logger: &libLog.NopLogger{}}
-
-	err := svc.startWorkers(context.Background())
-
-	require.NoError(t, err)
 }
 
 func TestServiceShutdown_ClosesConnectionsAndStopsDispatcher(t *testing.T) {
@@ -446,10 +284,98 @@ type mockCloser struct {
 	closed bool
 }
 
+type recordingLifecycleWorker struct {
+	startErr     error
+	stopObserved bool
+	stopFn       func()
+}
+
+func (worker *recordingLifecycleWorker) Start(_ context.Context) error {
+	return worker.startErr
+}
+
+func (worker *recordingLifecycleWorker) Stop() error {
+	if worker.stopFn != nil {
+		worker.stopFn()
+	}
+
+	return nil
+}
+
 func (m *mockCloser) Close() error {
 	m.closed = true
 
 	return nil
+}
+
+func TestServiceResolveActiveConfig_UsesConfigManagerSnapshot(t *testing.T) {
+	t.Parallel()
+
+	initialCfg := defaultConfig()
+	initialCfg.App.LogLevel = "info"
+	managedCfg := defaultConfig()
+	managedCfg.App.LogLevel = "debug"
+
+	cm, err := NewConfigManager(managedCfg, &libLog.NopLogger{})
+	require.NoError(t, err)
+	t.Cleanup(cm.Stop)
+
+	svc := &Service{
+		Config:        initialCfg,
+		ConfigManager: cm,
+	}
+
+	resolved := svc.resolveActiveConfig()
+	require.NotNil(t, resolved)
+	assert.Equal(t, "debug", resolved.App.LogLevel)
+	assert.Equal(t, resolved, svc.Config)
+}
+
+func TestServiceRun_PropagatesWorkerManagerStartFailure(t *testing.T) {
+	t.Parallel()
+
+	worker := &recordingLifecycleWorker{startErr: errors.New("worker start failed")}
+	wm := NewWorkerManager(&libLog.NopLogger{}, nil)
+	wm.Register("critical", func(_ *Config) (WorkerLifecycle, error) {
+		return worker, nil
+	}, alwaysEnabled, alwaysCritical)
+
+	svc := &Service{
+		Logger:        &libLog.NopLogger{},
+		Config:        defaultConfig(),
+		workerManager: wm,
+	}
+
+	err := svc.Run()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "critical worker \"critical\" failed to start")
+}
+
+func TestServiceStopBackgroundWorkers_StopsConfigManagerAndWorkers(t *testing.T) {
+	t.Parallel()
+
+	cm, err := NewConfigManager(defaultConfig(), &libLog.NopLogger{})
+	require.NoError(t, err)
+	t.Cleanup(cm.Stop)
+
+	worker := &recordingLifecycleWorker{}
+	worker.stopFn = func() {
+		worker.stopObserved = true
+	}
+
+	wm := NewWorkerManager(&libLog.NopLogger{}, nil)
+	wm.Register("worker", func(_ *Config) (WorkerLifecycle, error) {
+		return worker, nil
+	}, alwaysEnabled, neverCritical)
+	require.NoError(t, wm.Start(context.Background(), defaultConfig()))
+
+	svc := &Service{
+		ConfigManager: cm,
+		workerManager: wm,
+	}
+
+	svc.stopBackgroundWorkers(context.Background(), &libLog.NopLogger{})
+	assert.True(t, worker.stopObserved, "worker should have been stopped during shutdown")
 }
 
 func TestServerRun_StartsAndShutdowns(t *testing.T) {
@@ -566,10 +492,6 @@ func TestStopBackgroundWorkers_AllNilWorkers(t *testing.T) {
 
 	svc := &Service{
 		Logger:             &libLog.NopLogger{},
-		exportWorker:       nil,
-		cleanupWorker:      nil,
-		archivalWorker:     nil,
-		schedulerWorker:    nil,
 		dbMetricsCollector: nil,
 		outboxRunner:       nil,
 	}
@@ -716,18 +638,21 @@ func TestServiceShutdown_WithNilLogger(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestServiceStruct_WithArchivalWorkerField(t *testing.T) {
+func TestServiceShutdown_MarksReadinessDraining(t *testing.T) {
 	t.Parallel()
 
-	t.Run("service accepts nil archival worker", func(t *testing.T) {
-		t.Parallel()
+	state := &readinessState{}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
 
-		svc := &Service{
-			archivalWorker: nil,
-		}
+	svc := &Service{
+		Logger:         &libLog.NopLogger{},
+		Config:         &Config{ShutdownGracePeriod: time.Millisecond},
+		readinessState: state,
+	}
 
-		assert.Nil(t, svc.archivalWorker)
-	})
+	require.NoError(t, svc.Shutdown(ctx))
+	assert.True(t, state.isDraining())
 }
 
 func TestShutdownServerAndConnections_ConnectionManagerError(t *testing.T) {
@@ -779,23 +704,6 @@ func TestShutdownServerAndConnections_ServerShutdownError(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "server not initialized")
-}
-
-func TestStopBackgroundWorkers_WithNilArchivalWorker(t *testing.T) {
-	t.Parallel()
-
-	t.Run("does not panic when archival worker is nil", func(t *testing.T) {
-		t.Parallel()
-
-		svc := &Service{
-			Logger:         &libLog.NopLogger{},
-			archivalWorker: nil,
-		}
-
-		assert.NotPanics(t, func() {
-			svc.stopBackgroundWorkers(context.Background(), &libLog.NopLogger{})
-		})
-	})
 }
 
 func TestService_GetOutboxRunner(t *testing.T) {

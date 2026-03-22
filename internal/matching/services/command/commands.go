@@ -6,12 +6,10 @@ import (
 	"errors"
 	"time"
 
-	governanceRepositories "github.com/LerianStudio/matcher/internal/governance/domain/repositories"
 	matchingRepositories "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
 	matching "github.com/LerianStudio/matcher/internal/matching/domain/services"
 	"github.com/LerianStudio/matcher/internal/matching/ports"
-	outboxEntities "github.com/LerianStudio/matcher/internal/outbox/domain/entities"
-	outboxRepositories "github.com/LerianStudio/matcher/internal/outbox/domain/repositories"
+	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -36,14 +34,15 @@ var (
 	ErrNilInfrastructureProvider = errors.New("infrastructure provider is required")
 	ErrNilAuditLogRepository     = errors.New("audit log repository is required")
 	ErrNilFeeScheduleRepository  = errors.New("fee schedule repository is required")
+	ErrNilFeeRuleProvider        = errors.New("fee rule provider is required")
 )
 
 type outboxTxCreator interface {
 	CreateWithTx(
 		ctx context.Context,
 		tx *sql.Tx,
-		event *outboxEntities.OutboxEvent,
-	) (*outboxEntities.OutboxEvent, error)
+		event *sharedDomain.OutboxEvent,
+	) (*sharedDomain.OutboxEvent, error)
 }
 
 // UseCase implements matching command operations.
@@ -57,14 +56,15 @@ type UseCase struct {
 	matchGroupRepo       matchingRepositories.MatchGroupRepository
 	matchItemRepo        matchingRepositories.MatchItemRepository
 	exceptionCreator     ports.ExceptionCreator
-	outboxRepo           outboxRepositories.OutboxRepository
+	outboxRepo           sharedPorts.OutboxRepository
 	outboxRepoTx         outboxTxCreator
 	rateRepo             matchingRepositories.RateRepository
 	feeVarianceRepo      matchingRepositories.FeeVarianceRepository
 	adjustmentRepo       matchingRepositories.AdjustmentRepository
 	infraProvider        sharedPorts.InfrastructureProvider
-	auditLogRepo         governanceRepositories.AuditLogRepository
+	auditLogRepo         sharedPorts.AuditLogRepository
 	feeScheduleRepo      matchingRepositories.FeeScheduleRepository
+	feeRuleProvider      ports.FeeRuleProvider
 	executeRules         func(context.Context, ExecuteRulesInput) ([]matching.MatchProposal, error)
 	executeRulesDetailed func(context.Context, ExecuteRulesInput) (*ExecuteRulesResult, error)
 	lockRefreshInterval  time.Duration
@@ -82,13 +82,14 @@ type UseCaseDeps struct {
 	MatchGroupRepo   matchingRepositories.MatchGroupRepository
 	MatchItemRepo    matchingRepositories.MatchItemRepository
 	ExceptionCreator ports.ExceptionCreator
-	OutboxRepo       outboxRepositories.OutboxRepository
+	OutboxRepo       sharedPorts.OutboxRepository
 	RateRepo         matchingRepositories.RateRepository
 	FeeVarianceRepo  matchingRepositories.FeeVarianceRepository
 	AdjustmentRepo   matchingRepositories.AdjustmentRepository
 	InfraProvider    sharedPorts.InfrastructureProvider
-	AuditLogRepo     governanceRepositories.AuditLogRepository
+	AuditLogRepo     sharedPorts.AuditLogRepository
 	FeeScheduleRepo  matchingRepositories.FeeScheduleRepository
+	FeeRuleProvider  ports.FeeRuleProvider
 }
 
 func (deps *UseCaseDeps) validate() error {
@@ -112,6 +113,7 @@ func (deps *UseCaseDeps) validate() error {
 		{deps.InfraProvider == nil, ErrNilInfrastructureProvider},
 		{deps.AuditLogRepo == nil, ErrNilAuditLogRepository},
 		{deps.FeeScheduleRepo == nil, ErrNilFeeScheduleRepository},
+		{deps.FeeRuleProvider == nil, ErrNilFeeRuleProvider},
 	}
 
 	for _, check := range checks {
@@ -152,6 +154,7 @@ func New(deps UseCaseDeps) (*UseCase, error) {
 		infraProvider:       deps.InfraProvider,
 		auditLogRepo:        deps.AuditLogRepo,
 		feeScheduleRepo:     deps.FeeScheduleRepo,
+		feeRuleProvider:     deps.FeeRuleProvider,
 		lockRefreshInterval: lockRefreshIntervalDefault,
 		maxLockBatchSize:    maxCandidateSet,
 	}

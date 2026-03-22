@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 //go:build unit
 
 package bootstrap
@@ -13,8 +17,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
 
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 )
 
 func TestInitTelemetry(t *testing.T) {
@@ -27,7 +31,7 @@ func TestInitTelemetry(t *testing.T) {
 				Telemetry: TelemetryConfig{
 					Enabled:        false,
 					ServiceName:    "matcher-test",
-					ServiceVersion: "1.0.0",
+					ServiceVersion: "1.1.0",
 				},
 			}
 			logger := &mockLoggerForTelemetry{}
@@ -65,7 +69,7 @@ func TestInitTelemetry(t *testing.T) {
 			Telemetry: TelemetryConfig{
 				Enabled:        false,
 				ServiceName:    "propagator-test",
-				ServiceVersion: "1.0.0",
+				ServiceVersion: "1.1.0",
 			},
 		}
 		logger := &mockLoggerForTelemetry{}
@@ -105,7 +109,7 @@ func TestInitTelemetryWithTimeout(t *testing.T) {
 			Telemetry: TelemetryConfig{
 				Enabled:        false,
 				ServiceName:    "timeout-test",
-				ServiceVersion: "1.0.0",
+				ServiceVersion: "1.1.0",
 			},
 		}
 		logger := &mockLoggerForTelemetry{}
@@ -130,7 +134,7 @@ func TestInitTelemetryWithTimeout(t *testing.T) {
 			Telemetry: TelemetryConfig{
 				Enabled:           true,
 				ServiceName:       "timeout-test",
-				ServiceVersion:    "1.0.0",
+				ServiceVersion:    "1.1.0",
 				CollectorEndpoint: "unreachable-host:4317",
 			},
 		}
@@ -161,7 +165,7 @@ func TestInitTelemetryWithTimeout(t *testing.T) {
 			Telemetry: TelemetryConfig{
 				Enabled:           true,
 				ServiceName:       "timeout-fallback-test",
-				ServiceVersion:    "1.0.0",
+				ServiceVersion:    "1.1.0",
 				CollectorEndpoint: "localhost:4317",
 			},
 		}
@@ -207,7 +211,7 @@ func TestInitTelemetryWithTimeout(t *testing.T) {
 			Telemetry: TelemetryConfig{
 				Enabled:        true,
 				ServiceName:    "expired-parent-context",
-				ServiceVersion: "1.0.0",
+				ServiceVersion: "1.1.0",
 			},
 		}
 

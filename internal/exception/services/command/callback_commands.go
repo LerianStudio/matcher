@@ -13,9 +13,9 @@ import (
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/repositories"
@@ -513,7 +513,7 @@ func (uc *CallbackUseCase) processCallback(
 
 	// Atomic transaction: update exception state AND create audit log in same transaction.
 	// This ensures SOX compliance - if either fails, both are rolled back.
-	tx, err := uc.infraProvider.BeginTx(ctx)
+	txLease, err := uc.infraProvider.BeginTx(ctx)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to begin transaction", err)
 		uc.markIdempotencyFailed(ctx, params.dedupeKey)
@@ -522,10 +522,10 @@ func (uc *CallbackUseCase) processCallback(
 	}
 
 	defer func() {
-		_ = tx.Rollback() // No-op if already committed
+		_ = txLease.Rollback() // No-op if already committed
 	}()
 
-	updated, err := uc.exceptionRepo.UpdateWithTx(ctx, tx, exception)
+	updated, err := uc.exceptionRepo.UpdateWithTx(ctx, txLease.SQLTx(), exception)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to update exception", err)
 		uc.markIdempotencyFailed(ctx, params.dedupeKey)
@@ -533,11 +533,11 @@ func (uc *CallbackUseCase) processCallback(
 		return fmt.Errorf("update exception: %w", err)
 	}
 
-	if err := uc.publishCallbackAudit(ctx, tx, cmd, params, updated, span); err != nil {
+	if err := uc.publishCallbackAudit(ctx, txLease.SQLTx(), cmd, params, updated, span); err != nil {
 		return err
 	}
 
-	if err := tx.Commit(); err != nil {
+	if err := txLease.Commit(); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to commit transaction", err)
 		uc.markIdempotencyFailed(ctx, params.dedupeKey)
 

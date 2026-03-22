@@ -14,17 +14,16 @@ import (
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
 	ingestionRepositories "github.com/LerianStudio/matcher/internal/ingestion/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/ingestion/ports"
-	outboxEntities "github.com/LerianStudio/matcher/internal/outbox/domain/entities"
-	outboxRepositories "github.com/LerianStudio/matcher/internal/outbox/domain/repositories"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 const (
@@ -105,8 +104,8 @@ type outboxTxCreator interface {
 	CreateWithTx(
 		ctx context.Context,
 		tx *sql.Tx,
-		event *outboxEntities.OutboxEvent,
-	) (*outboxEntities.OutboxEvent, error)
+		event *shared.OutboxEvent,
+	) (*shared.OutboxEvent, error)
 }
 
 type transactionCleanupTxUpdater interface {
@@ -119,8 +118,9 @@ type UseCase struct {
 	transactionRepo ingestionRepositories.TransactionRepository
 	dedupe          ports.DedupeService
 	dedupeTTL       time.Duration
+	dedupeTTLGetter func() time.Duration
 	publisher       ports.EventPublisher
-	outboxRepo      outboxRepositories.OutboxRepository
+	outboxRepo      sharedPorts.OutboxRepository
 	jobTxRunner     jobTxRunner
 	jobRepoTx       jobTxUpdater
 	txCleanupRepoTx transactionCleanupTxUpdater
@@ -138,11 +138,12 @@ type UseCaseDeps struct {
 	TransactionRepo ingestionRepositories.TransactionRepository
 	Dedupe          ports.DedupeService
 	Publisher       ports.EventPublisher
-	OutboxRepo      outboxRepositories.OutboxRepository
+	OutboxRepo      sharedPorts.OutboxRepository
 	Parsers         ports.ParserRegistry
 	FieldMapRepo    ports.FieldMapRepository
 	SourceRepo      ports.SourceRepository
 	DedupeTTL       time.Duration
+	DedupeTTLGetter func() time.Duration
 	MatchTrigger    ports.MatchTrigger
 	ContextProvider ports.ContextProvider
 }
@@ -211,6 +212,7 @@ func NewUseCase(deps UseCaseDeps) (*UseCase, error) {
 		transactionRepo: deps.TransactionRepo,
 		dedupe:          deps.Dedupe,
 		dedupeTTL:       deps.DedupeTTL,
+		dedupeTTLGetter: deps.DedupeTTLGetter,
 		publisher:       deps.Publisher,
 		outboxRepo:      deps.OutboxRepo,
 		jobTxRunner:     jobTx,
@@ -637,7 +639,7 @@ func (uc *UseCase) persistCompletedJob(
 			return fmt.Errorf("failed to marshal event: %w", err)
 		}
 
-		outboxEvent, err := outboxEntities.NewOutboxEvent(ctx, event.EventType, event.JobID, body)
+		outboxEvent, err := shared.NewOutboxEvent(ctx, event.EventType, event.JobID, body)
 		if err != nil {
 			return fmt.Errorf("failed to create outbox event: %w", err)
 		}
@@ -686,7 +688,7 @@ func (uc *UseCase) filterAndInsertChunk(
 
 	for _, tx := range transactions {
 		hash := uc.dedupe.CalculateHash(tx.SourceID, tx.ExternalID)
-		if err := uc.dedupe.MarkSeenWithRetry(ctx, job.ContextID, hash, uc.dedupeTTL, defaultDedupeRetries); err != nil {
+		if err := uc.dedupe.MarkSeenWithRetry(ctx, job.ContextID, hash, uc.currentDedupeTTL(), defaultDedupeRetries); err != nil {
 			if errors.Is(err, ports.ErrDuplicateTransaction) {
 				continue
 			}
@@ -835,7 +837,7 @@ func (uc *UseCase) failJob(
 			return fmt.Errorf("marshal ingestion failed event: %w", err)
 		}
 
-		outboxEvent, err := outboxEntities.NewOutboxEvent(persistCtx, event.EventType, event.JobID, body)
+		outboxEvent, err := shared.NewOutboxEvent(persistCtx, event.EventType, event.JobID, body)
 		if err != nil {
 			return fmt.Errorf("failed to create outbox event: %w", err)
 		}
@@ -956,4 +958,18 @@ func convertParseErrors(errs []ports.ParseError) []entities.RowError {
 	}
 
 	return result
+}
+
+func (uc *UseCase) currentDedupeTTL() time.Duration {
+	if uc == nil {
+		return 0
+	}
+
+	if uc.dedupeTTLGetter != nil {
+		if ttl := uc.dedupeTTLGetter(); ttl > 0 {
+			return ttl
+		}
+	}
+
+	return uc.dedupeTTL
 }

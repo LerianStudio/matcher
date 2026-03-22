@@ -11,15 +11,16 @@ import (
 	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
+	"github.com/LerianStudio/matcher/internal/shared/constants"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -33,6 +34,34 @@ func safeLimit(n int) uint64 {
 	}
 
 	return uint64(n)
+}
+
+func trimExportJobsAndEncodeNextCursor(
+	records []*entities.ExportJob,
+	limit int,
+	encodeCursor func(time.Time, uuid.UUID) (string, error),
+) ([]*entities.ExportJob, string, error) {
+	trimmedRecords, nextCursor, err := pgcommon.TrimRecordsAndEncodeTimestampNextCursor(
+		records,
+		limit,
+		func(job *entities.ExportJob) (time.Time, uuid.UUID) {
+			if job == nil {
+				return time.Time{}, uuid.Nil
+			}
+
+			return job.CreatedAt, job.ID
+		},
+		encodeCursor,
+	)
+	if err != nil {
+		if errors.Is(err, pgcommon.ErrCursorEncoderRequired) {
+			return trimmedRecords, "", fmt.Errorf("encode next cursor: %w", ErrCursorEncoderRequired)
+		}
+
+		return trimmedRecords, "", fmt.Errorf("trim records and encode export job cursor: %w", err)
+	}
+
+	return trimmedRecords, nextCursor, nil
 }
 
 // Repository persists export jobs in Postgres.
@@ -347,7 +376,7 @@ func (repo *Repository) List(
 
 	var pagination libHTTP.CursorPagination
 
-	limit = libHTTP.ValidateLimit(limit, libHTTP.DefaultLimit, libHTTP.MaxLimit)
+	limit = libHTTP.ValidateLimit(limit, constants.DefaultPaginationLimit, constants.MaximumPaginationLimit)
 
 	jobs, err := pgcommon.WithTenantTxProvider(
 		ctx,
@@ -389,13 +418,16 @@ func (repo *Repository) List(
 				return nil, err
 			}
 
-			hasMore := len(records) > limit
-			if hasMore {
-				records = records[:limit]
-				last := records[len(records)-1]
-
-				pagination.Next = libHTTP.EncodeTimestampCursor(last.CreatedAt, last.ID)
+			records, nextCursor, nextCursorErr := trimExportJobsAndEncodeNextCursor(
+				records,
+				limit,
+				libHTTP.EncodeTimestampCursor,
+			)
+			if nextCursorErr != nil {
+				return nil, nextCursorErr
 			}
+
+			pagination.Next = nextCursor
 
 			return records, nil
 		},

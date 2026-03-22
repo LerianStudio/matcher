@@ -3,7 +3,6 @@ package match_rule
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
@@ -11,17 +10,6 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
-)
-
-// Sentinel errors for match rule model operations.
-var (
-	ErrMatchRuleEntityRequired    = errors.New("match rule entity is required")
-	ErrMatchRuleModelRequired     = errors.New("match rule model is required")
-	ErrMatchRuleContextIDRequired = errors.New("match rule context ID is required")
-	ErrRepoNotInitialized         = errors.New("match rule repository not initialized")
-	ErrRuleIDsRequired            = errors.New("rule ids are required")
-	ErrCursorNotFound             = errors.New("cursor not found")
-	ErrTransactionRequired        = errors.New("transaction is required")
 )
 
 // MatchRulePostgreSQLModel represents the database model for match rules.

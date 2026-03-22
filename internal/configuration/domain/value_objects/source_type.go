@@ -11,7 +11,7 @@ var ErrInvalidSourceType = errors.New("invalid source type")
 
 // SourceType defines the supported reconciliation source categories.
 // @Description Category of data source for reconciliation
-// @Enum LEDGER,BANK,GATEWAY,CUSTOM
+// @Enum LEDGER,BANK,GATEWAY,CUSTOM,FETCHER
 // swagger:enum SourceType
 type SourceType string
 
@@ -25,12 +25,14 @@ const (
 	SourceTypeGateway SourceType = "GATEWAY"
 	// SourceTypeCustom indicates a user-defined custom source.
 	SourceTypeCustom SourceType = "CUSTOM"
+	// SourceTypeFetcher indicates a fetcher source.
+	SourceTypeFetcher SourceType = "FETCHER"
 )
 
 // Valid reports whether the source type is supported.
 func (st SourceType) Valid() bool {
 	switch st {
-	case SourceTypeLedger, SourceTypeBank, SourceTypeGateway, SourceTypeCustom:
+	case SourceTypeLedger, SourceTypeBank, SourceTypeGateway, SourceTypeCustom, SourceTypeFetcher:
 		return true
 	}
 

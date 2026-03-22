@@ -1,54 +1,60 @@
 package auth
 
 import (
+	"errors"
+	"strings"
+
 	"github.com/gofiber/fiber/v2"
 
 	authMiddleware "github.com/LerianStudio/lib-auth/v2/auth/middleware"
 )
 
-// ProtectedGroup creates a route group with tenant extraction and authorization middleware.
-func ProtectedGroup(
+// Sentinel errors returned at startup when route configuration is invalid.
+var (
+	ErrNilTenantExtractor = errors.New("tenant extractor not initialized")
+	ErrNoActions          = errors.New("authorization actions not configured")
+	ErrEmptyAction        = errors.New("authorization actions contain empty entry")
+)
+
+// ProtectedGroupWithActionsWithMiddleware validates auth-enabled tokens locally before
+// applying all requested authorization checks, then extracts tenant context and
+// finally applies additional middleware.
+//
+// Validation errors (nil extractor, empty/blank actions) are returned at startup
+// so misconfiguration is caught before the server accepts traffic.
+func ProtectedGroupWithActionsWithMiddleware(
 	router fiber.Router,
 	authClient *authMiddleware.AuthClient,
 	extractor *TenantExtractor,
-	resource, action string,
-) fiber.Router {
-	if extractor == nil {
-		return router.Group("/", func(c *fiber.Ctx) error {
-			return fiber.NewError(
-				fiber.StatusInternalServerError,
-				"tenant extractor not initialized",
-			)
-		})
-	}
-
-	return router.Group("/", extractor.ExtractTenant(), Authorize(authClient, resource, action))
-}
-
-// ProtectedGroupWithMiddleware creates a route group with tenant extraction, authorization,
-// and additional middleware applied AFTER auth (e.g., rate limiter that uses UserID/TenantID).
-// Middleware order: TenantExtract → Auth → additionalMiddleware → Handlers.
-func ProtectedGroupWithMiddleware(
-	router fiber.Router,
-	authClient *authMiddleware.AuthClient,
-	extractor *TenantExtractor,
-	resource, action string,
+	resource string,
+	actions []string,
 	additionalMiddleware ...fiber.Handler,
-) fiber.Router {
+) (fiber.Router, error) {
 	if extractor == nil {
-		return router.Group("/", func(c *fiber.Ctx) error {
-			return fiber.NewError(
-				fiber.StatusInternalServerError,
-				"tenant extractor not initialized",
-			)
-		})
+		return nil, ErrNilTenantExtractor
 	}
 
-	const baseHandlerCount = 2
+	if len(actions) == 0 {
+		return nil, ErrNoActions
+	}
 
-	handlers := make([]fiber.Handler, 0, baseHandlerCount+len(additionalMiddleware))
-	handlers = append(handlers, extractor.ExtractTenant(), Authorize(authClient, resource, action))
+	for _, action := range actions {
+		if strings.TrimSpace(action) == "" {
+			return nil, ErrEmptyAction
+		}
+	}
+
+	handlers := make([]fiber.Handler, 0, len(actions)+2+len(additionalMiddleware))
+	if authClient != nil && extractor.authEnabled {
+		handlers = append(handlers, extractor.validateTenantClaims())
+	}
+
+	for _, action := range actions {
+		handlers = append(handlers, Authorize(authClient, resource, action))
+	}
+
+	handlers = append(handlers, extractor.ExtractTenant())
 	handlers = append(handlers, additionalMiddleware...)
 
-	return router.Group("/", handlers...)
+	return router.Group("/", handlers...), nil
 }

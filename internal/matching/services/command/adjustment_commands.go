@@ -3,7 +3,6 @@ package command
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,13 +11,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
-	governanceEntities "github.com/LerianStudio/matcher/internal/governance/domain/entities"
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
-	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
+	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 // CreateAdjustmentInput contains the input parameters for creating an adjustment.
@@ -91,57 +89,46 @@ func (uc *UseCase) persistAdjustmentWithAudit(
 	adjustment *matchingEntities.Adjustment,
 	in CreateAdjustmentInput,
 ) (*matchingEntities.Adjustment, error) {
-	result, err := pgcommon.WithTenantTxProvider(ctx, uc.infraProvider, func(tx *sql.Tx) (*matchingEntities.Adjustment, error) {
-		created, err := uc.adjustmentRepo.CreateWithTx(ctx, tx, adjustment)
-		if err != nil {
-			return nil, fmt.Errorf("persist adjustment: %w", err)
-		}
+	auditLog, err := uc.buildAdjustmentAuditLogEntity(ctx, adjustment, in)
+	if err != nil {
+		return nil, err
+	}
 
-		if err := uc.createAdjustmentAuditLog(ctx, tx, created, in); err != nil {
-			return nil, err
-		}
-
-		return created, nil
-	})
+	created, err := uc.adjustmentRepo.CreateWithAuditLog(ctx, adjustment, auditLog)
 	if err != nil {
 		return nil, fmt.Errorf("persist adjustment transaction: %w", err)
 	}
 
-	return result, nil
+	return created, nil
 }
 
-// createAdjustmentAuditLog creates and persists the audit log for an adjustment.
-func (uc *UseCase) createAdjustmentAuditLog(
+// buildAdjustmentAuditLogEntity builds the audit log entity for an adjustment.
+func (uc *UseCase) buildAdjustmentAuditLogEntity(
 	ctx context.Context,
-	tx *sql.Tx,
-	created *matchingEntities.Adjustment,
+	adjustment *matchingEntities.Adjustment,
 	in CreateAdjustmentInput,
-) error {
-	auditChanges, err := buildAdjustmentAuditChanges(created, in)
+) (*sharedDomain.AuditLog, error) {
+	auditChanges, err := buildAdjustmentAuditChanges(adjustment.ID, in)
 	if err != nil {
-		return fmt.Errorf("build audit changes: %w", err)
+		return nil, fmt.Errorf("build audit changes: %w", err)
 	}
 
 	actorID := in.CreatedBy
 
-	auditLog, err := governanceEntities.NewAuditLog(
+	auditLog, err := sharedDomain.NewAuditLog(
 		ctx,
 		in.TenantID,
 		"adjustment",
-		created.ID,
+		adjustment.ID,
 		"CREATE",
 		&actorID,
 		auditChanges,
 	)
 	if err != nil {
-		return fmt.Errorf("create audit log entity: %w", err)
+		return nil, fmt.Errorf("create audit log entity: %w", err)
 	}
 
-	if _, err := uc.auditLogRepo.CreateWithTx(ctx, tx, auditLog); err != nil {
-		return fmt.Errorf("persist audit log: %w", err)
-	}
-
-	return nil
+	return auditLog, nil
 }
 
 // CreateAdjustment creates a balancing journal entry to resolve a variance.
@@ -185,22 +172,20 @@ func (uc *UseCase) CreateAdjustment(
 }
 
 // buildAdjustmentAuditChanges creates a JSON payload with adjustment details for audit logging.
-func buildAdjustmentAuditChanges(
-	adjustment *matchingEntities.Adjustment,
-	in CreateAdjustmentInput,
-) ([]byte, error) {
+func buildAdjustmentAuditChanges(adjustmentID uuid.UUID, in CreateAdjustmentInput) ([]byte, error) {
 	payload := map[string]any{
 		"entity_type": "adjustment",
-		"entity_id":   adjustment.ID.String(),
+		"entity_id":   adjustmentID.String(),
 		"action":      "CREATE",
 		"actor":       in.CreatedBy,
 		"occurred_at": time.Now().UTC(),
 		"context_id":  in.ContextID.String(),
-		"type":        string(adjustment.Type),
-		"amount":      adjustment.Amount.String(),
-		"currency":    adjustment.Currency,
-		"description": adjustment.Description,
-		"reason":      adjustment.Reason,
+		"type":        in.Type,
+		"direction":   in.Direction,
+		"amount":      in.Amount.String(),
+		"currency":    in.Currency,
+		"description": in.Description,
+		"reason":      in.Reason,
 	}
 
 	if in.MatchGroupID != nil {

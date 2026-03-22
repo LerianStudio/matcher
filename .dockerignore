@@ -44,7 +44,6 @@ docs/plans/
 # Config secrets (config/.env is NOT matched by root-level .env pattern)
 config/.env
 config/.env.*
-!config/.env.example
 
 # CI/CD
 .github/
@@ -63,5 +62,4 @@ tests/
 # Misc
 Makefile
 docker-compose.yml
-docker-compose.prod.yml
 console/

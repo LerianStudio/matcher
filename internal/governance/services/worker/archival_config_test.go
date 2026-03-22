@@ -23,7 +23,6 @@ func TestArchivalWorkerConfig_DefaultValues(t *testing.T) {
 	assert.Empty(t, cfg.StoragePrefix)
 	assert.Empty(t, cfg.StorageClass)
 	assert.Zero(t, cfg.PartitionLookahead)
-	assert.Zero(t, cfg.PresignExpiry)
 }
 
 func TestArchivalWorkerConfig_FieldAssignment(t *testing.T) {
@@ -39,7 +38,6 @@ func TestArchivalWorkerConfig_FieldAssignment(t *testing.T) {
 		StoragePrefix:       "archives/audit-logs",
 		StorageClass:        "GLACIER",
 		PartitionLookahead:  3,
-		PresignExpiry:       1 * time.Hour,
 	}
 
 	assert.Equal(t, 24*time.Hour, cfg.Interval)
@@ -51,5 +49,4 @@ func TestArchivalWorkerConfig_FieldAssignment(t *testing.T) {
 	assert.Equal(t, "archives/audit-logs", cfg.StoragePrefix)
 	assert.Equal(t, "GLACIER", cfg.StorageClass)
 	assert.Equal(t, 3, cfg.PartitionLookahead)
-	assert.Equal(t, 1*time.Hour, cfg.PresignExpiry)
 }

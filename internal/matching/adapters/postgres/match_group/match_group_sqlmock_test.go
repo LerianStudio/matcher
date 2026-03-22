@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -15,11 +16,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	matchingRepos "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
 	matchingVO "github.com/LerianStudio/matcher/internal/matching/domain/value_objects"
+	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
+	"github.com/LerianStudio/matcher/internal/shared/constants"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 )
 
@@ -689,6 +692,61 @@ func TestListByRunID_CursorWithNonIDSort(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestCalculateMatchGroupSortPagination_PropagatesCalculatorError(t *testing.T) {
+	t.Parallel()
+
+	_, err := calculateMatchGroupSortPagination(
+		true,
+		true,
+		true,
+		sortColumnCreatedAt,
+		time.Now().UTC().Format(time.RFC3339Nano),
+		uuid.New().String(),
+		time.Now().UTC().Add(time.Minute).Format(time.RFC3339Nano),
+		uuid.New().String(),
+		func(
+			_ bool,
+			_ bool,
+			_ bool,
+			_ string,
+			_ string,
+			_ string,
+			_ string,
+			_ string,
+		) (string, string, error) {
+			return "", "", errTestQuery
+		},
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errTestQuery)
+}
+
+func TestCalculateMatchGroupSortPagination_NilCalculator(t *testing.T) {
+	t.Parallel()
+
+	_, err := calculateMatchGroupSortPagination(
+		true,
+		true,
+		true,
+		sortColumnCreatedAt,
+		time.Now().UTC().Format(time.RFC3339Nano),
+		uuid.New().String(),
+		time.Now().UTC().Add(time.Minute).Format(time.RFC3339Nano),
+		uuid.New().String(),
+		nil,
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, pgcommon.ErrSortCursorCalculatorRequired)
+}
+
+func TestMatchGroupSortValue_NilGroup(t *testing.T) {
+	t.Parallel()
+
+	assert.Empty(t, matchGroupSortValue(nil, sortColumnCreatedAt))
+}
+
 func TestListByRunID_DefaultLimit(t *testing.T) {
 	t.Parallel()
 
@@ -786,6 +844,61 @@ func TestListByRunID_QueryError(t *testing.T) {
 	require.Error(t, err)
 	require.Nil(t, result)
 	assert.Equal(t, libHTTP.CursorPagination{}, pagination)
+}
+
+func TestListByRunID_ReturnsRowsThroughBoundaryValidation(t *testing.T) {
+	t.Parallel()
+
+	repo, mock, finish := setupMockRepository(t)
+	defer finish()
+
+	ctx := context.Background()
+	contextID := uuid.New()
+	runID := uuid.New()
+	groupID := uuid.New()
+	ruleID := uuid.New()
+	now := time.Now().UTC()
+	ruleStr := ruleID.String()
+
+	rows := sqlmock.NewRows([]string{
+		"id", "context_id", "run_id", "rule_id", "confidence", "status",
+		"rejected_reason", "confirmed_at", "created_at", "updated_at",
+	}).AddRow(
+		groupID.String(), contextID.String(), runID.String(), &ruleStr,
+		80, "CONFIRMED", nil, &now, now, now,
+	)
+
+	mock.ExpectQuery("SELECT").WillReturnRows(rows)
+
+	results, pagination, err := repo.ListByRunID(ctx, contextID, runID, matchingRepos.CursorFilter{Limit: 10})
+
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, groupID, results[0].ID)
+	assert.Equal(t, contextID, results[0].ContextID)
+	assert.Equal(t, runID, results[0].RunID)
+	assert.Empty(t, pagination.Prev, "first page should have no prev cursor")
+}
+
+func TestListByRunID_LimitCappedAtMaximum(t *testing.T) {
+	t.Parallel()
+
+	repo, mock, finish := setupMockRepository(t)
+	defer finish()
+
+	ctx := context.Background()
+
+	rows := sqlmock.NewRows([]string{"id", "context_id", "run_id", "rule_id", "confidence", "status", "rejected_reason", "confirmed_at", "created_at", "updated_at"})
+
+	mock.ExpectQuery(fmt.Sprintf("LIMIT %d", constants.MaximumPaginationLimit+1)).WillReturnRows(rows)
+
+	filter := matchingRepos.CursorFilter{Limit: constants.MaximumPaginationLimit + 1}
+	result, pagination, err := repo.ListByRunID(ctx, uuid.New(), uuid.New(), filter)
+
+	require.NoError(t, err)
+	assert.Empty(t, result)
+	assert.Empty(t, pagination.Next)
+	assert.Empty(t, pagination.Prev)
 }
 
 func TestFindByID_SuccessWithMock(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 
 	"github.com/Masterminds/squirrel"
 
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
 	sharedpg "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 )

@@ -7,19 +7,16 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"net/url"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	libPostgres "github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres"
+	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
 	"github.com/bxcodec/dbresolver/v2"
 	"github.com/golang-migrate/migrate/v4"
 	migratePostgres "github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/stretchr/testify/require"
@@ -34,8 +31,10 @@ import (
 	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	configVO "github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
+	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	tenantAdapters "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant/adapters"
 	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
+	embeddedmigrations "github.com/LerianStudio/matcher/migrations"
 )
 
 // SharedInfra holds containers that are shared across all tests in a package.
@@ -144,21 +143,7 @@ func createSharedInfra(ctx context.Context) (*SharedInfra, error) {
 	infra.RedisAddr = redisAddr
 
 	// Start RabbitMQ
-	rabbitReq := testcontainers.ContainerRequest{
-		Image:        "rabbitmq:4.1.3-management-alpine",
-		ExposedPorts: []string{"5672/tcp", "15672/tcp"},
-		WaitingFor: wait.ForAll(
-			wait.ForListeningPort("5672/tcp"),
-			wait.ForLog("Server startup complete").WithStartupTimeout(120*time.Second),
-		).WithStartupTimeout(120 * time.Second),
-	}
-	rabbitContainer, err := testcontainers.GenericContainer(
-		startupCtx,
-		testcontainers.GenericContainerRequest{
-			ContainerRequest: rabbitReq,
-			Started:          true,
-		},
-	)
+	rabbitContainer, err := startRabbitMQContainer(startupCtx)
 	if err != nil {
 		_ = pgContainer.Terminate(ctx)
 		_ = redisContainer.Terminate(ctx)
@@ -166,25 +151,25 @@ func createSharedInfra(ctx context.Context) (*SharedInfra, error) {
 	}
 	infra.RabbitMQContainer = rabbitContainer
 
-	rabbitHost, err := rabbitContainer.Host(startupCtx)
+	rabbitHost, err := containerHostWithRetry(startupCtx, rabbitContainer)
 	if err != nil {
 		_ = infra.Cleanup(ctx)
 		return nil, fmt.Errorf("failed to get rabbitmq host: %w", err)
 	}
-	rabbitPort, err := rabbitContainer.MappedPort(startupCtx, "5672/tcp")
+	rabbitPort, err := mappedPortWithRetry(startupCtx, rabbitContainer, "5672/tcp")
 	if err != nil {
 		_ = infra.Cleanup(ctx)
 		return nil, fmt.Errorf("failed to get rabbitmq port: %w", err)
 	}
-	rabbitHealthPort, err := rabbitContainer.MappedPort(startupCtx, "15672/tcp")
+	rabbitHealthPort, err := mappedPortWithRetry(startupCtx, rabbitContainer, "15672/tcp")
 	if err != nil {
 		_ = infra.Cleanup(ctx)
 		return nil, fmt.Errorf("failed to get rabbitmq health port: %w", err)
 	}
 
 	infra.RabbitMQHost = rabbitHost
-	infra.RabbitMQPort = rabbitPort.Port()
-	infra.RabbitMQHealthURL = fmt.Sprintf("http://%s:%s", rabbitHost, rabbitHealthPort.Port())
+	infra.RabbitMQPort = rabbitPort
+	infra.RabbitMQHealthURL = fmt.Sprintf("http://%s:%s", rabbitHost, rabbitHealthPort)
 
 	return infra, nil
 }
@@ -231,13 +216,7 @@ func (si *SharedInfra) GetOrCreateConnection(
 		return si.sharedConnection, nil
 	}
 
-	_, currentFile, _, ok := runtime.Caller(0)
-	if !ok {
-		return nil, fmt.Errorf("failed to get current file path")
-	}
-	migrationsPath := filepath.Clean(filepath.Join(filepath.Dir(currentFile), "../../migrations"))
-
-	connection, closeDBs, err := initSharedDBConnection(t, si.PostgresDSN, migrationsPath)
+	connection, closeDBs, err := initSharedDBConnection(t, si.PostgresDSN, "migrations")
 	if err != nil {
 		return nil, err
 	}
@@ -366,6 +345,9 @@ func resetSharedDatabase(t *testing.T, connection *libPostgres.Client) error {
 	rolledBack := false
 	defer func() {
 		if !rolledBack {
+			// Cleanup runs in a deferred path after the real test outcome is already
+			// determined. Unexpected rollback errors are logged for diagnosis, but are
+			// intentionally non-fatal so they do not mask the primary test failure.
 			if rbErr := tx.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
 				t.Logf("warning: rollback error during database reset cleanup: %v", rbErr)
 			}
@@ -485,7 +467,7 @@ func RunWithSharedDatabase(t *testing.T, testFn func(t *testing.T, h *TestHarnes
 // Uses larger pool sizes since it's shared.
 func initSharedDBConnection(
 	t *testing.T,
-	connectionString, migrationsPath string,
+	connectionString, _ string,
 ) (*libPostgres.Client, func() error, error) {
 	t.Helper()
 
@@ -502,6 +484,18 @@ func initSharedDBConnection(
 
 	waitForSharedPostgres(t, primaryDB)
 	waitForSharedPostgres(t, replicaDB)
+
+	if err := dropAllPublicTables(t, primaryDB); err != nil {
+		_ = primaryDB.Close()
+		_ = replicaDB.Close()
+		return nil, nil, fmt.Errorf("failed to reset shared database before migrations: %w", err)
+	}
+
+	if err := dropAllPublicEnumTypes(t, primaryDB); err != nil {
+		_ = primaryDB.Close()
+		_ = replicaDB.Close()
+		return nil, nil, fmt.Errorf("failed to reset shared enum types before migrations: %w", err)
+	}
 
 	// Conservative pool sizes to prevent connection exhaustion with parallel tests.
 	// Each test's bootstrap.Service also creates its own pool, so we keep this low.
@@ -521,13 +515,12 @@ func initSharedDBConnection(
 		dbresolver.WithLoadBalancer(dbresolver.RoundRobinLB),
 	)
 
-	migrationURL, err := url.Parse(filepath.ToSlash(migrationsPath))
+	source, err := iofs.New(embeddedmigrations.FS, ".")
 	if err != nil {
 		_ = primaryDB.Close()
 		_ = replicaDB.Close()
-		return nil, nil, fmt.Errorf("failed to parse migrations path: %w", err)
+		return nil, nil, fmt.Errorf("failed to create embedded migration source: %w", err)
 	}
-	migrationURL.Scheme = "file"
 
 	driver, err := migratePostgres.WithInstance(primaryDB, &migratePostgres.Config{
 		MultiStatementEnabled: true,
@@ -540,7 +533,7 @@ func initSharedDBConnection(
 		return nil, nil, fmt.Errorf("failed to create migration driver: %w", err)
 	}
 
-	migrator, err := migrate.NewWithDatabaseInstance(migrationURL.String(), "matcher_test", driver)
+	migrator, err := migrate.NewWithInstance("iofs", source, "matcher_test", driver)
 	if err != nil {
 		_ = primaryDB.Close()
 		_ = replicaDB.Close()
@@ -567,6 +560,97 @@ func initSharedDBConnection(
 	}
 
 	return connection, cleanup, nil
+}
+
+func dropAllPublicTables(t *testing.T, db *sql.DB) error {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	rows, err := db.QueryContext(ctx, `
+SELECT tablename
+FROM pg_tables
+WHERE schemaname = 'public'
+ORDER BY tablename ASC
+`)
+	if err != nil {
+		return fmt.Errorf("querying public tables: %w", err)
+	}
+	defer rows.Close()
+
+	tables := make([]string, 0)
+	for rows.Next() {
+		var tableName string
+		if err := rows.Scan(&tableName); err != nil {
+			return fmt.Errorf("scanning public table name: %w", err)
+		}
+
+		tables = append(tables, tableName)
+	}
+
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterating public tables: %w", err)
+	}
+
+	if len(tables) == 0 {
+		return nil
+	}
+
+	qualifiedTables := make([]string, 0, len(tables))
+	for _, table := range tables {
+		qualifiedTables = append(qualifiedTables, "public."+quoteIdentifier(table))
+	}
+
+	query := fmt.Sprintf("DROP TABLE IF EXISTS %s CASCADE", strings.Join(qualifiedTables, ", "))
+	if _, err := db.ExecContext(ctx, query); err != nil {
+		return fmt.Errorf("dropping public tables: %w", err)
+	}
+
+	return nil
+}
+
+func dropAllPublicEnumTypes(t *testing.T, db *sql.DB) error {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	rows, err := db.QueryContext(ctx, `
+SELECT t.typname
+FROM pg_type t
+JOIN pg_namespace n ON n.oid = t.typnamespace
+WHERE n.nspname = 'public'
+  AND t.typtype = 'e'
+ORDER BY t.typname ASC
+`)
+	if err != nil {
+		return fmt.Errorf("querying public enum types: %w", err)
+	}
+	defer rows.Close()
+
+	types := make([]string, 0)
+	for rows.Next() {
+		var typeName string
+		if err := rows.Scan(&typeName); err != nil {
+			return fmt.Errorf("scanning public enum type: %w", err)
+		}
+
+		types = append(types, typeName)
+	}
+
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterating public enum types: %w", err)
+	}
+
+	for _, typeName := range types {
+		query := fmt.Sprintf("DROP TYPE IF EXISTS public.%s CASCADE", quoteIdentifier(typeName))
+		if _, err := db.ExecContext(ctx, query); err != nil {
+			return fmt.Errorf("dropping public enum type %s: %w", typeName, err)
+		}
+	}
+
+	return nil
 }
 
 func setupSharedSeedData(
@@ -620,6 +704,7 @@ func setupSharedSeedData(
 		configEntities.CreateReconciliationSourceInput{
 			Name:   "Integration Test Source",
 			Type:   configVO.SourceTypeLedger,
+			Side:   sharedfee.MatchingSideLeft,
 			Config: map[string]any{},
 		},
 	)

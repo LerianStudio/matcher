@@ -5,6 +5,7 @@ package adjustment
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"regexp"
 	"testing"
 	"time"
@@ -15,9 +16,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	pkgHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	pkgHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	matchingRepositories "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
+	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
+	"github.com/LerianStudio/matcher/internal/shared/constants"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 )
 
@@ -28,7 +31,7 @@ func setupRepository(t *testing.T) (*Repository, sqlmock.Sqlmock, func()) {
 	require.NoError(t, err)
 
 	provider := testutil.NewMockProviderFromDB(t, db)
-	repo := NewRepository(provider)
+	repo := NewRepository(provider, nil)
 
 	finish := func() {
 		mock.ExpectClose()
@@ -43,7 +46,7 @@ func TestNewRepository(t *testing.T) {
 	t.Parallel()
 
 	provider := &testutil.MockInfrastructureProvider{}
-	repo := NewRepository(provider)
+	repo := NewRepository(provider, nil)
 
 	require.NotNil(t, repo)
 	assert.NotNil(t, repo.provider)
@@ -412,6 +415,74 @@ func TestRepository_ListByContextID_Empty(t *testing.T) {
 	assert.Empty(t, results)
 }
 
+func TestRepository_ListByContextID_LimitCappedAtMaximum(t *testing.T) {
+	t.Parallel()
+
+	repo, mock, finish := setupRepository(t)
+	defer finish()
+
+	ctx := context.Background()
+	contextID := uuid.New()
+
+	rows := sqlmock.NewRows([]string{
+		"id", "context_id", "match_group_id", "transaction_id", "type", "direction", "amount",
+		"currency", "description", "reason", "created_by", "created_at", "updated_at",
+	})
+
+	mock.ExpectQuery(fmt.Sprintf("LIMIT %d", constants.MaximumPaginationLimit+1)).
+		WithArgs(contextID.String()).
+		WillReturnRows(rows)
+
+	results, pagination, err := repo.ListByContextID(
+		ctx,
+		contextID,
+		matchingRepositories.CursorFilter{Limit: constants.MaximumPaginationLimit + 1},
+	)
+	require.NoError(t, err)
+	assert.Empty(t, results)
+	assert.Empty(t, pagination.Next)
+	assert.Empty(t, pagination.Prev)
+}
+
+func TestRepository_ListByContextID_ReturnsRowsThroughBoundaryValidation(t *testing.T) {
+	t.Parallel()
+
+	repo, mock, finish := setupRepository(t)
+	defer finish()
+
+	ctx := context.Background()
+	contextID := uuid.New()
+	adjID := uuid.New()
+	now := time.Now().UTC()
+
+	rows := sqlmock.NewRows([]string{
+		"id", "context_id", "match_group_id", "transaction_id", "type", "direction", "amount",
+		"currency", "description", "reason", "created_by", "created_at", "updated_at",
+	}).AddRow(
+		adjID.String(), contextID.String(), nil, nil, "BANK_FEE", "DEBIT",
+		decimal.NewFromFloat(10.50), "USD", "Test adjustment", "Test reason", "system",
+		now, now,
+	)
+
+	mock.ExpectQuery("SELECT").
+		WithArgs(contextID.String()).
+		WillReturnRows(rows)
+
+	results, pagination, err := repo.ListByContextID(
+		ctx,
+		contextID,
+		matchingRepositories.CursorFilter{Limit: 10},
+	)
+
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, adjID, results[0].ID)
+	assert.Equal(t, contextID, results[0].ContextID)
+	assert.Equal(t, matchingEntities.AdjustmentTypeBankFee, results[0].Type)
+	assert.Equal(t, matchingEntities.AdjustmentDirectionDebit, results[0].Direction)
+	assert.Empty(t, pagination.Prev, "first page should have no prev cursor")
+}
+
 func TestRepository_ListByContextID_InvalidSortCursor(t *testing.T) {
 	t.Parallel()
 
@@ -428,6 +499,56 @@ func TestRepository_ListByContextID_InvalidSortCursor(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.ErrorIs(t, err, pkgHTTP.ErrInvalidCursor)
+}
+
+func TestCalculateAdjustmentSortPagination_PropagatesCalculatorError(t *testing.T) {
+	t.Parallel()
+
+	_, err := calculateAdjustmentSortPagination(
+		true,
+		true,
+		true,
+		sortColumnCreatedAt,
+		time.Now().UTC().Format(time.RFC3339Nano),
+		uuid.New().String(),
+		time.Now().UTC().Add(time.Minute).Format(time.RFC3339Nano),
+		uuid.New().String(),
+		func(
+			_ bool,
+			_ bool,
+			_ bool,
+			_ string,
+			_ string,
+			_ string,
+			_ string,
+			_ string,
+		) (string, string, error) {
+			return "", "", sql.ErrTxDone
+		},
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, sql.ErrTxDone)
+	assert.Contains(t, err.Error(), "calculate adjustment cursor pagination")
+}
+
+func TestCalculateAdjustmentSortPagination_NilCalculator(t *testing.T) {
+	t.Parallel()
+
+	_, err := calculateAdjustmentSortPagination(
+		true,
+		true,
+		true,
+		sortColumnCreatedAt,
+		time.Now().UTC().Format(time.RFC3339Nano),
+		uuid.New().String(),
+		time.Now().UTC().Add(time.Minute).Format(time.RFC3339Nano),
+		uuid.New().String(),
+		nil,
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, pgcommon.ErrSortCursorCalculatorRequired)
 }
 
 func TestRepository_ListByMatchGroupID_NilRepository(t *testing.T) {

@@ -16,10 +16,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 )
 
@@ -81,6 +82,7 @@ func TestRepository_Create_NilChecks(t *testing.T) {
 		ContextID: uuid.New(),
 		Name:      "Test Source",
 		Type:      value_objects.SourceTypeLedger,
+		Side:      sharedfee.MatchingSideLeft,
 		Config:    map[string]any{"key": "value"},
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -133,6 +135,7 @@ func TestRepository_CreateWithTx_NilChecks(t *testing.T) {
 		ContextID: uuid.New(),
 		Name:      "Test Source",
 		Type:      value_objects.SourceTypeLedger,
+		Side:      sharedfee.MatchingSideLeft,
 		Config:    map[string]any{"key": "value"},
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -288,6 +291,7 @@ func TestRepository_Update_NilChecks(t *testing.T) {
 		ContextID: uuid.New(),
 		Name:      "Test Source",
 		Type:      value_objects.SourceTypeLedger,
+		Side:      sharedfee.MatchingSideLeft,
 		Config:    map[string]any{"key": "value"},
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -340,6 +344,7 @@ func TestRepository_UpdateWithTx_NilChecks(t *testing.T) {
 		ContextID: uuid.New(),
 		Name:      "Test Source",
 		Type:      value_objects.SourceTypeLedger,
+		Side:      sharedfee.MatchingSideLeft,
 		Config:    map[string]any{"key": "value"},
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -553,6 +558,7 @@ func TestModelConversion_EdgeCases(t *testing.T) {
 			ContextID: uuid.New(),
 			Name:      "Test Source",
 			Type:      value_objects.SourceTypeLedger,
+			Side:      sharedfee.MatchingSideLeft,
 			Config:    map[string]any{},
 			CreatedAt: now,
 			UpdatedAt: now,
@@ -576,6 +582,7 @@ func TestModelConversion_EdgeCases(t *testing.T) {
 			ContextID: uuid.New(),
 			Name:      "Test Source",
 			Type:      value_objects.SourceTypeGateway,
+			Side:      sharedfee.MatchingSideRight,
 			Config: map[string]any{
 				"string":  "value",
 				"number":  float64(42),
@@ -641,6 +648,7 @@ func TestModelConversion_EdgeCases(t *testing.T) {
 			ContextID: uuid.New(),
 			Name:      "Test Source",
 			Type:      value_objects.SourceTypeLedger,
+			Side:      sharedfee.MatchingSideLeft,
 			Config:    map[string]any{},
 			CreatedAt: createdAt,
 			UpdatedAt: updatedAt,
@@ -664,6 +672,7 @@ func TestModelConversion_EdgeCases(t *testing.T) {
 			ContextID: uuid.New(),
 			Name:      "Test Source with 'quotes' and \"double quotes\" and special chars: @#$%",
 			Type:      value_objects.SourceTypeLedger,
+			Side:      sharedfee.MatchingSideLeft,
 			Config:    map[string]any{},
 			CreatedAt: now,
 			UpdatedAt: now,
@@ -687,6 +696,7 @@ func createValidSourceEntity(t *testing.T) *entities.ReconciliationSource {
 		ContextID: uuid.New(),
 		Name:      "Test Source",
 		Type:      value_objects.SourceTypeLedger,
+		Side:      sharedfee.MatchingSideLeft,
 		Config:    map[string]any{"key": "value"},
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -1123,9 +1133,9 @@ func TestScanSource_Success(t *testing.T) {
 	configJSON := []byte(`{"key":"value"}`)
 
 	rows := sqlmock.NewRows([]string{
-		"id", "context_id", "name", "type", "config", "fee_schedule_id", "created_at", "updated_at",
+		"id", "context_id", "name", "type", "side", "config", "created_at", "updated_at",
 	}).AddRow(
-		id.String(), contextID.String(), "Test Source", "LEDGER", configJSON, nil, now, now,
+		id.String(), contextID.String(), "Test Source", "LEDGER", "LEFT", configJSON, now, now,
 	)
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
 
@@ -1159,9 +1169,9 @@ func TestScanSource_InvalidID(t *testing.T) {
 	configJSON := []byte(`{}`)
 
 	rows := sqlmock.NewRows([]string{
-		"id", "context_id", "name", "type", "config", "fee_schedule_id", "created_at", "updated_at",
+		"id", "context_id", "name", "type", "side", "config", "created_at", "updated_at",
 	}).AddRow(
-		"invalid-uuid", uuid.New().String(), "Test Source", "LEDGER", configJSON, nil, now, now,
+		"invalid-uuid", uuid.New().String(), "Test Source", "LEDGER", "LEFT", configJSON, now, now,
 	)
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
 
@@ -1191,9 +1201,9 @@ func TestScanSource_InvalidContextID(t *testing.T) {
 	configJSON := []byte(`{}`)
 
 	rows := sqlmock.NewRows([]string{
-		"id", "context_id", "name", "type", "config", "fee_schedule_id", "created_at", "updated_at",
+		"id", "context_id", "name", "type", "side", "config", "created_at", "updated_at",
 	}).AddRow(
-		uuid.New().String(), "invalid-uuid", "Test Source", "LEDGER", configJSON, nil, now, now,
+		uuid.New().String(), "invalid-uuid", "Test Source", "LEDGER", "LEFT", configJSON, now, now,
 	)
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
 
@@ -1223,11 +1233,11 @@ func TestScanSource_InvalidType(t *testing.T) {
 	configJSON := []byte(`{}`)
 
 	rows := sqlmock.NewRows([]string{
-		"id", "context_id", "name", "type", "config", "fee_schedule_id", "created_at", "updated_at",
+		"id", "context_id", "name", "type", "side", "config", "created_at", "updated_at",
 	}).AddRow(
 		uuid.New().
 			String(),
-		uuid.New().String(), "Test Source", "INVALID_TYPE", configJSON, nil, now, now,
+		uuid.New().String(), "Test Source", "INVALID_TYPE", "LEFT", configJSON, now, now,
 	)
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
 
@@ -1257,11 +1267,11 @@ func TestScanSource_InvalidConfig(t *testing.T) {
 	invalidConfigJSON := []byte(`{invalid json}`)
 
 	rows := sqlmock.NewRows([]string{
-		"id", "context_id", "name", "type", "config", "fee_schedule_id", "created_at", "updated_at",
+		"id", "context_id", "name", "type", "side", "config", "created_at", "updated_at",
 	}).AddRow(
 		uuid.New().
 			String(),
-		uuid.New().String(), "Test Source", "LEDGER", invalidConfigJSON, nil, now, now,
+		uuid.New().String(), "Test Source", "LEDGER", "LEFT", invalidConfigJSON, now, now,
 	)
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
 
@@ -1288,7 +1298,7 @@ func TestScanSource_ScanError(t *testing.T) {
 	defer db.Close()
 
 	rows := sqlmock.NewRows([]string{
-		"id", "context_id", "name", "type", "config", "fee_schedule_id", "created_at", "updated_at",
+		"id", "context_id", "name", "type", "side", "config", "created_at", "updated_at",
 	}).AddRow(
 		nil, nil, nil, nil, nil, nil, nil, nil,
 	)
@@ -1334,11 +1344,11 @@ func TestScanSource_AllSourceTypes(t *testing.T) {
 			configJSON := []byte(`{}`)
 
 			rows := sqlmock.NewRows([]string{
-				"id", "context_id", "name", "type", "config", "fee_schedule_id", "created_at", "updated_at",
+				"id", "context_id", "name", "type", "side", "config", "created_at", "updated_at",
 			}).AddRow(
 				uuid.New().
 					String(),
-				uuid.New().String(), "Test Source", tc.typeStr, configJSON, nil, now, now,
+				uuid.New().String(), "Test Source", tc.typeStr, "LEFT", configJSON, now, now,
 			)
 			mock.ExpectQuery("SELECT").WillReturnRows(rows)
 
@@ -1370,11 +1380,11 @@ func TestScanSource_EmptyConfig(t *testing.T) {
 	emptyConfigJSON := []byte(`{}`)
 
 	rows := sqlmock.NewRows([]string{
-		"id", "context_id", "name", "type", "config", "fee_schedule_id", "created_at", "updated_at",
+		"id", "context_id", "name", "type", "side", "config", "created_at", "updated_at",
 	}).AddRow(
 		uuid.New().
 			String(),
-		uuid.New().String(), "Test Source", "LEDGER", emptyConfigJSON, nil, now, now,
+		uuid.New().String(), "Test Source", "LEDGER", "LEFT", emptyConfigJSON, now, now,
 	)
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
 
@@ -1492,9 +1502,9 @@ func TestRepository_FindByID_SuccessWithMock(t *testing.T) {
 	configJSON := []byte(`{"key":"value"}`)
 
 	rows := sqlmock.NewRows([]string{
-		"id", "context_id", "name", "type", "config", "fee_schedule_id", "created_at", "updated_at",
+		"id", "context_id", "name", "type", "side", "config", "created_at", "updated_at",
 	}).AddRow(
-		id.String(), contextID.String(), "Test Source", "LEDGER", configJSON, nil, now, now,
+		id.String(), contextID.String(), "Test Source", "LEDGER", "LEFT", configJSON, now, now,
 	)
 
 	mock.ExpectBegin()
@@ -1567,10 +1577,10 @@ func TestRepository_FindByContextID_SuccessWithMock(t *testing.T) {
 	configJSON := []byte(`{}`)
 
 	rows := sqlmock.NewRows([]string{
-		"id", "context_id", "name", "type", "config", "fee_schedule_id", "created_at", "updated_at",
+		"id", "context_id", "name", "type", "side", "config", "created_at", "updated_at",
 	}).
-		AddRow(id1.String(), contextID.String(), "Source 1", "LEDGER", configJSON, nil, now, now).
-		AddRow(id2.String(), contextID.String(), "Source 2", "GATEWAY", configJSON, nil, now, now)
+		AddRow(id1.String(), contextID.String(), "Source 1", "LEDGER", "LEFT", configJSON, now, now).
+		AddRow(id2.String(), contextID.String(), "Source 2", "GATEWAY", "RIGHT", configJSON, now, now)
 
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT .+ FROM reconciliation_sources WHERE context_id").WillReturnRows(rows)
@@ -1597,8 +1607,8 @@ func TestRepository_FindByContextID_WithCursorWithMock(t *testing.T) {
 	configJSON := []byte(`{}`)
 
 	rows := sqlmock.NewRows([]string{
-		"id", "context_id", "name", "type", "config", "fee_schedule_id", "created_at", "updated_at",
-	}).AddRow(id.String(), contextID.String(), "Source", "BANK", configJSON, nil, now, now)
+		"id", "context_id", "name", "type", "side", "config", "created_at", "updated_at",
+	}).AddRow(id.String(), contextID.String(), "Source", "BANK", "LEFT", configJSON, now, now)
 
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT .+ FROM reconciliation_sources WHERE context_id").WillReturnRows(rows)
@@ -1622,7 +1632,7 @@ func TestRepository_FindByContextID_EmptyWithMock(t *testing.T) {
 	contextID := uuid.New()
 
 	rows := sqlmock.NewRows([]string{
-		"id", "context_id", "name", "type", "config", "fee_schedule_id", "created_at", "updated_at",
+		"id", "context_id", "name", "type", "side", "config", "created_at", "updated_at",
 	})
 
 	mock.ExpectBegin()
@@ -1670,8 +1680,8 @@ func TestRepository_FindByContextIDAndType_SuccessWithMock(t *testing.T) {
 	configJSON := []byte(`{}`)
 
 	rows := sqlmock.NewRows([]string{
-		"id", "context_id", "name", "type", "config", "fee_schedule_id", "created_at", "updated_at",
-	}).AddRow(id.String(), contextID.String(), "Source", "LEDGER", configJSON, nil, now, now)
+		"id", "context_id", "name", "type", "side", "config", "created_at", "updated_at",
+	}).AddRow(id.String(), contextID.String(), "Source", "LEDGER", "LEFT", configJSON, now, now)
 
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT .+ FROM reconciliation_sources WHERE context_id").WillReturnRows(rows)
@@ -1705,8 +1715,8 @@ func TestRepository_FindByContextIDAndType_WithCursorWithMock(t *testing.T) {
 	configJSON := []byte(`{}`)
 
 	rows := sqlmock.NewRows([]string{
-		"id", "context_id", "name", "type", "config", "fee_schedule_id", "created_at", "updated_at",
-	}).AddRow(id.String(), contextID.String(), "Source", "GATEWAY", configJSON, nil, now, now)
+		"id", "context_id", "name", "type", "side", "config", "created_at", "updated_at",
+	}).AddRow(id.String(), contextID.String(), "Source", "GATEWAY", "RIGHT", configJSON, now, now)
 
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT .+ FROM reconciliation_sources WHERE context_id").WillReturnRows(rows)
@@ -2058,6 +2068,7 @@ func TestModelConversion_ConfigEdgeCases(t *testing.T) {
 			ContextID: uuid.New(),
 			Name:      "Test Source",
 			Type:      value_objects.SourceTypeLedger,
+			Side:      sharedfee.MatchingSideLeft,
 			Config: map[string]any{
 				"unicode":  "こんにちは",
 				"emoji":    "🔥",
@@ -2086,6 +2097,7 @@ func TestModelConversion_ConfigEdgeCases(t *testing.T) {
 			ContextID: uuid.New(),
 			Name:      "Test Source",
 			Type:      value_objects.SourceTypeGateway,
+			Side:      sharedfee.MatchingSideRight,
 			Config: map[string]any{
 				"level1": map[string]any{
 					"level2": map[string]any{
@@ -2210,6 +2222,88 @@ func TestRepository_FindByContextID_InvalidCursor(t *testing.T) {
 		assert.Empty(t, pagination.Next)
 		assert.Empty(t, pagination.Prev)
 	})
+}
+
+// TestScanSource_InvalidPersistedSide verifies adapter boundary behavior when
+// the database contains an unrecognized side value. The toDomain conversion at
+// source.go:96-99 casts any string to MatchingSide without validation.
+// This test ensures the scan path does not panic and faithfully passes the raw
+// value through, leaving domain-level validation to the caller.
+func TestScanSource_InvalidPersistedSide(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+
+	defer db.Close()
+
+	now := time.Now().UTC()
+	id := uuid.New()
+	contextID := uuid.New()
+	configJSON := []byte(`{}`)
+
+	rows := sqlmock.NewRows([]string{
+		"id", "context_id", "name", "type", "side", "config", "created_at", "updated_at",
+	}).AddRow(
+		id.String(), contextID.String(), "Test Source", "LEDGER", "INVALID", configJSON, now, now,
+	)
+	mock.ExpectQuery("SELECT").WillReturnRows(rows)
+
+	sqlRows, err := db.QueryContext(ctx, "SELECT 1")
+	require.NoError(t, err)
+
+	defer sqlRows.Close()
+
+	require.True(t, sqlRows.Next())
+
+	result, err := scanSource(sqlRows)
+	require.NoError(t, err, "scanSource must not panic or error on unrecognized side value")
+	require.NotNil(t, result)
+	require.Equal(t, id, result.ID)
+
+	// The adapter faithfully passes through the raw string; domain validation
+	// (MatchingSide.IsValid()) is the caller's responsibility.
+	assert.Equal(t, sharedfee.MatchingSide("INVALID"), result.Side)
+	assert.False(t, result.Side.IsValid(), "INVALID side must not pass domain validation")
+}
+
+// TestScanSource_EmptyPersistedSide verifies that a NULL side from the database
+// produces an empty MatchingSide (zero value).
+func TestScanSource_EmptyPersistedSide(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+
+	defer db.Close()
+
+	now := time.Now().UTC()
+	id := uuid.New()
+	contextID := uuid.New()
+	configJSON := []byte(`{}`)
+
+	// sql.NullString with empty string simulates a NULL column.
+	rows := sqlmock.NewRows([]string{
+		"id", "context_id", "name", "type", "side", "config", "created_at", "updated_at",
+	}).AddRow(
+		id.String(), contextID.String(), "Test Source", "LEDGER", nil, configJSON, now, now,
+	)
+	mock.ExpectQuery("SELECT").WillReturnRows(rows)
+
+	sqlRows, err := db.QueryContext(ctx, "SELECT 1")
+	require.NoError(t, err)
+
+	defer sqlRows.Close()
+
+	require.True(t, sqlRows.Next())
+
+	result, err := scanSource(sqlRows)
+	require.NoError(t, err, "scanSource must not panic on NULL side")
+	require.NotNil(t, result)
+	assert.Equal(t, sharedfee.MatchingSide(""), result.Side)
+	assert.False(t, result.Side.IsExclusive(), "empty side must not be exclusive")
 }
 
 func TestRepository_FindByContextIDAndType_InvalidCursor(t *testing.T) {

@@ -4,22 +4,22 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel/trace/noop"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/exception/ports"
+	tenantinfra "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 const (
-	callbackRateLimitKeyPrefix = "matcher:callback:ratelimit:"
+	callbackRateLimitKeyPrefix = "matcher:callback:ratelimit"
 )
 
 // DefaultCallbackRateLimitPerMin is the default maximum number of callbacks
@@ -44,9 +44,10 @@ var (
 //   - If the counter exceeds the limit, deny the request
 //   - When the TTL expires, the counter resets automatically
 type CallbackRateLimiter struct {
-	provider sharedPorts.InfrastructureProvider
-	limit    int
-	window   time.Duration
+	provider    sharedPorts.InfrastructureProvider
+	limit       int
+	window      time.Duration
+	limitGetter func() int
 }
 
 // NewCallbackRateLimiter creates a new Redis-based callback rate limiter
@@ -75,6 +76,33 @@ func NewCallbackRateLimiter(
 	}, nil
 }
 
+// SetRuntimeLimitGetter injects a live config-backed callback limit source.
+func (rl *CallbackRateLimiter) SetRuntimeLimitGetter(getter func() int) {
+	if rl == nil {
+		return
+	}
+
+	rl.limitGetter = getter
+}
+
+func (rl *CallbackRateLimiter) currentLimit() int {
+	if rl == nil {
+		return DefaultCallbackRateLimitPerMin
+	}
+
+	if rl.limitGetter != nil {
+		if limit := rl.limitGetter(); limit > 0 {
+			return limit
+		}
+	}
+
+	if rl.limit > 0 {
+		return rl.limit
+	}
+
+	return DefaultCallbackRateLimitPerMin
+}
+
 // Allow checks whether a callback identified by key is within the configured rate limit.
 // Uses a Redis INCR + EXPIRE pattern for a fixed-window counter.
 func (rl *CallbackRateLimiter) Allow(ctx context.Context, key string) (bool, error) {
@@ -91,12 +119,14 @@ func (rl *CallbackRateLimiter) Allow(ctx context.Context, key string) (bool, err
 	ctx, span := tracer.Start(ctx, "redis.callback_rate_limiter.allow")
 	defer span.End()
 
-	conn, err := rl.provider.GetRedisConnection(ctx)
+	connLease, err := rl.provider.GetRedisConnection(ctx)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to get redis connection", err)
 		return false, fmt.Errorf("rate limiter get redis connection: %w", err)
 	}
+	defer connLease.Release()
 
+	conn := connLease.Connection()
 	if conn == nil {
 		return false, ErrRateLimiterRedisClientNil
 	}
@@ -107,7 +137,7 @@ func (rl *CallbackRateLimiter) Allow(ctx context.Context, key string) (bool, err
 		return false, fmt.Errorf("%w: %w", ErrRateLimiterRedisClientNil, err)
 	}
 
-	redisKey := callbackRateLimitKeyPrefix + scopedRateLimitKey(ctx, key)
+	redisKey := scopedRateLimitRedisKey(ctx, key)
 
 	// Lua script atomically increments counter and sets TTL on first request.
 	// This avoids race conditions between INCR and EXPIRE.
@@ -132,7 +162,7 @@ return 1
 		ctx,
 		script,
 		[]string{redisKey},
-		rl.limit,
+		rl.currentLimit(),
 		rl.window.Milliseconds(),
 	).Result()
 	if err != nil {
@@ -154,14 +184,19 @@ return 1
 	return allowed == 1, nil
 }
 
-func scopedRateLimitKey(ctx context.Context, key string) string {
-	tenantID := strings.TrimSpace(auth.GetTenantID(ctx))
-	if tenantID == "" {
-		tenantID = auth.DefaultTenantID
-	}
-
-	return tenantID + ":" + key
-}
-
 // Ensure CallbackRateLimiter implements the port interface.
 var _ ports.CallbackRateLimiter = (*CallbackRateLimiter)(nil)
+
+//nolint:contextcheck // This helper derives a scoped context exclusively for redis key namespacing.
+func scopedRateLimitRedisKey(ctx context.Context, key string) string {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	return tenantinfra.ScopedRedisSegments(
+		context.WithValue(ctx, auth.TenantIDKey, auth.GetTenantID(ctx)),
+		true,
+		callbackRateLimitKeyPrefix,
+		key,
+	)
+}

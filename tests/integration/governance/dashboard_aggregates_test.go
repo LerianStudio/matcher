@@ -23,6 +23,7 @@ import (
 	reportingEntities "github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	reportingQuery "github.com/LerianStudio/matcher/internal/reporting/services/query"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
+	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
@@ -484,6 +485,7 @@ func TestIntegrationDashboardAggregates_SourceFiltering(t *testing.T) {
 			configEntities.CreateReconciliationSourceInput{
 				Name:   "Other Source",
 				Type:   configVO.SourceTypeBank,
+				Side:   sharedfee.MatchingSideRight,
 				Config: map[string]any{},
 			},
 		)

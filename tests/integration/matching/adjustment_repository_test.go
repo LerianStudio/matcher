@@ -14,13 +14,34 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 
+	governancePostgres "github.com/LerianStudio/matcher/internal/governance/adapters/postgres"
 	adjustmentRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/adjustment"
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	matchingRepositories "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
 	matchingVO "github.com/LerianStudio/matcher/internal/matching/domain/value_objects"
 	matchingCommand "github.com/LerianStudio/matcher/internal/matching/services/command"
+	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
+	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
+
+func newAdjustmentAuditLog(t *testing.T, ctx context.Context, tenantID, adjustmentID uuid.UUID) *sharedDomain.AuditLog {
+	t.Helper()
+
+	changes := []byte(fmt.Sprintf(`{"entity_type":"adjustment","entity_id":"%s","action":"CREATE"}`, adjustmentID.String()))
+	auditLog, err := sharedDomain.NewAuditLog(
+		ctx,
+		tenantID,
+		"adjustment",
+		adjustmentID,
+		"CREATE",
+		nil,
+		changes,
+	)
+	require.NoError(t, err)
+
+	return auditLog
+}
 
 // createTestAdjustment creates a persisted adjustment linked to the given match group.
 // The suffix is appended to description/reason to ensure distinguishable records.
@@ -69,7 +90,7 @@ func TestAdjustmentRepository_Create(t *testing.T) {
 		wired := wireE4T9UseCases(t, h)
 		group := runMatchAndGetGroup(t, ctx, h, wired, seed)
 
-		repo := adjustmentRepo.NewRepository(h.Provider())
+		repo := adjustmentRepo.NewRepository(h.Provider(), nil)
 
 		amount := decimal.NewFromFloat(7.25)
 		entity, err := matchingEntities.NewAdjustment(
@@ -129,7 +150,7 @@ func TestAdjustmentRepository_FindByID(t *testing.T) {
 		wired := wireE4T9UseCases(t, h)
 		group := runMatchAndGetGroup(t, ctx, h, wired, seed)
 
-		repo := adjustmentRepo.NewRepository(h.Provider())
+		repo := adjustmentRepo.NewRepository(h.Provider(), nil)
 		created := createTestAdjustment(t, ctx, repo, seed.ContextID, group.ID, "find-by-id")
 
 		found, err := repo.FindByID(ctx, seed.ContextID, created.ID)
@@ -160,7 +181,7 @@ func TestAdjustmentRepository_FindByID_NotFound(t *testing.T) {
 
 		seed := seedE4T9Config(t, h)
 
-		repo := adjustmentRepo.NewRepository(h.Provider())
+		repo := adjustmentRepo.NewRepository(h.Provider(), nil)
 
 		_, err := repo.FindByID(ctx, seed.ContextID, uuid.New())
 		require.ErrorIs(t, err, sql.ErrNoRows)
@@ -180,7 +201,7 @@ func TestAdjustmentRepository_ListByContextID(t *testing.T) {
 		wired := wireE4T9UseCases(t, h)
 		group := runMatchAndGetGroup(t, ctx, h, wired, seed)
 
-		repo := adjustmentRepo.NewRepository(h.Provider())
+		repo := adjustmentRepo.NewRepository(h.Provider(), nil)
 
 		const count = 3
 		createdIDs := make(map[uuid.UUID]struct{}, count)
@@ -222,7 +243,7 @@ func TestAdjustmentRepository_ListByContextID_Pagination(t *testing.T) {
 		wired := wireE4T9UseCases(t, h)
 		group := runMatchAndGetGroup(t, ctx, h, wired, seed)
 
-		repo := adjustmentRepo.NewRepository(h.Provider())
+		repo := adjustmentRepo.NewRepository(h.Provider(), nil)
 
 		const totalAdjustments = 5
 		allIDs := make(map[uuid.UUID]struct{}, totalAdjustments)
@@ -304,17 +325,16 @@ func TestAdjustmentRepository_ListByMatchGroupID(t *testing.T) {
 		require.NoError(t, err)
 
 		_, groups2, err := wired.MatchingUC.RunMatch(ctx, matchingCommand.RunMatchInput{
-			TenantID:        h.Seed.TenantID,
-			ContextID:       seed.ContextID,
-			Mode:            matchingVO.MatchRunModeCommit,
-			PrimarySourceID: nil,
+			TenantID:  h.Seed.TenantID,
+			ContextID: seed.ContextID,
+			Mode:      matchingVO.MatchRunModeCommit,
 		})
 		require.NoError(t, err)
 		require.NotEmpty(t, groups2, "expected at least one match group from second RunMatch")
 
 		group2 := groups2[0]
 
-		repo := adjustmentRepo.NewRepository(h.Provider())
+		repo := adjustmentRepo.NewRepository(h.Provider(), nil)
 
 		// Create 2 adjustments for group1.
 		g1Adj1 := createTestAdjustment(t, ctx, repo, seed.ContextID, group1.ID, "g1-a")
@@ -342,5 +362,167 @@ func TestAdjustmentRepository_ListByMatchGroupID(t *testing.T) {
 		listed2, err := repo.ListByMatchGroupID(ctx, seed.ContextID, group2.ID)
 		require.NoError(t, err)
 		require.Len(t, listed2, 1)
+	})
+}
+
+func TestAdjustmentRepository_CreateWithAuditLog(t *testing.T) {
+	t.Parallel()
+
+	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
+		ctxBase := e4t9Ctx(t, h)
+		ctx, cancel := context.WithTimeout(ctxBase, 90*time.Second)
+		defer cancel()
+
+		seed := seedE4T9Config(t, h)
+		registerFailureDiagnostics(t, h, seed.ContextID)
+		wired := wireE4T9UseCases(t, h)
+		group := runMatchAndGetGroup(t, ctx, h, wired, seed)
+
+		auditRepo := governancePostgres.NewRepository(h.Provider())
+		repo := adjustmentRepo.NewRepository(h.Provider(), auditRepo)
+
+		entity, err := matchingEntities.NewAdjustment(
+			ctx,
+			seed.ContextID,
+			&group.ID,
+			nil,
+			matchingEntities.AdjustmentTypeBankFee,
+			matchingEntities.AdjustmentDirectionDebit,
+			decimal.NewFromFloat(13.37),
+			"USD",
+			"SOX integration test adjustment",
+			"integration audit path",
+			"integration-test-user",
+		)
+		require.NoError(t, err)
+
+		auditLog := newAdjustmentAuditLog(t, ctx, h.Seed.TenantID, entity.ID)
+
+		created, err := repo.CreateWithAuditLog(ctx, entity, auditLog)
+		require.NoError(t, err)
+		require.NotNil(t, created)
+
+		adjustmentRows := countInt(
+			t,
+			ctx,
+			h.Connection,
+			"SELECT count(*) FROM adjustments WHERE id=$1",
+			created.ID.String(),
+		)
+		require.Equal(t, 1, adjustmentRows)
+
+		auditRows := countInt(
+			t,
+			ctx,
+			h.Connection,
+			"SELECT count(*) FROM audit_logs WHERE entity_type=$1 AND entity_id=$2",
+			"adjustment",
+			created.ID.String(),
+		)
+		require.Equal(t, 1, auditRows)
+	})
+}
+
+func TestAdjustmentRepository_CreateWithAuditLogWithTx(t *testing.T) {
+	t.Parallel()
+
+	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
+		ctxBase := e4t9Ctx(t, h)
+		ctx, cancel := context.WithTimeout(ctxBase, 90*time.Second)
+		defer cancel()
+
+		seed := seedE4T9Config(t, h)
+		registerFailureDiagnostics(t, h, seed.ContextID)
+		wired := wireE4T9UseCases(t, h)
+		group := runMatchAndGetGroup(t, ctx, h, wired, seed)
+
+		auditRepo := governancePostgres.NewRepository(h.Provider())
+		repo := adjustmentRepo.NewRepository(h.Provider(), auditRepo)
+
+		entity, err := matchingEntities.NewAdjustment(
+			ctx,
+			seed.ContextID,
+			&group.ID,
+			nil,
+			matchingEntities.AdjustmentTypeRounding,
+			matchingEntities.AdjustmentDirectionCredit,
+			decimal.NewFromFloat(0.02),
+			"USD",
+			"SOX tx integration test",
+			"integration tx audit path",
+			"integration-test-user",
+		)
+		require.NoError(t, err)
+
+		auditLog := newAdjustmentAuditLog(t, ctx, h.Seed.TenantID, entity.ID)
+
+		_, err = pgcommon.WithTenantTxProvider(ctx, h.Provider(), func(tx *sql.Tx) (*matchingEntities.Adjustment, error) {
+			return repo.CreateWithAuditLogWithTx(ctx, tx, entity, auditLog)
+		})
+		require.NoError(t, err)
+
+		adjustmentRows := countInt(
+			t,
+			ctx,
+			h.Connection,
+			"SELECT count(*) FROM adjustments WHERE id=$1",
+			entity.ID.String(),
+		)
+		require.Equal(t, 1, adjustmentRows)
+
+		auditRows := countInt(
+			t,
+			ctx,
+			h.Connection,
+			"SELECT count(*) FROM audit_logs WHERE entity_type=$1 AND entity_id=$2",
+			"adjustment",
+			entity.ID.String(),
+		)
+		require.Equal(t, 1, auditRows)
+	})
+}
+
+func TestAdjustmentRepository_CreateWithAuditLog_RollbackWhenAuditMissing(t *testing.T) {
+	t.Parallel()
+
+	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
+		ctxBase := e4t9Ctx(t, h)
+		ctx, cancel := context.WithTimeout(ctxBase, 90*time.Second)
+		defer cancel()
+
+		seed := seedE4T9Config(t, h)
+		registerFailureDiagnostics(t, h, seed.ContextID)
+		wired := wireE4T9UseCases(t, h)
+		group := runMatchAndGetGroup(t, ctx, h, wired, seed)
+
+		auditRepo := governancePostgres.NewRepository(h.Provider())
+		repo := adjustmentRepo.NewRepository(h.Provider(), auditRepo)
+
+		entity, err := matchingEntities.NewAdjustment(
+			ctx,
+			seed.ContextID,
+			&group.ID,
+			nil,
+			matchingEntities.AdjustmentTypeBankFee,
+			matchingEntities.AdjustmentDirectionDebit,
+			decimal.NewFromFloat(9.99),
+			"USD",
+			"rollback adjustment",
+			"missing audit log must rollback",
+			"integration-test-user",
+		)
+		require.NoError(t, err)
+
+		_, err = repo.CreateWithAuditLog(ctx, entity, nil)
+		require.ErrorIs(t, err, adjustmentRepo.ErrAuditLogRequired)
+
+		adjustmentRows := countInt(
+			t,
+			ctx,
+			h.Connection,
+			"SELECT count(*) FROM adjustments WHERE id=$1",
+			entity.ID.String(),
+		)
+		require.Equal(t, 0, adjustmentRows)
 	})
 }

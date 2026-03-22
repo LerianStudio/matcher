@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libRabbitmq "github.com/LerianStudio/lib-uncommons/v2/uncommons/rabbitmq"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libRabbitmq "github.com/LerianStudio/lib-commons/v4/commons/rabbitmq"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -577,13 +577,14 @@ func createRabbitMQConnectionFromHarness(
 	connStr := "amqp://guest:guest@" + harness.RabbitMQHost + ":" + harness.RabbitMQPort + "/"
 
 	return &libRabbitmq.RabbitMQConnection{
-		ConnectionStringSource: connStr,
-		HealthCheckURL:         harness.RabbitMQHealthURL,
-		Host:                   harness.RabbitMQHost,
-		Port:                   harness.RabbitMQPort,
-		User:                   "guest",
-		Pass:                   "guest",
-		Logger:                 &libLog.NopLogger{},
+		ConnectionStringSource:   connStr,
+		HealthCheckURL:           harness.RabbitMQHealthURL,
+		Host:                     harness.RabbitMQHost,
+		Port:                     harness.RabbitMQPort,
+		User:                     "guest",
+		Pass:                     "guest",
+		Logger:                   &libLog.NopLogger{},
+		AllowInsecureHealthCheck: true,
 	}
 }
 

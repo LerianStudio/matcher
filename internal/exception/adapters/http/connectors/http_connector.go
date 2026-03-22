@@ -17,10 +17,10 @@ import (
 	"time"
 	"unicode"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	"github.com/LerianStudio/lib-uncommons/v2/uncommons/backoff"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	"github.com/LerianStudio/lib-commons/v4/commons/backoff"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/services"
 	"github.com/LerianStudio/matcher/internal/exception/ports"
@@ -48,8 +48,9 @@ const (
 
 // HTTPConnector dispatches exceptions to external systems via HTTP.
 type HTTPConnector struct {
-	client *http.Client
-	config ConnectorConfig
+	client               *http.Client
+	config               ConnectorConfig
+	webhookTimeoutGetter func() time.Duration
 }
 
 // NewHTTPConnector creates a new HTTP connector with the given configuration.
@@ -68,6 +69,15 @@ func NewHTTPConnector(config ConnectorConfig) (*HTTPConnector, error) {
 		client: client,
 		config: config,
 	}, nil
+}
+
+// SetWebhookTimeoutGetter injects a live config-backed webhook timeout source.
+func (conn *HTTPConnector) SetWebhookTimeoutGetter(getter func() time.Duration) {
+	if conn == nil {
+		return
+	}
+
+	conn.webhookTimeoutGetter = getter
 }
 
 // newSSRFSafeTransport returns an *http.Transport with a ControlContext hook
@@ -249,7 +259,15 @@ func (conn *HTTPConnector) dispatchToWebhook(
 	}
 
 	webhookConfig := conn.config.Webhook
-	client := conn.clientWithTimeout(webhookConfig.TimeoutOrDefault())
+	timeout := webhookConfig.TimeoutOrDefault()
+
+	if conn.webhookTimeoutGetter != nil {
+		if runtimeTimeout := conn.webhookTimeoutGetter(); runtimeTimeout > 0 {
+			timeout = runtimeTimeout
+		}
+	}
+
+	client := conn.clientWithTimeout(timeout)
 
 	req, err := http.NewRequestWithContext(
 		ctx,
@@ -367,7 +385,7 @@ func (conn *HTTPConnector) executeAttempt(
 		reqCopy.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 	}
 
-	resp, err := client.Do(reqCopy) //nolint:gosec // #nosec G107 -- URL is from validated connector configuration, not user input
+	resp, err := client.Do(reqCopy) // #nosec G704 -- URL is from validated connector configuration, not user input
 	if err != nil {
 		retry := attempt < maxRetries-1
 		return nil, retry, fmt.Errorf("attempt %d/%d: %w", attempt+1, maxRetries, err)
@@ -469,7 +487,7 @@ func retryDelay(baseBackoff time.Duration, attempt int) time.Duration {
 }
 
 func sleepWithContext(ctx context.Context, duration time.Duration) error {
-	if err := backoff.SleepWithContext(ctx, duration); err != nil {
+	if err := backoff.WaitContext(ctx, duration); err != nil {
 		return fmt.Errorf("sleep interrupted: %w", err)
 	}
 

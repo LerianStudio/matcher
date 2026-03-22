@@ -17,7 +17,7 @@ var (
 // RegisterRoutes registers all configuration routes with the provided router.
 //
 //nolint:funlen // route registration is a single declarative block
-func RegisterRoutes(protected func(resource, action string) fiber.Router, handler *Handler) error {
+func RegisterRoutes(protected func(resource string, actions ...string) fiber.Router, handler *Handler) error {
 	if protected == nil {
 		return ErrProtectedRouteHelperRequired
 	}
@@ -29,139 +29,165 @@ func RegisterRoutes(protected func(resource, action string) fiber.Router, handle
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionContextCreate,
-	).Post("/v1/config/contexts", handler.CreateContext)
+	).Post("/v1/contexts", handler.CreateContext)
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionContextRead,
-	).Get("/v1/config/contexts", handler.ListContexts)
+	).Get("/v1/contexts", handler.ListContexts)
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionContextRead,
-	).Get("/v1/config/contexts/:contextId", handler.GetContext)
+	).Get("/v1/contexts/:contextId", handler.GetContext)
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionContextUpdate,
-	).Patch("/v1/config/contexts/:contextId", handler.UpdateContext)
+	).Patch("/v1/contexts/:contextId", handler.UpdateContext)
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionContextDelete,
-	).Delete("/v1/config/contexts/:contextId", handler.DeleteContext)
+	).Delete("/v1/contexts/:contextId", handler.DeleteContext)
 
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionContextCreate,
-	).Post("/v1/config/contexts/:contextId/clone", handler.CloneContext)
+	).Post("/v1/contexts/:contextId/clone", handler.CloneContext)
 
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionSourceCreate,
-	).Post("/v1/config/contexts/:contextId/sources", handler.CreateSource)
+	).Post("/v1/contexts/:contextId/sources", handler.CreateSource)
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionSourceRead,
-	).Get("/v1/config/contexts/:contextId/sources", handler.ListSources)
+	).Get("/v1/contexts/:contextId/sources", handler.ListSources)
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionSourceRead,
-	).Get("/v1/config/contexts/:contextId/sources/:sourceId", handler.GetSource)
+	).Get("/v1/contexts/:contextId/sources/:sourceId", handler.GetSource)
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionSourceUpdate,
-	).Patch("/v1/config/contexts/:contextId/sources/:sourceId", handler.UpdateSource)
+	).Patch("/v1/contexts/:contextId/sources/:sourceId", handler.UpdateSource)
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionSourceDelete,
-	).Delete("/v1/config/contexts/:contextId/sources/:sourceId", handler.DeleteSource)
+	).Delete("/v1/contexts/:contextId/sources/:sourceId", handler.DeleteSource)
 
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionFieldMapCreate,
-	).Post("/v1/config/contexts/:contextId/sources/:sourceId/field-maps", handler.CreateFieldMap)
+	).Post("/v1/contexts/:contextId/sources/:sourceId/field-maps", handler.CreateFieldMap)
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionFieldMapRead,
-	).Get("/v1/config/contexts/:contextId/sources/:sourceId/field-maps", handler.GetFieldMapBySource)
+	).Get("/v1/contexts/:contextId/sources/:sourceId/field-maps", handler.GetFieldMapBySource)
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionFieldMapUpdate,
-	).Patch("/v1/config/field-maps/:fieldMapId", handler.UpdateFieldMap)
+	).Patch("/v1/field-maps/:fieldMapId", handler.UpdateFieldMap)
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionFieldMapDelete,
-	).Delete("/v1/config/field-maps/:fieldMapId", handler.DeleteFieldMap)
+	).Delete("/v1/field-maps/:fieldMapId", handler.DeleteFieldMap)
 
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionRuleCreate,
-	).Post("/v1/config/contexts/:contextId/rules", handler.CreateMatchRule)
+	).Post("/v1/contexts/:contextId/rules", handler.CreateMatchRule)
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionRuleRead,
-	).Get("/v1/config/contexts/:contextId/rules", handler.ListMatchRules)
+	).Get("/v1/contexts/:contextId/rules", handler.ListMatchRules)
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionRuleRead,
-	).Get("/v1/config/contexts/:contextId/rules/:ruleId", handler.GetMatchRule)
+	).Get("/v1/contexts/:contextId/rules/:ruleId", handler.GetMatchRule)
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionRuleUpdate,
-	).Patch("/v1/config/contexts/:contextId/rules/:ruleId", handler.UpdateMatchRule)
+	).Patch("/v1/contexts/:contextId/rules/:ruleId", handler.UpdateMatchRule)
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionRuleDelete,
-	).Delete("/v1/config/contexts/:contextId/rules/:ruleId", handler.DeleteMatchRule)
+	).Delete("/v1/contexts/:contextId/rules/:ruleId", handler.DeleteMatchRule)
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionRuleUpdate,
-	).Post("/v1/config/contexts/:contextId/rules/reorder", handler.ReorderMatchRules)
+	).Post("/v1/contexts/:contextId/rules/reorder", handler.ReorderMatchRules)
 
 	// Fee schedule routes
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionFeeScheduleCreate,
-	).Post("/v1/config/fee-schedules", handler.CreateFeeSchedule)
+	).Post("/v1/fee-schedules", handler.CreateFeeSchedule)
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionFeeScheduleRead,
-	).Get("/v1/config/fee-schedules", handler.ListFeeSchedules)
+	).Get("/v1/fee-schedules", handler.ListFeeSchedules)
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionFeeScheduleRead,
-	).Get("/v1/config/fee-schedules/:scheduleId", handler.GetFeeSchedule)
+	).Get("/v1/fee-schedules/:scheduleId", handler.GetFeeSchedule)
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionFeeScheduleUpdate,
-	).Patch("/v1/config/fee-schedules/:scheduleId", handler.UpdateFeeSchedule)
+	).Patch("/v1/fee-schedules/:scheduleId", handler.UpdateFeeSchedule)
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionFeeScheduleDelete,
-	).Delete("/v1/config/fee-schedules/:scheduleId", handler.DeleteFeeSchedule)
+	).Delete("/v1/fee-schedules/:scheduleId", handler.DeleteFeeSchedule)
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionFeeScheduleRead,
-	).Post("/v1/config/fee-schedules/:scheduleId/simulate", handler.SimulateFeeSchedule)
+	).Post("/v1/fee-schedules/:scheduleId/simulate", handler.SimulateFeeSchedule)
+
+	// Fee rule routes
+	// Create/update require fee-schedule:read in addition to fee-rule permissions
+	// because the caller must be allowed to reference the target schedule.
+	protected(
+		auth.ResourceConfiguration,
+		auth.ActionFeeRuleCreate,
+		auth.ActionFeeScheduleRead,
+	).Post("/v1/config/contexts/:contextId/fee-rules", handler.CreateFeeRule)
+	protected(
+		auth.ResourceConfiguration,
+		auth.ActionFeeRuleRead,
+	).Get("/v1/config/contexts/:contextId/fee-rules", handler.ListFeeRules)
+	protected(
+		auth.ResourceConfiguration,
+		auth.ActionFeeRuleRead,
+	).Get("/v1/config/fee-rules/:feeRuleId", handler.GetFeeRule)
+	protected(
+		auth.ResourceConfiguration,
+		auth.ActionFeeRuleUpdate,
+		auth.ActionFeeScheduleRead,
+	).Patch("/v1/config/fee-rules/:feeRuleId", handler.UpdateFeeRule)
+	protected(
+		auth.ResourceConfiguration,
+		auth.ActionFeeRuleDelete,
+	).Delete("/v1/config/fee-rules/:feeRuleId", handler.DeleteFeeRule)
 
 	// Schedule routes
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionScheduleCreate,
-	).Post("/v1/config/contexts/:contextId/schedules", handler.CreateSchedule)
+	).Post("/v1/contexts/:contextId/schedules", handler.CreateSchedule)
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionScheduleRead,
-	).Get("/v1/config/contexts/:contextId/schedules", handler.ListSchedules)
+	).Get("/v1/contexts/:contextId/schedules", handler.ListSchedules)
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionScheduleRead,
-	).Get("/v1/config/contexts/:contextId/schedules/:scheduleId", handler.GetSchedule)
+	).Get("/v1/contexts/:contextId/schedules/:scheduleId", handler.GetSchedule)
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionScheduleUpdate,
-	).Patch("/v1/config/contexts/:contextId/schedules/:scheduleId", handler.UpdateSchedule)
+	).Patch("/v1/contexts/:contextId/schedules/:scheduleId", handler.UpdateSchedule)
 	protected(
 		auth.ResourceConfiguration,
 		auth.ActionScheduleDelete,
-	).Delete("/v1/config/contexts/:contextId/schedules/:scheduleId", handler.DeleteSchedule)
+	).Delete("/v1/contexts/:contextId/schedules/:scheduleId", handler.DeleteSchedule)
 
 	return nil
 }

@@ -15,9 +15,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace/noop"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
 
-	sharedhttp "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	sharedhttp "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/matching/ports"
 	"github.com/LerianStudio/matcher/internal/matching/services/command"
@@ -43,6 +43,7 @@ func TestUnmatchHandler_InvalidMatchGroupID(t *testing.T) {
 		&command.UseCase{},
 		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
 		ctxProv,
+		false,
 	)
 	require.NoError(t, err)
 
@@ -87,6 +88,7 @@ func TestUnmatchHandler_MissingContextID(t *testing.T) {
 		&command.UseCase{},
 		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
 		ctxProv,
+		false,
 	)
 	require.NoError(t, err)
 
@@ -130,6 +132,7 @@ func TestUnmatchHandler_InvalidPayload(t *testing.T) {
 		&command.UseCase{},
 		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
 		ctxProv,
+		false,
 	)
 	require.NoError(t, err)
 
@@ -173,6 +176,7 @@ func TestUnmatchHandler_MissingReason(t *testing.T) {
 		&command.UseCase{},
 		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
 		ctxProv,
+		false,
 	)
 	require.NoError(t, err)
 
@@ -219,6 +223,7 @@ func TestUnmatchHandler_ContextNotFound(t *testing.T) {
 		&command.UseCase{},
 		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
 		ctxProv,
+		false,
 	)
 	require.NoError(t, err)
 
@@ -262,6 +267,7 @@ func TestUnmatchHandler_ContextNotActive(t *testing.T) {
 		&command.UseCase{},
 		newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}),
 		ctxProv,
+		false,
 	)
 	require.NoError(t, err)
 
@@ -307,7 +313,7 @@ func TestUnmatchHandler_MatchGroupNotFound(t *testing.T) {
 	}
 	uc := newRunMatchUseCase(t, ctxProv, []*shared.Transaction{}, nil)
 
-	handler, err := NewHandler(uc, newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}), ctxProv)
+	handler, err := NewHandler(uc, newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}), ctxProv, false)
 	require.NoError(t, err)
 
 	app.Delete("/v1/matching/groups/:matchGroupId", handler.Unmatch)

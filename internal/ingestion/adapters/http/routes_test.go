@@ -14,7 +14,7 @@ func TestRegisterRoutesValidation(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		protected func(string, string) fiber.Router
+		protected func(string, ...string) fiber.Router
 		handlers  *Handlers
 		wantErr   error
 	}{
@@ -26,7 +26,7 @@ func TestRegisterRoutesValidation(t *testing.T) {
 		},
 		{
 			name:      "nil handlers",
-			protected: func(_, _ string) fiber.Router { return nil },
+			protected: func(_ string, _ ...string) fiber.Router { return nil },
 			handlers:  nil,
 			wantErr:   ErrHandlersRequired,
 		},
@@ -46,7 +46,7 @@ func TestRegisterRoutesSuccess(t *testing.T) {
 	t.Parallel()
 
 	app := fiber.New()
-	protected := func(resource, action string) fiber.Router {
+	protected := func(resource string, actions ...string) fiber.Router {
 		return app.Group("/api")
 	}
 

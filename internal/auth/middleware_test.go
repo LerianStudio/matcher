@@ -7,7 +7,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -21,7 +20,7 @@ import (
 
 	authMiddleware "github.com/LerianStudio/lib-auth/v2/auth/middleware"
 
-	"github.com/LerianStudio/lib-uncommons/v2/uncommons/jwt"
+	"github.com/LerianStudio/lib-commons/v4/commons/jwt"
 )
 
 const testTokenSecret = "secret"
@@ -261,6 +260,44 @@ func TestGetUserID(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestLookupTenantID(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns explicit tenant from context", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.WithValue(context.Background(), TenantIDKey, "tenant-a")
+		tenantID, ok := LookupTenantID(ctx)
+		require.True(t, ok)
+		assert.Equal(t, "tenant-a", tenantID)
+	})
+
+	t.Run("does not fall back to default tenant", func(t *testing.T) {
+		t.Parallel()
+
+		tenantID, ok := LookupTenantID(context.Background())
+		require.False(t, ok)
+		assert.Empty(t, tenantID)
+	})
+
+	t.Run("nil context returns no tenant", func(t *testing.T) {
+		t.Parallel()
+
+		tenantID, ok := LookupTenantID(nil)
+		require.False(t, ok)
+		assert.Empty(t, tenantID)
+	})
+
+	t.Run("whitespace tenant is rejected", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.WithValue(context.Background(), TenantIDKey, "   ")
+		tenantID, ok := LookupTenantID(ctx)
+		require.False(t, ok)
+		assert.Empty(t, tenantID)
+	})
 }
 
 func TestExtractClaimsFromToken(t *testing.T) {
@@ -773,19 +810,9 @@ func TestProtectedGroup_NilExtractor(t *testing.T) {
 	app := fiber.New()
 	client := authMiddleware.NewAuthClient("", false, nil)
 
-	protected := ProtectedGroup(app, client, nil, "resource", "read")
-	protected.Get("/secure", func(c *fiber.Ctx) error {
-		return c.SendStatus(http.StatusOK)
-	})
-
-	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/secure", http.NoBody))
-	require.NoError(t, err)
-
-	bodyBytes, readErr := io.ReadAll(resp.Body)
-	require.NoError(t, readErr)
-	require.NoError(t, resp.Body.Close())
-	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
-	assert.Contains(t, string(bodyBytes), "tenant extractor not initialized")
+	_, err := ProtectedGroupWithActionsWithMiddleware(app, client, nil, "resource", []string{"read"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrNilTenantExtractor)
 }
 
 func TestAuthorize_NilClient(t *testing.T) {

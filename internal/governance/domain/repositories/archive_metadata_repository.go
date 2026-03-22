@@ -35,7 +35,7 @@ type ArchiveMetadataRepository interface {
 
 	// ListByTenant retrieves archive metadata for a tenant, optionally filtered by status and date bounds.
 	// Returns the matching metadata records and any error.
-	ListByTenant(ctx context.Context, tenantID uuid.UUID, status string, from, to *time.Time, limit, offset int) ([]*entities.ArchiveMetadata, error)
+	ListByTenant(ctx context.Context, tenantID uuid.UUID, status entities.ArchiveStatus, from, to *time.Time, limit, offset int) ([]*entities.ArchiveMetadata, error)
 
 	// ListPending retrieves all archive metadata records with PENDING status.
 	ListPending(ctx context.Context) ([]*entities.ArchiveMetadata, error)

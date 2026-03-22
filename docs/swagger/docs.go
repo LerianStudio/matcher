@@ -47,7 +47,7 @@ const docTemplate = `{
         },
         "/ready": {
             "get": {
-                "description": "Checks if the service is ready to accept traffic by verifying all required dependencies.\nUsed by Kubernetes readiness probes to control traffic routing.\nReturns 200 OK when all required dependencies are healthy, 503 Service Unavailable otherwise.\nDependency check details are only included in non-production environments.",
+                "description": "Checks if the service is ready to accept traffic by verifying all required dependencies.\nUsed by Kubernetes readiness probes to control traffic routing.\nReturns 200 OK when all required dependencies are healthy, 503 Service Unavailable otherwise.\nDependency check details are only included in development/test environments.",
                 "produces": [
                     "application/json"
                 ],
@@ -144,25 +144,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid query parameters",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -212,31 +212,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "Conflict: duplicate resource or idempotency key in progress",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -284,31 +284,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid context ID format",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Context not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -348,31 +348,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid context ID format",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Context not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -430,37 +430,37 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Context not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "Conflict: duplicate resource or idempotency key in progress",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -473,7 +473,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Creates a deep copy of a reconciliation context including its sources, field maps, match rules, and optionally fee schedules.",
+                "description": "Creates a deep copy of a reconciliation context including its sources, field maps, match rules, and fee rules. Referenced fee schedules are reused by cloned fee rules.",
                 "consumes": [
                     "application/json"
                 ],
@@ -520,37 +520,206 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Context not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "Conflict: duplicate resource or idempotency key in progress",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/config/contexts/{contextId}/fee-rules": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns all fee rules for a reconciliation context, ordered by priority.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Configuration Fee Rules"
+                ],
+                "summary": "List fee rules",
+                "operationId": "listFeeRules",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Context ID",
+                        "name": "contextId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of fee rules",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeRuleResponse"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid context ID format",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Context not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Creates a new fee rule that maps transaction metadata to a fee schedule within a context. Priority must be unique within a context across all sides (LEFT, RIGHT, and ANY rules share the same priority space). The caller must also be allowed to read the referenced fee schedule.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Configuration Fee Rules"
+                ],
+                "summary": "Create a fee rule",
+                "operationId": "createFeeRule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Idempotency key for safe retries",
+                        "name": "X-Idempotency-Key",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Context ID",
+                        "name": "contextId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Fee rule creation payload",
+                        "name": "feeRule",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateFeeRuleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Successfully created fee rule",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeRuleResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request payload",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Context not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict: duplicate priority or name",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -624,31 +793,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid query parameters",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Context not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -706,37 +875,37 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Context not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "Conflict: duplicate resource or idempotency key in progress",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -793,31 +962,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Context not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -873,31 +1042,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid rule ID format",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Match rule not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -945,31 +1114,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid rule ID format",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Match rule not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -1035,448 +1204,37 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Match rule not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "Conflict: duplicate resource or idempotency key in progress",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/config/contexts/{contextId}/schedules": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Returns all schedules for a reconciliation context.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Configuration Schedules"
-                ],
-                "summary": "List reconciliation schedules",
-                "operationId": "listSchedules",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Request ID for tracing",
-                        "name": "X-Request-Id",
-                        "in": "header"
-                    },
-                    {
-                        "type": "string",
-                        "format": "uuid",
-                        "description": "Context ID",
-                        "name": "contextId",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "List of schedules",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.ScheduleResponse"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid context ID format",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Context not found",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Creates a new cron-based schedule for automated matching.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Configuration Schedules"
-                ],
-                "summary": "Create a reconciliation schedule",
-                "operationId": "createSchedule",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Request ID for tracing",
-                        "name": "X-Request-Id",
-                        "in": "header"
-                    },
-                    {
-                        "type": "string",
-                        "format": "uuid",
-                        "description": "Context ID",
-                        "name": "contextId",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Schedule creation payload",
-                        "name": "schedule",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateScheduleRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Successfully created schedule",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.ScheduleResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid request payload",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Context not found",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    },
-                    "409": {
-                        "description": "Conflict: duplicate resource or idempotency key in progress",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/config/contexts/{contextId}/schedules/{scheduleId}": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Returns a reconciliation schedule by ID.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Configuration Schedules"
-                ],
-                "summary": "Get a reconciliation schedule",
-                "operationId": "getSchedule",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Request ID for tracing",
-                        "name": "X-Request-Id",
-                        "in": "header"
-                    },
-                    {
-                        "type": "string",
-                        "format": "uuid",
-                        "description": "Context ID",
-                        "name": "contextId",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "format": "uuid",
-                        "description": "Schedule ID",
-                        "name": "scheduleId",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Successfully retrieved schedule",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.ScheduleResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid schedule ID format",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Schedule not found",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Removes a reconciliation schedule by ID.",
-                "tags": [
-                    "Configuration Schedules"
-                ],
-                "summary": "Delete a reconciliation schedule",
-                "operationId": "deleteSchedule",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Request ID for tracing",
-                        "name": "X-Request-Id",
-                        "in": "header"
-                    },
-                    {
-                        "type": "string",
-                        "format": "uuid",
-                        "description": "Context ID",
-                        "name": "contextId",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "format": "uuid",
-                        "description": "Schedule ID",
-                        "name": "scheduleId",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "Schedule successfully deleted"
-                    },
-                    "400": {
-                        "description": "Invalid schedule ID format",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Schedule not found",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "patch": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Updates fields on a reconciliation schedule.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Configuration Schedules"
-                ],
-                "summary": "Update a reconciliation schedule",
-                "operationId": "updateSchedule",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Request ID for tracing",
-                        "name": "X-Request-Id",
-                        "in": "header"
-                    },
-                    {
-                        "type": "string",
-                        "format": "uuid",
-                        "description": "Context ID",
-                        "name": "contextId",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "format": "uuid",
-                        "description": "Schedule ID",
-                        "name": "scheduleId",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Schedule updates",
-                        "name": "schedule",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.UpdateScheduleRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Successfully updated schedule",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.ScheduleResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid request payload",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Schedule not found",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    },
-                    "409": {
-                        "description": "Conflict: duplicate resource or idempotency key in progress",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -1533,7 +1291,8 @@ const docTemplate = `{
                             "LEDGER",
                             "BANK",
                             "GATEWAY",
-                            "CUSTOM"
+                            "CUSTOM",
+                            "FETCHER"
                         ],
                         "type": "string",
                         "description": "Filter by source type",
@@ -1551,31 +1310,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid query parameters",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Context not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -1633,37 +1392,37 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Context not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "Conflict: duplicate resource or idempotency key in progress",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -1719,31 +1478,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid source ID format",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Source not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -1791,31 +1550,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid source ID format",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Source not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -1881,37 +1640,37 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Source not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "Conflict: duplicate resource or idempotency key in progress",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -1967,31 +1726,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid source ID format",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Field map not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -2057,202 +1816,58 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Context or source not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "Conflict: duplicate resource or idempotency key in progress",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     }
                 }
             }
         },
-        "/v1/config/fee-schedules": {
+        "/v1/config/fee-rules/{feeRuleId}": {
             "get": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns fee schedules for the tenant. Results may be capped by the \"limit\" query parameter (default 20, max 200).",
+                "description": "Returns a fee rule by ID.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "Configuration Fee Schedules"
+                    "Configuration Fee Rules"
                 ],
-                "summary": "List fee schedules",
-                "operationId": "listFeeSchedules",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Request ID for tracing",
-                        "name": "X-Request-Id",
-                        "in": "header"
-                    },
-                    {
-                        "maximum": 200,
-                        "minimum": 1,
-                        "type": "integer",
-                        "default": 20,
-                        "description": "Maximum number of records to return",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "List of fee schedules",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeScheduleResponse"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Creates a new fee schedule for transaction fee calculation.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Configuration Fee Schedules"
-                ],
-                "summary": "Create a fee schedule",
-                "operationId": "createFeeSchedule",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Request ID for tracing",
-                        "name": "X-Request-Id",
-                        "in": "header"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Idempotency key for safe retries",
-                        "name": "X-Idempotency-Key",
-                        "in": "header"
-                    },
-                    {
-                        "description": "Fee schedule creation payload",
-                        "name": "feeSchedule",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateFeeScheduleRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Successfully created fee schedule",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeScheduleResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid request payload",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    },
-                    "409": {
-                        "description": "Conflict: duplicate resource or idempotency key in progress",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/config/fee-schedules/{scheduleId}": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Returns a fee schedule by ID.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Configuration Fee Schedules"
-                ],
-                "summary": "Get a fee schedule",
-                "operationId": "getFeeSchedule",
+                "summary": "Get a fee rule",
+                "operationId": "getFeeRule",
                 "parameters": [
                     {
                         "type": "string",
@@ -2263,47 +1878,47 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "format": "uuid",
-                        "description": "Schedule ID",
-                        "name": "scheduleId",
+                        "description": "Fee Rule ID",
+                        "name": "feeRuleId",
                         "in": "path",
                         "required": true
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "Successfully retrieved fee schedule",
+                        "description": "Successfully retrieved fee rule",
                         "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeScheduleResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeRuleResponse"
                         }
                     },
                     "400": {
-                        "description": "Invalid schedule ID format",
+                        "description": "Invalid fee rule ID format",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Fee schedule not found",
+                        "description": "Fee rule not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -2314,12 +1929,12 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Removes a fee schedule by ID.",
+                "description": "Removes a fee rule by ID.",
                 "tags": [
-                    "Configuration Fee Schedules"
+                    "Configuration Fee Rules"
                 ],
-                "summary": "Delete a fee schedule",
-                "operationId": "deleteFeeSchedule",
+                "summary": "Delete a fee rule",
+                "operationId": "deleteFeeRule",
                 "parameters": [
                     {
                         "type": "string",
@@ -2330,44 +1945,44 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "format": "uuid",
-                        "description": "Schedule ID",
-                        "name": "scheduleId",
+                        "description": "Fee Rule ID",
+                        "name": "feeRuleId",
                         "in": "path",
                         "required": true
                     }
                 ],
                 "responses": {
                     "204": {
-                        "description": "Fee schedule successfully deleted"
+                        "description": "Fee rule successfully deleted"
                     },
                     "400": {
-                        "description": "Invalid schedule ID format",
+                        "description": "Invalid fee rule ID format",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Fee schedule not found",
+                        "description": "Fee rule not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -2378,7 +1993,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Updates fields on a fee schedule by ID.",
+                "description": "Updates fields on a fee rule by ID. If the referenced fee schedule changes, the caller must also be allowed to read that fee schedule.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2386,10 +2001,10 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "Configuration Fee Schedules"
+                    "Configuration Fee Rules"
                 ],
-                "summary": "Update a fee schedule",
-                "operationId": "updateFeeSchedule",
+                "summary": "Update a fee rule",
+                "operationId": "updateFeeRule",
                 "parameters": [
                     {
                         "type": "string",
@@ -2406,146 +2021,62 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "format": "uuid",
-                        "description": "Schedule ID",
-                        "name": "scheduleId",
+                        "description": "Fee Rule ID",
+                        "name": "feeRuleId",
                         "in": "path",
                         "required": true
                     },
                     {
-                        "description": "Fee schedule updates",
-                        "name": "feeSchedule",
+                        "description": "Fee rule updates",
+                        "name": "feeRule",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.UpdateFeeScheduleRequest"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.UpdateFeeRuleRequest"
                         }
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "Successfully updated fee schedule",
+                        "description": "Successfully updated fee rule",
                         "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeScheduleResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeRuleResponse"
                         }
                     },
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Fee schedule not found",
+                        "description": "Fee rule not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "409": {
-                        "description": "Conflict: duplicate resource or idempotency key in progress",
+                        "description": "Conflict: duplicate priority or name",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/config/fee-schedules/{scheduleId}/simulate": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Calculates fees for a given gross amount using a specific fee schedule.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Configuration Fee Schedules"
-                ],
-                "summary": "Simulate fee calculation",
-                "operationId": "simulateFeeSchedule",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Request ID for tracing",
-                        "name": "X-Request-Id",
-                        "in": "header"
-                    },
-                    {
-                        "type": "string",
-                        "format": "uuid",
-                        "description": "Schedule ID",
-                        "name": "scheduleId",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Simulation parameters",
-                        "name": "simulate",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.SimulateFeeRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Simulation result",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.SimulateFeeResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid request payload",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Fee schedule not found",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -2587,31 +2118,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid field map ID format",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Field map not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -2669,37 +2200,37 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Field map not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "Conflict: duplicate resource or idempotency key in progress",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -2762,31 +2293,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid query parameters",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Context not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -2844,37 +2375,1078 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Context not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "Conflict: duplicate resource or idempotency key in progress",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Export worker disabled",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/contexts/{contextId}/schedules": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns all schedules for a reconciliation context.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Configuration Schedules"
+                ],
+                "summary": "List reconciliation schedules",
+                "operationId": "listSchedules",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Context ID",
+                        "name": "contextId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of schedules",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.ScheduleResponse"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid context ID format",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Context not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Creates a new cron-based schedule for automated matching.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Configuration Schedules"
+                ],
+                "summary": "Create a reconciliation schedule",
+                "operationId": "createSchedule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Context ID",
+                        "name": "contextId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Schedule creation payload",
+                        "name": "schedule",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateScheduleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Successfully created schedule",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.ScheduleResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request payload",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Context not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict: duplicate resource or idempotency key in progress",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/contexts/{contextId}/schedules/{scheduleId}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns a reconciliation schedule by ID.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Configuration Schedules"
+                ],
+                "summary": "Get a reconciliation schedule",
+                "operationId": "getSchedule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Context ID",
+                        "name": "contextId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Schedule ID",
+                        "name": "scheduleId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully retrieved schedule",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.ScheduleResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid schedule ID format",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Schedule not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Removes a reconciliation schedule by ID.",
+                "tags": [
+                    "Configuration Schedules"
+                ],
+                "summary": "Delete a reconciliation schedule",
+                "operationId": "deleteSchedule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Context ID",
+                        "name": "contextId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Schedule ID",
+                        "name": "scheduleId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Schedule successfully deleted"
+                    },
+                    "400": {
+                        "description": "Invalid schedule ID format",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Schedule not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Updates fields on a reconciliation schedule.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Configuration Schedules"
+                ],
+                "summary": "Update a reconciliation schedule",
+                "operationId": "updateSchedule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Context ID",
+                        "name": "contextId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Schedule ID",
+                        "name": "scheduleId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Schedule updates",
+                        "name": "schedule",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.UpdateScheduleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully updated schedule",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.ScheduleResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request payload",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Schedule not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict: duplicate resource or idempotency key in progress",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/discovery/connections": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns all discovered Fetcher database connections.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Discovery"
+                ],
+                "summary": "List discovered connections",
+                "operationId": "listDiscoveryConnections",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of connections",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ConnectionListResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/discovery/connections/{connectionId}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns a single discovered Fetcher connection by its internal ID.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Discovery"
+                ],
+                "summary": "Get a discovered connection",
+                "operationId": "getDiscoveryConnection",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Connection ID (UUID)",
+                        "name": "connectionId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Connection details",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ConnectionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid connection ID",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Connection not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/discovery/connections/{connectionId}/extractions": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Creates a tenant-scoped extraction request for a discovered connection and submits it to Fetcher.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Discovery"
+                ],
+                "summary": "Start a connection extraction",
+                "operationId": "startDiscoveryExtraction",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Connection ID (UUID)",
+                        "name": "connectionId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Extraction request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.StartExtractionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Extraction request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ExtractionRequestResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Connection not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Fetcher service unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/discovery/connections/{connectionId}/schema": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns all discovered table schemas for a connection.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Discovery"
+                ],
+                "summary": "Get connection schema",
+                "operationId": "getDiscoveryConnectionSchema",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Connection ID (UUID)",
+                        "name": "connectionId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Schema for the connection",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ConnectionSchemaResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid connection ID",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Connection not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/discovery/connections/{connectionId}/test": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Tests connectivity for a specific discovered connection owned by the current tenant.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Discovery"
+                ],
+                "summary": "Test a connection",
+                "operationId": "testDiscoveryConnection",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Connection ID (UUID)",
+                        "name": "connectionId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Test result",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.TestConnectionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid connection ID",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Connection not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Fetcher service unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/discovery/extractions/{extractionId}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns a single tenant-scoped extraction request by its internal ID.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Discovery"
+                ],
+                "summary": "Get an extraction request",
+                "operationId": "getDiscoveryExtraction",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Extraction ID (UUID)",
+                        "name": "extractionId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Extraction request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ExtractionRequestResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid extraction ID",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Extraction not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/discovery/extractions/{extractionId}/poll": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Polls Fetcher for the latest extraction status and persists any lifecycle transition.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Discovery"
+                ],
+                "summary": "Poll an extraction request",
+                "operationId": "pollDiscoveryExtraction",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Extraction ID (UUID)",
+                        "name": "extractionId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Updated extraction request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ExtractionRequestResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid extraction ID",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Extraction not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Fetcher service unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/discovery/refresh": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Forces an immediate sync with the Fetcher service, updating connections and schemas.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Discovery"
+                ],
+                "summary": "Refresh discovery",
+                "operationId": "refreshDiscovery",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Refresh result",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.RefreshDiscoveryResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Refresh already in progress",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Fetcher service unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/discovery/status": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the current Fetcher integration status including health and connection count.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Discovery"
+                ],
+                "summary": "Get discovery status",
+                "operationId": "getDiscoveryStatus",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Discovery status",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.DiscoveryStatusResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_discovery_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -2991,25 +3563,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -3057,31 +3629,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Dispute not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -3147,37 +3719,37 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Dispute not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "Unprocessable entity: invalid state transition",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -3243,37 +3815,37 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Dispute not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "Unprocessable entity: invalid state transition",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -3405,25 +3977,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -3475,25 +4047,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -3545,25 +4117,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -3615,25 +4187,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -3681,31 +4253,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Exception not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -3771,37 +4343,37 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Exception not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "Unprocessable entity: invalid state transition",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -3862,43 +4434,43 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized - Bearer token missing or invalid",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden - insufficient permissions",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Exception not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "Conflict or idempotency",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "429": {
                         "description": "Rate limit exceeded",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -3946,31 +4518,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Exception not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -4028,31 +4600,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Exception not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -4105,31 +4677,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Comment not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -4195,37 +4767,37 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Exception not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "Unprocessable entity: invalid state transition",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -4291,31 +4863,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Exception not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -4381,37 +4953,37 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Exception not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "Unprocessable entity: invalid state transition",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -4474,31 +5046,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Exception not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -4559,25 +5131,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid query parameters",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -4625,31 +5197,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid query parameters",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Export job not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -4697,37 +5269,37 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Export job not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "Job in terminal state or idempotency conflict",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -4775,37 +5347,501 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid query parameters",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Export job not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "Job not ready for download",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/fee-schedules": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns fee schedules for the tenant. Results may be capped by the \"limit\" query parameter (default 20, max 200).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Configuration Fee Schedules"
+                ],
+                "summary": "List fee schedules",
+                "operationId": "listFeeSchedules",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "maximum": 200,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 20,
+                        "description": "Maximum number of records to return",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of fee schedules",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeScheduleResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Creates a new fee schedule for transaction fee calculation.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Configuration Fee Schedules"
+                ],
+                "summary": "Create a fee schedule",
+                "operationId": "createFeeSchedule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Idempotency key for safe retries",
+                        "name": "X-Idempotency-Key",
+                        "in": "header"
+                    },
+                    {
+                        "description": "Fee schedule creation payload",
+                        "name": "feeSchedule",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateFeeScheduleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Successfully created fee schedule",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeScheduleResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request payload",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict: duplicate resource or idempotency key in progress",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/fee-schedules/{scheduleId}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns a fee schedule by ID.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Configuration Fee Schedules"
+                ],
+                "summary": "Get a fee schedule",
+                "operationId": "getFeeSchedule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Schedule ID",
+                        "name": "scheduleId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully retrieved fee schedule",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeScheduleResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid schedule ID format",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Fee schedule not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Removes a fee schedule by ID.",
+                "tags": [
+                    "Configuration Fee Schedules"
+                ],
+                "summary": "Delete a fee schedule",
+                "operationId": "deleteFeeSchedule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Schedule ID",
+                        "name": "scheduleId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Fee schedule successfully deleted"
+                    },
+                    "400": {
+                        "description": "Invalid schedule ID format",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Fee schedule not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict: fee schedule is still referenced by fee rules",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Updates fields on a fee schedule by ID.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Configuration Fee Schedules"
+                ],
+                "summary": "Update a fee schedule",
+                "operationId": "updateFeeSchedule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Idempotency key for safe retries",
+                        "name": "X-Idempotency-Key",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Schedule ID",
+                        "name": "scheduleId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Fee schedule updates",
+                        "name": "feeSchedule",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.UpdateFeeScheduleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully updated fee schedule",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeScheduleResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request payload",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Fee schedule not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict: duplicate resource or idempotency key in progress",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/fee-schedules/{scheduleId}/simulate": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Calculates fees for a given gross amount using a specific fee schedule.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Configuration Fee Schedules"
+                ],
+                "summary": "Simulate fee calculation",
+                "operationId": "simulateFeeSchedule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Schedule ID",
+                        "name": "scheduleId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Simulation parameters",
+                        "name": "simulate",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.SimulateFeeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Simulation result",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.SimulateFeeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request payload",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Fee schedule not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_configuration_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -4846,37 +5882,37 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_governance_adapters_http.ActorMappingResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_governance_adapters_http_dto.ActorMappingResponse"
                         }
                     },
                     "400": {
                         "description": "Invalid request",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Actor mapping not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -4919,7 +5955,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_governance_adapters_http.UpsertActorMappingRequest"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_governance_adapters_http_dto.UpsertActorMappingRequest"
                         }
                     }
                 ],
@@ -4927,31 +5963,31 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_governance_adapters_http.ActorMappingResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_governance_adapters_http_dto.ActorMappingResponse"
                         }
                     },
                     "400": {
                         "description": "Invalid request",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -4993,31 +6029,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Actor mapping not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -5061,31 +6097,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Actor mapping not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -5154,25 +6190,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid query parameters",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -5220,31 +6256,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Archive not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -5331,25 +6367,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid query parameters",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -5397,31 +6433,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Audit log not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -5492,25 +6528,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -5596,25 +6632,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid query parameters",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_ingestion_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_ingestion_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_ingestion_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_ingestion_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -5670,31 +6706,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid query parameters",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_ingestion_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_ingestion_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_ingestion_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Job not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_ingestion_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_ingestion_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -5788,31 +6824,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid query parameters",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_ingestion_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_ingestion_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_ingestion_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Job not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_ingestion_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_ingestion_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -5907,31 +6943,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_ingestion_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_ingestion_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_ingestion_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Source not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_ingestion_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_ingestion_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -6009,37 +7045,37 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_ingestion_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_ingestion_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_ingestion_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Source not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_ingestion_adapters_http.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "Conflict: duplicate resource or idempotency key in progress",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_ingestion_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_ingestion_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -6166,25 +7202,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid query parameters",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_ingestion_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_ingestion_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_ingestion_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_ingestion_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -6252,37 +7288,37 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_ingestion_adapters_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_ingestion_adapters_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_ingestion_adapters_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Transaction not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_ingestion_adapters_http.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "Transaction already matched/ignored or idempotency conflict",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_ingestion_adapters_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/internal_ingestion_adapters_http.ErrorResponse"
                         }
                     }
                 }
@@ -6342,31 +7378,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Context not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -6426,31 +7462,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Context not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -6523,31 +7559,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Context not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -6612,31 +7648,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Match group not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -6696,31 +7732,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Transaction not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -6776,31 +7812,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Match run not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -6892,31 +7928,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid request payload",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Match run not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -6980,37 +8016,37 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_reporting_adapters_http.DashboardAggregatesResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.DashboardAggregatesResponse"
                         }
                     },
                     "400": {
                         "description": "Invalid query parameters",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Context not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -7074,37 +8110,37 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_reporting_adapters_http.CashImpactSummaryResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.CashImpactSummaryResponse"
                         }
                     },
                     "400": {
                         "description": "Invalid query parameters",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Context not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -7168,37 +8204,37 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_reporting_adapters_http.MatchRateStatsResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.MatchRateStatsResponse"
                         }
                     },
                     "400": {
                         "description": "Invalid query parameters",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Context not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -7262,37 +8298,37 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_reporting_adapters_http.MatcherDashboardMetricsResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.MatcherDashboardMetricsResponse"
                         }
                     },
                     "400": {
                         "description": "Invalid query parameters",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Context not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -7356,37 +8392,37 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_reporting_adapters_http.SLAStatsResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.SLAStatsResponse"
                         }
                     },
                     "400": {
                         "description": "Invalid query parameters",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Context not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -7450,37 +8486,37 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_reporting_adapters_http.SourceBreakdownListResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.SourceBreakdownListResponse"
                         }
                     },
                     "400": {
                         "description": "Invalid query parameters",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Context not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -7544,37 +8580,37 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_reporting_adapters_http.VolumeStatsResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.VolumeStatsResponse"
                         }
                     },
                     "400": {
                         "description": "Invalid query parameters",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Context not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -7638,37 +8674,37 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_reporting_adapters_http.ExportCountResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.ExportCountResponse"
                         }
                     },
                     "400": {
                         "description": "Invalid query parameters",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Context not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -7758,37 +8794,37 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_reporting_adapters_http.ListMatchedReportResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.ListMatchedReportResponse"
                         }
                     },
                     "400": {
                         "description": "Invalid query parameters",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Context not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -7867,31 +8903,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid query parameters",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Context not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -7955,37 +8991,37 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_reporting_adapters_http.ExportCountResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.ExportCountResponse"
                         }
                     },
                     "400": {
                         "description": "Invalid query parameters",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Context not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -8049,37 +9085,37 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_reporting_adapters_http.SummaryReportResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.SummaryReportResponse"
                         }
                     },
                     "400": {
                         "description": "Invalid query parameters",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Context not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -8158,31 +9194,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid query parameters",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Context not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -8246,37 +9282,37 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_reporting_adapters_http.ExportCountResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.ExportCountResponse"
                         }
                     },
                     "400": {
                         "description": "Invalid query parameters",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Context not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -8366,37 +9402,37 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_reporting_adapters_http.ListUnmatchedReportResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.ListUnmatchedReportResponse"
                         }
                     },
                     "400": {
                         "description": "Invalid query parameters",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Context not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -8460,37 +9496,37 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_reporting_adapters_http.ExportCountResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.ExportCountResponse"
                         }
                     },
                     "400": {
                         "description": "Invalid query parameters",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Context not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -8569,31 +9605,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid query parameters",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Context not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -8683,37 +9719,37 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_reporting_adapters_http.ListVarianceReportResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.ListVarianceReportResponse"
                         }
                     },
                     "400": {
                         "description": "Invalid query parameters",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Context not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -8792,31 +9828,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid query parameters",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Context not found",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/http.ErrorResponse"
+                            "$ref": "#/definitions/github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse"
                         }
                     }
                 }
@@ -8824,31 +9860,36 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "github_com_LerianStudio_lib-uncommons_v2_uncommons_net_http.CursorPagination": {
+        "github_com_LerianStudio_lib-commons_v4_commons_net_http.ErrorResponse": {
+            "description": "Standard error response returned by all API endpoints",
             "type": "object",
             "properties": {
-                "next": {
-                    "type": "string"
+                "code": {
+                    "description": "HTTP status code",
+                    "type": "integer",
+                    "example": 400
                 },
-                "prev": {
-                    "type": "string"
+                "message": {
+                    "description": "Human-readable error message",
+                    "type": "string",
+                    "example": "context name is required"
+                },
+                "title": {
+                    "description": "Error type identifier",
+                    "type": "string",
+                    "example": "invalid_request"
                 }
             }
         },
         "github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CloneContextRequest": {
-            "description": "Request payload for cloning a context with its configuration",
+            "description": "Request payload for cloning a context with its configuration. When sources are included, their LEFT/RIGHT side assignments and field maps are preserved. When rules are included, both match rules and fee rules are cloned, and cloned fee rules keep referencing the same fee schedules as the source context.",
             "type": "object",
             "required": [
                 "name"
             ],
             "properties": {
-                "includeFeeSchedules": {
-                    "description": "Whether to clone fee schedules (true) or keep original references (false) (default: true)",
-                    "type": "boolean",
-                    "example": true
-                },
                 "includeRules": {
-                    "description": "Whether to include match rules in the clone (default: true)",
+                    "description": "Whether to include match rules and fee rules in the clone (default: true)",
                     "type": "boolean",
                     "example": true
                 },
@@ -8867,7 +9908,7 @@ const docTemplate = `{
             }
         },
         "github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CloneContextResponse": {
-            "description": "Result of cloning a reconciliation context",
+            "description": "Result of cloning a reconciliation context, including counts for cloned sources, match rules, fee rules, and field maps.",
             "type": "object",
             "properties": {
                 "context": {
@@ -8878,8 +9919,8 @@ const docTemplate = `{
                         }
                     ]
                 },
-                "feeSchedulesCloned": {
-                    "description": "Number of fee schedules cloned",
+                "feeRulesCloned": {
+                    "description": "Number of fee rules cloned",
                     "type": "integer",
                     "example": 2
                 },
@@ -8946,6 +9987,20 @@ const docTemplate = `{
                     "format": "uuid",
                     "example": "550e8400-e29b-41d4-a716-446655440000"
                 },
+                "rules": {
+                    "type": "array",
+                    "maxItems": 50,
+                    "items": {
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateMatchRuleRequest"
+                    }
+                },
+                "sources": {
+                    "type": "array",
+                    "maxItems": 10,
+                    "items": {
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateContextSourceRequest"
+                    }
+                },
                 "type": {
                     "type": "string",
                     "enum": [
@@ -8954,6 +10009,91 @@ const docTemplate = `{
                         "N:M"
                     ],
                     "example": "1:1"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateContextSourceRequest": {
+            "description": "Request payload for creating a source inline with a context",
+            "type": "object",
+            "required": [
+                "name",
+                "side",
+                "type"
+            ],
+            "properties": {
+                "config": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "mapping": {
+                    "type": "object"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 50,
+                    "minLength": 1,
+                    "example": "Primary Bank Account"
+                },
+                "side": {
+                    "type": "string",
+                    "enum": [
+                        "LEFT",
+                        "RIGHT"
+                    ],
+                    "example": "LEFT"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "LEDGER",
+                        "BANK",
+                        "GATEWAY",
+                        "CUSTOM",
+                        "FETCHER"
+                    ],
+                    "example": "BANK"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateFeeRuleRequest": {
+            "type": "object",
+            "required": [
+                "feeScheduleId",
+                "name",
+                "side"
+            ],
+            "properties": {
+                "feeScheduleId": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "example": "BB Right-Side Rule"
+                },
+                "predicates": {
+                    "type": "array",
+                    "maxItems": 50,
+                    "items": {
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldPredicateRequest"
+                    }
+                },
+                "priority": {
+                    "description": "Priority must be unique within the context. LEFT, RIGHT, and ANY rules share the same priority space.",
+                    "type": "integer",
+                    "minimum": 0,
+                    "example": 0
+                },
+                "side": {
+                    "type": "string",
+                    "enum": [
+                        "LEFT",
+                        "RIGHT",
+                        "ANY"
+                    ],
+                    "example": "RIGHT"
                 }
             }
         },
@@ -9106,6 +10246,7 @@ const docTemplate = `{
             "type": "object",
             "required": [
                 "name",
+                "side",
                 "type"
             ],
             "properties": {
@@ -9113,16 +10254,19 @@ const docTemplate = `{
                     "type": "object",
                     "additionalProperties": {}
                 },
-                "feeScheduleId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "example": "550e8400-e29b-41d4-a716-446655440000"
-                },
                 "name": {
                     "type": "string",
                     "maxLength": 50,
                     "minLength": 1,
                     "example": "Primary Bank Account"
+                },
+                "side": {
+                    "type": "string",
+                    "enum": [
+                        "LEFT",
+                        "RIGHT"
+                    ],
+                    "example": "LEFT"
                 },
                 "type": {
                     "type": "string",
@@ -9130,9 +10274,58 @@ const docTemplate = `{
                         "LEDGER",
                         "BANK",
                         "GATEWAY",
-                        "CUSTOM"
+                        "CUSTOM",
+                        "FETCHER"
                     ],
                     "example": "BANK"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FeeRuleResponse": {
+            "type": "object",
+            "properties": {
+                "contextId": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                "createdAt": {
+                    "type": "string",
+                    "example": "2025-01-15T10:30:00Z"
+                },
+                "feeScheduleId": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                "id": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "BB Right-Side Rule"
+                },
+                "predicates": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldPredicateResponse"
+                    }
+                },
+                "priority": {
+                    "type": "integer",
+                    "example": 0
+                },
+                "side": {
+                    "type": "string",
+                    "enum": [
+                        "LEFT",
+                        "RIGHT",
+                        "ANY"
+                    ],
+                    "example": "RIGHT"
+                },
+                "updatedAt": {
+                    "type": "string",
+                    "example": "2025-01-15T10:30:00Z"
                 }
             }
         },
@@ -9271,6 +10464,69 @@ const docTemplate = `{
                     "description": "Version number for optimistic locking",
                     "type": "integer",
                     "example": 1
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldPredicateRequest": {
+            "type": "object",
+            "required": [
+                "field",
+                "operator"
+            ],
+            "properties": {
+                "field": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "example": "institution"
+                },
+                "operator": {
+                    "type": "string",
+                    "enum": [
+                        "EQUALS",
+                        "IN",
+                        "EXISTS"
+                    ],
+                    "example": "EQUALS"
+                },
+                "value": {
+                    "type": "string",
+                    "maxLength": 1024,
+                    "example": "Banco do Brasil"
+                },
+                "values": {
+                    "type": "array",
+                    "maxItems": 100,
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldPredicateResponse": {
+            "type": "object",
+            "properties": {
+                "field": {
+                    "type": "string",
+                    "example": "institution"
+                },
+                "operator": {
+                    "type": "string",
+                    "enum": [
+                        "EQUALS",
+                        "IN",
+                        "EXISTS"
+                    ],
+                    "example": "EQUALS"
+                },
+                "value": {
+                    "type": "string",
+                    "example": "Banco do Brasil"
+                },
+                "values": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -9427,11 +10683,6 @@ const docTemplate = `{
                     "type": "string",
                     "example": "2025-01-15T10:30:00Z"
                 },
-                "feeScheduleId": {
-                    "description": "Fee schedule ID associated with this source",
-                    "type": "string",
-                    "example": "550e8400-e29b-41d4-a716-446655440000"
-                },
                 "id": {
                     "description": "Unique identifier for the source",
                     "type": "string",
@@ -9441,6 +10692,15 @@ const docTemplate = `{
                     "description": "Name of the source",
                     "type": "string",
                     "example": "Primary Bank Account"
+                },
+                "side": {
+                    "description": "Matching side configured for the source",
+                    "type": "string",
+                    "enum": [
+                        "LEFT",
+                        "RIGHT"
+                    ],
+                    "example": "LEFT"
                 },
                 "type": {
                     "description": "Type of the source",
@@ -9587,11 +10847,6 @@ const docTemplate = `{
                     "type": "string",
                     "example": "2025-01-15T10:30:00Z"
                 },
-                "feeScheduleId": {
-                    "description": "Fee schedule ID associated with this source",
-                    "type": "string",
-                    "example": "550e8400-e29b-41d4-a716-446655440000"
-                },
                 "hasFieldMaps": {
                     "description": "Indicates if field maps are configured for this source",
                     "type": "boolean",
@@ -9606,6 +10861,15 @@ const docTemplate = `{
                     "description": "Name of the source",
                     "type": "string",
                     "example": "Primary Bank Account"
+                },
+                "side": {
+                    "description": "Matching side configured for the source",
+                    "type": "string",
+                    "enum": [
+                        "LEFT",
+                        "RIGHT"
+                    ],
+                    "example": "LEFT"
                 },
                 "type": {
                     "description": "Type of the source",
@@ -9681,6 +10945,40 @@ const docTemplate = `{
                         "N:M"
                     ],
                     "example": "1:N"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.UpdateFeeRuleRequest": {
+            "type": "object",
+            "properties": {
+                "feeScheduleId": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 100,
+                    "example": "Updated Rule"
+                },
+                "predicates": {
+                    "type": "array",
+                    "maxItems": 50,
+                    "items": {
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.FieldPredicateRequest"
+                    }
+                },
+                "priority": {
+                    "description": "Priority must remain unique within the context. LEFT, RIGHT, and ANY rules share the same priority space.",
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "side": {
+                    "type": "string",
+                    "enum": [
+                        "LEFT",
+                        "RIGHT",
+                        "ANY"
+                    ],
+                    "example": "LEFT"
                 }
             }
         },
@@ -9773,15 +11071,18 @@ const docTemplate = `{
                     "type": "object",
                     "additionalProperties": {}
                 },
-                "feeScheduleId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "example": "550e8400-e29b-41d4-a716-446655440000"
-                },
                 "name": {
                     "type": "string",
                     "maxLength": 50,
                     "example": "Secondary Bank Account"
+                },
+                "side": {
+                    "type": "string",
+                    "enum": [
+                        "LEFT",
+                        "RIGHT"
+                    ],
+                    "example": "RIGHT"
                 },
                 "type": {
                     "type": "string",
@@ -9789,9 +11090,215 @@ const docTemplate = `{
                         "LEDGER",
                         "BANK",
                         "GATEWAY",
-                        "CUSTOM"
+                        "CUSTOM",
+                        "FETCHER"
                     ],
                     "example": "LEDGER"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ConnectionListResponse": {
+            "type": "object",
+            "properties": {
+                "connections": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ConnectionResponse"
+                    }
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ConnectionResponse": {
+            "type": "object",
+            "properties": {
+                "configName": {
+                    "type": "string"
+                },
+                "databaseType": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "lastSeenAt": {
+                    "type": "string"
+                },
+                "schemaDiscovered": {
+                    "type": "boolean"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ConnectionSchemaResponse": {
+            "type": "object",
+            "properties": {
+                "connectionId": {
+                    "type": "string"
+                },
+                "tables": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.SchemaTableResponse"
+                    }
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.DiscoveryStatusResponse": {
+            "type": "object",
+            "properties": {
+                "connectionCount": {
+                    "type": "integer"
+                },
+                "fetcherHealthy": {
+                    "type": "boolean"
+                },
+                "lastSyncAt": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ExtractionRequestResponse": {
+            "type": "object",
+            "properties": {
+                "connectionId": {
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "endDate": {
+                    "type": "string"
+                },
+                "errorMessage": {
+                    "type": "string"
+                },
+                "filters": {
+                    "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_shared_ports.ExtractionFilters"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "ingestionJobId": {
+                    "type": "string"
+                },
+                "startDate": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "tables": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ExtractionTableResponse"
+                    }
+                },
+                "updatedAt": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ExtractionTableRequest": {
+            "type": "object",
+            "required": [
+                "columns"
+            ],
+            "properties": {
+                "columns": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ExtractionTableResponse": {
+            "type": "object",
+            "properties": {
+                "columns": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.RefreshDiscoveryResponse": {
+            "type": "object",
+            "properties": {
+                "connectionsSynced": {
+                    "type": "integer"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.SchemaColumnResponse": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "nullable": {
+                    "type": "boolean"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.SchemaTableResponse": {
+            "type": "object",
+            "properties": {
+                "columns": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.SchemaColumnResponse"
+                    }
+                },
+                "tableName": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.StartExtractionRequest": {
+            "type": "object",
+            "required": [
+                "tables"
+            ],
+            "properties": {
+                "endDate": {
+                    "type": "string"
+                },
+                "filters": {
+                    "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_shared_ports.ExtractionFilters"
+                },
+                "startDate": {
+                    "type": "string"
+                },
+                "tables": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ExtractionTableRequest"
+                    }
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.TestConnectionResponse": {
+            "type": "object",
+            "properties": {
+                "connectionId": {
+                    "type": "string"
+                },
+                "errorMessage": {
+                    "type": "string"
+                },
+                "healthy": {
+                    "type": "boolean"
+                },
+                "latencyMs": {
+                    "type": "integer"
                 }
             }
         },
@@ -10560,6 +12067,96 @@ const docTemplate = `{
                 }
             }
         },
+        "github_com_LerianStudio_matcher_internal_governance_adapters_http_dto.ActorMappingResponse": {
+            "description": "Actor mapping entry linking an opaque actor ID to PII",
+            "type": "object",
+            "properties": {
+                "actor_id": {
+                    "description": "Opaque actor identifier",
+                    "type": "string",
+                    "example": "user:550e8400-e29b-41d4-a716-446655440000"
+                },
+                "created_at": {
+                    "description": "Timestamp when the mapping was created (RFC3339)",
+                    "type": "string",
+                    "example": "2026-01-15T10:30:00Z"
+                },
+                "display_name": {
+                    "description": "Human-readable display name",
+                    "type": "string",
+                    "example": "John Doe"
+                },
+                "email": {
+                    "description": "Email address",
+                    "type": "string",
+                    "example": "john.doe@example.com"
+                },
+                "updated_at": {
+                    "description": "Timestamp when the mapping was last updated (RFC3339)",
+                    "type": "string",
+                    "example": "2026-01-15T10:30:00Z"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_governance_adapters_http_dto.ArchiveMetadataResponse": {
+            "description": "Completed audit log archive metadata",
+            "type": "object",
+            "properties": {
+                "archived_at": {
+                    "description": "Timestamp when archival completed (RFC3339)",
+                    "type": "string",
+                    "example": "2024-04-01T02:30:00Z"
+                },
+                "compressed_size_bytes": {
+                    "description": "Compressed file size in bytes",
+                    "type": "integer",
+                    "example": 10485760
+                },
+                "date_range_end": {
+                    "description": "End of the archived date range (RFC3339)",
+                    "type": "string",
+                    "example": "2024-03-31T23:59:59Z"
+                },
+                "date_range_start": {
+                    "description": "Start of the archived date range (RFC3339)",
+                    "type": "string",
+                    "example": "2024-01-01T00:00:00Z"
+                },
+                "id": {
+                    "description": "Unique identifier for the archive",
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                "partition_name": {
+                    "description": "Name of the database partition that was archived",
+                    "type": "string",
+                    "example": "audit_logs_2024_q1"
+                },
+                "row_count": {
+                    "description": "Number of rows archived",
+                    "type": "integer",
+                    "example": 150000
+                },
+                "status": {
+                    "description": "Archive status",
+                    "type": "string",
+                    "enum": [
+                        "COMPLETE"
+                    ],
+                    "example": "COMPLETE"
+                },
+                "storage_class": {
+                    "description": "Object storage class",
+                    "type": "string",
+                    "enum": [
+                        "STANDARD",
+                        "GLACIER",
+                        "DEEP_ARCHIVE"
+                    ],
+                    "example": "GLACIER"
+                }
+            }
+        },
         "github_com_LerianStudio_matcher_internal_governance_adapters_http_dto.AuditLogResponse": {
             "description": "Immutable audit log entry for governance tracking",
             "type": "object",
@@ -10638,6 +12235,22 @@ const docTemplate = `{
                 "prevCursor": {
                     "type": "string",
                     "example": "eyJpZCI6IjEyMiJ9"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_governance_adapters_http_dto.UpsertActorMappingRequest": {
+            "description": "Request body for upserting an actor mapping",
+            "type": "object",
+            "properties": {
+                "display_name": {
+                    "description": "Human-readable display name for the actor",
+                    "type": "string",
+                    "example": "John Doe"
+                },
+                "email": {
+                    "description": "Email address of the actor",
+                    "type": "string",
+                    "example": "john.doe@example.com"
                 }
             }
         },
@@ -11268,24 +12881,575 @@ const docTemplate = `{
                 }
             }
         },
-        "http.ErrorResponse": {
-            "description": "Standard error response returned by all API endpoints",
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.AgeBucketDTO": {
             "type": "object",
             "properties": {
-                "code": {
-                    "description": "HTTP status code",
+                "bucket": {
+                    "type": "string",
+                    "example": "0-24h"
+                },
+                "value": {
                     "type": "integer",
-                    "example": 400
-                },
-                "message": {
-                    "description": "Human-readable error message",
+                    "example": 15
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.AgeExposureResponse": {
+            "type": "object",
+            "properties": {
+                "amount": {
                     "type": "string",
-                    "example": "context name is required"
+                    "example": "10000.00"
                 },
-                "title": {
-                    "description": "Error type identifier",
+                "bucket": {
                     "type": "string",
-                    "example": "invalid_request"
+                    "example": "0-24h"
+                },
+                "transactionCount": {
+                    "type": "integer",
+                    "example": 120
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.BreakdownMetricsResponse": {
+            "type": "object",
+            "properties": {
+                "byAge": {
+                    "type": "array",
+                    "maxItems": 20,
+                    "items": {
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.AgeBucketDTO"
+                    }
+                },
+                "byReason": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                },
+                "byRule": {
+                    "type": "array",
+                    "maxItems": 100,
+                    "items": {
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.RuleMatchCountDTO"
+                    }
+                },
+                "bySeverity": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.CashImpactSummaryResponse": {
+            "type": "object",
+            "properties": {
+                "byAge": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.AgeExposureResponse"
+                    }
+                },
+                "byCurrency": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.CurrencyExposureResponse"
+                    }
+                },
+                "totalUnmatchedAmount": {
+                    "type": "string",
+                    "example": "70000.00"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.CurrencyExposureResponse": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "string",
+                    "example": "25000.00"
+                },
+                "currency": {
+                    "type": "string",
+                    "example": "USD"
+                },
+                "transactionCount": {
+                    "type": "integer",
+                    "example": 250
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.DashboardAggregatesResponse": {
+            "type": "object",
+            "properties": {
+                "matchRate": {
+                    "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.MatchRateStatsResponse"
+                },
+                "sla": {
+                    "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.SLAStatsResponse"
+                },
+                "updatedAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "example": "2025-01-15T10:30:00Z"
+                },
+                "volume": {
+                    "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.VolumeStatsResponse"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.ExportCountResponse": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer",
+                    "example": 4250
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.ListMatchedReportResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.MatchedItemResponse"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/http.CursorPagination"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.ListUnmatchedReportResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.UnmatchedItemResponse"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/http.CursorPagination"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.ListVarianceReportResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.VarianceReportRowResponse"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/http.CursorPagination"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.MatchRateStatsResponse": {
+            "type": "object",
+            "properties": {
+                "matchRate": {
+                    "type": "number",
+                    "example": 94.4
+                },
+                "matchRateAmount": {
+                    "type": "number",
+                    "example": 94.4
+                },
+                "matchedCount": {
+                    "type": "integer",
+                    "example": 11800
+                },
+                "totalCount": {
+                    "type": "integer",
+                    "example": 12500
+                },
+                "unmatchedCount": {
+                    "type": "integer",
+                    "example": 700
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.MatchedItemResponse": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "string",
+                    "example": "1250.50"
+                },
+                "currency": {
+                    "type": "string",
+                    "example": "USD"
+                },
+                "date": {
+                    "type": "string",
+                    "format": "date-time",
+                    "example": "2025-01-15T10:30:00Z"
+                },
+                "match_group_id": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440001"
+                },
+                "source_id": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440002"
+                },
+                "transaction_id": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.MatcherDashboardMetricsResponse": {
+            "type": "object",
+            "properties": {
+                "breakdowns": {
+                    "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.BreakdownMetricsResponse"
+                },
+                "summary": {
+                    "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.SummaryMetricsResponse"
+                },
+                "trends": {
+                    "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.TrendMetricsResponse"
+                },
+                "updatedAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "example": "2025-01-15T10:30:00Z"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.RuleMatchCountDTO": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer",
+                    "example": 1250
+                },
+                "id": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "Exact Amount Match"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.SLAStatsResponse": {
+            "type": "object",
+            "properties": {
+                "averageResolutionMs": {
+                    "type": "integer",
+                    "example": 3600000
+                },
+                "pendingOverdue": {
+                    "type": "integer",
+                    "example": 2
+                },
+                "pendingWithinSLA": {
+                    "type": "integer",
+                    "example": 2
+                },
+                "resolvedLate": {
+                    "type": "integer",
+                    "example": 3
+                },
+                "resolvedOnTime": {
+                    "type": "integer",
+                    "example": 35
+                },
+                "slaComplianceRate": {
+                    "type": "number",
+                    "example": 83.3
+                },
+                "totalExceptions": {
+                    "type": "integer",
+                    "example": 42
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.SourceBreakdownListResponse": {
+            "type": "object",
+            "properties": {
+                "sources": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.SourceBreakdownResponse"
+                    }
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.SourceBreakdownResponse": {
+            "type": "object",
+            "properties": {
+                "currency": {
+                    "type": "string",
+                    "example": "USD"
+                },
+                "matchRate": {
+                    "type": "number",
+                    "example": 95
+                },
+                "matchedTransactions": {
+                    "type": "integer",
+                    "example": 4750
+                },
+                "sourceId": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                "sourceName": {
+                    "type": "string",
+                    "example": "Primary Bank Account"
+                },
+                "totalAmount": {
+                    "type": "string",
+                    "example": "500000.00"
+                },
+                "totalTransactions": {
+                    "type": "integer",
+                    "example": 5000
+                },
+                "unmatchedAmount": {
+                    "type": "string",
+                    "example": "25000.00"
+                },
+                "unmatchedTransactions": {
+                    "type": "integer",
+                    "example": 250
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.SummaryMetricsResponse": {
+            "type": "object",
+            "properties": {
+                "criticalExposure": {
+                    "type": "string",
+                    "example": "15000.00"
+                },
+                "matchRate": {
+                    "type": "number",
+                    "example": 94.4
+                },
+                "oldestExceptionAgeHours": {
+                    "type": "number",
+                    "example": 72.5
+                },
+                "pendingExceptions": {
+                    "type": "integer",
+                    "example": 4
+                },
+                "totalMatches": {
+                    "type": "integer",
+                    "example": 11800
+                },
+                "totalTransactions": {
+                    "type": "integer",
+                    "example": 12500
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.SummaryReportResponse": {
+            "type": "object",
+            "properties": {
+                "matched_amount": {
+                    "type": "string",
+                    "example": "1180000.00"
+                },
+                "matched_count": {
+                    "type": "integer",
+                    "example": 11800
+                },
+                "total_amount": {
+                    "type": "string",
+                    "example": "1250000.00"
+                },
+                "unmatched_amount": {
+                    "type": "string",
+                    "example": "70000.00"
+                },
+                "unmatched_count": {
+                    "type": "integer",
+                    "example": 700
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.TrendMetricsResponse": {
+            "type": "object",
+            "properties": {
+                "dates": {
+                    "type": "array",
+                    "maxItems": 366,
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "exceptions": {
+                    "type": "array",
+                    "maxItems": 366,
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "ingestion": {
+                    "type": "array",
+                    "maxItems": 366,
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "matchRates": {
+                    "type": "array",
+                    "maxItems": 366,
+                    "items": {
+                        "type": "number"
+                    }
+                },
+                "matches": {
+                    "type": "array",
+                    "maxItems": 366,
+                    "items": {
+                        "type": "integer"
+                    }
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.UnmatchedItemResponse": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "string",
+                    "example": "1250.50"
+                },
+                "currency": {
+                    "type": "string",
+                    "example": "USD"
+                },
+                "date": {
+                    "type": "string",
+                    "format": "date-time",
+                    "example": "2025-01-15T10:30:00Z"
+                },
+                "due_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "example": "2025-02-15T10:30:00Z"
+                },
+                "exception_id": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440003"
+                },
+                "source_id": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440002"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "PENDING"
+                },
+                "transaction_id": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.VarianceReportRowResponse": {
+            "type": "object",
+            "properties": {
+                "currency": {
+                    "type": "string",
+                    "example": "USD"
+                },
+                "fee_type": {
+                    "type": "string",
+                    "example": "INTERCHANGE"
+                },
+                "net_variance": {
+                    "type": "string",
+                    "example": "-200.00"
+                },
+                "source_id": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                "total_actual": {
+                    "type": "string",
+                    "example": "4800.00"
+                },
+                "total_expected": {
+                    "type": "string",
+                    "example": "5000.00"
+                },
+                "variance_pct": {
+                    "type": "string",
+                    "example": "-4.00"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_reporting_adapters_http_dto.VolumeStatsResponse": {
+            "type": "object",
+            "properties": {
+                "matchedAmount": {
+                    "type": "string",
+                    "example": "1180000.00"
+                },
+                "matchedTransactions": {
+                    "type": "integer",
+                    "example": 11800
+                },
+                "periodEnd": {
+                    "type": "string",
+                    "format": "date-time",
+                    "example": "2025-01-31T23:59:59Z"
+                },
+                "periodStart": {
+                    "type": "string",
+                    "format": "date-time",
+                    "example": "2025-01-01T00:00:00Z"
+                },
+                "totalAmount": {
+                    "type": "string",
+                    "example": "1250000.00"
+                },
+                "totalTransactions": {
+                    "type": "integer",
+                    "example": 12500
+                },
+                "unmatchedAmount": {
+                    "type": "string",
+                    "example": "70000.00"
+                },
+                "unmatchedCount": {
+                    "type": "integer",
+                    "example": 700
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_shared_ports.ExtractionFilters": {
+            "type": "object",
+            "properties": {
+                "equals": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "http.CursorPagination": {
+            "type": "object",
+            "properties": {
+                "next": {
+                    "type": "string"
+                },
+                "prev": {
+                    "type": "string"
                 }
             }
         },
@@ -11350,7 +13514,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "checks": {
-                    "description": "Checks contains individual dependency status (only in non-production environments)",
+                    "description": "Checks contains individual dependency status (only in development/test environments)",
                     "allOf": [
                         {
                             "$ref": "#/definitions/internal_bootstrap.DependencyChecks"
@@ -11365,6 +13529,20 @@ const docTemplate = `{
                         "degraded"
                     ],
                     "example": "ok"
+                }
+            }
+        },
+        "internal_configuration_adapters_http.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
                 }
             }
         },
@@ -11480,34 +13658,31 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_governance_adapters_http.ActorMappingResponse": {
-            "description": "Actor mapping entry linking an opaque actor ID to PII",
+        "internal_discovery_adapters_http.ErrorResponse": {
             "type": "object",
             "properties": {
-                "actor_id": {
-                    "description": "Opaque actor identifier",
-                    "type": "string",
-                    "example": "user:550e8400-e29b-41d4-a716-446655440000"
+                "code": {
+                    "type": "integer"
                 },
-                "created_at": {
-                    "description": "Timestamp when the mapping was created (RFC3339)",
-                    "type": "string",
-                    "example": "2026-01-15T10:30:00Z"
+                "message": {
+                    "type": "string"
                 },
-                "display_name": {
-                    "description": "Human-readable display name",
-                    "type": "string",
-                    "example": "John Doe"
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_exception_adapters_http.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
                 },
-                "email": {
-                    "description": "Email address",
-                    "type": "string",
-                    "example": "john.doe@example.com"
+                "message": {
+                    "type": "string"
                 },
-                "updated_at": {
-                    "description": "Timestamp when the mapping was last updated (RFC3339)",
-                    "type": "string",
-                    "example": "2026-01-15T10:30:00Z"
+                "title": {
+                    "type": "string"
                 }
             }
         },
@@ -11532,65 +13707,6 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_governance_adapters_http.ArchiveMetadataResponse": {
-            "description": "Completed audit log archive metadata",
-            "type": "object",
-            "properties": {
-                "archived_at": {
-                    "description": "Timestamp when archival completed (RFC3339)",
-                    "type": "string",
-                    "example": "2024-04-01T02:30:00Z"
-                },
-                "compressed_size_bytes": {
-                    "description": "Compressed file size in bytes",
-                    "type": "integer",
-                    "example": 10485760
-                },
-                "date_range_end": {
-                    "description": "End of the archived date range (RFC3339)",
-                    "type": "string",
-                    "example": "2024-03-31T23:59:59Z"
-                },
-                "date_range_start": {
-                    "description": "Start of the archived date range (RFC3339)",
-                    "type": "string",
-                    "example": "2024-01-01T00:00:00Z"
-                },
-                "id": {
-                    "description": "Unique identifier for the archive",
-                    "type": "string",
-                    "example": "550e8400-e29b-41d4-a716-446655440000"
-                },
-                "partition_name": {
-                    "description": "Name of the database partition that was archived",
-                    "type": "string",
-                    "example": "audit_logs_2024_q1"
-                },
-                "row_count": {
-                    "description": "Number of rows archived",
-                    "type": "integer",
-                    "example": 150000
-                },
-                "status": {
-                    "description": "Archive status",
-                    "type": "string",
-                    "enum": [
-                        "COMPLETE"
-                    ],
-                    "example": "COMPLETE"
-                },
-                "storage_class": {
-                    "description": "Object storage class",
-                    "type": "string",
-                    "enum": [
-                        "STANDARD",
-                        "GLACIER",
-                        "DEEP_ARCHIVE"
-                    ],
-                    "example": "GLACIER"
-                }
-            }
-        },
         "internal_governance_adapters_http.ListArchivesResponse": {
             "description": "Paginated list of completed audit log archives",
             "type": "object",
@@ -11605,7 +13721,7 @@ const docTemplate = `{
                     "type": "array",
                     "maxItems": 200,
                     "items": {
-                        "$ref": "#/definitions/internal_governance_adapters_http.ArchiveMetadataResponse"
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_governance_adapters_http_dto.ArchiveMetadataResponse"
                     }
                 },
                 "limit": {
@@ -11616,19 +13732,17 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_governance_adapters_http.UpsertActorMappingRequest": {
-            "description": "Request body for upserting an actor mapping",
+        "internal_ingestion_adapters_http.ErrorResponse": {
             "type": "object",
             "properties": {
-                "display_name": {
-                    "description": "Human-readable display name for the actor",
-                    "type": "string",
-                    "example": "John Doe"
+                "code": {
+                    "type": "integer"
                 },
-                "email": {
-                    "description": "Email address of the actor",
-                    "type": "string",
-                    "example": "john.doe@example.com"
+                "message": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
                 }
             }
         },
@@ -11806,13 +13920,6 @@ const docTemplate = `{
                         "COMMIT"
                     ],
                     "example": "DRY_RUN"
-                },
-                "primarySourceId": {
-                    "description": "PrimarySourceID optionally specifies which source is the reference (left) side.\nIf provided, directed matching: this source -\u003e left, others -\u003e right.\nIf omitted, symmetric matching: sources compared freely (first source used as left internally).",
-                    "type": "string",
-                    "format": "uuid",
-                    "x-nullable": true,
-                    "example": "550e8400-e29b-41d4-a716-446655440000"
                 }
             }
         },
@@ -11844,88 +13951,6 @@ const docTemplate = `{
                 "reason": {
                     "type": "string",
                     "example": "incorrect match - amounts do not match"
-                }
-            }
-        },
-        "internal_reporting_adapters_http.AgeBucketDTO": {
-            "type": "object",
-            "properties": {
-                "bucket": {
-                    "type": "string",
-                    "example": "0-24h"
-                },
-                "value": {
-                    "type": "integer",
-                    "example": 15
-                }
-            }
-        },
-        "internal_reporting_adapters_http.AgeExposureResponse": {
-            "type": "object",
-            "properties": {
-                "amount": {
-                    "type": "string",
-                    "example": "10000.00"
-                },
-                "bucket": {
-                    "type": "string",
-                    "example": "0-24h"
-                },
-                "transactionCount": {
-                    "type": "integer",
-                    "example": 120
-                }
-            }
-        },
-        "internal_reporting_adapters_http.BreakdownMetricsResponse": {
-            "type": "object",
-            "properties": {
-                "byAge": {
-                    "type": "array",
-                    "maxItems": 20,
-                    "items": {
-                        "$ref": "#/definitions/internal_reporting_adapters_http.AgeBucketDTO"
-                    }
-                },
-                "byReason": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "integer"
-                    }
-                },
-                "byRule": {
-                    "type": "array",
-                    "maxItems": 100,
-                    "items": {
-                        "$ref": "#/definitions/internal_reporting_adapters_http.RuleMatchCountDTO"
-                    }
-                },
-                "bySeverity": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "integer"
-                    }
-                }
-            }
-        },
-        "internal_reporting_adapters_http.CashImpactSummaryResponse": {
-            "type": "object",
-            "properties": {
-                "byAge": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/internal_reporting_adapters_http.AgeExposureResponse"
-                    }
-                },
-                "byCurrency": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/internal_reporting_adapters_http.CurrencyExposureResponse"
-                    }
-                },
-                "totalUnmatchedAmount": {
-                    "type": "string",
-                    "example": "70000.00"
                 }
             }
         },
@@ -11962,17 +13987,23 @@ const docTemplate = `{
                     "example": "CSV"
                 },
                 "reportType": {
-                    "description": "ReportType specifies the type of report to export\n@enum MATCHED,UNMATCHED,SUMMARY,VARIANCE",
+                    "description": "ReportType specifies the type of report to export\n@enum MATCHED,UNMATCHED,SUMMARY,VARIANCE,EXCEPTIONS,MATCHES,UNMATCHED_TRANSACTIONS",
                     "type": "string",
                     "enum": [
                         "MATCHED",
                         "UNMATCHED",
                         "SUMMARY",
                         "VARIANCE",
+                        "EXCEPTIONS",
+                        "MATCHES",
+                        "UNMATCHED_TRANSACTIONS",
                         "matched",
                         "unmatched",
                         "summary",
-                        "variance"
+                        "variance",
+                        "exceptions",
+                        "matches",
+                        "unmatched_transactions"
                     ],
                     "example": "MATCHED"
                 },
@@ -12003,42 +14034,6 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_reporting_adapters_http.CurrencyExposureResponse": {
-            "type": "object",
-            "properties": {
-                "amount": {
-                    "type": "string",
-                    "example": "25000.00"
-                },
-                "currency": {
-                    "type": "string",
-                    "example": "USD"
-                },
-                "transactionCount": {
-                    "type": "integer",
-                    "example": 250
-                }
-            }
-        },
-        "internal_reporting_adapters_http.DashboardAggregatesResponse": {
-            "type": "object",
-            "properties": {
-                "matchRate": {
-                    "$ref": "#/definitions/internal_reporting_adapters_http.MatchRateStatsResponse"
-                },
-                "sla": {
-                    "$ref": "#/definitions/internal_reporting_adapters_http.SLAStatsResponse"
-                },
-                "updatedAt": {
-                    "type": "string",
-                    "format": "date-time",
-                    "example": "2025-01-15T10:30:00Z"
-                },
-                "volume": {
-                    "$ref": "#/definitions/internal_reporting_adapters_http.VolumeStatsResponse"
-                }
-            }
-        },
         "internal_reporting_adapters_http.DownloadExportJobResponse": {
             "type": "object",
             "properties": {
@@ -12061,15 +14056,6 @@ const docTemplate = `{
                     "description": "SHA-256 checksum of the file for integrity verification",
                     "type": "string",
                     "example": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-                }
-            }
-        },
-        "internal_reporting_adapters_http.ExportCountResponse": {
-            "type": "object",
-            "properties": {
-                "count": {
-                    "type": "integer",
-                    "example": 4250
                 }
             }
         },
@@ -12177,429 +14163,6 @@ const docTemplate = `{
                         "CANCELED"
                     ],
                     "example": "SUCCEEDED"
-                }
-            }
-        },
-        "internal_reporting_adapters_http.ListMatchedReportResponse": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/internal_reporting_adapters_http.MatchedItemResponse"
-                    }
-                },
-                "pagination": {
-                    "$ref": "#/definitions/github_com_LerianStudio_lib-uncommons_v2_uncommons_net_http.CursorPagination"
-                }
-            }
-        },
-        "internal_reporting_adapters_http.ListUnmatchedReportResponse": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/internal_reporting_adapters_http.UnmatchedItemResponse"
-                    }
-                },
-                "pagination": {
-                    "$ref": "#/definitions/github_com_LerianStudio_lib-uncommons_v2_uncommons_net_http.CursorPagination"
-                }
-            }
-        },
-        "internal_reporting_adapters_http.ListVarianceReportResponse": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/internal_reporting_adapters_http.VarianceReportRowResponse"
-                    }
-                },
-                "pagination": {
-                    "$ref": "#/definitions/github_com_LerianStudio_lib-uncommons_v2_uncommons_net_http.CursorPagination"
-                }
-            }
-        },
-        "internal_reporting_adapters_http.MatchRateStatsResponse": {
-            "type": "object",
-            "properties": {
-                "matchRate": {
-                    "type": "number",
-                    "example": 94.4
-                },
-                "matchRateAmount": {
-                    "type": "number",
-                    "example": 94.4
-                },
-                "matchedCount": {
-                    "type": "integer",
-                    "example": 11800
-                },
-                "totalCount": {
-                    "type": "integer",
-                    "example": 12500
-                },
-                "unmatchedCount": {
-                    "type": "integer",
-                    "example": 700
-                }
-            }
-        },
-        "internal_reporting_adapters_http.MatchedItemResponse": {
-            "type": "object",
-            "properties": {
-                "amount": {
-                    "type": "string",
-                    "example": "1250.50"
-                },
-                "currency": {
-                    "type": "string",
-                    "example": "USD"
-                },
-                "date": {
-                    "type": "string",
-                    "format": "date-time",
-                    "example": "2025-01-15T10:30:00Z"
-                },
-                "match_group_id": {
-                    "type": "string",
-                    "example": "550e8400-e29b-41d4-a716-446655440001"
-                },
-                "source_id": {
-                    "type": "string",
-                    "example": "550e8400-e29b-41d4-a716-446655440002"
-                },
-                "transaction_id": {
-                    "type": "string",
-                    "example": "550e8400-e29b-41d4-a716-446655440000"
-                }
-            }
-        },
-        "internal_reporting_adapters_http.MatcherDashboardMetricsResponse": {
-            "type": "object",
-            "properties": {
-                "breakdowns": {
-                    "$ref": "#/definitions/internal_reporting_adapters_http.BreakdownMetricsResponse"
-                },
-                "summary": {
-                    "$ref": "#/definitions/internal_reporting_adapters_http.SummaryMetricsResponse"
-                },
-                "trends": {
-                    "$ref": "#/definitions/internal_reporting_adapters_http.TrendMetricsResponse"
-                },
-                "updatedAt": {
-                    "type": "string",
-                    "format": "date-time",
-                    "example": "2025-01-15T10:30:00Z"
-                }
-            }
-        },
-        "internal_reporting_adapters_http.RuleMatchCountDTO": {
-            "type": "object",
-            "properties": {
-                "count": {
-                    "type": "integer",
-                    "example": 1250
-                },
-                "id": {
-                    "type": "string",
-                    "example": "550e8400-e29b-41d4-a716-446655440000"
-                },
-                "name": {
-                    "type": "string",
-                    "example": "Exact Amount Match"
-                }
-            }
-        },
-        "internal_reporting_adapters_http.SLAStatsResponse": {
-            "type": "object",
-            "properties": {
-                "averageResolutionMs": {
-                    "type": "integer",
-                    "example": 3600000
-                },
-                "pendingOverdue": {
-                    "type": "integer",
-                    "example": 2
-                },
-                "pendingWithinSLA": {
-                    "type": "integer",
-                    "example": 2
-                },
-                "resolvedLate": {
-                    "type": "integer",
-                    "example": 3
-                },
-                "resolvedOnTime": {
-                    "type": "integer",
-                    "example": 35
-                },
-                "slaComplianceRate": {
-                    "type": "number",
-                    "example": 83.3
-                },
-                "totalExceptions": {
-                    "type": "integer",
-                    "example": 42
-                }
-            }
-        },
-        "internal_reporting_adapters_http.SourceBreakdownListResponse": {
-            "type": "object",
-            "properties": {
-                "sources": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/internal_reporting_adapters_http.SourceBreakdownResponse"
-                    }
-                }
-            }
-        },
-        "internal_reporting_adapters_http.SourceBreakdownResponse": {
-            "type": "object",
-            "properties": {
-                "currency": {
-                    "type": "string",
-                    "example": "USD"
-                },
-                "matchRate": {
-                    "type": "number",
-                    "example": 95
-                },
-                "matchedTransactions": {
-                    "type": "integer",
-                    "example": 4750
-                },
-                "sourceId": {
-                    "type": "string",
-                    "example": "550e8400-e29b-41d4-a716-446655440000"
-                },
-                "sourceName": {
-                    "type": "string",
-                    "example": "Primary Bank Account"
-                },
-                "totalAmount": {
-                    "type": "string",
-                    "example": "500000.00"
-                },
-                "totalTransactions": {
-                    "type": "integer",
-                    "example": 5000
-                },
-                "unmatchedAmount": {
-                    "type": "string",
-                    "example": "25000.00"
-                },
-                "unmatchedTransactions": {
-                    "type": "integer",
-                    "example": 250
-                }
-            }
-        },
-        "internal_reporting_adapters_http.SummaryMetricsResponse": {
-            "type": "object",
-            "properties": {
-                "criticalExposure": {
-                    "type": "string",
-                    "example": "15000.00"
-                },
-                "matchRate": {
-                    "type": "number",
-                    "example": 94.4
-                },
-                "oldestExceptionAgeHours": {
-                    "type": "number",
-                    "example": 72.5
-                },
-                "pendingExceptions": {
-                    "type": "integer",
-                    "example": 4
-                },
-                "totalMatches": {
-                    "type": "integer",
-                    "example": 11800
-                },
-                "totalTransactions": {
-                    "type": "integer",
-                    "example": 12500
-                }
-            }
-        },
-        "internal_reporting_adapters_http.SummaryReportResponse": {
-            "type": "object",
-            "properties": {
-                "matched_amount": {
-                    "type": "string",
-                    "example": "1180000.00"
-                },
-                "matched_count": {
-                    "type": "integer",
-                    "example": 11800
-                },
-                "total_amount": {
-                    "type": "string",
-                    "example": "1250000.00"
-                },
-                "unmatched_amount": {
-                    "type": "string",
-                    "example": "70000.00"
-                },
-                "unmatched_count": {
-                    "type": "integer",
-                    "example": 700
-                }
-            }
-        },
-        "internal_reporting_adapters_http.TrendMetricsResponse": {
-            "type": "object",
-            "properties": {
-                "dates": {
-                    "type": "array",
-                    "maxItems": 366,
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "exceptions": {
-                    "type": "array",
-                    "maxItems": 366,
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "ingestion": {
-                    "type": "array",
-                    "maxItems": 366,
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "matchRates": {
-                    "type": "array",
-                    "maxItems": 366,
-                    "items": {
-                        "type": "number"
-                    }
-                },
-                "matches": {
-                    "type": "array",
-                    "maxItems": 366,
-                    "items": {
-                        "type": "integer"
-                    }
-                }
-            }
-        },
-        "internal_reporting_adapters_http.UnmatchedItemResponse": {
-            "type": "object",
-            "properties": {
-                "amount": {
-                    "type": "string",
-                    "example": "1250.50"
-                },
-                "currency": {
-                    "type": "string",
-                    "example": "USD"
-                },
-                "date": {
-                    "type": "string",
-                    "format": "date-time",
-                    "example": "2025-01-15T10:30:00Z"
-                },
-                "due_at": {
-                    "type": "string",
-                    "format": "date-time",
-                    "example": "2025-02-15T10:30:00Z"
-                },
-                "exception_id": {
-                    "type": "string",
-                    "example": "550e8400-e29b-41d4-a716-446655440003"
-                },
-                "source_id": {
-                    "type": "string",
-                    "example": "550e8400-e29b-41d4-a716-446655440002"
-                },
-                "status": {
-                    "type": "string",
-                    "example": "PENDING"
-                },
-                "transaction_id": {
-                    "type": "string",
-                    "example": "550e8400-e29b-41d4-a716-446655440000"
-                }
-            }
-        },
-        "internal_reporting_adapters_http.VarianceReportRowResponse": {
-            "type": "object",
-            "properties": {
-                "currency": {
-                    "type": "string",
-                    "example": "USD"
-                },
-                "fee_type": {
-                    "type": "string",
-                    "example": "INTERCHANGE"
-                },
-                "net_variance": {
-                    "type": "string",
-                    "example": "-200.00"
-                },
-                "source_id": {
-                    "type": "string",
-                    "example": "550e8400-e29b-41d4-a716-446655440000"
-                },
-                "total_actual": {
-                    "type": "string",
-                    "example": "4800.00"
-                },
-                "total_expected": {
-                    "type": "string",
-                    "example": "5000.00"
-                },
-                "variance_pct": {
-                    "type": "string",
-                    "example": "-4.00"
-                }
-            }
-        },
-        "internal_reporting_adapters_http.VolumeStatsResponse": {
-            "type": "object",
-            "properties": {
-                "matchedAmount": {
-                    "type": "string",
-                    "example": "1180000.00"
-                },
-                "matchedTransactions": {
-                    "type": "integer",
-                    "example": 11800
-                },
-                "periodEnd": {
-                    "type": "string",
-                    "format": "date-time",
-                    "example": "2025-01-31T23:59:59Z"
-                },
-                "periodStart": {
-                    "type": "string",
-                    "format": "date-time",
-                    "example": "2025-01-01T00:00:00Z"
-                },
-                "totalAmount": {
-                    "type": "string",
-                    "example": "1250000.00"
-                },
-                "totalTransactions": {
-                    "type": "integer",
-                    "example": 12500
-                },
-                "unmatchedAmount": {
-                    "type": "string",
-                    "example": "70000.00"
-                },
-                "unmatchedCount": {
-                    "type": "integer",
-                    "example": 700
                 }
             }
         }

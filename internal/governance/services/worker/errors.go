@@ -11,6 +11,9 @@ var (
 	// ErrWorkerNotRunning indicates the worker is not started.
 	ErrWorkerNotRunning = errors.New("archival worker is not running")
 
+	// ErrRuntimeConfigUpdateWhileRunning indicates runtime config can only change while stopped.
+	ErrRuntimeConfigUpdateWhileRunning = errors.New("worker runtime config update requires stopped worker")
+
 	// ErrNilArchiveRepo indicates the archive metadata repository is nil.
 	ErrNilArchiveRepo = errors.New("archive metadata repository is required")
 

@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	libPostgres "github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres"
+	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -21,6 +21,7 @@ import (
 	configSourceRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/source"
 	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	configVO "github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	tenantAdapters "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant/adapters"
 	"github.com/LerianStudio/matcher/tests/integration"
 	"github.com/LerianStudio/matcher/tests/integration/server"
@@ -269,6 +270,7 @@ func setupIdempotencyTestConfigWithConnection(
 		configEntities.CreateReconciliationSourceInput{
 			Name:   "Idempotency Test Bank Source",
 			Type:   configVO.SourceTypeBank,
+			Side:   sharedfee.MatchingSideRight,
 			Config: map[string]any{"format": "csv"},
 		},
 	)

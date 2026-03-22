@@ -18,6 +18,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/ingestion/ports"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	"github.com/LerianStudio/matcher/internal/shared/sanitize"
 )
 
 // Package-level sinks to prevent compiler optimizations from eliminating benchmarked code.
@@ -410,36 +411,36 @@ func BenchmarkNormalizeTransaction_SingleRow(b *testing.B) {
 	}
 }
 
-func BenchmarkSanitizeCSVValue_SafeValue(b *testing.B) {
+func BenchmarkSanitizeFormulaInjection_SafeValue(b *testing.B) {
 	value := "safe value 12345"
 
 	b.ResetTimer()
 	b.ReportAllocs()
 
 	for b.Loop() {
-		sinkString = sanitizeCSVValue(value)
+		sinkString = sanitizeFormulaInjection(value)
 	}
 }
 
-func BenchmarkSanitizeCSVValue_NumericValue(b *testing.B) {
+func BenchmarkSanitizeFormulaInjection_NumericValue(b *testing.B) {
 	value := "-1234.56"
 
 	b.ResetTimer()
 	b.ReportAllocs()
 
 	for b.Loop() {
-		sinkString = sanitizeCSVValue(value)
+		sinkString = sanitizeFormulaInjection(value)
 	}
 }
 
-func BenchmarkSanitizeCSVValue_FormulaInjection(b *testing.B) {
+func BenchmarkSanitizeFormulaInjection_FormulaInjection(b *testing.B) {
 	value := "=SUM(A1:A10)"
 
 	b.ResetTimer()
 	b.ReportAllocs()
 
 	for b.Loop() {
-		sinkString = sanitizeCSVValue(value)
+		sinkString = sanitizeFormulaInjection(value)
 	}
 }
 
@@ -450,7 +451,7 @@ func BenchmarkIsNumericString_ValidNumber(b *testing.B) {
 	b.ReportAllocs()
 
 	for b.Loop() {
-		sinkBool = isNumericString(value)
+		sinkBool = sanitize.IsNumericString(value)
 	}
 }
 
@@ -461,7 +462,7 @@ func BenchmarkIsNumericString_NonNumeric(b *testing.B) {
 	b.ReportAllocs()
 
 	for b.Loop() {
-		sinkBool = isNumericString(value)
+		sinkBool = sanitize.IsNumericString(value)
 	}
 }
 

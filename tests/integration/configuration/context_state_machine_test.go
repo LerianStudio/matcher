@@ -225,8 +225,6 @@ func TestContextStateMachine_InvalidTransitions(t *testing.T) {
 		ctx := h.Ctx()
 
 		t.Run("DRAFT_to_PAUSED", func(t *testing.T) {
-			t.Parallel()
-
 			created := createDraftContext(t, h, uc, "SM Invalid Draft Paused")
 
 			pausedStatus := value_objects.ContextStatusPaused
@@ -239,8 +237,6 @@ func TestContextStateMachine_InvalidTransitions(t *testing.T) {
 		})
 
 		t.Run("DRAFT_to_ARCHIVED", func(t *testing.T) {
-			t.Parallel()
-
 			created := createDraftContext(t, h, uc, "SM Invalid Draft Archived")
 
 			archivedStatus := value_objects.ContextStatusArchived
@@ -253,8 +249,6 @@ func TestContextStateMachine_InvalidTransitions(t *testing.T) {
 		})
 
 		t.Run("ARCHIVED_to_ACTIVE", func(t *testing.T) {
-			t.Parallel()
-
 			created := createDraftContext(t, h, uc, "SM Invalid Archived Active")
 
 			// Move to ACTIVE then ARCHIVED
@@ -280,8 +274,6 @@ func TestContextStateMachine_InvalidTransitions(t *testing.T) {
 		})
 
 		t.Run("ARCHIVED_to_PAUSED", func(t *testing.T) {
-			t.Parallel()
-
 			created := createDraftContext(t, h, uc, "SM Invalid Archived Paused")
 
 			// Move to ACTIVE then ARCHIVED

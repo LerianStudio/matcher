@@ -5,25 +5,20 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
-	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
-	libPostgres "github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/common"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
-	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
-const sourceColumns = "id, context_id, name, type, config, fee_schedule_id, created_at, updated_at"
+const sourceColumns = "id, context_id, name, type, side, config, created_at, updated_at"
 
 // Repository provides PostgreSQL operations for reconciliation sources.
 type Repository struct {
@@ -62,10 +57,11 @@ func (repo *Repository) Create(
 		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
 		return nil, fmt.Errorf("get postgres connection: %w", err)
 	}
+	defer connection.Release()
 
 	result, err := common.WithTenantTx(
 		ctx,
-		connection,
+		connection.Connection(),
 		func(tx *sql.Tx) (*entities.ReconciliationSource, error) {
 			return repo.executeCreate(ctx, tx, entity)
 		},
@@ -110,10 +106,11 @@ func (repo *Repository) CreateWithTx(
 		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
 		return nil, fmt.Errorf("get postgres connection: %w", err)
 	}
+	defer connection.Release()
 
 	result, err := common.WithTenantTxOrExisting(
 		ctx,
-		connection,
+		connection.Connection(),
 		tx,
 		func(innerTx *sql.Tx) (*entities.ReconciliationSource, error) {
 			return repo.executeCreate(ctx, innerTx, entity)
@@ -143,14 +140,14 @@ func (repo *Repository) executeCreate(
 
 	_, err = tx.ExecContext(
 		ctx,
-		`INSERT INTO reconciliation_sources (id, context_id, name, type, config, fee_schedule_id, created_at, updated_at)
+		`INSERT INTO reconciliation_sources (id, context_id, name, type, side, config, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
 		model.ID,
 		model.ContextID,
 		model.Name,
 		model.Type,
+		model.Side,
 		model.Config,
-		model.FeeScheduleID,
 		model.CreatedAt,
 		model.UpdatedAt,
 	)
@@ -159,151 +156,6 @@ func (repo *Repository) executeCreate(
 	}
 
 	return model.ToEntity()
-}
-
-// FindByID retrieves a reconciliation source by context and source ID.
-func (repo *Repository) FindByID(
-	ctx stdctx.Context,
-	contextID, id uuid.UUID,
-) (*entities.ReconciliationSource, error) {
-	if repo == nil || repo.provider == nil {
-		return nil, ErrRepoNotInitialized
-	}
-
-	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
-
-	ctx, span := tracer.Start(ctx, "repository.source.find_by_id")
-	defer span.End()
-
-	connection, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return nil, fmt.Errorf("get postgres connection: %w", err)
-	}
-
-	result, err := common.WithTenantTx(
-		ctx,
-		connection,
-		func(tx *sql.Tx) (*entities.ReconciliationSource, error) {
-			row := tx.QueryRowContext(
-				ctx,
-				"SELECT "+sourceColumns+" FROM reconciliation_sources WHERE context_id = $1 AND id = $2",
-				contextID.String(),
-				id.String(),
-			)
-
-			return scanSource(row)
-		},
-	)
-	if err != nil {
-		if !errors.Is(err, sql.ErrNoRows) {
-			libOpentelemetry.HandleSpanError(
-				span,
-				"failed to find reconciliation source by id",
-				err,
-			)
-
-			logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to find reconciliation source by id")
-		}
-
-		return nil, fmt.Errorf("failed to find reconciliation source by id: %w", err)
-	}
-
-	return result, nil
-}
-
-// FindByContextID retrieves all reconciliation sources for a context using cursor-based pagination.
-func (repo *Repository) FindByContextID(
-	ctx stdctx.Context,
-	contextID uuid.UUID,
-	cursor string,
-	limit int,
-) ([]*entities.ReconciliationSource, libHTTP.CursorPagination, error) {
-	if repo == nil || repo.provider == nil {
-		return nil, libHTTP.CursorPagination{}, ErrRepoNotInitialized
-	}
-
-	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
-
-	ctx, span := tracer.Start(ctx, "repository.source.list")
-	defer span.End()
-
-	connection, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return nil, libHTTP.CursorPagination{}, fmt.Errorf("get postgres connection: %w", err)
-	}
-
-	limit = libHTTP.ValidateLimit(limit, libHTTP.DefaultLimit, libHTTP.MaxLimit)
-
-	decodedCursor, err := parseCursor(cursor)
-	if err != nil {
-		return nil, libHTTP.CursorPagination{}, err
-	}
-
-	baseQuery := squirrel.Select(strings.Split(sourceColumns, ", ")...).
-		From("reconciliation_sources").
-		Where(squirrel.Eq{"context_id": contextID.String()}).
-		PlaceholderFormat(squirrel.Dollar)
-
-	sources, pagination, err := executeSourceQuery(ctx, connection, baseQuery, cursor, decodedCursor, limit)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to list reconciliation sources", err)
-
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to list reconciliation sources")
-
-		return nil, libHTTP.CursorPagination{}, fmt.Errorf("failed to find reconciliation sources by context: %w", err)
-	}
-
-	return sources, pagination, nil
-}
-
-// FindByContextIDAndType retrieves reconciliation sources for a context filtered by type using cursor-based pagination.
-func (repo *Repository) FindByContextIDAndType(
-	ctx stdctx.Context,
-	contextID uuid.UUID,
-	sourceType value_objects.SourceType,
-	cursor string,
-	limit int,
-) ([]*entities.ReconciliationSource, libHTTP.CursorPagination, error) {
-	if repo == nil || repo.provider == nil {
-		return nil, libHTTP.CursorPagination{}, ErrRepoNotInitialized
-	}
-
-	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
-
-	ctx, span := tracer.Start(ctx, "repository.source.list_by_type")
-	defer span.End()
-
-	connection, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return nil, libHTTP.CursorPagination{}, fmt.Errorf("get postgres connection: %w", err)
-	}
-
-	limit = libHTTP.ValidateLimit(limit, libHTTP.DefaultLimit, libHTTP.MaxLimit)
-
-	decodedCursor, err := parseCursor(cursor)
-	if err != nil {
-		return nil, libHTTP.CursorPagination{}, err
-	}
-
-	baseQuery := squirrel.Select(strings.Split(sourceColumns, ", ")...).
-		From("reconciliation_sources").
-		Where(squirrel.Eq{"context_id": contextID.String()}).
-		Where(squirrel.Eq{"type": sourceType.String()}).
-		PlaceholderFormat(squirrel.Dollar)
-
-	sources, pagination, err := executeSourceQuery(ctx, connection, baseQuery, cursor, decodedCursor, limit)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to list reconciliation sources", err)
-
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to list reconciliation sources")
-
-		return nil, libHTTP.CursorPagination{}, fmt.Errorf("failed to find reconciliation sources by context and type: %w", err)
-	}
-
-	return sources, pagination, nil
 }
 
 // Update modifies an existing reconciliation source.
@@ -331,10 +183,11 @@ func (repo *Repository) Update(
 		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
 		return nil, fmt.Errorf("get postgres connection: %w", err)
 	}
+	defer connection.Release()
 
 	result, err := common.WithTenantTx(
 		ctx,
-		connection,
+		connection.Connection(),
 		func(tx *sql.Tx) (*entities.ReconciliationSource, error) {
 			return repo.executeUpdate(ctx, tx, entity)
 		},
@@ -383,10 +236,11 @@ func (repo *Repository) UpdateWithTx(
 		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
 		return nil, fmt.Errorf("get postgres connection: %w", err)
 	}
+	defer connection.Release()
 
 	result, err := common.WithTenantTxOrExisting(
 		ctx,
-		connection,
+		connection.Connection(),
 		tx,
 		func(innerTx *sql.Tx) (*entities.ReconciliationSource, error) {
 			return repo.executeUpdate(ctx, innerTx, entity)
@@ -418,12 +272,12 @@ func (repo *Repository) executeUpdate(
 
 	result, err := tx.ExecContext(
 		ctx,
-		`UPDATE reconciliation_sources SET name = $1, type = $2, config = $3, fee_schedule_id = $4, updated_at = $5
+		`UPDATE reconciliation_sources SET name = $1, type = $2, side = $3, config = $4, updated_at = $5
 		WHERE context_id = $6 AND id = $7`,
 		model.Name,
 		model.Type,
+		model.Side,
 		model.Config,
-		model.FeeScheduleID,
 		model.UpdatedAt,
 		model.ContextID,
 		model.ID,
@@ -460,8 +314,9 @@ func (repo *Repository) Delete(ctx stdctx.Context, contextID, id uuid.UUID) erro
 		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
 		return fmt.Errorf("get postgres connection: %w", err)
 	}
+	defer connection.Release()
 
-	_, err = common.WithTenantTx(ctx, connection, func(tx *sql.Tx) (bool, error) {
+	_, err = common.WithTenantTx(ctx, connection.Connection(), func(tx *sql.Tx) (bool, error) {
 		return repo.executeDelete(ctx, tx, contextID, id)
 	})
 	if err != nil {
@@ -502,10 +357,11 @@ func (repo *Repository) DeleteWithTx(
 		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
 		return fmt.Errorf("get postgres connection: %w", err)
 	}
+	defer connection.Release()
 
 	_, err = common.WithTenantTxOrExisting(
 		ctx,
-		connection,
+		connection.Connection(),
 		tx,
 		func(innerTx *sql.Tx) (bool, error) {
 			return repo.executeDelete(ctx, innerTx, contextID, id)
@@ -550,246 +406,4 @@ func (repo *Repository) executeDelete(
 	}
 
 	return true, nil
-}
-
-// GetContextIDBySourceID retrieves the context_id for a given source ID.
-// This is used as a fallback path when the ingestion job lookup fails during
-// exception resolution context lookup (Transaction.SourceID -> context_id).
-func (repo *Repository) GetContextIDBySourceID(
-	ctx stdctx.Context,
-	sourceID uuid.UUID,
-) (uuid.UUID, error) {
-	if repo == nil || repo.provider == nil {
-		return uuid.Nil, ErrRepoNotInitialized
-	}
-
-	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
-
-	ctx, span := tracer.Start(ctx, "repository.source.find_context_id_by_source_id")
-	defer span.End()
-
-	connection, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return uuid.Nil, fmt.Errorf("get postgres connection: %w", err)
-	}
-
-	result, err := common.WithTenantTx(
-		ctx,
-		connection,
-		func(tx *sql.Tx) (uuid.UUID, error) {
-			var contextIDStr string
-
-			row := tx.QueryRowContext(
-				ctx,
-				"SELECT context_id FROM reconciliation_sources WHERE id = $1",
-				sourceID.String(),
-			)
-
-			if err := row.Scan(&contextIDStr); err != nil {
-				return uuid.Nil, err
-			}
-
-			parsed, err := uuid.Parse(contextIDStr)
-			if err != nil {
-				return uuid.Nil, fmt.Errorf("parse context id: %w", err)
-			}
-
-			return parsed, nil
-		},
-	)
-	if err != nil {
-		if !errors.Is(err, sql.ErrNoRows) {
-			libOpentelemetry.HandleSpanError(
-				span,
-				"failed to find context id by source id",
-				err,
-			)
-
-			logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to find context id by source id")
-		}
-
-		return uuid.Nil, fmt.Errorf("find context id by source id: %w", err)
-	}
-
-	return result, nil
-}
-
-// parseCursor decodes a cursor string into a Cursor struct for pagination.
-// Returns a default cursor pointing forward if the input is empty.
-func parseCursor(cursor string) (libHTTP.Cursor, error) {
-	if cursor == "" {
-		return libHTTP.Cursor{Direction: libHTTP.CursorDirectionNext}, nil
-	}
-
-	parsedCursor, err := libHTTP.DecodeCursor(cursor)
-	if err != nil {
-		return libHTTP.Cursor{}, fmt.Errorf("%w: %w", libHTTP.ErrInvalidCursor, err)
-	}
-
-	return parsedCursor, nil
-}
-
-// executeSourceQuery executes a paginated source query within a tenant transaction.
-func executeSourceQuery(
-	ctx stdctx.Context,
-	connection *libPostgres.Client,
-	baseQuery squirrel.SelectBuilder,
-	cursor string,
-	decodedCursor libHTTP.Cursor,
-	limit int,
-) ([]*entities.ReconciliationSource, libHTTP.CursorPagination, error) {
-	var pagination libHTTP.CursorPagination
-
-	result, err := common.WithTenantTx(
-		ctx,
-		connection,
-		func(tx *sql.Tx) ([]*entities.ReconciliationSource, error) {
-			return fetchPaginatedSources(ctx, tx, baseQuery, cursor, decodedCursor, limit, &pagination)
-		},
-	)
-	if err != nil {
-		return nil, libHTTP.CursorPagination{}, fmt.Errorf("execute tenant tx for source query: %w", err)
-	}
-
-	return result, pagination, nil
-}
-
-// fetchPaginatedSources applies pagination and fetches sources from the database.
-func fetchPaginatedSources(
-	ctx stdctx.Context,
-	tx *sql.Tx,
-	baseQuery squirrel.SelectBuilder,
-	cursor string,
-	decodedCursor libHTTP.Cursor,
-	limit int,
-	pagination *libHTTP.CursorPagination,
-) (sources []*entities.ReconciliationSource, err error) {
-	paginatedQuery, err := buildPaginatedSourceQuery(baseQuery, decodedCursor, limit)
-	if err != nil {
-		return nil, err
-	}
-
-	sources, err = executeSourceRows(ctx, tx, paginatedQuery, limit)
-	if err != nil {
-		return nil, err
-	}
-
-	return applySourcePagination(sources, cursor, decodedCursor, limit, pagination)
-}
-
-// buildPaginatedSourceQuery applies cursor direction and limit to the base query.
-func buildPaginatedSourceQuery(
-	baseQuery squirrel.SelectBuilder,
-	decodedCursor libHTTP.Cursor,
-	limit int,
-) (squirrel.SelectBuilder, error) {
-	orderDirection := libHTTP.ValidateSortDirection("ASC")
-
-	operator, effectiveOrder, dirErr := libHTTP.CursorDirectionRules(orderDirection, decodedCursor.Direction)
-	if dirErr != nil {
-		return baseQuery, fmt.Errorf("cursor direction rules: %w", dirErr)
-	}
-
-	if decodedCursor.ID != "" {
-		baseQuery = baseQuery.Where(squirrel.Expr("id "+operator+" ?", decodedCursor.ID))
-	}
-
-	return baseQuery.
-		OrderBy("id " + effectiveOrder).
-		Limit(uint64(limit + 1)), nil //nolint:gosec //#nosec G115 -- limit is validated positive by caller
-}
-
-// executeSourceRows runs the query and scans all source rows.
-func executeSourceRows(
-	ctx stdctx.Context,
-	tx *sql.Tx,
-	paginatedQuery squirrel.SelectBuilder,
-	limit int,
-) ([]*entities.ReconciliationSource, error) {
-	query, args, err := paginatedQuery.ToSql()
-	if err != nil {
-		return nil, fmt.Errorf("build list sources query: %w", err)
-	}
-
-	rows, err := tx.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-
-	defer rows.Close()
-
-	sources := make([]*entities.ReconciliationSource, 0, limit)
-
-	for rows.Next() {
-		sourceEntity, scanErr := scanSource(rows)
-		if scanErr != nil {
-			return nil, scanErr
-		}
-
-		sources = append(sources, sourceEntity)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return sources, nil
-}
-
-// applySourcePagination processes results to calculate cursor pagination.
-func applySourcePagination(
-	sources []*entities.ReconciliationSource,
-	cursor string,
-	decodedCursor libHTTP.Cursor,
-	limit int,
-	pagination *libHTTP.CursorPagination,
-) ([]*entities.ReconciliationSource, error) {
-	hasPagination := len(sources) > limit
-	isFirstPage := cursor == "" || (!hasPagination && decodedCursor.Direction == libHTTP.CursorDirectionPrev)
-
-	sources = libHTTP.PaginateRecords(
-		isFirstPage,
-		hasPagination,
-		decodedCursor.Direction,
-		sources,
-		limit,
-	)
-
-	if len(sources) > 0 {
-		page, calcErr := libHTTP.CalculateCursor(
-			isFirstPage,
-			hasPagination,
-			decodedCursor.Direction,
-			sources[0].ID.String(),
-			sources[len(sources)-1].ID.String(),
-		)
-		if calcErr != nil {
-			return nil, fmt.Errorf("calculate cursor: %w", calcErr)
-		}
-
-		*pagination = page
-	}
-
-	return sources, nil
-}
-
-func scanSource(
-	scanner interface{ Scan(dest ...any) error },
-) (*entities.ReconciliationSource, error) {
-	var model SourcePostgreSQLModel
-	if err := scanner.Scan(
-		&model.ID,
-		&model.ContextID,
-		&model.Name,
-		&model.Type,
-		&model.Config,
-		&model.FeeScheduleID,
-		&model.CreatedAt,
-		&model.UpdatedAt,
-	); err != nil {
-		return nil, err
-	}
-
-	return model.ToEntity()
 }

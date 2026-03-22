@@ -12,8 +12,6 @@ import (
 
 	"github.com/google/uuid"
 
-	libRedis "github.com/LerianStudio/lib-uncommons/v2/uncommons/redis"
-
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/matching/ports"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
@@ -46,22 +44,23 @@ func NewLockManager(provider sharedPorts.InfrastructureProvider) *LockManager {
 }
 
 type lock struct {
-	conn  *libRedis.Client
+	lease *sharedPorts.RedisConnectionLease
 	key   string
 	token string
 }
 
 // Release releases the held Redis lock.
 func (lck *lock) Release(ctx context.Context) error {
-	if lck == nil || lck.conn == nil {
+	if lck == nil || lck.lease == nil || lck.lease.Connection() == nil {
 		return errRedisConnRequired
 	}
+	defer lck.lease.Release()
 
 	if strings.TrimSpace(lck.key) == "" {
 		return nil
 	}
 
-	rdb, err := lck.conn.GetClient(ctx)
+	rdb, err := lck.lease.Connection().GetClient(ctx)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errRedisConnRequired, err)
 	}
@@ -93,7 +92,7 @@ end
 
 // Refresh extends the Redis lock TTL if it is still owned.
 func (lck *lock) Refresh(ctx context.Context, ttl time.Duration) error {
-	if lck == nil || lck.conn == nil {
+	if lck == nil || lck.lease == nil || lck.lease.Connection() == nil {
 		return errRedisConnRequired
 	}
 
@@ -101,7 +100,7 @@ func (lck *lock) Refresh(ctx context.Context, ttl time.Duration) error {
 		return nil
 	}
 
-	rdb, err := lck.conn.GetClient(ctx)
+	rdb, err := lck.lease.Connection().GetClient(ctx)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errRedisConnRequired, err)
 	}
@@ -201,30 +200,36 @@ func (mgr *LockManager) acquireLock(
 		return nil, fmt.Errorf("generate lock token: %w", err)
 	}
 
-	conn, err := mgr.provider.GetRedisConnection(ctx)
+	connLease, err := mgr.provider.GetRedisConnection(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get redis connection: %w", err)
 	}
 
-	if conn == nil {
+	if connLease == nil || connLease.Connection() == nil {
 		return nil, errRedisConnRequired
 	}
 
-	rdb, err := conn.GetClient(ctx)
+	rdb, err := connLease.Connection().GetClient(ctx)
 	if err != nil {
+		connLease.Release()
+
 		return nil, fmt.Errorf("%w: %w", errRedisConnRequired, err)
 	}
 
 	ok, err := rdb.SetNX(ctx, key, token, ttl).Result()
 	if err != nil {
+		connLease.Release()
+
 		return nil, fmt.Errorf("acquire lock: %w", err)
 	}
 
 	if !ok {
+		connLease.Release()
+
 		return nil, ports.ErrLockAlreadyHeld
 	}
 
-	return &lock{conn: conn, key: key, token: token}, nil
+	return &lock{lease: connLease, key: key, token: token}, nil
 }
 
 func randomToken(nBytes int) (string, error) {

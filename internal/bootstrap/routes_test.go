@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 //go:build unit
 
 package bootstrap
@@ -12,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	authMiddleware "github.com/LerianStudio/lib-auth/v2/auth/middleware"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 
 	swagger "github.com/LerianStudio/matcher/docs/swagger"
 	"github.com/LerianStudio/matcher/internal/auth"
@@ -25,7 +29,7 @@ func TestRegisterRoutes_NilTenantExtractor_ReturnsError(t *testing.T) {
 	cfg := &Config{App: AppConfig{EnvName: "test"}}
 	client := authMiddleware.NewAuthClient("", false, nil)
 
-	routes, err := RegisterRoutes(app, cfg, nil, &libLog.NopLogger{}, client, nil, nil, nil)
+	routes, err := RegisterRoutes(app, cfg, nil, nil, nil, &libLog.NopLogger{}, client, nil, nil, nil)
 	require.Error(t, err)
 	require.Nil(t, routes)
 	require.ErrorContains(t, err, "tenant extractor is required")
@@ -45,7 +49,7 @@ func TestRegisterRoutes_NilApp_ReturnsError(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	routes, err := RegisterRoutes(nil, cfg, nil, &libLog.NopLogger{}, client, extractor, nil, nil)
+	routes, err := RegisterRoutes(nil, cfg, nil, nil, nil, &libLog.NopLogger{}, client, extractor, nil, nil)
 	require.Error(t, err)
 	require.Nil(t, routes)
 	require.ErrorContains(t, err, "fiber app is required")
@@ -65,7 +69,7 @@ func TestRegisterRoutes_NilConfig_ReturnsError(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	routes, err := RegisterRoutes(app, nil, nil, &libLog.NopLogger{}, client, extractor, nil, nil)
+	routes, err := RegisterRoutes(app, nil, nil, nil, nil, &libLog.NopLogger{}, client, extractor, nil, nil)
 	require.Error(t, err)
 	require.Nil(t, routes)
 	require.ErrorContains(t, err, "config is required")
@@ -99,6 +103,8 @@ func TestRegisterRoutes_Success(t *testing.T) {
 		routes, err := RegisterRoutes(
 			app,
 			cfg,
+			nil,
+			nil,
 			nil,
 			&libLog.NopLogger{},
 			client,
@@ -135,6 +141,8 @@ func TestRegisterRoutes_Success(t *testing.T) {
 			app,
 			cfg,
 			nil,
+			nil,
+			nil,
 			&libLog.NopLogger{},
 			client,
 			extractor,
@@ -169,6 +177,8 @@ func TestRegisterRoutes_Success(t *testing.T) {
 		routes, err := RegisterRoutes(
 			app,
 			cfg,
+			nil,
+			nil,
 			nil,
 			&libLog.NopLogger{},
 			client,
@@ -210,6 +220,8 @@ func TestRegisterRoutes_Success(t *testing.T) {
 				app,
 				cfg,
 				nil,
+				nil,
+				nil,
 				&libLog.NopLogger{},
 				client,
 				extractor,
@@ -242,6 +254,8 @@ func TestRegisterRoutes_Success(t *testing.T) {
 			_, err = RegisterRoutes(
 				app,
 				cfg,
+				nil,
+				nil,
 				nil,
 				&libLog.NopLogger{},
 				client,
@@ -284,6 +298,8 @@ func TestRegisterRoutes_Success(t *testing.T) {
 				app,
 				cfg,
 				nil,
+				nil,
+				nil,
 				&libLog.NopLogger{},
 				client,
 				extractor,
@@ -316,6 +332,8 @@ func TestRegisterRoutes_Success(t *testing.T) {
 			_, err = RegisterRoutes(
 				app,
 				cfg,
+				nil,
+				nil,
 				nil,
 				&libLog.NopLogger{},
 				client,
@@ -350,6 +368,8 @@ func TestRegisterRoutes_Success(t *testing.T) {
 				app,
 				cfg,
 				nil,
+				nil,
+				nil,
 				&libLog.NopLogger{},
 				client,
 				extractor,
@@ -380,7 +400,7 @@ func TestRegisterRoutes_Success(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		_, err = RegisterRoutes(app, cfg, nil, &libLog.NopLogger{}, client, extractor, nil, nil)
+		_, err = RegisterRoutes(app, cfg, nil, nil, nil, &libLog.NopLogger{}, client, extractor, nil, nil)
 		require.NoError(t, err)
 
 		req := httptest.NewRequest(http.MethodGet, "/swagger/index.html", http.NoBody)
@@ -407,7 +427,7 @@ func TestRegisterRoutes_HealthEndpoints(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	_, err = RegisterRoutes(app, cfg, nil, &libLog.NopLogger{}, client, extractor, nil, nil)
+	_, err = RegisterRoutes(app, cfg, nil, nil, nil, &libLog.NopLogger{}, client, extractor, nil, nil)
 	require.NoError(t, err)
 
 	t.Run("health endpoint is accessible", func(t *testing.T) {
@@ -451,6 +471,8 @@ func TestRoutesStruct(t *testing.T) {
 			app,
 			cfg,
 			nil,
+			nil,
+			nil,
 			&libLog.NopLogger{},
 			client,
 			extractor,
@@ -474,6 +496,72 @@ func TestRoutesStruct(t *testing.T) {
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 	})
+}
+
+func TestRegisterRoutes_DynamicRateLimitToggle(t *testing.T) {
+	t.Parallel()
+
+	app := fiber.New()
+	cfg := &Config{
+		App: AppConfig{EnvName: "test"},
+		RateLimit: RateLimitConfig{
+			Enabled:   false,
+			Max:       1,
+			ExpirySec: 60,
+		},
+	}
+
+	currentCfg := cfg
+	configGetter := func() *Config {
+		return currentCfg
+	}
+
+	client := authMiddleware.NewAuthClient("", false, nil)
+	extractor, err := auth.NewTenantExtractor(
+		false,
+		"11111111-1111-1111-1111-111111111111",
+		"default",
+		"",
+		"test",
+	)
+	require.NoError(t, err)
+
+	routes, err := RegisterRoutes(app, cfg, configGetter, nil, nil, &libLog.NopLogger{}, client, extractor, nil, nil)
+	require.NoError(t, err)
+
+	router := routes.Protected("configuration", "read")
+	router.Get("/dynamic-rate-limit", func(c *fiber.Ctx) error {
+		return c.SendStatus(http.StatusOK)
+	})
+
+	// Initially disabled: request should pass.
+	firstReq := httptest.NewRequest(http.MethodGet, "/dynamic-rate-limit", http.NoBody)
+	firstResp, firstErr := app.Test(firstReq)
+	require.NoError(t, firstErr)
+	defer firstResp.Body.Close()
+	assert.Equal(t, http.StatusOK, firstResp.StatusCode)
+
+	// Toggle on at runtime using config getter.
+	currentCfg = &Config{
+		App: AppConfig{EnvName: "test"},
+		RateLimit: RateLimitConfig{
+			Enabled:   true,
+			Max:       1,
+			ExpirySec: 60,
+		},
+	}
+
+	secondReq := httptest.NewRequest(http.MethodGet, "/dynamic-rate-limit", http.NoBody)
+	secondResp, secondErr := app.Test(secondReq)
+	require.NoError(t, secondErr)
+	defer secondResp.Body.Close()
+	assert.Equal(t, http.StatusOK, secondResp.StatusCode)
+
+	thirdReq := httptest.NewRequest(http.MethodGet, "/dynamic-rate-limit", http.NoBody)
+	thirdResp, thirdErr := app.Test(thirdReq)
+	require.NoError(t, thirdErr)
+	defer thirdResp.Body.Close()
+	assert.Equal(t, http.StatusTooManyRequests, thirdResp.StatusCode)
 }
 
 func TestParseSchemes(t *testing.T) {

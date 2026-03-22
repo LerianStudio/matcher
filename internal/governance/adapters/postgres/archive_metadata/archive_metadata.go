@@ -4,7 +4,6 @@ package archivemetadata
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
@@ -17,19 +16,6 @@ var selectColumns = []string{
 	"row_count", "archive_key", "checksum", "compressed_size_bytes", "storage_class",
 	"status", "error_message", "archived_at", "created_at", "updated_at",
 }
-
-// Sentinel errors for the archive metadata repository.
-var (
-	ErrRepositoryNotInitialized = errors.New("archive metadata repository not initialized")
-	ErrMetadataRequired         = errors.New("archive metadata is required")
-	ErrMetadataNotFound         = errors.New("archive metadata not found")
-	ErrIDRequired               = errors.New("id is required")
-	ErrTenantIDRequired         = errors.New("tenant id is required")
-	ErrPartitionNameRequired    = errors.New("partition name is required")
-	ErrLimitMustBePositive      = errors.New("limit must be positive")
-	ErrNilScanner               = errors.New("nil scanner")
-	ErrTransactionRequired      = errors.New("transaction is required")
-)
 
 func scanArchiveMetadata(scanner interface{ Scan(dest ...any) error }) (*entities.ArchiveMetadata, error) {
 	if scanner == nil {
@@ -90,6 +76,10 @@ func scanArchiveMetadata(scanner interface{ Scan(dest ...any) error }) (*entitie
 	if archivedAt.Valid {
 		t := archivedAt.Time
 		am.ArchivedAt = &t
+	}
+
+	if !am.Status.IsValid() {
+		return nil, fmt.Errorf("%w: %q", ErrInvalidArchiveStatus, am.Status)
 	}
 
 	return &am, nil

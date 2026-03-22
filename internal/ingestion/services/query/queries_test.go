@@ -11,11 +11,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/repositories"
-	"github.com/LerianStudio/matcher/internal/ingestion/domain/repositories/mock"
+	"github.com/LerianStudio/matcher/internal/ingestion/domain/repositories/mocks"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
@@ -26,8 +26,8 @@ func TestNewUseCaseRequiresRepos(t *testing.T) {
 
 	defer ctrl.Finish()
 
-	jobRepo := mock.NewMockJobRepository(ctrl)
-	txRepo := mock.NewMockTransactionRepository(ctrl)
+	jobRepo := mocks.NewMockJobRepository(ctrl)
+	txRepo := mocks.NewMockTransactionRepository(ctrl)
 
 	_, err := NewUseCase(nil, txRepo)
 	require.ErrorIs(t, err, ErrNilJobRepository)
@@ -43,8 +43,8 @@ func TestQueryUseCasePaths(t *testing.T) {
 
 	defer ctrl.Finish()
 
-	jobRepo := mock.NewMockJobRepository(ctrl)
-	txRepo := mock.NewMockTransactionRepository(ctrl)
+	jobRepo := mocks.NewMockJobRepository(ctrl)
+	txRepo := mocks.NewMockTransactionRepository(ctrl)
 	uc, err := NewUseCase(jobRepo, txRepo)
 	require.NoError(t, err)
 
@@ -105,8 +105,8 @@ func TestGetJobByContextNilJobReturnsNotFound(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	jobRepo := mock.NewMockJobRepository(ctrl)
-	txRepo := mock.NewMockTransactionRepository(ctrl)
+	jobRepo := mocks.NewMockJobRepository(ctrl)
+	txRepo := mocks.NewMockTransactionRepository(ctrl)
 	uc, err := NewUseCase(jobRepo, txRepo)
 	require.NoError(t, err)
 
@@ -137,8 +137,8 @@ func TestGetJob_NotFound(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	jobRepo := mock.NewMockJobRepository(ctrl)
-	txRepo := mock.NewMockTransactionRepository(ctrl)
+	jobRepo := mocks.NewMockJobRepository(ctrl)
+	txRepo := mocks.NewMockTransactionRepository(ctrl)
 	uc, err := NewUseCase(jobRepo, txRepo)
 	require.NoError(t, err)
 
@@ -156,8 +156,8 @@ func TestGetJob_RepoError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	jobRepo := mock.NewMockJobRepository(ctrl)
-	txRepo := mock.NewMockTransactionRepository(ctrl)
+	jobRepo := mocks.NewMockJobRepository(ctrl)
+	txRepo := mocks.NewMockTransactionRepository(ctrl)
 	uc, err := NewUseCase(jobRepo, txRepo)
 	require.NoError(t, err)
 
@@ -186,8 +186,8 @@ func TestGetJobByContext_RepoError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	jobRepo := mock.NewMockJobRepository(ctrl)
-	txRepo := mock.NewMockTransactionRepository(ctrl)
+	jobRepo := mocks.NewMockJobRepository(ctrl)
+	txRepo := mocks.NewMockTransactionRepository(ctrl)
 	uc, err := NewUseCase(jobRepo, txRepo)
 	require.NoError(t, err)
 
@@ -217,8 +217,8 @@ func TestListJobsByContext_RepoError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	jobRepo := mock.NewMockJobRepository(ctrl)
-	txRepo := mock.NewMockTransactionRepository(ctrl)
+	jobRepo := mocks.NewMockJobRepository(ctrl)
+	txRepo := mocks.NewMockTransactionRepository(ctrl)
 	uc, err := NewUseCase(jobRepo, txRepo)
 	require.NoError(t, err)
 
@@ -241,8 +241,8 @@ func TestListJobsByContext_EmptyResult(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	jobRepo := mock.NewMockJobRepository(ctrl)
-	txRepo := mock.NewMockTransactionRepository(ctrl)
+	jobRepo := mocks.NewMockJobRepository(ctrl)
+	txRepo := mocks.NewMockTransactionRepository(ctrl)
 	uc, err := NewUseCase(jobRepo, txRepo)
 	require.NoError(t, err)
 
@@ -274,8 +274,8 @@ func TestGetTransaction_RepoError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	jobRepo := mock.NewMockJobRepository(ctrl)
-	txRepo := mock.NewMockTransactionRepository(ctrl)
+	jobRepo := mocks.NewMockJobRepository(ctrl)
+	txRepo := mocks.NewMockTransactionRepository(ctrl)
 	uc, err := NewUseCase(jobRepo, txRepo)
 	require.NoError(t, err)
 
@@ -295,8 +295,8 @@ func TestGetTransaction_NilResult(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	jobRepo := mock.NewMockJobRepository(ctrl)
-	txRepo := mock.NewMockTransactionRepository(ctrl)
+	jobRepo := mocks.NewMockJobRepository(ctrl)
+	txRepo := mocks.NewMockTransactionRepository(ctrl)
 	uc, err := NewUseCase(jobRepo, txRepo)
 	require.NoError(t, err)
 
@@ -327,8 +327,8 @@ func TestListTransactionsByJob_RepoError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	jobRepo := mock.NewMockJobRepository(ctrl)
-	txRepo := mock.NewMockTransactionRepository(ctrl)
+	jobRepo := mocks.NewMockJobRepository(ctrl)
+	txRepo := mocks.NewMockTransactionRepository(ctrl)
 	uc, err := NewUseCase(jobRepo, txRepo)
 	require.NoError(t, err)
 
@@ -351,8 +351,8 @@ func TestListTransactionsByJob_EmptyResult(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	jobRepo := mock.NewMockJobRepository(ctrl)
-	txRepo := mock.NewMockTransactionRepository(ctrl)
+	jobRepo := mocks.NewMockJobRepository(ctrl)
+	txRepo := mocks.NewMockTransactionRepository(ctrl)
 	uc, err := NewUseCase(jobRepo, txRepo)
 	require.NoError(t, err)
 
@@ -389,8 +389,8 @@ func TestListTransactionsByJobContext_RepoError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	jobRepo := mock.NewMockJobRepository(ctrl)
-	txRepo := mock.NewMockTransactionRepository(ctrl)
+	jobRepo := mocks.NewMockJobRepository(ctrl)
+	txRepo := mocks.NewMockTransactionRepository(ctrl)
 	uc, err := NewUseCase(jobRepo, txRepo)
 	require.NoError(t, err)
 
@@ -414,8 +414,8 @@ func TestListTransactionsByJobContext_EmptyResult(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	jobRepo := mock.NewMockJobRepository(ctrl)
-	txRepo := mock.NewMockTransactionRepository(ctrl)
+	jobRepo := mocks.NewMockJobRepository(ctrl)
+	txRepo := mocks.NewMockTransactionRepository(ctrl)
 	uc, err := NewUseCase(jobRepo, txRepo)
 	require.NoError(t, err)
 
@@ -439,8 +439,8 @@ func TestNewUseCaseSuccess(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	jobRepo := mock.NewMockJobRepository(ctrl)
-	txRepo := mock.NewMockTransactionRepository(ctrl)
+	jobRepo := mocks.NewMockJobRepository(ctrl)
+	txRepo := mocks.NewMockTransactionRepository(ctrl)
 
 	uc, err := NewUseCase(jobRepo, txRepo)
 	require.NoError(t, err)

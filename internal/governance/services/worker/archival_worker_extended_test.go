@@ -743,7 +743,8 @@ func TestArchiveKey_JanuaryPartition(t *testing.T) {
 		DateRangeEnd:   time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC),
 	}
 
-	key := w.archiveKey(metadata)
+	key, err := w.archiveKey(metadata)
+	require.NoError(t, err)
 	expected := "archives/audit-logs/550e8400-e29b-41d4-a716-446655440000/2024/01/aabbccdd-0011-2233-4455-667788990011/audit_logs_2024_01.jsonl.gz"
 	assert.Equal(t, expected, key)
 }
@@ -770,7 +771,8 @@ func TestArchiveKey_DecemberPartition(t *testing.T) {
 		DateRangeEnd:   time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
 	}
 
-	key := w.archiveKey(metadata)
+	key, err := w.archiveKey(metadata)
+	require.NoError(t, err)
 	expected := "archives/audit-logs/660e8400-e29b-41d4-a716-446655440001/2023/12/aabbccdd-0011-2233-4455-667788990022/audit_logs_2023_12.jsonl.gz"
 	assert.Equal(t, expected, key)
 }

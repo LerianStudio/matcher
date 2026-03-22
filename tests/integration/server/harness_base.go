@@ -12,13 +12,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
 
-	libRabbitmq "github.com/LerianStudio/lib-uncommons/v2/uncommons/rabbitmq"
+	libRabbitmq "github.com/LerianStudio/lib-commons/v4/commons/rabbitmq"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -220,15 +218,6 @@ func (sh *serverHarnessBase) setEnvFromContainers(t *testing.T) error {
 	}
 	redisHost := redisURL.Host
 
-	// Compute absolute path to migrations folder
-	_, currentFile, _, ok := runtime.Caller(0)
-	if !ok {
-		return fmt.Errorf("failed to get current file path for migrations")
-	}
-	migrationsPath := filepath.Clean(
-		filepath.Join(filepath.Dir(currentFile), "../../../migrations"),
-	)
-
 	// Set environment variables
 	envVars := map[string]string{
 		// Postgres
@@ -239,8 +228,8 @@ func (sh *serverHarnessBase) setEnvFromContainers(t *testing.T) error {
 		"POSTGRES_DB":       pgDB,
 		"POSTGRES_SSLMODE":  "disable",
 
-		// Migrations path (absolute)
-		"MIGRATIONS_PATH": migrationsPath,
+		// Non-empty value enables embedded migrations during bootstrap.
+		"MIGRATIONS_PATH": "migrations",
 
 		// Redis
 		"REDIS_HOST":     redisHost,
@@ -248,13 +237,14 @@ func (sh *serverHarnessBase) setEnvFromContainers(t *testing.T) error {
 		"REDIS_TLS":      "false",
 
 		// RabbitMQ
-		"RABBITMQ_HOST":       sh.RabbitMQHost,
-		"RABBITMQ_PORT":       sh.RabbitMQPort,
-		"RABBITMQ_USER":       "guest",
-		"RABBITMQ_PASSWORD":   "guest",
-		"RABBITMQ_VHOST":      "/",
-		"RABBITMQ_URI":        "amqp",
-		"RABBITMQ_HEALTH_URL": sh.RabbitMQHealthURL,
+		"RABBITMQ_HOST":                        sh.RabbitMQHost,
+		"RABBITMQ_PORT":                        sh.RabbitMQPort,
+		"RABBITMQ_USER":                        "guest",
+		"RABBITMQ_PASSWORD":                    "guest",
+		"RABBITMQ_VHOST":                       "/",
+		"RABBITMQ_URI":                         "amqp",
+		"RABBITMQ_HEALTH_URL":                  sh.RabbitMQHealthURL,
+		"RABBITMQ_ALLOW_INSECURE_HEALTH_CHECK": "true",
 
 		// Auth disabled for tests
 		"AUTH_ENABLED": "false",
@@ -293,6 +283,9 @@ func (sh *serverHarnessBase) setEnvFromContainers(t *testing.T) error {
 
 		// Disable background workers not needed in tests
 		"ARCHIVAL_WORKER_ENABLED": "false",
+
+		// Systemplane secret master key (well-known dev default)
+		"SYSTEMPLANE_SECRET_MASTER_KEY": "+PnwgNy8bL3HGT1rOXp47PqyGcPywXH/epgmSVwPkL0=",
 	}
 
 	for key, val := range envVars {
@@ -358,7 +351,7 @@ func (sh *serverHarnessBase) setupRabbitSpy(t *testing.T) error {
 	return nil
 }
 
-// RabbitMQConnection returns a lib-uncommons compatible RabbitMQ connection.
+// RabbitMQConnection returns a lib-commons compatible RabbitMQ connection.
 func (sh *serverHarnessBase) RabbitMQConnection() *libRabbitmq.RabbitMQConnection {
 	return &libRabbitmq.RabbitMQConnection{
 		ConnectionStringSource: fmt.Sprintf(
@@ -366,10 +359,11 @@ func (sh *serverHarnessBase) RabbitMQConnection() *libRabbitmq.RabbitMQConnectio
 			sh.RabbitMQHost,
 			sh.RabbitMQPort,
 		),
-		HealthCheckURL: sh.RabbitMQHealthURL,
-		Host:           sh.RabbitMQHost,
-		Port:           sh.RabbitMQPort,
-		User:           "guest",
-		Pass:           "guest",
+		HealthCheckURL:           sh.RabbitMQHealthURL,
+		Host:                     sh.RabbitMQHost,
+		Port:                     sh.RabbitMQPort,
+		User:                     "guest",
+		Pass:                     "guest",
+		AllowInsecureHealthCheck: true,
 	}
 }

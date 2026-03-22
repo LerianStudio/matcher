@@ -21,7 +21,7 @@ var (
 
 // RegisterRoutes registers the reporting HTTP routes with export rate limiting.
 func RegisterRoutes(
-	protected func(resource, action string) fiber.Router,
+	protected func(resource string, actions ...string) fiber.Router,
 	handlers *Handlers,
 	exportLimiter fiber.Handler,
 ) error {
@@ -124,7 +124,7 @@ func RegisterRoutes(
 
 // RegisterExportJobRoutes registers the export job HTTP routes.
 func RegisterExportJobRoutes(
-	protected func(resource, action string) fiber.Router,
+	protected func(resource string, actions ...string) fiber.Router,
 	handlers *ExportJobHandlers,
 	exportLimiter fiber.Handler,
 ) error {

@@ -13,16 +13,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/exception/adapters/http/dto"
@@ -33,7 +34,14 @@ import (
 	"github.com/LerianStudio/matcher/internal/exception/services/command"
 	"github.com/LerianStudio/matcher/internal/exception/services/query"
 	crossAdapters "github.com/LerianStudio/matcher/internal/shared/adapters/cross"
+	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
+
+// productionMode indicates whether the application is running in production.
+// Set once during handler construction via NewHandler; governs SafeError behavior
+// (suppresses internal error details in client responses when true).
+// Uses atomic.Bool because parallel tests construct handlers concurrently.
+var productionMode atomic.Bool
 
 // Handlers provides HTTP handlers for exception operations.
 type Handlers struct {
@@ -59,6 +67,7 @@ func NewHandlers(
 	callbackUC *command.CallbackUseCase,
 	exceptionProvider exceptionProvider,
 	disputeProvider disputeProvider,
+	production bool,
 ) (*Handlers, error) {
 	if exceptionUC == nil {
 		return nil, ErrNilExceptionUseCase
@@ -96,6 +105,8 @@ func NewHandlers(
 		return nil, ErrNilDisputeProvider
 	}
 
+	productionMode.Store(production)
+
 	return &Handlers{
 		exceptionUC:       exceptionUC,
 		disputeUC:         disputeUC,
@@ -124,7 +135,7 @@ func startHandlerSpan(c *fiber.Ctx, name string) (context.Context, trace.Span, l
 
 func logSpanError(ctx context.Context, span trace.Span, logger libLog.Logger, message string, err error) {
 	libOpentelemetry.HandleSpanError(span, message, err)
-	libLog.SafeError(logger, ctx, message, err, false)
+	libLog.SafeError(logger, ctx, message, err, productionMode.Load())
 }
 
 func badRequest(
@@ -1169,7 +1180,7 @@ func (handler *Handlers) GetHistory(fiberCtx *fiber.Ctx) error {
 	cursorParam := fiberCtx.Query("cursor")
 
 	// cursorPtr validates/parses the timestamp cursor; the raw cursorParam is forwarded as-is.
-	cursorPtr, limit, err := libHTTP.ParseTimestampCursorPagination(fiberCtx)
+	cursorPtr, limit, err := parseTimestampCursorPagination(fiberCtx)
 	if err != nil {
 		return badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
 	}
@@ -1224,4 +1235,23 @@ func (handler *Handlers) GetHistory(fiberCtx *fiber.Ctx) error {
 			HasMore:    nextCursor != "",
 		},
 	})
+}
+
+func parseTimestampCursorPagination(fiberCtx *fiber.Ctx) (*libHTTP.TimestampCursor, int, error) {
+	cursor, limit, err := libHTTP.ParseTimestampCursorPagination(fiberCtx)
+	if err != nil {
+		return nil, 0, fmt.Errorf("parse timestamp cursor pagination: %w", err)
+	}
+
+	limit = libHTTP.ValidateLimit(limit, constants.DefaultPaginationLimit, constants.MaximumPaginationLimit)
+
+	return cursor, limit, nil
+}
+
+// ErrorResponse is a placeholder for Swagger documentation.
+// The actual error response type is defined in lib-commons.
+type ErrorResponse struct {
+	Code    int    `json:"code"`
+	Title   string `json:"title"`
+	Message string `json:"message"`
 }

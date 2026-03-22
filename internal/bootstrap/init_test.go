@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 //go:build unit
 
 package bootstrap
@@ -18,17 +22,21 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libAssert "github.com/LerianStudio/lib-uncommons/v2/uncommons/assert"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libPostgres "github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres"
-	libRabbitmq "github.com/LerianStudio/lib-uncommons/v2/uncommons/rabbitmq"
+	libAssert "github.com/LerianStudio/lib-commons/v4/commons/assert"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
+	libRabbitmq "github.com/LerianStudio/lib-commons/v4/commons/rabbitmq"
 
 	"github.com/LerianStudio/matcher/internal/auth"
+	discoveryWorker "github.com/LerianStudio/matcher/internal/discovery/services/worker"
+	governanceWorker "github.com/LerianStudio/matcher/internal/governance/services/worker"
 	ingestionRabbitmq "github.com/LerianStudio/matcher/internal/ingestion/adapters/rabbitmq"
 	matchingRabbitmq "github.com/LerianStudio/matcher/internal/matching/adapters/rabbitmq"
 	reportingStorage "github.com/LerianStudio/matcher/internal/reporting/adapters/storage"
+	reportingWorker "github.com/LerianStudio/matcher/internal/reporting/services/worker"
 	sharedRabbitmq "github.com/LerianStudio/matcher/internal/shared/adapters/rabbitmq"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // errMatchRuleAdapterRequired is a test-only sentinel used to verify error handling paths.
@@ -171,7 +179,7 @@ func TestCreatePostgresConnection(t *testing.T) {
 func TestCreateRedisConnection(t *testing.T) {
 	t.Parallel()
 
-	// In lib-uncommons v2, New() eagerly connects to Redis.
+	// In lib-commons v4, New() eagerly connects to Redis.
 	// Without a running Redis server, connection attempts will fail.
 	t.Run("returns error when redis unreachable", func(t *testing.T) {
 		t.Parallel()
@@ -238,7 +246,405 @@ func TestCreateRabbitMQConnection(t *testing.T) {
 		assert.Equal(t, "localhost", conn.Host)
 		assert.Equal(t, "5672", conn.Port)
 		assert.Equal(t, "guest", conn.User)
+		assert.False(t, conn.AllowInsecureHealthCheck)
 	})
+
+	t.Run("does not allow insecure health check for https url by default", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := &Config{
+			RabbitMQ: RabbitMQConfig{
+				HealthURL: "https://rabbitmq.example.com/api/health/checks/alarms",
+			},
+		}
+
+		conn := createRabbitMQConnection(cfg, &libLog.NopLogger{})
+
+		require.NotNil(t, conn)
+		assert.False(t, conn.AllowInsecureHealthCheck)
+	})
+
+	t.Run("warns when HTTP health URL is configured but insecure checks stay disabled", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := &Config{
+			RabbitMQ: RabbitMQConfig{
+				HealthURL:                "http://localhost:15672/api/health/checks/alarms",
+				AllowInsecureHealthCheck: false,
+			},
+		}
+
+		logger := &recordingInitLogger{}
+		conn := createRabbitMQConnection(cfg, logger)
+
+		require.NotNil(t, conn)
+		assert.False(t, conn.AllowInsecureHealthCheck)
+		assert.True(
+			t,
+			logger.hasEntry(
+				libLog.LevelWarn,
+				"RabbitMQ health URL uses HTTP while insecure checks are disabled; set RABBITMQ_ALLOW_INSECURE_HEALTH_CHECK=true only for local/internal non-production environments",
+			),
+		)
+	})
+
+	t.Run("allows insecure health check when explicitly enabled for local http URL", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := &Config{
+			RabbitMQ: RabbitMQConfig{
+				HealthURL:                "http://localhost:15672/api/health/checks/alarms",
+				AllowInsecureHealthCheck: true,
+			},
+		}
+
+		conn := createRabbitMQConnection(cfg, &libLog.NopLogger{})
+
+		require.NotNil(t, conn)
+		assert.True(t, conn.AllowInsecureHealthCheck)
+	})
+
+	t.Run("disables insecure health check for external host", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := &Config{
+			App: AppConfig{EnvName: "staging"},
+			RabbitMQ: RabbitMQConfig{
+				HealthURL:                "http://rabbitmq.example.com/api/health/checks/alarms",
+				AllowInsecureHealthCheck: true,
+			},
+		}
+
+		logger := &recordingInitLogger{}
+		conn := createRabbitMQConnection(cfg, logger)
+
+		require.NotNil(t, conn)
+		assert.False(t, conn.AllowInsecureHealthCheck)
+		assert.True(
+			t,
+			logger.hasEntry(libLog.LevelWarn, "RabbitMQ insecure health check is restricted to local/internal hosts"),
+		)
+	})
+
+	t.Run("warns when insecure health check is enabled in production", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := &Config{
+			App: AppConfig{EnvName: "production"},
+			RabbitMQ: RabbitMQConfig{
+				HealthURL:                "http://rabbitmq.example.com/api/health/checks/alarms",
+				AllowInsecureHealthCheck: true,
+			},
+		}
+
+		logger := &recordingInitLogger{}
+		conn := createRabbitMQConnection(cfg, logger)
+
+		require.NotNil(t, conn)
+		assert.False(t, conn.AllowInsecureHealthCheck)
+		assert.True(
+			t,
+			logger.hasEntry(libLog.LevelWarn, "RabbitMQ health check insecure HTTP is disabled in production"),
+		)
+	})
+
+	t.Run("handles nil logger safely", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := &Config{
+			RabbitMQ: RabbitMQConfig{
+				HealthURL:                "http://localhost:15672/api/health/checks/alarms",
+				AllowInsecureHealthCheck: true,
+			},
+		}
+
+		assert.NotPanics(t, func() {
+			conn := createRabbitMQConnection(cfg, nil)
+			require.NotNil(t, conn)
+		})
+	})
+
+	t.Run("handles nil config safely", func(t *testing.T) {
+		t.Parallel()
+
+		logger := &recordingInitLogger{}
+		conn := createRabbitMQConnection(nil, logger)
+
+		require.NotNil(t, conn)
+		assert.Empty(t, conn.Host)
+		assert.Empty(t, conn.HealthCheckURL)
+		assert.False(t, conn.AllowInsecureHealthCheck)
+		assert.True(
+			t,
+			logger.hasEntry(
+				libLog.LevelError,
+				"RabbitMQ connection configuration is nil; using empty defaults and disabling insecure health checks",
+			),
+		)
+	})
+}
+
+func TestEvaluateInsecureRabbitMQHealthCheckPolicy(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil config returns false", func(t *testing.T) {
+		t.Parallel()
+
+		allowed, reason := evaluateInsecureRabbitMQHealthCheckPolicy(nil)
+
+		assert.False(t, allowed)
+		assert.Equal(t, "RabbitMQ health check insecure HTTP is disabled because configuration is nil", reason)
+	})
+
+	t.Run("default config returns false", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := &Config{}
+		allowed, reason := evaluateInsecureRabbitMQHealthCheckPolicy(cfg)
+
+		assert.False(t, allowed)
+		assert.Empty(t, reason)
+	})
+
+	t.Run("explicit true returns true", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := &Config{RabbitMQ: RabbitMQConfig{
+			AllowInsecureHealthCheck: true,
+			HealthURL:                "http://localhost:15672/api/health/checks/alarms",
+		}}
+
+		allowed, reason := evaluateInsecureRabbitMQHealthCheckPolicy(cfg)
+
+		assert.True(t, allowed)
+		assert.Empty(t, reason)
+	})
+
+	t.Run("external host returns false", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := &Config{App: AppConfig{EnvName: "staging"}, RabbitMQ: RabbitMQConfig{
+			AllowInsecureHealthCheck: true,
+			HealthURL:                "http://rabbitmq.example.com/api/health/checks/alarms",
+		}}
+
+		allowed, reason := evaluateInsecureRabbitMQHealthCheckPolicy(cfg)
+
+		assert.False(t, allowed)
+		assert.Equal(t, "RabbitMQ insecure health check is restricted to local/internal hosts", reason)
+	})
+
+	t.Run("single-label host requires configured RabbitMQ host match", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := &Config{App: AppConfig{EnvName: "staging"}, RabbitMQ: RabbitMQConfig{
+			AllowInsecureHealthCheck: true,
+			Host:                     "broker",
+			HealthURL:                "http://rabbitmq:15672/api/health/checks/alarms",
+		}}
+
+		allowed, reason := evaluateInsecureRabbitMQHealthCheckPolicy(cfg)
+
+		assert.False(t, allowed)
+		assert.Equal(t, "RabbitMQ insecure health check is restricted to local/internal hosts", reason)
+	})
+
+	t.Run("single-label host is allowed when it matches configured RabbitMQ host", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := &Config{App: AppConfig{EnvName: "staging"}, RabbitMQ: RabbitMQConfig{
+			AllowInsecureHealthCheck: true,
+			Host:                     "rabbitmq",
+			HealthURL:                "http://rabbitmq:15672/api/health/checks/alarms",
+		}}
+
+		allowed, reason := evaluateInsecureRabbitMQHealthCheckPolicy(cfg)
+
+		assert.True(t, allowed)
+		assert.Empty(t, reason)
+	})
+
+	t.Run("requires HTTP health URL when insecure checks are requested", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := &Config{App: AppConfig{EnvName: "staging"}, RabbitMQ: RabbitMQConfig{
+			AllowInsecureHealthCheck: true,
+			HealthURL:                "https://rabbitmq.internal/api/health/checks/alarms",
+		}}
+
+		allowed, reason := evaluateInsecureRabbitMQHealthCheckPolicy(cfg)
+
+		assert.False(t, allowed)
+		assert.Equal(t, "RabbitMQ insecure health check requires an HTTP health URL", reason)
+	})
+
+	t.Run("allows private IP host in non production", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := &Config{App: AppConfig{EnvName: "staging"}, RabbitMQ: RabbitMQConfig{
+			AllowInsecureHealthCheck: true,
+			HealthURL:                "http://10.42.0.7:15672/api/health/checks/alarms",
+		}}
+
+		allowed, reason := evaluateInsecureRabbitMQHealthCheckPolicy(cfg)
+
+		assert.True(t, allowed)
+		assert.Empty(t, reason)
+	})
+}
+
+func TestIsInsecureHTTPHealthCheckURL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		url      string
+		expected bool
+	}{
+		{"HTTP URL returns true", "http://localhost:15672/api/health", true},
+		{"HTTPS URL returns false", "https://localhost:15672/api/health", false},
+		{"empty string returns false", "", false},
+		{"malformed URL returns false", "://bad-url", false},
+		{"HTTP uppercase scheme returns true", "HTTP://localhost:15672/api/health", true},
+		{"no scheme returns false", "localhost:15672/api/health", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := isInsecureHTTPHealthCheckURL(tt.url)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestIsAllowedInsecureHealthCheckHost(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		healthURL      string
+		configuredHost string
+		expected       bool
+	}{
+		{"localhost returns true", "http://localhost:15672/api/health", "", true},
+		{"IPv4 loopback returns true", "http://127.0.0.1:15672/api/health", "", true},
+		{"IPv6 loopback returns true", "http://[::1]:15672/api/health", "", true},
+		{"private 10.x IP returns true", "http://10.0.0.5:15672/api/health", "", true},
+		{"private 172.16.x IP returns true", "http://172.16.0.1:15672/api/health", "", true},
+		{"private 192.168.x IP returns true", "http://192.168.1.1:15672/api/health", "", true},
+		{"public IP returns false", "http://8.8.8.8:15672/api/health", "", false},
+		{".local suffix returns true", "http://rabbitmq.local:15672/api/health", "", true},
+		{".internal suffix returns true", "http://rabbitmq.internal:15672/api/health", "", true},
+		{".cluster.local suffix returns true", "http://rabbitmq.svc.cluster.local:15672/api/health", "", true},
+		{"external FQDN returns false", "http://rabbitmq.example.com:15672/api/health", "", false},
+		{"single-label matching configured host returns true", "http://rabbitmq:15672/api/health", "rabbitmq", true},
+		{"single-label not matching configured host returns false", "http://rabbitmq:15672/api/health", "broker", false},
+		{"single-label with empty configured host returns false", "http://rabbitmq:15672/api/health", "", false},
+		{"malformed URL returns false", "://bad-url", "", false},
+		{"empty hostname returns false", "http://:15672/api/health", "", false},
+		{"configured host case insensitive match", "http://RABBITMQ:15672/api/health", "rabbitmq", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := isAllowedInsecureHealthCheckHost(tt.healthURL, tt.configuredHost)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestInitializeAuthBoundaryLogger(t *testing.T) {
+	originalFn := initializeAuthBoundaryLoggerFn
+	t.Cleanup(func() {
+		initializeAuthBoundaryLoggerFn = originalFn
+	})
+
+	t.Run("wraps initializer error", func(t *testing.T) {
+		initializeAuthBoundaryLoggerFn = func() (libLog.Logger, error) {
+			return nil, errMatchRuleAdapterRequired
+		}
+
+		logger, err := initializeAuthBoundaryLogger()
+
+		require.Error(t, err)
+		assert.Nil(t, logger)
+		assert.Contains(t, err.Error(), "initialize auth boundary logger")
+		assert.ErrorIs(t, err, errMatchRuleAdapterRequired)
+	})
+
+	t.Run("returns logger on success", func(t *testing.T) {
+		expectedLogger := libLog.NewNop()
+		initializeAuthBoundaryLoggerFn = func() (libLog.Logger, error) {
+			return expectedLogger, nil
+		}
+
+		logger, err := initializeAuthBoundaryLogger()
+
+		require.NoError(t, err)
+		assert.Equal(t, expectedLogger, logger)
+	})
+
+	t.Run("returns error when initializer yields nil logger", func(t *testing.T) {
+		initializeAuthBoundaryLoggerFn = func() (libLog.Logger, error) {
+			return nil, nil
+		}
+
+		logger, err := initializeAuthBoundaryLogger()
+
+		require.Error(t, err)
+		assert.Nil(t, logger)
+		assert.ErrorIs(t, err, errAuthBoundaryLoggerNil)
+	})
+}
+
+type initLogEntry struct {
+	level libLog.Level
+	msg   string
+}
+
+type recordingInitLogger struct {
+	mu      sync.Mutex
+	entries []initLogEntry
+}
+
+func (l *recordingInitLogger) Log(_ context.Context, level libLog.Level, msg string, _ ...libLog.Field) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	l.entries = append(l.entries, initLogEntry{level: level, msg: msg})
+}
+
+func (l *recordingInitLogger) With(_ ...libLog.Field) libLog.Logger {
+	return l
+}
+
+func (l *recordingInitLogger) WithGroup(_ string) libLog.Logger {
+	return l
+}
+
+func (l *recordingInitLogger) Enabled(_ libLog.Level) bool {
+	return true
+}
+
+func (l *recordingInitLogger) Sync(_ context.Context) error {
+	return nil
+}
+
+func (l *recordingInitLogger) hasEntry(level libLog.Level, msg string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	for _, entry := range l.entries {
+		if entry.level == level && entry.msg == msg {
+			return true
+		}
+	}
+
+	return false
 }
 
 func TestCleanupPostgres(t *testing.T) {
@@ -518,10 +924,15 @@ func TestErrObjectStorageBucketRequired(t *testing.T) {
 }
 
 func TestBuildTenantExtractor(t *testing.T) {
-	t.Parallel()
+	// Not parallel: buildTenantExtractor mutates process-global auth defaults.
 
 	t.Run("creates extractor with valid config", func(t *testing.T) {
-		t.Parallel()
+		originalID := auth.GetDefaultTenantID()
+		originalSlug := auth.GetTenantSlug(context.Background())
+		t.Cleanup(func() {
+			require.NoError(t, auth.SetDefaultTenantID(originalID))
+			require.NoError(t, auth.SetDefaultTenantSlug(originalSlug))
+		})
 
 		cfg := &Config{
 			Auth: AuthConfig{Enabled: false, TokenSecret: ""},
@@ -536,10 +947,17 @@ func TestBuildTenantExtractor(t *testing.T) {
 
 		require.NoError(t, err)
 		require.NotNil(t, extractor)
+		assert.Equal(t, cfg.Tenancy.DefaultTenantID, auth.GetDefaultTenantID())
+		assert.Equal(t, cfg.Tenancy.DefaultTenantSlug, auth.GetTenantSlug(context.Background()))
 	})
 
 	t.Run("creates extractor with auth enabled", func(t *testing.T) {
-		t.Parallel()
+		originalID := auth.GetDefaultTenantID()
+		originalSlug := auth.GetTenantSlug(context.Background())
+		t.Cleanup(func() {
+			require.NoError(t, auth.SetDefaultTenantID(originalID))
+			require.NoError(t, auth.SetDefaultTenantSlug(originalSlug))
+		})
 
 		cfg := &Config{
 			Auth: AuthConfig{Enabled: true, TokenSecret: "secret"},
@@ -557,7 +975,12 @@ func TestBuildTenantExtractor(t *testing.T) {
 	})
 
 	t.Run("returns error when auth enabled but secret missing", func(t *testing.T) {
-		t.Parallel()
+		originalID := auth.GetDefaultTenantID()
+		originalSlug := auth.GetTenantSlug(context.Background())
+		t.Cleanup(func() {
+			require.NoError(t, auth.SetDefaultTenantID(originalID))
+			require.NoError(t, auth.SetDefaultTenantSlug(originalSlug))
+		})
 
 		cfg := &Config{
 			Auth: AuthConfig{Enabled: true, TokenSecret: ""},
@@ -700,7 +1123,7 @@ func TestCreateArchivalStorage(t *testing.T) {
 			},
 		}
 
-		client, err := createArchivalStorage(cfg, &libLog.NopLogger{})
+		client, err := createArchivalStorage(context.Background(), cfg)
 
 		assert.NoError(t, err)
 		assert.Nil(t, client)
@@ -718,7 +1141,7 @@ func TestCreateArchivalStorage(t *testing.T) {
 			},
 		}
 
-		client, err := createArchivalStorage(cfg, &libLog.NopLogger{})
+		client, err := createArchivalStorage(context.Background(), cfg)
 
 		assert.NoError(t, err)
 		assert.Nil(t, client)
@@ -732,7 +1155,7 @@ func TestCreateArchivalStorage(t *testing.T) {
 			ObjectStorage: ObjectStorageConfig{},
 		}
 
-		client, err := createArchivalStorage(cfg, &libLog.NopLogger{})
+		client, err := createArchivalStorage(context.Background(), cfg)
 
 		assert.NoError(t, err)
 		assert.Nil(t, client)
@@ -753,7 +1176,7 @@ func TestInitArchivalComponents_DisabledNoStorage(t *testing.T) {
 		}
 
 		var cleanups []func()
-		worker, err := initArchivalComponents(nil, cfg, nil, &libLog.NopLogger{}, &cleanups)
+		worker, err := initArchivalComponents(nil, cfg, nil, nil, &libLog.NopLogger{}, &cleanups)
 
 		assert.NoError(t, err)
 		assert.Nil(t, worker)
@@ -891,6 +1314,28 @@ func TestBuildInfraStatus(t *testing.T) {
 		assert.Equal(t, "standalone", status.RedisMode)
 	})
 
+	t.Run("worker status follows effective enablement not object existence", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := &Config{
+			ExportWorker:  ExportWorkerConfig{Enabled: false},
+			CleanupWorker: CleanupWorkerConfig{Enabled: false},
+			Archival:      ArchivalConfig{Enabled: false},
+		}
+
+		modules := &modulesResult{
+			exportWorker:   &reportingWorker.ExportWorker{},
+			cleanupWorker:  &reportingWorker.CleanupWorker{},
+			archivalWorker: &governanceWorker.ArchivalWorker{},
+		}
+
+		status := buildInfraStatus(cfg, nil, nil, nil, modules, nil, nil)
+
+		assert.False(t, status.ExportWorkerEnabled)
+		assert.False(t, status.CleanupWorkerEnabled)
+		assert.False(t, status.ArchivalWorkerEnabled)
+	})
+
 	t.Run("same primary and replica host means no replica", func(t *testing.T) {
 		t.Parallel()
 
@@ -1004,6 +1449,109 @@ func TestInitCleanupMetrics(t *testing.T) {
 	})
 }
 
+func TestFetcherHTTPClientConfig(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cfg.Fetcher.URL = "http://fetcher.internal:4006"
+	cfg.Fetcher.AllowPrivateIPs = false
+	cfg.Fetcher.HealthTimeoutSec = 9
+	cfg.Fetcher.RequestTimeoutSec = 41
+
+	clientCfg := fetcherHTTPClientConfig(cfg)
+
+	assert.Equal(t, "http://fetcher.internal:4006", clientCfg.BaseURL)
+	assert.False(t, clientCfg.AllowPrivateIPs)
+	assert.Equal(t, 9*time.Second, clientCfg.HealthTimeout)
+	assert.Equal(t, 41*time.Second, clientCfg.RequestTimeout)
+	assert.Equal(t, defaultFetcherClientMaxRetries, clientCfg.MaxRetries)
+	assert.Equal(t, defaultFetcherClientRetryBaseDelay, clientCfg.RetryBaseDelay)
+}
+
+func TestInitOptionalDiscoveryWorker(t *testing.T) {
+	t.Parallel()
+
+	t.Run("enabled_fetcher_returns_initialized_worker", func(t *testing.T) {
+		t.Parallel()
+
+		logger := &recordingInitLogger{}
+		cfg := defaultConfig()
+		cfg.Fetcher.Enabled = true
+
+		expectedWorker := &discoveryWorker.DiscoveryWorker{}
+		called := false
+
+		worker, err := initOptionalDiscoveryWorker(
+			nil,
+			cfg,
+			nil,
+			nil,
+			nil,
+			logger,
+			func(_ *Routes, _ *Config, _ func() *Config, _ sharedPorts.InfrastructureProvider, _ sharedPorts.TenantLister, _ libLog.Logger) (*discoveryWorker.DiscoveryWorker, error) {
+				called = true
+				return expectedWorker, nil
+			},
+		)
+
+		require.NoError(t, err)
+		assert.True(t, called)
+		assert.Same(t, expectedWorker, worker)
+		assert.False(t, logger.hasEntry(libLog.LevelWarn, "discovery module failed to initialize"))
+	})
+
+	t.Run("disabled_fetcher_still_initializes_shell", func(t *testing.T) {
+		t.Parallel()
+
+		logger := &recordingInitLogger{}
+		cfg := defaultConfig()
+		cfg.Fetcher.Enabled = false
+
+		expectedWorker := &discoveryWorker.DiscoveryWorker{}
+		called := false
+		worker, err := initOptionalDiscoveryWorker(
+			nil,
+			cfg,
+			nil,
+			nil,
+			nil,
+			logger,
+			func(_ *Routes, _ *Config, _ func() *Config, _ sharedPorts.InfrastructureProvider, _ sharedPorts.TenantLister, _ libLog.Logger) (*discoveryWorker.DiscoveryWorker, error) {
+				called = true
+				return expectedWorker, nil
+			},
+		)
+
+		require.NoError(t, err)
+		assert.Same(t, expectedWorker, worker)
+		assert.True(t, called)
+	})
+
+	t.Run("enabled_fetcher_failure_returns_error", func(t *testing.T) {
+		t.Parallel()
+
+		logger := &recordingInitLogger{}
+		cfg := defaultConfig()
+		cfg.Fetcher.Enabled = true
+
+		worker, err := initOptionalDiscoveryWorker(
+			nil,
+			cfg,
+			nil,
+			nil,
+			nil,
+			logger,
+			func(_ *Routes, _ *Config, _ func() *Config, _ sharedPorts.InfrastructureProvider, _ sharedPorts.TenantLister, _ libLog.Logger) (*discoveryWorker.DiscoveryWorker, error) {
+				return nil, errors.New("fetcher bootstrap failed")
+			},
+		)
+
+		assert.Nil(t, worker)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "initialize discovery module")
+	})
+}
+
 func TestCreateObjectStorage_NotEnabled(t *testing.T) {
 	t.Parallel()
 
@@ -1013,7 +1561,7 @@ func TestCreateObjectStorage_NotEnabled(t *testing.T) {
 		},
 	}
 
-	client, err := createObjectStorage(cfg, &libLog.NopLogger{})
+	client, err := createObjectStorage(context.Background(), cfg)
 
 	assert.NoError(t, err)
 	assert.Nil(t, client)
@@ -1031,11 +1579,36 @@ func TestCreateObjectStorage_EnabledWithoutBucket(t *testing.T) {
 		},
 	}
 
-	client, err := createObjectStorage(cfg, &libLog.NopLogger{})
+	client, err := createObjectStorage(context.Background(), cfg)
 
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, ErrObjectStorageBucketRequired)
 	assert.Nil(t, client)
+}
+
+func TestCreateObjectStorage_CleanupEnabledWithoutBucket(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		ExportWorker:  ExportWorkerConfig{Enabled: false},
+		CleanupWorker: CleanupWorkerConfig{Enabled: true},
+		ObjectStorage: ObjectStorageConfig{Bucket: ""},
+	}
+
+	client, err := createObjectStorage(context.Background(), cfg)
+
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, ErrObjectStorageBucketRequired)
+	assert.Nil(t, client)
+}
+
+func TestReportingStorageRequired(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, reportingStorageRequired(nil))
+	assert.False(t, reportingStorageRequired(&Config{}))
+	assert.True(t, reportingStorageRequired(&Config{ExportWorker: ExportWorkerConfig{Enabled: true}}))
+	assert.True(t, reportingStorageRequired(&Config{CleanupWorker: CleanupWorkerConfig{Enabled: true}}))
 }
 
 func TestCreateObjectStorageForHealth_EmptyEndpoint(t *testing.T) {
@@ -1048,7 +1621,7 @@ func TestCreateObjectStorageForHealth_EmptyEndpoint(t *testing.T) {
 		},
 	}
 
-	client, err := createObjectStorageForHealth(context.Background(), cfg, &libLog.NopLogger{})
+	client, err := createObjectStorageForHealth(context.Background(), cfg)
 
 	assert.NoError(t, err)
 	assert.Nil(t, client)
@@ -1064,7 +1637,7 @@ func TestCreateObjectStorageForHealth_EmptyBucket(t *testing.T) {
 		},
 	}
 
-	client, err := createObjectStorageForHealth(context.Background(), cfg, &libLog.NopLogger{})
+	client, err := createObjectStorageForHealth(context.Background(), cfg)
 
 	assert.NoError(t, err)
 	assert.Nil(t, client)
@@ -1080,7 +1653,7 @@ func TestCreateObjectStorageForHealth_BothEmpty(t *testing.T) {
 		},
 	}
 
-	client, err := createObjectStorageForHealth(context.Background(), cfg, &libLog.NopLogger{})
+	client, err := createObjectStorageForHealth(context.Background(), cfg)
 
 	assert.NoError(t, err)
 	assert.Nil(t, client)
@@ -1149,7 +1722,7 @@ func TestCreateIdempotencyRepository_NilProvider(t *testing.T) {
 		},
 	}
 
-	repo := createIdempotencyRepository(cfg, nil, &libLog.NopLogger{})
+	repo := createIdempotencyRepository(cfg, nil, nil, &libLog.NopLogger{})
 	assert.Nil(t, repo)
 }
 
@@ -1259,7 +1832,7 @@ func TestCreateObjectStorage_ValidBucketButNoEndpoint(t *testing.T) {
 		},
 	}
 
-	client, err := createObjectStorage(cfg, &libLog.NopLogger{})
+	client, err := createObjectStorage(context.Background(), cfg)
 	require.Error(t, err)
 	assert.Nil(t, client)
 	assert.Contains(t, err.Error(), "create S3 client")
@@ -1282,7 +1855,7 @@ func TestCreateObjectStorageForHealth_ValidConfig(t *testing.T) {
 		},
 	}
 
-	client, err := createObjectStorageForHealth(context.Background(), cfg, &libLog.NopLogger{})
+	client, err := createObjectStorageForHealth(context.Background(), cfg)
 	require.NoError(t, err)
 	assert.NotNil(t, client)
 }
@@ -1306,7 +1879,7 @@ func TestCreateArchivalStorage_ValidConfig(t *testing.T) {
 		},
 	}
 
-	client, err := createArchivalStorage(cfg, &libLog.NopLogger{})
+	client, err := createArchivalStorage(context.Background(), cfg)
 	require.NoError(t, err)
 	assert.NotNil(t, client)
 }
@@ -1386,7 +1959,7 @@ func TestInitEventPublishers_OpenChannelFailure_CleansUpOpenedChannel(t *testing
 	})
 	t.Cleanup(restore)
 
-	matchingPublisher, ingestionPublisher, err := initEventPublishers(&libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{})
+	matchingPublisher, ingestionPublisher, err := initEventPublishers(context.Background(), &libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "open AMQP channels")
@@ -1418,7 +1991,7 @@ func TestInitEventPublishers_MatchingPublisherFailure_CleansUpChannels(t *testin
 	})
 	t.Cleanup(restore)
 
-	matchingPublisher, ingestionPublisher, err := initEventPublishers(&libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{})
+	matchingPublisher, ingestionPublisher, err := initEventPublishers(context.Background(), &libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "create matching event publisher")
@@ -1456,7 +2029,7 @@ func TestInitEventPublishers_IngestionPublisherFailure_CleansUpPublisherAndChann
 	})
 	t.Cleanup(restore)
 
-	matchingPublisher, ingestionPublisher, err := initEventPublishers(&libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{})
+	matchingPublisher, ingestionPublisher, err := initEventPublishers(context.Background(), &libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "create ingestion event publisher")

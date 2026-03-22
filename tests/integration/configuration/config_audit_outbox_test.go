@@ -263,7 +263,7 @@ func TestConfigAuditOutbox_EventStatusIsPending(t *testing.T) {
 		require.NoError(t, err)
 
 		status := readOutboxStatus(t, ctx, h, entityID)
-		require.Equal(t, outboxEntities.OutboxStatusPending, status,
+		require.Equal(t, string(outboxEntities.OutboxStatusPending), status,
 			"newly created outbox event must be in PENDING status for dispatcher pickup")
 	})
 }

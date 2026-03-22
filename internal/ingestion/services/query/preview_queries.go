@@ -12,11 +12,11 @@ import (
 	"strconv"
 	"strings"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
-	"github.com/LerianStudio/matcher/internal/ingestion/adapters/parsers"
+	valueObjects "github.com/LerianStudio/matcher/internal/ingestion/domain/value_objects"
 )
 
 const (
@@ -111,7 +111,7 @@ func (uc *UseCase) PreviewFile(
 
 // previewCSV reads CSV headers and up to maxRows of sample data.
 func previewCSV(ctx context.Context, reader io.Reader, maxRows int) (*FilePreviewResult, error) {
-	bomFreeReader, err := parsers.StripBOM(reader)
+	bomFreeReader, err := valueObjects.StripUTF8BOM(reader)
 	if err != nil {
 		return nil, fmt.Errorf("strip bom from csv preview: %w", err)
 	}
@@ -368,14 +368,14 @@ parseLoop:
 		switch typed := token.(type) {
 		case xml.StartElement:
 			name := typed.Name.Local
-			if isRecordElement(name) {
+			if valueObjects.IsXMLRecordElement(name) {
 				current = make(map[string]string)
 			} else if current != nil {
 				currentElement = name
 			}
 		case xml.EndElement:
 			name := typed.Name.Local
-			if isRecordElement(name) && current != nil {
+			if valueObjects.IsXMLRecordElement(name) && current != nil {
 				for key := range current {
 					if !columnSet[key] {
 						columnSet[key] = true
@@ -424,11 +424,4 @@ parseLoop:
 		RowCount:    len(rows),
 		ParseErrors: 0,
 	}, nil
-}
-
-// isRecordElement checks if the element name represents a transaction record.
-// It delegates to the shared parsers.IsXMLRecordElement to keep preview
-// and parser recognition in sync, preventing silent data loss.
-func isRecordElement(name string) bool {
-	return parsers.IsXMLRecordElement(name)
 }

@@ -12,7 +12,7 @@ import (
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
 
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
 	"github.com/LerianStudio/matcher/internal/governance/domain/repositories/mocks"

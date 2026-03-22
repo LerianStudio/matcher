@@ -3,7 +3,7 @@ package testutil
 import (
 	"context"
 
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 )
 
 // TestLogger is a mock logger that tracks level usage and captured messages.

@@ -13,6 +13,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/ports"
+	tenantinfra "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -56,6 +57,7 @@ func NewCacheService(provider sharedPorts.InfrastructureProvider, ttl time.Durat
 }
 
 func (svc *CacheService) buildKey(
+	ctx context.Context,
 	contextID uuid.UUID,
 	keyType string,
 	dateFrom, dateTo time.Time,
@@ -66,7 +68,9 @@ func (svc *CacheService) buildKey(
 		sourceKey = sourceID.String()
 	}
 
-	return fmt.Sprintf("%s:%s:%s:%s:%s:%s",
+	return tenantinfra.ScopedRedisSegments(
+		ctx,
+		false,
 		dashboardCachePrefix,
 		contextID.String(),
 		keyType,
@@ -74,6 +78,36 @@ func (svc *CacheService) buildKey(
 		dateTo.Format(time.DateOnly),
 		sourceKey,
 	)
+}
+
+func (svc *CacheService) redisClient(
+	ctx context.Context,
+	clientContext string,
+) (goredis.UniversalClient, func(), error) {
+	if svc == nil || svc.provider == nil {
+		return nil, nil, ErrRedisConnRequired
+	}
+
+	connLease, err := svc.provider.GetRedisConnection(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get redis connection: %w", err)
+	}
+
+	conn := connLease.Connection()
+	if conn == nil {
+		connLease.Release()
+
+		return nil, nil, ErrRedisConnRequired
+	}
+
+	rdb, err := conn.GetClient(ctx)
+	if err != nil {
+		connLease.Release()
+
+		return nil, nil, fmt.Errorf("get redis client for %s: %w", clientContext, err)
+	}
+
+	return rdb, connLease.Release, nil
 }
 
 // GetVolumeStats retrieves cached volume stats.
@@ -85,21 +119,14 @@ func (svc *CacheService) GetVolumeStats(
 		return nil, ErrRedisConnRequired
 	}
 
-	conn, err := svc.provider.GetRedisConnection(ctx)
+	rdb, release, err := svc.redisClient(ctx, "volume stats get")
 	if err != nil {
-		return nil, fmt.Errorf("failed to get redis connection: %w", err)
+		return nil, err
 	}
-
-	if conn == nil {
-		return nil, ErrRedisConnRequired
-	}
-
-	rdb, err := conn.GetClient(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("get redis client for volume stats get: %w", err)
-	}
+	defer release()
 
 	key := svc.buildKey(
+		ctx,
 		filter.ContextID,
 		volumeKeyType,
 		filter.DateFrom,
@@ -134,21 +161,14 @@ func (svc *CacheService) SetVolumeStats(
 		return ErrRedisConnRequired
 	}
 
-	conn, err := svc.provider.GetRedisConnection(ctx)
+	rdb, release, err := svc.redisClient(ctx, "volume stats set")
 	if err != nil {
-		return fmt.Errorf("failed to get redis connection: %w", err)
+		return err
 	}
-
-	if conn == nil {
-		return ErrRedisConnRequired
-	}
-
-	rdb, err := conn.GetClient(ctx)
-	if err != nil {
-		return fmt.Errorf("get redis client for volume stats set: %w", err)
-	}
+	defer release()
 
 	key := svc.buildKey(
+		ctx,
 		filter.ContextID,
 		volumeKeyType,
 		filter.DateFrom,
@@ -177,21 +197,14 @@ func (svc *CacheService) GetSLAStats(
 		return nil, ErrRedisConnRequired
 	}
 
-	conn, err := svc.provider.GetRedisConnection(ctx)
+	rdb, release, err := svc.redisClient(ctx, "sla stats get")
 	if err != nil {
-		return nil, fmt.Errorf("failed to get redis connection: %w", err)
+		return nil, err
 	}
-
-	if conn == nil {
-		return nil, ErrRedisConnRequired
-	}
-
-	rdb, err := conn.GetClient(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("get redis client for sla stats get: %w", err)
-	}
+	defer release()
 
 	key := svc.buildKey(
+		ctx,
 		filter.ContextID,
 		slaKeyType,
 		filter.DateFrom,
@@ -226,21 +239,14 @@ func (svc *CacheService) SetSLAStats(
 		return ErrRedisConnRequired
 	}
 
-	conn, err := svc.provider.GetRedisConnection(ctx)
+	rdb, release, err := svc.redisClient(ctx, "sla stats set")
 	if err != nil {
-		return fmt.Errorf("failed to get redis connection: %w", err)
+		return err
 	}
-
-	if conn == nil {
-		return ErrRedisConnRequired
-	}
-
-	rdb, err := conn.GetClient(ctx)
-	if err != nil {
-		return fmt.Errorf("get redis client for sla stats set: %w", err)
-	}
+	defer release()
 
 	key := svc.buildKey(
+		ctx,
 		filter.ContextID,
 		slaKeyType,
 		filter.DateFrom,
@@ -269,21 +275,14 @@ func (svc *CacheService) GetMatchRateStats(
 		return nil, ErrRedisConnRequired
 	}
 
-	conn, err := svc.provider.GetRedisConnection(ctx)
+	rdb, release, err := svc.redisClient(ctx, "match rate stats get")
 	if err != nil {
-		return nil, fmt.Errorf("failed to get redis connection: %w", err)
+		return nil, err
 	}
-
-	if conn == nil {
-		return nil, ErrRedisConnRequired
-	}
-
-	rdb, err := conn.GetClient(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("get redis client for match rate stats get: %w", err)
-	}
+	defer release()
 
 	key := svc.buildKey(
+		ctx,
 		filter.ContextID,
 		matchRateKeyType,
 		filter.DateFrom,
@@ -318,21 +317,14 @@ func (svc *CacheService) SetMatchRateStats(
 		return ErrRedisConnRequired
 	}
 
-	conn, err := svc.provider.GetRedisConnection(ctx)
+	rdb, release, err := svc.redisClient(ctx, "match rate stats set")
 	if err != nil {
-		return fmt.Errorf("failed to get redis connection: %w", err)
+		return err
 	}
-
-	if conn == nil {
-		return ErrRedisConnRequired
-	}
-
-	rdb, err := conn.GetClient(ctx)
-	if err != nil {
-		return fmt.Errorf("get redis client for match rate stats set: %w", err)
-	}
+	defer release()
 
 	key := svc.buildKey(
+		ctx,
 		filter.ContextID,
 		matchRateKeyType,
 		filter.DateFrom,
@@ -361,21 +353,14 @@ func (svc *CacheService) GetDashboardAggregates(
 		return nil, ErrRedisConnRequired
 	}
 
-	conn, err := svc.provider.GetRedisConnection(ctx)
+	rdb, release, err := svc.redisClient(ctx, "dashboard aggregates get")
 	if err != nil {
-		return nil, fmt.Errorf("failed to get redis connection: %w", err)
+		return nil, err
 	}
-
-	if conn == nil {
-		return nil, ErrRedisConnRequired
-	}
-
-	rdb, err := conn.GetClient(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("get redis client for dashboard aggregates get: %w", err)
-	}
+	defer release()
 
 	key := svc.buildKey(
+		ctx,
 		filter.ContextID,
 		aggregatesKeyType,
 		filter.DateFrom,
@@ -410,21 +395,14 @@ func (svc *CacheService) SetDashboardAggregates(
 		return ErrRedisConnRequired
 	}
 
-	conn, err := svc.provider.GetRedisConnection(ctx)
+	rdb, release, err := svc.redisClient(ctx, "dashboard aggregates set")
 	if err != nil {
-		return fmt.Errorf("failed to get redis connection: %w", err)
+		return err
 	}
-
-	if conn == nil {
-		return ErrRedisConnRequired
-	}
-
-	rdb, err := conn.GetClient(ctx)
-	if err != nil {
-		return fmt.Errorf("get redis client for dashboard aggregates set: %w", err)
-	}
+	defer release()
 
 	key := svc.buildKey(
+		ctx,
 		filter.ContextID,
 		aggregatesKeyType,
 		filter.DateFrom,
@@ -453,21 +431,14 @@ func (svc *CacheService) GetMatcherDashboardMetrics(
 		return nil, ErrRedisConnRequired
 	}
 
-	conn, err := svc.provider.GetRedisConnection(ctx)
+	rdb, release, err := svc.redisClient(ctx, "dashboard metrics get")
 	if err != nil {
-		return nil, fmt.Errorf("failed to get redis connection: %w", err)
+		return nil, err
 	}
-
-	if conn == nil {
-		return nil, ErrRedisConnRequired
-	}
-
-	rdb, err := conn.GetClient(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("get redis client for dashboard metrics get: %w", err)
-	}
+	defer release()
 
 	key := svc.buildKey(
+		ctx,
 		filter.ContextID,
 		metricsKeyType,
 		filter.DateFrom,
@@ -502,21 +473,14 @@ func (svc *CacheService) SetMatcherDashboardMetrics(
 		return ErrRedisConnRequired
 	}
 
-	conn, err := svc.provider.GetRedisConnection(ctx)
+	rdb, release, err := svc.redisClient(ctx, "dashboard metrics set")
 	if err != nil {
-		return fmt.Errorf("failed to get redis connection: %w", err)
+		return err
 	}
-
-	if conn == nil {
-		return ErrRedisConnRequired
-	}
-
-	rdb, err := conn.GetClient(ctx)
-	if err != nil {
-		return fmt.Errorf("get redis client for dashboard metrics set: %w", err)
-	}
+	defer release()
 
 	key := svc.buildKey(
+		ctx,
 		filter.ContextID,
 		metricsKeyType,
 		filter.DateFrom,
@@ -542,21 +506,13 @@ func (svc *CacheService) InvalidateContext(ctx context.Context, contextID uuid.U
 		return ErrRedisConnRequired
 	}
 
-	conn, err := svc.provider.GetRedisConnection(ctx)
+	rdb, release, err := svc.redisClient(ctx, "cache invalidation")
 	if err != nil {
-		return fmt.Errorf("failed to get redis connection: %w", err)
+		return err
 	}
+	defer release()
 
-	if conn == nil {
-		return ErrRedisConnRequired
-	}
-
-	rdb, err := conn.GetClient(ctx)
-	if err != nil {
-		return fmt.Errorf("get redis client for cache invalidation: %w", err)
-	}
-
-	pattern := fmt.Sprintf("%s:%s:*", dashboardCachePrefix, contextID.String())
+	pattern := tenantinfra.ScopedRedisSegments(ctx, false, dashboardCachePrefix, contextID.String(), "*")
 
 	const batchSize = 500
 

@@ -109,7 +109,7 @@ func TestConcurrentOperations_ParallelIngestion(t *testing.T) {
 			require.NoError(t, bankErr, "bank ingestion should complete")
 			tc.Logf("Both jobs completed: ledger=%s, bank=%s", ledgerJobID, bankJobID)
 
-			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -212,7 +212,7 @@ func TestConcurrentOperations_MultipleContexts(t *testing.T) {
 						return
 					}
 
-					matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+					matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 					if err != nil {
 						errors <- err
 						return

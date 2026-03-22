@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libPostgres "github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres"
-	libRedis "github.com/LerianStudio/lib-uncommons/v2/uncommons/redis"
+	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
+	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
 
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 )
@@ -94,7 +94,7 @@ func TestMockInfrastructureProvider_GetPostgresConnection(t *testing.T) {
 				assert.Nil(t, conn)
 			} else {
 				require.NotNil(t, conn)
-				assert.Same(t, tt.wantConn, conn)
+				assert.Same(t, tt.wantConn, conn.Connection())
 			}
 		})
 	}
@@ -165,7 +165,7 @@ func TestMockInfrastructureProvider_GetRedisConnection(t *testing.T) {
 				assert.Nil(t, conn)
 			} else {
 				require.NotNil(t, conn)
-				assert.Same(t, tt.wantConn, conn)
+				assert.Same(t, tt.wantConn, conn.Connection())
 			}
 		})
 	}
@@ -188,8 +188,10 @@ func TestMockInfrastructureProvider_ContextIsIgnored(t *testing.T) {
 	pgConn, pgErr := provider.GetPostgresConnection(ctx)
 	require.NoError(t, pgErr)
 	assert.NotNil(t, pgConn)
+	assert.Same(t, pgClient, pgConn.Connection())
 
 	redisConn, redisErr := provider.GetRedisConnection(ctx)
 	require.NoError(t, redisErr)
 	assert.NotNil(t, redisConn)
+	assert.Same(t, redisClient, redisConn.Connection())
 }

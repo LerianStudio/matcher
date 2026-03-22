@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 //go:build unit
 
 package bootstrap
@@ -8,7 +12,7 @@ import (
 )
 
 func FuzzConfigEnvOverride(f *testing.F) {
-	f.Add("localhost", "5432", "matcher", "secret", "matcher_db", "disable")
+	f.Add("localhost", "5432", "matcher", "pr0d-s3cure-p@ss!", "matcher_db", "disable")
 	f.Add("db.example.com", "5433", "admin", "p@ssw0rd!", "prod_db", "require")
 	f.Add("192.168.1.1", "15432", "user_name", "", "db-name", "verify-full")
 	f.Add("", "", "", "", "", "")
@@ -135,7 +139,7 @@ func buildFuzzConfig(
 		Auth: AuthConfig{
 			Enabled:     authEnabled,
 			Host:        authHost,
-			TokenSecret: "secret",
+			TokenSecret: "jwt-pr0d-t0ken-s3cret!",
 		},
 		Postgres: PostgresConfig{
 			PrimaryPassword: password,
@@ -272,7 +276,7 @@ func validateProductionCORS(t *testing.T, cfg *Config) {
 	}
 
 	if strings.TrimSpace(corsCfg.Auth.TokenSecret) == "" {
-		corsCfg.Auth.TokenSecret = "secret"
+		corsCfg.Auth.TokenSecret = "jwt-pr0d-t0ken-s3cret!"
 	}
 
 	corsCfg.Postgres.PrimarySSLMode = "require"

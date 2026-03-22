@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libPostgres "github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres"
+	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
@@ -486,10 +486,11 @@ func TestGetReadDB_ReturnsReplicaWhenAvailable(t *testing.T) {
 
 	ctx := readContextWithDefaultTenant()
 
-	db, err := getReadDB(ctx, provider)
+	lease, err := getReadDB(ctx, provider)
 
 	require.NoError(t, err)
-	assert.Equal(t, replicaDB, db)
+	require.NotNil(t, lease)
+	assert.Equal(t, replicaDB, lease.DB())
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -506,10 +507,11 @@ func TestGetReadDB_FallsToPrimaryWhenReplicaNil(t *testing.T) {
 
 	ctx := readContextWithDefaultTenant()
 
-	db, err := getReadDB(ctx, provider)
+	lease, err := getReadDB(ctx, provider)
 
 	require.NoError(t, err)
-	assert.Equal(t, primaryDB, db)
+	require.NotNil(t, lease)
+	assert.Equal(t, primaryDB, lease.DB())
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -542,10 +544,11 @@ func TestGetPrimaryDBFallback_Success(t *testing.T) {
 
 	ctx := readContextWithDefaultTenant()
 
-	db, err := getPrimaryDBFallback(ctx, provider)
+	lease, err := getPrimaryDBFallback(ctx, provider)
 
 	require.NoError(t, err)
-	assert.Equal(t, primaryDB, db)
+	require.NotNil(t, lease)
+	assert.Equal(t, primaryDB, lease.DB())
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 

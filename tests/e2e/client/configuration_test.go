@@ -31,7 +31,7 @@ func TestConfigurationClient_CreateContext(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/v1/config/contexts", r.URL.Path)
+		assert.Equal(t, "/v1/contexts", r.URL.Path)
 		assert.Equal(t, http.MethodPost, r.Method)
 
 		var req CreateContextRequest
@@ -65,7 +65,7 @@ func TestConfigurationClient_GetContext(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/v1/config/contexts/ctx-123", r.URL.Path)
+		assert.Equal(t, "/v1/contexts/ctx-123", r.URL.Path)
 
 		resp := Context{ID: "ctx-123", Name: "My Context"}
 		json.NewEncoder(w).Encode(resp)
@@ -83,6 +83,9 @@ func TestConfigurationClient_ListContexts(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/contexts", r.URL.Path)
+		assert.Equal(t, http.MethodGet, r.Method)
+
 		resp := struct {
 			Items []Context `json:"items"`
 		}{
@@ -106,6 +109,7 @@ func TestConfigurationClient_UpdateContext(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/contexts/ctx-123", r.URL.Path)
 		assert.Equal(t, http.MethodPatch, r.Method)
 
 		var req UpdateContextRequest
@@ -133,7 +137,7 @@ func TestConfigurationClient_DeleteContext(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodDelete, r.Method)
-		assert.Equal(t, "/v1/config/contexts/ctx-123", r.URL.Path)
+		assert.Equal(t, "/v1/contexts/ctx-123", r.URL.Path)
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer server.Close()
@@ -148,7 +152,7 @@ func TestConfigurationClient_CreateSource(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/v1/config/contexts/ctx-123/sources", r.URL.Path)
+		assert.Equal(t, "/v1/contexts/ctx-123/sources", r.URL.Path)
 		assert.Equal(t, http.MethodPost, r.Method)
 
 		resp := Source{ID: "src-123", Name: "Bank Source"}
@@ -170,7 +174,8 @@ func TestConfigurationClient_GetSource(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/v1/config/contexts/ctx-123/sources/src-456", r.URL.Path)
+		assert.Equal(t, "/v1/contexts/ctx-123/sources/src-456", r.URL.Path)
+		assert.Equal(t, http.MethodGet, r.Method)
 
 		resp := Source{ID: "src-456", Name: "My Source"}
 		json.NewEncoder(w).Encode(resp)
@@ -188,6 +193,9 @@ func TestConfigurationClient_ListSources(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/contexts/ctx-123/sources", r.URL.Path)
+		assert.Equal(t, http.MethodGet, r.Method)
+
 		resp := struct {
 			Items []Source `json:"items"`
 		}{
@@ -211,6 +219,7 @@ func TestConfigurationClient_UpdateSource(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/contexts/ctx-123/sources/src-123", r.URL.Path)
 		assert.Equal(t, http.MethodPatch, r.Method)
 
 		resp := Source{ID: "src-123", Name: "Updated Source"}
@@ -238,6 +247,7 @@ func TestConfigurationClient_DeleteSource(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodDelete, r.Method)
+		assert.Equal(t, "/v1/contexts/ctx-123/sources/src-123", r.URL.Path)
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer server.Close()
@@ -252,7 +262,8 @@ func TestConfigurationClient_CreateFieldMap(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/v1/config/contexts/ctx-123/sources/src-456/field-maps", r.URL.Path)
+		assert.Equal(t, "/v1/contexts/ctx-123/sources/src-456/field-maps", r.URL.Path)
+		assert.Equal(t, http.MethodPost, r.Method)
 
 		resp := FieldMap{ID: "fm-123"}
 		json.NewEncoder(w).Encode(resp)
@@ -277,6 +288,9 @@ func TestConfigurationClient_GetFieldMapBySource(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/contexts/ctx-123/sources/src-456/field-maps", r.URL.Path)
+		assert.Equal(t, http.MethodGet, r.Method)
+
 		resp := FieldMap{
 			ID:      "fm-123",
 			Mapping: map[string]any{"amount": "col_a"},
@@ -296,7 +310,7 @@ func TestConfigurationClient_UpdateFieldMap(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/v1/config/field-maps/fm-123", r.URL.Path)
+		assert.Equal(t, "/v1/field-maps/fm-123", r.URL.Path)
 		assert.Equal(t, http.MethodPatch, r.Method)
 
 		resp := FieldMap{ID: "fm-123"}
@@ -317,7 +331,7 @@ func TestConfigurationClient_DeleteFieldMap(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/v1/config/field-maps/fm-123", r.URL.Path)
+		assert.Equal(t, "/v1/field-maps/fm-123", r.URL.Path)
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer server.Close()
@@ -332,7 +346,8 @@ func TestConfigurationClient_CreateMatchRule(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/v1/config/contexts/ctx-123/rules", r.URL.Path)
+		assert.Equal(t, "/v1/contexts/ctx-123/rules", r.URL.Path)
+		assert.Equal(t, http.MethodPost, r.Method)
 
 		resp := MatchRule{ID: "rule-123", Priority: 1}
 		json.NewEncoder(w).Encode(resp)
@@ -353,7 +368,8 @@ func TestConfigurationClient_GetMatchRule(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/v1/config/contexts/ctx-123/rules/rule-456", r.URL.Path)
+		assert.Equal(t, "/v1/contexts/ctx-123/rules/rule-456", r.URL.Path)
+		assert.Equal(t, http.MethodGet, r.Method)
 
 		resp := MatchRule{ID: "rule-456", Priority: 2}
 		json.NewEncoder(w).Encode(resp)
@@ -371,6 +387,9 @@ func TestConfigurationClient_ListMatchRules(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/contexts/ctx-123/rules", r.URL.Path)
+		assert.Equal(t, http.MethodGet, r.Method)
+
 		resp := struct {
 			Items []MatchRule `json:"items"`
 		}{
@@ -394,6 +413,7 @@ func TestConfigurationClient_UpdateMatchRule(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/contexts/ctx-123/rules/rule-123", r.URL.Path)
 		assert.Equal(t, http.MethodPatch, r.Method)
 
 		resp := MatchRule{ID: "rule-123", Priority: 5}
@@ -420,6 +440,7 @@ func TestConfigurationClient_DeleteMatchRule(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/contexts/ctx-123/rules/rule-123", r.URL.Path)
 		assert.Equal(t, http.MethodDelete, r.Method)
 		w.WriteHeader(http.StatusNoContent)
 	}))
@@ -435,7 +456,7 @@ func TestConfigurationClient_ReorderMatchRules(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/v1/config/contexts/ctx-123/rules/reorder", r.URL.Path)
+		assert.Equal(t, "/v1/contexts/ctx-123/rules/reorder", r.URL.Path)
 		assert.Equal(t, http.MethodPost, r.Method)
 
 		var req ReorderMatchRulesRequest

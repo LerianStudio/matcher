@@ -17,19 +17,18 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	"github.com/LerianStudio/lib-uncommons/v2/uncommons/backoff"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
-	"github.com/LerianStudio/lib-uncommons/v2/uncommons/runtime"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	"github.com/LerianStudio/lib-commons/v4/commons/backoff"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/auth"
-	ingestionEntities "github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
-	ingestionPorts "github.com/LerianStudio/matcher/internal/ingestion/ports"
 	outboxEntities "github.com/LerianStudio/matcher/internal/outbox/domain/entities"
 	"github.com/LerianStudio/matcher/internal/outbox/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // Sentinel errors for dispatcher validation.
@@ -84,7 +83,7 @@ const (
 // Dispatcher handles publishing outbox events to message queues.
 type Dispatcher struct {
 	repo                        repositories.OutboxRepository
-	ingestPub                   ingestionPorts.EventPublisher
+	ingestPub                   sharedPorts.IngestionEventPublisher
 	matchPub                    sharedDomain.MatchEventPublisher
 	auditPub                    sharedDomain.AuditEventPublisher
 	logger                      libLog.Logger
@@ -97,6 +96,7 @@ type Dispatcher struct {
 	failureCountsMu             sync.Mutex
 	listPendingFailureThreshold int
 	retryWindow                 time.Duration
+	retryWindowGetter           func() time.Duration
 	maxDispatchAttempts         int
 	processingTimeout           time.Duration
 	stop                        chan struct{}
@@ -104,11 +104,42 @@ type Dispatcher struct {
 	cancelFunc                  context.CancelFunc
 	dispatchWg                  sync.WaitGroup
 
+	// production indicates whether the application is running in production.
+	// Governs SafeError behavior (suppresses internal error details when true).
+	production bool
+
 	// OTel metrics
 	eventsDispatched metric.Int64Counter
 	eventsFailed     metric.Int64Counter
 	dispatchLatency  metric.Float64Histogram
 	queueDepth       metric.Int64Gauge
+}
+
+// SetRetryWindowGetter injects a live config-backed retry window source.
+func (dispatcher *Dispatcher) SetRetryWindowGetter(getter func() time.Duration) {
+	if dispatcher == nil {
+		return
+	}
+
+	dispatcher.retryWindowGetter = getter
+}
+
+func (dispatcher *Dispatcher) currentRetryWindow() time.Duration {
+	if dispatcher == nil {
+		return defaultRetryWindow
+	}
+
+	if dispatcher.retryWindowGetter != nil {
+		if window := dispatcher.retryWindowGetter(); window > 0 {
+			return window
+		}
+	}
+
+	if dispatcher.retryWindow > 0 {
+		return dispatcher.retryWindow
+	}
+
+	return defaultRetryWindow
 }
 
 // DispatcherOption configures optional dispatcher dependencies.
@@ -130,6 +161,14 @@ func WithBatchSize(size int) DispatcherOption {
 	}
 }
 
+// WithProduction sets whether the dispatcher runs in production mode.
+// When true, SafeError suppresses internal error details from logs.
+func WithProduction(production bool) DispatcherOption {
+	return func(d *Dispatcher) {
+		d.production = production
+	}
+}
+
 // WithDispatchInterval configures how often the dispatcher polls for new events.
 func WithDispatchInterval(interval time.Duration) DispatcherOption {
 	return func(d *Dispatcher) {
@@ -142,7 +181,7 @@ func WithDispatchInterval(interval time.Duration) DispatcherOption {
 // NewDispatcher creates a new Dispatcher with the given dependencies.
 func NewDispatcher(
 	repo repositories.OutboxRepository,
-	ingestPub ingestionPorts.EventPublisher,
+	ingestPub sharedPorts.IngestionEventPublisher,
 	matchPub sharedDomain.MatchEventPublisher,
 	logger libLog.Logger,
 	tracer trace.Tracer,
@@ -266,6 +305,8 @@ func (dispatcher *Dispatcher) Run(_ *libCommons.Launcher) error {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	dispatcher.cancelFunc = cancel
 
 	defer runtime.RecoverAndLogWithContext(
@@ -411,7 +452,7 @@ func (dispatcher *Dispatcher) DispatchOnce(ctx context.Context) int {
 		}
 
 		if err := dispatcher.repo.MarkPublished(ctx, event.ID, time.Now().UTC()); err != nil {
-			libLog.SafeError(logger, ctx, "failed to mark outbox published", err, false)
+			libLog.SafeError(logger, ctx, "failed to mark outbox published", err, dispatcher.production)
 		}
 
 		succeeded++
@@ -459,7 +500,7 @@ func (dispatcher *Dispatcher) dispatchAcrossTenants(ctx context.Context) {
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to list tenants", err)
 
-		libLog.SafeError(logger, ctx, "failed to list tenants", err, false)
+		libLog.SafeError(logger, ctx, "failed to list tenants", err, dispatcher.production)
 
 		return
 	}
@@ -483,7 +524,7 @@ func (dispatcher *Dispatcher) collectEvents(
 	span trace.Span,
 ) []*outboxEntities.OutboxEvent {
 	logger := dispatcher.logger
-	failedBefore := time.Now().UTC().Add(-dispatcher.retryWindow)
+	failedBefore := time.Now().UTC().Add(-dispatcher.currentRetryWindow())
 	processingBefore := time.Now().UTC().Add(-dispatcher.processingTimeout)
 
 	priorityBudget := min(defaultPriorityBudget, dispatcher.batchSize)
@@ -504,7 +545,7 @@ func (dispatcher *Dispatcher) collectEvents(
 	)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to reset stuck events", err)
-		libLog.SafeError(logger, ctx, "failed to reset stuck events", err, false)
+		libLog.SafeError(logger, ctx, "failed to reset stuck events", err, dispatcher.production)
 	}
 
 	collected += len(stuckEvents)
@@ -523,7 +564,7 @@ func (dispatcher *Dispatcher) collectEvents(
 	)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to reset failed events for retry", err)
-		libLog.SafeError(logger, ctx, "failed to reset failed events for retry", err, false)
+		libLog.SafeError(logger, ctx, "failed to reset failed events for retry", err, dispatcher.production)
 	}
 
 	collected += len(failedEvents)
@@ -566,8 +607,6 @@ func deduplicateEvents(events []*outboxEntities.OutboxEvent) []*outboxEntities.O
 
 	for _, event := range events {
 		if event == nil {
-			result = append(result, event)
-
 			continue
 		}
 
@@ -610,7 +649,7 @@ func (dispatcher *Dispatcher) collectPriorityEvents(
 		events, err := dispatcher.repo.ListPendingByType(ctx, eventType, remaining)
 		if err != nil {
 			libOpentelemetry.HandleSpanError(span, "failed to list priority events", err)
-			libLog.SafeError(dispatcher.logger, ctx, "failed to list priority events", err, false)
+			libLog.SafeError(dispatcher.logger, ctx, "failed to list priority events", err, dispatcher.production)
 
 			continue
 		}
@@ -634,7 +673,7 @@ func (dispatcher *Dispatcher) handleListPendingError(ctx context.Context, span t
 	logger := dispatcher.logger
 
 	libOpentelemetry.HandleSpanError(span, "failed to list outbox events", err)
-	libLog.SafeError(logger, ctx, "failed to list outbox events", err, false)
+	libLog.SafeError(logger, ctx, "failed to list outbox events", err, dispatcher.production)
 
 	dispatcher.failureCountsMu.Lock()
 	dispatcher.listPendingFailureCounts[tenantKey]++
@@ -716,9 +755,9 @@ func (dispatcher *Dispatcher) publishEvent(
 	}
 
 	switch event.EventType {
-	case ingestionEntities.EventTypeIngestionCompleted:
+	case sharedDomain.EventTypeIngestionCompleted:
 		return dispatcher.publishIngestionCompleted(ctx, event.Payload)
-	case ingestionEntities.EventTypeIngestionFailed:
+	case sharedDomain.EventTypeIngestionFailed:
 		return dispatcher.publishIngestionFailed(ctx, event.Payload)
 	case sharedDomain.EventTypeMatchConfirmed:
 		return dispatcher.publishMatchConfirmed(ctx, event.Payload)
@@ -732,7 +771,7 @@ func (dispatcher *Dispatcher) publishEvent(
 }
 
 func (dispatcher *Dispatcher) publishIngestionCompleted(ctx context.Context, payload []byte) error {
-	var event ingestionEntities.IngestionCompletedEvent
+	var event sharedDomain.IngestionCompletedEvent
 
 	if err := json.Unmarshal(payload, &event); err != nil {
 		return fmt.Errorf("ingestion completed %w: %w", ErrInvalidPayload, err)
@@ -750,7 +789,7 @@ func (dispatcher *Dispatcher) publishIngestionCompleted(ctx context.Context, pay
 }
 
 func (dispatcher *Dispatcher) publishIngestionFailed(ctx context.Context, payload []byte) error {
-	var event ingestionEntities.IngestionFailedEvent
+	var event sharedDomain.IngestionFailedEvent
 
 	if err := json.Unmarshal(payload, &event); err != nil {
 		return fmt.Errorf("ingestion failed %w: %w", ErrInvalidPayload, err)
@@ -825,7 +864,7 @@ func (dispatcher *Dispatcher) publishAuditLogCreated(ctx context.Context, payloa
 	return nil
 }
 
-func validateIngestionCompletedPayload(payload ingestionEntities.IngestionCompletedEvent) error {
+func validateIngestionCompletedPayload(payload sharedDomain.IngestionCompletedEvent) error {
 	if payload.JobID == uuid.Nil {
 		return fmt.Errorf("ingestion completed: %w", ErrMissingJobID)
 	}
@@ -841,7 +880,7 @@ func validateIngestionCompletedPayload(payload ingestionEntities.IngestionComple
 	return nil
 }
 
-func validateIngestionFailedPayload(payload ingestionEntities.IngestionFailedEvent) error {
+func validateIngestionFailedPayload(payload sharedDomain.IngestionFailedEvent) error {
 	if payload.JobID == uuid.Nil {
 		return fmt.Errorf("ingestion failed: %w", ErrMissingJobID)
 	}

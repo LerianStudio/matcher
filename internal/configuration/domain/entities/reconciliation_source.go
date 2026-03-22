@@ -10,10 +10,11 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/LerianStudio/lib-uncommons/v2/uncommons/assert"
+	"github.com/LerianStudio/lib-commons/v4/commons/assert"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
+	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
 // maxSourceNameLength defines the maximum allowed length for source names.
@@ -31,34 +32,47 @@ var (
 	ErrSourceTypeInvalid = errors.New("invalid source type")
 	// ErrSourceContextRequired is returned when the context_id is not provided.
 	ErrSourceContextRequired = errors.New("context_id is required")
+	// ErrSourceSideRequired is returned when the source side is not provided.
+	ErrSourceSideRequired = errors.New("source side is required")
+	// ErrSourceSideInvalid is returned when the source side is invalid.
+	ErrSourceSideInvalid = errors.New("invalid source side")
 )
 
 // ReconciliationSource represents an external source to reconcile against.
 type ReconciliationSource struct {
-	ID            uuid.UUID
-	ContextID     uuid.UUID
-	Name          string
-	Type          value_objects.SourceType
-	Config        map[string]any
-	FeeScheduleID *uuid.UUID
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID        uuid.UUID
+	ContextID uuid.UUID
+	Name      string
+	Type      value_objects.SourceType
+	Side      sharedfee.MatchingSide
+	Config    map[string]any
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // CreateReconciliationSourceInput defines the input required to create a source.
 type CreateReconciliationSourceInput struct {
-	Name          string                   `json:"name"                    validate:"required,max=50" example:"Primary Bank Account"               minLength:"1" maxLength:"50"`
-	Type          value_objects.SourceType `json:"type"                    validate:"required"        example:"BANK"                                                              enums:"LEDGER,BANK,GATEWAY,CUSTOM"`
-	Config        map[string]any           `json:"config"`
-	FeeScheduleID *uuid.UUID               `json:"feeScheduleId,omitempty"                            example:"550e8400-e29b-41d4-a716-446655440000"`
+	Name   string                   `json:"name"   validate:"required,max=50" example:"Primary Bank Account" minLength:"1" maxLength:"50"`
+	Type   value_objects.SourceType `json:"type"   validate:"required"        example:"BANK"                                              enums:"LEDGER,BANK,GATEWAY,CUSTOM,FETCHER"`
+	Side   sharedfee.MatchingSide   `json:"side"   validate:"required"        example:"LEFT"                                              enums:"LEFT,RIGHT"`
+	Config map[string]any           `json:"config"`
+}
+
+// CreateContextSourceInput defines the input required to create a source inline with a context.
+type CreateContextSourceInput struct {
+	Name    string                   `json:"name"              validate:"required,max=50" example:"Primary Bank Account" minLength:"1" maxLength:"50"`
+	Type    value_objects.SourceType `json:"type"              validate:"required"        example:"BANK"                                              enums:"LEDGER,BANK,GATEWAY,CUSTOM,FETCHER"`
+	Side    sharedfee.MatchingSide   `json:"side"              validate:"required"        example:"LEFT"                                              enums:"LEFT,RIGHT"`
+	Config  map[string]any           `json:"config"`
+	Mapping map[string]any           `json:"mapping,omitempty"`
 }
 
 // UpdateReconciliationSourceInput defines the fields that can be updated on a source.
 type UpdateReconciliationSourceInput struct {
-	Name          *string                   `json:"name,omitempty"            validate:"omitempty,max=50" example:"Secondary Bank Account" maxLength:"50"`
-	Type          *value_objects.SourceType `json:"type,omitempty"                                        example:"LEDGER"                                enums:"LEDGER,BANK,GATEWAY,CUSTOM"`
-	Config        map[string]any            `json:"config,omitempty"`
-	FeeScheduleID *uuid.UUID                `json:"feeScheduleId,omitempty"                               example:"550e8400-e29b-41d4-a716-446655440000"`
+	Name   *string                   `json:"name,omitempty" validate:"omitempty,max=50" example:"Secondary Bank Account" maxLength:"50"`
+	Type   *value_objects.SourceType `json:"type,omitempty"                             example:"LEDGER"                                enums:"LEDGER,BANK,GATEWAY,CUSTOM,FETCHER"`
+	Side   *sharedfee.MatchingSide   `json:"side,omitempty"                             example:"RIGHT"                                 enums:"LEFT,RIGHT"`
+	Config map[string]any            `json:"config,omitempty"`
 }
 
 // NewReconciliationSource validates input and returns a new source entity.
@@ -91,6 +105,14 @@ func NewReconciliationSource(
 		return nil, ErrSourceTypeInvalid
 	}
 
+	if err := asserter.NotEmpty(ctx, string(input.Side), ErrSourceSideRequired.Error()); err != nil {
+		return nil, ErrSourceSideRequired
+	}
+
+	if err := asserter.That(ctx, input.Side.IsExclusive(), ErrSourceSideInvalid.Error(), "side", input.Side); err != nil {
+		return nil, ErrSourceSideInvalid
+	}
+
 	config := input.Config
 	if config == nil {
 		config = make(map[string]any)
@@ -99,14 +121,14 @@ func NewReconciliationSource(
 	now := time.Now().UTC()
 
 	return &ReconciliationSource{
-		ID:            uuid.New(),
-		ContextID:     contextID,
-		Name:          name,
-		Type:          input.Type,
-		Config:        config,
-		FeeScheduleID: input.FeeScheduleID,
-		CreatedAt:     now,
-		UpdatedAt:     now,
+		ID:        uuid.New(),
+		ContextID: contextID,
+		Name:      name,
+		Type:      input.Type,
+		Side:      input.Side,
+		Config:    config,
+		CreatedAt: now,
+		UpdatedAt: now,
 	}, nil
 }
 
@@ -147,12 +169,16 @@ func (rs *ReconciliationSource) Update(
 		rs.Type = *input.Type
 	}
 
-	if input.Config != nil {
-		rs.Config = input.Config
+	if input.Side != nil {
+		if !input.Side.IsExclusive() {
+			return ErrSourceSideInvalid
+		}
+
+		rs.Side = *input.Side
 	}
 
-	if input.FeeScheduleID != nil {
-		rs.FeeScheduleID = input.FeeScheduleID
+	if input.Config != nil {
+		rs.Config = input.Config
 	}
 
 	rs.UpdatedAt = time.Now().UTC()

@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 package bootstrap
 
 import (
@@ -9,10 +13,12 @@ import (
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file" // File source driver
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	"github.com/LerianStudio/lib-uncommons/v2/uncommons/runtime"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
+
+	"github.com/LerianStudio/matcher/migrations"
 )
 
 // ErrDatabaseDirty indicates the database is in a dirty migration state requiring intervention.
@@ -100,7 +106,7 @@ func openMigrationDB(ctx context.Context, dsn string) (*sql.DB, error) {
 	return db, nil
 }
 
-func newMigrator(db *sql.DB, dbName, migrationsPath string) (migrationRunner, error) {
+func newMigrator(db *sql.DB, dbName, _ string) (migrationRunner, error) {
 	driver, err := postgres.WithInstance(db, &postgres.Config{
 		DatabaseName:          dbName,
 		MultiStatementEnabled: true,
@@ -109,9 +115,15 @@ func newMigrator(db *sql.DB, dbName, migrationsPath string) (migrationRunner, er
 		return nil, fmt.Errorf("create migration driver: %w", err)
 	}
 
-	sourceURL := "file://" + migrationsPath
+	// Use embedded migrations from the migrations package.
+	// This eliminates filesystem access requirements, enabling containers
+	// to run with readOnlyRootFilesystem: true for enhanced security.
+	source, err := iofs.New(migrations.FS, ".")
+	if err != nil {
+		return nil, fmt.Errorf("create migration source from embedded files: %w", err)
+	}
 
-	migrator, err := migrate.NewWithDatabaseInstance(sourceURL, dbName, driver)
+	migrator, err := migrate.NewWithInstance("iofs", source, dbName, driver)
 	if err != nil {
 		return nil, fmt.Errorf("create migrator: %w", err)
 	}

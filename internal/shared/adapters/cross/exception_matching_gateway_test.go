@@ -4,6 +4,7 @@ package cross
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
 	"time"
@@ -13,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
 	exceptionPorts "github.com/LerianStudio/matcher/internal/exception/ports"
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
@@ -47,8 +48,25 @@ func (stub *stubAdjustmentRepo) Create(
 
 func (stub *stubAdjustmentRepo) CreateWithTx(
 	ctx context.Context,
-	_ any,
+	_ *sql.Tx,
 	adj *matchingEntities.Adjustment,
+) (*matchingEntities.Adjustment, error) {
+	return stub.Create(ctx, adj)
+}
+
+func (stub *stubAdjustmentRepo) CreateWithAuditLog(
+	ctx context.Context,
+	adj *matchingEntities.Adjustment,
+	_ *shared.AuditLog,
+) (*matchingEntities.Adjustment, error) {
+	return stub.Create(ctx, adj)
+}
+
+func (stub *stubAdjustmentRepo) CreateWithAuditLogWithTx(
+	ctx context.Context,
+	_ *sql.Tx,
+	adj *matchingEntities.Adjustment,
+	_ *shared.AuditLog,
 ) (*matchingEntities.Adjustment, error) {
 	return stub.Create(ctx, adj)
 }

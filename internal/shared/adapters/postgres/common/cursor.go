@@ -5,14 +5,154 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"time"
 
 	"github.com/Masterminds/squirrel"
+	"github.com/google/uuid"
 
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 )
 
 // ErrInvalidIdentifier is returned when a SQL identifier fails validation.
-var ErrInvalidIdentifier = errors.New("invalid SQL identifier")
+var (
+	ErrInvalidIdentifier = errors.New("invalid SQL identifier")
+	// ErrSortCursorCalculatorRequired is returned when the sort cursor callback is missing.
+	ErrSortCursorCalculatorRequired = errors.New("sort cursor calculator is required")
+	// ErrSortCursorBoundaryRecordNil is returned when first/last pagination records are nil.
+	ErrSortCursorBoundaryRecordNil = errors.New("sort cursor boundary record is nil")
+	// ErrCursorRecordExtractorRequired is returned when cursor field extractor callback is missing.
+	ErrCursorRecordExtractorRequired = errors.New("cursor record extractor is required")
+	// ErrCursorEncoderRequired is returned when cursor encoder callback is missing.
+	ErrCursorEncoderRequired = errors.New("cursor encoder is required")
+)
+
+// TimestampCursorExtractor extracts timestamp and ID fields from a record for
+// timestamp cursor generation.
+type TimestampCursorExtractor[T any] func(record T) (time.Time, uuid.UUID)
+
+// TimestampCursorEncoder encodes timestamp/ID cursor values.
+type TimestampCursorEncoder func(time.Time, uuid.UUID) (string, error)
+
+// TrimRecordsAndEncodeTimestampNextCursor applies the common "limit+1" pagination
+// contract: trims records to limit and encodes the next cursor from the last
+// returned record. When limit is non-positive or there are not enough records,
+// it returns the input records and an empty cursor.
+func TrimRecordsAndEncodeTimestampNextCursor[T any](
+	records []T,
+	limit int,
+	extractCursor TimestampCursorExtractor[T],
+	encodeCursor TimestampCursorEncoder,
+) ([]T, string, error) {
+	if limit <= 0 || len(records) <= limit {
+		return records, "", nil
+	}
+
+	trimmedRecords := records[:limit]
+
+	if extractCursor == nil {
+		return trimmedRecords, "", fmt.Errorf("extract next cursor fields: %w", ErrCursorRecordExtractorRequired)
+	}
+
+	if encodeCursor == nil {
+		return trimmedRecords, "", fmt.Errorf("encode next cursor: %w", ErrCursorEncoderRequired)
+	}
+
+	cursorTimestamp, cursorID := extractCursor(trimmedRecords[len(trimmedRecords)-1])
+
+	nextCursor, err := encodeCursor(cursorTimestamp, cursorID)
+	if err != nil {
+		return trimmedRecords, "", fmt.Errorf("encode next cursor: %w", err)
+	}
+
+	return trimmedRecords, nextCursor, nil
+}
+
+// SortCursorCalculator computes next/prev cursor values for sort-based pagination.
+type SortCursorCalculator func(
+	isFirstPage bool,
+	hasPagination bool,
+	pointsNext bool,
+	sortColumn string,
+	firstSortValue string,
+	firstID string,
+	lastSortValue string,
+	lastID string,
+) (string, string, error)
+
+// CalculateSortCursorPagination computes sort-based cursor pagination metadata.
+func CalculateSortCursorPagination(
+	isFirstPage, hasPagination, pointsNext bool,
+	sortColumn,
+	firstSortValue,
+	firstID,
+	lastSortValue,
+	lastID string,
+	calculateSortCursor SortCursorCalculator,
+) (libHTTP.CursorPagination, error) {
+	if calculateSortCursor == nil {
+		return libHTTP.CursorPagination{}, ErrSortCursorCalculatorRequired
+	}
+
+	next, prev, err := calculateSortCursor(
+		isFirstPage,
+		hasPagination,
+		pointsNext,
+		sortColumn,
+		firstSortValue,
+		firstID,
+		lastSortValue,
+		lastID,
+	)
+	if err != nil {
+		return libHTTP.CursorPagination{}, err
+	}
+
+	return libHTTP.CursorPagination{Next: next, Prev: prev}, nil
+}
+
+// ValidateSortCursorBoundaries ensures the first and last records used for
+// sort cursor pagination are non-nil.
+func ValidateSortCursorBoundaries[T any](firstRecord, lastRecord *T) error {
+	if firstRecord == nil || lastRecord == nil {
+		return ErrSortCursorBoundaryRecordNil
+	}
+
+	return nil
+}
+
+// CalculateSortCursorPaginationWrapped computes sort cursor pagination and wraps
+// any underlying error with a stable operation context.
+func CalculateSortCursorPaginationWrapped(
+	isFirstPage, hasPagination, pointsNext bool,
+	sortColumn,
+	firstSortValue,
+	firstID,
+	lastSortValue,
+	lastID string,
+	calculateSortCursor SortCursorCalculator,
+	operation string,
+) (libHTTP.CursorPagination, error) {
+	pagination, err := CalculateSortCursorPagination(
+		isFirstPage,
+		hasPagination,
+		pointsNext,
+		sortColumn,
+		firstSortValue,
+		firstID,
+		lastSortValue,
+		lastID,
+		calculateSortCursor,
+	)
+	if err != nil {
+		if operation == "" {
+			operation = "calculate sort cursor pagination"
+		}
+
+		return libHTTP.CursorPagination{}, fmt.Errorf("%s: %w", operation, err)
+	}
+
+	return pagination, nil
+}
 
 // validIdentifier matches safe PostgreSQL unquoted identifiers: lowercase letters
 // or underscore start, followed by lowercase letters, digits, or underscores.

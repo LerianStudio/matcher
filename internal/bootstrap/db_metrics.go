@@ -1,9 +1,14 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 package bootstrap
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"sync"
 	"time"
 
@@ -11,8 +16,8 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 
-	libPostgres "github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres"
-	"github.com/LerianStudio/lib-uncommons/v2/uncommons/runtime"
+	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
+	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
 )
 
 // ErrNilResolverWithoutError is returned when Resolver returns nil without an error.
@@ -28,11 +33,12 @@ const DefaultMetricsCollectionInterval = 15 * time.Second
 // to OpenTelemetry. It tracks open, idle, and in-use connections, as well as
 // wait counts, wait durations, and connection closures due to pool limits.
 type DBMetricsCollector struct {
-	db       dbresolver.DB
-	meter    metric.Meter
-	interval time.Duration
-	stopCh   chan struct{}
-	stopOnce sync.Once
+	db        dbresolver.DB
+	currentDB func(context.Context) (dbresolver.DB, error)
+	meter     metric.Meter
+	interval  time.Duration
+	stopCh    chan struct{}
+	stopOnce  sync.Once
 
 	// Gauges for connection pool stats
 	openConns     metric.Int64Gauge
@@ -49,6 +55,7 @@ type DBMetricsCollector struct {
 	lastMaxIdleClosed int64
 	lastMaxLifeClosed int64
 	lastStatsMu       sync.Mutex
+	lastResolverID    uintptr
 }
 
 // NewDBMetricsCollector creates a new collector for the given PostgreSQL connection.
@@ -90,6 +97,16 @@ func NewDBMetricsCollector(
 	}
 
 	return collector, nil
+}
+
+// SetResolverGetter configures a resolver getter used to refresh the active
+// database handle before each collection cycle.
+func (collector *DBMetricsCollector) SetResolverGetter(getter func(context.Context) (dbresolver.DB, error)) {
+	if collector == nil {
+		return
+	}
+
+	collector.currentDB = getter
 }
 
 func (collector *DBMetricsCollector) initMetrics() error {
@@ -196,6 +213,25 @@ func (collector *DBMetricsCollector) Stop() {
 // For cumulative counters (WaitCount, WaitDuration, MaxIdleClosed, MaxLifetimeClosed),
 // we calculate deltas to avoid double-counting since sql.DBStats returns totals.
 func (collector *DBMetricsCollector) collect(ctx context.Context) {
+	if collector.currentDB != nil {
+		db, err := collector.currentDB(ctx)
+		if err == nil && db != nil {
+			collector.lastStatsMu.Lock()
+
+			currentID := resolverIdentity(db)
+			if collector.lastResolverID != 0 && collector.lastResolverID != currentID {
+				collector.lastWaitCount = 0
+				collector.lastWaitDuration = 0
+				collector.lastMaxIdleClosed = 0
+				collector.lastMaxLifeClosed = 0
+			}
+
+			collector.lastResolverID = currentID
+			collector.db = db
+			collector.lastStatsMu.Unlock()
+		}
+	}
+
 	if collector.db == nil {
 		return
 	}
@@ -240,4 +276,13 @@ func (collector *DBMetricsCollector) collect(ctx context.Context) {
 	}
 
 	collector.lastMaxLifeClosed = stats.MaxLifetimeClosed
+}
+
+func resolverIdentity(db dbresolver.DB) uintptr {
+	value := reflect.ValueOf(db)
+	if value.Kind() == reflect.Pointer {
+		return value.Pointer()
+	}
+
+	return 0
 }

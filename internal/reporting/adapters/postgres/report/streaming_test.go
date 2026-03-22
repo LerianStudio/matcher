@@ -18,6 +18,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 var (
@@ -544,7 +545,7 @@ func TestMatchedRowIterator_CloseWithTransaction(t *testing.T) {
 	sqlRows, err := tx.QueryContext(context.Background(), "SELECT 1")
 	require.NoError(t, err)
 
-	iter := &matchedRowIterator{rows: sqlRows, tx: tx}
+	iter := &matchedRowIterator{rows: sqlRows, tx: sharedPorts.NewTxLease(tx, nil)}
 
 	require.NoError(t, sqlRows.Err())
 
@@ -583,7 +584,7 @@ func TestUnmatchedRowIterator_CloseWithTransaction(t *testing.T) {
 	sqlRows, err := tx.QueryContext(context.Background(), "SELECT 1")
 	require.NoError(t, err)
 
-	iter := &unmatchedRowIterator{rows: sqlRows, tx: tx}
+	iter := &unmatchedRowIterator{rows: sqlRows, tx: sharedPorts.NewTxLease(tx, nil)}
 
 	require.NoError(t, sqlRows.Err())
 
@@ -620,7 +621,7 @@ func TestVarianceRowIterator_CloseWithTransaction(t *testing.T) {
 	sqlRows, err := tx.QueryContext(context.Background(), "SELECT 1")
 	require.NoError(t, err)
 
-	iter := &varianceRowIterator{rows: sqlRows, tx: tx}
+	iter := &varianceRowIterator{rows: sqlRows, tx: sharedPorts.NewTxLease(tx, nil)}
 
 	require.NoError(t, sqlRows.Err())
 
@@ -648,7 +649,7 @@ func TestMatchedRowIterator_CloseWithTransactionError(t *testing.T) {
 	sqlRows, err := tx.QueryContext(context.Background(), "SELECT 1")
 	require.NoError(t, err)
 
-	iter := &matchedRowIterator{rows: sqlRows, tx: tx}
+	iter := &matchedRowIterator{rows: sqlRows, tx: sharedPorts.NewTxLease(tx, nil)}
 
 	require.NoError(t, sqlRows.Err())
 
@@ -689,7 +690,7 @@ func TestUnmatchedRowIterator_CloseWithTransactionError(t *testing.T) {
 	sqlRows, err := tx.QueryContext(context.Background(), "SELECT 1")
 	require.NoError(t, err)
 
-	iter := &unmatchedRowIterator{rows: sqlRows, tx: tx}
+	iter := &unmatchedRowIterator{rows: sqlRows, tx: sharedPorts.NewTxLease(tx, nil)}
 
 	require.NoError(t, sqlRows.Err())
 
@@ -728,7 +729,7 @@ func TestVarianceRowIterator_CloseWithTransactionError(t *testing.T) {
 	sqlRows, err := tx.QueryContext(context.Background(), "SELECT 1")
 	require.NoError(t, err)
 
-	iter := &varianceRowIterator{rows: sqlRows, tx: tx}
+	iter := &varianceRowIterator{rows: sqlRows, tx: sharedPorts.NewTxLease(tx, nil)}
 
 	require.NoError(t, sqlRows.Err())
 

@@ -11,11 +11,13 @@ package mocks
 
 import (
 	context "context"
+	sql "database/sql"
 	reflect "reflect"
 
-	http "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	http "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 	entities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	repositories "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	uuid "github.com/google/uuid"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -59,8 +61,38 @@ func (mr *MockAdjustmentRepositoryMockRecorder) Create(ctx, adjustment any) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockAdjustmentRepository)(nil).Create), ctx, adjustment)
 }
 
+// CreateWithAuditLog mocks base method.
+func (m *MockAdjustmentRepository) CreateWithAuditLog(ctx context.Context, adjustment *entities.Adjustment, auditLog *shared.AuditLog) (*entities.Adjustment, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateWithAuditLog", ctx, adjustment, auditLog)
+	ret0, _ := ret[0].(*entities.Adjustment)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateWithAuditLog indicates an expected call of CreateWithAuditLog.
+func (mr *MockAdjustmentRepositoryMockRecorder) CreateWithAuditLog(ctx, adjustment, auditLog any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateWithAuditLog", reflect.TypeOf((*MockAdjustmentRepository)(nil).CreateWithAuditLog), ctx, adjustment, auditLog)
+}
+
+// CreateWithAuditLogWithTx mocks base method.
+func (m *MockAdjustmentRepository) CreateWithAuditLogWithTx(ctx context.Context, tx *sql.Tx, adjustment *entities.Adjustment, auditLog *shared.AuditLog) (*entities.Adjustment, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateWithAuditLogWithTx", ctx, tx, adjustment, auditLog)
+	ret0, _ := ret[0].(*entities.Adjustment)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateWithAuditLogWithTx indicates an expected call of CreateWithAuditLogWithTx.
+func (mr *MockAdjustmentRepositoryMockRecorder) CreateWithAuditLogWithTx(ctx, tx, adjustment, auditLog any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateWithAuditLogWithTx", reflect.TypeOf((*MockAdjustmentRepository)(nil).CreateWithAuditLogWithTx), ctx, tx, adjustment, auditLog)
+}
+
 // CreateWithTx mocks base method.
-func (m *MockAdjustmentRepository) CreateWithTx(ctx context.Context, tx any, adjustment *entities.Adjustment) (*entities.Adjustment, error) {
+func (m *MockAdjustmentRepository) CreateWithTx(ctx context.Context, tx *sql.Tx, adjustment *entities.Adjustment) (*entities.Adjustment, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateWithTx", ctx, tx, adjustment)
 	ret0, _ := ret[0].(*entities.Adjustment)

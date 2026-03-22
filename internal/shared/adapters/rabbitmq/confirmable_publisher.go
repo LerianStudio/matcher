@@ -11,10 +11,10 @@ import (
 
 	amqp "github.com/rabbitmq/amqp091-go"
 
-	"github.com/LerianStudio/lib-uncommons/v2/uncommons/backoff"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libRabbitmq "github.com/LerianStudio/lib-uncommons/v2/uncommons/rabbitmq"
-	"github.com/LerianStudio/lib-uncommons/v2/uncommons/runtime"
+	"github.com/LerianStudio/lib-commons/v4/commons/backoff"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libRabbitmq "github.com/LerianStudio/lib-commons/v4/commons/rabbitmq"
+	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
 )
 
 // recoveryAttemptResult indicates the outcome of a single recovery attempt.
@@ -26,9 +26,9 @@ const (
 	recoveryAttemptAborted                              // recovery aborted externally
 )
 
-// MIGRATION(lib-uncommons): ConfirmablePublisher Migration Plan
+// MIGRATION(lib-commons): ConfirmablePublisher Migration Plan
 //
-// This type is a candidate for promotion to lib-uncommons/v2/commons/rabbitmq so
+// This type is a candidate for promotion to lib-commons/v4/commons/rabbitmq so
 // that all Lerian services (Matcher, Midaz, and future services) can share a
 // single, battle-tested publisher-confirms implementation.
 //
@@ -62,14 +62,14 @@ const (
 //     for external implementors.
 //   - The ChannelProvider function type signature may evolve if connection-level
 //     recovery is added (it may need to accept a context or return a connection).
-//   - Package path changes: lib-uncommons uses commons/rabbitmq as the base
+//   - Package path changes: lib-commons uses commons/rabbitmq as the base
 //     package. Sentinel errors would move and importers must update.
 //
 // # Migration trigger
 //
 //   When 2+ Lerian services need reliable publisher confirms (Matcher already
 //   does; if Midaz or another service adopts outbox+RabbitMQ), begin the
-//   migration. File an issue in lib-uncommons with a link to this comment.
+//   migration. File an issue in lib-commons with a link to this comment.
 
 // Publisher confirm errors.
 var (
@@ -563,7 +563,7 @@ func (pub *ConfirmablePublisher) waitRecoveryBackoff(
 		}
 	})
 
-	sleepErr := backoff.SleepWithContext(sleepCtx, delay)
+	sleepErr := backoff.WaitContext(sleepCtx, delay)
 
 	close(sleepDone)
 	sleepCancel()

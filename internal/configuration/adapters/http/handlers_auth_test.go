@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -18,18 +17,21 @@ import (
 	"github.com/stretchr/testify/require"
 
 	authMiddleware "github.com/LerianStudio/lib-auth/v2/auth/middleware"
-	libCommonsLog "github.com/LerianStudio/lib-commons/v2/commons/log"
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/configuration/services/command"
 	"github.com/LerianStudio/matcher/internal/configuration/services/query"
+	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
 
 // errNotImplemented is returned by noop repositories for unimplemented methods.
 var errNotImplemented = errors.New("not implemented")
+
+const defaultPaginationOffset = 0
 
 func TestConfigRoutes_AuthEnforced(t *testing.T) {
 	t.Parallel()
@@ -50,10 +52,7 @@ func TestConfigRoutes_AuthEnforced(t *testing.T) {
 	)
 	defer authServer.Close()
 
-	// Bridge: lib-auth requires lib-commons log types until it migrates to lib-uncommons.
-	logger := &libCommonsLog.NoneLogger{}
-
-	var loggerInterface libCommonsLog.Logger = logger
+	var loggerInterface libLog.Logger = libLog.NewNop()
 
 	authClient := authMiddleware.NewAuthClient(authServer.URL, true, &loggerInterface)
 	extractor, err := auth.NewTenantExtractor(
@@ -66,8 +65,11 @@ func TestConfigRoutes_AuthEnforced(t *testing.T) {
 	require.NoError(t, err)
 
 	app := fiber.New()
-	protected := func(resource, action string) fiber.Router {
-		return auth.ProtectedGroup(app, authClient, extractor, resource, action)
+	protected := func(resource string, actions ...string) fiber.Router {
+		group, err := auth.ProtectedGroupWithActionsWithMiddleware(app, authClient, extractor, resource, actions)
+		require.NoError(t, err)
+
+		return group
 	}
 
 	commandUseCase, err := command.NewUseCase(
@@ -85,12 +87,12 @@ func TestConfigRoutes_AuthEnforced(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	handler, err := NewHandler(commandUseCase, queryUseCase)
+	handler, err := NewHandler(commandUseCase, queryUseCase, false)
 	require.NoError(t, err)
 	err = RegisterRoutes(protected, handler)
 	require.NoError(t, err)
 
-	request := httptest.NewRequest(http.MethodGet, "/v1/config/contexts", nil)
+	request := httptest.NewRequest(http.MethodGet, "/v1/contexts", nil)
 
 	response, err := app.Test(request)
 	require.NoError(t, err)
@@ -121,15 +123,15 @@ func TestParsePagination_LimitClampsToDefault(t *testing.T) {
 		})
 	})
 
-	// In lib-uncommons v2, ParseOpaqueCursorPagination silently clamps
+	// In lib-commons v4, ParseOpaqueCursorPagination silently clamps
 	// limit <= 0 to DefaultLimit instead of returning an error.
 	tests := []struct {
 		name          string
 		query         string
 		expectedLimit int
 	}{
-		{"zero limit clamps to default", "/?limit=0", libHTTP.DefaultLimit},
-		{"negative limit clamps to default", "/?limit=-5", libHTTP.DefaultLimit},
+		{"zero limit clamps to default", "/?limit=0", constants.DefaultPaginationLimit},
+		{"negative limit clamps to default", "/?limit=-5", constants.DefaultPaginationLimit},
 	}
 
 	for _, tt := range tests {
@@ -148,7 +150,7 @@ func TestParsePagination_LimitClampsToDefault(t *testing.T) {
 			var payload paginationResponse
 			require.NoError(t, json.NewDecoder(response.Body).Decode(&payload))
 			assert.Equal(t, tt.expectedLimit, payload.Limit)
-			assert.Equal(t, libHTTP.DefaultOffset, payload.Offset)
+			assert.Equal(t, defaultPaginationOffset, payload.Offset)
 		})
 	}
 }
@@ -174,13 +176,13 @@ func TestParsePagination_OffsetClampsToDefault(t *testing.T) {
 		})
 	})
 
-	// ParsePagination returns a validation error for offset < 0.
+	// Contract: ParsePagination clamps offset < 0 to default offset.
 	tests := []struct {
 		name  string
 		query string
 	}{
-		{"negative offset returns bad request", "/?offset=-1"},
-		{"large negative offset returns bad request", "/?offset=-100"},
+		{"negative offset clamps to default", "/?offset=-1"},
+		{"large negative offset clamps to default", "/?offset=-100"},
 	}
 
 	for _, tt := range tests {
@@ -194,11 +196,12 @@ func TestParsePagination_OffsetClampsToDefault(t *testing.T) {
 
 			defer response.Body.Close()
 
-			assert.Equal(t, http.StatusBadRequest, response.StatusCode)
+			assert.Equal(t, http.StatusOK, response.StatusCode)
 
-			body, readErr := io.ReadAll(response.Body)
-			require.NoError(t, readErr)
-			assert.Contains(t, string(body), "offset must be non-negative")
+			var payload paginationResponse
+			require.NoError(t, json.NewDecoder(response.Body).Decode(&payload))
+			assert.Equal(t, constants.DefaultPaginationLimit, payload.Limit)
+			assert.Equal(t, defaultPaginationOffset, payload.Offset)
 		})
 	}
 }

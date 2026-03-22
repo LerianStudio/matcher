@@ -17,10 +17,10 @@ import (
 
 // TestNoUnwrappedGoroutines walks the entire Matcher codebase and fails if any
 // bare `go` statement is found outside the allowlisted files. All goroutines
-// must use runtime.SafeGo* (from lib-uncommons) or errgroup.Go (from lib-uncommons)
+// must use runtime.SafeGo* (from lib-commons) or errgroup.Go (from lib-commons)
 // to ensure panic recovery.
 //
-// The SafeGo and errgroup implementations now live in lib-uncommons (vendored),
+// The SafeGo and errgroup implementations now live in lib-commons (vendored),
 // so the allowlist points to vendor paths. Application code in internal/ and cmd/
 // must never use bare `go` statements.
 func TestNoUnwrappedGoroutines(t *testing.T) {
@@ -33,7 +33,7 @@ func TestNoUnwrappedGoroutines(t *testing.T) {
 
 	var violations []string
 
-	// All goroutine wrappers (SafeGo, errgroup.Go) live in lib-uncommons
+	// All goroutine wrappers (SafeGo, errgroup.Go) live in lib-commons
 	// which is in vendor/ (skipped above). No application code in this
 	// repo should contain bare `go` statements.
 	allowlist := map[string]struct{}{}
@@ -54,6 +54,7 @@ func TestNoUnwrappedGoroutines(t *testing.T) {
 				"migrations",
 				"config",
 				".references",
+				"references",
 				"testdata":
 				return filepath.SkipDir
 			}

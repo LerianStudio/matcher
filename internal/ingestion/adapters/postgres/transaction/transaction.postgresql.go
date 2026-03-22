@@ -11,15 +11,16 @@ import (
 	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	pgcommon "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/common"
 	repositories "github.com/LerianStudio/matcher/internal/ingestion/domain/repositories"
 	sharedpg "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
+	"github.com/LerianStudio/matcher/internal/shared/constants"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 )
@@ -30,9 +31,17 @@ const (
 	columnDate             = "date"
 	columnStatus           = "status"
 	columnExtractionStatus = "extraction_status"
+
+	// defaultTransactionPaginationLimit is intentionally higher than the generic
+	// shared default because transaction listings are a high-volume read path.
+	defaultTransactionPaginationLimit = 50
 )
 
 func transactionSortValue(tx *shared.Transaction, column string) string {
+	if tx == nil {
+		return ""
+	}
+
 	switch column {
 	case columnCreatedAt:
 		return tx.CreatedAt.UTC().Format(time.RFC3339Nano)
@@ -317,7 +326,7 @@ func (repo *Repository) FindByID(ctx context.Context, id uuid.UUID) (*shared.Tra
 
 // FindByJobID retrieves transactions by job ID with cursor pagination.
 //
-//nolint:gocyclo,cyclop // pagination logic is inherently complex
+//nolint:cyclop // pagination logic is inherently complex
 func (repo *Repository) FindByJobID(
 	ctx context.Context,
 	jobID uuid.UUID,
@@ -342,10 +351,11 @@ func (repo *Repository) FindByJobID(
 
 			sortColumn := normalizeTransactionSortColumn(filter.SortBy)
 
-			limit := filter.Limit
-			if limit <= 0 {
-				limit = 50
-			}
+			limit := libHTTP.ValidateLimit(
+				filter.Limit,
+				defaultTransactionPaginationLimit,
+				constants.MaximumPaginationLimit,
+			)
 
 			useIDCursor := sortColumn == "id"
 
@@ -431,7 +441,7 @@ func (repo *Repository) FindByJobID(
 
 // FindByJobAndContextID retrieves transactions by job ID and context ID with cursor pagination.
 //
-//nolint:gocyclo,cyclop // pagination logic is inherently complex
+//nolint:cyclop // pagination logic is inherently complex
 func (repo *Repository) FindByJobAndContextID(
 	ctx context.Context,
 	jobID, contextID uuid.UUID,
@@ -456,10 +466,11 @@ func (repo *Repository) FindByJobAndContextID(
 
 			sortColumn := normalizeTransactionSortColumn(filter.SortBy)
 
-			limit := filter.Limit
-			if limit <= 0 {
-				limit = 50
-			}
+			limit := libHTTP.ValidateLimit(
+				filter.Limit,
+				defaultTransactionPaginationLimit,
+				constants.MaximumPaginationLimit,
+			)
 
 			useIDCursor := sortColumn == "id"
 
@@ -1127,10 +1138,15 @@ func calculateTransactionPagination(
 		return libHTTP.CursorPagination{}, nil
 	}
 
+	first, last := transactions[0], transactions[len(transactions)-1]
+	if err := sharedpg.ValidateSortCursorBoundaries(first, last); err != nil {
+		return libHTTP.CursorPagination{}, fmt.Errorf("validate transaction pagination boundaries: %w", err)
+	}
+
 	if useIDCursor {
 		pagination, err := libHTTP.CalculateCursor(
 			isFirstPage, hasPagination, cursorDirection,
-			transactions[0].ID.String(), transactions[len(transactions)-1].ID.String(),
+			first.ID.String(), last.ID.String(),
 		)
 		if err != nil {
 			return libHTTP.CursorPagination{}, fmt.Errorf("calculate cursor: %w", err)
@@ -1139,16 +1155,45 @@ func calculateTransactionPagination(
 		return pagination, nil
 	}
 
-	first, last := transactions[0], transactions[len(transactions)-1]
-
-	next, prev := libHTTP.CalculateSortCursorPagination(
-		isFirstPage, hasPagination, cursorDirection == libHTTP.CursorDirectionNext,
+	return calculateTransactionSortPagination(
+		isFirstPage,
+		hasPagination,
+		cursorDirection == libHTTP.CursorDirectionNext,
 		sortColumn,
-		transactionSortValue(first, sortColumn), first.ID.String(),
-		transactionSortValue(last, sortColumn), last.ID.String(),
+		transactionSortValue(first, sortColumn),
+		first.ID.String(),
+		transactionSortValue(last, sortColumn),
+		last.ID.String(),
+		libHTTP.CalculateSortCursorPagination,
 	)
+}
 
-	return libHTTP.CursorPagination{Next: next, Prev: prev}, nil
+func calculateTransactionSortPagination(
+	isFirstPage, hasPagination, pointsNext bool,
+	sortColumn,
+	firstSortValue,
+	firstID,
+	lastSortValue,
+	lastID string,
+	calculateSortCursor sharedpg.SortCursorCalculator,
+) (libHTTP.CursorPagination, error) {
+	pagination, err := sharedpg.CalculateSortCursorPaginationWrapped(
+		isFirstPage,
+		hasPagination,
+		pointsNext,
+		sortColumn,
+		firstSortValue,
+		firstID,
+		lastSortValue,
+		lastID,
+		calculateSortCursor,
+		"calculate sort cursor pagination",
+	)
+	if err != nil {
+		return libHTTP.CursorPagination{}, fmt.Errorf("calculate transaction sort cursor pagination: %w", err)
+	}
+
+	return pagination, nil
 }
 
 // allowedTransactionSortColumns lists columns valid for sort operations.
@@ -1406,7 +1451,7 @@ func (repo *Repository) SearchTransactions(
 
 	limit := params.Limit
 	if limit <= 0 {
-		limit = 20
+		limit = constants.DefaultPaginationLimit
 	}
 
 	const maxSearchLimit = 50
@@ -1454,8 +1499,8 @@ func (repo *Repository) SearchTransactions(
 
 			dataQuery = dataQuery.
 				OrderBy("created_at DESC").
-				Limit(uint64(limit)).  //nolint:gosec //#nosec G115 -- limit is capped at maxSearchLimit
-				Offset(uint64(offset)) //nolint:gosec //#nosec G115 -- offset validated non-negative
+				Limit(sharedpg.SafeIntToUint64(limit)).
+				Offset(sharedpg.SafeIntToUint64(offset))
 
 			// Execute count query
 			countSQL, countArgs, err := countQuery.ToSql()

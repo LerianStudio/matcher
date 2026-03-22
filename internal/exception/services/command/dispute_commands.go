@@ -12,9 +12,9 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/dispute"
 	"github.com/LerianStudio/matcher/internal/exception/domain/repositories"
@@ -190,7 +190,7 @@ func (uc *DisputeUseCase) processOpenDispute(
 
 	// Atomic transaction: create dispute AND create audit log in same transaction.
 	// This ensures SOX compliance - if either fails, both are rolled back.
-	tx, err := uc.infraProvider.BeginTx(ctx)
+	txLease, err := uc.infraProvider.BeginTx(ctx)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to begin transaction", err)
 
@@ -198,12 +198,12 @@ func (uc *DisputeUseCase) processOpenDispute(
 	}
 
 	defer func() {
-		if rbErr := tx.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
+		if rbErr := txLease.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
 			libOpentelemetry.HandleSpanError(span, "tx.Rollback failed", rbErr)
 		}
 	}()
 
-	created, err := uc.disputeRepo.CreateWithTx(ctx, tx, newDispute)
+	created, err := uc.disputeRepo.CreateWithTx(ctx, txLease.SQLTx(), newDispute)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to persist dispute", err)
 
@@ -215,7 +215,7 @@ func (uc *DisputeUseCase) processOpenDispute(
 		"category":   params.category.String(),
 	}
 
-	if err := uc.auditPublisher.PublishExceptionEventWithTx(ctx, tx, ports.AuditEvent{
+	if err := uc.auditPublisher.PublishExceptionEventWithTx(ctx, txLease.SQLTx(), ports.AuditEvent{
 		ExceptionID: cmd.ExceptionID,
 		Action:      "DISPUTE_OPENED",
 		Actor:       params.actor,
@@ -228,7 +228,7 @@ func (uc *DisputeUseCase) processOpenDispute(
 		return nil, fmt.Errorf("publish audit: %w", err)
 	}
 
-	if err := tx.Commit(); err != nil {
+	if err := txLease.Commit(); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to commit transaction", err)
 
 		return nil, fmt.Errorf("commit transaction: %w", err)
@@ -340,7 +340,7 @@ func (uc *DisputeUseCase) processCloseDispute(
 
 	// Atomic transaction: update dispute state AND create audit log in same transaction.
 	// This ensures SOX compliance - if either fails, both are rolled back.
-	tx, err := uc.infraProvider.BeginTx(ctx)
+	txLease, err := uc.infraProvider.BeginTx(ctx)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to begin transaction", err)
 
@@ -348,12 +348,12 @@ func (uc *DisputeUseCase) processCloseDispute(
 	}
 
 	defer func() {
-		if rbErr := tx.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
+		if rbErr := txLease.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
 			libOpentelemetry.HandleSpanError(span, "tx.Rollback failed", rbErr)
 		}
 	}()
 
-	updated, err := uc.disputeRepo.UpdateWithTx(ctx, tx, existingDispute)
+	updated, err := uc.disputeRepo.UpdateWithTx(ctx, txLease.SQLTx(), existingDispute)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to update dispute", err)
 
@@ -364,7 +364,7 @@ func (uc *DisputeUseCase) processCloseDispute(
 		"dispute_id": updated.ID.String(),
 	}
 
-	if err := uc.auditPublisher.PublishExceptionEventWithTx(ctx, tx, ports.AuditEvent{
+	if err := uc.auditPublisher.PublishExceptionEventWithTx(ctx, txLease.SQLTx(), ports.AuditEvent{
 		ExceptionID: updated.ExceptionID,
 		Action:      action,
 		Actor:       params.actor,
@@ -377,7 +377,7 @@ func (uc *DisputeUseCase) processCloseDispute(
 		return nil, fmt.Errorf("publish audit: %w", err)
 	}
 
-	if err := tx.Commit(); err != nil {
+	if err := txLease.Commit(); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to commit transaction", err)
 
 		return nil, fmt.Errorf("commit transaction: %w", err)
@@ -501,7 +501,7 @@ func (uc *DisputeUseCase) processSubmitEvidence(
 
 	// Atomic transaction: update dispute state AND create audit log in same transaction.
 	// This ensures SOX compliance - if either fails, both are rolled back.
-	tx, err := uc.infraProvider.BeginTx(ctx)
+	txLease, err := uc.infraProvider.BeginTx(ctx)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to begin transaction", err)
 
@@ -509,12 +509,12 @@ func (uc *DisputeUseCase) processSubmitEvidence(
 	}
 
 	defer func() {
-		if rbErr := tx.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
+		if rbErr := txLease.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
 			libOpentelemetry.HandleSpanError(span, "tx.Rollback failed", rbErr)
 		}
 	}()
 
-	updated, err := uc.disputeRepo.UpdateWithTx(ctx, tx, existingDispute)
+	updated, err := uc.disputeRepo.UpdateWithTx(ctx, txLease.SQLTx(), existingDispute)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to update dispute", err)
 
@@ -529,7 +529,7 @@ func (uc *DisputeUseCase) processSubmitEvidence(
 		metadata["file_url"] = *params.fileURL
 	}
 
-	if err := uc.auditPublisher.PublishExceptionEventWithTx(ctx, tx, ports.AuditEvent{
+	if err := uc.auditPublisher.PublishExceptionEventWithTx(ctx, txLease.SQLTx(), ports.AuditEvent{
 		ExceptionID: updated.ExceptionID,
 		Action:      "EVIDENCE_SUBMITTED",
 		Actor:       params.actor,
@@ -542,7 +542,7 @@ func (uc *DisputeUseCase) processSubmitEvidence(
 		return nil, fmt.Errorf("publish audit: %w", err)
 	}
 
-	if err := tx.Commit(); err != nil {
+	if err := txLease.Commit(); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to commit transaction", err)
 
 		return nil, fmt.Errorf("commit transaction: %w", err)

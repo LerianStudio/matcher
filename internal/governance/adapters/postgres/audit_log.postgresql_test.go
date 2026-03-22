@@ -18,10 +18,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libPostgres "github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres"
-	libRedis "github.com/LerianStudio/lib-uncommons/v2/uncommons/redis"
-
-	sharedhttp "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	sharedhttp "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
@@ -51,17 +48,17 @@ type fakeInfrastructureProvider struct{}
 
 func (f *fakeInfrastructureProvider) GetPostgresConnection(
 	_ context.Context,
-) (*libPostgres.Client, error) {
+) (*ports.PostgresConnectionLease, error) {
 	return nil, nil
 }
 
 func (f *fakeInfrastructureProvider) GetRedisConnection(
 	_ context.Context,
-) (*libRedis.Client, error) {
+) (*ports.RedisConnectionLease, error) {
 	return nil, nil
 }
 
-func (f *fakeInfrastructureProvider) BeginTx(ctx context.Context) (*sql.Tx, error) {
+func (f *fakeInfrastructureProvider) BeginTx(ctx context.Context) (*ports.TxLease, error) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create sqlmock: %w", err)
@@ -74,10 +71,10 @@ func (f *fakeInfrastructureProvider) BeginTx(ctx context.Context) (*sql.Tx, erro
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 
-	return tx, nil
+	return ports.NewTxLease(tx, nil), nil
 }
 
-func (f *fakeInfrastructureProvider) GetReplicaDB(_ context.Context) (*sql.DB, error) {
+func (f *fakeInfrastructureProvider) GetReplicaDB(_ context.Context) (*ports.ReplicaDBLease, error) {
 	return nil, nil
 }
 
@@ -1046,7 +1043,8 @@ func TestBuildNextCursor(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			result, cursor := buildNextCursor(tt.logs, tt.limit)
+			result, cursor, err := buildNextCursor(tt.logs, tt.limit)
+			require.NoError(t, err)
 
 			require.Len(t, result, tt.expectTrimmed)
 
@@ -1057,6 +1055,48 @@ func TestBuildNextCursor(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBuildNextCursorWithEncoder_EncodeFailure(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	logs := []*entities.AuditLog{
+		{ID: uuid.New(), CreatedAt: now},
+		{ID: uuid.New(), CreatedAt: now.Add(-time.Second)},
+	}
+
+	trimmed, cursor, err := buildNextCursorWithEncoder(
+		logs,
+		1,
+		func(_ time.Time, _ uuid.UUID) (string, error) {
+			return "", errTestDatabaseError
+		},
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errTestDatabaseError)
+	assert.Contains(t, err.Error(), "encode next cursor")
+	require.Len(t, trimmed, 1)
+	assert.Empty(t, cursor)
+}
+
+func TestBuildNextCursorWithEncoder_NilEncoder(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	logs := []*entities.AuditLog{
+		{ID: uuid.New(), CreatedAt: now},
+		{ID: uuid.New(), CreatedAt: now.Add(-time.Second)},
+	}
+
+	trimmed, cursor, err := buildNextCursorWithEncoder(logs, 1, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrCursorEncoderRequired)
+	assert.Contains(t, err.Error(), "encode next cursor")
+	require.Len(t, trimmed, 1)
+	assert.Empty(t, cursor)
 }
 
 func TestCreate_NilAuditLog(t *testing.T) {

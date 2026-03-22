@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -120,4 +121,10 @@ func TestErrors_CanBeWrapped(t *testing.T) {
 			assert.ErrorIs(t, wrapped, tt.err)
 		})
 	}
+}
+
+func TestErrTransactionRequired_CanonicalIdentity(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, errors.Is(ErrTransactionRequired, pgcommon.ErrTransactionRequired))
 }

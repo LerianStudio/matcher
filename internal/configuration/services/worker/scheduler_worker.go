@@ -14,15 +14,16 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
-	"github.com/LerianStudio/lib-uncommons/v2/uncommons/runtime"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/ports"
 	configCommand "github.com/LerianStudio/matcher/internal/configuration/services/command"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+	"github.com/LerianStudio/matcher/pkg/chanutil"
 )
 
 const (
@@ -39,11 +40,12 @@ var ErrNilScheduleRepository = configCommand.ErrNilScheduleRepository
 
 // Sentinel errors for scheduler worker.
 var (
-	ErrNilMatchTrigger      = errors.New("match trigger is required")
-	ErrNilInfraProvider     = errors.New("infrastructure provider is required")
-	ErrWorkerAlreadyRunning = errors.New("scheduler worker already running")
-	ErrWorkerNotRunning     = errors.New("scheduler worker not running")
-	ErrRedisClientNil       = errors.New("redis client is nil")
+	ErrNilMatchTrigger                 = errors.New("match trigger is required")
+	ErrNilInfraProvider                = errors.New("infrastructure provider is required")
+	ErrWorkerAlreadyRunning            = errors.New("scheduler worker already running")
+	ErrWorkerNotRunning                = errors.New("scheduler worker not running")
+	ErrRuntimeConfigUpdateWhileRunning = errors.New("worker runtime config update requires stopped worker")
+	ErrRedisClientNil                  = errors.New("redis client is nil")
 )
 
 // SchedulerWorkerConfig holds configuration for the scheduler worker.
@@ -54,6 +56,7 @@ type SchedulerWorkerConfig struct {
 
 // SchedulerWorker polls for due schedules and triggers match runs.
 type SchedulerWorker struct {
+	mu            sync.Mutex
 	scheduleRepo  ports.ScheduleRepository
 	matchTrigger  sharedPorts.MatchTrigger
 	infraProvider sharedPorts.InfrastructureProvider
@@ -65,6 +68,14 @@ type SchedulerWorker struct {
 	stopOnce sync.Once
 	stopCh   chan struct{}
 	doneCh   chan struct{}
+}
+
+func normalizeSchedulerWorkerConfig(cfg SchedulerWorkerConfig) SchedulerWorkerConfig {
+	if cfg.Interval <= 0 {
+		cfg.Interval = time.Minute
+	}
+
+	return cfg
 }
 
 // NewSchedulerWorker creates a new scheduler worker.
@@ -87,9 +98,7 @@ func NewSchedulerWorker(
 		return nil, ErrNilInfraProvider
 	}
 
-	if cfg.Interval <= 0 {
-		cfg.Interval = time.Minute
-	}
+	cfg = normalizeSchedulerWorkerConfig(cfg)
 
 	if logger == nil {
 		logger = &libLog.NopLogger{}
@@ -107,11 +116,49 @@ func NewSchedulerWorker(
 	}, nil
 }
 
+// prepareRunState reinitialises the worker's stop/done channels and sync.Once for
+// re-entrant Start→Stop→Start cycles. SAFETY: The caller (WorkerManager) MUST ensure
+// Stop() has fully completed before calling Start(), which calls prepareRunState().
+// The WorkerManager serialises all lifecycle transitions via its mutex.
+func (worker *SchedulerWorker) prepareRunState() {
+	worker.mu.Lock()
+	defer worker.mu.Unlock()
+
+	worker.stopOnce = sync.Once{}
+
+	if chanutil.ClosedSignalChannel(worker.stopCh) {
+		worker.stopCh = make(chan struct{})
+	}
+
+	if chanutil.ClosedSignalChannel(worker.doneCh) {
+		worker.doneCh = make(chan struct{})
+	}
+}
+
+// UpdateRuntimeConfig updates the worker runtime configuration used on the next start/restart.
+// NOTE: This does NOT affect a currently running worker's ticker. The WorkerManager
+// always performs a full stop→start cycle when config changes, ensuring the new
+// config is picked up when the worker's run() loop creates a fresh ticker.
+func (worker *SchedulerWorker) UpdateRuntimeConfig(cfg SchedulerWorkerConfig) error {
+	worker.mu.Lock()
+	defer worker.mu.Unlock()
+
+	if worker.running.Load() {
+		return ErrRuntimeConfigUpdateWhileRunning
+	}
+
+	worker.cfg = normalizeSchedulerWorkerConfig(cfg)
+
+	return nil
+}
+
 // Start begins the scheduler worker.
 func (worker *SchedulerWorker) Start(ctx context.Context) error {
 	if !worker.running.CompareAndSwap(false, true) {
 		return ErrWorkerAlreadyRunning
 	}
+
+	worker.prepareRunState()
 
 	runtime.SafeGoWithContextAndComponent(
 		ctx,
@@ -127,7 +174,7 @@ func (worker *SchedulerWorker) Start(ctx context.Context) error {
 
 // Stop gracefully shuts down the worker.
 func (worker *SchedulerWorker) Stop() error {
-	if !worker.running.CompareAndSwap(true, false) {
+	if !worker.running.Load() {
 		return ErrWorkerNotRunning
 	}
 
@@ -135,6 +182,10 @@ func (worker *SchedulerWorker) Stop() error {
 		close(worker.stopCh)
 	})
 	<-worker.doneCh
+
+	if !worker.running.CompareAndSwap(true, false) {
+		return ErrWorkerNotRunning
+	}
 
 	worker.logger.Log(context.Background(), libLog.LevelInfo, "scheduler worker stopped")
 
@@ -249,11 +300,13 @@ func (worker *SchedulerWorker) processSchedule(
 
 // acquireLock attempts to acquire a Redis distributed lock.
 func (worker *SchedulerWorker) acquireLock(ctx context.Context, key string) (bool, string, error) {
-	conn, err := worker.infraProvider.GetRedisConnection(ctx)
+	connLease, err := worker.infraProvider.GetRedisConnection(ctx)
 	if err != nil {
 		return false, "", fmt.Errorf("get redis connection: %w", err)
 	}
+	defer connLease.Release()
 
+	conn := connLease.Connection()
 	if conn == nil {
 		return false, "", ErrRedisClientNil
 	}
@@ -276,11 +329,13 @@ func (worker *SchedulerWorker) acquireLock(ctx context.Context, key string) (boo
 
 // releaseLock releases a Redis distributed lock.
 func (worker *SchedulerWorker) releaseLock(ctx context.Context, key, token string) {
-	conn, err := worker.infraProvider.GetRedisConnection(ctx)
+	connLease, err := worker.infraProvider.GetRedisConnection(ctx)
 	if err != nil {
 		return
 	}
+	defer connLease.Release()
 
+	conn := connLease.Connection()
 	if conn == nil {
 		return
 	}

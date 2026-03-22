@@ -20,21 +20,13 @@ func NewMatchingClient(client *Client) *MatchingClient {
 }
 
 // RunMatch triggers a matching run for a context.
-// If primarySourceID is non-empty, it designates one source as the anchor for asymmetric matching.
 func (c *MatchingClient) RunMatch(
 	ctx context.Context,
 	contextID, mode string,
-	primarySourceID string,
 ) (*RunMatchResponse, error) {
 	var resp RunMatchResponse
 	path := fmt.Sprintf("/v1/matching/contexts/%s/run", contextID)
-
-	var primarySourceIDPtr *string
-	if primarySourceID != "" {
-		primarySourceIDPtr = &primarySourceID
-	}
-
-	req := RunMatchRequest{Mode: mode, PrimarySourceID: primarySourceIDPtr}
+	req := RunMatchRequest{Mode: mode}
 	err := c.client.DoJSON(ctx, http.MethodPost, path, req, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("run match: %w", err)
@@ -46,18 +38,16 @@ func (c *MatchingClient) RunMatch(
 func (c *MatchingClient) RunMatchCommit(
 	ctx context.Context,
 	contextID string,
-	primarySourceID string,
 ) (*RunMatchResponse, error) {
-	return c.RunMatch(ctx, contextID, "COMMIT", primarySourceID)
+	return c.RunMatch(ctx, contextID, "COMMIT")
 }
 
 // RunMatchDryRun triggers a matching run in DRY_RUN mode.
 func (c *MatchingClient) RunMatchDryRun(
 	ctx context.Context,
 	contextID string,
-	primarySourceID string,
 ) (*RunMatchResponse, error) {
-	return c.RunMatch(ctx, contextID, "DRY_RUN", primarySourceID)
+	return c.RunMatch(ctx, contextID, "DRY_RUN")
 }
 
 // GetMatchRun retrieves a match run by ID.

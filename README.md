@@ -39,21 +39,23 @@ Matcher is built as a modular monolith with DDD, hexagonal architecture, and CQR
 
 ### Domains
 
-- **Configuration**: Reconciliation contexts, sources, field maps, and match rules
-- **Ingestion**: Import jobs, file parsing, normalization, deduplication
-- **Matching**: Match orchestration, rule execution, fee schedule verification, confidence scoring, manual match/unmatch
-- **Exception**: Exception lifecycle, disputes with evidence tracking, resolution workflows
-- **Governance**: Immutable audit logs for compliance
-- **Reporting**: Export jobs, dashboard analytics, variance analysis, archive management
-- **Outbox**: Reliable event publication
+- **Configuration**: Reconciliation contexts, sources, field maps, match rules, fee schedules/rules, scheduling, clone operations
+- **Ingestion**: Import jobs, file parsing (CSV/JSON/XML/ISO 20022), normalization, deduplication, auto-match trigger
+- **Matching**: Match orchestration, rule execution, fee verification, confidence scoring, manual match/unmatch, adjustments, currency conversion
+- **Exception**: Exception lifecycle, disputes with evidence tracking, resolution workflows, force-match, bulk operations, external dispatch (JIRA/webhooks)
+- **Governance**: Immutable audit logs, hash chain verification, actor mapping, archive management
+- **Reporting**: Dashboard analytics, export jobs (CSV/PDF), streaming reports, Redis caching, variance analysis
+- **Discovery**: External data source discovery, schema detection, extraction management
+- **Outbox**: Reliable event publication via transactional outbox pattern
 
 ### Services
 
-1. **Configuration and Ingestion**: REST APIs for setup, fee schedule management, and data onboarding with PostgreSQL persistence.
-2. **Matching Engine**: Rule execution, confidence scoring, fee verification, manual matching, and dry-run previews.
-3. **Exception and Dispute Management**: Exception classification, dispute lifecycle, evidence collection, and resolution workflows.
-4. **Governance, Reporting, and Exports**: Immutable audit trail, dashboard analytics, async export jobs, and audit log archival.
-5. **Infrastructure Layer**: PostgreSQL (with replica support), Redis (dedupe/locks/idempotency), RabbitMQ (async workflows), S3-compatible object storage (exports/archives), OpenTelemetry.
+1. **Configuration and Ingestion**: REST APIs for setup, fee schedule/rule management, scheduling, clone operations, and data onboarding with PostgreSQL persistence.
+2. **Matching Engine**: Rule execution, confidence scoring, fee verification, manual matching, adjustments, currency conversion, and dry-run previews.
+3. **Exception and Dispute Management**: Exception classification, dispute lifecycle, evidence collection, force-match, adjust-entry, bulk operations, and external dispatch (JIRA/webhooks).
+4. **Discovery**: External data source connection management, schema detection, and extraction orchestration.
+5. **Governance, Reporting, and Exports**: Immutable audit trail with hash chains, dashboard analytics with Redis caching, async export jobs (CSV/PDF), streaming reports, and audit log archival.
+6. **Infrastructure Layer**: PostgreSQL (with replica support), Redis (dedupe/locks/idempotency/caching), RabbitMQ (async workflows), S3-compatible object storage (exports/archives), OpenTelemetry, Systemplane (runtime configuration).
 
 ### Reconciliation Processing
 
@@ -69,13 +71,16 @@ Matcher is built as a modular monolith with DDD, hexagonal architecture, and CQR
 - **Hexagonal Architecture**: Ports and adapters per bounded context
 - **CQRS-Light**: Separate command and query use cases for clarity and performance
 - **Schema-Per-Tenant**: PostgreSQL search_path isolation per tenant
-- **Outbox Pattern**: Reliable event publication for ingestion workflows
-- **OpenTelemetry**: Standard tracing and metrics via lib-uncommons
-- **Runtime Safety**: `pkg/assert` and `pkg/runtime` for invariant enforcement
+- **Outbox Pattern**: Reliable event publication for ingestion and matching workflows
+- **OpenTelemetry**: Standard tracing and metrics via lib-commons
+- **Systemplane**: Runtime configuration authority with hot-reloadable settings, history, and schema
 - **Fee Schedule Engine**: Net-to-gross normalization with parallel and cascading fee application
-- **Export Pipeline**: Async export jobs with S3-compatible object storage and presigned URLs
+- **Export Pipeline**: Async export jobs (CSV/PDF) with S3-compatible object storage and presigned URLs
 - **Rate Limiting**: Configurable rate limits per operation type
 - **Idempotency**: Redis-backed idempotency keys for safe client retries
+- **Distributed Locking**: Redis-based locks for concurrent match run prevention
+- **Cross-Currency Matching**: FX rate lookups and base-currency normalization
+- **Chaos Testing**: Toxiproxy-based fault injection for resilience validation
 
 ## Project Structure
 
@@ -83,34 +88,27 @@ Matcher is built as a modular monolith with DDD, hexagonal architecture, and CQR
 matcher/
 ├── cmd/                  # Application entry points (matcher, health-probe)
 ├── config/               # Environment templates and storage config
-├── console/              # Web UI (Next.js)
 ├── docs/                 # Design documents, PRD, TRD, API specs
 ├── internal/             # Core application code (bounded contexts)
 │   ├── auth/             # Authentication, authorization, multi-tenancy
-│   ├── bootstrap/        # Service initialization and dependency wiring
-│   ├── configuration/    # Reconciliation contexts, sources, rules
+│   ├── bootstrap/        # Service initialization, dependency wiring, systemplane
+│   ├── configuration/    # Reconciliation contexts, sources, rules, fees, scheduling
+│   ├── discovery/        # External data source discovery and schema detection
 │   ├── ingestion/        # File parsing, normalization, deduplication
-│   ├── matching/         # Match engine, rule execution, scoring
-│   ├── exception/        # Disputes, evidence, resolution workflows
-│   ├── governance/       # Immutable audit logs
-│   ├── reporting/        # Analytics, exports, variance reports
+│   ├── matching/         # Match engine, rule execution, scoring, adjustments
+│   ├── exception/        # Disputes, evidence, resolution workflows, bulk ops
+│   ├── governance/       # Immutable audit logs, hash chains, archival
+│   ├── reporting/        # Analytics, exports (CSV/PDF), dashboard caching
 │   ├── outbox/           # Transactional outbox pattern
-│   ├── shared/           # Cross-context domain objects and adapters
+│   ├── shared/           # Cross-context domain objects, fee engine, adapters
 │   └── testutil/         # Shared test helpers
-├── migrations/           # PostgreSQL schema migrations
+├── migrations/           # PostgreSQL schema migrations (19 migrations)
 ├── pkg/                  # Reusable library packages
-│   ├── assert/           # Runtime assertions with observability
-│   ├── backoff/          # Exponential backoff with jitter
-│   ├── cron/             # Cron expression parser
-│   ├── errgroup/         # Goroutine group with panic recovery
-│   ├── http/             # HTTP response helpers and error mapping
-│   ├── jwt/              # HMAC JWT signing and verification
-│   ├── logging/          # Production-safe logging with PII sanitization
-│   ├── runtime/          # Panic recovery with observability
-│   ├── safe/             # Safe wrappers for panic-prone operations
-│   └── storageopt/       # Object storage functional options
+│   ├── chanutil/         # Safe channel utilities
+│   ├── storageopt/       # Object storage functional options
+│   └── systemplane/      # Runtime configuration authority (control plane)
 ├── scripts/              # Dev and CI utility scripts
-├── tests/                # Integration and E2E test suites
+├── tests/                # Integration, E2E, chaos, and static analysis tests
 └── tools/                # Custom linters and dev tooling
 ```
 
@@ -118,27 +116,11 @@ Each directory contains a README with detailed documentation.
 
 ## Getting Started
 
-### 1) Configure Environment
+### 1) Configure (Optional)
 
-```bash
-cp config/.env.example .env
-```
+No configuration files needed — all defaults are baked into the binary and match the docker-compose setup.
 
-Key environment variables (from `config/.env.example`):
-
-- **Application (required)**: `ENV_NAME`, `LOG_LEVEL`, `SERVER_ADDRESS`, `HTTP_BODY_LIMIT_BYTES`
-- **CORS (optional)**: `CORS_ALLOWED_ORIGINS`, `CORS_ALLOWED_METHODS`, `CORS_ALLOWED_HEADERS`
-- **TLS (optional)**: `SERVER_TLS_CERT_FILE`, `SERVER_TLS_KEY_FILE`, `TLS_TERMINATED_UPSTREAM`
-- **Tenancy (required)**: `DEFAULT_TENANT_ID`, `DEFAULT_TENANT_SLUG`, `MULTI_TENANT_INFRA_ENABLED`
-- **PostgreSQL (required)**: `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_SSLMODE`, pool config
-- **PostgreSQL Replica (optional)**: `POSTGRES_REPLICA_HOST`, `POSTGRES_REPLICA_PORT`, etc.
-- **Redis (required)**: `REDIS_HOST`, `REDIS_PASSWORD`, `REDIS_DB`, `REDIS_POOL_SIZE`, plus Sentinel/TLS options
-- **RabbitMQ (required)**: `RABBITMQ_URI`, `RABBITMQ_HOST`, `RABBITMQ_PORT`, `RABBITMQ_USER`, `RABBITMQ_PASSWORD`, `RABBITMQ_VHOST`
-- **Object Storage (optional — needed for exports/archival)**: `OBJECT_STORAGE_ENDPOINT`, `OBJECT_STORAGE_REGION`, `OBJECT_STORAGE_BUCKET`, `OBJECT_STORAGE_ACCESS_KEY_ID`, `OBJECT_STORAGE_SECRET_ACCESS_KEY`
-- **Auth (optional — disabled for development via `AUTH_ENABLED=false`)**: `AUTH_ENABLED`, `AUTH_SERVICE_ADDRESS`, `AUTH_JWT_SECRET`
-- **Telemetry (optional)**: `ENABLE_TELEMETRY`, `OTEL_*` vars
-
-See `config/.env.example` for the complete list of 80+ environment variables including archival, rate limiting, idempotency, and timeout settings.
+For production, override via env vars. See `config/.config-map.example` for bootstrap-only keys (require restart). All other settings are hot-reloadable via the systemplane API (`/v1/system/configs`).
 
 ### 2) Start Infrastructure
 
@@ -152,17 +134,15 @@ Optional object storage for exports and archival:
 docker-compose --profile storage up -d seaweedfs
 ```
 
-Optional observability stack:
-
-```bash
-docker-compose --profile observability up -d jaeger
-```
+Optional observability stack (requires OpenTelemetry Collector configured via `OTEL_EXPORTER_OTLP_ENDPOINT`).
 
 ### 3) Run Migrations
 
 ```bash
 make migrate-up
 ```
+
+For production rollout and rollback procedures, see `docs/migrations/PRODUCTION_MIGRATIONS.md`.
 
 ### 4) Run the Service
 
@@ -180,7 +160,11 @@ Health endpoints:
 - `make test` — Unit tests
 - `make test-int` — Integration tests (requires Docker)
 - `make test-e2e` — End-to-end tests (requires full stack)
+- `make test-e2e-journeys` — Journey-based E2E tests
+- `make test-chaos` — Chaos/fault-injection tests (requires Toxiproxy)
+- `make test-all` — All tests with merged coverage
 - `make lint` — Linting (75+ linters)
+- `make lint-custom` — Custom architectural linters
 - `make sec` — Security scanning
 - `make build` — Build binary
 

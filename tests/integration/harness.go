@@ -7,17 +7,14 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"net/url"
-	"path/filepath"
-	"runtime"
 	"testing"
 	"time"
 
-	libPostgres "github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres"
+	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
 	"github.com/bxcodec/dbresolver/v2"
 	"github.com/golang-migrate/migrate/v4"
 	migratePostgres "github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/stretchr/testify/require"
@@ -32,9 +29,11 @@ import (
 	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	configVO "github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
+	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	tenantAdapters "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant/adapters"
 	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
+	embeddedmigrations "github.com/LerianStudio/matcher/migrations"
 )
 
 // SeedData contains pre-created entities for integration tests.
@@ -148,22 +147,7 @@ func NewTestHarness(ctx context.Context, t *testing.T) (*TestHarness, error) {
 
 	harness.RedisAddr = redisAddr
 
-	rabbitReq := testcontainers.ContainerRequest{
-		Image:        "rabbitmq:4.1.3-management-alpine",
-		ExposedPorts: []string{"5672/tcp", "15672/tcp"},
-		WaitingFor: wait.ForAll(
-			wait.ForListeningPort("5672/tcp"),
-			wait.ForLog("Server startup complete"),
-		).WithDeadline(120 * time.Second),
-	}
-
-	rabbitContainer, err := testcontainers.GenericContainer(
-		startupCtx,
-		testcontainers.GenericContainerRequest{
-			ContainerRequest: rabbitReq,
-			Started:          true,
-		},
-	)
+	rabbitContainer, err := startRabbitMQContainer(startupCtx)
 	if err != nil {
 		if terminateErr := terminateContainer(ctx, pgContainer); terminateErr != nil {
 			return nil, fmt.Errorf(
@@ -186,7 +170,7 @@ func NewTestHarness(ctx context.Context, t *testing.T) (*TestHarness, error) {
 
 	harness.RabbitMQContainer = rabbitContainer
 
-	rabbitHost, err := rabbitContainer.Host(startupCtx)
+	rabbitHost, err := containerHostWithRetry(startupCtx, rabbitContainer)
 	if err != nil {
 		if cleanupErr := harness.Cleanup(ctx); cleanupErr != nil {
 			return nil, fmt.Errorf(
@@ -199,7 +183,7 @@ func NewTestHarness(ctx context.Context, t *testing.T) (*TestHarness, error) {
 		return nil, fmt.Errorf("failed to get rabbitmq host: %w", err)
 	}
 
-	rabbitPort, err := rabbitContainer.MappedPort(startupCtx, "5672/tcp")
+	rabbitPort, err := mappedPortWithRetry(startupCtx, rabbitContainer, "5672/tcp")
 	if err != nil {
 		if cleanupErr := harness.Cleanup(ctx); cleanupErr != nil {
 			return nil, fmt.Errorf(
@@ -212,7 +196,7 @@ func NewTestHarness(ctx context.Context, t *testing.T) (*TestHarness, error) {
 		return nil, fmt.Errorf("failed to get rabbitmq port: %w", err)
 	}
 
-	rabbitHealthPort, err := rabbitContainer.MappedPort(startupCtx, "15672/tcp")
+	rabbitHealthPort, err := mappedPortWithRetry(startupCtx, rabbitContainer, "15672/tcp")
 	if err != nil {
 		if cleanupErr := harness.Cleanup(ctx); cleanupErr != nil {
 			return nil, fmt.Errorf(
@@ -226,8 +210,8 @@ func NewTestHarness(ctx context.Context, t *testing.T) (*TestHarness, error) {
 	}
 
 	harness.RabbitMQHost = rabbitHost
-	harness.RabbitMQPort = rabbitPort.Port()
-	harness.RabbitMQHealthURL = fmt.Sprintf("http://%s:%s", rabbitHost, rabbitHealthPort.Port())
+	harness.RabbitMQPort = rabbitPort
+	harness.RabbitMQHealthURL = fmt.Sprintf("http://%s:%s", rabbitHost, rabbitHealthPort)
 
 	return harness, nil
 }
@@ -237,14 +221,7 @@ func NewTestHarness(ctx context.Context, t *testing.T) (*TestHarness, error) {
 func (h *TestHarness) InitDatabase(t *testing.T) error {
 	t.Helper()
 
-	_, currentFile, _, ok := runtime.Caller(0)
-	if !ok {
-		return fmt.Errorf("failed to get current file path")
-	}
-
-	migrationsPath := filepath.Clean(filepath.Join(filepath.Dir(currentFile), "../../migrations"))
-
-	connection, closeDBs, err := initializeTestConnection(t, h.PostgresDSN, migrationsPath)
+	connection, closeDBs, err := initializeTestConnection(t, h.PostgresDSN, "migrations")
 	if err != nil {
 		return fmt.Errorf("failed to initialize database connection: %w", err)
 	}
@@ -366,7 +343,7 @@ func terminateContainer(ctx context.Context, container testcontainers.Container)
 
 func initializeTestConnection(
 	t *testing.T,
-	connectionString, migrationsPath string,
+	connectionString, _ string,
 ) (*libPostgres.Client, func() error, error) {
 	t.Helper()
 
@@ -398,15 +375,13 @@ func initializeTestConnection(
 		dbresolver.WithLoadBalancer(dbresolver.RoundRobinLB),
 	)
 
-	migrationURL, err := url.Parse(filepath.ToSlash(migrationsPath))
+	source, err := iofs.New(embeddedmigrations.FS, ".")
 	if err != nil {
 		_ = primaryDB.Close()
 		_ = replicaDB.Close()
 
-		return nil, nil, fmt.Errorf("failed to parse migrations path: %w", err)
+		return nil, nil, fmt.Errorf("failed to create embedded migration source: %w", err)
 	}
-
-	migrationURL.Scheme = "file"
 
 	driver, err := migratePostgres.WithInstance(primaryDB, &migratePostgres.Config{
 		MultiStatementEnabled: true,
@@ -420,7 +395,7 @@ func initializeTestConnection(
 		return nil, nil, fmt.Errorf("failed to create migration driver: %w", err)
 	}
 
-	migrator, err := migrate.NewWithDatabaseInstance(migrationURL.String(), "matcher_test", driver)
+	migrator, err := migrate.NewWithInstance("iofs", source, "matcher_test", driver)
 	if err != nil {
 		_ = primaryDB.Close()
 		_ = replicaDB.Close()
@@ -500,6 +475,7 @@ func setupSeedData(t *testing.T, connection *libPostgres.Client) (SeedData, erro
 		configEntities.CreateReconciliationSourceInput{
 			Name:   "Integration Test Source",
 			Type:   configVO.SourceTypeLedger,
+			Side:   sharedfee.MatchingSideLeft,
 			Config: map[string]any{},
 		},
 	)

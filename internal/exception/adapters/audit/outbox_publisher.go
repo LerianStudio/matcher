@@ -11,14 +11,13 @@ import (
 
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/exception/ports"
-	outboxEntities "github.com/LerianStudio/matcher/internal/outbox/domain/entities"
-	outboxRepositories "github.com/LerianStudio/matcher/internal/outbox/domain/repositories"
 	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 const entityTypeException = "exception"
@@ -31,11 +30,11 @@ var (
 
 // OutboxPublisher publishes exception audit events to the outbox for asynchronous processing.
 type OutboxPublisher struct {
-	outboxRepo outboxRepositories.OutboxRepository
+	outboxRepo sharedPorts.OutboxRepository
 }
 
 // NewOutboxPublisher creates a new outbox-based audit publisher.
-func NewOutboxPublisher(repo outboxRepositories.OutboxRepository) (*OutboxPublisher, error) {
+func NewOutboxPublisher(repo sharedPorts.OutboxRepository) (*OutboxPublisher, error) {
 	if repo == nil {
 		return nil, ErrNilOutboxRepository
 	}
@@ -65,7 +64,7 @@ func (pub *OutboxPublisher) PublishExceptionEvent(ctx context.Context, event por
 func (pub *OutboxPublisher) buildOutboxEvent(
 	ctx context.Context,
 	event ports.AuditEvent,
-) (*outboxEntities.OutboxEvent, error) {
+) (*sharedDomain.OutboxEvent, error) {
 	tenantIDStr := auth.GetTenantID(ctx)
 	if tenantIDStr == "" {
 		tenantIDStr = auth.GetDefaultTenantID()
@@ -107,7 +106,7 @@ func (pub *OutboxPublisher) buildOutboxEvent(
 		return nil, fmt.Errorf("marshal audit event: %w", err)
 	}
 
-	outboxEvent, err := outboxEntities.NewOutboxEvent(
+	outboxEvent, err := sharedDomain.NewOutboxEvent(
 		ctx,
 		sharedDomain.EventTypeAuditLogCreated,
 		event.ExceptionID,

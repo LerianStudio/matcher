@@ -23,8 +23,8 @@ import (
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/ingestion/adapters/http/dto"
@@ -297,7 +297,7 @@ func TestSearchTransactionsHandler_Success(t *testing.T) {
 			},
 		}, int64(1), nil)
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := testTracerCtx()
@@ -338,7 +338,7 @@ func TestSearchTransactionsHandler_WithAllFilters(t *testing.T) {
 		SearchTransactions(gomock.Any(), contextID, gomock.Any()).
 		Return([]*shared.Transaction{}, int64(0), nil)
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := testTracerCtx()
@@ -376,7 +376,7 @@ func TestSearchTransactionsHandler_InvalidContext(t *testing.T) {
 
 	fixture := newIngestionHandlerFixture(t)
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := testTracerCtx()
@@ -405,7 +405,7 @@ func TestSearchTransactionsHandler_InvalidAmountMin(t *testing.T) {
 
 	fixture.contextProvider.info = &ReconciliationContextInfo{ID: contextID, Active: true}
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := testTracerCtx()
@@ -435,7 +435,7 @@ func TestSearchTransactionsHandler_InvalidAmountMax(t *testing.T) {
 
 	fixture.contextProvider.info = &ReconciliationContextInfo{ID: contextID, Active: true}
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := testTracerCtx()
@@ -465,7 +465,7 @@ func TestSearchTransactionsHandler_InvalidDateFrom(t *testing.T) {
 
 	fixture.contextProvider.info = &ReconciliationContextInfo{ID: contextID, Active: true}
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := testTracerCtx()
@@ -494,7 +494,7 @@ func TestSearchTransactionsHandler_InvalidDateTo(t *testing.T) {
 
 	fixture.contextProvider.info = &ReconciliationContextInfo{ID: contextID, Active: true}
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := testTracerCtx()
@@ -523,7 +523,7 @@ func TestSearchTransactionsHandler_InvalidSourceID(t *testing.T) {
 
 	fixture.contextProvider.info = &ReconciliationContextInfo{ID: contextID, Active: true}
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := testTracerCtx()
@@ -556,7 +556,7 @@ func TestSearchTransactionsHandler_InternalError(t *testing.T) {
 		SearchTransactions(gomock.Any(), contextID, gomock.Any()).
 		Return(nil, int64(0), errTestGenericDBError)
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := testTracerCtx()
@@ -589,7 +589,7 @@ func TestSearchTransactionsHandler_EmptyResult(t *testing.T) {
 		SearchTransactions(gomock.Any(), contextID, gomock.Any()).
 		Return([]*shared.Transaction{}, int64(0), nil)
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := testTracerCtx()
@@ -630,7 +630,7 @@ func TestPreviewFileHandler_SuccessCSV(t *testing.T) {
 
 	fixture.contextProvider.info = &ReconciliationContextInfo{ID: contextID, Active: true}
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := testTracerCtx()
@@ -668,7 +668,7 @@ func TestPreviewFileHandler_SuccessJSON(t *testing.T) {
 
 	fixture.contextProvider.info = &ReconciliationContextInfo{ID: contextID, Active: true}
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := testTracerCtx()
@@ -701,7 +701,7 @@ func TestPreviewFileHandler_InvalidContextID(t *testing.T) {
 
 	fixture := newIngestionHandlerFixture(t)
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := testTracerCtx()
@@ -731,7 +731,7 @@ func TestPreviewFileHandler_InvalidSourceID(t *testing.T) {
 
 	fixture.contextProvider.info = &ReconciliationContextInfo{ID: contextID, Active: true}
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := testTracerCtx()
@@ -766,7 +766,7 @@ func TestPreviewFileHandler_MissingFile(t *testing.T) {
 
 	fixture.contextProvider.info = &ReconciliationContextInfo{ID: contextID, Active: true}
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := testTracerCtx()
@@ -803,7 +803,7 @@ func TestPreviewFileHandler_EmptyFile(t *testing.T) {
 
 	fixture.contextProvider.info = &ReconciliationContextInfo{ID: contextID, Active: true}
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := testTracerCtx()
@@ -863,7 +863,7 @@ func TestPreviewFileHandler_FormatAutoDetection(t *testing.T) {
 
 			fixture.contextProvider.info = &ReconciliationContextInfo{ID: contextID, Active: true}
 
-			handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+			handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 			require.NoError(t, err)
 
 			ctx := testTracerCtx()
@@ -901,7 +901,7 @@ func TestPreviewFileHandler_UnknownExtensionNoFormat(t *testing.T) {
 
 	fixture.contextProvider.info = &ReconciliationContextInfo{ID: contextID, Active: true}
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := testTracerCtx()
@@ -933,7 +933,7 @@ func TestPreviewFileHandler_MaxRowsFromForm(t *testing.T) {
 
 	fixture.contextProvider.info = &ReconciliationContextInfo{ID: contextID, Active: true}
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := testTracerCtx()
@@ -972,7 +972,7 @@ func TestPreviewFileHandler_PreviewEmptyJSON(t *testing.T) {
 
 	fixture.contextProvider.info = &ReconciliationContextInfo{ID: contextID, Active: true}
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := testTracerCtx()
@@ -1005,7 +1005,7 @@ func TestPreviewFileHandler_GenericInternalError(t *testing.T) {
 
 	fixture.contextProvider.info = &ReconciliationContextInfo{ID: contextID, Active: true}
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := testTracerCtx()
@@ -1064,7 +1064,7 @@ func TestHandleIngestionError_EOFError(t *testing.T) {
 		CreateWithTx(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&outboxEntities.OutboxEvent{}, nil).AnyTimes()
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := testTracerCtx()
@@ -1115,7 +1115,7 @@ func TestHandleIngestionError_EmptyFileFromParser(t *testing.T) {
 		CreateWithTx(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&outboxEntities.OutboxEvent{}, nil).AnyTimes()
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := testTracerCtx()
@@ -1163,7 +1163,7 @@ func TestIgnoreTransactionHandler_InternalError(t *testing.T) {
 		UpdateStatus(gomock.Any(), txID, contextID, shared.TransactionStatusIgnored).
 		Return(nil, errTestGenericDBError)
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := testTracerCtx()
@@ -1198,7 +1198,7 @@ func TestHandleContextVerificationError_InvalidTenantID(t *testing.T) {
 
 	fixture := newIngestionHandlerFixture(t)
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	// Create an app with an invalid (non-UUID) tenant ID in context
@@ -1244,7 +1244,7 @@ func TestUploadFileHandler_MissingFormat(t *testing.T) {
 
 	fixture.contextProvider.info = &ReconciliationContextInfo{ID: contextID, Active: true}
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := testTracerCtx()
@@ -1280,7 +1280,7 @@ func TestUploadFileHandler_ZeroByteFile(t *testing.T) {
 
 	fixture.contextProvider.info = &ReconciliationContextInfo{ID: contextID, Active: true}
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := testTracerCtx()
@@ -1318,7 +1318,7 @@ func TestListJobsByContextHandler_InvalidCursorError(t *testing.T) {
 		FindByContextID(gomock.Any(), contextID, gomock.Any()).
 		Return(nil, libHTTP.CursorPagination{}, libHTTP.ErrInvalidCursor)
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := testTracerCtx()
@@ -1360,7 +1360,7 @@ func TestListTransactionsByJobHandler_InvalidCursorError(t *testing.T) {
 		FindByJobAndContextID(gomock.Any(), jobID, contextID, gomock.Any()).
 		Return(nil, libHTTP.CursorPagination{}, libHTTP.ErrInvalidCursor)
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := testTracerCtx()
@@ -1401,7 +1401,7 @@ func TestListJobsByContextHandler_AscSortOrder(t *testing.T) {
 		FindByContextID(gomock.Any(), contextID, gomock.Any()).
 		Return([]*entities.IngestionJob{}, libHTTP.CursorPagination{}, nil)
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := testTracerCtx()
@@ -1442,7 +1442,7 @@ func TestListTransactionsByJobHandler_AscSortOrder(t *testing.T) {
 		FindByJobAndContextID(gomock.Any(), jobID, contextID, gomock.Any()).
 		Return([]*shared.Transaction{}, libHTTP.CursorPagination{}, nil)
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := testTracerCtx()
@@ -1482,7 +1482,7 @@ func TestGetJobHandler_QueryErrJobNotFound(t *testing.T) {
 	// Return nil job (which causes query UC to return ErrJobNotFound)
 	fixture.jobs.EXPECT().FindByID(gomock.Any(), jobID).Return(nil, nil)
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := testTracerCtx()
@@ -1518,7 +1518,7 @@ func TestListTransactionsByJobHandler_GetJobInternalError(t *testing.T) {
 
 	fixture.jobs.EXPECT().FindByID(gomock.Any(), jobID).Return(nil, errTestGenericDBError)
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := testTracerCtx()
@@ -1558,7 +1558,7 @@ func TestListTransactionsByJobHandler_JobNotFoundByQuery(t *testing.T) {
 	// Return nil job → query UC wraps to ErrJobNotFound
 	fixture.jobs.EXPECT().FindByID(gomock.Any(), jobID).Return(nil, nil)
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := testTracerCtx()
@@ -1601,7 +1601,7 @@ func TestListJobsByContextHandler_WithPagination(t *testing.T) {
 			Next: "next-cursor-token",
 		}, nil)
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := testTracerCtx()
@@ -1650,7 +1650,7 @@ func TestProviderError_ReturnsInternalServerError(t *testing.T) {
 	fixture.contextProvider.info = nil
 	fixture.contextProvider.err = fmt.Errorf("unexpected provider error")
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := testTracerCtx()
@@ -1684,7 +1684,7 @@ func TestSearchTransactionsHandler_ForbiddenCrossTenant(t *testing.T) {
 	fixture.contextProvider.info = nil
 	fixture.contextProvider.err = libHTTP.ErrContextNotOwned
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := testTracerCtx()
@@ -1719,7 +1719,7 @@ func TestPreviewFileHandler_ForbiddenCrossTenant(t *testing.T) {
 	fixture.contextProvider.info = nil
 	fixture.contextProvider.err = libHTTP.ErrContextNotOwned
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := testTracerCtx()
@@ -1755,7 +1755,7 @@ func TestIgnoreTransactionHandler_ForbiddenCrossTenant(t *testing.T) {
 	fixture.contextProvider.info = nil
 	fixture.contextProvider.err = libHTTP.ErrContextNotOwned
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := testTracerCtx()
@@ -1794,7 +1794,7 @@ func TestIgnoreTransactionHandler_ContextNotActive(t *testing.T) {
 
 	fixture.contextProvider.info = &ReconciliationContextInfo{ID: contextID, Active: false}
 
-	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider)
+	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
 
 	ctx := testTracerCtx()

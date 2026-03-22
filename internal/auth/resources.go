@@ -22,6 +22,12 @@ const (
 
 	// ResourceException is the RBAC resource for exception management.
 	ResourceException = "exception"
+
+	// ResourceDiscovery is the RBAC resource for schema discovery operations.
+	ResourceDiscovery = "discovery"
+
+	// ResourceSystem is the RBAC resource for system-level operations.
+	ResourceSystem = "system"
 )
 
 // Standard RBAC actions.
@@ -70,6 +76,11 @@ const (
 	ActionScheduleRead   = "schedule:read"
 	ActionScheduleUpdate = "schedule:update"
 	ActionScheduleDelete = "schedule:delete"
+
+	ActionFeeRuleCreate = "fee-rule:create"
+	ActionFeeRuleRead   = "fee-rule:read"
+	ActionFeeRuleUpdate = "fee-rule:update"
+	ActionFeeRuleDelete = "fee-rule:delete"
 )
 
 // Ingestion module actions.
@@ -104,6 +115,27 @@ const (
 	ActionExportRead     = "export:read"
 	ActionExportJobWrite = "export-job:write"
 	ActionExportJobRead  = "export-job:read"
+)
+
+// Discovery module actions.
+const (
+	ActionDiscoveryRead  = "discovery:read"
+	ActionDiscoveryWrite = "discovery:write"
+)
+
+// System module actions.
+const (
+	ActionConfigRead          = "config:read"
+	ActionConfigWrite         = "config:write"
+	ActionConfigSchemaRead    = "config/schema:read"
+	ActionConfigHistoryRead   = "config/history:read"
+	ActionConfigReloadWrite   = "config/reload:write"
+	ActionSettingsRead        = "settings:read"
+	ActionSettingsWrite       = "settings:write"
+	ActionSettingsSchemaRead  = "settings/schema:read"
+	ActionSettingsHistoryRead = "settings/history:read"
+	ActionSettingsGlobalRead  = "settings/global:read"
+	ActionSettingsGlobalWrite = "settings/global:write"
 )
 
 // Exception module actions.

@@ -2,8 +2,8 @@
 package source
 
 import (
+	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
@@ -11,28 +11,19 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
-)
-
-// Sentinel errors for source model operations.
-var (
-	ErrSourceEntityRequired   = errors.New("source entity is required")
-	ErrSourceEntityIDRequired = errors.New("source entity ID is required")
-	ErrSourceModelRequired    = errors.New("source model is required")
-	ErrRepoNotInitialized     = errors.New("source repository not initialized")
-	ErrConnectionRequired     = errors.New("postgres connection is required")
-	ErrTransactionRequired    = errors.New("transaction is required")
+	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
 // SourcePostgreSQLModel represents the database model for reconciliation sources.
 type SourcePostgreSQLModel struct {
-	ID            string
-	ContextID     string
-	Name          string
-	Type          string
-	Config        []byte
-	FeeScheduleID *string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID        string
+	ContextID string
+	Name      string
+	Type      string
+	Side      sql.NullString
+	Config    []byte
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // NewSourcePostgreSQLModel creates a new PostgreSQL model from a source entity.
@@ -69,22 +60,15 @@ func NewSourcePostgreSQLModel(
 		updatedAt = createdAt
 	}
 
-	var feeScheduleID *string
-
-	if entity.FeeScheduleID != nil {
-		s := entity.FeeScheduleID.String()
-		feeScheduleID = &s
-	}
-
 	return &SourcePostgreSQLModel{
-		ID:            id.String(),
-		ContextID:     entity.ContextID.String(),
-		Name:          entity.Name,
-		Type:          entity.Type.String(),
-		Config:        configJSON,
-		FeeScheduleID: feeScheduleID,
-		CreatedAt:     createdAt,
-		UpdatedAt:     updatedAt,
+		ID:        id.String(),
+		ContextID: entity.ContextID.String(),
+		Name:      entity.Name,
+		Type:      entity.Type.String(),
+		Side:      sql.NullString{String: string(entity.Side), Valid: entity.Side != ""},
+		Config:    configJSON,
+		CreatedAt: createdAt,
+		UpdatedAt: updatedAt,
 	}, nil
 }
 
@@ -109,6 +93,11 @@ func (model *SourcePostgreSQLModel) ToEntity() (*entities.ReconciliationSource, 
 		return nil, fmt.Errorf("failed to parse source type: %w", err)
 	}
 
+	var sourceSide sharedfee.MatchingSide
+	if model.Side.Valid {
+		sourceSide = sharedfee.MatchingSide(model.Side.String)
+	}
+
 	config := make(map[string]any)
 	if len(model.Config) > 0 {
 		if err := json.Unmarshal(model.Config, &config); err != nil {
@@ -120,25 +109,14 @@ func (model *SourcePostgreSQLModel) ToEntity() (*entities.ReconciliationSource, 
 		config = make(map[string]any)
 	}
 
-	var feeScheduleID *uuid.UUID
-
-	if model.FeeScheduleID != nil && *model.FeeScheduleID != "" {
-		parsed, err := uuid.Parse(*model.FeeScheduleID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse fee schedule ID: %w", err)
-		}
-
-		feeScheduleID = &parsed
-	}
-
 	return &entities.ReconciliationSource{
-		ID:            id,
-		ContextID:     contextID,
-		Name:          model.Name,
-		Type:          sourceType,
-		Config:        config,
-		FeeScheduleID: feeScheduleID,
-		CreatedAt:     model.CreatedAt,
-		UpdatedAt:     model.UpdatedAt,
+		ID:        id,
+		ContextID: contextID,
+		Name:      model.Name,
+		Type:      sourceType,
+		Side:      sourceSide,
+		Config:    config,
+		CreatedAt: model.CreatedAt,
+		UpdatedAt: model.UpdatedAt,
 	}, nil
 }

@@ -4,7 +4,6 @@ package transaction
 import (
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
@@ -13,19 +12,6 @@ import (
 
 	pgcommon "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/common"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
-)
-
-var (
-	errTxEntityRequired        = errors.New("transaction entity is required")
-	errTxModelRequired         = errors.New("transaction model is required")
-	errTxRequired              = errors.New("database transaction is required")
-	errInvalidExtractionStatus = errors.New("invalid extraction status")
-	errInvalidTxStatus         = errors.New("invalid transaction status")
-	errTxRepoNotInit           = errors.New("transaction repository not initialized")
-	errContextIDRequired       = errors.New("context id is required")
-	errJobIDRequired           = errors.New("job id is required")
-	errLimitMustBePositive     = errors.New("limit must be greater than zero")
-	errOffsetMustBeNonNegative = errors.New("offset must be greater or equal to zero")
 )
 
 // NewTransactionPostgreSQLModel converts an entity to a PostgreSQL model.

@@ -1,14 +1,18 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 package bootstrap
 
 import (
 	"strings"
 
-	libZap "github.com/LerianStudio/lib-uncommons/v2/uncommons/zap"
+	libZap "github.com/LerianStudio/lib-commons/v4/commons/zap"
 )
 
 const defaultLoggerLevel = "info"
 
-// ResolveLoggerEnvironment maps app environment names to lib-uncommons zap environments.
+// ResolveLoggerEnvironment maps app environment names to lib-commons zap environments.
 func ResolveLoggerEnvironment(envName string) libZap.Environment {
 	switch strings.ToLower(strings.TrimSpace(envName)) {
 	case envProduction:

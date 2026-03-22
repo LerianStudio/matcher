@@ -5,6 +5,7 @@ package adjustment
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"regexp"
 	"testing"
 	"time"
@@ -15,9 +16,71 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	sharedHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	matchingRepositories "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
+	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
 )
+
+type stubAuditLogRepo struct {
+	createWithTxFn func(ctx context.Context, tx *sql.Tx, auditLog *sharedDomain.AuditLog) (*sharedDomain.AuditLog, error)
+}
+
+func (s *stubAuditLogRepo) Create(_ context.Context, _ *sharedDomain.AuditLog) (*sharedDomain.AuditLog, error) {
+	return nil, nil
+}
+
+func (s *stubAuditLogRepo) CreateWithTx(
+	ctx context.Context,
+	tx *sql.Tx,
+	auditLog *sharedDomain.AuditLog,
+) (*sharedDomain.AuditLog, error) {
+	if s.createWithTxFn != nil {
+		return s.createWithTxFn(ctx, tx, auditLog)
+	}
+
+	return auditLog, nil
+}
+
+func (s *stubAuditLogRepo) GetByID(_ context.Context, _ uuid.UUID) (*sharedDomain.AuditLog, error) {
+	return nil, nil
+}
+
+func (s *stubAuditLogRepo) ListByEntity(
+	_ context.Context,
+	_ string,
+	_ uuid.UUID,
+	_ *sharedHTTP.TimestampCursor,
+	_ int,
+) ([]*sharedDomain.AuditLog, string, error) {
+	return nil, "", nil
+}
+
+func (s *stubAuditLogRepo) List(
+	_ context.Context,
+	_ sharedDomain.AuditLogFilter,
+	_ *sharedHTTP.TimestampCursor,
+	_ int,
+) ([]*sharedDomain.AuditLog, string, error) {
+	return nil, "", nil
+}
+
+func newTestAuditLog(t *testing.T) *sharedDomain.AuditLog {
+	t.Helper()
+
+	auditLog, err := sharedDomain.NewAuditLog(
+		context.Background(),
+		uuid.New(),
+		"adjustment",
+		uuid.New(),
+		"CREATE",
+		nil,
+		[]byte(`{"ok":true}`),
+	)
+	require.NoError(t, err)
+
+	return auditLog
+}
 
 // --- CreateWithTx tests ---
 
@@ -86,35 +149,6 @@ func TestRepository_CreateWithTx_NilTx(t *testing.T) {
 
 	_, err = repo.CreateWithTx(ctx, nil, adjustment)
 	require.ErrorIs(t, err, ErrTransactionRequired)
-}
-
-func TestRepository_CreateWithTx_InvalidTxType(t *testing.T) {
-	t.Parallel()
-
-	repo, _, finish := setupRepository(t)
-	defer finish()
-
-	ctx := context.Background()
-	contextID := uuid.New()
-	matchGroupID := uuid.New()
-
-	adjustment, err := matchingEntities.NewAdjustment(
-		ctx,
-		contextID,
-		&matchGroupID,
-		nil,
-		matchingEntities.AdjustmentTypeBankFee,
-		matchingEntities.AdjustmentDirectionDebit,
-		decimal.NewFromFloat(10.50),
-		"USD",
-		"Test",
-		"Test reason",
-		"user@example.com",
-	)
-	require.NoError(t, err)
-
-	_, err = repo.CreateWithTx(ctx, "not-a-sql-tx", adjustment)
-	require.ErrorIs(t, err, ErrInvalidTransactionType)
 }
 
 func TestRepository_CreateWithTx_Success(t *testing.T) {
@@ -247,6 +281,251 @@ func TestRepository_CreateWithTx_InsertError(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestRepository_CreateWithAuditLog_NilAuditLogRepo(t *testing.T) {
+	t.Parallel()
+
+	repo, _, finish := setupRepository(t)
+	defer finish()
+
+	ctx := context.Background()
+	contextID := uuid.New()
+	matchGroupID := uuid.New()
+
+	adjustment, err := matchingEntities.NewAdjustment(
+		ctx,
+		contextID,
+		&matchGroupID,
+		nil,
+		matchingEntities.AdjustmentTypeBankFee,
+		matchingEntities.AdjustmentDirectionDebit,
+		decimal.NewFromFloat(10.50),
+		"USD",
+		"Test",
+		"Reason",
+		"user@example.com",
+	)
+	require.NoError(t, err)
+
+	_, err = repo.CreateWithAuditLog(ctx, adjustment, newTestAuditLog(t))
+	require.ErrorIs(t, err, ErrAuditLogRepoRequired)
+}
+
+func TestRepository_CreateWithAuditLog_NilAuditLog_RollsBackWithoutInsert(t *testing.T) {
+	t.Parallel()
+
+	repo, mock, finish := setupRepository(t)
+	defer finish()
+	repo.auditLogRepo = &stubAuditLogRepo{}
+
+	ctx := context.Background()
+	contextID := uuid.New()
+	matchGroupID := uuid.New()
+
+	adjustment, err := matchingEntities.NewAdjustment(
+		ctx,
+		contextID,
+		&matchGroupID,
+		nil,
+		matchingEntities.AdjustmentTypeBankFee,
+		matchingEntities.AdjustmentDirectionDebit,
+		decimal.NewFromFloat(10.50),
+		"USD",
+		"Test",
+		"Reason",
+		"user@example.com",
+	)
+	require.NoError(t, err)
+
+	mock.ExpectBegin()
+	mock.ExpectRollback()
+
+	_, err = repo.CreateWithAuditLog(ctx, adjustment, nil)
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrAuditLogRequired)
+}
+
+func TestRepository_CreateWithAuditLogWithTx_NilTx(t *testing.T) {
+	t.Parallel()
+
+	repo, _, finish := setupRepository(t)
+	defer finish()
+	repo.auditLogRepo = &stubAuditLogRepo{}
+
+	ctx := context.Background()
+	contextID := uuid.New()
+	matchGroupID := uuid.New()
+
+	adjustment, err := matchingEntities.NewAdjustment(
+		ctx,
+		contextID,
+		&matchGroupID,
+		nil,
+		matchingEntities.AdjustmentTypeBankFee,
+		matchingEntities.AdjustmentDirectionDebit,
+		decimal.NewFromFloat(10.50),
+		"USD",
+		"Test",
+		"Reason",
+		"user@example.com",
+	)
+	require.NoError(t, err)
+
+	_, err = repo.CreateWithAuditLogWithTx(ctx, nil, adjustment, newTestAuditLog(t))
+	require.ErrorIs(t, err, ErrTransactionRequired)
+}
+
+func TestRepository_CreateWithAuditLog_Success(t *testing.T) {
+	t.Parallel()
+
+	repo, mock, finish := setupRepository(t)
+	defer finish()
+
+	called := false
+	repo.auditLogRepo = &stubAuditLogRepo{
+		createWithTxFn: func(_ context.Context, tx *sql.Tx, auditLog *sharedDomain.AuditLog) (*sharedDomain.AuditLog, error) {
+			called = true
+			require.NotNil(t, tx)
+			require.NotNil(t, auditLog)
+			return auditLog, nil
+		},
+	}
+
+	ctx := context.Background()
+	contextID := uuid.New()
+	matchGroupID := uuid.New()
+	now := time.Now().UTC()
+
+	adjustment, err := matchingEntities.NewAdjustment(
+		ctx,
+		contextID,
+		&matchGroupID,
+		nil,
+		matchingEntities.AdjustmentTypeBankFee,
+		matchingEntities.AdjustmentDirectionDebit,
+		decimal.NewFromFloat(10.50),
+		"USD",
+		"Test",
+		"Reason",
+		"user@example.com",
+	)
+	require.NoError(t, err)
+
+	insertQuery := regexp.QuoteMeta(
+		`INSERT INTO adjustments (id, context_id, match_group_id, transaction_id, type, direction, amount, currency, description, reason, created_by, created_at, updated_at)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+	)
+	selectQuery := regexp.QuoteMeta("SELECT " + columns + " FROM adjustments WHERE id=$1")
+	rows := sqlmock.NewRows([]string{
+		"id", "context_id", "match_group_id", "transaction_id", "type", "direction", "amount",
+		"currency", "description", "reason", "created_by", "created_at", "updated_at",
+	}).AddRow(
+		adjustment.ID.String(),
+		contextID.String(),
+		sql.NullString{String: matchGroupID.String(), Valid: true},
+		sql.NullString{},
+		"BANK_FEE",
+		"DEBIT",
+		decimal.NewFromFloat(10.50),
+		"USD",
+		"Test",
+		"Reason",
+		"user@example.com",
+		now,
+		now,
+	)
+
+	mock.ExpectBegin()
+	mock.ExpectExec(insertQuery).
+		WithArgs(
+			sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(),
+			sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(),
+			sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+		).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectQuery(selectQuery).WithArgs(adjustment.ID.String()).WillReturnRows(rows)
+	mock.ExpectCommit()
+
+	result, err := repo.CreateWithAuditLog(ctx, adjustment, newTestAuditLog(t))
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.True(t, called)
+	assert.Equal(t, adjustment.ID, result.ID)
+}
+
+func TestRepository_CreateWithAuditLog_AuditInsertError_RollsBack(t *testing.T) {
+	t.Parallel()
+
+	repo, mock, finish := setupRepository(t)
+	defer finish()
+
+	repo.auditLogRepo = &stubAuditLogRepo{
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, _ *sharedDomain.AuditLog) (*sharedDomain.AuditLog, error) {
+			return nil, errors.New("audit insert failed")
+		},
+	}
+
+	ctx := context.Background()
+	contextID := uuid.New()
+	matchGroupID := uuid.New()
+	now := time.Now().UTC()
+
+	adjustment, err := matchingEntities.NewAdjustment(
+		ctx,
+		contextID,
+		&matchGroupID,
+		nil,
+		matchingEntities.AdjustmentTypeBankFee,
+		matchingEntities.AdjustmentDirectionDebit,
+		decimal.NewFromFloat(10.50),
+		"USD",
+		"Test",
+		"Reason",
+		"user@example.com",
+	)
+	require.NoError(t, err)
+
+	insertQuery := regexp.QuoteMeta(
+		`INSERT INTO adjustments (id, context_id, match_group_id, transaction_id, type, direction, amount, currency, description, reason, created_by, created_at, updated_at)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+	)
+	selectQuery := regexp.QuoteMeta("SELECT " + columns + " FROM adjustments WHERE id=$1")
+	rows := sqlmock.NewRows([]string{
+		"id", "context_id", "match_group_id", "transaction_id", "type", "direction", "amount",
+		"currency", "description", "reason", "created_by", "created_at", "updated_at",
+	}).AddRow(
+		adjustment.ID.String(),
+		contextID.String(),
+		sql.NullString{String: matchGroupID.String(), Valid: true},
+		sql.NullString{},
+		"BANK_FEE",
+		"DEBIT",
+		decimal.NewFromFloat(10.50),
+		"USD",
+		"Test",
+		"Reason",
+		"user@example.com",
+		now,
+		now,
+	)
+
+	mock.ExpectBegin()
+	mock.ExpectExec(insertQuery).
+		WithArgs(
+			sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(),
+			sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(),
+			sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+		).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectQuery(selectQuery).WithArgs(adjustment.ID.String()).WillReturnRows(rows)
+	mock.ExpectRollback()
+
+	_, err = repo.CreateWithAuditLog(ctx, adjustment, newTestAuditLog(t))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "persist audit log")
+}
+
 // --- adjustmentSortValue tests ---
 
 func TestAdjustmentSortValue(t *testing.T) {
@@ -295,6 +574,12 @@ func TestAdjustmentSortValue(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+
+	t.Run("nil adjustment returns empty string", func(t *testing.T) {
+		t.Parallel()
+
+		assert.Empty(t, adjustmentSortValue(nil, sortColumnCreatedAt))
+	})
 }
 
 // --- ListByContextID with sort by created_at ---
@@ -531,7 +816,6 @@ func TestSentinelErrors_Extended(t *testing.T) {
 		message string
 	}{
 		{"ErrTransactionRequired", ErrTransactionRequired, "transaction is required"},
-		{"ErrInvalidTransactionType", ErrInvalidTransactionType, "invalid transaction type: expected *sql.Tx"},
 		{"ErrInvalidAdjustmentType", ErrInvalidAdjustmentType, "invalid adjustment type"},
 		{"ErrInvalidAdjustmentDirection", ErrInvalidAdjustmentDirection, "invalid adjustment direction"},
 	}

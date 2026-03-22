@@ -8,9 +8,9 @@ import (
 
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
@@ -45,15 +45,15 @@ func NewExportJobUseCase(repo repositories.ExportJobRepository) (*ExportJobUseCa
 type CreateExportJobInput struct {
 	TenantID   uuid.UUID
 	ContextID  uuid.UUID
-	ReportType string
-	Format     string
+	ReportType entities.ExportReportType
+	Format     entities.ExportFormat
 	Filter     entities.ExportJobFilter
 }
 
 // CreateExportJobOutput contains the result of creating an export job.
 type CreateExportJobOutput struct {
 	JobID     uuid.UUID
-	Status    string
+	Status    entities.ExportJobStatus
 	StatusURL string
 }
 
@@ -75,8 +75,8 @@ func (uc *ExportJobUseCase) CreateExportJob(
 	}{
 		TenantID:   input.TenantID.String(),
 		ContextID:  input.ContextID.String(),
-		ReportType: input.ReportType,
-		Format:     input.Format,
+		ReportType: string(input.ReportType),
+		Format:     string(input.Format),
 	}, nil)
 
 	job, err := entities.NewExportJob(
@@ -139,7 +139,7 @@ func (uc *ExportJobUseCase) CancelExportJob(ctx context.Context, id uuid.UUID) e
 	}
 
 	if job.IsTerminal() {
-		return fmt.Errorf("%w: %s", ErrJobInTerminalState, job.Status)
+		return fmt.Errorf("%w: %s", ErrJobInTerminalState, string(job.Status))
 	}
 
 	job.MarkCanceled()

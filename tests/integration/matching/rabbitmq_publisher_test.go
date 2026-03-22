@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libRabbitmq "github.com/LerianStudio/lib-uncommons/v2/uncommons/rabbitmq"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libRabbitmq "github.com/LerianStudio/lib-commons/v4/commons/rabbitmq"
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/stretchr/testify/require"
@@ -26,11 +26,12 @@ func TestEventPublisherPublishesMatchConfirmed(t *testing.T) {
 		defer cancel()
 
 		conn := &libRabbitmq.RabbitMQConnection{
-			ConnectionStringSource: "amqp://guest:guest@" + harness.RabbitMQHost + ":" + harness.RabbitMQPort + "/",
-			HealthCheckURL:         harness.RabbitMQHealthURL,
-			User:                   "guest",
-			Pass:                   "guest",
-			Logger:                 &libLog.NopLogger{},
+			ConnectionStringSource:   "amqp://guest:guest@" + harness.RabbitMQHost + ":" + harness.RabbitMQPort + "/",
+			HealthCheckURL:           harness.RabbitMQHealthURL,
+			User:                     "guest",
+			Pass:                     "guest",
+			Logger:                   &libLog.NopLogger{},
+			AllowInsecureHealthCheck: true,
 		}
 		require.NoError(t, conn.Connect())
 		t.Cleanup(func() {

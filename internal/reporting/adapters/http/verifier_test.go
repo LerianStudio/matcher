@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	sharedhttp "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	sharedhttp "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 )
 
 var errDatabaseFailure = errors.New("database error")

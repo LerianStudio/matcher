@@ -317,8 +317,8 @@ func TestVarianceReport_MultipleGroups(t *testing.T) {
 		sourceCreatedAt := time.Now().UTC()
 		_, err := pgcommon.WithTenantTx(ctx, h.Connection, func(tx *sql.Tx) (struct{}, error) {
 			_, execErr := tx.ExecContext(ctx, `
-				INSERT INTO reconciliation_sources (id, context_id, name, type, config, created_at, updated_at)
-				VALUES ($1, $2, 'Variance Source 2', 'BANK', '{}', $3, $3)
+				INSERT INTO reconciliation_sources (id, context_id, name, type, side, config, created_at, updated_at)
+				VALUES ($1, $2, 'Variance Source 2', 'BANK', 'RIGHT', '{}', $3, $3)
 			`, source2ID, seed.ContextID, sourceCreatedAt)
 
 			return struct{}{}, execErr
@@ -414,8 +414,8 @@ func TestVarianceReport_ListVariancePage_Pagination(t *testing.T) {
 		sourceCreatedAt := time.Now().UTC()
 		_, err := pgcommon.WithTenantTx(ctx, h.Connection, func(tx *sql.Tx) (struct{}, error) {
 			_, execErr := tx.ExecContext(ctx, `
-				INSERT INTO reconciliation_sources (id, context_id, name, type, config, created_at, updated_at)
-				VALUES ($1, $2, 'Variance Page Source 2', 'BANK', '{}', $3, $3)
+				INSERT INTO reconciliation_sources (id, context_id, name, type, side, config, created_at, updated_at)
+				VALUES ($1, $2, 'Variance Page Source 2', 'BANK', 'RIGHT', '{}', $3, $3)
 			`, source2ID, seed.ContextID, sourceCreatedAt)
 
 			return struct{}{}, execErr
@@ -511,8 +511,8 @@ func TestVarianceReport_SourceFilter(t *testing.T) {
 		sourceCreatedAt := time.Now().UTC()
 		_, err := pgcommon.WithTenantTx(ctx, h.Connection, func(tx *sql.Tx) (struct{}, error) {
 			_, execErr := tx.ExecContext(ctx, `
-				INSERT INTO reconciliation_sources (id, context_id, name, type, config, created_at, updated_at)
-				VALUES ($1, $2, 'Variance Filter Source 2', 'BANK', '{}', $3, $3)
+				INSERT INTO reconciliation_sources (id, context_id, name, type, side, config, created_at, updated_at)
+				VALUES ($1, $2, 'Variance Filter Source 2', 'BANK', 'RIGHT', '{}', $3, $3)
 			`, source2ID, seed.ContextID, sourceCreatedAt)
 
 			return struct{}{}, execErr

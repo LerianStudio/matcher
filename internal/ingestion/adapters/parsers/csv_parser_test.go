@@ -17,6 +17,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
 	"github.com/LerianStudio/matcher/internal/ingestion/ports"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	"github.com/LerianStudio/matcher/internal/shared/sanitize"
 )
 
 // ParseResultForTest is a test helper struct for validating parse results.
@@ -531,43 +532,6 @@ func TestCSVParser_Parse_MetadataPreserved(t *testing.T) {
 	assert.Equal(t, "another_value", tx.Metadata["another_field"])
 }
 
-func TestSanitizeCSVValue(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{"empty string", "", ""},
-		{"normal value", "hello", "hello"},
-		{"numeric value", "12345", "12345"},
-		{"formula equals", "=SUM(A1:A10)", "'=SUM(A1:A10)"},
-		{"formula plus", "+1+2", "'+1+2"},
-		{"formula minus", "-1-2", "'-1-2"}, // not a valid number, so sanitized
-		{"formula at", "@SUM(A1)", "'@SUM(A1)"},
-		{"formula tab", "\tcommand", "'\tcommand"},
-		{"formula carriage return", "\rcommand", "'\rcommand"},
-		{"leading space preserved", " hello", " hello"},
-		{"embedded equals", "a=b", "a=b"},
-		{"embedded plus", "a+b", "a+b"},
-		{"embedded minus", "a-b", "a-b"},
-		{"negative number", "-100.50", "-100.50"},           // valid number, not sanitized
-		{"positive number with plus", "+100.50", "+100.50"}, // valid number, not sanitized
-		{"formula plus expression", "+cmd|calc", "'+cmd|calc"},
-		{"formula minus expression", "-cmd|calc", "'-cmd|calc"},
-	}
-
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			result := sanitizeCSVValue(testCase.input)
-			assert.Equal(t, testCase.expected, result)
-		})
-	}
-}
-
 func TestIsNumericString(t *testing.T) {
 	t.Parallel()
 
@@ -631,7 +595,7 @@ func TestIsNumericString(t *testing.T) {
 		t.Run(testCase.input, func(t *testing.T) {
 			t.Parallel()
 
-			result := isNumericString(testCase.input)
+			result := sanitize.IsNumericString(testCase.input)
 			assert.Equal(t, testCase.expected, result, "for input: %q", testCase.input)
 		})
 	}

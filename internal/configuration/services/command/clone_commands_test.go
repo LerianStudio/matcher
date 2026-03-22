@@ -5,6 +5,7 @@ package command
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"testing"
 
 	"github.com/google/uuid"
@@ -13,11 +14,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/repositories/mocks"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
 func TestCloneContext_NilRepository(t *testing.T) {
@@ -41,6 +43,7 @@ func TestCloneContext_EmptyName(t *testing.T) {
 		mocks.NewMockSourceRepository(ctrl),
 		mocks.NewMockFieldMapRepository(ctrl),
 		mocks.NewMockMatchRuleRepository(ctrl),
+		WithFeeRuleRepository(newFeeRuleMockRepo()),
 	)
 	require.NoError(t, err)
 
@@ -70,6 +73,7 @@ func TestCloneContext_SourceNotFound(t *testing.T) {
 		mocks.NewMockSourceRepository(ctrl),
 		mocks.NewMockFieldMapRepository(ctrl),
 		mocks.NewMockMatchRuleRepository(ctrl),
+		WithFeeRuleRepository(newFeeRuleMockRepo()),
 	)
 	require.NoError(t, err)
 
@@ -139,7 +143,6 @@ func TestCloneContext_ContextOnly(t *testing.T) {
 	assert.Equal(t, 0, result.SourcesCloned)
 	assert.Equal(t, 0, result.RulesCloned)
 	assert.Equal(t, 0, result.FieldMapsCloned)
-	assert.Equal(t, 0, result.FeeSchedulesCloned)
 }
 
 func TestCloneContext_WithSourcesAndRules(t *testing.T) {
@@ -152,6 +155,7 @@ func TestCloneContext_WithSourcesAndRules(t *testing.T) {
 	mockSrcRepo := mocks.NewMockSourceRepository(ctrl)
 	mockFMRepo := mocks.NewMockFieldMapRepository(ctrl)
 	mockRuleRepo := mocks.NewMockMatchRuleRepository(ctrl)
+	feeRuleRepo := newFeeRuleMockRepo()
 
 	sourceCtxID := uuid.New()
 	tenantID := uuid.New()
@@ -175,6 +179,9 @@ func TestCloneContext_WithSourcesAndRules(t *testing.T) {
 	rules := entities.MatchRules{
 		{ID: uuid.New(), ContextID: sourceCtxID, Priority: 1, Type: "EXACT", Config: map[string]any{"field": "amount"}},
 	}
+	feeRule, err := fee.NewFeeRule(context.Background(), sourceCtxID, uuid.New(), fee.MatchingSideAny, "fee-rule", 1, validPredicates())
+	require.NoError(t, err)
+	feeRuleRepo.rules[feeRule.ID] = feeRule
 
 	mockCtxRepo.EXPECT().FindByID(gomock.Any(), sourceCtxID).Return(sourceContext, nil)
 	mockCtxRepo.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -211,22 +218,186 @@ func TestCloneContext_WithSourcesAndRules(t *testing.T) {
 	// Create rule.
 	mockRuleRepo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(nil, nil)
 
-	uc, err := NewUseCase(mockCtxRepo, mockSrcRepo, mockFMRepo, mockRuleRepo)
+	uc, err := NewUseCase(mockCtxRepo, mockSrcRepo, mockFMRepo, mockRuleRepo, WithFeeRuleRepository(feeRuleRepo))
 	require.NoError(t, err)
 
 	result, err := uc.CloneContext(context.Background(), CloneContextInput{
-		SourceContextID:     sourceCtxID,
-		NewName:             "Clone",
-		IncludeSources:      true,
-		IncludeRules:        true,
-		IncludeFeeSchedules: false,
+		SourceContextID: sourceCtxID,
+		NewName:         "Clone",
+		IncludeSources:  true,
+		IncludeRules:    true,
 	})
 
 	require.NoError(t, err)
 	assert.Equal(t, 2, result.SourcesCloned)
 	assert.Equal(t, 1, result.FieldMapsCloned)
 	assert.Equal(t, 1, result.RulesCloned)
-	assert.Equal(t, 0, result.FeeSchedulesCloned)
+	assert.Equal(t, 1, result.FeeRulesCloned)
+}
+
+func TestCloneContext_IncludeRulesRequiresFeeRuleRepository(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockCtxRepo := mocks.NewMockContextRepository(ctrl)
+
+	uc, err := NewUseCase(
+		mockCtxRepo,
+		mocks.NewMockSourceRepository(ctrl),
+		mocks.NewMockFieldMapRepository(ctrl),
+		mocks.NewMockMatchRuleRepository(ctrl),
+	)
+	require.NoError(t, err)
+
+	_, err = uc.CloneContext(context.Background(), CloneContextInput{
+		SourceContextID: uuid.New(),
+		NewName:         "Clone",
+		IncludeRules:    true,
+	})
+
+	assert.ErrorIs(t, err, ErrNilFeeRuleRepository)
+}
+
+func TestCloneContext_RollsBackWhenRuleCreationFails(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockCtxRepo := mocks.NewMockContextRepository(ctrl)
+	mockSrcRepo := mocks.NewMockSourceRepository(ctrl)
+	mockFMRepo := mocks.NewMockFieldMapRepository(ctrl)
+	mockRuleRepo := mocks.NewMockMatchRuleRepository(ctrl)
+	feeRuleRepo := newFeeRuleMockRepo()
+
+	sourceCtxID := uuid.New()
+	tenantID := uuid.New()
+	sourceID := uuid.New()
+
+	sourceContext := &entities.ReconciliationContext{
+		ID:       sourceCtxID,
+		TenantID: tenantID,
+		Name:     "Original",
+		Type:     value_objects.ContextType("1:1"),
+		Interval: "daily",
+		Status:   value_objects.ContextStatusActive,
+	}
+
+	sources := []*entities.ReconciliationSource{
+		{ID: sourceID, ContextID: sourceCtxID, Name: "Source A", Type: value_objects.SourceType("BANK")},
+	}
+
+	rules := entities.MatchRules{
+		{ID: uuid.New(), ContextID: sourceCtxID, Priority: 1, Type: "EXACT", Config: map[string]any{"field": "amount"}},
+	}
+
+	errRuleCreation := errors.New("rule creation failed: constraint violation")
+
+	// Happy path: context and sources created
+	mockCtxRepo.EXPECT().FindByID(gomock.Any(), sourceCtxID).Return(sourceContext, nil)
+	mockCtxRepo.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, e *entities.ReconciliationContext) (*entities.ReconciliationContext, error) {
+			return e, nil
+		})
+
+	// Sources: one page, no more
+	mockSrcRepo.EXPECT().FindByContextID(gomock.Any(), sourceCtxID, "", maxClonePaginationLimit).
+		Return(sources, libHTTP.CursorPagination{}, nil)
+
+	// No field maps
+	mockFMRepo.EXPECT().ExistsBySourceIDs(gomock.Any(), gomock.Len(1)).
+		Return(map[uuid.UUID]bool{sourceID: false}, nil)
+
+	// Source created successfully
+	mockSrcRepo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(nil, nil)
+
+	// Rules pagination: one page
+	mockRuleRepo.EXPECT().FindByContextID(gomock.Any(), sourceCtxID, "", maxClonePaginationLimit).
+		Return(rules, libHTTP.CursorPagination{}, nil)
+
+	// Rule creation FAILS – the error should propagate upward
+	mockRuleRepo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(nil, errRuleCreation)
+
+	uc, err := NewUseCase(mockCtxRepo, mockSrcRepo, mockFMRepo, mockRuleRepo, WithFeeRuleRepository(feeRuleRepo))
+	require.NoError(t, err)
+
+	result, err := uc.CloneContext(context.Background(), CloneContextInput{
+		SourceContextID: sourceCtxID,
+		NewName:         "Clone With Failure",
+		IncludeSources:  true,
+		IncludeRules:    true,
+	})
+
+	// The clone must fail; context + sources were created (non-transactional)
+	// but the error is propagated so the caller knows the clone is incomplete.
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "rule creation failed")
+}
+
+func TestCloneContext_SourceCreationFailsPropagatesError(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockCtxRepo := mocks.NewMockContextRepository(ctrl)
+	mockSrcRepo := mocks.NewMockSourceRepository(ctrl)
+	mockFMRepo := mocks.NewMockFieldMapRepository(ctrl)
+	mockRuleRepo := mocks.NewMockMatchRuleRepository(ctrl)
+
+	sourceCtxID := uuid.New()
+	tenantID := uuid.New()
+	sourceID := uuid.New()
+
+	sourceContext := &entities.ReconciliationContext{
+		ID:       sourceCtxID,
+		TenantID: tenantID,
+		Name:     "Original",
+		Type:     value_objects.ContextType("1:1"),
+		Interval: "daily",
+		Status:   value_objects.ContextStatusActive,
+	}
+
+	sources := []*entities.ReconciliationSource{
+		{ID: sourceID, ContextID: sourceCtxID, Name: "Source A", Type: value_objects.SourceType("BANK")},
+	}
+
+	errSourceCreation := errors.New("source creation failed: FK violation")
+
+	// Happy path: context found and created
+	mockCtxRepo.EXPECT().FindByID(gomock.Any(), sourceCtxID).Return(sourceContext, nil)
+	mockCtxRepo.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, e *entities.ReconciliationContext) (*entities.ReconciliationContext, error) {
+			return e, nil
+		})
+
+	// Sources: found one
+	mockSrcRepo.EXPECT().FindByContextID(gomock.Any(), sourceCtxID, "", maxClonePaginationLimit).
+		Return(sources, libHTTP.CursorPagination{}, nil)
+
+	// Field map existence check
+	mockFMRepo.EXPECT().ExistsBySourceIDs(gomock.Any(), gomock.Len(1)).
+		Return(map[uuid.UUID]bool{sourceID: false}, nil)
+
+	// Source creation FAILS
+	mockSrcRepo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(nil, errSourceCreation)
+
+	uc, err := NewUseCase(mockCtxRepo, mockSrcRepo, mockFMRepo, mockRuleRepo, WithFeeRuleRepository(newFeeRuleMockRepo()))
+	require.NoError(t, err)
+
+	result, err := uc.CloneContext(context.Background(), CloneContextInput{
+		SourceContextID: sourceCtxID,
+		NewName:         "Clone Source Failure",
+		IncludeSources:  true,
+		IncludeRules:    true,
+	})
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "source creation failed")
 }
 
 func TestCloneMap(t *testing.T) {
@@ -254,4 +425,45 @@ func TestCloneMap(t *testing.T) {
 		copied["c"] = "new"
 		assert.NotContains(t, original, "c")
 	})
+
+	t.Run("deep copies nested json-like structures", func(t *testing.T) {
+		t.Parallel()
+
+		original := map[string]any{
+			"config": map[string]any{
+				"tags": []any{"a", map[string]any{"enabled": true}},
+			},
+		}
+
+		copied := cloneMap(context.Background(), original)
+		require.Equal(t, original, copied)
+
+		nestedCopy := copied["config"].(map[string]any)
+		nestedTags := nestedCopy["tags"].([]any)
+		nestedTagMap := nestedTags[1].(map[string]any)
+		nestedTagMap["enabled"] = false
+
+		nestedOriginal := original["config"].(map[string]any)
+		originalTags := nestedOriginal["tags"].([]any)
+		originalTagMap := originalTags[1].(map[string]any)
+		assert.Equal(t, true, originalTagMap["enabled"])
+	})
+}
+
+func TestClonePredicates(t *testing.T) {
+	t.Parallel()
+
+	original := []fee.FieldPredicate{
+		{Field: "channel", Operator: fee.PredicateOperatorEquals, Value: "wire"},
+		{Field: "brand", Operator: fee.PredicateOperatorIn, Values: []string{"visa", "mastercard"}},
+	}
+
+	cloned := clonePredicates(original)
+	require.Equal(t, original, cloned)
+
+	original[1].Values[0] = "elo"
+	require.Equal(t, []string{"visa", "mastercard"}, cloned[1].Values)
+
+	cloned[0].Value = "pix"
+	require.Equal(t, "wire", original[0].Value)
 }

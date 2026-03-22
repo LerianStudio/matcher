@@ -10,9 +10,9 @@ import (
 	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
@@ -377,7 +377,7 @@ func (repo *Repository) GetByPartition(
 // buildListByTenantQuery constructs the query for listing archive metadata with optional filters.
 func buildListByTenantQuery(
 	tenantID uuid.UUID,
-	status string,
+	status entities.ArchiveStatus,
 	from, to *time.Time,
 	limit, offset int,
 ) squirrel.SelectBuilder {
@@ -386,8 +386,8 @@ func buildListByTenantQuery(
 		From(tableName).
 		Where(squirrel.Eq{"tenant_id": tenantID}).
 		OrderBy("created_at DESC").
-		Limit(uint64(limit)).  //nolint:gosec //#nosec G115 -- limit is validated positive by caller
-		Offset(uint64(offset)) //nolint:gosec //#nosec G115 -- offset is validated non-negative by caller
+		Limit(pgcommon.SafeIntToUint64(limit)).
+		Offset(pgcommon.SafeIntToUint64(offset))
 
 	if status != "" {
 		qb = qb.Where(squirrel.Eq{"status": status})
@@ -408,7 +408,7 @@ func buildListByTenantQuery(
 func (repo *Repository) ListByTenant(
 	ctx context.Context,
 	tenantID uuid.UUID,
-	status string,
+	status entities.ArchiveStatus,
 	from, to *time.Time,
 	limit int,
 	offset int,

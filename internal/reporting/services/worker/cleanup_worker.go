@@ -11,14 +11,15 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
-	"github.com/LerianStudio/lib-uncommons/v2/uncommons/runtime"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/reporting/ports"
+	"github.com/LerianStudio/matcher/pkg/chanutil"
 )
 
 const (
@@ -36,6 +37,7 @@ type CleanupWorkerConfig struct {
 
 // CleanupWorker removes expired export files and updates job status.
 type CleanupWorker struct {
+	mu      sync.Mutex
 	jobRepo repositories.ExportJobRepository
 	storage ports.ObjectStorageClient
 	cfg     CleanupWorkerConfig
@@ -46,6 +48,22 @@ type CleanupWorker struct {
 	stopOnce sync.Once
 	stopCh   chan struct{}
 	doneCh   chan struct{}
+}
+
+func normalizeCleanupWorkerConfig(cfg CleanupWorkerConfig) CleanupWorkerConfig {
+	if cfg.Interval <= 0 {
+		cfg.Interval = defaultCleanupInterval
+	}
+
+	if cfg.BatchSize <= 0 {
+		cfg.BatchSize = defaultCleanupBatch
+	}
+
+	if cfg.FileDeleteGracePeriod <= 0 {
+		cfg.FileDeleteGracePeriod = defaultFileDeleteGrace
+	}
+
+	return cfg
 }
 
 // NewCleanupWorker creates a new cleanup worker.
@@ -63,17 +81,7 @@ func NewCleanupWorker(
 		return nil, ErrNilStorageClient
 	}
 
-	if cfg.Interval <= 0 {
-		cfg.Interval = defaultCleanupInterval
-	}
-
-	if cfg.BatchSize <= 0 {
-		cfg.BatchSize = defaultCleanupBatch
-	}
-
-	if cfg.FileDeleteGracePeriod <= 0 {
-		cfg.FileDeleteGracePeriod = defaultFileDeleteGrace
-	}
+	cfg = normalizeCleanupWorkerConfig(cfg)
 
 	return &CleanupWorker{
 		jobRepo: jobRepo,
@@ -86,11 +94,49 @@ func NewCleanupWorker(
 	}, nil
 }
 
+// prepareRunState reinitialises the worker's stop/done channels and sync.Once for
+// re-entrant Start→Stop→Start cycles. SAFETY: The caller (WorkerManager) MUST ensure
+// Stop() has fully completed before calling Start(), which calls prepareRunState().
+// The WorkerManager serialises all lifecycle transitions via its mutex.
+func (worker *CleanupWorker) prepareRunState() {
+	worker.mu.Lock()
+	defer worker.mu.Unlock()
+
+	worker.stopOnce = sync.Once{}
+
+	if chanutil.ClosedSignalChannel(worker.stopCh) {
+		worker.stopCh = make(chan struct{})
+	}
+
+	if chanutil.ClosedSignalChannel(worker.doneCh) {
+		worker.doneCh = make(chan struct{})
+	}
+}
+
+// UpdateRuntimeConfig updates the worker runtime configuration used on the next start/restart.
+// NOTE: This does NOT affect a currently running worker's ticker. The WorkerManager
+// always performs a full stop→start cycle when config changes, ensuring the new
+// config is picked up when the worker's run() loop creates a fresh ticker.
+func (worker *CleanupWorker) UpdateRuntimeConfig(cfg CleanupWorkerConfig) error {
+	worker.mu.Lock()
+	defer worker.mu.Unlock()
+
+	if worker.running.Load() {
+		return ErrRuntimeConfigUpdateWhileRunning
+	}
+
+	worker.cfg = normalizeCleanupWorkerConfig(cfg)
+
+	return nil
+}
+
 // Start begins the cleanup worker.
 func (worker *CleanupWorker) Start(ctx context.Context) error {
 	if !worker.running.CompareAndSwap(false, true) {
 		return ErrWorkerAlreadyRunning
 	}
+
+	worker.prepareRunState()
 
 	runtime.SafeGoWithContextAndComponent(
 		ctx,

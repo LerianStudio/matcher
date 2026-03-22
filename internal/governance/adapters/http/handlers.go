@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -13,15 +14,16 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/governance/adapters/http/dto"
-	"github.com/LerianStudio/matcher/internal/governance/adapters/postgres"
 	governanceEntities "github.com/LerianStudio/matcher/internal/governance/domain/entities"
+	governanceErrors "github.com/LerianStudio/matcher/internal/governance/domain/errors"
 	"github.com/LerianStudio/matcher/internal/governance/domain/repositories"
+	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
 
 // Sentinel errors for handler validation.
@@ -37,6 +39,12 @@ var (
 	ErrInvalidDateFormat  = errors.New("invalid date format")
 )
 
+// productionMode indicates whether the application is running in production.
+// Set once during handler construction via NewHandler; governs SafeError behavior
+// (suppresses internal error details in client responses when true).
+// Uses atomic.Bool because parallel tests construct handlers concurrently.
+var productionMode atomic.Bool
+
 // Handler handles HTTP requests for governance audit logs.
 // It instruments each operation with OpenTelemetry metrics for observability:
 // audit_log_created_total, audit_log_queries_total, and audit_log_query_latency_seconds.
@@ -50,10 +58,12 @@ type Handler struct {
 }
 
 // NewHandler creates a new governance HTTP handler.
-func NewHandler(repo repositories.AuditLogRepository) (*Handler, error) {
+func NewHandler(repo repositories.AuditLogRepository, production bool) (*Handler, error) {
 	if repo == nil {
 		return nil, ErrRepoRequired
 	}
+
+	productionMode.Store(production)
 
 	handler := &Handler{repo: repo}
 
@@ -109,7 +119,7 @@ func startHandlerSpan(c *fiber.Ctx, name string) (context.Context, trace.Span, l
 
 func logSpanError(ctx context.Context, span trace.Span, logger libLog.Logger, message string, err error) {
 	libOpentelemetry.HandleSpanError(span, message, err)
-	libLog.SafeError(logger, ctx, message, err, false)
+	libLog.SafeError(logger, ctx, message, err, productionMode.Load())
 }
 
 func badRequest(
@@ -199,7 +209,7 @@ func (handler *Handler) GetAuditLog(
 	handler.queryLatencyHist.Record(ctx, time.Since(queryStart).Seconds())
 
 	if err != nil {
-		if errors.Is(err, postgres.ErrAuditLogNotFound) {
+		if errors.Is(err, governanceErrors.ErrAuditLogNotFound) {
 			return writeNotFound(ctx, fiberCtx, span, logger, "audit log not found", err)
 		}
 
@@ -213,7 +223,7 @@ func (handler *Handler) GetAuditLog(
 			span,
 			logger,
 			"audit log not found",
-			postgres.ErrAuditLogNotFound,
+			governanceErrors.ErrAuditLogNotFound,
 		)
 	}
 
@@ -274,13 +284,9 @@ func (handler *Handler) ListAuditLogsByEntity(
 		)
 	}
 
-	cursor, limit, err := libHTTP.ParseTimestampCursorPagination(fiberCtx)
+	cursor, limit, err := parseTimestampCursorPagination(fiberCtx)
 	if err != nil {
 		return badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
-	}
-
-	if limit > libHTTP.MaxLimit {
-		limit = libHTTP.MaxLimit
 	}
 
 	logs, nextCursor, err := handler.repo.ListByEntity(ctx, entityType, entityID, cursor, limit)
@@ -343,13 +349,9 @@ func (handler *Handler) ListAuditLogs(
 		return badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
 	}
 
-	cursor, limit, err := libHTTP.ParseTimestampCursorPagination(fiberCtx)
+	cursor, limit, err := parseTimestampCursorPagination(fiberCtx)
 	if err != nil {
 		return badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
-	}
-
-	if limit > libHTTP.MaxLimit {
-		limit = libHTTP.MaxLimit
 	}
 
 	logs, nextCursor, err := handler.repo.List(ctx, filter, cursor, limit)
@@ -422,6 +424,17 @@ func parseAuditLogFilter(fiberCtx *fiber.Ctx) (governanceEntities.AuditLogFilter
 	}
 
 	return filter, nil
+}
+
+func parseTimestampCursorPagination(fiberCtx *fiber.Ctx) (*libHTTP.TimestampCursor, int, error) {
+	cursor, limit, err := libHTTP.ParseTimestampCursorPagination(fiberCtx)
+	if err != nil {
+		return nil, 0, fmt.Errorf("parse timestamp cursor pagination: %w", err)
+	}
+
+	limit = libHTTP.ValidateLimit(limit, constants.DefaultPaginationLimit, constants.MaximumPaginationLimit)
+
+	return cursor, limit, nil
 }
 
 func parseDate(dateStr string) (time.Time, error) {

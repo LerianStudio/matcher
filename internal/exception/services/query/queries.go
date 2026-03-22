@@ -8,13 +8,14 @@ import (
 
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/dispute"
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/repositories"
-	govRepositories "github.com/LerianStudio/matcher/internal/governance/domain/repositories"
+	"github.com/LerianStudio/matcher/internal/shared/constants"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // Query use case errors.
@@ -36,7 +37,7 @@ type TenantExtractor interface {
 type UseCase struct {
 	exceptionRepo   repositories.ExceptionRepository
 	disputeRepo     repositories.DisputeRepository
-	auditRepo       govRepositories.AuditLogRepository
+	auditRepo       sharedPorts.AuditLogRepository
 	tenantExtractor TenantExtractor
 }
 
@@ -44,7 +45,7 @@ type UseCase struct {
 func NewUseCase(
 	exceptionRepo repositories.ExceptionRepository,
 	disputeRepo repositories.DisputeRepository,
-	auditRepo govRepositories.AuditLogRepository,
+	auditRepo sharedPorts.AuditLogRepository,
 	tenantExtractor TenantExtractor,
 ) (*UseCase, error) {
 	if exceptionRepo == nil {
@@ -171,7 +172,7 @@ func (uc *UseCase) GetHistory(
 	}
 
 	if limit <= 0 {
-		limit = 20
+		limit = constants.DefaultPaginationLimit
 	}
 
 	logs, nextCursor, err := uc.auditRepo.ListByEntity(

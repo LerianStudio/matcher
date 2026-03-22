@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libPostgres "github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres"
+	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
 
 	sharedCommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
@@ -29,7 +29,7 @@ func TestWithTenantTx(t *testing.T) {
 		})
 
 		require.Error(t, err)
-		require.ErrorIs(t, err, sharedCommon.ErrConnectionRequired)
+		require.ErrorContains(t, err, "postgres connection is required")
 		assert.Zero(t, result)
 	})
 
@@ -115,7 +115,7 @@ func TestWithTenantTxOrExisting(t *testing.T) {
 		)
 
 		require.Error(t, err)
-		require.ErrorIs(t, err, sharedCommon.ErrConnectionRequired)
+		require.ErrorContains(t, err, "postgres connection is required")
 		assert.Zero(t, result)
 	})
 
@@ -141,7 +141,7 @@ func TestWithTenantTxOrExisting(t *testing.T) {
 		)
 
 		require.Error(t, err)
-		require.ErrorIs(t, err, sharedCommon.ErrConnectionRequired)
+		require.ErrorContains(t, err, "postgres connection is required")
 		assert.Empty(t, result)
 		require.NoError(t, mock.ExpectationsWereMet())
 	})
@@ -218,7 +218,7 @@ func TestWithTenantTxProvider(t *testing.T) {
 		)
 
 		require.Error(t, err)
-		require.ErrorIs(t, err, sharedCommon.ErrConnectionRequired)
+		require.ErrorContains(t, err, "postgres connection is required")
 		assert.Zero(t, result)
 	})
 
@@ -238,7 +238,7 @@ func TestWithTenantTxProvider(t *testing.T) {
 		)
 
 		require.Error(t, err)
-		require.ErrorIs(t, err, sharedCommon.ErrConnectionRequired)
+		require.ErrorContains(t, err, "failed to begin transaction")
 		assert.Empty(t, result)
 	})
 
@@ -259,7 +259,7 @@ func TestWithTenantTxProvider(t *testing.T) {
 		)
 
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to get postgres connection")
+		assert.Contains(t, err.Error(), "failed to begin transaction")
 		assert.Zero(t, result)
 	})
 
@@ -336,7 +336,7 @@ func TestWithTenantTxOrExistingProvider(t *testing.T) {
 		)
 
 		require.Error(t, err)
-		require.ErrorIs(t, err, sharedCommon.ErrConnectionRequired)
+		require.ErrorContains(t, err, "postgres connection is required")
 		assert.Empty(t, result)
 		require.NoError(t, mock.ExpectationsWereMet())
 	})
@@ -358,7 +358,7 @@ func TestWithTenantTxOrExistingProvider(t *testing.T) {
 		)
 
 		require.Error(t, err)
-		require.ErrorIs(t, err, sharedCommon.ErrConnectionRequired)
+		require.ErrorContains(t, err, "failed to begin transaction")
 		assert.Zero(t, result)
 	})
 
@@ -380,7 +380,7 @@ func TestWithTenantTxOrExistingProvider(t *testing.T) {
 		)
 
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to get postgres connection")
+		assert.Contains(t, err.Error(), "failed to begin transaction")
 		assert.Zero(t, result)
 	})
 
@@ -429,7 +429,7 @@ func TestErrorWrapping(t *testing.T) {
 		})
 
 		require.Error(t, err)
-		require.ErrorIs(t, err, sharedCommon.ErrConnectionRequired)
+		require.ErrorContains(t, err, "postgres connection is required")
 	})
 
 	t.Run("WithTenantTxOrExisting passes through shared layer error", func(t *testing.T) {
@@ -492,7 +492,7 @@ func TestErrorWrapping(t *testing.T) {
 		)
 
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to get postgres connection")
+		assert.Contains(t, err.Error(), "failed to begin transaction")
 		assert.Contains(t, err.Error(), "custom provider error")
 	})
 }

@@ -51,6 +51,40 @@ func TestNewExportJob_Success(t *testing.T) {
 	assert.Equal(t, filter, job.Filter)
 }
 
+func TestNewExportJob_NilTenantID(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	contextID := uuid.New()
+	filter := ExportJobFilter{
+		DateFrom: time.Now().UTC().Add(-24 * time.Hour),
+		DateTo:   time.Now().UTC(),
+	}
+
+	job, err := NewExportJob(ctx, uuid.Nil, contextID, ExportReportTypeMatched, ExportFormatCSV, filter)
+
+	assert.Nil(t, job)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "export job tenant id")
+}
+
+func TestNewExportJob_NilContextID(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	tenantID := uuid.New()
+	filter := ExportJobFilter{
+		DateFrom: time.Now().UTC().Add(-24 * time.Hour),
+		DateTo:   time.Now().UTC(),
+	}
+
+	job, err := NewExportJob(ctx, tenantID, uuid.Nil, ExportReportTypeMatched, ExportFormatCSV, filter)
+
+	assert.Nil(t, job)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "export job context id")
+}
+
 func TestNewExportJob_InvalidFormat(t *testing.T) {
 	t.Parallel()
 
@@ -89,10 +123,10 @@ func TestNewExportJob_AllFormats(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	formats := []string{ExportFormatCSV, ExportFormatJSON, ExportFormatXML, ExportFormatPDF}
+	formats := []ExportFormat{ExportFormatCSV, ExportFormatJSON, ExportFormatXML, ExportFormatPDF}
 
 	for _, format := range formats {
-		t.Run(format, func(t *testing.T) {
+		t.Run(string(format), func(t *testing.T) {
 			t.Parallel()
 
 			tenantID := uuid.New()
@@ -121,15 +155,16 @@ func TestNewExportJob_AllReportTypes(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	reportTypes := []string{
+	reportTypes := []ExportReportType{
 		ExportReportTypeMatched,
 		ExportReportTypeUnmatched,
 		ExportReportTypeSummary,
 		ExportReportTypeVariance,
+		ExportReportTypeExceptions,
 	}
 
 	for _, reportType := range reportTypes {
-		t.Run(reportType, func(t *testing.T) {
+		t.Run(string(reportType), func(t *testing.T) {
 			t.Parallel()
 
 			tenantID := uuid.New()
@@ -321,7 +356,7 @@ func TestExportJob_IsTerminal(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		status     string
+		status     ExportJobStatus
 		isTerminal bool
 	}{
 		{name: "queued is not terminal", status: ExportJobStatusQueued, isTerminal: false},
@@ -347,7 +382,7 @@ func TestExportJob_IsDownloadable(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		status         string
+		status         ExportJobStatus
 		fileKey        string
 		isDownloadable bool
 	}{
@@ -405,12 +440,69 @@ func TestExportJob_IsDownloadable(t *testing.T) {
 	}
 }
 
+func TestExportJobStatus_IsValid(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		status ExportJobStatus
+		want   bool
+	}{
+		{name: "QUEUED is valid", status: ExportJobStatusQueued, want: true},
+		{name: "RUNNING is valid", status: ExportJobStatusRunning, want: true},
+		{name: "SUCCEEDED is valid", status: ExportJobStatusSucceeded, want: true},
+		{name: "FAILED is valid", status: ExportJobStatusFailed, want: true},
+		{name: "EXPIRED is valid", status: ExportJobStatusExpired, want: true},
+		{name: "CANCELED is valid", status: ExportJobStatusCanceled, want: true},
+		{name: "empty string is invalid", status: ExportJobStatus(""), want: false},
+		{name: "lowercase queued is invalid", status: ExportJobStatus("queued"), want: false},
+		{name: "arbitrary string is invalid", status: ExportJobStatus("UNKNOWN"), want: false},
+		{name: "partial match is invalid", status: ExportJobStatus("QUEUE"), want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tt.want, tt.status.IsValid())
+		})
+	}
+}
+
+func TestExportReportType_IsValid(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		reportType ExportReportType
+		want       bool
+	}{
+		{name: "MATCHED is valid", reportType: ExportReportTypeMatched, want: true},
+		{name: "UNMATCHED is valid", reportType: ExportReportTypeUnmatched, want: true},
+		{name: "SUMMARY is valid", reportType: ExportReportTypeSummary, want: true},
+		{name: "VARIANCE is valid", reportType: ExportReportTypeVariance, want: true},
+		{name: "EXCEPTIONS is valid", reportType: ExportReportTypeExceptions, want: true},
+		{name: "empty string is invalid", reportType: ExportReportType(""), want: false},
+		{name: "lowercase matched is invalid", reportType: ExportReportType("matched"), want: false},
+		{name: "arbitrary string is invalid", reportType: ExportReportType("CUSTOM"), want: false},
+		{name: "partial match is invalid", reportType: ExportReportType("MATCH"), want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tt.want, tt.reportType.IsValid())
+		})
+	}
+}
+
 func TestIsValidExportFormat(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name     string
-		format   string
+		format   ExportFormat
 		expected bool
 	}{
 		{name: "CSV is valid", format: ExportFormatCSV, expected: true},
@@ -437,13 +529,14 @@ func TestIsValidReportType(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		reportType string
+		reportType ExportReportType
 		expected   bool
 	}{
 		{name: "MATCHED is valid", reportType: ExportReportTypeMatched, expected: true},
 		{name: "UNMATCHED is valid", reportType: ExportReportTypeUnmatched, expected: true},
 		{name: "SUMMARY is valid", reportType: ExportReportTypeSummary, expected: true},
 		{name: "VARIANCE is valid", reportType: ExportReportTypeVariance, expected: true},
+		{name: "EXCEPTIONS is valid", reportType: ExportReportTypeExceptions, expected: true},
 		{name: "lowercase matched is invalid", reportType: "matched", expected: false},
 		{name: "empty string is invalid", reportType: "", expected: false},
 		{name: "unknown type is invalid", reportType: "CUSTOM", expected: false},
@@ -463,7 +556,7 @@ func TestIsStreamableFormat(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		format   string
+		format   ExportFormat
 		expected bool
 	}{
 		{name: "CSV is streamable", format: ExportFormatCSV, expected: true},
@@ -492,8 +585,8 @@ func TestGenerateFileName(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		reportType string
-		format     string
+		reportType ExportReportType
+		format     ExportFormat
 		expected   string
 	}{
 		{
@@ -519,6 +612,12 @@ func TestGenerateFileName(t *testing.T) {
 			reportType: ExportReportTypeVariance,
 			format:     ExportFormatPDF,
 			expected:   "VARIANCE_12345678_20240115-20240320.pdf",
+		},
+		{
+			name:       "exceptions format",
+			reportType: ExportReportTypeExceptions,
+			format:     ExportFormatJSON,
+			expected:   "EXCEPTIONS_12345678_20240115-20240320.json",
 		},
 		{
 			name:       "unknown format defaults to dat",
@@ -614,6 +713,15 @@ func TestExportJobFilterFromJSON_InvalidJSON(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestExportJobFilterFromJSON_InvalidStatus(t *testing.T) {
+	t.Parallel()
+
+	_, err := ExportJobFilterFromJSON([]byte(`{"status":"NOPE"}`))
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrInvalidExportJobStatus)
+}
+
 func TestExportJobFilterFromJSON_EmptyJSON(t *testing.T) {
 	t.Parallel()
 
@@ -702,6 +810,26 @@ func TestExportJob_StateTransitions(t *testing.T) {
 	})
 }
 
+func TestExportJob_NilReceiverGuards(t *testing.T) {
+	t.Parallel()
+
+	var job *ExportJob
+
+	nextRetry := time.Now().UTC().Add(time.Minute)
+
+	require.NotPanics(t, func() { job.MarkRunning() })
+	require.NotPanics(t, func() { job.MarkSucceeded("k", "f", "s", 1, 1) })
+	require.NotPanics(t, func() { job.MarkFailed("err") })
+	require.NotPanics(t, func() { job.MarkForRetry("err", nextRetry) })
+	require.NotPanics(t, func() { job.MarkExpired() })
+	require.NotPanics(t, func() { job.MarkCanceled() })
+	require.NotPanics(t, func() { job.UpdateProgress(1, 1) })
+	require.NotPanics(t, func() { job.SetClock(DefaultClock) })
+
+	assert.False(t, job.IsTerminal())
+	assert.False(t, job.IsDownloadable())
+}
+
 func TestDefaultExportExpiry(t *testing.T) {
 	t.Parallel()
 
@@ -712,22 +840,23 @@ func TestDefaultExportExpiry(t *testing.T) {
 func TestExportJobConstants(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, "QUEUED", ExportJobStatusQueued)
-	assert.Equal(t, "RUNNING", ExportJobStatusRunning)
-	assert.Equal(t, "SUCCEEDED", ExportJobStatusSucceeded)
-	assert.Equal(t, "FAILED", ExportJobStatusFailed)
-	assert.Equal(t, "EXPIRED", ExportJobStatusExpired)
-	assert.Equal(t, "CANCELED", ExportJobStatusCanceled)
+	assert.Equal(t, ExportJobStatus("QUEUED"), ExportJobStatusQueued)
+	assert.Equal(t, ExportJobStatus("RUNNING"), ExportJobStatusRunning)
+	assert.Equal(t, ExportJobStatus("SUCCEEDED"), ExportJobStatusSucceeded)
+	assert.Equal(t, ExportJobStatus("FAILED"), ExportJobStatusFailed)
+	assert.Equal(t, ExportJobStatus("EXPIRED"), ExportJobStatusExpired)
+	assert.Equal(t, ExportJobStatus("CANCELED"), ExportJobStatusCanceled)
 
-	assert.Equal(t, "CSV", ExportFormatCSV)
-	assert.Equal(t, "JSON", ExportFormatJSON)
-	assert.Equal(t, "XML", ExportFormatXML)
-	assert.Equal(t, "PDF", ExportFormatPDF)
+	assert.Equal(t, ExportFormat("CSV"), ExportFormatCSV)
+	assert.Equal(t, ExportFormat("JSON"), ExportFormatJSON)
+	assert.Equal(t, ExportFormat("XML"), ExportFormatXML)
+	assert.Equal(t, ExportFormat("PDF"), ExportFormatPDF)
 
-	assert.Equal(t, "MATCHED", ExportReportTypeMatched)
-	assert.Equal(t, "UNMATCHED", ExportReportTypeUnmatched)
-	assert.Equal(t, "SUMMARY", ExportReportTypeSummary)
-	assert.Equal(t, "VARIANCE", ExportReportTypeVariance)
+	assert.Equal(t, ExportReportType("MATCHED"), ExportReportTypeMatched)
+	assert.Equal(t, ExportReportType("UNMATCHED"), ExportReportTypeUnmatched)
+	assert.Equal(t, ExportReportType("SUMMARY"), ExportReportTypeSummary)
+	assert.Equal(t, ExportReportType("VARIANCE"), ExportReportTypeVariance)
+	assert.Equal(t, ExportReportType("EXCEPTIONS"), ExportReportTypeExceptions)
 }
 
 func createTestExportJob(t *testing.T) *ExportJob {

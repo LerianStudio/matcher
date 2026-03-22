@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/repositories/mocks"
@@ -132,25 +132,6 @@ func TestCloneContext_IncludeRulesNilMatchRuleRepo(t *testing.T) {
 	require.ErrorIs(t, err, ErrNilMatchRuleRepository)
 }
 
-func TestCloneContext_IncludeFeeSchedulesNilRepo(t *testing.T) {
-	t.Parallel()
-
-	uc := &UseCase{
-		contextRepo:  &mockCtxRepo{},
-		sourceRepo:   &stubSourceRepo{},
-		fieldMapRepo: &stubFieldMapRepo{},
-	}
-
-	_, err := uc.CloneContext(context.Background(), CloneContextInput{
-		SourceContextID:     uuid.New(),
-		NewName:             "Clone",
-		IncludeSources:      true,
-		IncludeFeeSchedules: true,
-	})
-
-	require.ErrorIs(t, err, ErrNilFeeScheduleRepository)
-}
-
 // =============================================================================
 // CloneContext — context create error
 // =============================================================================
@@ -230,7 +211,7 @@ func TestCloneContext_SourcesCloneError(t *testing.T) {
 	mockSrcRepo.EXPECT().FindByContextID(gomock.Any(), sourceCtxID, "", maxClonePaginationLimit).
 		Return(nil, libHTTP.CursorPagination{}, fetchErr)
 
-	uc, err := NewUseCase(mockCtxRepo, mockSrcRepo, mockFMRepo, mockRuleRepo)
+	uc, err := NewUseCase(mockCtxRepo, mockSrcRepo, mockFMRepo, mockRuleRepo, WithFeeRuleRepository(newFeeRuleMockRepo()))
 	require.NoError(t, err)
 
 	_, err = uc.CloneContext(context.Background(), CloneContextInput{
@@ -279,7 +260,7 @@ func TestCloneContext_RulesCloneError(t *testing.T) {
 	mockRuleRepo.EXPECT().FindByContextID(gomock.Any(), sourceCtxID, "", maxClonePaginationLimit).
 		Return(nil, libHTTP.CursorPagination{}, ruleErr)
 
-	uc, err := NewUseCase(mockCtxRepo, mockSrcRepo, mockFMRepo, mockRuleRepo)
+	uc, err := NewUseCase(mockCtxRepo, mockSrcRepo, mockFMRepo, mockRuleRepo, WithFeeRuleRepository(newFeeRuleMockRepo()))
 	require.NoError(t, err)
 
 	_, err = uc.CloneContext(context.Background(), CloneContextInput{
@@ -290,221 +271,6 @@ func TestCloneContext_RulesCloneError(t *testing.T) {
 
 	require.Error(t, err)
 	require.ErrorIs(t, err, ruleErr)
-}
-
-// =============================================================================
-// CloneContext — with fee schedule cloning
-// =============================================================================
-
-func TestCloneContext_WithFeeSchedules(t *testing.T) {
-	t.Parallel()
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockCtxRepo := mocks.NewMockContextRepository(ctrl)
-	mockSrcRepo := mocks.NewMockSourceRepository(ctrl)
-	mockFMRepo := mocks.NewMockFieldMapRepository(ctrl)
-	mockRuleRepo := mocks.NewMockMatchRuleRepository(ctrl)
-
-	sourceCtxID := uuid.New()
-	tenantID := uuid.New()
-	feeScheduleID := uuid.New()
-	sourceID := uuid.New()
-
-	mockCtxRepo.EXPECT().FindByID(gomock.Any(), sourceCtxID).
-		Return(&entities.ReconciliationContext{
-			ID:       sourceCtxID,
-			TenantID: tenantID,
-			Name:     "Original",
-			Type:     value_objects.ContextType("1:1"),
-			Interval: "daily",
-			Status:   value_objects.ContextStatusActive,
-		}, nil)
-
-	mockCtxRepo.EXPECT().Create(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, e *entities.ReconciliationContext) (*entities.ReconciliationContext, error) {
-			return e, nil
-		})
-
-	sources := []*entities.ReconciliationSource{
-		{ID: sourceID, ContextID: sourceCtxID, Name: "Source A", FeeScheduleID: &feeScheduleID},
-	}
-
-	mockSrcRepo.EXPECT().FindByContextID(gomock.Any(), sourceCtxID, "", maxClonePaginationLimit).
-		Return(sources, libHTTP.CursorPagination{}, nil)
-
-	feeRepo := &feeScheduleRepoStub{
-		getByIDsFn: func(_ context.Context, ids []uuid.UUID) (map[uuid.UUID]*fee.FeeSchedule, error) {
-			result := make(map[uuid.UUID]*fee.FeeSchedule)
-			for _, id := range ids {
-				result[id] = &fee.FeeSchedule{
-					ID:               id,
-					TenantID:         tenantID,
-					Name:             "Original Fee",
-					Currency:         "USD",
-					ApplicationOrder: fee.ApplicationOrderParallel,
-					RoundingScale:    2,
-					RoundingMode:     fee.RoundingModeHalfUp,
-					Items: []fee.FeeScheduleItem{
-						{
-							ID:        uuid.New(),
-							Name:      "Interchange",
-							Priority:  1,
-							Structure: fee.FlatFee{Amount: decimal.NewFromFloat(1.50)},
-						},
-					},
-				}
-			}
-			return result, nil
-		},
-		createFn: func(_ context.Context, s *fee.FeeSchedule) (*fee.FeeSchedule, error) {
-			return s, nil
-		},
-	}
-
-	// Field map existence check
-	mockFMRepo.EXPECT().ExistsBySourceIDs(gomock.Any(), gomock.Len(1)).
-		Return(map[uuid.UUID]bool{sourceID: false}, nil)
-
-	// Create source
-	mockSrcRepo.EXPECT().Create(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, src *entities.ReconciliationSource) (*entities.ReconciliationSource, error) {
-			return src, nil
-		})
-
-	uc, err := NewUseCase(
-		mockCtxRepo, mockSrcRepo, mockFMRepo, mockRuleRepo,
-		WithFeeScheduleRepository(feeRepo),
-	)
-	require.NoError(t, err)
-
-	result, err := uc.CloneContext(context.Background(), CloneContextInput{
-		SourceContextID:     sourceCtxID,
-		NewName:             "Clone With Fees",
-		IncludeSources:      true,
-		IncludeFeeSchedules: true,
-	})
-
-	require.NoError(t, err)
-	assert.Equal(t, 1, result.SourcesCloned)
-	assert.Equal(t, 1, result.FeeSchedulesCloned)
-}
-
-// =============================================================================
-// cloneReferencedFeeSchedules edge cases
-// =============================================================================
-
-func TestCloneReferencedFeeSchedules_NoFeeScheduleIDs(t *testing.T) {
-	t.Parallel()
-
-	uc := &UseCase{
-		feeScheduleRepo: &feeScheduleRepoStub{},
-	}
-
-	sources := []*entities.ReconciliationSource{
-		{ID: uuid.New(), Name: "No Fee"},
-	}
-
-	mapping, count, err := uc.cloneReferencedFeeSchedules(context.Background(), sources, uuid.New())
-	require.NoError(t, err)
-	assert.Empty(t, mapping)
-	assert.Equal(t, 0, count)
-}
-
-func TestCloneReferencedFeeSchedules_NilFeeScheduleID(t *testing.T) {
-	t.Parallel()
-
-	uc := &UseCase{
-		feeScheduleRepo: &feeScheduleRepoStub{},
-	}
-
-	nilID := uuid.Nil
-	sources := []*entities.ReconciliationSource{
-		{ID: uuid.New(), Name: "Nil Fee", FeeScheduleID: &nilID},
-	}
-
-	mapping, count, err := uc.cloneReferencedFeeSchedules(context.Background(), sources, uuid.New())
-	require.NoError(t, err)
-	assert.Empty(t, mapping)
-	assert.Equal(t, 0, count)
-}
-
-func TestCloneReferencedFeeSchedules_FetchError(t *testing.T) {
-	t.Parallel()
-
-	fetchErr := errors.New("batch fetch error")
-
-	uc := &UseCase{
-		feeScheduleRepo: &feeScheduleRepoStub{
-			getByIDsFn: func(_ context.Context, _ []uuid.UUID) (map[uuid.UUID]*fee.FeeSchedule, error) {
-				return nil, fetchErr
-			},
-		},
-	}
-
-	feeID := uuid.New()
-	sources := []*entities.ReconciliationSource{
-		{ID: uuid.New(), Name: "Source", FeeScheduleID: &feeID},
-	}
-
-	_, _, err := uc.cloneReferencedFeeSchedules(context.Background(), sources, uuid.New())
-	require.Error(t, err)
-	require.ErrorIs(t, err, fetchErr)
-}
-
-func TestCloneReferencedFeeSchedules_NilScheduleInMap(t *testing.T) {
-	t.Parallel()
-
-	feeID := uuid.New()
-
-	uc := &UseCase{
-		feeScheduleRepo: &feeScheduleRepoStub{
-			getByIDsFn: func(_ context.Context, _ []uuid.UUID) (map[uuid.UUID]*fee.FeeSchedule, error) {
-				return map[uuid.UUID]*fee.FeeSchedule{feeID: nil}, nil
-			},
-		},
-	}
-
-	sources := []*entities.ReconciliationSource{
-		{ID: uuid.New(), Name: "Source", FeeScheduleID: &feeID},
-	}
-
-	mapping, count, err := uc.cloneReferencedFeeSchedules(context.Background(), sources, uuid.New())
-	require.NoError(t, err)
-	assert.Empty(t, mapping)
-	assert.Equal(t, 0, count)
-}
-
-func TestCloneReferencedFeeSchedules_CreateError(t *testing.T) {
-	t.Parallel()
-
-	feeID := uuid.New()
-	createErr := errors.New("fee create error")
-
-	uc := &UseCase{
-		feeScheduleRepo: &feeScheduleRepoStub{
-			getByIDsFn: func(_ context.Context, _ []uuid.UUID) (map[uuid.UUID]*fee.FeeSchedule, error) {
-				return map[uuid.UUID]*fee.FeeSchedule{
-					feeID: {
-						ID:   feeID,
-						Name: "Fee Schedule",
-					},
-				}, nil
-			},
-			createFn: func(_ context.Context, _ *fee.FeeSchedule) (*fee.FeeSchedule, error) {
-				return nil, createErr
-			},
-		},
-	}
-
-	sources := []*entities.ReconciliationSource{
-		{ID: uuid.New(), Name: "Source", FeeScheduleID: &feeID},
-	}
-
-	_, _, err := uc.cloneReferencedFeeSchedules(context.Background(), sources, uuid.New())
-	require.Error(t, err)
-	require.ErrorIs(t, err, createErr)
 }
 
 // =============================================================================
@@ -592,13 +358,12 @@ func TestCloneSourcesAndFieldMaps_EmptySources(t *testing.T) {
 		fieldMapRepo: mockFMRepo,
 	}
 
-	sourcesCloned, fieldMapsCloned, feeSchedulesCloned, err := uc.cloneSourcesAndFieldMaps(
-		context.Background(), nil, uuid.New(), uuid.New(), uuid.New(), false,
+	sourcesCloned, fieldMapsCloned, err := uc.cloneSourcesAndFieldMaps(
+		context.Background(), nil, uuid.New(), uuid.New(),
 	)
 	require.NoError(t, err)
 	assert.Equal(t, 0, sourcesCloned)
 	assert.Equal(t, 0, fieldMapsCloned)
-	assert.Equal(t, 0, feeSchedulesCloned)
 }
 
 func TestCloneSourcesAndFieldMaps_ExistsBySourceIDsError(t *testing.T) {
@@ -626,8 +391,8 @@ func TestCloneSourcesAndFieldMaps_ExistsBySourceIDsError(t *testing.T) {
 		fieldMapRepo: mockFMRepo,
 	}
 
-	_, _, _, err := uc.cloneSourcesAndFieldMaps(
-		context.Background(), nil, uuid.New(), uuid.New(), uuid.New(), false,
+	_, _, err := uc.cloneSourcesAndFieldMaps(
+		context.Background(), nil, uuid.New(), uuid.New(),
 	)
 	require.Error(t, err)
 	require.ErrorIs(t, err, existsErr)
@@ -661,14 +426,14 @@ func TestCloneSourcesAndFieldMaps_SourceCreateError(t *testing.T) {
 		fieldMapRepo: mockFMRepo,
 	}
 
-	_, _, _, err := uc.cloneSourcesAndFieldMaps(
-		context.Background(), nil, uuid.New(), uuid.New(), uuid.New(), false,
+	_, _, err := uc.cloneSourcesAndFieldMaps(
+		context.Background(), nil, uuid.New(), uuid.New(),
 	)
 	require.Error(t, err)
 	require.ErrorIs(t, err, createErr)
 }
 
-func TestCloneSourcesAndFieldMaps_FeeScheduleMappingApplied(t *testing.T) {
+func TestCloneSourcesAndFieldMaps_SourceClonedWithoutLegacyFeeScheduleField(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
@@ -678,66 +443,8 @@ func TestCloneSourcesAndFieldMaps_FeeScheduleMappingApplied(t *testing.T) {
 	mockFMRepo := mocks.NewMockFieldMapRepository(ctrl)
 
 	sourceID := uuid.New()
-	feeID := uuid.New()
 	sources := []*entities.ReconciliationSource{
-		{ID: sourceID, Name: "Source A", FeeScheduleID: &feeID},
-	}
-
-	mockSrcRepo.EXPECT().FindByContextID(gomock.Any(), gomock.Any(), "", maxClonePaginationLimit).
-		Return(sources, libHTTP.CursorPagination{}, nil)
-
-	mockFMRepo.EXPECT().ExistsBySourceIDs(gomock.Any(), gomock.Any()).
-		Return(map[uuid.UUID]bool{sourceID: false}, nil)
-
-	feeRepo := &feeScheduleRepoStub{
-		getByIDsFn: func(_ context.Context, _ []uuid.UUID) (map[uuid.UUID]*fee.FeeSchedule, error) {
-			return map[uuid.UUID]*fee.FeeSchedule{
-				feeID: {ID: feeID, Name: "Fee"},
-			}, nil
-		},
-		createFn: func(_ context.Context, s *fee.FeeSchedule) (*fee.FeeSchedule, error) {
-			return s, nil
-		},
-	}
-
-	var capturedSource *entities.ReconciliationSource
-	mockSrcRepo.EXPECT().Create(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, src *entities.ReconciliationSource) (*entities.ReconciliationSource, error) {
-			capturedSource = src
-			return src, nil
-		})
-
-	uc := &UseCase{
-		sourceRepo:      mockSrcRepo,
-		fieldMapRepo:    mockFMRepo,
-		feeScheduleRepo: feeRepo,
-	}
-
-	sourcesCloned, _, feeSchedulesCloned, err := uc.cloneSourcesAndFieldMaps(
-		context.Background(), nil, uuid.New(), uuid.New(), uuid.New(), true,
-	)
-	require.NoError(t, err)
-	assert.Equal(t, 1, sourcesCloned)
-	assert.Equal(t, 1, feeSchedulesCloned)
-	require.NotNil(t, capturedSource)
-	require.NotNil(t, capturedSource.FeeScheduleID)
-	// The fee schedule ID should be the NEW cloned ID, not the original
-	assert.NotEqual(t, feeID, *capturedSource.FeeScheduleID)
-}
-
-func TestCloneSourcesAndFieldMaps_SourceKeepsOriginalFeeScheduleID(t *testing.T) {
-	t.Parallel()
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockSrcRepo := mocks.NewMockSourceRepository(ctrl)
-	mockFMRepo := mocks.NewMockFieldMapRepository(ctrl)
-
-	sourceID := uuid.New()
-	feeID := uuid.New()
-	sources := []*entities.ReconciliationSource{
-		{ID: sourceID, Name: "Source A", FeeScheduleID: &feeID},
+		{ID: sourceID, Name: "Source A"},
 	}
 
 	mockSrcRepo.EXPECT().FindByContextID(gomock.Any(), gomock.Any(), "", maxClonePaginationLimit).
@@ -758,14 +465,13 @@ func TestCloneSourcesAndFieldMaps_SourceKeepsOriginalFeeScheduleID(t *testing.T)
 		fieldMapRepo: mockFMRepo,
 	}
 
-	// Without fee schedule cloning, the mapping is empty, so original ID is kept
-	_, _, _, err := uc.cloneSourcesAndFieldMaps(
-		context.Background(), nil, uuid.New(), uuid.New(), uuid.New(), false,
+	sourcesCloned, _, err := uc.cloneSourcesAndFieldMaps(
+		context.Background(), nil, uuid.New(), uuid.New(),
 	)
 	require.NoError(t, err)
+	assert.Equal(t, 1, sourcesCloned)
 	require.NotNil(t, capturedSource)
-	require.NotNil(t, capturedSource.FeeScheduleID)
-	assert.Equal(t, feeID, *capturedSource.FeeScheduleID)
+	assert.Equal(t, "Source A", capturedSource.Name)
 }
 
 // =============================================================================

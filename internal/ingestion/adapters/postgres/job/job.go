@@ -4,7 +4,6 @@ package job
 import (
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
@@ -13,13 +12,6 @@ import (
 	pgcommon "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/common"
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/value_objects"
-)
-
-var (
-	errJobEntityRequired = errors.New("ingestion job entity is required")
-	errJobModelRequired  = errors.New("ingestion job model is required")
-	errInvalidJobStatus  = errors.New("invalid job status")
-	errRepoNotInit       = errors.New("job repository not initialized")
 )
 
 // NewJobPostgreSQLModel converts an entity to a PostgreSQL model.

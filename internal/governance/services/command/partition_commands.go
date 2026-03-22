@@ -14,9 +14,9 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 )
@@ -24,6 +24,7 @@ import (
 // Sentinel errors for partition manager operations.
 var (
 	ErrNilDB                 = errors.New("database connection is required")
+	ErrNowFuncRequired       = errors.New("clock function is required")
 	ErrPartitionNotFound     = errors.New("partition not found")
 	ErrInvalidLookahead      = errors.New("lookahead months must be positive")
 	ErrInvalidPartitionName  = errors.New("invalid partition name format")
@@ -51,18 +52,37 @@ type PartitionManager struct {
 	db     *sql.DB
 	logger libLog.Logger
 	tracer trace.Tracer
+	nowFn  func() time.Time
 }
 
 // NewPartitionManager creates a new PartitionManager with the given dependencies.
 func NewPartitionManager(db *sql.DB, logger libLog.Logger, tracer trace.Tracer) (*PartitionManager, error) {
+	return NewPartitionManagerWithClock(db, logger, tracer, func() time.Time {
+		return time.Now().UTC()
+	})
+}
+
+// NewPartitionManagerWithClock creates a new PartitionManager with a custom clock.
+// Use this constructor in tests for deterministic time-dependent behavior.
+func NewPartitionManagerWithClock(
+	db *sql.DB,
+	logger libLog.Logger,
+	tracer trace.Tracer,
+	nowFn func() time.Time,
+) (*PartitionManager, error) {
 	if db == nil {
 		return nil, ErrNilDB
+	}
+
+	if nowFn == nil {
+		return nil, ErrNowFuncRequired
 	}
 
 	return &PartitionManager{
 		db:     db,
 		logger: logger,
 		tracer: tracer,
+		nowFn:  nowFn,
 	}, nil
 }
 
@@ -96,20 +116,14 @@ func (pm *PartitionManager) EnsurePartitionsExist(ctx context.Context, lookahead
 		return fmt.Errorf("apply tenant schema: %w", err)
 	}
 
-	now := time.Now().UTC()
+	now := pm.nowFn()
 
 	for i := range lookaheadMonths + 1 {
 		start := monthStart(now, i)
 		end := monthStart(now, i+1)
 		name := partitionName(start)
 
-		//nolint:gosec //#nosec G201 -- partition name is generated from time values via partitionName(), not user input
-		ddl := fmt.Sprintf(
-			"CREATE TABLE IF NOT EXISTS %s PARTITION OF audit_logs FOR VALUES FROM ('%s') TO ('%s')",
-			name,
-			start.Format("2006-01-02"),
-			end.Format("2006-01-02"),
-		)
+		ddl := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s PARTITION OF audit_logs FOR VALUES FROM ('%s') TO ('%s')", name, start.Format("2006-01-02"), end.Format("2006-01-02")) // #nosec G201 -- partition name is generated from time values via partitionName(), not user input
 
 		if _, err := tx.ExecContext(ctx, ddl); err != nil {
 			libOpentelemetry.HandleSpanError(span, "failed to create partition", err)
@@ -173,7 +187,7 @@ func (pm *PartitionManager) ListPartitions(ctx context.Context) ([]PartitionInfo
 
 	defer rows.Close()
 
-	var partitions []PartitionInfo
+	partitions := make([]PartitionInfo, 0)
 
 	for rows.Next() {
 		var (
@@ -238,19 +252,10 @@ func (pm *PartitionManager) DetachPartition(ctx context.Context, partitionName s
 
 	span.SetAttributes(attribute.String("partition.name", partitionName))
 
-	_, endDate, err := parsePartitionBoundFromName(partitionName)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "parse partition bound from name", err)
-		return fmt.Errorf("parse partition bound: %w", err)
-	}
+	if err := pm.validateRetentionPeriod(partitionName); err != nil {
+		libOpentelemetry.HandleSpanError(span, "retention period active", err)
 
-	retentionDuration := time.Duration(minRetentionYears) * daysPerYear * hoursPerDay * time.Hour
-	if time.Since(endDate) < retentionDuration {
-		retentionErr := fmt.Errorf("partition %s data is within %d-year retention period: %w",
-			partitionName, minRetentionYears, ErrRetentionPeriodActive)
-		libOpentelemetry.HandleSpanError(span, "retention period active", retentionErr)
-
-		return retentionErr
+		return err
 	}
 
 	tx, err := pm.db.BeginTx(ctx, nil)
@@ -268,7 +273,7 @@ func (pm *PartitionManager) DetachPartition(ctx context.Context, partitionName s
 		return fmt.Errorf("apply tenant schema: %w", err)
 	}
 
-	ddl := "ALTER TABLE audit_logs DETACH PARTITION " + partitionName //nolint:gosec // G202 -- partition name validated by partitionNameRegex, not from user input
+	ddl := "ALTER TABLE audit_logs DETACH PARTITION " + partitionName // #nosec G202 -- partition name validated by partitionNameRegex, not from user input
 
 	if _, err := tx.ExecContext(ctx, ddl); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to detach partition", err)
@@ -298,6 +303,12 @@ func (pm *PartitionManager) DropPartition(ctx context.Context, partitionName str
 		return err
 	}
 
+	if err := pm.validateRetentionPeriod(partitionName); err != nil {
+		libOpentelemetry.HandleSpanError(span, "retention period active", err)
+
+		return err
+	}
+
 	span.SetAttributes(attribute.String("partition.name", partitionName))
 
 	tx, err := pm.db.BeginTx(ctx, nil)
@@ -315,7 +326,7 @@ func (pm *PartitionManager) DropPartition(ctx context.Context, partitionName str
 		return fmt.Errorf("apply tenant schema: %w", err)
 	}
 
-	ddl := "DROP TABLE IF EXISTS " + partitionName //nolint:gosec // G202 -- partition name validated by partitionNameRegex, not from user input
+	ddl := "DROP TABLE IF EXISTS " + partitionName // #nosec G202 -- partition name validated by partitionNameRegex, not from user input
 
 	if _, err := tx.ExecContext(ctx, ddl); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to drop partition", err)
@@ -439,6 +450,21 @@ func tryParseTime(s string, formats []string) time.Time {
 	}
 
 	return time.Time{}
+}
+
+func (pm *PartitionManager) validateRetentionPeriod(partitionName string) error {
+	_, endDate, err := parsePartitionBoundFromName(partitionName)
+	if err != nil {
+		return fmt.Errorf("parse partition bound: %w", err)
+	}
+
+	retentionDuration := time.Duration(minRetentionYears) * daysPerYear * hoursPerDay * time.Hour
+	if pm.nowFn().Sub(endDate) < retentionDuration {
+		return fmt.Errorf("partition %s data is within %d-year retention period: %w",
+			partitionName, minRetentionYears, ErrRetentionPeriodActive)
+	}
+
+	return nil
 }
 
 // tracking extracts observability primitives from context, falling back to instance-level values.

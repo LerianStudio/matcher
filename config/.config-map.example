@@ -1,0 +1,77 @@
+# Matcher — Bootstrap-Only Configuration (requires restart)
+#
+# Common settings that require a container/pod restart to take effect.
+# For the full list of bootstrap-only keys, see the systemplane key definitions
+# in internal/bootstrap/systemplane_keys_*.go (any key with ApplyBootstrapOnly).
+# Everything else is hot-reloadable at runtime via the systemplane API:
+#
+#   GET  /v1/system/configs          — view current runtime config
+#   PATCH /v1/system/configs         — change any runtime-managed key
+#   GET  /v1/system/configs/schema   — see all keys, types, and mutability
+#   GET  /v1/system/configs/history  — audit trail of changes
+#
+# For local development with docker-compose, you don't need this file at all.
+# All defaults are baked into the binary and match the docker-compose setup.
+#
+# For production (Kubernetes), map these as a ConfigMap or Secret and inject
+# as environment variables into the pod spec.
+
+# ── Application ──────────────────────────────────────────────────────────────
+# Environment name. Affects security enforcement (production disables Swagger,
+# forces rate limiting). Values: development, staging, production.
+ENV_NAME=development
+
+# ── Server ───────────────────────────────────────────────────────────────────
+# HTTP listen address. Change requires server restart.
+SERVER_ADDRESS=:4018
+
+# TLS — only needed when terminating TLS at the application level.
+# Most deployments terminate TLS at the ingress/load balancer.
+# SERVER_TLS_CERT_FILE=
+# SERVER_TLS_KEY_FILE=
+
+# Set to true when TLS is terminated by an upstream proxy (enables HSTS).
+TLS_TERMINATED_UPSTREAM=false
+
+# Comma-separated trusted proxy CIDRs for client IP resolution.
+# TRUSTED_PROXIES=
+
+# ── Authentication ───────────────────────────────────────────────────────────
+# Enable lib-auth JWT middleware.
+# REQUIRED for production. Only set to false for isolated local development.
+AUTH_ENABLED=true
+
+# Auth service address for token validation.
+# AUTH_SERVICE_ADDRESS=http://localhost:8081
+
+# JWT signing secret. REQUIRED when AUTH_ENABLED=true.
+# SECURITY: Use a strong random secret (minimum 32 bytes) in production.
+# AUTH_JWT_SECRET=
+
+# ── Observability ────────────────────────────────────────────────────────────
+# OpenTelemetry. Disabled by default. Enable for traces/metrics collection.
+ENABLE_TELEMETRY=false
+OTEL_RESOURCE_SERVICE_NAME=matcher
+OTEL_LIBRARY_NAME=github.com/LerianStudio/matcher
+OTEL_RESOURCE_SERVICE_VERSION=1.1.0
+OTEL_RESOURCE_DEPLOYMENT_ENVIRONMENT=development
+OTEL_EXPORTER_OTLP_ENDPOINT=localhost:4317
+
+# Database metrics scrape interval (seconds).
+DB_METRICS_INTERVAL_SEC=15
+
+# ── Systemplane ──────────────────────────────────────────────────────────────
+# Backend store for runtime configuration. Default: postgres (reuses the
+# application Postgres DSN). Set to "mongodb" for a Mongo-backed store.
+# SYSTEMPLANE_BACKEND=postgres
+
+# Override the connection DSN for the systemplane store. When unset, the
+# application's primary Postgres DSN is used.
+# SYSTEMPLANE_POSTGRES_DSN=
+
+# REQUIRED: AES-256-GCM master key for encrypting secret config values.
+# Generate a unique value per environment:
+#   openssl rand -base64 32 | tr -d '\n'
+# SECURITY: The development default (used in docker-compose.yml) is
+# explicitly blocked in production by validateProductionConfig.
+# SYSTEMPLANE_SECRET_MASTER_KEY=

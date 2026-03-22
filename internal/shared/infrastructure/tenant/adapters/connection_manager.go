@@ -14,11 +14,11 @@ import (
 
 	"golang.org/x/sync/singleflight"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	"github.com/LerianStudio/lib-uncommons/v2/uncommons/assert"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libPostgres "github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres"
-	libRedis "github.com/LerianStudio/lib-uncommons/v2/uncommons/redis"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	"github.com/LerianStudio/lib-commons/v4/commons/assert"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
+	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
@@ -41,6 +41,11 @@ var (
 	errUnexpectedConnectionType = errors.New("unexpected connection type from singleflight")
 	// ErrRedisAddressesRequired is returned when Redis configuration has no usable addresses.
 	ErrRedisAddressesRequired = errors.New("redis addresses are required")
+	// ErrTenantPoolLimitReached is returned when a new tenant pool cannot be created without
+	// exceeding the configured hard cap.
+	ErrTenantPoolLimitReached = errors.New("tenant connection pool limit reached")
+	// errCachedConnectionMissing is returned when a connection disappears between creation and lease acquisition.
+	errCachedConnectionMissing = errors.New("cached connection missing after creation")
 )
 
 var _ ports.InfrastructureProvider = (*TenantConnectionManager)(nil)
@@ -48,11 +53,35 @@ var _ ports.InfrastructureProvider = (*TenantConnectionManager)(nil)
 const defaultConnectionSetupTimeout = 15 * time.Second
 
 type cachedPostgresConnection struct {
-	conn *libPostgres.Client
+	conn       *libPostgres.Client
+	lastUsedAt time.Time
+	idleSince  time.Time
+	leases     int
+	draining   bool
 }
 
 type cachedRedisConnection struct {
-	conn *libRedis.Client
+	conn       *libRedis.Client
+	lastUsedAt time.Time
+	idleSince  time.Time
+	leases     int
+	draining   bool
+}
+
+// ConnectionManagerOption customizes TenantConnectionManager behavior.
+type ConnectionManagerOption func(*TenantConnectionManager)
+
+// WithCachePolicy enables soft-limit cache eviction for idle tenant pools.
+func WithCachePolicy(maxTenantPools int, idleTimeout time.Duration) ConnectionManagerOption {
+	return func(mgr *TenantConnectionManager) {
+		if maxTenantPools > 0 {
+			mgr.maxTenantPools = maxTenantPools
+		}
+
+		if idleTimeout > 0 {
+			mgr.idleTimeout = idleTimeout
+		}
+	}
 }
 
 // TenantConnectionManager resolves and caches connections per unique infrastructure configuration.
@@ -78,6 +107,8 @@ type TenantConnectionManager struct {
 	maxIdleConns        int
 	connMaxLifetimeMins int
 	connMaxIdleTimeMins int
+	maxTenantPools      int
+	idleTimeout         time.Duration
 }
 
 // NewTenantConnectionManager creates a TenantConnectionManager with the given configuration port.
@@ -85,6 +116,7 @@ type TenantConnectionManager struct {
 func NewTenantConnectionManager(
 	configPort ports.ConfigurationPort,
 	maxOpenConns, maxIdleConns, connMaxLifetimeMins, connMaxIdleTimeMins int,
+	opts ...ConnectionManagerOption,
 ) (*TenantConnectionManager, error) {
 	if configPort == nil {
 		return nil, ErrConfigurationPortRequired
@@ -106,7 +138,7 @@ func NewTenantConnectionManager(
 		connMaxIdleTimeMins = 5
 	}
 
-	return &TenantConnectionManager{
+	mgr := &TenantConnectionManager{
 		configPort:            configPort,
 		postgresClientFactory: libPostgres.New,
 		postgresConnector: func(ctx context.Context, client *libPostgres.Client) error {
@@ -119,32 +151,30 @@ func NewTenantConnectionManager(
 		maxIdleConns:        maxIdleConns,
 		connMaxLifetimeMins: connMaxLifetimeMins,
 		connMaxIdleTimeMins: connMaxIdleTimeMins,
-	}, nil
+	}
+
+	for _, opt := range opts {
+		if opt != nil {
+			opt(mgr)
+		}
+	}
+
+	return mgr, nil
 }
 
-// GetPostgresConnection returns a postgres connection for the tenant in context.
-// Connections are cached by infrastructure key to avoid duplicate pools.
-// Uses singleflight to prevent duplicate connection creation when multiple
-// goroutines request the same infrastructure key concurrently.
+// GetPostgresConnection returns a leased postgres connection for the tenant in context.
+// Callers MUST release the returned lease when finished.
+//
+//nolint:cyclop // Lease acquisition has explicit closed/cache/cap branches for safety.
 func (mgr *TenantConnectionManager) GetPostgresConnection(
 	ctx context.Context,
-) (*libPostgres.Client, error) {
+) (*ports.PostgresConnectionLease, error) {
 	asserter := assert.New(
 		ctx,
 		nil,
 		constants.ApplicationName,
 		"tenant_connection_manager.get_postgres",
 	)
-
-	mgr.mu.RLock()
-
-	if mgr.closed {
-		mgr.mu.RUnlock()
-
-		return nil, ErrConnectionManagerClosed
-	}
-
-	mgr.mu.RUnlock()
 
 	tenantID := auth.GetTenantID(ctx)
 
@@ -158,40 +188,66 @@ func (mgr *TenantConnectionManager) GetPostgresConnection(
 	}
 
 	infraKey := postgresInfraKey(cfg)
+	now := time.Now().UTC()
 
-	mgr.mu.RLock()
+	mgr.mu.Lock()
+	if mgr.closed {
+		mgr.mu.Unlock()
 
-	if cached, ok := mgr.postgresCache[infraKey]; ok {
-		mgr.mu.RUnlock()
-
-		return cached.conn, nil
+		return nil, ErrConnectionManagerClosed
 	}
 
-	mgr.mu.RUnlock()
+	if lease, ok := mgr.acquirePostgresLeaseLocked(infraKey, now); ok {
+		mgr.mu.Unlock()
+
+		return lease, nil
+	}
+	mgr.mu.Unlock()
 
 	result, err, _ := mgr.postgresSF.Do(infraKey, func() (any, error) {
 		setupCtx, cancel := newConnectionSetupContext(ctx)
 		defer cancel()
 
 		mgr.mu.Lock()
-		defer mgr.mu.Unlock()
 
 		if mgr.closed {
+			mgr.mu.Unlock()
+
 			return nil, ErrConnectionManagerClosed
 		}
 
 		if cached, ok := mgr.postgresCache[infraKey]; ok {
-			return cached.conn, nil
+			conn := cached.conn
+			mgr.mu.Unlock()
+
+			return conn, nil
+		}
+
+		if err := mgr.evictIdlePostgresLocked(now); err != nil {
+			mgr.mu.Unlock()
+
+			return nil, err
+		}
+
+		if mgr.maxTenantPools > 0 && len(mgr.postgresCache) >= mgr.maxTenantPools {
+			mgr.mu.Unlock()
+
+			return nil, fmt.Errorf("%w: postgres cap=%d infra_key=%s", ErrTenantPoolLimitReached, mgr.maxTenantPools, infraKey)
 		}
 
 		conn, createErr := mgr.createPostgresConnection(setupCtx, cfg, infraKey)
 		if createErr != nil {
+			mgr.mu.Unlock()
+
 			return nil, createErr
 		}
 
 		mgr.postgresCache[infraKey] = &cachedPostgresConnection{
-			conn: conn,
+			conn:       conn,
+			lastUsedAt: now,
+			idleSince:  now,
 		}
+		mgr.mu.Unlock()
 
 		return conn, nil
 	})
@@ -199,37 +255,39 @@ func (mgr *TenantConnectionManager) GetPostgresConnection(
 		return nil, fmt.Errorf("singleflight get postgres connection: %w", err)
 	}
 
-	conn, ok := result.(*libPostgres.Client)
+	_, ok := result.(*libPostgres.Client)
 	if !ok {
 		return nil, fmt.Errorf("%w: %T", errUnexpectedConnectionType, result)
 	}
 
-	return conn, nil
+	mgr.mu.Lock()
+	defer mgr.mu.Unlock()
+
+	if mgr.closed {
+		return nil, ErrConnectionManagerClosed
+	}
+
+	lease, ok := mgr.acquirePostgresLeaseLocked(infraKey, time.Now().UTC())
+	if !ok {
+		return nil, fmt.Errorf("%w: postgres infra_key=%s", errCachedConnectionMissing, infraKey)
+	}
+
+	return lease, nil
 }
 
-// GetRedisConnection returns a redis connection for the tenant in context.
-// Connections are cached by infrastructure key to avoid duplicate pools.
-// Uses singleflight to prevent duplicate connection creation when multiple
-// goroutines request the same infrastructure key concurrently.
+// GetRedisConnection returns a leased redis connection for the tenant in context.
+// Callers MUST release the returned lease when finished.
+//
+//nolint:cyclop,gocyclo // Lease acquisition has explicit closed/cache/cap branches for safety.
 func (mgr *TenantConnectionManager) GetRedisConnection(
 	ctx context.Context,
-) (*libRedis.Client, error) {
+) (*ports.RedisConnectionLease, error) {
 	asserter := assert.New(
 		ctx,
 		nil,
 		constants.ApplicationName,
 		"tenant_connection_manager.get_redis",
 	)
-
-	mgr.mu.RLock()
-
-	if mgr.closed {
-		mgr.mu.RUnlock()
-
-		return nil, ErrConnectionManagerClosed
-	}
-
-	mgr.mu.RUnlock()
 
 	tenantID := auth.GetTenantID(ctx)
 
@@ -247,40 +305,66 @@ func (mgr *TenantConnectionManager) GetRedisConnection(
 	}
 
 	infraKey := redisInfraKey(cfg)
+	now := time.Now().UTC()
 
-	mgr.mu.RLock()
+	mgr.mu.Lock()
+	if mgr.closed {
+		mgr.mu.Unlock()
 
-	if cached, ok := mgr.redisCache[infraKey]; ok {
-		mgr.mu.RUnlock()
-
-		return cached.conn, nil
+		return nil, ErrConnectionManagerClosed
 	}
 
-	mgr.mu.RUnlock()
+	if lease, ok := mgr.acquireRedisLeaseLocked(infraKey, now); ok {
+		mgr.mu.Unlock()
+
+		return lease, nil
+	}
+	mgr.mu.Unlock()
 
 	result, err, _ := mgr.redisSF.Do(infraKey, func() (any, error) {
 		setupCtx, cancel := newConnectionSetupContext(ctx)
 		defer cancel()
 
 		mgr.mu.Lock()
-		defer mgr.mu.Unlock()
 
 		if mgr.closed {
+			mgr.mu.Unlock()
+
 			return nil, ErrConnectionManagerClosed
 		}
 
 		if cached, ok := mgr.redisCache[infraKey]; ok {
-			return cached.conn, nil
+			conn := cached.conn
+			mgr.mu.Unlock()
+
+			return conn, nil
+		}
+
+		if err := mgr.evictIdleRedisLocked(now); err != nil {
+			mgr.mu.Unlock()
+
+			return nil, err
+		}
+
+		if mgr.maxTenantPools > 0 && len(mgr.redisCache) >= mgr.maxTenantPools {
+			mgr.mu.Unlock()
+
+			return nil, fmt.Errorf("%w: redis cap=%d infra_key=%s", ErrTenantPoolLimitReached, mgr.maxTenantPools, infraKey)
 		}
 
 		conn, createErr := mgr.createRedisConnection(setupCtx, cfg, infraKey)
 		if createErr != nil {
+			mgr.mu.Unlock()
+
 			return nil, createErr
 		}
 
 		mgr.redisCache[infraKey] = &cachedRedisConnection{
-			conn: conn,
+			conn:       conn,
+			lastUsedAt: now,
+			idleSince:  now,
 		}
+		mgr.mu.Unlock()
 
 		return conn, nil
 	})
@@ -288,39 +372,236 @@ func (mgr *TenantConnectionManager) GetRedisConnection(
 		return nil, fmt.Errorf("singleflight get redis connection: %w", err)
 	}
 
-	conn, ok := result.(*libRedis.Client)
+	_, ok := result.(*libRedis.Client)
 	if !ok {
 		return nil, fmt.Errorf("%w: %T", errUnexpectedConnectionType, result)
 	}
 
-	return conn, nil
+	mgr.mu.Lock()
+	defer mgr.mu.Unlock()
+
+	if mgr.closed {
+		return nil, ErrConnectionManagerClosed
+	}
+
+	lease, ok := mgr.acquireRedisLeaseLocked(infraKey, time.Now().UTC())
+	if !ok {
+		return nil, fmt.Errorf("%w: redis infra_key=%s", errCachedConnectionMissing, infraKey)
+	}
+
+	return lease, nil
+}
+
+type evictionCandidate struct {
+	infraKey   string
+	lastUsedAt time.Time
+}
+
+//nolint:cyclop,gocyclo // Eviction is an explicit state machine over cached entries.
+func (mgr *TenantConnectionManager) evictIdlePostgresLocked(now time.Time) error {
+	if mgr.maxTenantPools <= 0 || mgr.idleTimeout <= 0 || len(mgr.postgresCache) < mgr.maxTenantPools {
+		return nil
+	}
+
+	candidates := make([]evictionCandidate, 0, len(mgr.postgresCache))
+	for infraKey, cached := range mgr.postgresCache {
+		if cached == nil || cached.conn == nil || cached.leases > 0 || cached.draining || cached.idleSince.IsZero() {
+			continue
+		}
+
+		if now.Sub(cached.idleSince) >= mgr.idleTimeout {
+			candidates = append(candidates, evictionCandidate{infraKey: infraKey, lastUsedAt: cached.idleSince})
+		}
+	}
+
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].lastUsedAt.Before(candidates[j].lastUsedAt)
+	})
+
+	for len(mgr.postgresCache) >= mgr.maxTenantPools && len(candidates) > 0 {
+		candidate := candidates[0]
+		candidates = candidates[1:]
+
+		cached := mgr.postgresCache[candidate.infraKey]
+		delete(mgr.postgresCache, candidate.infraKey)
+
+		if cached != nil && cached.conn != nil {
+			if err := cached.conn.Close(); err != nil {
+				return fmt.Errorf("evict idle postgres [%s]: %w", candidate.infraKey, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+//nolint:cyclop,gocyclo // Eviction is an explicit state machine over cached entries.
+func (mgr *TenantConnectionManager) evictIdleRedisLocked(now time.Time) error {
+	if mgr.maxTenantPools <= 0 || mgr.idleTimeout <= 0 || len(mgr.redisCache) < mgr.maxTenantPools {
+		return nil
+	}
+
+	candidates := make([]evictionCandidate, 0, len(mgr.redisCache))
+	for infraKey, cached := range mgr.redisCache {
+		if cached == nil || cached.conn == nil || cached.leases > 0 || cached.draining || cached.idleSince.IsZero() {
+			continue
+		}
+
+		if now.Sub(cached.idleSince) >= mgr.idleTimeout {
+			candidates = append(candidates, evictionCandidate{infraKey: infraKey, lastUsedAt: cached.idleSince})
+		}
+	}
+
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].lastUsedAt.Before(candidates[j].lastUsedAt)
+	})
+
+	for len(mgr.redisCache) >= mgr.maxTenantPools && len(candidates) > 0 {
+		candidate := candidates[0]
+		candidates = candidates[1:]
+
+		cached := mgr.redisCache[candidate.infraKey]
+		delete(mgr.redisCache, candidate.infraKey)
+
+		if cached != nil && cached.conn != nil {
+			if err := cached.conn.Close(); err != nil {
+				return fmt.Errorf("evict idle redis [%s]: %w", candidate.infraKey, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+func (mgr *TenantConnectionManager) acquirePostgresLeaseLocked(
+	infraKey string,
+	now time.Time,
+) (*ports.PostgresConnectionLease, bool) {
+	cached, ok := mgr.postgresCache[infraKey]
+	if !ok || cached == nil || cached.conn == nil {
+		return nil, false
+	}
+
+	cached.leases++
+	cached.lastUsedAt = now
+	cached.idleSince = time.Time{}
+
+	return ports.NewPostgresConnectionLease(cached.conn, func() {
+		mgr.releasePostgresLease(infraKey)
+	}), true
+}
+
+func (mgr *TenantConnectionManager) acquireRedisLeaseLocked(
+	infraKey string,
+	now time.Time,
+) (*ports.RedisConnectionLease, bool) {
+	cached, ok := mgr.redisCache[infraKey]
+	if !ok || cached == nil || cached.conn == nil {
+		return nil, false
+	}
+
+	cached.leases++
+	cached.lastUsedAt = now
+	cached.idleSince = time.Time{}
+
+	return ports.NewRedisConnectionLease(cached.conn, func() {
+		mgr.releaseRedisLease(infraKey)
+	}), true
+}
+
+func (mgr *TenantConnectionManager) releasePostgresLease(infraKey string) {
+	mgr.mu.Lock()
+	defer mgr.mu.Unlock()
+
+	cached, ok := mgr.postgresCache[infraKey]
+	if !ok || cached == nil {
+		return
+	}
+
+	if cached.leases > 0 {
+		cached.leases--
+	}
+
+	if cached.leases != 0 {
+		return
+	}
+
+	cached.idleSince = time.Now().UTC()
+	if !mgr.closed && !cached.draining {
+		return
+	}
+
+	delete(mgr.postgresCache, infraKey)
+
+	if cached.conn != nil {
+		_ = cached.conn.Close()
+	}
+}
+
+func (mgr *TenantConnectionManager) releaseRedisLease(infraKey string) {
+	mgr.mu.Lock()
+	defer mgr.mu.Unlock()
+
+	cached, ok := mgr.redisCache[infraKey]
+	if !ok || cached == nil {
+		return
+	}
+
+	if cached.leases > 0 {
+		cached.leases--
+	}
+
+	if cached.leases != 0 {
+		return
+	}
+
+	cached.idleSince = time.Now().UTC()
+	if !mgr.closed && !cached.draining {
+		return
+	}
+
+	delete(mgr.redisCache, infraKey)
+
+	if cached.conn != nil {
+		_ = cached.conn.Close()
+	}
 }
 
 // BeginTx starts a tenant-scoped database transaction.
-// The caller is responsible for calling Commit() or Rollback() on the returned transaction.
-func (mgr *TenantConnectionManager) BeginTx(ctx context.Context) (*sql.Tx, error) {
-	conn, err := mgr.GetPostgresConnection(ctx)
+// The caller is responsible for calling Commit() or Rollback() on the returned lease.
+func (mgr *TenantConnectionManager) BeginTx(ctx context.Context) (*ports.TxLease, error) {
+	connLease, err := mgr.GetPostgresConnection(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get postgres connection: %w", err)
 	}
 
+	conn := connLease.Connection()
+
 	db, err := conn.Resolver(ctx)
 	if err != nil {
+		connLease.Release()
+
 		return nil, fmt.Errorf("failed to get database connection: %w", err)
 	}
 
 	primaryDBs := db.PrimaryDBs()
 	if len(primaryDBs) == 0 {
+		connLease.Release()
+
 		return nil, ErrNoPrimaryDatabaseConfigured
 	}
 
 	tx, err := primaryDBs[0].BeginTx(ctx, nil)
 	if err != nil {
+		connLease.Release()
+
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 
 	if err := auth.ApplyTenantSchema(ctx, tx); err != nil {
 		if rollbackErr := tx.Rollback(); rollbackErr != nil {
+			connLease.Release()
+
 			logger, _, _, _ := libCommons.NewTrackingFromContext(ctx)
 			if logger != nil {
 				logger.Log(ctx, libLog.LevelError, fmt.Sprintf(
@@ -336,10 +617,12 @@ func (mgr *TenantConnectionManager) BeginTx(ctx context.Context) (*sql.Tx, error
 			)
 		}
 
+		connLease.Release()
+
 		return nil, fmt.Errorf("failed to apply tenant schema: %w", err)
 	}
 
-	return tx, nil
+	return ports.NewTxLease(tx, connLease.Release), nil
 }
 
 // GetReplicaDB returns the replica database for read-only queries.
@@ -350,61 +633,110 @@ func (mgr *TenantConnectionManager) BeginTx(ctx context.Context) (*sql.Tx, error
 // to ensure tenant-scoped reads, or manually apply the schema via
 // SET search_path before executing queries. Direct use without schema scoping
 // in multi-tenant mode will cause cross-tenant data leakage.
-func (mgr *TenantConnectionManager) GetReplicaDB(ctx context.Context) (*sql.DB, error) {
-	conn, err := mgr.GetPostgresConnection(ctx)
+func (mgr *TenantConnectionManager) GetReplicaDB(ctx context.Context) (*ports.ReplicaDBLease, error) {
+	connLease, err := mgr.GetPostgresConnection(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get postgres connection: %w", err)
 	}
 
+	conn := connLease.Connection()
+
 	db, err := conn.Resolver(ctx)
 	if err != nil {
+		connLease.Release()
+
 		return nil, fmt.Errorf("failed to get database connection: %w", err)
 	}
 
 	replicaDBs := db.ReplicaDBs()
 	if len(replicaDBs) > 0 {
-		return replicaDBs[0], nil
+		return ports.NewReplicaDBLease(replicaDBs[0], connLease.Release), nil
 	}
 
 	primaryDBs := db.PrimaryDBs()
 	if len(primaryDBs) == 0 {
+		connLease.Release()
+
 		return nil, ErrNoPrimaryDatabaseConfigured
 	}
 
-	return primaryDBs[0], nil
+	return ports.NewReplicaDBLease(primaryDBs[0], connLease.Release), nil
 }
 
 // Close closes all cached connections. Safe to call multiple times.
+//
+//nolint:cyclop // Close handles draining active leases and eager shutdown of idle pools.
 func (mgr *TenantConnectionManager) Close() error {
 	mgr.mu.Lock()
-	defer mgr.mu.Unlock()
 
 	if mgr.closed {
+		mgr.mu.Unlock()
+
 		return nil
 	}
 
 	mgr.closed = true
 
-	var errs []error
+	var (
+		postgresToClose []*libPostgres.Client
+		redisToClose    []*libRedis.Client
+	)
 
 	for infraKey, cached := range mgr.postgresCache {
-		if cached.conn != nil {
-			if err := cached.conn.Close(); err != nil {
-				errs = append(errs, fmt.Errorf("close postgres [%s]: %w", infraKey, err))
-			}
+		if cached == nil {
+			delete(mgr.postgresCache, infraKey)
+
+			continue
 		}
+
+		if cached.leases == 0 {
+			delete(mgr.postgresCache, infraKey)
+
+			if cached.conn != nil {
+				postgresToClose = append(postgresToClose, cached.conn)
+			}
+
+			continue
+		}
+
+		cached.draining = true
 	}
 
 	for infraKey, cached := range mgr.redisCache {
-		if cached.conn != nil {
-			if err := cached.conn.Close(); err != nil {
-				errs = append(errs, fmt.Errorf("close redis [%s]: %w", infraKey, err))
+		if cached == nil {
+			delete(mgr.redisCache, infraKey)
+
+			continue
+		}
+
+		if cached.leases == 0 {
+			delete(mgr.redisCache, infraKey)
+
+			if cached.conn != nil {
+				redisToClose = append(redisToClose, cached.conn)
 			}
+
+			continue
+		}
+
+		cached.draining = true
+	}
+
+	mgr.mu.Unlock()
+
+	var errs []error
+
+	for _, conn := range postgresToClose {
+		if err := conn.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("close postgres: %w", err))
 		}
 	}
 
-	mgr.postgresCache = nil
-	mgr.redisCache = nil
+	for _, conn := range redisToClose {
+		if err := conn.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("close redis: %w", err))
+		}
+	}
 
 	if len(errs) > 0 {
 		allErrs := append([]error{ErrCloseConnections}, errs...)
@@ -691,5 +1023,7 @@ func newConnectionSetupContext(parent context.Context) (context.Context, context
 		parent = context.Background()
 	}
 
-	return context.WithTimeout(context.WithoutCancel(parent), defaultConnectionSetupTimeout)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), defaultConnectionSetupTimeout) // #nosec G118 -- cancel is returned to the caller
+
+	return ctx, cancel
 }

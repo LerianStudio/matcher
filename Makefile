@@ -5,11 +5,20 @@
 # Define the root directory of the project
 MATCHER_ROOT := $(shell pwd)
 
-# Load environment variables from config/.env if it exists
+# Test targets use CLEAN_ENV to unset the full Matcher config env surface so
+# tests are not polluted by host environment values.
+CONFIG_ENV_KEYS := $(shell sed -n 's/^[[:space:]]*"\([A-Z0-9_]*\)",/\1/p' internal/bootstrap/config_test_helpers_test.go 2>/dev/null)
+MATCHER_OVERRIDE_KEYS := $(shell sed -n 's/^[[:space:]]*"\(MATCHER_[A-Z0-9_]*\)",/\1/p' internal/bootstrap/config_override_env_keys_test.go 2>/dev/null)
+TEST_ENV_KEYS := $(CONFIG_ENV_KEYS)
+CLEAN_ENV := env $(foreach v,$(TEST_ENV_KEYS),-u $(v)) $(foreach v,$(MATCHER_OVERRIDE_KEYS),-u $(v))
+
+# Load environment variables from config/.env if it exists.
+# This is optional — all defaults are baked into the binary.
+# Create config/.env only when you need to override defaults for local dev.
 -include config/.env
 ifneq ("$(wildcard config/.env)","")
 ENV_VARS := $(shell sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' config/.env)
-export $(ENV_VARS)
+$(foreach v,$(ENV_VARS),$(eval export $(v)))
 endif
 
 # Directory configuration
@@ -19,6 +28,7 @@ CONFIG_DIR := ./config
 BINARY_NAME ?= matcher
 BIN_DIR ?= bin
 GOLANGCI_LINT_VERSION ?= v2.6.2
+GO_CI_PACKAGES := ./cmd/... ./internal/... ./migrations/... ./pkg/... ./tests/...
 
 # Migration configuration
 MIGRATE_PATH ?= migrations
@@ -108,11 +118,6 @@ help:
 	@echo "  make tidy                        - Clean go module dependencies"
 	@echo ""
 	@echo ""
-	@echo "Setup Commands:"
-	@echo "  make set-env                     - Copy .env.example to .env"
-	@echo "  make clear-envs                  - Remove .env file"
-	@echo ""
-	@echo ""
 	@echo "Code Quality Commands:"
 	@echo "  make lint                        - Run golangci-lint"
 	@echo "  make lint-fix                    - Run golangci-lint with auto-fix"
@@ -121,6 +126,10 @@ help:
 	@echo "  make sec                         - Run security checks using gosec"
 	@echo "  make check-tests                 - Verify test coverage for components"
 	@echo "  make check-coverage              - Check coverage against thresholds"
+	@echo ""
+	@echo ""
+	@echo "CI Commands:"
+	@echo "  make ci                          - Run local CI verification (lint, tests, security, metadata checks)"
 	@echo ""
 	@echo ""
 	@echo "Test Commands:"
@@ -162,6 +171,7 @@ help:
 	@echo "Migration Commands:"
 	@echo "  make migrate-up                  - Apply database migrations"
 	@echo "  make migrate-down                - Roll back last migration"
+	@echo "  make migrate-to VERSION=<n>      - Migrate to a specific version"
 	@echo "  make migrate-create NAME=<name>  - Create new migration files"
 	@echo ""
 	@echo ""
@@ -197,37 +207,14 @@ tidy:
 	@echo "[ok] Go modules tidied successfully"
 
 #-------------------------------------------------------
-# Setup Commands
-#-------------------------------------------------------
-
-.PHONY: set-env clear-envs
-
-set-env:
-	$(call print_title,Setting up environment files)
-	@if [ -f "$(CONFIG_DIR)/.env.example" ] && [ ! -f "$(CONFIG_DIR)/.env" ]; then \
-		cp $(CONFIG_DIR)/.env.example $(CONFIG_DIR)/.env; \
-		echo "Created $(CONFIG_DIR)/.env from .env.example"; \
-	elif [ -f "$(CONFIG_DIR)/.env" ]; then \
-		echo "$(CONFIG_DIR)/.env already exists, skipping"; \
-	else \
-		echo "Warning: $(CONFIG_DIR)/.env.example not found"; \
-	fi
-	@echo "[ok] Environment setup completed"
-
-clear-envs:
-	$(call print_title,Removing environment files)
-	@rm -f $(CONFIG_DIR)/.env
-	@echo "[ok] Environment files removed"
-
-#-------------------------------------------------------
 # Code Quality Commands
 #-------------------------------------------------------
 
-.PHONY: lint lint-fix lint-custom format sec vet vulncheck check-tests check-test-tags check-coverage
+.PHONY: lint lint-fix lint-custom format sec vet vulncheck check-tests check-test-tags check-generated-artifacts check-coverage
 
 vet:
 	$(call print_title,Running go vet)
-	@go vet ./...
+	@go vet $(GO_CI_PACKAGES)
 	@echo "[ok] go vet completed successfully"
 
 lint:
@@ -236,13 +223,13 @@ lint:
 		echo "golangci-lint not found, installing..."; \
 		go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION); \
 	fi
-	@golangci-lint run ./...
+	@golangci-lint run $(GO_CI_PACKAGES)
 	@echo "[ok] Linting completed successfully"
 
 lint-fix:
 	$(call print_title,Running linters with auto-fix on all packages)
 	$(call check_command,golangci-lint,"go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)")
-	@golangci-lint run --fix ./...
+	@golangci-lint run --fix $(GO_CI_PACKAGES)
 	@echo "[ok] Lint auto-fix completed"
 
 lint-custom:
@@ -280,7 +267,7 @@ sec:
 		echo "Installing gosec..."; \
 		go install github.com/securego/gosec/v2/cmd/gosec@latest; \
 	fi
-	@gosec ./...
+	@gosec ./cmd/... ./internal/... ./pkg/... ./tests/...
 	@echo "[ok] Security checks completed"
 
 vulncheck:
@@ -289,7 +276,7 @@ vulncheck:
 		echo "Installing govulncheck..."; \
 		go install golang.org/x/vuln/cmd/govulncheck@latest; \
 	fi
-	@govulncheck ./...
+	@govulncheck $(GO_CI_PACKAGES)
 	@echo "[ok] Vulnerability check completed"
 
 check-tests:
@@ -300,6 +287,20 @@ check-tests:
 check-test-tags:
 	$(call print_title,Checking test build tags)
 	@./scripts/check-test-tags.sh
+
+check-generated-artifacts:
+	$(call print_title,Checking generated artifacts)
+	@set -e; \
+	tmp_dir="$$(mktemp -d)"; \
+	trap 'rm -rf "$$tmp_dir"' EXIT; \
+	cp -R docs/swagger "$$tmp_dir/swagger-before"; \
+	$(MAKE) generate-docs >/dev/null; \
+	if ! diff -ru "$$tmp_dir/swagger-before" docs/swagger >/dev/null; then \
+		echo "❌ Swagger artifacts are out of date. Run: make generate-docs"; \
+		diff -ru "$$tmp_dir/swagger-before" docs/swagger || true; \
+		exit 1; \
+	fi; \
+	echo "[ok] Generated artifacts are up to date"
 
 check-coverage: test
 	$(call print_title,Checking coverage thresholds)
@@ -314,14 +315,18 @@ check-coverage: test
 # Test Commands
 #-------------------------------------------------------
 
-.PHONY: test test-unit test-int test-e2e test-e2e-dashboard test-chaos test-all cover
+.PHONY: test test-unit coverage-unit test-int test-e2e test-e2e-dashboard test-chaos test-all cover
 
 test: test-unit
 
+## CI-facing target: runs unit tests and produces coverage.txt for shared workflow artifact collection.
+coverage-unit: test-unit
+	@cp $(COVER_PROFILE_UNIT) coverage.txt
+
 test-unit:
 	$(call print_title,Running unit tests)
-	@$(TEST_RUNNER) -tags=unit -coverprofile=$(COVER_PROFILE_UNIT) -race -cover ./...
-	@cd tools && $(TEST_RUNNER) -tags=unit -coverprofile=../$(COVER_PROFILE_TOOLS) -race ./...
+	@$(CLEAN_ENV) $(TEST_RUNNER) -tags=unit -coverprofile=$(COVER_PROFILE_UNIT) -race -cover $(GO_CI_PACKAGES)
+	@cd tools && $(CLEAN_ENV) $(TEST_RUNNER) -tags=unit -coverprofile=../$(COVER_PROFILE_TOOLS) -race ./...
 	$(call show_coverage,$(COVER_PROFILE_UNIT))
 	@printf "Coverage summary (%s): " $(COVER_PROFILE_TOOLS); cd tools && go tool cover -func=../$(COVER_PROFILE_TOOLS) | tail -n 1
 	@echo "[ok] Unit tests passed"
@@ -387,6 +392,28 @@ cover:
 	@echo "----------------------------------------"
 	@echo "Open coverage.html in your browser to view detailed coverage report"
 	@echo "[ok] Coverage report generated successfully"
+
+#-------------------------------------------------------
+# CI Commands
+#-------------------------------------------------------
+
+.PHONY: ci
+
+ci:
+	$(call print_title,Running local CI verification pipeline)
+	@$(MAKE) lint
+	@$(MAKE) test
+	@$(MAKE) test-int
+	@$(MAKE) check-tests
+	@$(MAKE) check-test-tags
+	@$(MAKE) check-generated-artifacts
+	@$(MAKE) sec
+	@$(MAKE) vet
+	@$(MAKE) vulncheck
+	@echo ""
+	@echo "=========================================="
+	@echo "   [ok] Local CI verification passed"
+	@echo "=========================================="
 
 #-------------------------------------------------------
 # Service Commands
@@ -485,7 +512,7 @@ generate-docs:
 # Migration Commands
 #-------------------------------------------------------
 
-.PHONY: check-db-safety migrate-up migrate-down migrate-create
+.PHONY: check-db-safety migrate-up migrate-down migrate-to migrate-create
 
 check-db-safety:
 	@set -eu; \
@@ -524,6 +551,17 @@ migrate-down: check-db-safety
 	$(call check_command,migrate,"https://github.com/golang-migrate/migrate")
 	@migrate -path $(MIGRATE_PATH) -database "$(DATABASE_URL)" down 1
 	@echo "[ok] Migration rolled back successfully"
+
+migrate-to: check-db-safety
+	$(call print_title,Migrating to specific version)
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Error: VERSION not specified."; \
+		echo "Usage: make migrate-to VERSION=<version_number>"; \
+		exit 1; \
+	fi
+	$(call check_command,migrate,"https://github.com/golang-migrate/migrate")
+	@migrate -path $(MIGRATE_PATH) -database "$(DATABASE_URL)" goto $(VERSION)
+	@echo "[ok] Migrated to version $(VERSION) successfully"
 
 migrate-create:
 	$(call print_title,Creating new migration)

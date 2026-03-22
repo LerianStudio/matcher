@@ -13,9 +13,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libPostgres "github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres"
-	libRedis "github.com/LerianStudio/lib-uncommons/v2/uncommons/redis"
-
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
@@ -27,21 +24,21 @@ type fakeInfraProvider struct{}
 
 func (f *fakeInfraProvider) GetPostgresConnection(
 	_ context.Context,
-) (*libPostgres.Client, error) {
+) (*ports.PostgresConnectionLease, error) {
 	return nil, nil
 }
 
 func (f *fakeInfraProvider) GetRedisConnection(
 	_ context.Context,
-) (*libRedis.Client, error) {
+) (*ports.RedisConnectionLease, error) {
 	return nil, nil
 }
 
-func (f *fakeInfraProvider) BeginTx(_ context.Context) (*sql.Tx, error) {
+func (f *fakeInfraProvider) BeginTx(_ context.Context) (*ports.TxLease, error) {
 	return nil, nil
 }
 
-func (f *fakeInfraProvider) GetReplicaDB(_ context.Context) (*sql.DB, error) {
+func (f *fakeInfraProvider) GetReplicaDB(_ context.Context) (*ports.ReplicaDBLease, error) {
 	return nil, nil
 }
 
@@ -384,7 +381,7 @@ func TestNewExportJob_ValidFormats(t *testing.T) {
 		DateTo:   time.Now().UTC(),
 	}
 
-	formats := []string{
+	formats := []entities.ExportFormat{
 		entities.ExportFormatCSV,
 		entities.ExportFormatJSON,
 		entities.ExportFormatXML,
@@ -394,7 +391,7 @@ func TestNewExportJob_ValidFormats(t *testing.T) {
 	ctx := context.Background()
 
 	for _, format := range formats {
-		t.Run(format, func(t *testing.T) {
+		t.Run(string(format), func(t *testing.T) {
 			t.Parallel()
 
 			job, err := entities.NewExportJob(
@@ -424,15 +421,16 @@ func TestNewExportJob_ValidReportTypes(t *testing.T) {
 		DateTo:   time.Now().UTC(),
 	}
 
-	reportTypes := []string{
+	reportTypes := []entities.ExportReportType{
 		entities.ExportReportTypeMatched,
 		entities.ExportReportTypeUnmatched,
 		entities.ExportReportTypeSummary,
 		entities.ExportReportTypeVariance,
+		entities.ExportReportTypeExceptions,
 	}
 
 	for _, reportType := range reportTypes {
-		t.Run(reportType, func(t *testing.T) {
+		t.Run(string(reportType), func(t *testing.T) {
 			t.Parallel()
 
 			job, err := entities.NewExportJob(
@@ -614,7 +612,7 @@ func TestExportJob_IsTerminal(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		status     string
+		status     entities.ExportJobStatus
 		isTerminal bool
 	}{
 		{
@@ -664,7 +662,7 @@ func TestExportJob_IsDownloadable(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		status         string
+		status         entities.ExportJobStatus
 		fileKey        string
 		isDownloadable bool
 	}{
@@ -747,7 +745,7 @@ func TestIsValidExportFormat(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		format   string
+		format   entities.ExportFormat
 		expected bool
 	}{
 		{name: "CSV is valid", format: entities.ExportFormatCSV, expected: true},
@@ -773,7 +771,7 @@ func TestIsValidReportType(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		reportType string
+		reportType entities.ExportReportType
 		expected   bool
 	}{
 		{name: "MATCHED is valid", reportType: entities.ExportReportTypeMatched, expected: true},
@@ -803,7 +801,7 @@ func TestIsStreamableFormat(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		format   string
+		format   entities.ExportFormat
 		expected bool
 	}{
 		{name: "CSV is streamable", format: entities.ExportFormatCSV, expected: true},
@@ -831,8 +829,8 @@ func TestGenerateFileName(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		reportType string
-		format     string
+		reportType entities.ExportReportType
+		format     entities.ExportFormat
 		expected   string
 	}{
 		{
@@ -1073,14 +1071,14 @@ func TestRepository_List_DatabaseQuery(t *testing.T) {
 		defer finish()
 
 		ctx := context.Background()
-		status := entities.ExportJobStatusQueued
+		statusStr := string(entities.ExportJobStatusQueued)
 
 		mock.ExpectBegin()
 		mock.ExpectQuery("SELECT").
 			WillReturnRows(sqlmock.NewRows(exportJobColumns()))
 		mock.ExpectCommit()
 
-		jobs, _, err := repo.List(ctx, &status, nil, 10)
+		jobs, _, err := repo.List(ctx, &statusStr, nil, 10)
 
 		require.NoError(t, err)
 		assert.Empty(t, jobs)

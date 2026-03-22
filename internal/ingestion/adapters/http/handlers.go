@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -19,10 +20,10 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/ingestion/adapters/http/dto"
@@ -101,6 +102,12 @@ type contextProvider interface {
 	FindByID(ctx context.Context, tenantID, contextID uuid.UUID) (*ReconciliationContextInfo, error)
 }
 
+// productionMode indicates whether the application is running in production.
+// Set once during handler construction via NewHandler; governs SafeError behavior
+// (suppresses internal error details in client responses when true).
+// Uses atomic.Bool because parallel tests construct handlers concurrently.
+var productionMode atomic.Bool
+
 // Handlers provides HTTP handlers for ingestion operations.
 type Handlers struct {
 	commandUC       *command.UseCase
@@ -114,6 +121,7 @@ func NewHandlers(
 	commandUC *command.UseCase,
 	queryUC *query.UseCase,
 	ctxProvider contextProvider,
+	production bool,
 ) (*Handlers, error) {
 	if commandUC == nil {
 		return nil, ErrNilCommandUseCase
@@ -126,6 +134,8 @@ func NewHandlers(
 	if ctxProvider == nil {
 		return nil, ErrNilContextProvider
 	}
+
+	productionMode.Store(production)
 
 	verifier := NewTenantOwnershipVerifier(ctxProvider)
 
@@ -152,7 +162,7 @@ func startHandlerSpan(c *fiber.Ctx, name string) (context.Context, trace.Span, l
 
 func logSpanError(ctx context.Context, span trace.Span, logger libLog.Logger, message string, err error) {
 	libOpentelemetry.HandleSpanError(span, message, err)
-	libLog.SafeError(logger, ctx, message, err, false)
+	libLog.SafeError(logger, ctx, message, err, productionMode.Load())
 }
 
 // validateFileContentType checks if the file's content type is valid for the declared format.
@@ -1133,4 +1143,12 @@ func handleIgnoreTransactionError(
 	logSpanError(ctx, span, logger, "failed to ignore transaction", err)
 
 	return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
+}
+
+// ErrorResponse is a placeholder for Swagger documentation.
+// The actual error response type is defined in lib-commons.
+type ErrorResponse struct {
+	Code    int    `json:"code"`
+	Title   string `json:"title"`
+	Message string `json:"message"`
 }

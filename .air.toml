@@ -9,9 +9,13 @@ tmp_dir = "tmp"
 # Binary output path
 entrypoint = "./tmp/main"
 # Build command
-cmd = "go build -mod=vendor -o ./tmp/main ./cmd/matcher"
+cmd = "go build -mod=mod -o ./tmp/main ./cmd/matcher"
 # Watch these extensions
 include_ext = ["go", "tpl", "tmpl", "html", "sql"]
+# Limit watch scope to source directories only
+include_dir = ["cmd", "internal", "pkg"]
+# Also watch module metadata and Air config
+include_file = ["go.mod", "go.sum", ".air.toml"]
 # Exclude directories
 exclude_dir = [
   "tests",
@@ -23,7 +27,9 @@ exclude_dir = [
   "node_modules",
   ".git",
   "docs",
+  "image",
   "console",
+  "scripts",
   "worktrees",
   "bin",
   "migrations",
@@ -35,7 +41,7 @@ exclude_file = []
 # Exclude regex patterns
 exclude_regex = ["_test.go"]
 # Exclude unchanged files
-exclude_unchanged = false
+exclude_unchanged = true
 # Follow symbolic links
 follow_symlink = false
 # Full binary path

@@ -11,14 +11,16 @@ import (
 	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	pgcommon "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/common"
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/repositories"
+	sharedpg "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
+	"github.com/LerianStudio/matcher/internal/shared/constants"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -53,13 +55,14 @@ func (repo *Repository) WithTx(ctx context.Context, fn func(*sql.Tx) error) erro
 
 	defer span.End()
 
-	connection, err := repo.provider.GetPostgresConnection(ctx)
+	connectionLease, err := repo.provider.GetPostgresConnection(ctx)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
 		return fmt.Errorf("get postgres connection for job transaction: %w", err)
 	}
+	defer connectionLease.Release()
 
-	_, err = pgcommon.WithTenantTx(ctx, connection, func(tx *sql.Tx) (struct{}, error) {
+	_, err = pgcommon.WithTenantTx(ctx, connectionLease.Connection(), func(tx *sql.Tx) (struct{}, error) {
 		return struct{}{}, fn(tx)
 	})
 	if err != nil {
@@ -108,15 +111,16 @@ func (repo *Repository) create(
 
 	defer span.End()
 
-	connection, err := repo.provider.GetPostgresConnection(ctx)
+	connectionLease, err := repo.provider.GetPostgresConnection(ctx)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
 		return nil, fmt.Errorf("get postgres connection for create job: %w", err)
 	}
+	defer connectionLease.Release()
 
 	result, err := pgcommon.WithTenantTxOrExisting(
 		ctx,
-		connection,
+		connectionLease.Connection(),
 		tx,
 		func(execTx *sql.Tx) (*entities.IngestionJob, error) {
 			model, err := NewJobPostgreSQLModel(job)
@@ -167,15 +171,16 @@ func (repo *Repository) FindByID(
 
 	defer span.End()
 
-	connection, err := repo.provider.GetPostgresConnection(ctx)
+	connectionLease, err := repo.provider.GetPostgresConnection(ctx)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
 		return nil, fmt.Errorf("get postgres connection for find job: %w", err)
 	}
+	defer connectionLease.Release()
 
 	result, err := pgcommon.WithTenantTx(
 		ctx,
-		connection,
+		connectionLease.Connection(),
 		func(tx *sql.Tx) (*entities.IngestionJob, error) {
 			row := tx.QueryRowContext(
 				ctx,
@@ -216,24 +221,25 @@ func (repo *Repository) FindByContextID(
 
 	defer span.End()
 
-	connection, err := repo.provider.GetPostgresConnection(ctx)
+	connectionLease, err := repo.provider.GetPostgresConnection(ctx)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
 		return nil, libHTTP.CursorPagination{}, fmt.Errorf("get postgres connection for list jobs: %w", err)
 	}
+	defer connectionLease.Release()
 
 	var pagination libHTTP.CursorPagination
 
 	result, err := pgcommon.WithTenantTx(
 		ctx,
-		connection,
+		connectionLease.Connection(),
 		func(tx *sql.Tx) (jobs []*entities.IngestionJob, err error) {
 			orderDirection := libHTTP.ValidateSortDirection(filter.SortOrder)
-
-			limit := filter.Limit
-			if limit <= 0 {
-				limit = 20
-			}
+			limit := libHTTP.ValidateLimit(
+				filter.Limit,
+				constants.DefaultPaginationLimit,
+				constants.MaximumPaginationLimit,
+			)
 
 			sortColumn := normalizeJobSortColumn(filter.SortBy)
 			useIDCursor := sortColumn == "id"
@@ -353,15 +359,16 @@ func (repo *Repository) update(
 
 	defer span.End()
 
-	connection, err := repo.provider.GetPostgresConnection(ctx)
+	connectionLease, err := repo.provider.GetPostgresConnection(ctx)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
 		return nil, fmt.Errorf("get postgres connection for update job: %w", err)
 	}
+	defer connectionLease.Release()
 
 	result, err := pgcommon.WithTenantTxOrExisting(
 		ctx,
-		connection,
+		connectionLease.Connection(),
 		tx,
 		func(execTx *sql.Tx) (*entities.IngestionJob, error) {
 			model, err := NewJobPostgreSQLModel(job)
@@ -397,6 +404,10 @@ func (repo *Repository) update(
 }
 
 func jobSortValue(job *entities.IngestionJob, column string) string {
+	if job == nil {
+		return ""
+	}
+
 	switch column {
 	case columnCreatedAt:
 		return job.CreatedAt.UTC().Format(time.RFC3339Nano)
@@ -437,10 +448,15 @@ func calculateJobPagination(
 		return libHTTP.CursorPagination{}, nil
 	}
 
+	first, last := jobs[0], jobs[len(jobs)-1]
+	if err := sharedpg.ValidateSortCursorBoundaries(first, last); err != nil {
+		return libHTTP.CursorPagination{}, fmt.Errorf("validate job pagination boundaries: %w", err)
+	}
+
 	if useIDCursor {
 		pagination, err := libHTTP.CalculateCursor(
 			isFirstPage, hasPagination, cursorDirection,
-			jobs[0].ID.String(), jobs[len(jobs)-1].ID.String(),
+			first.ID.String(), last.ID.String(),
 		)
 		if err != nil {
 			return libHTTP.CursorPagination{}, fmt.Errorf("calculate cursor: %w", err)
@@ -449,16 +465,45 @@ func calculateJobPagination(
 		return pagination, nil
 	}
 
-	first, last := jobs[0], jobs[len(jobs)-1]
-
-	next, prev := libHTTP.CalculateSortCursorPagination(
-		isFirstPage, hasPagination, cursorDirection == libHTTP.CursorDirectionNext,
+	return calculateJobSortPagination(
+		isFirstPage,
+		hasPagination,
+		cursorDirection == libHTTP.CursorDirectionNext,
 		sortColumn,
-		jobSortValue(first, sortColumn), first.ID.String(),
-		jobSortValue(last, sortColumn), last.ID.String(),
+		jobSortValue(first, sortColumn),
+		first.ID.String(),
+		jobSortValue(last, sortColumn),
+		last.ID.String(),
+		libHTTP.CalculateSortCursorPagination,
 	)
+}
 
-	return libHTTP.CursorPagination{Next: next, Prev: prev}, nil
+func calculateJobSortPagination(
+	isFirstPage, hasPagination, pointsNext bool,
+	sortColumn,
+	firstSortValue,
+	firstID,
+	lastSortValue,
+	lastID string,
+	calculateSortCursor sharedpg.SortCursorCalculator,
+) (libHTTP.CursorPagination, error) {
+	pagination, err := sharedpg.CalculateSortCursorPaginationWrapped(
+		isFirstPage,
+		hasPagination,
+		pointsNext,
+		sortColumn,
+		firstSortValue,
+		firstID,
+		lastSortValue,
+		lastID,
+		calculateSortCursor,
+		"calculate sort cursor pagination",
+	)
+	if err != nil {
+		return libHTTP.CursorPagination{}, fmt.Errorf("calculate job sort cursor pagination: %w", err)
+	}
+
+	return pagination, nil
 }
 
 func scanJob(scanner interface{ Scan(dest ...any) error }) (*entities.IngestionJob, error) {

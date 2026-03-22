@@ -630,6 +630,20 @@ func TestSanitizeCSVValue_NormalString(t *testing.T) {
 	assert.Equal(t, "normal value", result)
 }
 
+func TestSanitizeCSVValue_TabPrefix(t *testing.T) {
+	t.Parallel()
+
+	result := sanitizeCSVValue("\tcommand")
+	assert.Equal(t, "'\tcommand", result)
+}
+
+func TestSanitizeCSVValue_CarriageReturnPrefix(t *testing.T) {
+	t.Parallel()
+
+	result := sanitizeCSVValue("\rcommand")
+	assert.Equal(t, "'\rcommand", result)
+}
+
 func TestBuildMatchedCSV_MultipleItems(t *testing.T) {
 	t.Parallel()
 

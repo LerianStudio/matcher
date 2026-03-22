@@ -9,9 +9,9 @@ import (
 
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
@@ -125,20 +125,20 @@ func (uc *UseCase) assignSingle(
 		return fmt.Errorf("assign exception: %w", err)
 	}
 
-	tx, err := uc.infraProvider.BeginTx(ctx)
+	txLease, err := uc.infraProvider.BeginTx(ctx)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
 	}
 
 	defer func() {
-		_ = tx.Rollback()
+		_ = txLease.Rollback()
 	}()
 
-	if _, err := uc.exceptionRepo.UpdateWithTx(ctx, tx, exception); err != nil {
+	if _, err := uc.exceptionRepo.UpdateWithTx(ctx, txLease.SQLTx(), exception); err != nil {
 		return fmt.Errorf("update exception: %w", err)
 	}
 
-	if err := uc.auditPublisher.PublishExceptionEventWithTx(ctx, tx, ports.AuditEvent{
+	if err := uc.auditPublisher.PublishExceptionEventWithTx(ctx, txLease.SQLTx(), ports.AuditEvent{
 		ExceptionID: exceptionID,
 		Action:      "BULK_ASSIGN",
 		Actor:       actor,
@@ -151,7 +151,7 @@ func (uc *UseCase) assignSingle(
 		return fmt.Errorf("publish audit: %w", err)
 	}
 
-	if err := tx.Commit(); err != nil {
+	if err := txLease.Commit(); err != nil {
 		return fmt.Errorf("commit transaction: %w", err)
 	}
 
@@ -241,20 +241,20 @@ func (uc *UseCase) resolveSingle(
 		return fmt.Errorf("resolve exception: %w", err)
 	}
 
-	tx, err := uc.infraProvider.BeginTx(ctx)
+	txLease, err := uc.infraProvider.BeginTx(ctx)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
 	}
 
 	defer func() {
-		_ = tx.Rollback()
+		_ = txLease.Rollback()
 	}()
 
-	if _, err := uc.exceptionRepo.UpdateWithTx(ctx, tx, exception); err != nil {
+	if _, err := uc.exceptionRepo.UpdateWithTx(ctx, txLease.SQLTx(), exception); err != nil {
 		return fmt.Errorf("update exception: %w", err)
 	}
 
-	if err := uc.auditPublisher.PublishExceptionEventWithTx(ctx, tx, ports.AuditEvent{
+	if err := uc.auditPublisher.PublishExceptionEventWithTx(ctx, txLease.SQLTx(), ports.AuditEvent{
 		ExceptionID: exceptionID,
 		Action:      "BULK_RESOLVE",
 		Actor:       actor,
@@ -267,7 +267,7 @@ func (uc *UseCase) resolveSingle(
 		return fmt.Errorf("publish audit: %w", err)
 	}
 
-	if err := tx.Commit(); err != nil {
+	if err := txLease.Commit(); err != nil {
 		return fmt.Errorf("commit transaction: %w", err)
 	}
 

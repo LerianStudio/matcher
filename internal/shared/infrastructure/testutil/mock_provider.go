@@ -10,13 +10,13 @@ import (
 	"testing"
 	"unsafe"
 
-	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/bxcodec/dbresolver/v2"
 	"github.com/redis/go-redis/v9"
 
-	libPostgres "github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres"
-	libRedis "github.com/LerianStudio/lib-uncommons/v2/uncommons/redis"
+	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
+	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
 
+	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -46,50 +46,49 @@ type MockInfrastructureProvider struct {
 // GetPostgresConnection returns the mocked postgres connection or error.
 func (provider *MockInfrastructureProvider) GetPostgresConnection(
 	_ context.Context,
-) (*libPostgres.Client, error) {
+) (*ports.PostgresConnectionLease, error) {
 	if provider.PostgresErr != nil {
 		return nil, provider.PostgresErr
 	}
 
-	return provider.PostgresConn, nil
+	return ports.NewPostgresConnectionLease(provider.PostgresConn, nil), nil
 }
 
 // GetRedisConnection returns the mocked redis connection or error.
 func (provider *MockInfrastructureProvider) GetRedisConnection(
 	_ context.Context,
-) (*libRedis.Client, error) {
+) (*ports.RedisConnectionLease, error) {
 	if provider.RedisErr != nil {
 		return nil, provider.RedisErr
 	}
 
-	return provider.RedisConn, nil
+	return ports.NewRedisConnectionLease(provider.RedisConn, nil), nil
 }
 
 // tryBeginPostgresTx attempts to begin a transaction from the configured PostgresConn.
-// Returns (tx, true) if successful, (nil, false) if PostgresConn is not configured.
 func (provider *MockInfrastructureProvider) tryBeginPostgresTx(
 	ctx context.Context,
-) (*sql.Tx, bool) {
+) (*sql.Tx, error) {
 	if provider.PostgresConn == nil {
-		return nil, false
+		return nil, ErrNoPostgresConnection
 	}
 
 	resolver, err := provider.PostgresConn.Resolver(ctx)
 	if err != nil {
-		return nil, false
+		return nil, fmt.Errorf("resolve postgres connection: %w", err)
 	}
 
 	primaryDBs := resolver.PrimaryDBs()
 	if len(primaryDBs) == 0 {
-		return nil, false
+		return nil, ErrNoDatabase
 	}
 
 	tx, err := primaryDBs[0].BeginTx(ctx, nil)
 	if err != nil {
-		return nil, false
+		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 
-	return tx, true
+	return tx, nil
 }
 
 // BeginTx returns a mock transaction for testing.
@@ -97,51 +96,50 @@ func (provider *MockInfrastructureProvider) tryBeginPostgresTx(
 // If Tx is set, returns it.
 // If PostgresConn is set with a configured database, uses that to begin transaction.
 // Otherwise creates a new mock transaction using sqlmock.
-func (provider *MockInfrastructureProvider) BeginTx(ctx context.Context) (*sql.Tx, error) {
+func (provider *MockInfrastructureProvider) BeginTx(ctx context.Context) (*ports.TxLease, error) {
 	if provider.TxErr != nil {
 		return nil, provider.TxErr
 	}
 
 	if provider.Tx != nil {
-		return provider.Tx, nil
+		return ports.NewTxLease(provider.Tx, nil), nil
+	}
+
+	if provider.PostgresErr != nil {
+		return nil, provider.PostgresErr
+	}
+
+	if provider.PostgresConn == nil {
+		return nil, ErrNoPostgresConnection
 	}
 
 	// If PostgresConn is configured, use it to begin transaction
 	// This allows existing tests with sqlmock expectations to work
-	tx, ok := provider.tryBeginPostgresTx(ctx)
-	if ok {
-		return tx, nil
-	}
-
-	// Create a mock transaction that handles Commit/Rollback without panicking
-	db, mock, err := sqlmock.New()
+	tx, err := provider.tryBeginPostgresTx(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("create sqlmock: %w", err)
+		return nil, err
 	}
 
-	mock.ExpectBegin()
-	mock.ExpectCommit()
-	mock.ExpectRollback()
+	if err := auth.ApplyTenantSchema(ctx, tx); err != nil {
+		_ = tx.Rollback()
 
-	tx, err = db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("begin mock transaction: %w", err)
+		return nil, fmt.Errorf("apply tenant schema: %w", err)
 	}
 
-	return tx, nil
+	return ports.NewTxLease(tx, nil), nil
 }
 
 // GetReplicaDB returns the mocked replica database or error.
 // If ReplicaDB is set, returns it.
 // If PostgresConn is set, attempts to get the replica from it.
 // Falls back to primary if no replica is configured.
-func (provider *MockInfrastructureProvider) GetReplicaDB(ctx context.Context) (*sql.DB, error) {
+func (provider *MockInfrastructureProvider) GetReplicaDB(ctx context.Context) (*ports.ReplicaDBLease, error) {
 	if provider.ReplicaDBErr != nil {
 		return nil, provider.ReplicaDBErr
 	}
 
 	if provider.ReplicaDB != nil {
-		return provider.ReplicaDB, nil
+		return ports.NewReplicaDBLease(provider.ReplicaDB, nil), nil
 	}
 
 	if provider.PostgresConn == nil {
@@ -155,7 +153,7 @@ func (provider *MockInfrastructureProvider) GetReplicaDB(ctx context.Context) (*
 
 	replicaDBs := resolver.ReplicaDBs()
 	if len(replicaDBs) > 0 {
-		return replicaDBs[0], nil
+		return ports.NewReplicaDBLease(replicaDBs[0], nil), nil
 	}
 
 	primaryDBs := resolver.PrimaryDBs()
@@ -163,7 +161,7 @@ func (provider *MockInfrastructureProvider) GetReplicaDB(ctx context.Context) (*
 		return nil, ErrNoDatabase
 	}
 
-	return primaryDBs[0], nil
+	return ports.NewReplicaDBLease(primaryDBs[0], nil), nil
 }
 
 // NewClientWithResolver creates a *libPostgres.Client with a pre-injected resolver
@@ -180,7 +178,7 @@ func NewClientWithResolver(resolver dbresolver.DB) *libPostgres.Client {
 
 	rf := rv.FieldByName("resolver")
 	if !rf.IsValid() {
-		panic("lib-uncommons postgres.Client no longer has field 'resolver'") //nolint:forbidigo // test infrastructure: panic detects upstream library breaking changes
+		panic("lib-commons postgres.Client no longer has field 'resolver'") //nolint:forbidigo // test infrastructure: panic detects upstream library breaking changes
 	}
 
 	// Use unsafe to bypass unexported field restrictions.
@@ -189,7 +187,7 @@ func NewClientWithResolver(resolver dbresolver.DB) *libPostgres.Client {
 
 	primaryField := rv.FieldByName("primary")
 	if !primaryField.IsValid() {
-		panic("lib-uncommons postgres.Client no longer has field 'primary'") //nolint:forbidigo // test infrastructure: panic detects upstream library breaking changes
+		panic("lib-commons postgres.Client no longer has field 'primary'") //nolint:forbidigo // test infrastructure: panic detects upstream library breaking changes
 	}
 
 	primaryDBs := resolver.PrimaryDBs()
@@ -200,7 +198,7 @@ func NewClientWithResolver(resolver dbresolver.DB) *libPostgres.Client {
 
 	replicaField := rv.FieldByName("replica")
 	if !replicaField.IsValid() {
-		panic("lib-uncommons postgres.Client no longer has field 'replica'") //nolint:forbidigo // test infrastructure: panic detects upstream library breaking changes
+		panic("lib-commons postgres.Client no longer has field 'replica'") //nolint:forbidigo // test infrastructure: panic detects upstream library breaking changes
 	}
 
 	replicaDBs := resolver.ReplicaDBs()
@@ -213,7 +211,7 @@ func NewClientWithResolver(resolver dbresolver.DB) *libPostgres.Client {
 }
 
 // NewRedisClientWithMock creates a *libRedis.Client with a pre-injected
-// redis.UniversalClient for test purposes. Since v2 redis.Client has all unexported
+// redis.UniversalClient for test purposes. Since v4 redis.Client has all unexported
 // fields, this uses reflect+unsafe to set the 'client' and 'connected' fields directly.
 // This is intentionally test-only. Pass nil to create a client that deterministically
 // returns an error from GetClient (simulating a broken/unavailable redis client).
@@ -225,7 +223,7 @@ func NewRedisClientWithMock(mock redis.UniversalClient) *libRedis.Client {
 
 		cfgField := rv.FieldByName("cfg")
 		if !cfgField.IsValid() {
-			panic("lib-uncommons redis.Client no longer has field 'cfg'") //nolint:forbidigo // test infrastructure: panic detects upstream library breaking changes
+			panic("lib-commons redis.Client no longer has field 'cfg'") //nolint:forbidigo // test infrastructure: panic detects upstream library breaking changes
 		}
 
 		cfgPtr := unsafe.Pointer(cfgField.UnsafeAddr()) //#nosec G103 -- test-only: bypassing unexported field for mock injection
@@ -244,7 +242,7 @@ func NewRedisClientWithMock(mock redis.UniversalClient) *libRedis.Client {
 	// Set the 'client' field (redis.UniversalClient).
 	rf := rv.FieldByName("client")
 	if !rf.IsValid() {
-		panic("lib-uncommons redis.Client no longer has field 'client'") //nolint:forbidigo // test infrastructure: panic detects upstream library breaking changes
+		panic("lib-commons redis.Client no longer has field 'client'") //nolint:forbidigo // test infrastructure: panic detects upstream library breaking changes
 	}
 
 	rPtr := unsafe.Pointer(rf.UnsafeAddr()) //#nosec G103 -- test-only: bypassing unexported field for mock injection
@@ -253,7 +251,7 @@ func NewRedisClientWithMock(mock redis.UniversalClient) *libRedis.Client {
 	// Set the 'connected' field to true.
 	cf := rv.FieldByName("connected")
 	if !cf.IsValid() {
-		panic("lib-uncommons redis.Client no longer has field 'connected'") //nolint:forbidigo // test infrastructure: panic detects upstream library breaking changes
+		panic("lib-commons redis.Client no longer has field 'connected'") //nolint:forbidigo // test infrastructure: panic detects upstream library breaking changes
 	}
 
 	cPtr := unsafe.Pointer(cf.UnsafeAddr()) //#nosec G103 -- test-only: bypassing unexported field for mock injection
@@ -272,7 +270,7 @@ func NewRedisClientConnected() *libRedis.Client {
 
 	cf := rv.FieldByName("connected")
 	if !cf.IsValid() {
-		panic("lib-uncommons redis.Client no longer has field 'connected'") //nolint:forbidigo // test infrastructure: panic detects upstream library breaking changes
+		panic("lib-commons redis.Client no longer has field 'connected'") //nolint:forbidigo // test infrastructure: panic detects upstream library breaking changes
 	}
 
 	cPtr := unsafe.Pointer(cf.UnsafeAddr()) //#nosec G103 -- test-only: bypassing unexported field for mock injection

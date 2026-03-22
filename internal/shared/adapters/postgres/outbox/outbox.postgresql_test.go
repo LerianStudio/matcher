@@ -609,7 +609,14 @@ func TestRepository_MarkPublished_Success(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE outbox_events SET status").
-		WithArgs(entities.OutboxStatusPublished, publishedAt, sqlmock.AnyArg(), id).
+		WithArgs(
+			entities.OutboxStatusPublished,
+			publishedAt,
+			sqlmock.AnyArg(),
+			id,
+			entities.OutboxStatusPublished,
+			entities.OutboxStatusInvalid,
+		).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 
@@ -630,7 +637,14 @@ func TestRepository_MarkPublished_Error(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE outbox_events SET status").
-		WithArgs(entities.OutboxStatusPublished, publishedAt, sqlmock.AnyArg(), id).
+		WithArgs(
+			entities.OutboxStatusPublished,
+			publishedAt,
+			sqlmock.AnyArg(),
+			id,
+			entities.OutboxStatusPublished,
+			entities.OutboxStatusInvalid,
+		).
 		WillReturnError(errTestDatabaseError)
 	mock.ExpectRollback()
 
@@ -652,7 +666,17 @@ func TestRepository_MarkFailed_Success(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE outbox_events SET").
-		WithArgs(maxAttempts, entities.OutboxStatusInvalid, entities.OutboxStatusFailed, "max dispatch attempts exceeded", errMsg, sqlmock.AnyArg(), id).
+		WithArgs(
+			maxAttempts,
+			entities.OutboxStatusInvalid,
+			entities.OutboxStatusFailed,
+			"max dispatch attempts exceeded",
+			errMsg,
+			sqlmock.AnyArg(),
+			id,
+			entities.OutboxStatusPublished,
+			entities.OutboxStatusInvalid,
+		).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 
@@ -674,7 +698,17 @@ func TestRepository_MarkFailed_Error(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE outbox_events SET").
-		WithArgs(maxAttempts, entities.OutboxStatusInvalid, entities.OutboxStatusFailed, "max dispatch attempts exceeded", errMsg, sqlmock.AnyArg(), id).
+		WithArgs(
+			maxAttempts,
+			entities.OutboxStatusInvalid,
+			entities.OutboxStatusFailed,
+			"max dispatch attempts exceeded",
+			errMsg,
+			sqlmock.AnyArg(),
+			id,
+			entities.OutboxStatusPublished,
+			entities.OutboxStatusInvalid,
+		).
 		WillReturnError(errTestDatabaseError)
 	mock.ExpectRollback()
 

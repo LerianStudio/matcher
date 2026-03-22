@@ -2,14 +2,13 @@ package adapters
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libPostgres "github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres"
-	libRedis "github.com/LerianStudio/lib-uncommons/v2/uncommons/redis"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
+	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
@@ -53,34 +52,37 @@ func NewSingleTenantInfrastructureProvider(
 // Returns ErrPostgresConnectionNotConfigured if no connection was provided at construction time.
 func (provider *SingleTenantInfrastructureProvider) GetPostgresConnection(
 	_ context.Context,
-) (*libPostgres.Client, error) {
-	if provider.postgres == nil {
+) (*ports.PostgresConnectionLease, error) {
+	postgres := provider.currentPostgres()
+	if postgres == nil {
 		return nil, ErrPostgresConnectionNotConfigured
 	}
 
-	return provider.postgres, nil
+	return ports.NewPostgresConnectionLease(postgres, nil), nil
 }
 
 // GetRedisConnection returns the singleton redis connection.
 // Returns ErrRedisConnectionNotConfigured if no connection was provided at construction time.
 func (provider *SingleTenantInfrastructureProvider) GetRedisConnection(
 	_ context.Context,
-) (*libRedis.Client, error) {
-	if provider.redis == nil {
+) (*ports.RedisConnectionLease, error) {
+	redis := provider.currentRedis()
+	if redis == nil {
 		return nil, ErrRedisConnectionNotConfigured
 	}
 
-	return provider.redis, nil
+	return ports.NewRedisConnectionLease(redis, nil), nil
 }
 
 // BeginTx starts a tenant-scoped database transaction.
 // The caller is responsible for calling Commit() or Rollback() on the returned transaction.
-func (provider *SingleTenantInfrastructureProvider) BeginTx(ctx context.Context) (*sql.Tx, error) {
-	if provider.postgres == nil {
+func (provider *SingleTenantInfrastructureProvider) BeginTx(ctx context.Context) (*ports.TxLease, error) {
+	postgres := provider.currentPostgres()
+	if postgres == nil {
 		return nil, ErrPostgresConnectionNotConfigured
 	}
 
-	resolver, err := provider.postgres.Resolver(ctx)
+	resolver, err := postgres.Resolver(ctx)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"failed to get database connection: %w",
@@ -120,7 +122,7 @@ func (provider *SingleTenantInfrastructureProvider) BeginTx(ctx context.Context)
 		return nil, fmt.Errorf("failed to apply tenant schema: %w", err)
 	}
 
-	return tx, nil
+	return ports.NewTxLease(tx, nil), nil
 }
 
 // GetReplicaDB returns the replica database for read-only queries.
@@ -131,12 +133,13 @@ func (provider *SingleTenantInfrastructureProvider) BeginTx(ctx context.Context)
 // to ensure tenant-scoped reads, or manually apply the schema via
 // SET search_path before executing queries. Direct use without schema scoping
 // in multi-tenant mode will cause cross-tenant data leakage.
-func (provider *SingleTenantInfrastructureProvider) GetReplicaDB(ctx context.Context) (*sql.DB, error) {
-	if provider.postgres == nil {
+func (provider *SingleTenantInfrastructureProvider) GetReplicaDB(ctx context.Context) (*ports.ReplicaDBLease, error) {
+	postgres := provider.currentPostgres()
+	if postgres == nil {
 		return nil, ErrPostgresConnectionNotConfigured
 	}
 
-	resolver, err := provider.postgres.Resolver(ctx)
+	resolver, err := postgres.Resolver(ctx)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"failed to get database connection: %w",
@@ -146,7 +149,7 @@ func (provider *SingleTenantInfrastructureProvider) GetReplicaDB(ctx context.Con
 
 	replicaDBs := resolver.ReplicaDBs()
 	if len(replicaDBs) > 0 {
-		return replicaDBs[0], nil
+		return ports.NewReplicaDBLease(replicaDBs[0], nil), nil
 	}
 
 	primaryDBs := resolver.PrimaryDBs()
@@ -154,5 +157,21 @@ func (provider *SingleTenantInfrastructureProvider) GetReplicaDB(ctx context.Con
 		return nil, ErrNoDatabaseForRead
 	}
 
-	return primaryDBs[0], nil
+	return ports.NewReplicaDBLease(primaryDBs[0], nil), nil
+}
+
+func (provider *SingleTenantInfrastructureProvider) currentPostgres() *libPostgres.Client {
+	if provider == nil {
+		return nil
+	}
+
+	return provider.postgres
+}
+
+func (provider *SingleTenantInfrastructureProvider) currentRedis() *libRedis.Client {
+	if provider == nil {
+		return nil
+	}
+
+	return provider.redis
 }

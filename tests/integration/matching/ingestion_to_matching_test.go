@@ -55,10 +55,9 @@ func TestIntegrationE4T9_IngestionToMatching_PersistsArtifactsAndUpdatesTransact
 		require.Len(t, candidates, 2)
 
 		run, groups, err := wired.MatchingUC.RunMatch(ctx, matchingCommand.RunMatchInput{
-			TenantID:        h.Seed.TenantID,
-			ContextID:       seed.ContextID,
-			Mode:            matchingVO.MatchRunModeCommit,
-			PrimarySourceID: nil,
+			TenantID:  h.Seed.TenantID,
+			ContextID: seed.ContextID,
+			Mode:      matchingVO.MatchRunModeCommit,
 		})
 		require.NoError(t, err)
 		require.NotNil(t, run)
@@ -80,12 +79,9 @@ func TestIntegrationE4T9_IngestionToMatching_PersistsArtifactsAndUpdatesTransact
 	})
 }
 
-// TestIntegrationE4T9_DirectedMatching_PrimarySourceIDSelectsLeftSide verifies
-// that passing a non-nil PrimarySourceID activates directed matching mode.
-// In directed mode, the specified source becomes the "left" side and all other
-// sources become the "right" side, rather than the default symmetric assignment
-// where the first source from the query becomes left.
-func TestIntegrationE4T9_DirectedMatching_PrimarySourceIDSelectsLeftSide(t *testing.T) {
+// TestIntegrationE4T9_ConfiguredSourceSidesDriveMatching verifies that
+// matching uses configured source sides rather than runtime direction hints.
+func TestIntegrationE4T9_ConfiguredSourceSidesDriveMatching(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctxBase := e4t9Ctx(t, h)
 		ctx, cancel := context.WithTimeout(ctxBase, 90*time.Second)
@@ -126,16 +122,11 @@ func TestIntegrationE4T9_DirectedMatching_PrimarySourceIDSelectsLeftSide(t *test
 		require.NoError(t, err)
 		require.Len(t, candidates, 2, "both transactions should be unmatched before directed match")
 
-		// Run matching in DIRECTED mode: NonLedgerSourceID (bank) as primary.
-		// This explicitly puts the bank source on the "left" side and the ledger
-		// source on the "right" side, which is the reverse of the default symmetric
-		// ordering.
-		primaryID := seed.NonLedgerSourceID
+		// Run matching using the configured source sides.
 		run, groups, err := wired.MatchingUC.RunMatch(ctx, matchingCommand.RunMatchInput{
-			TenantID:        h.Seed.TenantID,
-			ContextID:       seed.ContextID,
-			Mode:            matchingVO.MatchRunModeCommit,
-			PrimarySourceID: &primaryID,
+			TenantID:  h.Seed.TenantID,
+			ContextID: seed.ContextID,
+			Mode:      matchingVO.MatchRunModeCommit,
 		})
 		require.NoError(t, err)
 		require.NotNil(t, run, "match run should be returned")

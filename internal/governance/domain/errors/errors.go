@@ -1,0 +1,16 @@
+// Package errors defines sentinel errors for the governance domain.
+package errors
+
+import "errors"
+
+// Sentinel errors for governance domain operations.
+var (
+	// ErrAuditLogNotFound is returned when an audit log entry is not found.
+	ErrAuditLogNotFound = errors.New("audit log not found")
+
+	// ErrActorMappingNotFound is returned when an actor mapping is not found.
+	ErrActorMappingNotFound = errors.New("actor mapping not found")
+
+	// ErrMetadataNotFound is returned when archive metadata is not found.
+	ErrMetadataNotFound = errors.New("archive metadata not found")
+)

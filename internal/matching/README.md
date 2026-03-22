@@ -39,13 +39,16 @@ internal/matching/
 │   ├── entities/            # MatchRun, MatchGroup, MatchItem, Adjustment, FeeVariance, events
 │   ├── enums/               # Exception reason codes
 │   ├── repositories/        # Repository interfaces
-│   ├── services/            # Rule engine, confidence scorer, allocation, currency conversion,
-│   │                        #   date math, deterministic sort, evaluators
+│   ├── services/            # Core matching engine: rule engine, confidence scorer, allocation
+│   │                        #   (incl. failure handling), currency conversion, date math,
+│   │                        #   date lag evaluator, deterministic sort, exact/tolerance evaluators,
+│   │                        #   rule config decode, rule definition types
 │   └── value_objects/       # ConfidenceScore, FxRate, MatchGroupStatus, MatchRunMode/Status
 ├── ports/                   # ContextProvider, EventPublisher, ExceptionCreator, FxSource,
 │                            #   LockManager, MatchRuleProvider, SourceProvider, TransactionRepository
 └── services/
-    └── command/             # RunMatch, ManualMatch, Unmatch, Adjustment commands
+    ├── command/             # RunMatch, ManualMatch, Unmatch, Adjustment, rule execution commands
+    └── query/               # Match run, group, and item queries
 ```
 
 ## Domain Model
@@ -85,6 +88,9 @@ The engine verifies fees if a `RateID` is configured on the context.
 - **Currency Conversion**: Cross-currency matching with FX rate lookups and base-currency normalization.
 - **Deterministic Sorting**: Ensures consistent match ordering across runs for reproducible results.
 - **Date Math**: Date window evaluation with lag tolerance for handling settlement delays.
+- **Fee Normalization**: Net-to-gross fee conversion during rule execution for accurate fee comparison.
+
+> **Note**: The core matching engine implementation lives in `domain/services/` (not `services/command/`). This includes `engine.go` (orchestrator), `allocation.go` / `allocation_failure.go` (amount distribution), `confidence_scorer.go`, the evaluators (`exact_evaluator.go`, `tolerance_evaluator.go`, `date_lag_evaluator.go`), `currency_conversion.go`, `date_math.go`, `deterministic_sort.go`, and rule configuration decoding (`rule_config_decode.go`, `rule_definition.go`). The `services/command/` layer orchestrates use cases (run, manual match, unmatch, adjustments) that delegate to these domain services.
 
 ## Matching Process
 

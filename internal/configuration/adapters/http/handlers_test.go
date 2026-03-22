@@ -22,8 +22,8 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
@@ -31,15 +31,18 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/configuration/services/command"
 	"github.com/LerianStudio/matcher/internal/configuration/services/query"
+	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	"github.com/LerianStudio/matcher/internal/shared/testutil"
 )
 
 type handlerFixture struct {
-	handler       *Handler
-	contextRepo   *contextRepository
-	sourceRepo    *sourceRepository
-	fieldMapRepo  *fieldMapRepository
-	matchRuleRepo *matchRuleRepository
+	handler         *Handler
+	contextRepo     *contextRepository
+	sourceRepo      *sourceRepository
+	fieldMapRepo    *fieldMapRepository
+	matchRuleRepo   *matchRuleRepository
+	feeRuleRepo     *feeRuleRepository
+	feeScheduleRepo *feeScheduleRepository
 }
 
 func newHandlerFixture(t *testing.T) *handlerFixture {
@@ -49,22 +52,40 @@ func newHandlerFixture(t *testing.T) *handlerFixture {
 	sourceRepo := newSourceRepository()
 	fieldMapRepo := newFieldMapRepository()
 	matchRuleRepo := newMatchRuleRepository()
+	feeRuleRepo := newFeeRuleRepository()
+	feeScheduleRepo := newFeeScheduleRepository()
 
-	commandUseCase, err := command.NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
+	commandUseCase, err := command.NewUseCase(
+		contextRepo,
+		sourceRepo,
+		fieldMapRepo,
+		matchRuleRepo,
+		command.WithFeeRuleRepository(feeRuleRepo),
+		command.WithFeeScheduleRepository(feeScheduleRepo),
+	)
 	require.NoError(t, err)
 
-	queryUseCase, err := query.NewUseCase(contextRepo, sourceRepo, fieldMapRepo, matchRuleRepo)
+	queryUseCase, err := query.NewUseCase(
+		contextRepo,
+		sourceRepo,
+		fieldMapRepo,
+		matchRuleRepo,
+		query.WithFeeRuleRepository(feeRuleRepo),
+		query.WithFeeScheduleRepository(feeScheduleRepo),
+	)
 	require.NoError(t, err)
 
-	handler, err := NewHandler(commandUseCase, queryUseCase)
+	handler, err := NewHandler(commandUseCase, queryUseCase, false)
 	require.NoError(t, err)
 
 	return &handlerFixture{
-		handler:       handler,
-		contextRepo:   contextRepo,
-		sourceRepo:    sourceRepo,
-		fieldMapRepo:  fieldMapRepo,
-		matchRuleRepo: matchRuleRepo,
+		handler:         handler,
+		contextRepo:     contextRepo,
+		sourceRepo:      sourceRepo,
+		fieldMapRepo:    fieldMapRepo,
+		matchRuleRepo:   matchRuleRepo,
+		feeRuleRepo:     feeRuleRepo,
+		feeScheduleRepo: feeScheduleRepo,
 	}
 }
 
@@ -97,6 +118,7 @@ func (fixture *handlerFixture) seedSource(
 	input := entities.CreateReconciliationSourceInput{
 		Name: "Test Source",
 		Type: value_objects.SourceTypeLedger,
+		Side: fee.MatchingSideLeft,
 	}
 	sourceEntity, err := entities.NewReconciliationSource(context.Background(), contextID, input)
 	require.NoError(t, err)
@@ -124,6 +146,49 @@ func (fixture *handlerFixture) seedFieldMap(
 	require.NoError(t, err)
 
 	return stored
+}
+
+func (fixture *handlerFixture) seedFeeSchedule(
+	t *testing.T,
+	tenantID uuid.UUID,
+) *fee.FeeSchedule {
+	t.Helper()
+
+	schedule, err := fee.NewFeeSchedule(context.Background(), fee.NewFeeScheduleInput{
+		TenantID:         tenantID,
+		Name:             "Test Fee Schedule",
+		Currency:         "USD",
+		ApplicationOrder: fee.ApplicationOrderParallel,
+		RoundingScale:    2,
+		RoundingMode:     fee.RoundingModeHalfUp,
+		Items: []fee.FeeScheduleItemInput{{
+			Name:      "Processing",
+			Priority:  1,
+			Structure: fee.FlatFee{},
+		}},
+	})
+	require.NoError(t, err)
+
+	stored, err := fixture.feeScheduleRepo.Create(context.Background(), schedule)
+	require.NoError(t, err)
+
+	return stored
+}
+
+func (fixture *handlerFixture) seedFeeRule(
+	t *testing.T,
+	contextID, feeScheduleID uuid.UUID,
+	name string,
+	side fee.MatchingSide,
+	priority int,
+) *fee.FeeRule {
+	t.Helper()
+
+	rule, err := fee.NewFeeRule(context.Background(), contextID, feeScheduleID, side, name, priority, nil)
+	require.NoError(t, err)
+	require.NoError(t, fixture.feeRuleRepo.Create(context.Background(), rule))
+
+	return rule
 }
 
 func (fixture *handlerFixture) seedMatchRule(
@@ -274,6 +339,20 @@ func requireConflictResponse(
 	var payload map[string]any
 	require.NoError(t, json.NewDecoder(response.Body).Decode(&payload))
 	require.Equal(t, float64(409), payload["code"])
+	require.Equal(t, expectedTitle, payload["title"])
+	require.Equal(t, expectedMessage, payload["message"])
+}
+
+func requireBadRequestResponse(
+	t *testing.T,
+	response *http.Response,
+	expectedTitle, expectedMessage string,
+) {
+	t.Helper()
+
+	var payload map[string]any
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&payload))
+	require.Equal(t, float64(400), payload["code"])
 	require.Equal(t, expectedTitle, payload["title"])
 	require.Equal(t, expectedMessage, payload["message"])
 }
@@ -466,14 +545,14 @@ func getContextHandlerTestCases(t *testing.T, tenantID uuid.UUID) []contextHandl
 		{
 			name:   "create context",
 			method: http.MethodPost,
-			path:   "/v1/config/contexts",
+			path:   "/v1/contexts",
 			payload: entities.CreateReconciliationContextInput{
 				Name:     "Context A",
 				Type:     value_objects.ContextTypeOneToOne,
 				Interval: "daily",
 			},
 			registerRoute: func(app *fiber.App, handler *Handler) {
-				app.Post("/v1/config/contexts", handler.CreateContext)
+				app.Post("/v1/contexts", handler.CreateContext)
 			},
 			assertResponse: func(t *testing.T, response *http.Response, _ *entities.ReconciliationContext) {
 				t.Helper()
@@ -489,9 +568,9 @@ func getContextHandlerTestCases(t *testing.T, tenantID uuid.UUID) []contextHandl
 		{
 			name:   "list contexts",
 			method: http.MethodGet,
-			path:   "/v1/config/contexts",
+			path:   "/v1/contexts",
 			registerRoute: func(app *fiber.App, handler *Handler) {
-				app.Get("/v1/config/contexts", handler.ListContexts)
+				app.Get("/v1/contexts", handler.ListContexts)
 			},
 			setupFixture: func(fixture *handlerFixture) *entities.ReconciliationContext {
 				return fixture.seedContext(t, tenantID)
@@ -515,9 +594,9 @@ func getContextHandlerTestCases(t *testing.T, tenantID uuid.UUID) []contextHandl
 		{
 			name:   "get context",
 			method: http.MethodGet,
-			path:   "/v1/config/contexts/:contextId",
+			path:   "/v1/contexts/:contextId",
 			registerRoute: func(app *fiber.App, handler *Handler) {
-				app.Get("/v1/config/contexts/:contextId", handler.GetContext)
+				app.Get("/v1/contexts/:contextId", handler.GetContext)
 			},
 			setupFixture: func(fixture *handlerFixture) *entities.ReconciliationContext {
 				return fixture.seedContext(t, tenantID)
@@ -536,12 +615,12 @@ func getContextHandlerTestCases(t *testing.T, tenantID uuid.UUID) []contextHandl
 		{
 			name:   "update context",
 			method: http.MethodPatch,
-			path:   "/v1/config/contexts/:contextId",
+			path:   "/v1/contexts/:contextId",
 			payload: entities.UpdateReconciliationContextInput{
 				Name: stringPointer("Updated"),
 			},
 			registerRoute: func(app *fiber.App, handler *Handler) {
-				app.Patch("/v1/config/contexts/:contextId", handler.UpdateContext)
+				app.Patch("/v1/contexts/:contextId", handler.UpdateContext)
 			},
 			setupFixture: func(fixture *handlerFixture) *entities.ReconciliationContext {
 				return fixture.seedContext(t, tenantID)
@@ -559,9 +638,9 @@ func getContextHandlerTestCases(t *testing.T, tenantID uuid.UUID) []contextHandl
 		{
 			name:   "delete context",
 			method: http.MethodDelete,
-			path:   "/v1/config/contexts/:contextId",
+			path:   "/v1/contexts/:contextId",
 			registerRoute: func(app *fiber.App, handler *Handler) {
-				app.Delete("/v1/config/contexts/:contextId", handler.DeleteContext)
+				app.Delete("/v1/contexts/:contextId", handler.DeleteContext)
 			},
 			setupFixture: func(fixture *handlerFixture) *entities.ReconciliationContext {
 				return fixture.seedContext(t, tenantID)
@@ -594,9 +673,9 @@ func TestHandlers_GetContextInvalidUUID(t *testing.T) {
 	app := newTestApp(requestContext)
 	fixture := newHandlerFixture(t)
 
-	app.Get("/api/v1/config/contexts/:contextId", fixture.handler.GetContext)
+	app.Get("/api/v1/contexts/:contextId", fixture.handler.GetContext)
 
-	resp := performRequest(t, app, http.MethodGet, "/api/v1/config/contexts/not-a-uuid", nil)
+	resp := performRequest(t, app, http.MethodGet, "/api/v1/contexts/not-a-uuid", nil)
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
@@ -615,13 +694,13 @@ func TestHandlers_ContextErrorPaths(t *testing.T) {
 		app := newTestApp(requestContext)
 		fixture := newHandlerFixture(t)
 
-		app.Post("/api/v1/config/contexts", fixture.handler.CreateContext)
+		app.Post("/api/v1/contexts", fixture.handler.CreateContext)
 
 		resp := performRequest(
 			t,
 			app,
 			http.MethodPost,
-			"/api/v1/config/contexts",
+			"/api/v1/contexts",
 			[]byte("{invalid"),
 		)
 		defer resp.Body.Close()
@@ -639,9 +718,9 @@ func TestHandlers_ContextErrorPaths(t *testing.T) {
 		app := newTestApp(requestContext)
 		fixture := newHandlerFixture(t)
 
-		app.Get("/api/v1/config/contexts", fixture.handler.ListContexts)
+		app.Get("/api/v1/contexts", fixture.handler.ListContexts)
 
-		resp := performRequest(t, app, http.MethodGet, "/api/v1/config/contexts?limit=bad", nil)
+		resp := performRequest(t, app, http.MethodGet, "/api/v1/contexts?limit=bad", nil)
 		defer resp.Body.Close()
 
 		require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
@@ -657,13 +736,13 @@ func TestHandlers_ContextErrorPaths(t *testing.T) {
 		app := newTestApp(requestContext)
 		fixture := newHandlerFixture(t)
 
-		app.Get("/api/v1/config/contexts/:contextId", fixture.handler.GetContext)
+		app.Get("/api/v1/contexts/:contextId", fixture.handler.GetContext)
 
 		resp := performRequest(
 			t,
 			app,
 			http.MethodGet,
-			"/api/v1/config/contexts/"+uuid.NewString(),
+			"/api/v1/contexts/"+uuid.NewString(),
 			nil,
 		)
 		defer resp.Body.Close()
@@ -681,7 +760,7 @@ func TestHandlers_ContextErrorPaths(t *testing.T) {
 		app := newTestApp(requestContext)
 		fixture := newHandlerFixture(t)
 
-		app.Patch("/api/v1/config/contexts/:contextId", fixture.handler.UpdateContext)
+		app.Patch("/api/v1/contexts/:contextId", fixture.handler.UpdateContext)
 
 		payload := mustJSON(
 			t,
@@ -692,7 +771,7 @@ func TestHandlers_ContextErrorPaths(t *testing.T) {
 			t,
 			app,
 			http.MethodPatch,
-			"/api/v1/config/contexts/"+uuid.NewString(),
+			"/api/v1/contexts/"+uuid.NewString(),
 			payload,
 		)
 		defer resp.Body.Close()
@@ -710,13 +789,13 @@ func TestHandlers_ContextErrorPaths(t *testing.T) {
 		app := newTestApp(requestContext)
 		fixture := newHandlerFixture(t)
 
-		app.Delete("/api/v1/config/contexts/:contextId", fixture.handler.DeleteContext)
+		app.Delete("/api/v1/contexts/:contextId", fixture.handler.DeleteContext)
 
 		resp := performRequest(
 			t,
 			app,
 			http.MethodDelete,
-			"/api/v1/config/contexts/"+uuid.NewString(),
+			"/api/v1/contexts/"+uuid.NewString(),
 			nil,
 		)
 		defer resp.Body.Close()
@@ -735,7 +814,7 @@ func TestHandlers_ContextErrorPaths(t *testing.T) {
 		app := newTestApp(ctx)
 		fixture := newHandlerFixture(t)
 
-		app.Post("/api/v1/config/contexts", fixture.handler.CreateContext)
+		app.Post("/api/v1/contexts", fixture.handler.CreateContext)
 
 		payload := mustJSON(t, entities.CreateReconciliationContextInput{
 			Name:     "Context A",
@@ -743,7 +822,7 @@ func TestHandlers_ContextErrorPaths(t *testing.T) {
 			Interval: "daily",
 		})
 
-		resp := performRequest(t, app, http.MethodPost, "/api/v1/config/contexts", payload)
+		resp := performRequest(t, app, http.MethodPost, "/api/v1/contexts", payload)
 		defer resp.Body.Close()
 
 		require.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
@@ -763,13 +842,13 @@ func TestHandlers_InvalidCursor(t *testing.T) {
 		app := newTestApp(requestContext)
 		fixture := newHandlerFixture(t)
 
-		app.Get("/api/v1/config/contexts", fixture.handler.ListContexts)
+		app.Get("/api/v1/contexts", fixture.handler.ListContexts)
 
 		resp := performRequest(
 			t,
 			app,
 			http.MethodGet,
-			"/api/v1/config/contexts?cursor=invalid-cursor!!!",
+			"/api/v1/contexts?cursor=invalid-cursor!!!",
 			nil,
 		)
 		defer resp.Body.Close()
@@ -789,10 +868,10 @@ func TestHandlers_InvalidCursor(t *testing.T) {
 		fixture := newHandlerFixture(t)
 
 		contextEntity := fixture.seedContext(t, tenantID)
-		app.Get("/api/v1/config/contexts/:contextId/sources", fixture.handler.ListSources)
+		app.Get("/api/v1/contexts/:contextId/sources", fixture.handler.ListSources)
 
 		requestPath := replacePathParams(
-			"/api/v1/config/contexts/:contextId/sources",
+			"/api/v1/contexts/:contextId/sources",
 			contextEntity.ID.String(),
 		)
 
@@ -820,10 +899,10 @@ func TestHandlers_InvalidCursor(t *testing.T) {
 		fixture := newHandlerFixture(t)
 
 		contextEntity := fixture.seedContext(t, tenantID)
-		app.Get("/api/v1/config/contexts/:contextId/rules", fixture.handler.ListMatchRules)
+		app.Get("/api/v1/contexts/:contextId/rules", fixture.handler.ListMatchRules)
 
 		requestPath := replacePathParams(
-			"/api/v1/config/contexts/:contextId/rules",
+			"/api/v1/contexts/:contextId/rules",
 			contextEntity.ID.String(),
 		)
 
@@ -855,9 +934,9 @@ func TestHandlers_ListPaginationMetadata(t *testing.T) {
 		fixture := newHandlerFixture(t)
 
 		fixture.seedContext(t, tenantID)
-		app.Get("/api/v1/config/contexts", fixture.handler.ListContexts)
+		app.Get("/api/v1/contexts", fixture.handler.ListContexts)
 
-		resp := performRequest(t, app, http.MethodGet, "/api/v1/config/contexts", nil)
+		resp := performRequest(t, app, http.MethodGet, "/api/v1/contexts", nil)
 		defer resp.Body.Close()
 
 		require.Equal(t, fiber.StatusOK, resp.StatusCode)
@@ -882,10 +961,10 @@ func TestHandlers_ListPaginationMetadata(t *testing.T) {
 
 		contextEntity := fixture.seedContext(t, tenantID)
 		fixture.seedSource(t, contextEntity.ID)
-		app.Get("/api/v1/config/contexts/:contextId/sources", fixture.handler.ListSources)
+		app.Get("/api/v1/contexts/:contextId/sources", fixture.handler.ListSources)
 
 		requestPath := replacePathParams(
-			"/api/v1/config/contexts/:contextId/sources",
+			"/api/v1/contexts/:contextId/sources",
 			contextEntity.ID.String(),
 		)
 
@@ -914,10 +993,10 @@ func TestHandlers_ListPaginationMetadata(t *testing.T) {
 
 		contextEntity := fixture.seedContext(t, tenantID)
 		fixture.seedMatchRule(t, contextEntity.ID, 1)
-		app.Get("/api/v1/config/contexts/:contextId/rules", fixture.handler.ListMatchRules)
+		app.Get("/api/v1/contexts/:contextId/rules", fixture.handler.ListMatchRules)
 
 		requestPath := replacePathParams(
-			"/api/v1/config/contexts/:contextId/rules",
+			"/api/v1/contexts/:contextId/rules",
 			contextEntity.ID.String(),
 		)
 
@@ -942,13 +1021,14 @@ func makeCreateSourceTestCase(t *testing.T, tenantID uuid.UUID) sourceHandlerTes
 	return sourceHandlerTestCase{
 		name:   "create source",
 		method: http.MethodPost,
-		path:   "/api/v1/config/contexts/:contextId/sources",
+		path:   "/api/v1/contexts/:contextId/sources",
 		payload: entities.CreateReconciliationSourceInput{
 			Name: "Source A",
 			Type: value_objects.SourceTypeLedger,
+			Side: fee.MatchingSideLeft,
 		},
 		registerRoute: func(app *fiber.App, handler *Handler) {
-			app.Post("/api/v1/config/contexts/:contextId/sources", handler.CreateSource)
+			app.Post("/api/v1/contexts/:contextId/sources", handler.CreateSource)
 		},
 		setupFixture: func(fixture *handlerFixture) (uuid.UUID, uuid.UUID) {
 			contextEntity := fixture.seedContext(t, tenantID)
@@ -974,9 +1054,9 @@ func makeListSourcesTestCase(t *testing.T, tenantID uuid.UUID) sourceHandlerTest
 	return sourceHandlerTestCase{
 		name:   "list sources",
 		method: http.MethodGet,
-		path:   "/api/v1/config/contexts/:contextId/sources",
+		path:   "/api/v1/contexts/:contextId/sources",
 		registerRoute: func(app *fiber.App, handler *Handler) {
-			app.Get("/api/v1/config/contexts/:contextId/sources", handler.ListSources)
+			app.Get("/api/v1/contexts/:contextId/sources", handler.ListSources)
 		},
 		setupFixture: func(fixture *handlerFixture) (uuid.UUID, uuid.UUID) {
 			contextEntity := fixture.seedContext(t, tenantID)
@@ -1008,9 +1088,9 @@ func makeGetSourceTestCase(t *testing.T, tenantID uuid.UUID) sourceHandlerTestCa
 	return sourceHandlerTestCase{
 		name:   "get source",
 		method: http.MethodGet,
-		path:   "/api/v1/config/contexts/:contextId/sources/:sourceId",
+		path:   "/api/v1/contexts/:contextId/sources/:sourceId",
 		registerRoute: func(app *fiber.App, handler *Handler) {
-			app.Get("/api/v1/config/contexts/:contextId/sources/:sourceId", handler.GetSource)
+			app.Get("/api/v1/contexts/:contextId/sources/:sourceId", handler.GetSource)
 		},
 		setupFixture: func(fixture *handlerFixture) (uuid.UUID, uuid.UUID) {
 			contextEntity := fixture.seedContext(t, tenantID)
@@ -1037,12 +1117,12 @@ func makeUpdateSourceTestCase(t *testing.T, tenantID uuid.UUID) sourceHandlerTes
 	return sourceHandlerTestCase{
 		name:   "update source",
 		method: http.MethodPatch,
-		path:   "/api/v1/config/contexts/:contextId/sources/:sourceId",
+		path:   "/api/v1/contexts/:contextId/sources/:sourceId",
 		payload: entities.UpdateReconciliationSourceInput{
 			Name: stringPointer("Updated Source"),
 		},
 		registerRoute: func(app *fiber.App, handler *Handler) {
-			app.Patch("/api/v1/config/contexts/:contextId/sources/:sourceId", handler.UpdateSource)
+			app.Patch("/api/v1/contexts/:contextId/sources/:sourceId", handler.UpdateSource)
 		},
 		setupFixture: func(fixture *handlerFixture) (uuid.UUID, uuid.UUID) {
 			contextEntity := fixture.seedContext(t, tenantID)
@@ -1069,9 +1149,9 @@ func makeDeleteSourceTestCase(t *testing.T, tenantID uuid.UUID) sourceHandlerTes
 	return sourceHandlerTestCase{
 		name:   "delete source",
 		method: http.MethodDelete,
-		path:   "/api/v1/config/contexts/:contextId/sources/:sourceId",
+		path:   "/api/v1/contexts/:contextId/sources/:sourceId",
 		registerRoute: func(app *fiber.App, handler *Handler) {
-			app.Delete("/api/v1/config/contexts/:contextId/sources/:sourceId", handler.DeleteSource)
+			app.Delete("/api/v1/contexts/:contextId/sources/:sourceId", handler.DeleteSource)
 		},
 		setupFixture: func(fixture *handlerFixture) (uuid.UUID, uuid.UUID) {
 			contextEntity := fixture.seedContext(t, tenantID)
@@ -1122,10 +1202,10 @@ func TestHandlers_GetSourceNotFound(t *testing.T) {
 
 	contextEntity := fixture.seedContext(t, tenantID)
 
-	app.Get("/api/v1/config/contexts/:contextId/sources/:sourceId", fixture.handler.GetSource)
+	app.Get("/api/v1/contexts/:contextId/sources/:sourceId", fixture.handler.GetSource)
 
 	requestPath := replacePathParams(
-		"/api/v1/config/contexts/:contextId/sources/:sourceId",
+		"/api/v1/contexts/:contextId/sources/:sourceId",
 		contextEntity.ID.String(),
 		uuid.NewString(),
 	)
@@ -1151,10 +1231,10 @@ func TestHandlers_SourceErrorPaths(t *testing.T) {
 		fixture := newHandlerFixture(t)
 
 		contextEntity := fixture.seedContext(t, tenantID)
-		app.Post("/api/v1/config/contexts/:contextId/sources", fixture.handler.CreateSource)
+		app.Post("/api/v1/contexts/:contextId/sources", fixture.handler.CreateSource)
 
 		requestPath := replacePathParams(
-			"/api/v1/config/contexts/:contextId/sources",
+			"/api/v1/contexts/:contextId/sources",
 			contextEntity.ID.String(),
 		)
 
@@ -1176,10 +1256,10 @@ func TestHandlers_SourceErrorPaths(t *testing.T) {
 		fixture := newHandlerFixture(t)
 
 		contextEntity := fixture.seedContext(t, tenantID)
-		app.Get("/api/v1/config/contexts/:contextId/sources/:sourceId", fixture.handler.GetSource)
+		app.Get("/api/v1/contexts/:contextId/sources/:sourceId", fixture.handler.GetSource)
 
 		requestPath := replacePathParams(
-			"/api/v1/config/contexts/:contextId/sources/:sourceId",
+			"/api/v1/contexts/:contextId/sources/:sourceId",
 			contextEntity.ID.String(),
 			"not-a-uuid",
 		)
@@ -1202,13 +1282,13 @@ func TestHandlers_FieldMapHandlersTracing(t *testing.T) {
 		{
 			name:   "create field map",
 			method: http.MethodPost,
-			path:   "/api/v1/config/contexts/:contextId/sources/:sourceId/field-maps",
+			path:   "/api/v1/contexts/:contextId/sources/:sourceId/field-maps",
 			payload: entities.CreateFieldMapInput{
 				Mapping: map[string]any{"field": "value"},
 			},
 			registerRoute: func(app *fiber.App, handler *Handler) {
 				app.Post(
-					"/api/v1/config/contexts/:contextId/sources/:sourceId/field-maps",
+					"/api/v1/contexts/:contextId/sources/:sourceId/field-maps",
 					handler.CreateFieldMap,
 				)
 			},
@@ -1231,10 +1311,10 @@ func TestHandlers_FieldMapHandlersTracing(t *testing.T) {
 		{
 			name:   "get field map",
 			method: http.MethodGet,
-			path:   "/api/v1/config/contexts/:contextId/sources/:sourceId/field-maps",
+			path:   "/api/v1/contexts/:contextId/sources/:sourceId/field-maps",
 			registerRoute: func(app *fiber.App, handler *Handler) {
 				app.Get(
-					"/api/v1/config/contexts/:contextId/sources/:sourceId/field-maps",
+					"/api/v1/contexts/:contextId/sources/:sourceId/field-maps",
 					handler.GetFieldMapBySource,
 				)
 			},
@@ -1258,12 +1338,12 @@ func TestHandlers_FieldMapHandlersTracing(t *testing.T) {
 		{
 			name:   "update field map",
 			method: http.MethodPatch,
-			path:   "/api/v1/config/field-maps/:fieldMapId",
+			path:   "/api/v1/field-maps/:fieldMapId",
 			payload: entities.UpdateFieldMapInput{
 				Mapping: map[string]any{"field": "updated"},
 			},
 			registerRoute: func(app *fiber.App, handler *Handler) {
-				app.Patch("/api/v1/config/field-maps/:fieldMapId", handler.UpdateFieldMap)
+				app.Patch("/api/v1/field-maps/:fieldMapId", handler.UpdateFieldMap)
 			},
 			setupFixture: func(fixture *handlerFixture) []string {
 				contextEntity := fixture.seedContext(t, tenantID)
@@ -1285,9 +1365,9 @@ func TestHandlers_FieldMapHandlersTracing(t *testing.T) {
 		{
 			name:   "delete field map",
 			method: http.MethodDelete,
-			path:   "/api/v1/config/field-maps/:fieldMapId",
+			path:   "/api/v1/field-maps/:fieldMapId",
 			registerRoute: func(app *fiber.App, handler *Handler) {
-				app.Delete("/api/v1/config/field-maps/:fieldMapId", handler.DeleteFieldMap)
+				app.Delete("/api/v1/field-maps/:fieldMapId", handler.DeleteFieldMap)
 			},
 			setupFixture: func(fixture *handlerFixture) []string {
 				contextEntity := fixture.seedContext(t, tenantID)
@@ -1322,12 +1402,12 @@ func TestHandlers_GetFieldMapNotFound(t *testing.T) {
 	sourceEntity := fixture.seedSource(t, contextEntity.ID)
 
 	app.Get(
-		"/api/v1/config/contexts/:contextId/sources/:sourceId/field-maps",
+		"/api/v1/contexts/:contextId/sources/:sourceId/field-maps",
 		fixture.handler.GetFieldMapBySource,
 	)
 
 	requestPath := replacePathParams(
-		"/api/v1/config/contexts/:contextId/sources/:sourceId/field-maps",
+		"/api/v1/contexts/:contextId/sources/:sourceId/field-maps",
 		contextEntity.ID.String(),
 		sourceEntity.ID.String(),
 	)
@@ -1355,12 +1435,12 @@ func TestHandlers_FieldMapErrorPaths(t *testing.T) {
 		contextEntity := fixture.seedContext(t, tenantID)
 		sourceEntity := fixture.seedSource(t, contextEntity.ID)
 		app.Post(
-			"/api/v1/config/contexts/:contextId/sources/:sourceId/field-maps",
+			"/api/v1/contexts/:contextId/sources/:sourceId/field-maps",
 			fixture.handler.CreateFieldMap,
 		)
 
 		requestPath := replacePathParams(
-			"/api/v1/config/contexts/:contextId/sources/:sourceId/field-maps",
+			"/api/v1/contexts/:contextId/sources/:sourceId/field-maps",
 			contextEntity.ID.String(),
 			sourceEntity.ID.String(),
 		)
@@ -1384,12 +1464,12 @@ func TestHandlers_FieldMapErrorPaths(t *testing.T) {
 
 		contextEntity := fixture.seedContext(t, tenantID)
 		app.Get(
-			"/api/v1/config/contexts/:contextId/sources/:sourceId/field-maps",
+			"/api/v1/contexts/:contextId/sources/:sourceId/field-maps",
 			fixture.handler.GetFieldMapBySource,
 		)
 
 		requestPath := replacePathParams(
-			"/api/v1/config/contexts/:contextId/sources/:sourceId/field-maps",
+			"/api/v1/contexts/:contextId/sources/:sourceId/field-maps",
 			contextEntity.ID.String(),
 			"not-a-uuid",
 		)
@@ -1411,7 +1491,7 @@ func TestHandlers_FieldMapErrorPaths(t *testing.T) {
 		app := newTestApp(requestContext)
 		fixture := newHandlerFixture(t)
 
-		app.Patch("/api/v1/config/field-maps/:fieldMapId", fixture.handler.UpdateFieldMap)
+		app.Patch("/api/v1/field-maps/:fieldMapId", fixture.handler.UpdateFieldMap)
 
 		payload := mustJSON(
 			t,
@@ -1422,7 +1502,7 @@ func TestHandlers_FieldMapErrorPaths(t *testing.T) {
 			t,
 			app,
 			http.MethodPatch,
-			"/api/v1/config/field-maps/not-a-uuid",
+			"/api/v1/field-maps/not-a-uuid",
 			payload,
 		)
 		defer resp.Body.Close()
@@ -1439,14 +1519,14 @@ func makeCreateMatchRuleTestCase(t *testing.T, tenantID uuid.UUID) matchRuleHand
 	return matchRuleHandlerTestCase{
 		name:   "create match rule",
 		method: http.MethodPost,
-		path:   "/api/v1/config/contexts/:contextId/rules",
+		path:   "/api/v1/contexts/:contextId/rules",
 		payload: entities.CreateMatchRuleInput{
 			Priority: 1,
 			Type:     value_objects.RuleTypeExact,
 			Config:   map[string]any{"matchCurrency": true},
 		},
 		registerRoute: func(app *fiber.App, handler *Handler) {
-			app.Post("/api/v1/config/contexts/:contextId/rules", handler.CreateMatchRule)
+			app.Post("/api/v1/contexts/:contextId/rules", handler.CreateMatchRule)
 		},
 		setupFixture: func(fixture *handlerFixture) []string {
 			contextEntity := fixture.seedContext(t, tenantID)
@@ -1471,9 +1551,9 @@ func makeListMatchRulesTestCase(t *testing.T, tenantID uuid.UUID) matchRuleHandl
 	return matchRuleHandlerTestCase{
 		name:   "list match rules",
 		method: http.MethodGet,
-		path:   "/api/v1/config/contexts/:contextId/rules",
+		path:   "/api/v1/contexts/:contextId/rules",
 		registerRoute: func(app *fiber.App, handler *Handler) {
-			app.Get("/api/v1/config/contexts/:contextId/rules", handler.ListMatchRules)
+			app.Get("/api/v1/contexts/:contextId/rules", handler.ListMatchRules)
 		},
 		setupFixture: func(fixture *handlerFixture) []string {
 			contextEntity := fixture.seedContext(t, tenantID)
@@ -1505,9 +1585,9 @@ func makeGetMatchRuleTestCase(t *testing.T, tenantID uuid.UUID) matchRuleHandler
 	return matchRuleHandlerTestCase{
 		name:   "get match rule",
 		method: http.MethodGet,
-		path:   "/api/v1/config/contexts/:contextId/rules/:ruleId",
+		path:   "/api/v1/contexts/:contextId/rules/:ruleId",
 		registerRoute: func(app *fiber.App, handler *Handler) {
-			app.Get("/api/v1/config/contexts/:contextId/rules/:ruleId", handler.GetMatchRule)
+			app.Get("/api/v1/contexts/:contextId/rules/:ruleId", handler.GetMatchRule)
 		},
 		setupFixture: func(fixture *handlerFixture) []string {
 			contextEntity := fixture.seedContext(t, tenantID)
@@ -1534,12 +1614,12 @@ func makeUpdateMatchRuleTestCase(t *testing.T, tenantID uuid.UUID) matchRuleHand
 	return matchRuleHandlerTestCase{
 		name:   "update match rule",
 		method: http.MethodPatch,
-		path:   "/api/v1/config/contexts/:contextId/rules/:ruleId",
+		path:   "/api/v1/contexts/:contextId/rules/:ruleId",
 		payload: entities.UpdateMatchRuleInput{
 			Priority: intPointer(2),
 		},
 		registerRoute: func(app *fiber.App, handler *Handler) {
-			app.Patch("/api/v1/config/contexts/:contextId/rules/:ruleId", handler.UpdateMatchRule)
+			app.Patch("/api/v1/contexts/:contextId/rules/:ruleId", handler.UpdateMatchRule)
 		},
 		setupFixture: func(fixture *handlerFixture) []string {
 			contextEntity := fixture.seedContext(t, tenantID)
@@ -1566,9 +1646,9 @@ func makeDeleteMatchRuleTestCase(t *testing.T, tenantID uuid.UUID) matchRuleHand
 	return matchRuleHandlerTestCase{
 		name:   "delete match rule",
 		method: http.MethodDelete,
-		path:   "/api/v1/config/contexts/:contextId/rules/:ruleId",
+		path:   "/api/v1/contexts/:contextId/rules/:ruleId",
 		registerRoute: func(app *fiber.App, handler *Handler) {
-			app.Delete("/api/v1/config/contexts/:contextId/rules/:ruleId", handler.DeleteMatchRule)
+			app.Delete("/api/v1/contexts/:contextId/rules/:ruleId", handler.DeleteMatchRule)
 		},
 		setupFixture: func(fixture *handlerFixture) []string {
 			contextEntity := fixture.seedContext(t, tenantID)
@@ -1615,10 +1695,10 @@ func TestHandlers_MatchRuleErrorPaths(t *testing.T) {
 		t.Parallel()
 		tenantID, app, fixture, recorder := setupMatchRuleErrorTest(t)
 		contextEntity := fixture.seedContext(t, tenantID)
-		app.Post("/api/v1/config/contexts/:contextId/rules", fixture.handler.CreateMatchRule)
+		app.Post("/api/v1/contexts/:contextId/rules", fixture.handler.CreateMatchRule)
 
 		requestPath := replacePathParams(
-			"/api/v1/config/contexts/:contextId/rules",
+			"/api/v1/contexts/:contextId/rules",
 			contextEntity.ID.String(),
 		)
 
@@ -1634,10 +1714,10 @@ func TestHandlers_MatchRuleErrorPaths(t *testing.T) {
 		t.Parallel()
 		tenantID, app, fixture, recorder := setupMatchRuleErrorTest(t)
 		contextEntity := fixture.seedContext(t, tenantID)
-		app.Get("/api/v1/config/contexts/:contextId/rules/:ruleId", fixture.handler.GetMatchRule)
+		app.Get("/api/v1/contexts/:contextId/rules/:ruleId", fixture.handler.GetMatchRule)
 
 		requestPath := replacePathParams(
-			"/api/v1/config/contexts/:contextId/rules/:ruleId",
+			"/api/v1/contexts/:contextId/rules/:ruleId",
 			contextEntity.ID.String(),
 			"not-a-uuid",
 		)
@@ -1654,10 +1734,10 @@ func TestHandlers_MatchRuleErrorPaths(t *testing.T) {
 		t.Parallel()
 		tenantID, app, fixture, recorder := setupMatchRuleErrorTest(t)
 		contextEntity := fixture.seedContext(t, tenantID)
-		app.Get("/api/v1/config/contexts/:contextId/rules/:ruleId", fixture.handler.GetMatchRule)
+		app.Get("/api/v1/contexts/:contextId/rules/:ruleId", fixture.handler.GetMatchRule)
 
 		requestPath := replacePathParams(
-			"/api/v1/config/contexts/:contextId/rules/:ruleId",
+			"/api/v1/contexts/:contextId/rules/:ruleId",
 			contextEntity.ID.String(),
 			uuid.NewString(),
 		)
@@ -1675,14 +1755,14 @@ func TestHandlers_MatchRuleErrorPaths(t *testing.T) {
 		tenantID, app, fixture, recorder := setupMatchRuleErrorTest(t)
 		contextEntity := fixture.seedContext(t, tenantID)
 		app.Patch(
-			"/api/v1/config/contexts/:contextId/rules/:ruleId",
+			"/api/v1/contexts/:contextId/rules/:ruleId",
 			fixture.handler.UpdateMatchRule,
 		)
 
 		payload := mustJSON(t, entities.UpdateMatchRuleInput{Priority: intPointer(2)})
 
 		requestPath := replacePathParams(
-			"/api/v1/config/contexts/:contextId/rules/:ruleId",
+			"/api/v1/contexts/:contextId/rules/:ruleId",
 			contextEntity.ID.String(),
 			uuid.NewString(),
 		)
@@ -1700,12 +1780,12 @@ func TestHandlers_MatchRuleErrorPaths(t *testing.T) {
 		tenantID, app, fixture, recorder := setupMatchRuleErrorTest(t)
 		contextEntity := fixture.seedContext(t, tenantID)
 		app.Delete(
-			"/api/v1/config/contexts/:contextId/rules/:ruleId",
+			"/api/v1/contexts/:contextId/rules/:ruleId",
 			fixture.handler.DeleteMatchRule,
 		)
 
 		requestPath := replacePathParams(
-			"/api/v1/config/contexts/:contextId/rules/:ruleId",
+			"/api/v1/contexts/:contextId/rules/:ruleId",
 			contextEntity.ID.String(),
 			uuid.NewString(),
 		)
@@ -1729,13 +1809,13 @@ func TestHandlers_MatchRuleErrorPaths(t *testing.T) {
 
 		contextEntity := fixture.seedContext(t, tenantID)
 		app.Post(
-			"/api/v1/config/contexts/:contextId/rules/reorder",
+			"/api/v1/contexts/:contextId/rules/reorder",
 			fixture.handler.ReorderMatchRules,
 		)
 
 		payload := ReorderRequest{RuleIDs: []uuid.UUID{uuid.New()}}
 		requestPath := replacePathParams(
-			"/api/v1/config/contexts/:contextId/rules/reorder",
+			"/api/v1/contexts/:contextId/rules/reorder",
 			contextEntity.ID.String(),
 		)
 
@@ -1763,10 +1843,10 @@ func TestHandlers_ReorderMatchRulesTracing(t *testing.T) {
 
 	payload := ReorderRequest{RuleIDs: []uuid.UUID{secondRule.ID, firstRule.ID}}
 
-	app.Post("/api/v1/config/contexts/:contextId/rules/reorder", fixture.handler.ReorderMatchRules)
+	app.Post("/api/v1/contexts/:contextId/rules/reorder", fixture.handler.ReorderMatchRules)
 
 	requestPath := replacePathParams(
-		"/api/v1/config/contexts/:contextId/rules/reorder",
+		"/api/v1/contexts/:contextId/rules/reorder",
 		contextEntity.ID.String(),
 	)
 
@@ -1810,10 +1890,10 @@ func TestHandlers_CreateMatchRuleConflict(t *testing.T) {
 		Config:   map[string]any{"matchCurrency": true},
 	}
 
-	app.Post("/api/v1/config/contexts/:contextId/rules", fixture.handler.CreateMatchRule)
+	app.Post("/api/v1/contexts/:contextId/rules", fixture.handler.CreateMatchRule)
 
 	requestPath := replacePathParams(
-		"/api/v1/config/contexts/:contextId/rules",
+		"/api/v1/contexts/:contextId/rules",
 		contextEntity.ID.String(),
 	)
 
@@ -1838,10 +1918,10 @@ func TestHandlers_ReorderMatchRulesEmpty(t *testing.T) {
 
 	payload := ReorderRequest{RuleIDs: []uuid.UUID{}}
 
-	app.Post("/api/v1/config/contexts/:contextId/rules/reorder", fixture.handler.ReorderMatchRules)
+	app.Post("/api/v1/contexts/:contextId/rules/reorder", fixture.handler.ReorderMatchRules)
 
 	requestPath := replacePathParams(
-		"/api/v1/config/contexts/:contextId/rules/reorder",
+		"/api/v1/contexts/:contextId/rules/reorder",
 		contextEntity.ID.String(),
 	)
 

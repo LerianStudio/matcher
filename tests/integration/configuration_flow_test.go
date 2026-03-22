@@ -9,8 +9,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"path/filepath"
-	"runtime"
 	"testing"
 	"time"
 
@@ -25,13 +23,6 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 		postgresHost, postgresPort := extractHostPort(t, h.PostgresDSN)
 		redisAddr := extractRedisAddress(t, h.RedisAddr)
 
-		// Compute absolute path to migrations folder
-		_, currentFile, _, ok := runtime.Caller(0)
-		require.True(t, ok, "failed to get current file path")
-		migrationsPath := filepath.Clean(
-			filepath.Join(filepath.Dir(currentFile), "../../migrations"),
-		)
-
 		// Setup environment for testing
 		t.Setenv("ENV_NAME", "test")
 		t.Setenv("SERVER_ADDRESS", ":18081") // Use a different port than startup test
@@ -44,12 +35,13 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 		t.Setenv("POSTGRES_PASSWORD", "matcher_test")
 		t.Setenv("POSTGRES_DB", "matcher_test")
 		t.Setenv("POSTGRES_SSLMODE", "disable")
-		t.Setenv("MIGRATIONS_PATH", migrationsPath)
+		t.Setenv("MIGRATIONS_PATH", "migrations")
 		t.Setenv("REDIS_HOST", redisAddr)
 		t.Setenv("RABBITMQ_URI", "amqp")
 		t.Setenv("RABBITMQ_HOST", h.RabbitMQHost)
 		t.Setenv("RABBITMQ_PORT", h.RabbitMQPort)
 		t.Setenv("RABBITMQ_HEALTH_URL", h.RabbitMQHealthURL)
+		t.Setenv("RABBITMQ_ALLOW_INSECURE_HEALTH_CHECK", "true")
 		t.Setenv("RABBITMQ_USER", "guest")
 		t.Setenv("RABBITMQ_PASSWORD", "guest")
 		t.Setenv("RABBITMQ_VHOST", "/")
@@ -62,8 +54,11 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 		t.Setenv("EXPORT_RATE_LIMIT_EXPIRY_SEC", "300")
 		t.Setenv("DISPATCH_RATE_LIMIT_MAX", "100")
 		t.Setenv("DISPATCH_RATE_LIMIT_EXPIRY_SEC", "60")
+		t.Setenv("EXPORT_WORKER_ENABLED", "false")
+		t.Setenv("CLEANUP_WORKER_ENABLED", "false")
 		t.Setenv("OBJECT_STORAGE_ENDPOINT", "")
 		t.Setenv("ARCHIVAL_WORKER_ENABLED", "false")
+		t.Setenv("SYSTEMPLANE_SECRET_MASTER_KEY", "+PnwgNy8bL3HGT1rOXp47PqyGcPywXH/epgmSVwPkL0=")
 
 		// Initialize Service
 		service, err := bootstrap.InitServersWithOptions(nil)
@@ -133,7 +128,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 			t,
 			client,
 			"POST",
-			baseURL+"/v1/config/contexts",
+			baseURL+"/v1/contexts",
 			contextPayload,
 			http.StatusCreated,
 		)
@@ -150,7 +145,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 				t,
 				client,
 				"DELETE",
-				fmt.Sprintf("%s/v1/config/contexts/%s", baseURL, contextID),
+				fmt.Sprintf("%s/v1/contexts/%s", baseURL, contextID),
 				nil,
 				http.StatusNoContent,
 			)
@@ -160,6 +155,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 		ledgerPayload := map[string]any{
 			"name": "Ledger Source",
 			"type": "LEDGER",
+			"side": "LEFT",
 			"config": map[string]any{
 				"table": "journal_entries",
 			},
@@ -168,7 +164,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 			t,
 			client,
 			"POST",
-			fmt.Sprintf("%s/v1/config/contexts/%s/sources", baseURL, contextID),
+			fmt.Sprintf("%s/v1/contexts/%s/sources", baseURL, contextID),
 			ledgerPayload,
 			http.StatusCreated,
 		)
@@ -182,7 +178,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 				t,
 				client,
 				"DELETE",
-				fmt.Sprintf("%s/v1/config/contexts/%s/sources/%s", baseURL, contextID, ledgerID),
+				fmt.Sprintf("%s/v1/contexts/%s/sources/%s", baseURL, contextID, ledgerID),
 				nil,
 				http.StatusNoContent,
 			)
@@ -192,6 +188,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 		bankPayload := map[string]any{
 			"name": "Bank Source",
 			"type": "BANK",
+			"side": "RIGHT",
 			"config": map[string]any{
 				"file_format": "mt940",
 			},
@@ -200,7 +197,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 			t,
 			client,
 			"POST",
-			fmt.Sprintf("%s/v1/config/contexts/%s/sources", baseURL, contextID),
+			fmt.Sprintf("%s/v1/contexts/%s/sources", baseURL, contextID),
 			bankPayload,
 			http.StatusCreated,
 		)
@@ -214,7 +211,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 				t,
 				client,
 				"DELETE",
-				fmt.Sprintf("%s/v1/config/contexts/%s/sources/%s", baseURL, contextID, bankID),
+				fmt.Sprintf("%s/v1/contexts/%s/sources/%s", baseURL, contextID, bankID),
 				nil,
 				http.StatusNoContent,
 			)
@@ -234,7 +231,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 			client,
 			"POST",
 			fmt.Sprintf(
-				"%s/v1/config/contexts/%s/sources/%s/field-maps",
+				"%s/v1/contexts/%s/sources/%s/field-maps",
 				baseURL,
 				contextID,
 				ledgerID,
@@ -250,7 +247,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 				t,
 				client,
 				"DELETE",
-				fmt.Sprintf("%s/v1/config/field-maps/%s", baseURL, ledgerMapIDVal),
+				fmt.Sprintf("%s/v1/field-maps/%s", baseURL, ledgerMapIDVal),
 				nil,
 				http.StatusNoContent,
 			)
@@ -270,7 +267,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 			client,
 			"POST",
 			fmt.Sprintf(
-				"%s/v1/config/contexts/%s/sources/%s/field-maps",
+				"%s/v1/contexts/%s/sources/%s/field-maps",
 				baseURL,
 				contextID,
 				bankID,
@@ -286,7 +283,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 				t,
 				client,
 				"DELETE",
-				fmt.Sprintf("%s/v1/config/field-maps/%s", baseURL, bankMapIDVal),
+				fmt.Sprintf("%s/v1/field-maps/%s", baseURL, bankMapIDVal),
 				nil,
 				http.StatusNoContent,
 			)
@@ -305,7 +302,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 			t,
 			client,
 			"POST",
-			fmt.Sprintf("%s/v1/config/contexts/%s/rules", baseURL, contextID),
+			fmt.Sprintf("%s/v1/contexts/%s/rules", baseURL, contextID),
 			rulePayload,
 			http.StatusCreated,
 		)
@@ -319,7 +316,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 				t,
 				client,
 				"DELETE",
-				fmt.Sprintf("%s/v1/config/contexts/%s/rules/%s", baseURL, contextID, ruleID),
+				fmt.Sprintf("%s/v1/contexts/%s/rules/%s", baseURL, contextID, ruleID),
 				nil,
 				http.StatusNoContent,
 			)
@@ -330,7 +327,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 			t,
 			client,
 			"GET",
-			fmt.Sprintf("%s/v1/config/contexts/%s/rules", baseURL, contextID),
+			fmt.Sprintf("%s/v1/contexts/%s/rules", baseURL, contextID),
 			nil,
 			http.StatusOK,
 		)
@@ -343,7 +340,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 			t,
 			client,
 			"GET",
-			fmt.Sprintf("%s/v1/config/contexts/%s", baseURL, contextID),
+			fmt.Sprintf("%s/v1/contexts/%s", baseURL, contextID),
 			nil,
 			http.StatusOK,
 		)
@@ -351,6 +348,172 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 		require.True(t, ok, "Expected 'name' to be a string in response: %v", getContextResp)
 		require.Equal(t, "E2E Test Context", nameVal)
 		t.Log("Verified Get Context")
+
+		// --- Step 9: Create Fee Schedule (prerequisite for fee rules) ---
+		schedulePayload := map[string]any{
+			"name":             "E2E Test Schedule",
+			"currency":         "USD",
+			"applicationOrder": "PARALLEL",
+			"roundingScale":    2,
+			"roundingMode":     "HALF_UP",
+			"items": []map[string]any{
+				{
+					"name":          "Processing Fee",
+					"priority":      1,
+					"structureType": "FLAT",
+					"structure": map[string]any{
+						"amount": "2.50",
+					},
+				},
+			},
+		}
+		scheduleResp := makeRequest(
+			t,
+			client,
+			"POST",
+			baseURL+"/v1/fee-schedules",
+			schedulePayload,
+			http.StatusCreated,
+		)
+		scheduleIDVal, ok := scheduleResp["id"].(string)
+		require.True(t, ok, "Expected 'id' to be a string in fee schedule response: %v", scheduleResp)
+		require.NotEmpty(t, scheduleIDVal)
+		scheduleID := scheduleIDVal
+		t.Logf("Created Fee Schedule: %s", scheduleID)
+		t.Cleanup(func() {
+			makeRequest(
+				t,
+				client,
+				"DELETE",
+				fmt.Sprintf("%s/v1/fee-schedules/%s", baseURL, scheduleID),
+				nil,
+				http.StatusNoContent,
+			)
+		})
+
+		// --- Step 10: Create Fee Rule ---
+		feeRulePayload := map[string]any{
+			"side":          "RIGHT",
+			"feeScheduleId": scheduleID,
+			"name":          "E2E Right-Side Rule",
+			"priority":      0,
+			"predicates": []map[string]any{
+				{
+					"field":    "institution",
+					"operator": "EQUALS",
+					"value":    "Itau",
+				},
+			},
+		}
+		feeRuleResp := makeRequest(
+			t,
+			client,
+			"POST",
+			fmt.Sprintf("%s/v1/config/contexts/%s/fee-rules", baseURL, contextID),
+			feeRulePayload,
+			http.StatusCreated,
+		)
+		feeRuleIDVal, ok := feeRuleResp["id"].(string)
+		require.True(t, ok, "Expected 'id' to be a string in fee rule response: %v", feeRuleResp)
+		require.NotEmpty(t, feeRuleIDVal)
+		feeRuleID := feeRuleIDVal
+		t.Logf("Created Fee Rule: %s", feeRuleID)
+		feeRuleDeleted := false
+		// NOTE: t.Cleanup is LIFO. This runs BEFORE the fee schedule cleanup
+		// (registered earlier), ensuring correct FK deletion order.
+		t.Cleanup(func() {
+			if !feeRuleDeleted {
+				makeRequest(
+					t,
+					client,
+					"DELETE",
+					fmt.Sprintf("%s/v1/config/fee-rules/%s", baseURL, feeRuleID),
+					nil,
+					http.StatusNoContent,
+				)
+			}
+		})
+
+		// Verify created values.
+		require.Equal(t, "RIGHT", feeRuleResp["side"])
+		require.Equal(t, "E2E Right-Side Rule", feeRuleResp["name"])
+		require.Equal(t, scheduleID, feeRuleResp["feeScheduleId"])
+
+		predicatesVal, ok := feeRuleResp["predicates"].([]any)
+		require.True(t, ok, "Expected 'predicates' to be a list in response: %v", feeRuleResp)
+		require.Len(t, predicatesVal, 1)
+
+		// --- Step 11: Read back Fee Rule ---
+		getFeeRuleResp := makeRequest(
+			t,
+			client,
+			"GET",
+			fmt.Sprintf("%s/v1/config/fee-rules/%s", baseURL, feeRuleID),
+			nil,
+			http.StatusOK,
+		)
+		require.Equal(t, feeRuleID, getFeeRuleResp["id"])
+		require.Equal(t, "RIGHT", getFeeRuleResp["side"])
+		require.Equal(t, "E2E Right-Side Rule", getFeeRuleResp["name"])
+		t.Log("Verified Get Fee Rule")
+
+		// --- Step 12: Update Fee Rule ---
+		updateFeeRulePayload := map[string]any{
+			"name":     "Updated Right-Side Rule",
+			"side":     "LEFT",
+			"priority": 5,
+		}
+		updateFeeRuleResp := makeRequest(
+			t,
+			client,
+			"PATCH",
+			fmt.Sprintf("%s/v1/config/fee-rules/%s", baseURL, feeRuleID),
+			updateFeeRulePayload,
+			http.StatusOK,
+		)
+		require.Equal(t, "Updated Right-Side Rule", updateFeeRuleResp["name"])
+		require.Equal(t, "LEFT", updateFeeRuleResp["side"])
+
+		// JSON numbers are float64.
+		updatedPriority, ok := updateFeeRuleResp["priority"].(float64)
+		require.True(t, ok, "Expected 'priority' to be a number: %v", updateFeeRuleResp)
+		require.Equal(t, float64(5), updatedPriority)
+		t.Log("Verified Update Fee Rule")
+
+		// --- Step 13: List Fee Rules for Context ---
+		listFeeRulesResp := makeListRequest(
+			t,
+			client,
+			"GET",
+			fmt.Sprintf("%s/v1/config/contexts/%s/fee-rules", baseURL, contextID),
+			nil,
+			http.StatusOK,
+		)
+		require.Len(t, listFeeRulesResp, 1)
+		t.Log("Verified List Fee Rules")
+
+		// --- Step 14: Delete Fee Rule ---
+		makeRequest(
+			t,
+			client,
+			"DELETE",
+			fmt.Sprintf("%s/v1/config/fee-rules/%s", baseURL, feeRuleID),
+			nil,
+			http.StatusNoContent,
+		)
+		feeRuleDeleted = true
+		t.Log("Deleted Fee Rule")
+
+		// Verify deletion — GET should 404.
+		makeRequest(
+			t,
+			client,
+			"GET",
+			fmt.Sprintf("%s/v1/config/fee-rules/%s", baseURL, feeRuleID),
+			nil,
+			http.StatusNotFound,
+		)
+		t.Log("Verified Fee Rule Deletion (404)")
 	})
 }
 
@@ -402,6 +565,60 @@ func makeRequest(
 
 	if err := json.Unmarshal(bodyBytes, &result); err != nil {
 		t.Fatalf("Failed to parse JSON response: %v. Body: %s", err, string(bodyBytes))
+	}
+
+	return result
+}
+
+// makeListRequest is like makeRequest but for endpoints that return a JSON array.
+func makeListRequest(
+	t *testing.T,
+	client *http.Client,
+	method, url string,
+	body any,
+	expectedStatus int,
+) []map[string]any {
+	t.Helper()
+
+	var bodyReader io.Reader
+
+	if body != nil {
+		jsonBody, err := json.Marshal(body)
+		require.NoError(t, err)
+
+		bodyReader = bytes.NewBuffer(jsonBody)
+	}
+
+	req, err := http.NewRequest(method, url, bodyReader)
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	require.NoError(t, err, "Failed to read response body")
+
+	if resp.StatusCode != expectedStatus {
+		t.Fatalf(
+			"Unexpected status code for %s %s: got %d, want %d. Body: %s",
+			method,
+			url,
+			resp.StatusCode,
+			expectedStatus,
+			string(bodyBytes),
+		)
+	}
+
+	if len(bodyBytes) == 0 {
+		return nil
+	}
+
+	var result []map[string]any
+
+	if err := json.Unmarshal(bodyBytes, &result); err != nil {
+		t.Fatalf("Failed to parse JSON array response: %v. Body: %s", err, string(bodyBytes))
 	}
 
 	return result

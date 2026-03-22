@@ -15,8 +15,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
@@ -190,7 +190,11 @@ func TestExportWorker_StartStop(t *testing.T) {
 		cfg := ExportWorkerConfig{PollInterval: 100 * time.Millisecond}
 		logger := &libLog.NopLogger{}
 
-		jobRepo.EXPECT().ClaimNextQueued(gomock.Any()).Return(nil, nil).AnyTimes()
+		var claimCount atomic.Int32
+		jobRepo.EXPECT().ClaimNextQueued(gomock.Any()).DoAndReturn(func(context.Context) (*entities.ExportJob, error) {
+			claimCount.Add(1)
+			return nil, nil
+		}).AnyTimes()
 
 		worker, err := NewExportWorker(jobRepo, reportRepo, storage, cfg, logger)
 		require.NoError(t, err)
@@ -217,7 +221,11 @@ func TestExportWorker_StartStop(t *testing.T) {
 		cfg := ExportWorkerConfig{PollInterval: 100 * time.Millisecond}
 		logger := &libLog.NopLogger{}
 
-		jobRepo.EXPECT().ClaimNextQueued(gomock.Any()).Return(nil, nil).AnyTimes()
+		var claimCount atomic.Int32
+		jobRepo.EXPECT().ClaimNextQueued(gomock.Any()).DoAndReturn(func(context.Context) (*entities.ExportJob, error) {
+			claimCount.Add(1)
+			return nil, nil
+		}).AnyTimes()
 
 		worker, err := NewExportWorker(jobRepo, reportRepo, storage, cfg, logger)
 		require.NoError(t, err)
@@ -248,6 +256,60 @@ func TestExportWorker_StartStop(t *testing.T) {
 
 		err = worker.Stop()
 		require.ErrorIs(t, err, ErrWorkerNotRunning)
+	})
+
+	t.Run("supports stop start stop restart cycle", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		jobRepo := repomocks.NewMockExportJobRepository(ctrl)
+		reportRepo := &mockReportRepoForWorker{}
+		storage := portsmocks.NewMockObjectStorageClient(ctrl)
+		cfg := ExportWorkerConfig{PollInterval: 100 * time.Millisecond}
+		logger := &libLog.NopLogger{}
+
+		var claimCount atomic.Int32
+		jobRepo.EXPECT().ClaimNextQueued(gomock.Any()).DoAndReturn(func(context.Context) (*entities.ExportJob, error) {
+			claimCount.Add(1)
+			return nil, nil
+		}).AnyTimes()
+
+		worker, err := NewExportWorker(jobRepo, reportRepo, storage, cfg, logger)
+		require.NoError(t, err)
+
+		require.NoError(t, worker.Start(context.Background()))
+		require.Eventually(t, func() bool {
+			return claimCount.Load() >= 1
+		}, 300*time.Millisecond, 10*time.Millisecond)
+		require.NoError(t, worker.Stop())
+
+		before := claimCount.Load()
+		require.NoError(t, worker.Start(context.Background()))
+		require.Eventually(t, func() bool {
+			return claimCount.Load() > before
+		}, 300*time.Millisecond, 10*time.Millisecond)
+		require.NoError(t, worker.Stop())
+	})
+
+	t.Run("rejects runtime config update while running", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		jobRepo := repomocks.NewMockExportJobRepository(ctrl)
+		reportRepo := &mockReportRepoForWorker{}
+		storage := portsmocks.NewMockObjectStorageClient(ctrl)
+		cfg := ExportWorkerConfig{PollInterval: 100 * time.Millisecond}
+		logger := &libLog.NopLogger{}
+
+		jobRepo.EXPECT().ClaimNextQueued(gomock.Any()).Return(nil, nil).AnyTimes()
+
+		worker, err := NewExportWorker(jobRepo, reportRepo, storage, cfg, logger)
+		require.NoError(t, err)
+		require.NoError(t, worker.Start(context.Background()))
+
+		err = worker.UpdateRuntimeConfig(ExportWorkerConfig{PollInterval: time.Second, PageSize: 42})
+		require.ErrorIs(t, err, ErrRuntimeConfigUpdateWhileRunning)
+		require.NoError(t, worker.Stop())
 	})
 }
 
@@ -340,9 +402,13 @@ func TestCleanupWorker_StartStop(t *testing.T) {
 		cfg := CleanupWorkerConfig{Interval: 100 * time.Millisecond}
 		logger := &libLog.NopLogger{}
 
+		var listExpiredCount atomic.Int32
 		jobRepo.EXPECT().
 			ListExpired(gomock.Any(), gomock.Any()).
-			Return([]*entities.ExportJob{}, nil).
+			DoAndReturn(func(context.Context, int) ([]*entities.ExportJob, error) {
+				listExpiredCount.Add(1)
+				return []*entities.ExportJob{}, nil
+			}).
 			AnyTimes()
 
 		worker, err := NewCleanupWorker(jobRepo, storage, cfg, logger)
@@ -369,9 +435,13 @@ func TestCleanupWorker_StartStop(t *testing.T) {
 		cfg := CleanupWorkerConfig{Interval: 100 * time.Millisecond}
 		logger := &libLog.NopLogger{}
 
+		var listExpiredCount atomic.Int32
 		jobRepo.EXPECT().
 			ListExpired(gomock.Any(), gomock.Any()).
-			Return([]*entities.ExportJob{}, nil).
+			DoAndReturn(func(context.Context, int) ([]*entities.ExportJob, error) {
+				listExpiredCount.Add(1)
+				return []*entities.ExportJob{}, nil
+			}).
 			AnyTimes()
 
 		worker, err := NewCleanupWorker(jobRepo, storage, cfg, logger)
@@ -386,6 +456,64 @@ func TestCleanupWorker_StartStop(t *testing.T) {
 
 		err = worker.Stop()
 		require.NoError(t, err)
+	})
+
+	t.Run("supports stop start stop restart cycle", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		jobRepo := repomocks.NewMockExportJobRepository(ctrl)
+		storage := portsmocks.NewMockObjectStorageClient(ctrl)
+		cfg := CleanupWorkerConfig{Interval: 100 * time.Millisecond}
+		logger := &libLog.NopLogger{}
+
+		var listExpiredCount atomic.Int32
+		jobRepo.EXPECT().
+			ListExpired(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(context.Context, int) ([]*entities.ExportJob, error) {
+				listExpiredCount.Add(1)
+				return []*entities.ExportJob{}, nil
+			}).
+			AnyTimes()
+
+		worker, err := NewCleanupWorker(jobRepo, storage, cfg, logger)
+		require.NoError(t, err)
+
+		require.NoError(t, worker.Start(context.Background()))
+		require.Eventually(t, func() bool {
+			return listExpiredCount.Load() >= 1
+		}, 300*time.Millisecond, 10*time.Millisecond)
+		require.NoError(t, worker.Stop())
+
+		before := listExpiredCount.Load()
+		require.NoError(t, worker.Start(context.Background()))
+		require.Eventually(t, func() bool {
+			return listExpiredCount.Load() > before
+		}, 300*time.Millisecond, 10*time.Millisecond)
+		require.NoError(t, worker.Stop())
+	})
+
+	t.Run("rejects runtime config update while running", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		jobRepo := repomocks.NewMockExportJobRepository(ctrl)
+		storage := portsmocks.NewMockObjectStorageClient(ctrl)
+		cfg := CleanupWorkerConfig{Interval: 100 * time.Millisecond}
+		logger := &libLog.NopLogger{}
+
+		jobRepo.EXPECT().
+			ListExpired(gomock.Any(), gomock.Any()).
+			Return([]*entities.ExportJob{}, nil).
+			AnyTimes()
+
+		worker, err := NewCleanupWorker(jobRepo, storage, cfg, logger)
+		require.NoError(t, err)
+		require.NoError(t, worker.Start(context.Background()))
+
+		err = worker.UpdateRuntimeConfig(CleanupWorkerConfig{Interval: time.Second, BatchSize: 10})
+		require.ErrorIs(t, err, ErrRuntimeConfigUpdateWhileRunning)
+		require.NoError(t, worker.Stop())
 	})
 }
 
@@ -598,7 +726,7 @@ func TestExportWorker_GetExtension(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		format   string
+		format   entities.ExportFormat
 		expected string
 	}{
 		{
@@ -653,7 +781,7 @@ func TestExportWorker_GetContentType(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		format   string
+		format   entities.ExportFormat
 		expected string
 	}{
 		{
@@ -775,7 +903,8 @@ func TestExportWorker_GenerateFileKey(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := worker.generateFileKey(tt.job)
+			result, err := worker.generateFileKey(tt.job)
+			require.NoError(t, err)
 			for _, substr := range tt.contains {
 				assert.Contains(t, result, substr)
 			}
@@ -797,6 +926,27 @@ func TestExportWorker_DefaultTempDir(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.NotEmpty(t, worker.cfg.TempDir)
+}
+
+func TestExportWorker_GenerateFileKey_ExactFormat(t *testing.T) {
+	t.Parallel()
+
+	worker := &ExportWorker{}
+	jobID := uuid.MustParse("aabbccdd-0011-2233-4455-667788990011")
+	tenantID := uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
+	contextID := uuid.MustParse("660e8400-e29b-41d4-a716-446655440000")
+
+	job := &entities.ExportJob{
+		ID:         jobID,
+		TenantID:   tenantID,
+		ContextID:  contextID,
+		ReportType: entities.ExportReportTypeMatched,
+		Format:     entities.ExportFormatCSV,
+	}
+
+	result, err := worker.generateFileKey(job)
+	require.NoError(t, err)
+	assert.Equal(t, "exports/550e8400-e29b-41d4-a716-446655440000/660e8400-e29b-41d4-a716-446655440000/aabbccdd-0011-2233-4455-667788990011-MATCHED.csv", result)
 }
 
 func TestExportWorker_NegativeConfigValues(t *testing.T) {

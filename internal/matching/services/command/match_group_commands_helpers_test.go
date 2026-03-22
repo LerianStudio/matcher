@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	"github.com/LerianStudio/matcher/internal/auth"
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	"github.com/LerianStudio/matcher/internal/matching/domain/enums"
@@ -335,7 +335,7 @@ func TestBuildSourceTypeMap_SkipsNilSources(t *testing.T) {
 	id := uuid.MustParse("00000000-0000-0000-0000-000000100020")
 	sources := []*ports.SourceInfo{
 		nil,
-		{ID: id, Type: ports.SourceTypeLedger},
+		{ID: id, Type: ports.SourceTypeLedger, Side: fee.MatchingSideLeft},
 		nil,
 	}
 	result := buildSourceTypeMap(sources)
@@ -722,35 +722,20 @@ func TestCollectFeeFindings_SkipsNonConfirmedGroups(t *testing.T) {
 	assert.Empty(t, findings.exceptionInputs)
 }
 
-// --- loadFeeSchedules tests ---
+// --- loadFeeRulesAndSchedules tests ---
 
-func TestLoadFeeSchedules_NoScheduleIDs(t *testing.T) {
+func TestLoadFeeRulesAndSchedules_NoRules(t *testing.T) {
 	t.Parallel()
 
-	uc := &UseCase{}
-	sources := []*ports.SourceInfo{
-		{ID: uuid.New(), Type: ports.SourceTypeLedger},
+	uc := &UseCase{
+		feeRuleProvider: &stubFeeRuleProviderWithResult{rules: nil},
 	}
-	leftIDs := map[uuid.UUID]struct{}{sources[0].ID: {}}
 
-	left, right := uc.loadFeeSchedules(context.Background(), sources, leftIDs, map[uuid.UUID]struct{}{})
-	assert.Nil(t, left)
-	assert.Nil(t, right)
-}
-
-func TestLoadFeeSchedules_NilFeeScheduleRepo(t *testing.T) {
-	t.Parallel()
-
-	uc := &UseCase{feeScheduleRepo: nil}
-	scheduleID := uuid.New()
-	sources := []*ports.SourceInfo{
-		{ID: uuid.New(), Type: ports.SourceTypeLedger, FeeScheduleID: &scheduleID},
-	}
-	leftIDs := map[uuid.UUID]struct{}{sources[0].ID: {}}
-
-	left, right := uc.loadFeeSchedules(context.Background(), sources, leftIDs, map[uuid.UUID]struct{}{})
-	assert.Nil(t, left)
-	assert.Nil(t, right)
+	leftRules, rightRules, schedules, err := uc.loadFeeRulesAndSchedules(context.Background(), uuid.New())
+	require.NoError(t, err)
+	assert.Nil(t, leftRules)
+	assert.Nil(t, rightRules)
+	assert.Nil(t, schedules)
 }
 
 // --- recordGroupResults tests ---
@@ -844,73 +829,64 @@ func TestRecordGroupResults_PendingReview(t *testing.T) {
 
 // --- classifySources tests ---
 
-func TestClassifySources_DirectedMode_PrimarySourceFound(t *testing.T) {
+func TestClassifySources_OneToOne_UsesConfiguredSides(t *testing.T) {
 	t.Parallel()
 
-	primaryID := uuid.MustParse("00000000-0000-0000-0000-000000100300")
-	otherID := uuid.MustParse("00000000-0000-0000-0000-000000100301")
+	leftID := uuid.MustParse("00000000-0000-0000-0000-000000100300")
+	rightID := uuid.MustParse("00000000-0000-0000-0000-000000100301")
 
 	sources := []*ports.SourceInfo{
-		{ID: primaryID, Type: ports.SourceTypeLedger},
-		{ID: otherID, Type: ports.SourceTypeFile},
+		{ID: leftID, Type: ports.SourceTypeLedger, Side: fee.MatchingSideLeft},
+		{ID: rightID, Type: ports.SourceTypeFile, Side: fee.MatchingSideRight},
 	}
 
-	left, right, err := classifySources(sources, &primaryID)
+	left, right, err := classifySources(shared.ContextTypeOneToOne, sources)
 	require.NoError(t, err)
 	assert.Len(t, left, 1)
 	assert.Len(t, right, 1)
 
-	_, leftOk := left[primaryID]
-	assert.True(t, leftOk, "primary source should be in left set")
+	_, leftOk := left[leftID]
+	assert.True(t, leftOk, "configured left source should be in left set")
 
-	_, rightOk := right[otherID]
-	assert.True(t, rightOk, "other source should be in right set")
+	_, rightOk := right[rightID]
+	assert.True(t, rightOk, "configured right source should be in right set")
 }
 
-func TestClassifySources_SymmetricMode_NilPrimarySourceID(t *testing.T) {
+func TestClassifySources_OneToOne_RejectsMissingSourceSide(t *testing.T) {
 	t.Parallel()
 
 	firstID := uuid.MustParse("00000000-0000-0000-0000-000000100302")
 	secondID := uuid.MustParse("00000000-0000-0000-0000-000000100303")
 
 	sources := []*ports.SourceInfo{
-		{ID: firstID, Type: ports.SourceTypeFile},
+		{ID: firstID, Type: ports.SourceTypeFile, Side: fee.MatchingSideLeft},
 		{ID: secondID, Type: ports.SourceTypeFile},
 	}
 
-	left, right, err := classifySources(sources, nil)
-	require.NoError(t, err)
-	assert.Len(t, left, 1)
-	assert.Len(t, right, 1)
-
-	_, leftOk := left[firstID]
-	assert.True(t, leftOk, "first source should be in left set")
-
-	_, rightOk := right[secondID]
-	assert.True(t, rightOk, "second source should be in right set")
+	_, _, err := classifySources(shared.ContextTypeOneToOne, sources)
+	require.ErrorIs(t, err, ErrSourceSideRequiredForMatching)
 }
 
-func TestClassifySources_PrimarySourceNotInContext(t *testing.T) {
+func TestClassifySources_OneToOne_RejectsInvalidTopology(t *testing.T) {
 	t.Parallel()
 
-	missingID := uuid.MustParse("00000000-0000-0000-0000-000000100304")
 	sources := []*ports.SourceInfo{
-		{ID: uuid.MustParse("00000000-0000-0000-0000-000000100305"), Type: ports.SourceTypeLedger},
-		{ID: uuid.MustParse("00000000-0000-0000-0000-000000100306"), Type: ports.SourceTypeFile},
+		{ID: uuid.MustParse("00000000-0000-0000-0000-000000100305"), Type: ports.SourceTypeLedger, Side: fee.MatchingSideLeft},
+		{ID: uuid.MustParse("00000000-0000-0000-0000-000000100306"), Type: ports.SourceTypeFile, Side: fee.MatchingSideLeft},
 	}
 
-	_, _, err := classifySources(sources, &missingID)
-	require.ErrorIs(t, err, ErrPrimarySourceNotInContext)
+	_, _, err := classifySources(shared.ContextTypeOneToOne, sources)
+	require.ErrorIs(t, err, ErrOneToOneRequiresExactlyOneLeftSource)
 }
 
 func TestClassifySources_OnlyOneSource(t *testing.T) {
 	t.Parallel()
 
 	sources := []*ports.SourceInfo{
-		{ID: uuid.New(), Type: ports.SourceTypeLedger},
+		{ID: uuid.New(), Type: ports.SourceTypeLedger, Side: fee.MatchingSideLeft},
 	}
 
-	_, _, err := classifySources(sources, nil)
+	_, _, err := classifySources(shared.ContextTypeOneToOne, sources)
 	require.ErrorIs(t, err, ErrAtLeastTwoSourcesRequired)
 }
 
@@ -922,18 +898,18 @@ func TestClassifySources_NilSourcesSkipped(t *testing.T) {
 
 	sources := []*ports.SourceInfo{
 		nil,
-		{ID: id1, Type: ports.SourceTypeLedger},
+		{ID: id1, Type: ports.SourceTypeLedger, Side: fee.MatchingSideLeft},
 		nil,
-		{ID: id2, Type: ports.SourceTypeFile},
+		{ID: id2, Type: ports.SourceTypeFile, Side: fee.MatchingSideRight},
 	}
 
-	left, right, err := classifySources(sources, nil)
+	left, right, err := classifySources(shared.ContextTypeOneToOne, sources)
 	require.NoError(t, err)
 	assert.Len(t, left, 1)
 	assert.Len(t, right, 1)
 }
 
-func TestClassifySources_ThreePlusSources_WithPrimarySourceID(t *testing.T) {
+func TestClassifySources_OneToMany_RequiresOneLeftAndManyRight(t *testing.T) {
 	t.Parallel()
 
 	primaryID := uuid.MustParse("00000000-0000-0000-0000-000000100312")
@@ -941,15 +917,15 @@ func TestClassifySources_ThreePlusSources_WithPrimarySourceID(t *testing.T) {
 	otherID2 := uuid.MustParse("00000000-0000-0000-0000-000000100314")
 
 	sources := []*ports.SourceInfo{
-		{ID: otherID1, Type: ports.SourceTypeFile},
-		{ID: primaryID, Type: ports.SourceTypeLedger},
-		{ID: otherID2, Type: ports.SourceTypeAPI},
+		{ID: otherID1, Type: ports.SourceTypeFile, Side: fee.MatchingSideRight},
+		{ID: primaryID, Type: ports.SourceTypeLedger, Side: fee.MatchingSideLeft},
+		{ID: otherID2, Type: ports.SourceTypeAPI, Side: fee.MatchingSideRight},
 	}
 
-	left, right, err := classifySources(sources, &primaryID)
+	left, right, err := classifySources(shared.ContextTypeOneToMany, sources)
 	require.NoError(t, err)
-	assert.Len(t, left, 1, "only the primary source in left")
-	assert.Len(t, right, 2, "remaining sources in right")
+	assert.Len(t, left, 1, "only one configured LEFT source")
+	assert.Len(t, right, 2, "configured RIGHT sources remain on the right")
 
 	_, leftOk := left[primaryID]
 	assert.True(t, leftOk)
@@ -959,7 +935,7 @@ func TestClassifySources_ThreePlusSources_WithPrimarySourceID(t *testing.T) {
 	assert.True(t, right2Ok)
 }
 
-func TestClassifySources_ThreePlusSources_WithoutPrimarySourceID(t *testing.T) {
+func TestClassifySources_OneToMany_RejectsMultipleLeftSources(t *testing.T) {
 	t.Parallel()
 
 	id1 := uuid.MustParse("00000000-0000-0000-0000-000000100315")
@@ -967,28 +943,19 @@ func TestClassifySources_ThreePlusSources_WithoutPrimarySourceID(t *testing.T) {
 	id3 := uuid.MustParse("00000000-0000-0000-0000-000000100317")
 
 	sources := []*ports.SourceInfo{
-		{ID: id1, Type: ports.SourceTypeLedger},
-		{ID: id2, Type: ports.SourceTypeFile},
-		{ID: id3, Type: ports.SourceTypeAPI},
+		{ID: id1, Type: ports.SourceTypeLedger, Side: fee.MatchingSideLeft},
+		{ID: id2, Type: ports.SourceTypeFile, Side: fee.MatchingSideLeft},
+		{ID: id3, Type: ports.SourceTypeAPI, Side: fee.MatchingSideRight},
 	}
 
-	left, right, err := classifySources(sources, nil)
-	require.NoError(t, err)
-	assert.Len(t, left, 1, "first source in left")
-	assert.Len(t, right, 2, "remaining sources in right")
-
-	_, leftOk := left[id1]
-	assert.True(t, leftOk, "first source should be in left")
-	_, right1Ok := right[id2]
-	assert.True(t, right1Ok)
-	_, right2Ok := right[id3]
-	assert.True(t, right2Ok)
+	_, _, err := classifySources(shared.ContextTypeOneToMany, sources)
+	require.ErrorIs(t, err, ErrOneToManyRequiresExactlyOneLeftSource)
 }
 
 func TestClassifySources_EmptySlice(t *testing.T) {
 	t.Parallel()
 
-	_, _, err := classifySources([]*ports.SourceInfo{}, nil)
+	_, _, err := classifySources(shared.ContextTypeOneToOne, []*ports.SourceInfo{})
 	require.ErrorIs(t, err, ErrAtLeastTwoSourcesRequired)
 }
 
@@ -1017,25 +984,24 @@ func TestBuildAdjustmentAuditChanges_WithMatchGroupID(t *testing.T) {
 	t.Parallel()
 
 	matchGroupID := uuid.MustParse("00000000-0000-0000-0000-000000100500")
-	adjustment := &matchingEntities.Adjustment{
-		ID:          uuid.MustParse("00000000-0000-0000-0000-000000100501"),
-		ContextID:   uuid.MustParse("00000000-0000-0000-0000-000000100502"),
-		Type:        matchingEntities.AdjustmentTypeBankFee,
-		Amount:      decimal.NewFromInt(10),
-		Currency:    "USD",
-		Description: "test",
-		Reason:      "reason",
-	}
+	contextID := uuid.MustParse("00000000-0000-0000-0000-000000100502")
+	adjustmentID := uuid.MustParse("00000000-0000-0000-0000-000000100501")
 	input := CreateAdjustmentInput{
 		TenantID:     uuid.MustParse("00000000-0000-0000-0000-000000100503"),
-		ContextID:    adjustment.ContextID,
+		ContextID:    contextID,
 		MatchGroupID: &matchGroupID,
+		Type:         string(matchingEntities.AdjustmentTypeBankFee),
+		Amount:       decimal.NewFromInt(10),
+		Currency:     "USD",
+		Description:  "test",
+		Reason:       "reason",
 		CreatedBy:    "user@test.com",
 	}
 
-	changes, err := buildAdjustmentAuditChanges(adjustment, input)
+	changes, err := buildAdjustmentAuditChanges(adjustmentID, input)
 	require.NoError(t, err)
 	require.NotNil(t, changes)
+	assert.Contains(t, string(changes), "entity_id")
 	assert.Contains(t, string(changes), "match_group_id")
 }
 
@@ -1043,25 +1009,24 @@ func TestBuildAdjustmentAuditChanges_WithTransactionID(t *testing.T) {
 	t.Parallel()
 
 	txID := uuid.MustParse("00000000-0000-0000-0000-000000100510")
-	adjustment := &matchingEntities.Adjustment{
-		ID:          uuid.MustParse("00000000-0000-0000-0000-000000100511"),
-		ContextID:   uuid.MustParse("00000000-0000-0000-0000-000000100512"),
-		Type:        matchingEntities.AdjustmentTypeBankFee,
-		Amount:      decimal.NewFromInt(10),
-		Currency:    "USD",
-		Description: "test",
-		Reason:      "reason",
-	}
+	contextID := uuid.MustParse("00000000-0000-0000-0000-000000100512")
+	adjustmentID := uuid.MustParse("00000000-0000-0000-0000-000000100511")
 	input := CreateAdjustmentInput{
 		TenantID:      uuid.MustParse("00000000-0000-0000-0000-000000100513"),
-		ContextID:     adjustment.ContextID,
+		ContextID:     contextID,
 		TransactionID: &txID,
+		Type:          string(matchingEntities.AdjustmentTypeBankFee),
+		Amount:        decimal.NewFromInt(10),
+		Currency:      "USD",
+		Description:   "test",
+		Reason:        "reason",
 		CreatedBy:     "user@test.com",
 	}
 
-	changes, err := buildAdjustmentAuditChanges(adjustment, input)
+	changes, err := buildAdjustmentAuditChanges(adjustmentID, input)
 	require.NoError(t, err)
 	require.NotNil(t, changes)
+	assert.Contains(t, string(changes), "entity_id")
 	assert.Contains(t, string(changes), "transaction_id")
 	assert.NotContains(t, string(changes), "match_group_id")
 }
@@ -1069,44 +1034,47 @@ func TestBuildAdjustmentAuditChanges_WithTransactionID(t *testing.T) {
 func TestBuildAdjustmentAuditChanges_WithoutOptionalTargets(t *testing.T) {
 	t.Parallel()
 
-	adjustment := &matchingEntities.Adjustment{
-		ID:          uuid.MustParse("00000000-0000-0000-0000-000000100520"),
-		ContextID:   uuid.MustParse("00000000-0000-0000-0000-000000100521"),
-		Type:        matchingEntities.AdjustmentTypeBankFee,
+	contextID := uuid.MustParse("00000000-0000-0000-0000-000000100521")
+	adjustmentID := uuid.MustParse("00000000-0000-0000-0000-000000100520")
+	input := CreateAdjustmentInput{
+		TenantID:    uuid.MustParse("00000000-0000-0000-0000-000000100522"),
+		ContextID:   contextID,
+		Type:        string(matchingEntities.AdjustmentTypeBankFee),
 		Amount:      decimal.NewFromInt(10),
 		Currency:    "USD",
 		Description: "test",
 		Reason:      "reason",
-	}
-	input := CreateAdjustmentInput{
-		TenantID:  uuid.MustParse("00000000-0000-0000-0000-000000100522"),
-		ContextID: adjustment.ContextID,
-		CreatedBy: "user@test.com",
+		CreatedBy:   "user@test.com",
 	}
 
-	changes, err := buildAdjustmentAuditChanges(adjustment, input)
+	changes, err := buildAdjustmentAuditChanges(adjustmentID, input)
 	require.NoError(t, err)
 	require.NotNil(t, changes)
+	assert.Contains(t, string(changes), "entity_id")
 	assert.NotContains(t, string(changes), "match_group_id")
 	assert.NotContains(t, string(changes), "transaction_id")
 }
 
-// --- persistAdjustmentWithAudit - connection error ---
+// --- persistAdjustmentWithAudit - repository error ---
 
-func TestPersistAdjustmentWithAudit_ConnectionError(t *testing.T) {
+func TestPersistAdjustmentWithAudit_RepositoryError(t *testing.T) {
 	t.Parallel()
 
 	uc := &UseCase{
-		infraProvider: &stubInfraProvider{connErr: errAdjTestDatabase},
+		adjustmentRepo: &stubAdjustmentRepoWithError{err: errAdjTestDatabase},
 	}
 
 	adjustment := &matchingEntities.Adjustment{
 		ID: uuid.New(),
 	}
 
-	_, err := uc.persistAdjustmentWithAudit(context.Background(), adjustment, CreateAdjustmentInput{})
+	_, err := uc.persistAdjustmentWithAudit(context.Background(), adjustment, CreateAdjustmentInput{
+		TenantID:  uuid.New(),
+		ContextID: uuid.New(),
+		CreatedBy: "user@test.com",
+	})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to get postgres connection")
+	assert.Contains(t, err.Error(), "persist adjustment transaction")
 }
 
 // --- completeDryRun tests ---
@@ -1256,67 +1224,183 @@ func TestEnqueueMatchConfirmedEvents_SkipsNonConfirmedGroups(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// --- loadFeeSchedules with actual schedules ---
+// --- loadFeeRulesAndSchedules with actual rules and schedules ---
 
-func TestLoadFeeSchedules_WithSchedulesLoaded(t *testing.T) {
+func TestLoadFeeRulesAndSchedules_WithRulesAndSchedules(t *testing.T) {
 	t.Parallel()
 
 	scheduleID := uuid.MustParse("00000000-0000-0000-0000-000000100800")
-	sourceIDLeft := uuid.MustParse("00000000-0000-0000-0000-000000100801")
-	sourceIDRight := uuid.MustParse("00000000-0000-0000-0000-000000100802")
+	contextID := uuid.MustParse("00000000-0000-0000-0000-000000100803")
 
 	schedule := &fee.FeeSchedule{
 		ID:       scheduleID,
 		Currency: "USD",
 	}
 
+	rules := []*fee.FeeRule{
+		{
+			ID:            uuid.MustParse("00000000-0000-0000-0000-000000100804"),
+			ContextID:     contextID,
+			Side:          fee.MatchingSideLeft,
+			FeeScheduleID: scheduleID,
+			Name:          "Left rule",
+			Priority:      1,
+		},
+		{
+			ID:            uuid.MustParse("00000000-0000-0000-0000-000000100805"),
+			ContextID:     contextID,
+			Side:          fee.MatchingSideRight,
+			FeeScheduleID: scheduleID,
+			Name:          "Right rule",
+			Priority:      1,
+		},
+	}
+
 	uc := &UseCase{
+		feeRuleProvider: &stubFeeRuleProviderWithResult{rules: rules},
 		feeScheduleRepo: &stubFeeScheduleRepoWithResult{
 			schedules: map[uuid.UUID]*fee.FeeSchedule{scheduleID: schedule},
 		},
 	}
 
-	sources := []*ports.SourceInfo{
-		{ID: sourceIDLeft, Type: ports.SourceTypeLedger, FeeScheduleID: &scheduleID},
-		{ID: sourceIDRight, Type: ports.SourceTypeFile, FeeScheduleID: &scheduleID},
-	}
-
-	leftIDs := map[uuid.UUID]struct{}{sourceIDLeft: {}}
-	rightIDs := map[uuid.UUID]struct{}{sourceIDRight: {}}
-
-	left, right := uc.loadFeeSchedules(context.Background(), sources, leftIDs, rightIDs)
-	require.NotNil(t, left)
-	require.NotNil(t, right)
-	assert.Equal(t, schedule, left[sourceIDLeft])
-	assert.Equal(t, schedule, right[sourceIDRight])
+	leftRules, rightRules, allSchedules, err := uc.loadFeeRulesAndSchedules(context.Background(), contextID)
+	require.NoError(t, err)
+	require.NotNil(t, leftRules)
+	require.NotNil(t, rightRules)
+	require.NotNil(t, allSchedules)
+	assert.Len(t, leftRules, 1)
+	assert.Len(t, rightRules, 1)
+	assert.Equal(t, schedule, allSchedules[scheduleID])
 }
 
-func TestLoadFeeSchedules_GetByIDsError(t *testing.T) {
+func TestLoadFeeRulesAndSchedules_GetByIDsError(t *testing.T) {
 	t.Parallel()
 
 	scheduleID := uuid.MustParse("00000000-0000-0000-0000-000000100810")
-	sourceID := uuid.MustParse("00000000-0000-0000-0000-000000100811")
+	contextID := uuid.MustParse("00000000-0000-0000-0000-000000100812")
+
+	rules := []*fee.FeeRule{
+		{
+			ID:            uuid.MustParse("00000000-0000-0000-0000-000000100813"),
+			ContextID:     contextID,
+			Side:          fee.MatchingSideLeft,
+			FeeScheduleID: scheduleID,
+			Name:          "Test rule",
+			Priority:      1,
+		},
+	}
 
 	uc := &UseCase{
+		feeRuleProvider: &stubFeeRuleProviderWithResult{rules: rules},
 		feeScheduleRepo: &stubFeeScheduleRepoWithResult{
 			err: errors.New("db error"),
 		},
 	}
 
-	sources := []*ports.SourceInfo{
-		{ID: sourceID, Type: ports.SourceTypeLedger, FeeScheduleID: &scheduleID},
-	}
-	leftIDs := map[uuid.UUID]struct{}{sourceID: {}}
+	leftRules, rightRules, allSchedules, err := uc.loadFeeRulesAndSchedules(context.Background(), contextID)
+	require.Error(t, err)
+	assert.Nil(t, leftRules)
+	assert.Nil(t, rightRules)
+	assert.Nil(t, allSchedules)
+}
 
-	left, right := uc.loadFeeSchedules(context.Background(), sources, leftIDs, map[uuid.UUID]struct{}{})
-	assert.Nil(t, left)
-	assert.Nil(t, right)
+func TestLoadFeeRulesAndSchedules_FindByContextIDError(t *testing.T) {
+	t.Parallel()
+
+	uc := &UseCase{
+		feeRuleProvider: &stubFeeRuleProviderWithResult{
+			err: errors.New("provider error"),
+		},
+	}
+
+	leftRules, rightRules, allSchedules, err := uc.loadFeeRulesAndSchedules(context.Background(), uuid.New())
+	require.Error(t, err)
+	assert.Nil(t, leftRules)
+	assert.Nil(t, rightRules)
+	assert.Nil(t, allSchedules)
+}
+
+func TestLoadFeeRulesAndSchedules_NilFeeScheduleRepo(t *testing.T) {
+	t.Parallel()
+
+	contextID := uuid.MustParse("00000000-0000-0000-0000-000000100814")
+	scheduleID := uuid.MustParse("00000000-0000-0000-0000-000000100815")
+
+	rules := []*fee.FeeRule{
+		{
+			ID:            uuid.MustParse("00000000-0000-0000-0000-000000100816"),
+			ContextID:     contextID,
+			Side:          fee.MatchingSideAny,
+			FeeScheduleID: scheduleID,
+			Name:          "Any rule",
+			Priority:      1,
+		},
+	}
+
+	uc := &UseCase{
+		feeRuleProvider: &stubFeeRuleProviderWithResult{rules: rules},
+		feeScheduleRepo: nil,
+	}
+
+	leftRules, rightRules, allSchedules, err := uc.loadFeeRulesAndSchedules(context.Background(), contextID)
+	require.ErrorIs(t, err, ErrNilFeeScheduleRepository)
+	assert.Nil(t, leftRules)
+	assert.Nil(t, rightRules)
+	assert.Nil(t, allSchedules)
+}
+
+func TestLoadFeeRulesAndSchedules_MissingScheduleReference(t *testing.T) {
+	t.Parallel()
+
+	contextID := uuid.MustParse("00000000-0000-0000-0000-000000100817")
+	missingScheduleID := uuid.MustParse("00000000-0000-0000-0000-000000100818")
+
+	rules := []*fee.FeeRule{{
+		ID:            uuid.MustParse("00000000-0000-0000-0000-000000100819"),
+		ContextID:     contextID,
+		Side:          fee.MatchingSideAny,
+		FeeScheduleID: missingScheduleID,
+		Name:          "Missing schedule",
+		Priority:      1,
+	}}
+
+	uc := &UseCase{
+		feeRuleProvider: &stubFeeRuleProviderWithResult{rules: rules},
+		feeScheduleRepo: &stubFeeScheduleRepoWithResult{scheduleCount: 0, schedules: map[uuid.UUID]*fee.FeeSchedule{}},
+	}
+
+	leftRules, rightRules, allSchedules, err := uc.loadFeeRulesAndSchedules(context.Background(), contextID)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrFeeRulesReferenceMissingSchedules,
+		"should wrap the missing-schedules sentinel error")
+	assert.Contains(t, err.Error(), "1 missing references",
+		"error message should report the count of missing schedule references")
+	assert.Nil(t, leftRules)
+	assert.Nil(t, rightRules)
+	assert.Nil(t, allSchedules)
+}
+
+type stubFeeRuleProviderWithResult struct {
+	rules []*fee.FeeRule
+	err   error
+}
+
+func (s *stubFeeRuleProviderWithResult) FindByContextID(
+	_ context.Context,
+	_ uuid.UUID,
+) ([]*fee.FeeRule, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+
+	return s.rules, nil
 }
 
 type stubFeeScheduleRepoWithResult struct {
 	mockFeeScheduleRepo
-	schedules map[uuid.UUID]*fee.FeeSchedule
-	err       error
+	schedules     map[uuid.UUID]*fee.FeeSchedule
+	scheduleCount int
+	err           error
 }
 
 func (s *stubFeeScheduleRepoWithResult) GetByIDs(
@@ -1325,6 +1409,10 @@ func (s *stubFeeScheduleRepoWithResult) GetByIDs(
 ) (map[uuid.UUID]*fee.FeeSchedule, error) {
 	if s.err != nil {
 		return nil, s.err
+	}
+
+	if s.scheduleCount == 0 && s.schedules == nil {
+		return map[uuid.UUID]*fee.FeeSchedule{}, nil
 	}
 
 	return s.schedules, nil
@@ -1423,9 +1511,9 @@ func TestCreateAdjustment_InvalidDirection(t *testing.T) {
 	require.Nil(t, result)
 }
 
-// --- CreateAdjustment - AuditLog error ---
+// --- CreateAdjustment - combined persist error ---
 
-func TestCreateAdjustment_AuditLogError(t *testing.T) {
+func TestCreateAdjustment_CombinedPersistError(t *testing.T) {
 	t.Parallel()
 
 	tenantID := uuid.MustParse("00000000-0000-0000-0000-000000100610")
@@ -1449,9 +1537,8 @@ func TestCreateAdjustment_AuditLogError(t *testing.T) {
 			},
 		},
 		txRepo:         &stubTxRepoForAdjustment{},
-		adjustmentRepo: &stubAdjustmentRepo{},
+		adjustmentRepo: &stubAdjustmentRepoWithError{err: errAdjTestDatabase},
 		infraProvider:  infraProv,
-		auditLogRepo:   &stubAuditLogRepo{createErr: errAdjTestDatabase},
 	}
 
 	input := CreateAdjustmentInput{
@@ -1469,6 +1556,6 @@ func TestCreateAdjustment_AuditLogError(t *testing.T) {
 
 	result, err := uc.CreateAdjustment(context.Background(), input)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "persist audit log")
+	assert.Contains(t, err.Error(), "persist adjustment transaction")
 	require.Nil(t, result)
 }

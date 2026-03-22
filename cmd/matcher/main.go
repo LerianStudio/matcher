@@ -8,10 +8,10 @@ import (
 	"syscall"
 	"time"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	"github.com/LerianStudio/lib-uncommons/v2/uncommons/runtime"
-	libZap "github.com/LerianStudio/lib-uncommons/v2/uncommons/zap"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
+	libZap "github.com/LerianStudio/lib-commons/v4/commons/zap"
 
 	"github.com/LerianStudio/matcher/internal/bootstrap"
 )
@@ -85,6 +85,10 @@ var (
 // @tag.description Immutable audit logs and archive retrieval
 // @tag.name Health
 // @tag.description Service health and readiness endpoints for Kubernetes probes
+// @tag.name System Configs
+// @tag.description Runtime configuration management - view, patch, and audit system configs
+// @tag.name System Settings
+// @tag.description Tenant-scoped settings management - view, patch, and audit system settings
 func main() {
 	os.Exit(run())
 }
@@ -95,6 +99,7 @@ func run() int {
 	initLocalEnvConfig()
 
 	ctx := context.Background()
+	isProduction := bootstrap.IsProductionEnvironment(os.Getenv("ENV_NAME"))
 
 	logger, err := newLogger(libZap.Config{
 		Environment:     bootstrap.ResolveLoggerEnvironment(os.Getenv("ENV_NAME")),
@@ -102,7 +107,7 @@ func run() int {
 		OTelLibraryName: "github.com/LerianStudio/matcher",
 	})
 	if err != nil {
-		libLog.SafeError(nil, ctx, "Failed to initialize logger", err, false)
+		libLog.SafeError(nil, ctx, "Failed to initialize logger", err, isProduction)
 
 		return 1
 	}
@@ -111,7 +116,7 @@ func run() int {
 		Logger: logger,
 	})
 	if err != nil {
-		libLog.SafeError(logger, ctx, "Failed to initialize matcher service", err, false)
+		libLog.SafeError(logger, ctx, "Failed to initialize matcher service", err, isProduction)
 
 		syncCtx, syncCancel := context.WithTimeout(context.Background(), loggerSyncTimeout)
 		defer syncCancel()
@@ -143,7 +148,7 @@ func run() int {
 		logger.Log(ctx, libLog.LevelInfo, "Received shutdown signal, initiating graceful shutdown...")
 	case err := <-errChan:
 		if err != nil {
-			libLog.SafeError(logger, ctx, "Server error", err, false)
+			libLog.SafeError(logger, ctx, "Server error", err, isProduction)
 		}
 	}
 
@@ -156,7 +161,7 @@ func run() int {
 	defer shutdownCancel()
 
 	if err := service.Shutdown(shutdownCtx); err != nil {
-		libLog.SafeError(logger, shutdownCtx, "Graceful shutdown failed", err, false)
+		libLog.SafeError(logger, shutdownCtx, "Graceful shutdown failed", err, isProduction)
 
 		exitCode = 1
 	} else {

@@ -22,12 +22,6 @@ func TestServiceStartup_Integration(t *testing.T) {
 		postgresHost, postgresPort := extractHostPort(t, h.PostgresDSN)
 		redisAddr := extractRedisAddress(t, h.RedisAddr)
 
-		_, currentFile, _, ok := runtime.Caller(0)
-		require.True(t, ok, "failed to get current file path")
-		migrationsPath := filepath.Clean(
-			filepath.Join(filepath.Dir(currentFile), "../../migrations"),
-		)
-
 		t.Setenv("ENV_NAME", "test")
 		t.Setenv("SERVER_ADDRESS", ":18080")
 		t.Setenv("INFRA_CONNECT_TIMEOUT_SEC", "30")
@@ -39,12 +33,13 @@ func TestServiceStartup_Integration(t *testing.T) {
 		t.Setenv("POSTGRES_PASSWORD", "matcher_test")
 		t.Setenv("POSTGRES_DB", "matcher_test")
 		t.Setenv("POSTGRES_SSLMODE", "disable")
-		t.Setenv("MIGRATIONS_PATH", migrationsPath)
+		t.Setenv("MIGRATIONS_PATH", "migrations")
 		t.Setenv("REDIS_HOST", redisAddr)
 		t.Setenv("RABBITMQ_URI", "amqp")
 		t.Setenv("RABBITMQ_HOST", h.RabbitMQHost)
 		t.Setenv("RABBITMQ_PORT", h.RabbitMQPort)
 		t.Setenv("RABBITMQ_HEALTH_URL", h.RabbitMQHealthURL)
+		t.Setenv("RABBITMQ_ALLOW_INSECURE_HEALTH_CHECK", "true")
 		t.Setenv("RABBITMQ_USER", "guest")
 		t.Setenv("RABBITMQ_PASSWORD", "guest")
 		t.Setenv("RABBITMQ_VHOST", "/")
@@ -57,8 +52,11 @@ func TestServiceStartup_Integration(t *testing.T) {
 		t.Setenv("EXPORT_RATE_LIMIT_EXPIRY_SEC", "300")
 		t.Setenv("DISPATCH_RATE_LIMIT_MAX", "100")
 		t.Setenv("DISPATCH_RATE_LIMIT_EXPIRY_SEC", "60")
+		t.Setenv("EXPORT_WORKER_ENABLED", "false")
+		t.Setenv("CLEANUP_WORKER_ENABLED", "false")
 		t.Setenv("OBJECT_STORAGE_ENDPOINT", "")
 		t.Setenv("ARCHIVAL_WORKER_ENABLED", "false")
+		t.Setenv("SYSTEMPLANE_SECRET_MASTER_KEY", "+PnwgNy8bL3HGT1rOXp47PqyGcPywXH/epgmSVwPkL0=")
 
 		service, err := bootstrap.InitServersWithOptions(nil)
 		require.NoError(t, err)
@@ -183,12 +181,6 @@ func TestServiceStartupAndShutdown_Integration(t *testing.T) {
 		postgresHost, postgresPort := extractHostPort(t, h.PostgresDSN)
 		redisAddr := extractRedisAddress(t, h.RedisAddr)
 
-		_, currentFile, _, ok := runtime.Caller(0)
-		require.True(t, ok, "failed to get current file path")
-		migrationsPath := filepath.Clean(
-			filepath.Join(filepath.Dir(currentFile), "../../migrations"),
-		)
-
 		t.Setenv("ENV_NAME", "test")
 		t.Setenv("SERVER_ADDRESS", ":18081")
 		t.Setenv("INFRA_CONNECT_TIMEOUT_SEC", "30")
@@ -200,12 +192,13 @@ func TestServiceStartupAndShutdown_Integration(t *testing.T) {
 		t.Setenv("POSTGRES_PASSWORD", "matcher_test")
 		t.Setenv("POSTGRES_DB", "matcher_test")
 		t.Setenv("POSTGRES_SSLMODE", "disable")
-		t.Setenv("MIGRATIONS_PATH", migrationsPath)
+		t.Setenv("MIGRATIONS_PATH", "migrations")
 		t.Setenv("REDIS_HOST", redisAddr)
 		t.Setenv("RABBITMQ_URI", "amqp")
 		t.Setenv("RABBITMQ_HOST", h.RabbitMQHost)
 		t.Setenv("RABBITMQ_PORT", h.RabbitMQPort)
 		t.Setenv("RABBITMQ_HEALTH_URL", h.RabbitMQHealthURL)
+		t.Setenv("RABBITMQ_ALLOW_INSECURE_HEALTH_CHECK", "true")
 		t.Setenv("RABBITMQ_USER", "guest")
 		t.Setenv("RABBITMQ_PASSWORD", "guest")
 		t.Setenv("RABBITMQ_VHOST", "/")
@@ -218,8 +211,11 @@ func TestServiceStartupAndShutdown_Integration(t *testing.T) {
 		t.Setenv("EXPORT_RATE_LIMIT_EXPIRY_SEC", "300")
 		t.Setenv("DISPATCH_RATE_LIMIT_MAX", "100")
 		t.Setenv("DISPATCH_RATE_LIMIT_EXPIRY_SEC", "60")
+		t.Setenv("EXPORT_WORKER_ENABLED", "false")
+		t.Setenv("CLEANUP_WORKER_ENABLED", "false")
 		t.Setenv("OBJECT_STORAGE_ENDPOINT", "")
 		t.Setenv("ARCHIVAL_WORKER_ENABLED", "false")
+		t.Setenv("SYSTEMPLANE_SECRET_MASTER_KEY", "+PnwgNy8bL3HGT1rOXp47PqyGcPywXH/epgmSVwPkL0=")
 
 		service, err := bootstrap.InitServersWithOptions(nil)
 		require.NoError(t, err)

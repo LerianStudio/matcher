@@ -62,7 +62,7 @@ func TestExportJob_ListByContext(t *testing.T) {
 		repo := newExportJobRepo(h)
 
 		// Create 3 jobs for the seeded context
-		formats := []string{entities.ExportFormatCSV, entities.ExportFormatJSON, entities.ExportFormatPDF}
+		formats := []entities.ExportFormat{entities.ExportFormatCSV, entities.ExportFormatJSON, entities.ExportFormatPDF}
 		createdIDs := make([]uuid.UUID, 0, len(formats))
 
 		for _, format := range formats {

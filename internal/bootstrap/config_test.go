@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 //go:build unit
 
 package bootstrap
@@ -6,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -16,6 +20,8 @@ type flatConfig struct {
 	LogLevel                    string
 	DefaultTenantID             string
 	DefaultTenantSlug           string
+	MultiTenantEnabled          bool
+	MultiTenantURL              string
 	BodyLimitBytes              int
 	CORSAllowedOrigins          string
 	TLSTerminatedUpstream       bool
@@ -57,6 +63,7 @@ type flatConfig struct {
 	RabbitMQPassword            string
 	RabbitMQVHost               string
 	RabbitMQHealthURL           string
+	RabbitMQAllowInsecureHealth bool
 	AuthEnabled                 bool
 	AuthHost                    string
 	AuthTokenSecret             string
@@ -99,6 +106,8 @@ func buildConfig(fc flatConfig) Config {
 	cfg.App.LogLevel = fc.LogLevel
 	cfg.Tenancy.DefaultTenantID = fc.DefaultTenantID
 	cfg.Tenancy.DefaultTenantSlug = fc.DefaultTenantSlug
+	cfg.Tenancy.MultiTenantEnabled = fc.MultiTenantEnabled
+	cfg.Tenancy.MultiTenantURL = fc.MultiTenantURL
 	cfg.Tenancy.MultiTenantInfraEnabled = fc.MultiTenantInfraEnabled
 	cfg.Server.BodyLimitBytes = fc.BodyLimitBytes
 	cfg.Server.CORSAllowedOrigins = fc.CORSAllowedOrigins
@@ -141,6 +150,7 @@ func buildConfig(fc flatConfig) Config {
 	cfg.RabbitMQ.Password = fc.RabbitMQPassword
 	cfg.RabbitMQ.VHost = fc.RabbitMQVHost
 	cfg.RabbitMQ.HealthURL = fc.RabbitMQHealthURL
+	cfg.RabbitMQ.AllowInsecureHealthCheck = fc.RabbitMQAllowInsecureHealth
 	cfg.Auth.Enabled = fc.AuthEnabled
 	cfg.Auth.Host = fc.AuthHost
 	cfg.Auth.TokenSecret = fc.AuthTokenSecret
@@ -247,16 +257,10 @@ func testConfigValidCases(t *testing.T) {
 			config: buildConfig(flatConfig{
 				EnvName:                  "production",
 				DefaultTenantID:          validTenantID,
-				PrimaryDBPassword:        "secret",
-				PrimaryDBSSLMode:         "require",
-				RedisTLS:                 true,
+				PrimaryDBPassword:        "pr0d-s3cure-p@ss!",
 				RedisPassword:            "redis-secret",
-				RabbitMQURI:              "amqps",
 				RabbitMQUser:             "matcher",
 				RabbitMQPassword:         "secure",
-				AuthEnabled:              true,
-				AuthHost:                 "http://auth:8080",
-				AuthTokenSecret:          "secret",
 				CORSAllowedOrigins:       "https://example.com",
 				BodyLimitBytes:           1024,
 				LogLevel:                 "info",
@@ -277,7 +281,7 @@ func testConfigValidCases(t *testing.T) {
 				DefaultTenantID:          validTenantID,
 				AuthEnabled:              true,
 				AuthHost:                 "http://auth:8080",
-				AuthTokenSecret:          "secret",
+				AuthTokenSecret:          "jwt-pr0d-t0ken-s3cret!",
 				BodyLimitBytes:           1024,
 				LogLevel:                 "info",
 				RateLimitMax:             100,
@@ -344,167 +348,67 @@ func testConfigProductionValidations(t *testing.T) {
 		{
 			name: "production requires password",
 			config: buildConfig(flatConfig{
-				EnvName:               "production",
-				DefaultTenantID:       validTenantID,
-				PrimaryDBPassword:     "",
-				PrimaryDBSSLMode:      "require",
-				RedisTLS:              true,
-				RabbitMQURI:           "amqps",
-				AuthEnabled:           true,
-				AuthHost:              "http://auth:8080",
-				AuthTokenSecret:       "secret",
-				CORSAllowedOrigins:    "https://example.com",
-				BodyLimitBytes:        1024,
-				LogLevel:              "info",
-				TLSTerminatedUpstream: true,
+				EnvName:            "production",
+				DefaultTenantID:    validTenantID,
+				PrimaryDBPassword:  "",
+				RabbitMQUser:       "matcher",
+				RabbitMQPassword:   "secure",
+				CORSAllowedOrigins: "https://example.com",
+				BodyLimitBytes:     1024,
+				LogLevel:           "info",
 			}),
 			errMsg: "POSTGRES_PASSWORD is required in production",
 		},
 		{
-			name: "production requires auth enabled",
-			config: buildConfig(flatConfig{
-				EnvName:               "production",
-				DefaultTenantID:       validTenantID,
-				PrimaryDBPassword:     "secret",
-				PrimaryDBSSLMode:      "require",
-				RedisTLS:              true,
-				RabbitMQURI:           "amqps",
-				AuthEnabled:           false,
-				CORSAllowedOrigins:    "https://example.com",
-				BodyLimitBytes:        1024,
-				LogLevel:              "info",
-				TLSTerminatedUpstream: true,
-			}),
-			errMsg: "AUTH_ENABLED must be true in production",
-		},
-		{
-			name: "production requires TLS when not terminated upstream",
-			config: buildConfig(flatConfig{
-				EnvName:               "production",
-				DefaultTenantID:       validTenantID,
-				PrimaryDBPassword:     "secret",
-				PrimaryDBSSLMode:      "require",
-				RabbitMQUser:          "matcher",
-				RabbitMQPassword:      "secure",
-				AuthEnabled:           true,
-				AuthHost:              "http://auth:8080",
-				AuthTokenSecret:       "secret",
-				CORSAllowedOrigins:    "https://example.com",
-				BodyLimitBytes:        1024,
-				LogLevel:              "info",
-				TLSTerminatedUpstream: false,
-				ServerTLSCertFile:     "",
-				ServerTLSKeyFile:      "",
-			}),
-			errMsg: "production requires inbound TLS",
-		},
-		{
 			name: "production requires non-default rabbitmq credentials",
 			config: buildConfig(flatConfig{
-				EnvName:               "production",
-				DefaultTenantID:       validTenantID,
-				PrimaryDBPassword:     "secret",
-				PrimaryDBSSLMode:      "require",
-				RedisTLS:              true,
-				RabbitMQURI:           "amqps",
-				RabbitMQUser:          "guest",
-				RabbitMQPassword:      "guest",
-				AuthEnabled:           true,
-				AuthHost:              "http://auth:8080",
-				AuthTokenSecret:       "secret",
-				CORSAllowedOrigins:    "https://example.com",
-				BodyLimitBytes:        1024,
-				LogLevel:              "info",
-				TLSTerminatedUpstream: true,
+				EnvName:            "production",
+				DefaultTenantID:    validTenantID,
+				PrimaryDBPassword:  "pr0d-s3cure-p@ss!",
+				RabbitMQUser:       "guest",
+				RabbitMQPassword:   "guest",
+				CORSAllowedOrigins: "https://example.com",
+				BodyLimitBytes:     1024,
+				LogLevel:           "info",
 			}),
 			errMsg: "RABBITMQ credentials must be set to non-default values in production",
 		},
 		{
-			name: "production requires postgres sslmode enabled",
-			config: buildConfig(flatConfig{
-				EnvName:               "production",
-				DefaultTenantID:       validTenantID,
-				PrimaryDBPassword:     "secret",
-				PrimaryDBSSLMode:      "disable",
-				RedisTLS:              true,
-				RedisPassword:         "redis-secret",
-				RabbitMQURI:           "amqps",
-				RabbitMQUser:          "matcher",
-				RabbitMQPassword:      "secure",
-				AuthEnabled:           true,
-				AuthHost:              "http://auth:8080",
-				AuthTokenSecret:       "secret",
-				CORSAllowedOrigins:    "https://example.com",
-				BodyLimitBytes:        1024,
-				LogLevel:              "info",
-				TLSTerminatedUpstream: true,
-			}),
-			errMsg: "POSTGRES_SSLMODE must not be disable in production",
-		},
-		{
-			name: "production requires redis tls",
-			config: buildConfig(flatConfig{
-				EnvName:               "production",
-				DefaultTenantID:       validTenantID,
-				PrimaryDBPassword:     "secret",
-				PrimaryDBSSLMode:      "require",
-				RedisTLS:              false,
-				RedisPassword:         "redis-secret",
-				RabbitMQURI:           "amqps",
-				RabbitMQUser:          "matcher",
-				RabbitMQPassword:      "secure",
-				AuthEnabled:           true,
-				AuthHost:              "http://auth:8080",
-				AuthTokenSecret:       "secret",
-				CORSAllowedOrigins:    "https://example.com",
-				BodyLimitBytes:        1024,
-				LogLevel:              "info",
-				TLSTerminatedUpstream: true,
-			}),
-			errMsg: "REDIS_TLS must be true in production",
-		},
-		{
-			name: "production requires rabbitmq amqps uri",
-			config: buildConfig(flatConfig{
-				EnvName:               "production",
-				DefaultTenantID:       validTenantID,
-				PrimaryDBPassword:     "secret",
-				PrimaryDBSSLMode:      "require",
-				RedisTLS:              true,
-				RedisPassword:         "redis-secret",
-				RabbitMQURI:           "amqp",
-				RabbitMQUser:          "matcher",
-				RabbitMQPassword:      "secure",
-				AuthEnabled:           true,
-				AuthHost:              "http://auth:8080",
-				AuthTokenSecret:       "secret",
-				CORSAllowedOrigins:    "https://example.com",
-				BodyLimitBytes:        1024,
-				LogLevel:              "info",
-				TLSTerminatedUpstream: true,
-			}),
-			errMsg: "RABBITMQ_URI must use amqps in production",
-		},
-		{
 			name: "production requires restricted CORS",
 			config: buildConfig(flatConfig{
-				EnvName:               "production",
-				DefaultTenantID:       validTenantID,
-				PrimaryDBPassword:     "secret",
-				PrimaryDBSSLMode:      "require",
-				RedisTLS:              true,
-				RabbitMQURI:           "amqps",
-				RabbitMQUser:          "matcher",
-				RabbitMQPassword:      "secure",
-				AuthEnabled:           true,
-				AuthHost:              "http://auth:8080",
-				AuthTokenSecret:       "secret",
-				CORSAllowedOrigins:    "*",
-				BodyLimitBytes:        1024,
-				LogLevel:              "info",
-				TLSTerminatedUpstream: true,
+				EnvName:            "production",
+				DefaultTenantID:    validTenantID,
+				PrimaryDBPassword:  "pr0d-s3cure-p@ss!",
+				RabbitMQUser:       "matcher",
+				RabbitMQPassword:   "secure",
+				CORSAllowedOrigins: "*",
+				BodyLimitBytes:     1024,
+				LogLevel:           "info",
 			}),
 			errMsg: "CORS_ALLOWED_ORIGINS must be restricted in production",
+		},
+		{
+			name: "production requires insecure health check disabled",
+			config: buildConfig(flatConfig{
+				EnvName:                     "production",
+				DefaultTenantID:             validTenantID,
+				PrimaryDBPassword:           "pr0d-s3cure-p@ss!",
+				PrimaryDBSSLMode:            "require",
+				RedisTLS:                    true,
+				RedisPassword:               "redis-secret",
+				RabbitMQURI:                 "amqps",
+				RabbitMQUser:                "matcher",
+				RabbitMQPassword:            "secure",
+				RabbitMQAllowInsecureHealth: true,
+				AuthEnabled:                 true,
+				AuthHost:                    "http://auth:8080",
+				AuthTokenSecret:             "jwt-pr0d-t0ken-s3cret!",
+				CORSAllowedOrigins:          "https://example.com",
+				BodyLimitBytes:              1024,
+				LogLevel:                    "info",
+				TLSTerminatedUpstream:       true,
+			}),
+			errMsg: "RABBITMQ_ALLOW_INSECURE_HEALTH_CHECK must be false in production",
 		},
 	}
 
@@ -536,7 +440,7 @@ func testConfigAuthValidations(t *testing.T) {
 				DefaultTenantID: validTenantID,
 				AuthEnabled:     true,
 				AuthHost:        "",
-				AuthTokenSecret: "secret",
+				AuthTokenSecret: "jwt-pr0d-t0ken-s3cret!",
 				BodyLimitBytes:  1024,
 				LogLevel:        "info",
 			}),
@@ -662,13 +566,13 @@ func TestConfig_PrimaryDSN(t *testing.T) {
 		PrimaryDBHost:             "localhost",
 		PrimaryDBPort:             "5432",
 		PrimaryDBUser:             "matcher",
-		PrimaryDBPassword:         "secret",
+		PrimaryDBPassword:         "pr0d-s3cure-p@ss!",
 		PrimaryDBName:             "matcher_db",
 		PrimaryDBSSLMode:          "disable",
 		PostgresConnectTimeoutSec: 10,
 	})
 
-	expected := "host=localhost port=5432 user=matcher password=secret dbname=matcher_db sslmode=disable connect_timeout=10"
+	expected := "host=localhost port=5432 user=matcher password=pr0d-s3cure-p@ss! dbname=matcher_db sslmode=disable connect_timeout=10"
 	assert.Equal(t, expected, cfg.PrimaryDSN())
 }
 
@@ -679,7 +583,7 @@ func TestConfig_ReplicaDSN_FallbackToPrimary(t *testing.T) {
 		PrimaryDBHost:             "primary.db",
 		PrimaryDBPort:             "5432",
 		PrimaryDBUser:             "matcher",
-		PrimaryDBPassword:         "secret",
+		PrimaryDBPassword:         "pr0d-s3cure-p@ss!",
 		PrimaryDBName:             "matcher_db",
 		PrimaryDBSSLMode:          "require",
 		PostgresConnectTimeoutSec: 10,
@@ -696,7 +600,7 @@ func TestConfig_ReplicaDSN_WithReplica(t *testing.T) {
 		PrimaryDBHost:             "primary.db",
 		PrimaryDBPort:             "5432",
 		PrimaryDBUser:             "matcher",
-		PrimaryDBPassword:         "secret",
+		PrimaryDBPassword:         "pr0d-s3cure-p@ss!",
 		PrimaryDBName:             "matcher_db",
 		PrimaryDBSSLMode:          "require",
 		PostgresConnectTimeoutSec: 10,
@@ -704,7 +608,7 @@ func TestConfig_ReplicaDSN_WithReplica(t *testing.T) {
 		ReplicaDBPort:             "5433",
 	})
 
-	expected := "host=replica.db port=5433 user=matcher password=secret dbname=matcher_db sslmode=require connect_timeout=10"
+	expected := "host=replica.db port=5433 user=matcher password=pr0d-s3cure-p@ss! dbname=matcher_db sslmode=require connect_timeout=10"
 	assert.Equal(t, expected, cfg.ReplicaDSN())
 }
 
@@ -959,14 +863,14 @@ func TestConfig_InfraConnectTimeout(t *testing.T) {
 			expected: 10 * time.Second,
 		},
 		{
-			name:     "zero value returns minimum duration",
+			name:     "zero value returns default 30s",
 			timeout:  0,
-			expected: 1 * time.Second,
+			expected: 30 * time.Second,
 		},
 		{
-			name:     "negative value returns minimum duration",
+			name:     "negative value returns default 30s",
 			timeout:  -1,
-			expected: 1 * time.Second,
+			expected: 30 * time.Second,
 		},
 		{
 			name:     "caps absurdly high values",
@@ -997,20 +901,13 @@ func TestConfig_ProductionRedisPasswordValidation(t *testing.T) {
 			EnvName:                "production",
 			DefaultTenantID:        validTenantID,
 			PrimaryDBPassword:      "dbsecret",
-			PrimaryDBSSLMode:       "require",
-			RedisTLS:               true,
 			RedisHost:              "redis.example.com",
 			RedisPassword:          "",
-			RabbitMQURI:            "amqps",
 			RabbitMQUser:           "matcher",
 			RabbitMQPassword:       "rabbitsecret",
-			AuthEnabled:            true,
-			AuthHost:               "http://auth:8080",
-			AuthTokenSecret:        "jwtsecret",
 			CORSAllowedOrigins:     "https://example.com",
 			BodyLimitBytes:         1024,
 			LogLevel:               "info",
-			TLSTerminatedUpstream:  true,
 			InfraConnectTimeoutSec: 30,
 		})
 
@@ -1030,15 +927,9 @@ func TestConfig_ProductionRedisPasswordValidation(t *testing.T) {
 			EnvName:                  "production",
 			DefaultTenantID:          validTenantID,
 			PrimaryDBPassword:        "dbsecret",
-			PrimaryDBSSLMode:         "require",
-			RedisTLS:                 true,
 			RedisHost:                "",
-			RabbitMQURI:              "amqps",
 			RabbitMQUser:             "matcher",
 			RabbitMQPassword:         "rabbitsecret",
-			AuthEnabled:              true,
-			AuthHost:                 "http://auth:8080",
-			AuthTokenSecret:          "jwtsecret",
 			CORSAllowedOrigins:       "https://example.com",
 			BodyLimitBytes:           1024,
 			LogLevel:                 "info",
@@ -1046,7 +937,6 @@ func TestConfig_ProductionRedisPasswordValidation(t *testing.T) {
 			RateLimitExpirySec:       60,
 			ExportRateLimitMax:       10,
 			ExportRateLimitExpirySec: 60,
-			TLSTerminatedUpstream:    true,
 			InfraConnectTimeoutSec:   30,
 		})
 
@@ -1062,16 +952,10 @@ func TestConfig_ProductionRedisPasswordValidation(t *testing.T) {
 			EnvName:                  "production",
 			DefaultTenantID:          validTenantID,
 			PrimaryDBPassword:        "dbsecret",
-			PrimaryDBSSLMode:         "require",
-			RedisTLS:                 true,
 			RedisHost:                "redis.example.com",
 			RedisPassword:            "redissecret",
-			RabbitMQURI:              "amqps",
 			RabbitMQUser:             "matcher",
 			RabbitMQPassword:         "rabbitsecret",
-			AuthEnabled:              true,
-			AuthHost:                 "http://auth:8080",
-			AuthTokenSecret:          "jwtsecret",
 			CORSAllowedOrigins:       "https://example.com",
 			BodyLimitBytes:           1024,
 			LogLevel:                 "info",
@@ -1079,7 +963,6 @@ func TestConfig_ProductionRedisPasswordValidation(t *testing.T) {
 			RateLimitExpirySec:       60,
 			ExportRateLimitMax:       10,
 			ExportRateLimitExpirySec: 60,
-			TLSTerminatedUpstream:    true,
 			InfraConnectTimeoutSec:   30,
 		})
 
@@ -1161,7 +1044,7 @@ func TestConfig_ReplicaDSN_ExtendedCases(t *testing.T) {
 			PrimaryDBHost:             "primary-host",
 			PrimaryDBPort:             "5432",
 			PrimaryDBUser:             "matcher",
-			PrimaryDBPassword:         "secret",
+			PrimaryDBPassword:         "pr0d-s3cure-p@ss!",
 			PrimaryDBName:             "matcher_db",
 			PrimaryDBSSLMode:          "require",
 			PostgresConnectTimeoutSec: 10,
@@ -1190,7 +1073,7 @@ func TestConfig_ReplicaDSN_ExtendedCases(t *testing.T) {
 			PrimaryDBHost:             "primary-host",
 			PrimaryDBPort:             "5432",
 			PrimaryDBUser:             "matcher",
-			PrimaryDBPassword:         "secret",
+			PrimaryDBPassword:         "pr0d-s3cure-p@ss!",
 			PrimaryDBName:             "matcher_db",
 			PrimaryDBSSLMode:          "require",
 			PostgresConnectTimeoutSec: 10,
@@ -1202,7 +1085,7 @@ func TestConfig_ReplicaDSN_ExtendedCases(t *testing.T) {
 		assert.Contains(t, dsn, "host=replica-host")
 		assert.Contains(t, dsn, "port=5432")
 		assert.Contains(t, dsn, "user=matcher")
-		assert.Contains(t, dsn, "password=secret")
+		assert.Contains(t, dsn, "password=pr0d-s3cure-p@ss!")
 		assert.Contains(t, dsn, "dbname=matcher_db")
 		assert.Contains(t, dsn, "sslmode=require")
 	})
@@ -1240,7 +1123,7 @@ func TestConfig_ReplicaDSNMasked(t *testing.T) {
 			PrimaryDBHost:     "primary-host",
 			PrimaryDBPort:     "5432",
 			PrimaryDBUser:     "matcher",
-			PrimaryDBPassword: "secret",
+			PrimaryDBPassword: "pr0d-s3cure-p@ss!",
 			PrimaryDBName:     "matcher_db",
 			PrimaryDBSSLMode:  "require",
 			ReplicaDBHost:     "",
@@ -1259,7 +1142,7 @@ func TestConfig_ReplicaDSNMasked(t *testing.T) {
 			PrimaryDBHost:     "primary-host",
 			PrimaryDBPort:     "5432",
 			PrimaryDBUser:     "matcher",
-			PrimaryDBPassword: "secret",
+			PrimaryDBPassword: "pr0d-s3cure-p@ss!",
 			PrimaryDBName:     "matcher_db",
 			PrimaryDBSSLMode:  "require",
 			ReplicaDBHost:     "replica-host",
@@ -1793,7 +1676,7 @@ func TestConfig_ReplicaDSNMasked_PartialFallbacks(t *testing.T) {
 			PrimaryDBHost:     "primary-host",
 			PrimaryDBPort:     "5432",
 			PrimaryDBUser:     "matcher",
-			PrimaryDBPassword: "secret",
+			PrimaryDBPassword: "pr0d-s3cure-p@ss!",
 			PrimaryDBName:     "matcher_db",
 			PrimaryDBSSLMode:  "require",
 			ReplicaDBHost:     "replica-host",
@@ -1814,7 +1697,7 @@ func TestConfig_ReplicaDSNMasked_PartialFallbacks(t *testing.T) {
 			PrimaryDBHost:     "primary-host",
 			PrimaryDBPort:     "5432",
 			PrimaryDBUser:     "matcher",
-			PrimaryDBPassword: "secret",
+			PrimaryDBPassword: "pr0d-s3cure-p@ss!",
 			PrimaryDBName:     "matcher_db",
 			PrimaryDBSSLMode:  "require",
 			ReplicaDBHost:     "replica-host",
@@ -1833,7 +1716,7 @@ func TestConfig_ReplicaDSNMasked_PartialFallbacks(t *testing.T) {
 			PrimaryDBHost:     "primary-host",
 			PrimaryDBPort:     "5432",
 			PrimaryDBUser:     "matcher",
-			PrimaryDBPassword: "secret",
+			PrimaryDBPassword: "pr0d-s3cure-p@ss!",
 			PrimaryDBName:     "matcher_db",
 			PrimaryDBSSLMode:  "require",
 			ReplicaDBHost:     "replica-host",
@@ -1852,7 +1735,7 @@ func TestConfig_ReplicaDSNMasked_PartialFallbacks(t *testing.T) {
 			PrimaryDBHost:     "primary-host",
 			PrimaryDBPort:     "5432",
 			PrimaryDBUser:     "matcher",
-			PrimaryDBPassword: "secret",
+			PrimaryDBPassword: "pr0d-s3cure-p@ss!",
 			PrimaryDBName:     "matcher_db",
 			PrimaryDBSSLMode:  "require",
 			ReplicaDBHost:     "replica-host",
@@ -1871,7 +1754,7 @@ func TestConfig_ReplicaDSNMasked_PartialFallbacks(t *testing.T) {
 			PrimaryDBHost:     "primary-host",
 			PrimaryDBPort:     "5432",
 			PrimaryDBUser:     "matcher",
-			PrimaryDBPassword: "secret",
+			PrimaryDBPassword: "pr0d-s3cure-p@ss!",
 			PrimaryDBName:     "matcher_db",
 			PrimaryDBSSLMode:  "require",
 			ReplicaDBHost:     "replica-host",
@@ -2142,7 +2025,7 @@ func TestConfig_RabbitMQDSN_EdgeCases(t *testing.T) {
 			RabbitMQHost:     "rabbitmq.example.com",
 			RabbitMQPort:     "5671",
 			RabbitMQUser:     "matcher",
-			RabbitMQPassword: "secret",
+			RabbitMQPassword: "rmq-pr0d-s3cure!",
 			RabbitMQVHost:    "/production",
 		})
 
@@ -2223,7 +2106,7 @@ func TestConfig_ProductionTLSValidation(t *testing.T) {
 		cfg := buildConfig(flatConfig{
 			EnvName:                  "production",
 			DefaultTenantID:          validTenantID,
-			PrimaryDBPassword:        "secret",
+			PrimaryDBPassword:        "pr0d-s3cure-p@ss!",
 			PrimaryDBSSLMode:         "require",
 			RedisTLS:                 true,
 			RedisHost:                "redis.example.com",
@@ -2255,7 +2138,7 @@ func TestConfig_ProductionTLSValidation(t *testing.T) {
 		cfg := buildConfig(flatConfig{
 			EnvName:                  "production",
 			DefaultTenantID:          validTenantID,
-			PrimaryDBPassword:        "secret",
+			PrimaryDBPassword:        "pr0d-s3cure-p@ss!",
 			PrimaryDBSSLMode:         "require",
 			RedisTLS:                 true,
 			RedisHost:                "redis.example.com",
@@ -2299,7 +2182,7 @@ func TestConfig_AuthHostAndSecretValidation(t *testing.T) {
 			LogLevel:                 "info",
 			AuthEnabled:              true,
 			AuthHost:                 "",
-			AuthTokenSecret:          "secret",
+			AuthTokenSecret:          "jwt-pr0d-t0ken-s3cret!",
 			RateLimitMax:             100,
 			RateLimitExpirySec:       60,
 			ExportRateLimitMax:       10,
@@ -2345,7 +2228,7 @@ func TestConfig_AuthHostAndSecretValidation(t *testing.T) {
 			LogLevel:                 "info",
 			AuthEnabled:              true,
 			AuthHost:                 "   ",
-			AuthTokenSecret:          "secret",
+			AuthTokenSecret:          "jwt-pr0d-t0ken-s3cret!",
 			RateLimitMax:             100,
 			RateLimitExpirySec:       60,
 			ExportRateLimitMax:       10,
@@ -2392,7 +2275,7 @@ func TestConfig_ProductionCORSWildcard(t *testing.T) {
 		cfg := buildConfig(flatConfig{
 			EnvName:               "production",
 			DefaultTenantID:       validTenantID,
-			PrimaryDBPassword:     "secret",
+			PrimaryDBPassword:     "pr0d-s3cure-p@ss!",
 			PrimaryDBSSLMode:      "require",
 			RedisTLS:              true,
 			RabbitMQURI:           "amqps",
@@ -2418,7 +2301,7 @@ func TestConfig_ProductionCORSWildcard(t *testing.T) {
 		cfg := buildConfig(flatConfig{
 			EnvName:               "production",
 			DefaultTenantID:       validTenantID,
-			PrimaryDBPassword:     "secret",
+			PrimaryDBPassword:     "pr0d-s3cure-p@ss!",
 			PrimaryDBSSLMode:      "require",
 			RedisTLS:              true,
 			RabbitMQURI:           "amqps",

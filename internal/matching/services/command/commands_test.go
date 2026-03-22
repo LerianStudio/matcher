@@ -13,9 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
-	libPostgres "github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres"
-	libRedis "github.com/LerianStudio/lib-uncommons/v2/uncommons/redis"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
 	governanceEntities "github.com/LerianStudio/matcher/internal/governance/domain/entities"
 	governanceRepositories "github.com/LerianStudio/matcher/internal/governance/domain/repositories"
@@ -26,6 +24,7 @@ import (
 	outboxmocks "github.com/LerianStudio/matcher/internal/outbox/domain/repositories/mocks"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 func TestSentinelErrors(t *testing.T) {
@@ -76,6 +75,7 @@ func TestSentinelErrors(t *testing.T) {
 		},
 		{"ErrNilAuditLogRepository", ErrNilAuditLogRepository, "audit log repository is required"},
 		{"ErrNilFeeScheduleRepository", ErrNilFeeScheduleRepository, "fee schedule repository is required"},
+		{"ErrNilFeeRuleProvider", ErrNilFeeRuleProvider, "fee rule provider is required"},
 	}
 
 	for _, tt := range tests {
@@ -398,7 +398,7 @@ func (m *mockAdjustmentRepo) Create(
 
 func (m *mockAdjustmentRepo) CreateWithTx(
 	_ context.Context,
-	_ any,
+	_ *sql.Tx,
 	adj *matchingEntities.Adjustment,
 ) (*matchingEntities.Adjustment, error) {
 	return adj, nil
@@ -417,6 +417,23 @@ func (m *mockAdjustmentRepo) ListByContextID(
 	_ matchingRepositories.CursorFilter,
 ) ([]*matchingEntities.Adjustment, libHTTP.CursorPagination, error) {
 	return nil, libHTTP.CursorPagination{}, nil
+}
+
+func (m *mockAdjustmentRepo) CreateWithAuditLog(
+	_ context.Context,
+	adj *matchingEntities.Adjustment,
+	_ *shared.AuditLog,
+) (*matchingEntities.Adjustment, error) {
+	return adj, nil
+}
+
+func (m *mockAdjustmentRepo) CreateWithAuditLogWithTx(
+	_ context.Context,
+	_ *sql.Tx,
+	adj *matchingEntities.Adjustment,
+	_ *shared.AuditLog,
+) (*matchingEntities.Adjustment, error) {
+	return adj, nil
 }
 
 func (m *mockAdjustmentRepo) ListByMatchGroupID(
@@ -468,6 +485,17 @@ func (m *mockFeeScheduleRepo) GetByIDs(
 
 var _ matchingRepositories.FeeScheduleRepository = (*mockFeeScheduleRepo)(nil)
 
+type mockFeeRuleProvider struct{}
+
+func (m *mockFeeRuleProvider) FindByContextID(
+	_ context.Context,
+	_ uuid.UUID,
+) ([]*fee.FeeRule, error) {
+	return nil, nil
+}
+
+var _ ports.FeeRuleProvider = (*mockFeeRuleProvider)(nil)
+
 type mockInfraProvider struct {
 	tx  *sql.Tx
 	err error
@@ -475,25 +503,25 @@ type mockInfraProvider struct {
 
 func (m *mockInfraProvider) GetPostgresConnection(
 	_ context.Context,
-) (*libPostgres.Client, error) {
+) (*sharedPorts.PostgresConnectionLease, error) {
 	return nil, nil
 }
 
 func (m *mockInfraProvider) GetRedisConnection(
 	_ context.Context,
-) (*libRedis.Client, error) {
+) (*sharedPorts.RedisConnectionLease, error) {
 	return nil, nil
 }
 
-func (m *mockInfraProvider) BeginTx(_ context.Context) (*sql.Tx, error) {
+func (m *mockInfraProvider) BeginTx(_ context.Context) (*sharedPorts.TxLease, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
 
-	return m.tx, nil
+	return sharedPorts.NewTxLease(m.tx, nil), nil
 }
 
-func (m *mockInfraProvider) GetReplicaDB(_ context.Context) (*sql.DB, error) {
+func (m *mockInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.ReplicaDBLease, error) {
 	return nil, nil
 }
 
@@ -612,6 +640,7 @@ func TestNewUseCase(t *testing.T) {
 			InfraProvider:    &mockInfraProvider{},
 			AuditLogRepo:     &mockAuditLogRepo{},
 			FeeScheduleRepo:  &mockFeeScheduleRepo{},
+			FeeRuleProvider:  &mockFeeRuleProvider{},
 		}
 	}
 
@@ -793,6 +822,18 @@ func TestNewUseCase(t *testing.T) {
 		assert.Nil(t, uc)
 		require.ErrorIs(t, err, ErrNilFeeScheduleRepository)
 	})
+
+	t.Run("nil fee rule provider returns error", func(t *testing.T) {
+		t.Parallel()
+
+		deps := validDeps()
+		deps.FeeRuleProvider = nil
+
+		uc, err := New(deps)
+
+		assert.Nil(t, uc)
+		require.ErrorIs(t, err, ErrNilFeeRuleProvider)
+	})
 }
 
 func TestUseCaseFieldsInitialized(t *testing.T) {
@@ -849,6 +890,7 @@ func TestUseCaseFieldsInitialized(t *testing.T) {
 		InfraProvider:    &mockInfraProvider{},
 		AuditLogRepo:     &mockAuditLogRepo{},
 		FeeScheduleRepo:  &mockFeeScheduleRepo{},
+		FeeRuleProvider:  &mockFeeRuleProvider{},
 	})
 
 	require.NoError(t, err)

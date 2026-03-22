@@ -8,10 +8,11 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/shopspring/decimal"
 
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/configuration/services/command"
+	"github.com/LerianStudio/matcher/internal/shared/constants"
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
@@ -35,7 +36,7 @@ var errParseItemStructure = errors.New("item structure parse error")
 // @Failure 403 {object} ErrorResponse "Forbidden"
 // @Failure 409 {object} ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
 // @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /v1/config/fee-schedules [post]
+// @Router /v1/fee-schedules [post]
 func (handler *Handler) CreateFeeSchedule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fee_schedule.create")
 	defer span.End()
@@ -94,7 +95,7 @@ func (handler *Handler) CreateFeeSchedule(fiberCtx *fiber.Ctx) error {
 // @Failure 401 {object} ErrorResponse "Unauthorized"
 // @Failure 403 {object} ErrorResponse "Forbidden"
 // @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /v1/config/fee-schedules [get]
+// @Router /v1/fee-schedules [get]
 func (handler *Handler) ListFeeSchedules(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fee_schedule.list")
 	defer span.End()
@@ -106,12 +107,14 @@ func (handler *Handler) ListFeeSchedules(fiberCtx *fiber.Ctx) error {
 
 	libHTTP.SetTenantSpanAttribute(span, tenantID)
 
-	limitStr := fiberCtx.Query("limit", "20")
+	limitStr := fiberCtx.Query("limit", strconv.Itoa(constants.DefaultPaginationLimit))
 
 	limit, parseErr := strconv.Atoi(limitStr)
-	if parseErr != nil || limit < 1 || limit > 200 {
-		limit = 20
+	if parseErr != nil || limit < 1 {
+		limit = constants.DefaultPaginationLimit
 	}
+
+	limit = libHTTP.ValidateLimit(limit, constants.DefaultPaginationLimit, constants.MaximumPaginationLimit)
 
 	result, err := handler.query.ListFeeSchedules(ctx, limit)
 	if err != nil {
@@ -142,7 +145,7 @@ func (handler *Handler) ListFeeSchedules(fiberCtx *fiber.Ctx) error {
 // @Failure 403 {object} ErrorResponse "Forbidden"
 // @Failure 404 {object} ErrorResponse "Fee schedule not found"
 // @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /v1/config/fee-schedules/{scheduleId} [get]
+// @Router /v1/fee-schedules/{scheduleId} [get]
 func (handler *Handler) GetFeeSchedule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fee_schedule.get")
 	defer span.End()
@@ -193,7 +196,7 @@ func (handler *Handler) GetFeeSchedule(fiberCtx *fiber.Ctx) error {
 // @Failure 404 {object} ErrorResponse "Fee schedule not found"
 // @Failure 409 {object} ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
 // @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /v1/config/fee-schedules/{scheduleId} [patch]
+// @Router /v1/fee-schedules/{scheduleId} [patch]
 func (handler *Handler) UpdateFeeSchedule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fee_schedule.update")
 	defer span.End()
@@ -254,8 +257,9 @@ func (handler *Handler) UpdateFeeSchedule(fiberCtx *fiber.Ctx) error {
 // @Failure 401 {object} ErrorResponse "Unauthorized"
 // @Failure 403 {object} ErrorResponse "Forbidden"
 // @Failure 404 {object} ErrorResponse "Fee schedule not found"
+// @Failure      409         {object}  ErrorResponse  "Conflict: fee schedule is still referenced by fee rules"
 // @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /v1/config/fee-schedules/{scheduleId} [delete]
+// @Router /v1/fee-schedules/{scheduleId} [delete]
 func (handler *Handler) DeleteFeeSchedule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fee_schedule.delete")
 	defer span.End()
@@ -277,6 +281,15 @@ func (handler *Handler) DeleteFeeSchedule(fiberCtx *fiber.Ctx) error {
 
 		if errors.Is(err, fee.ErrFeeScheduleNotFound) {
 			return writeNotFound(fiberCtx, "fee schedule not found")
+		}
+
+		if errors.Is(err, command.ErrFeeScheduleReferencedByFeeRule) {
+			return libHTTP.RespondError(
+				fiberCtx,
+				fiber.StatusConflict,
+				"fee_schedule_in_use",
+				"fee schedule is still referenced by fee rules",
+			)
 		}
 
 		return writeServiceError(fiberCtx, err)
@@ -303,7 +316,7 @@ func (handler *Handler) DeleteFeeSchedule(fiberCtx *fiber.Ctx) error {
 // @Failure 403 {object} ErrorResponse "Forbidden"
 // @Failure 404 {object} ErrorResponse "Fee schedule not found"
 // @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /v1/config/fee-schedules/{scheduleId}/simulate [post]
+// @Router /v1/fee-schedules/{scheduleId}/simulate [post]
 func (handler *Handler) SimulateFeeSchedule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fee_schedule.simulate")
 	defer span.End()

@@ -3,12 +3,56 @@
 package chaos
 
 import (
-	"fmt"
 	"testing"
 
 	toxiproxy "github.com/Shopify/toxiproxy/v2/client"
 	"github.com/stretchr/testify/require"
 )
+
+type toxiproxyController struct{ proxy *toxiproxy.Proxy }
+
+func (controller toxiproxyController) Name() string {
+	if controller.proxy == nil {
+		return ""
+	}
+
+	return controller.proxy.Name
+}
+
+func (controller toxiproxyController) ListToxicNames() ([]string, error) {
+	if controller.proxy == nil {
+		return nil, nil
+	}
+
+	toxics, err := controller.proxy.Toxics()
+	if err != nil {
+		return nil, err
+	}
+
+	names := make([]string, 0, len(toxics))
+	for _, toxic := range toxics {
+		names = append(names, toxic.Name)
+	}
+
+	return names, nil
+}
+
+func (controller toxiproxyController) RemoveToxicByName(name string) error {
+	if controller.proxy == nil {
+		return nil
+	}
+
+	return controller.proxy.RemoveToxic(name)
+}
+
+func (controller toxiproxyController) SetEnabled(enabled bool) error {
+	if controller.proxy == nil {
+		return nil
+	}
+
+	controller.proxy.Enabled = enabled
+	return controller.proxy.Save()
+}
 
 // --------------------------------------------------------------------------
 // PostgreSQL toxic injection
@@ -251,41 +295,23 @@ func (h *ChaosHarness) EnableRabbitProxy(t *testing.T) {
 // for mid-test recovery scenarios.
 func (h *ChaosHarness) RemoveAllToxics(t *testing.T) {
 	t.Helper()
-
-	for _, proxy := range []*toxiproxy.Proxy{h.PGProxy, h.RedisProxy, h.RabbitProxy} {
-		if proxy == nil {
-			continue
-		}
-
-		toxics, err := proxy.Toxics()
-		if err != nil {
-			t.Logf("warning: failed to list toxics for %s: %v", proxy.Name, err)
-			continue
-		}
-
-		for _, toxic := range toxics {
-			if err := proxy.RemoveToxic(toxic.Name); err != nil {
-				t.Logf("warning: failed to remove toxic %s from %s: %v",
-					toxic.Name, proxy.Name, err)
-			}
-		}
+	proxies := []proxyController{
+		toxiproxyController{proxy: h.PGProxy},
+		toxiproxyController{proxy: h.RedisProxy},
+		toxiproxyController{proxy: h.RabbitProxy},
 	}
+	require.NoError(t, removeAllToxicsFromProxies(proxies))
 }
 
 // EnableAllProxies re-enables all proxies (recovering from DisableXxxProxy calls).
 func (h *ChaosHarness) EnableAllProxies(t *testing.T) {
 	t.Helper()
-
-	for _, proxy := range []*toxiproxy.Proxy{h.PGProxy, h.RedisProxy, h.RabbitProxy} {
-		if proxy == nil {
-			continue
-		}
-
-		proxy.Enabled = true
-		if err := proxy.Save(); err != nil {
-			t.Logf("warning: failed to re-enable proxy %s: %v", proxy.Name, err)
-		}
+	proxies := []proxyController{
+		toxiproxyController{proxy: h.PGProxy},
+		toxiproxyController{proxy: h.RedisProxy},
+		toxiproxyController{proxy: h.RabbitProxy},
 	}
+	require.NoError(t, enableAllProxyControllers(proxies))
 }
 
 // IsolateService disables one proxy while keeping others active.
@@ -294,27 +320,19 @@ func (h *ChaosHarness) IsolateService(t *testing.T, service string) error {
 	t.Helper()
 
 	var proxy *toxiproxy.Proxy
-
-	switch service {
-	case "postgres":
-		proxy = h.PGProxy
-	case "redis":
-		proxy = h.RedisProxy
-	case "rabbitmq":
-		proxy = h.RabbitProxy
-	default:
-		return fmt.Errorf("unknown service: %s (expected: postgres, redis, rabbitmq)", service)
-	}
-
-	proxy.Enabled = false
-
-	if err := proxy.Save(); err != nil {
-		return fmt.Errorf("isolate %s: %w", service, err)
+	restore, err := isolateServiceProxy(service, map[string]proxyController{
+		"postgres": toxiproxyController{proxy: h.PGProxy},
+		"redis":    toxiproxyController{proxy: h.RedisProxy},
+		"rabbitmq": toxiproxyController{proxy: h.RabbitProxy},
+	})
+	if err != nil {
+		return err
 	}
 
 	t.Cleanup(func() {
-		proxy.Enabled = true
-		_ = proxy.Save()
+		if err := restore(); err != nil {
+			t.Errorf("restore %s proxy after isolation: %v", service, err)
+		}
 	})
 
 	return nil

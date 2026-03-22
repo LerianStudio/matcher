@@ -11,16 +11,17 @@ import (
 	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/common"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
+	"github.com/LerianStudio/matcher/internal/shared/constants"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -181,10 +182,11 @@ func (repo *Repository) FindByID(
 		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
 		return nil, fmt.Errorf("get postgres connection: %w", err)
 	}
+	defer connection.Release()
 
 	result, err := common.WithTenantTx(
 		ctx,
-		connection,
+		connection.Connection(),
 		func(tx *sql.Tx) (*entities.ReconciliationContext, error) {
 			row := tx.QueryRowContext(
 				ctx,
@@ -230,10 +232,11 @@ func (repo *Repository) FindByName(
 		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
 		return nil, fmt.Errorf("get postgres connection: %w", err)
 	}
+	defer connection.Release()
 
 	result, err := common.WithTenantTx(
 		ctx,
-		connection,
+		connection.Connection(),
 		func(tx *sql.Tx) (*entities.ReconciliationContext, error) {
 			row := tx.QueryRowContext(
 				ctx,
@@ -288,8 +291,9 @@ func (repo *Repository) FindAll(
 		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
 		return nil, libHTTP.CursorPagination{}, fmt.Errorf("get postgres connection: %w", err)
 	}
+	defer connection.Release()
 
-	limit = libHTTP.ValidateLimit(limit, libHTTP.DefaultLimit, libHTTP.MaxLimit)
+	limit = libHTTP.ValidateLimit(limit, constants.DefaultPaginationLimit, constants.MaximumPaginationLimit)
 
 	decodedCursor, err := decodeCursorParam(cursor)
 	if err != nil {
@@ -300,7 +304,7 @@ func (repo *Repository) FindAll(
 
 	result, err := common.WithTenantTx(
 		ctx,
-		connection,
+		connection.Connection(),
 		func(tx *sql.Tx) (contexts []*entities.ReconciliationContext, err error) {
 			findAll := buildContextQuery(tenantID, contextType, status)
 
@@ -317,7 +321,7 @@ func (repo *Repository) FindAll(
 
 			findAll = findAll.
 				OrderBy("id " + effectiveOrder).
-				Limit(uint64(limit + 1)) //nolint:gosec //#nosec G115 -- limit is validated positive by ValidateLimit
+				Limit(pgcommon.SafeIntToUint64(limit) + 1)
 
 			contexts, err = executeContextQuery(ctx, tx, findAll, limit)
 			if err != nil {
@@ -608,8 +612,9 @@ func (repo *Repository) Count(ctx stdctx.Context) (int64, error) {
 		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
 		return 0, fmt.Errorf("get postgres connection: %w", err)
 	}
+	defer connection.Release()
 
-	result, err := common.WithTenantTx(ctx, connection, func(tx *sql.Tx) (int64, error) {
+	result, err := common.WithTenantTx(ctx, connection.Connection(), func(tx *sql.Tx) (int64, error) {
 		row := tx.QueryRowContext(
 			ctx,
 			"SELECT COUNT(1) FROM reconciliation_contexts WHERE tenant_id = $1",

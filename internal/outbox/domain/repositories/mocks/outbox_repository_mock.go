@@ -11,11 +11,11 @@ package mocks
 
 import (
 	context "context"
+	sql "database/sql"
 	reflect "reflect"
 	time "time"
 
-	entities "github.com/LerianStudio/matcher/internal/outbox/domain/entities"
-	repositories "github.com/LerianStudio/matcher/internal/outbox/domain/repositories"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	uuid "github.com/google/uuid"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -45,10 +45,10 @@ func (m *MockOutboxRepository) EXPECT() *MockOutboxRepositoryMockRecorder {
 }
 
 // Create mocks base method.
-func (m *MockOutboxRepository) Create(ctx context.Context, event *entities.OutboxEvent) (*entities.OutboxEvent, error) {
+func (m *MockOutboxRepository) Create(ctx context.Context, event *shared.OutboxEvent) (*shared.OutboxEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Create", ctx, event)
-	ret0, _ := ret[0].(*entities.OutboxEvent)
+	ret0, _ := ret[0].(*shared.OutboxEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -60,10 +60,10 @@ func (mr *MockOutboxRepositoryMockRecorder) Create(ctx, event any) *gomock.Call 
 }
 
 // CreateWithTx mocks base method.
-func (m *MockOutboxRepository) CreateWithTx(ctx context.Context, tx repositories.Tx, event *entities.OutboxEvent) (*entities.OutboxEvent, error) {
+func (m *MockOutboxRepository) CreateWithTx(ctx context.Context, tx *sql.Tx, event *shared.OutboxEvent) (*shared.OutboxEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateWithTx", ctx, tx, event)
-	ret0, _ := ret[0].(*entities.OutboxEvent)
+	ret0, _ := ret[0].(*shared.OutboxEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -75,10 +75,10 @@ func (mr *MockOutboxRepositoryMockRecorder) CreateWithTx(ctx, tx, event any) *go
 }
 
 // GetByID mocks base method.
-func (m *MockOutboxRepository) GetByID(ctx context.Context, id uuid.UUID) (*entities.OutboxEvent, error) {
+func (m *MockOutboxRepository) GetByID(ctx context.Context, id uuid.UUID) (*shared.OutboxEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetByID", ctx, id)
-	ret0, _ := ret[0].(*entities.OutboxEvent)
+	ret0, _ := ret[0].(*shared.OutboxEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -90,10 +90,10 @@ func (mr *MockOutboxRepositoryMockRecorder) GetByID(ctx, id any) *gomock.Call {
 }
 
 // ListFailedForRetry mocks base method.
-func (m *MockOutboxRepository) ListFailedForRetry(ctx context.Context, limit int, failedBefore time.Time, maxAttempts int) ([]*entities.OutboxEvent, error) {
+func (m *MockOutboxRepository) ListFailedForRetry(ctx context.Context, limit int, failedBefore time.Time, maxAttempts int) ([]*shared.OutboxEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListFailedForRetry", ctx, limit, failedBefore, maxAttempts)
-	ret0, _ := ret[0].([]*entities.OutboxEvent)
+	ret0, _ := ret[0].([]*shared.OutboxEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -105,10 +105,10 @@ func (mr *MockOutboxRepositoryMockRecorder) ListFailedForRetry(ctx, limit, faile
 }
 
 // ListPending mocks base method.
-func (m *MockOutboxRepository) ListPending(ctx context.Context, limit int) ([]*entities.OutboxEvent, error) {
+func (m *MockOutboxRepository) ListPending(ctx context.Context, limit int) ([]*shared.OutboxEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListPending", ctx, limit)
-	ret0, _ := ret[0].([]*entities.OutboxEvent)
+	ret0, _ := ret[0].([]*shared.OutboxEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -120,10 +120,10 @@ func (mr *MockOutboxRepositoryMockRecorder) ListPending(ctx, limit any) *gomock.
 }
 
 // ListPendingByType mocks base method.
-func (m *MockOutboxRepository) ListPendingByType(ctx context.Context, eventType string, limit int) ([]*entities.OutboxEvent, error) {
+func (m *MockOutboxRepository) ListPendingByType(ctx context.Context, eventType string, limit int) ([]*shared.OutboxEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListPendingByType", ctx, eventType, limit)
-	ret0, _ := ret[0].([]*entities.OutboxEvent)
+	ret0, _ := ret[0].([]*shared.OutboxEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -192,10 +192,10 @@ func (mr *MockOutboxRepositoryMockRecorder) MarkPublished(ctx, id, publishedAt a
 }
 
 // ResetForRetry mocks base method.
-func (m *MockOutboxRepository) ResetForRetry(ctx context.Context, limit int, failedBefore time.Time, maxAttempts int) ([]*entities.OutboxEvent, error) {
+func (m *MockOutboxRepository) ResetForRetry(ctx context.Context, limit int, failedBefore time.Time, maxAttempts int) ([]*shared.OutboxEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ResetForRetry", ctx, limit, failedBefore, maxAttempts)
-	ret0, _ := ret[0].([]*entities.OutboxEvent)
+	ret0, _ := ret[0].([]*shared.OutboxEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -207,10 +207,10 @@ func (mr *MockOutboxRepositoryMockRecorder) ResetForRetry(ctx, limit, failedBefo
 }
 
 // ResetStuckProcessing mocks base method.
-func (m *MockOutboxRepository) ResetStuckProcessing(ctx context.Context, limit int, processingBefore time.Time, maxAttempts int) ([]*entities.OutboxEvent, error) {
+func (m *MockOutboxRepository) ResetStuckProcessing(ctx context.Context, limit int, processingBefore time.Time, maxAttempts int) ([]*shared.OutboxEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ResetStuckProcessing", ctx, limit, processingBefore, maxAttempts)
-	ret0, _ := ret[0].([]*entities.OutboxEvent)
+	ret0, _ := ret[0].([]*shared.OutboxEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

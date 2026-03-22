@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 //go:build unit
 
 package bootstrap
@@ -5,7 +9,7 @@ package bootstrap
 import (
 	"testing"
 
-	libZap "github.com/LerianStudio/lib-uncommons/v2/uncommons/zap"
+	libZap "github.com/LerianStudio/lib-commons/v4/commons/zap"
 	"github.com/stretchr/testify/assert"
 )
 

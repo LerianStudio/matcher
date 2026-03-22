@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/dispute"
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
@@ -523,7 +523,8 @@ func TestGetHistory_WithCursor(t *testing.T) {
 
 	cursorTimestamp := time.Now().UTC()
 	cursorID := uuid.New()
-	encodedCursor := libHTTP.EncodeTimestampCursor(cursorTimestamp, cursorID)
+	encodedCursor, err := libHTTP.EncodeTimestampCursor(cursorTimestamp, cursorID)
+	require.NoError(t, err)
 
 	auditLogs := []*govEntities.AuditLog{
 		{

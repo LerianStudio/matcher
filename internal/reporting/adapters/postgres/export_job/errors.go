@@ -6,4 +6,5 @@ import "errors"
 // Repository-specific errors.
 var (
 	ErrRepositoryNotInitialized = errors.New("export job repository not initialized")
+	ErrCursorEncoderRequired    = errors.New("cursor encoder is required")
 )

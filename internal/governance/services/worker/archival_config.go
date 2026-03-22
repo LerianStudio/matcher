@@ -30,7 +30,4 @@ type ArchivalWorkerConfig struct {
 
 	// PartitionLookahead is the number of future monthly partitions to create proactively.
 	PartitionLookahead int
-
-	// PresignExpiry is the duration for presigned archive download URLs.
-	PresignExpiry time.Duration
 }

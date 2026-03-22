@@ -14,6 +14,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/alicebob/miniredis/v2"
+	"github.com/bxcodec/dbresolver/v2"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
@@ -23,8 +24,8 @@ import (
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
 	"github.com/LerianStudio/matcher/internal/governance/domain/repositories/mocks"
 	"github.com/LerianStudio/matcher/internal/governance/services/command"
-	reportingMocks "github.com/LerianStudio/matcher/internal/reporting/ports/mocks"
 	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
+	sharedPortMocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
 	sharedTestutil "github.com/LerianStudio/matcher/internal/shared/testutil"
 
 	"go.uber.org/mock/gomock"
@@ -45,7 +46,7 @@ func buildTestArchive(t *testing.T, rows ...map[string]any) (io.ReadCloser, stri
 type testDeps struct {
 	ctrl         *gomock.Controller
 	archiveRepo  *mocks.MockArchiveMetadataRepository
-	storage      *reportingMocks.MockObjectStorageClient
+	storage      *sharedPortMocks.MockObjectStorageClient
 	db           *sql.DB
 	sqlMock      sqlmock.Sqlmock
 	miniRedis    *miniredis.Miniredis
@@ -67,7 +68,10 @@ func setupTestDeps(t *testing.T) *testDeps {
 	srv := miniredis.RunT(t)
 	redisClient := redis.NewClient(&redis.Options{Addr: srv.Addr()})
 	conn := infraTestutil.NewRedisClientWithMock(redisClient)
-	provider := &infraTestutil.MockInfrastructureProvider{RedisConn: conn}
+	provider := &infraTestutil.MockInfrastructureProvider{
+		RedisConn:    conn,
+		PostgresConn: infraTestutil.NewClientWithResolver(dbresolver.New(dbresolver.WithPrimaryDBs(db))),
+	}
 
 	// Create partition manager with sqlmock db.
 	// No pre-seeded expectations; tests that use partition manager operations
@@ -90,13 +94,12 @@ func setupTestDeps(t *testing.T) *testDeps {
 		StoragePrefix:       "archives/audit-logs",
 		StorageClass:        "GLACIER",
 		PartitionLookahead:  3,
-		PresignExpiry:       1 * time.Hour,
 	}
 
 	return &testDeps{
 		ctrl:         ctrl,
 		archiveRepo:  mocks.NewMockArchiveMetadataRepository(ctrl),
-		storage:      reportingMocks.NewMockObjectStorageClient(ctrl),
+		storage:      sharedPortMocks.NewMockObjectStorageClient(ctrl),
 		db:           db,
 		sqlMock:      mock,
 		miniRedis:    srv,
@@ -259,6 +262,89 @@ func TestArchivalWorker_StartStop(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestArchivalWorker_StartStopStartStop_Success(t *testing.T) {
+	t.Parallel()
+
+	deps := setupTestDeps(t)
+	defer deps.ctrl.Finish()
+
+	deps.archiveRepo.EXPECT().ListIncomplete(gomock.Any()).Return(nil, nil).AnyTimes()
+
+	w, err := NewArchivalWorker(
+		deps.archiveRepo,
+		deps.partitionMgr,
+		deps.storage,
+		deps.db,
+		deps.provider,
+		deps.cfg,
+		deps.logger,
+	)
+	require.NoError(t, err)
+
+	deps.sqlMock.ExpectQuery("SELECT nspname FROM pg_namespace").WillReturnRows(sqlmock.NewRows([]string{"nspname"}))
+	deps.sqlMock.ExpectQuery("SELECT nspname FROM pg_namespace").WillReturnRows(sqlmock.NewRows([]string{"nspname"}))
+
+	ctx := context.Background()
+	require.NoError(t, w.Start(ctx))
+	require.Eventually(t, func() bool {
+		return w.running.Load()
+	}, 500*time.Millisecond, 10*time.Millisecond)
+	require.NoError(t, w.Stop())
+	require.NoError(t, w.Start(ctx))
+	require.Eventually(t, func() bool {
+		return deps.sqlMock.ExpectationsWereMet() == nil
+	}, 2*time.Second, 10*time.Millisecond)
+	require.NoError(t, w.Stop())
+}
+
+func TestArchivalWorker_UpdateRuntimeConfig_WhileRunning_ReturnsError(t *testing.T) {
+	t.Parallel()
+
+	deps := setupTestDeps(t)
+	defer deps.ctrl.Finish()
+
+	deps.archiveRepo.EXPECT().ListIncomplete(gomock.Any()).Return(nil, nil).AnyTimes()
+
+	w, err := NewArchivalWorker(
+		deps.archiveRepo,
+		deps.partitionMgr,
+		deps.storage,
+		deps.db,
+		deps.provider,
+		deps.cfg,
+		deps.logger,
+	)
+	require.NoError(t, err)
+	require.NoError(t, w.Start(context.Background()))
+
+	err = w.UpdateRuntimeConfig(ArchivalWorkerConfig{Interval: time.Hour})
+	require.ErrorIs(t, err, ErrRuntimeConfigUpdateWhileRunning)
+	require.NoError(t, w.Stop())
+}
+
+func TestArchivalWorker_UpdateRuntimeStorage_WhileStopped_SwapsClient(t *testing.T) {
+	t.Parallel()
+
+	deps := setupTestDeps(t)
+	defer deps.ctrl.Finish()
+
+	w, err := NewArchivalWorker(
+		deps.archiveRepo,
+		deps.partitionMgr,
+		deps.storage,
+		deps.db,
+		deps.provider,
+		deps.cfg,
+		deps.logger,
+	)
+	require.NoError(t, err)
+
+	replacement := sharedPortMocks.NewMockObjectStorageClient(deps.ctrl)
+
+	require.NoError(t, w.UpdateRuntimeStorage(replacement))
+	assert.Same(t, replacement, w.storage)
+}
+
 func TestArchivalWorker_StopWithoutStart(t *testing.T) {
 	t.Parallel()
 
@@ -390,7 +476,8 @@ func TestArchivalWorker_ArchiveKey(t *testing.T) {
 		DateRangeEnd:   rangeEnd,
 	}
 
-	key := w.archiveKey(metadata)
+	key, err := w.archiveKey(metadata)
+	require.NoError(t, err)
 
 	expected := "archives/audit-logs/550e8400-e29b-41d4-a716-446655440000/2025/06/aabbccdd-0011-2233-4455-667788990000/audit_logs_2025_06.jsonl.gz"
 	assert.Equal(t, expected, key)

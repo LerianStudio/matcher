@@ -17,7 +17,7 @@ var (
 )
 
 // RegisterRoutes registers the matching HTTP routes.
-func RegisterRoutes(protected func(resource, action string) fiber.Router, handler *Handler) error {
+func RegisterRoutes(protected func(resource string, actions ...string) fiber.Router, handler *Handler) error {
 	if protected == nil {
 		return ErrProtectedRouteHelperRequired
 	}

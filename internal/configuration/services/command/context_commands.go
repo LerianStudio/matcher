@@ -8,13 +8,27 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/ports"
+)
+
+const postgresUniqueViolationCode = "23505"
+
+var (
+	// ErrInlineCreateRequiresInfrastructure is returned when inline source/rule creation is attempted without an infrastructure provider.
+	ErrInlineCreateRequiresInfrastructure = errors.New("infrastructure provider is required for inline source/rule creation")
+	// ErrCreateContextTxSupportRequired indicates the repository does not support transactional create operations.
+	ErrCreateContextTxSupportRequired = errors.New("transactional create is not supported by the configured repository")
+	// ErrCreateContextReturnedNil indicates the context repository returned a nil entity without an error.
+	ErrCreateContextReturnedNil = errors.New("context repository returned nil context")
+	// ErrCreateSourceReturnedNil indicates the source repository returned a nil entity without an error.
+	ErrCreateSourceReturnedNil = errors.New("source repository returned nil source")
 )
 
 // publishAudit publishes an audit event if the publisher is configured.
@@ -84,9 +98,8 @@ func (uc *UseCase) CreateContext(
 	defer span.End()
 
 	// Enforce unique context name within tenant scope.
-	// FindByName returns (nil, nil) when no context exists with the given name.
-	// A non-nil error (other than sql.ErrNoRows) indicates a transient failure
-	// that must not be silently swallowed, as that could allow duplicate names.
+	// This is a best-effort pre-check to return early conflicts.
+	// The DB unique index remains the source of truth under concurrency.
 	existing, err := uc.contextRepo.FindByName(ctx, input.Name)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("checking context name uniqueness: %w", err)
@@ -102,22 +115,268 @@ func (uc *UseCase) CreateContext(
 		return nil, err
 	}
 
-	created, err := uc.contextRepo.Create(ctx, entity)
+	inlineCreateRequested := len(input.Sources) > 0 || len(input.Rules) > 0
+	if inlineCreateRequested && uc.infraProvider == nil {
+		libOpentelemetry.HandleSpanError(span, "inline create requires infrastructure provider", ErrInlineCreateRequiresInfrastructure)
+
+		logger.With(
+			libLog.String("context.name", input.Name),
+			libLog.Any("sources.count", len(input.Sources)),
+			libLog.Any("rules.count", len(input.Rules)),
+		).Log(ctx, libLog.LevelError, "inline create requested without infrastructure provider")
+
+		return nil, ErrInlineCreateRequiresInfrastructure
+	}
+
+	created, err := uc.createContextWithChildren(ctx, entity, input)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to create reconciliation context", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to create reconciliation context")
+		logger.With(
+			libLog.String("context.name", input.Name),
+			libLog.Any("error", err.Error()),
+		).Log(ctx, libLog.LevelError, "failed to create reconciliation context")
 
-		return nil, fmt.Errorf("creating reconciliation context: %w", err)
+		return nil, err
 	}
 
 	uc.publishAudit(ctx, "context", created.ID, "create", map[string]any{
-		"name":     created.Name,
-		"type":     created.Type,
-		"interval": created.Interval,
+		"name":          created.Name,
+		"type":          created.Type,
+		"interval":      created.Interval,
+		"sources_count": len(input.Sources),
+		"rules_count":   len(input.Rules),
 	})
 
 	return created, nil
+}
+
+func (uc *UseCase) createContextWithChildren(
+	ctx context.Context,
+	entity *entities.ReconciliationContext,
+	input entities.CreateReconciliationContextInput,
+) (*entities.ReconciliationContext, error) {
+	if len(input.Sources) == 0 && len(input.Rules) == 0 {
+		return uc.createContextOnly(ctx, entity)
+	}
+
+	return uc.createContextTransactional(ctx, entity, input)
+}
+
+func (uc *UseCase) createContextOnly(ctx context.Context, entity *entities.ReconciliationContext) (*entities.ReconciliationContext, error) {
+	created, err := uc.contextRepo.Create(ctx, entity)
+	if err != nil {
+		return nil, normalizeContextCreateError(err)
+	}
+
+	if created == nil {
+		return nil, ErrCreateContextReturnedNil
+	}
+
+	return created, nil
+}
+
+// inlineTxCreators holds the transactional creator interfaces resolved from
+// the UseCase repositories. This struct is populated by resolveTxCreators
+// and consumed by createContextTransactional.
+type inlineTxCreators struct {
+	context  contextTxCreator
+	source   sourceTxCreator
+	fieldMap fieldMapTxCreator
+	rule     matchRuleTxCreator
+}
+
+func (uc *UseCase) resolveTxCreators(input entities.CreateReconciliationContextInput) (*inlineTxCreators, error) {
+	txCtx, ok := uc.contextRepo.(contextTxCreator)
+	if !ok {
+		return nil, fmt.Errorf("context transactional create support: %w", ErrCreateContextTxSupportRequired)
+	}
+
+	creators := &inlineTxCreators{context: txCtx}
+
+	if len(input.Sources) > 0 {
+		creators.source, ok = uc.sourceRepo.(sourceTxCreator)
+		if !ok {
+			return nil, fmt.Errorf("source transactional create support: %w", ErrCreateContextTxSupportRequired)
+		}
+	}
+
+	if hasInlineMappings(input.Sources) {
+		creators.fieldMap, ok = uc.fieldMapRepo.(fieldMapTxCreator)
+		if !ok {
+			return nil, fmt.Errorf("field map transactional create support: %w", ErrCreateContextTxSupportRequired)
+		}
+	}
+
+	if len(input.Rules) > 0 {
+		creators.rule, ok = uc.matchRuleRepo.(matchRuleTxCreator)
+		if !ok {
+			return nil, fmt.Errorf("match rule transactional create support: %w", ErrCreateContextTxSupportRequired)
+		}
+	}
+
+	return creators, nil
+}
+
+func (uc *UseCase) createContextTransactional(
+	ctx context.Context,
+	entity *entities.ReconciliationContext,
+	input entities.CreateReconciliationContextInput,
+) (*entities.ReconciliationContext, error) {
+	if err := validateInlineRulePriorities(input.Rules); err != nil {
+		return nil, err
+	}
+
+	creators, err := uc.resolveTxCreators(input)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, cancel, txErr := beginTenantTx(ctx, uc.infraProvider)
+	if txErr != nil {
+		return nil, fmt.Errorf("begin create transaction: %w", txErr)
+	}
+
+	defer cancel()
+	defer func() { _ = tx.Rollback() }()
+
+	created, err := creators.context.CreateWithTx(ctx, tx, entity)
+	if err != nil {
+		return nil, normalizeContextCreateError(err)
+	}
+
+	if created == nil {
+		return nil, ErrCreateContextReturnedNil
+	}
+
+	if err := createInlineSources(ctx, tx, created.ID, input.Sources, creators.source, creators.fieldMap); err != nil {
+		return nil, err
+	}
+
+	if err := createInlineRules(ctx, tx, created.ID, input.Rules, creators.rule); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit create transaction: %w", err)
+	}
+
+	return created, nil
+}
+
+func createInlineSources(
+	ctx context.Context,
+	tx *sql.Tx,
+	contextID uuid.UUID,
+	sources []entities.CreateContextSourceInput,
+	txSourceCreator sourceTxCreator,
+	txFieldMapCreator fieldMapTxCreator,
+) error {
+	for _, srcInput := range sources {
+		srcEntity, srcErr := entities.NewReconciliationSource(ctx, contextID, entities.CreateReconciliationSourceInput{
+			Name:   srcInput.Name,
+			Type:   srcInput.Type,
+			Side:   srcInput.Side,
+			Config: srcInput.Config,
+		})
+		if srcErr != nil {
+			return fmt.Errorf("invalid source input: %w", srcErr)
+		}
+
+		createdSrc, srcErr := txSourceCreator.CreateWithTx(ctx, tx, srcEntity)
+		if srcErr != nil {
+			return fmt.Errorf("creating source: %w", srcErr)
+		}
+
+		if createdSrc == nil {
+			return ErrCreateSourceReturnedNil
+		}
+
+		if len(srcInput.Mapping) == 0 {
+			continue
+		}
+
+		fmEntity, fmErr := entities.NewFieldMap(
+			ctx,
+			contextID,
+			createdSrc.ID,
+			entities.CreateFieldMapInput{Mapping: srcInput.Mapping},
+		)
+		if fmErr != nil {
+			return fmt.Errorf("invalid field map input: %w", fmErr)
+		}
+
+		if _, fmErr = txFieldMapCreator.CreateWithTx(ctx, tx, fmEntity); fmErr != nil {
+			return fmt.Errorf("creating field map: %w", fmErr)
+		}
+	}
+
+	return nil
+}
+
+func createInlineRules(
+	ctx context.Context,
+	tx *sql.Tx,
+	contextID uuid.UUID,
+	rules []entities.CreateMatchRuleInput,
+	txRuleCreator matchRuleTxCreator,
+) error {
+	for _, ruleInput := range rules {
+		ruleEntity, ruleErr := entities.NewMatchRule(ctx, contextID, ruleInput)
+		if ruleErr != nil {
+			return fmt.Errorf("invalid rule input: %w", ruleErr)
+		}
+
+		if _, ruleErr = txRuleCreator.CreateWithTx(ctx, tx, ruleEntity); ruleErr != nil {
+			return fmt.Errorf("creating rule: %w", ruleErr)
+		}
+	}
+
+	return nil
+}
+
+func hasInlineMappings(sources []entities.CreateContextSourceInput) bool {
+	for _, src := range sources {
+		if len(src.Mapping) > 0 {
+			return true
+		}
+	}
+
+	return false
+}
+
+func validateInlineRulePriorities(rules []entities.CreateMatchRuleInput) error {
+	if len(rules) == 0 {
+		return nil
+	}
+
+	seen := make(map[int]struct{}, len(rules))
+
+	for _, rule := range rules {
+		if _, exists := seen[rule.Priority]; exists {
+			return entities.ErrRulePriorityConflict
+		}
+
+		seen[rule.Priority] = struct{}{}
+	}
+
+	return nil
+}
+
+func normalizeContextCreateError(err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == postgresUniqueViolationCode {
+		switch pgErr.ConstraintName {
+		case "uq_rule_context_priority":
+			return entities.ErrRulePriorityConflict
+		case "uq_context_tenant_name", "idx_reconciliation_contexts_name_unique":
+			return ErrContextNameAlreadyExists
+		default:
+			return fmt.Errorf("unique constraint violation (%s): %w", pgErr.ConstraintName, err)
+		}
+	}
+
+	return fmt.Errorf("creating reconciliation context: %w", err)
 }
 
 // UpdateContext modifies an existing reconciliation context.
@@ -245,7 +504,7 @@ func (uc *UseCase) DeleteContext(ctx context.Context, contextID uuid.UUID) error
 }
 
 // checkContextChildren verifies that no child entities (sources, match rules,
-// or schedules) reference the given context. Returns ErrContextHasChildEntities
+// fee rules, or schedules) reference the given context. Returns ErrContextHasChildEntities
 // if any children exist. This is a guard against accidental data loss.
 func (uc *UseCase) checkContextChildren(ctx context.Context, contextID uuid.UUID) error {
 	// Check for associated sources.
@@ -266,6 +525,18 @@ func (uc *UseCase) checkContextChildren(ctx context.Context, contextID uuid.UUID
 
 	if len(rules) > 0 {
 		return ErrContextHasChildEntities
+	}
+
+	// Check for associated fee rules (optional dependency).
+	if uc.feeRuleRepo != nil {
+		feeRules, err := uc.feeRuleRepo.FindByContextID(ctx, contextID)
+		if err != nil {
+			return fmt.Errorf("checking context fee rules: %w", err)
+		}
+
+		if len(feeRules) > 0 {
+			return ErrContextHasChildEntities
+		}
 	}
 
 	// Check for associated schedules (optional dependency).

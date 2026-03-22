@@ -5,13 +5,13 @@ import (
 
 	"github.com/google/uuid"
 
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 )
 
-//go:generate mockgen -source=source_repository.go -destination=mocks/mock_source_repository.go -package=mocks
+//go:generate mockgen -source=source_repository.go -destination=mocks/source_repository_mock.go -package=mocks
 
 // SourceRepository defines persistence operations for reconciliation sources.
 type SourceRepository interface {

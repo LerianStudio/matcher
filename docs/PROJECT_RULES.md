@@ -34,15 +34,15 @@ This project follows Lerian Studio Ring standards for Go services.
 ## Required Libraries
 
 - AuthN/AuthZ: `github.com/LerianStudio/lib-auth/v2` only.
-- Commons/Telemetry: `github.com/LerianStudio/lib-uncommons`.
+- Commons/Telemetry: `github.com/LerianStudio/lib-commons`.
 - Assertions: `github.com/LerianStudio/matcher/pkg/assert` (no panics).
-- Use lib-uncommons submodules for:
+- Use lib-commons submodules for:
   - Tracking/logging (`libCommons.NewTrackingFromContext`).
-  - OpenTelemetry (`uncommons/opentelemetry`).
+  - OpenTelemetry (`commons/opentelemetry`).
   - Database connections (`database`).
   - Redis clients (`redis`).
   - Messaging (RabbitMQ) (`messaging`).
-- Do not introduce custom DB/Redis/MQ clients outside lib-uncommons wrappers.
+- Do not introduce custom DB/Redis/MQ clients outside lib-commons wrappers.
 
 ## Context + Observability
 
@@ -71,7 +71,7 @@ This project follows Lerian Studio Ring standards for Go services.
 - Keep migrations additive; avoid destructive changes in production.
 - Enforce referential integrity with foreign keys where applicable.
 - Avoid long-running transactions; keep write paths short and deterministic.
-- Prefer read replicas for query services when supported by lib-uncommons.
+- Prefer read replicas for query services when supported by lib-commons.
 
 ## Testing
 
@@ -183,6 +183,13 @@ Build tags are the authoritative test type discriminator:
 - **Rationale**: The GitHub repository was archived on March 4, 2025. Active development continued on Codeberg by the same maintainers with an identical API. This is a direct import path swap with no code changes required.
 - **Scope**: Used only in `internal/reporting/services/query/exports/pdf.go` for report PDF generation (matched, unmatched, summary, variance reports).
 - **Risk**: Low. Same library, same maintainers, MIT license, no external dependencies beyond Go stdlib. If Codeberg hosting becomes unavailable, the library is pure Go with zero transitive dependencies and could be vendored trivially.
+
+### Core Runtime Dependency Refresh Policy
+
+- **Scope**: Infrastructure/runtime upgrades (framework, logging, telemetry, messaging, networking, and datastore clients) must be treated as operationally sensitive.
+- **Soak policy**: Stage for at least 7 days with `make test-int`, `make test-e2e-fast`, and readiness/health probes validated under representative load.
+- **Rollback plan**: Keep a tested rollback path (revert dependency bump or pin previous known-good versions in `go.mod`), run `go mod tidy`, then re-run `make test` + `make test-int` before redeploy.
+- **Owner**: Platform/Runtime maintainers must sign off rollout and rollback readiness during review.
 
 ## Misc
 

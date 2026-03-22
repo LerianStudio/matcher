@@ -13,9 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
-	libPostgres "github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres"
-	libRedis "github.com/LerianStudio/lib-uncommons/v2/uncommons/redis"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
 	governanceEntities "github.com/LerianStudio/matcher/internal/governance/domain/entities"
 	governanceRepositories "github.com/LerianStudio/matcher/internal/governance/domain/repositories"
@@ -28,6 +26,7 @@ import (
 	outboxRepositories "github.com/LerianStudio/matcher/internal/outbox/domain/repositories"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	matchingFee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 var (
@@ -577,8 +576,25 @@ func (r *runMatchAdjustmentRepo) Create(
 
 func (r *runMatchAdjustmentRepo) CreateWithTx(
 	ctx context.Context,
-	_ any,
+	_ *sql.Tx,
 	adj *matchingEntities.Adjustment,
+) (*matchingEntities.Adjustment, error) {
+	return r.Create(ctx, adj)
+}
+
+func (r *runMatchAdjustmentRepo) CreateWithAuditLog(
+	ctx context.Context,
+	adj *matchingEntities.Adjustment,
+	_ *shared.AuditLog,
+) (*matchingEntities.Adjustment, error) {
+	return r.Create(ctx, adj)
+}
+
+func (r *runMatchAdjustmentRepo) CreateWithAuditLogWithTx(
+	ctx context.Context,
+	_ *sql.Tx,
+	adj *matchingEntities.Adjustment,
+	_ *shared.AuditLog,
 ) (*matchingEntities.Adjustment, error) {
 	return r.Create(ctx, adj)
 }
@@ -609,21 +625,21 @@ type runMatchInfraProvider struct{}
 
 func (r *runMatchInfraProvider) GetPostgresConnection(
 	_ context.Context,
-) (*libPostgres.Client, error) {
+) (*sharedPorts.PostgresConnectionLease, error) {
 	return nil, nil
 }
 
 func (r *runMatchInfraProvider) GetRedisConnection(
 	_ context.Context,
-) (*libRedis.Client, error) {
+) (*sharedPorts.RedisConnectionLease, error) {
 	return nil, nil
 }
 
-func (r *runMatchInfraProvider) BeginTx(_ context.Context) (*sql.Tx, error) {
+func (r *runMatchInfraProvider) BeginTx(_ context.Context) (*sharedPorts.TxLease, error) {
 	return nil, nil
 }
 
-func (r *runMatchInfraProvider) GetReplicaDB(_ context.Context) (*sql.DB, error) {
+func (r *runMatchInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.ReplicaDBLease, error) {
 	return nil, nil
 }
 
@@ -714,6 +730,16 @@ func (r *runMatchFeeScheduleRepo) GetByIDs(
 	return nil, nil
 }
 
+// runMatchFeeRuleProvider is a minimal stub for fee rule provider in tests.
+type runMatchFeeRuleProvider struct{}
+
+func (r *runMatchFeeRuleProvider) FindByContextID(
+	_ context.Context,
+	_ uuid.UUID,
+) ([]*matchingFee.FeeRule, error) {
+	return nil, nil
+}
+
 // stubMatchItemRepo is a minimal stub for match item repository in tests.
 type stubMatchItemRepo struct{}
 
@@ -765,8 +791,8 @@ func newRunMatchUseCase(
 	t.Helper()
 
 	sourceProvider := &runMatchSourceProvider{sources: []*ports.SourceInfo{
-		{ID: uuid.New(), Type: ports.SourceTypeLedger},
-		{ID: uuid.New(), Type: ports.SourceTypeAPI},
+		{ID: uuid.New(), Type: ports.SourceTypeLedger, Side: matchingFee.MatchingSideLeft},
+		{ID: uuid.New(), Type: ports.SourceTypeAPI, Side: matchingFee.MatchingSideRight},
 	}}
 
 	ruleProvider := &runMatchRuleProvider{rules: shared.MatchRules{}}
@@ -783,6 +809,7 @@ func newRunMatchUseCase(
 	infraProvider := &runMatchInfraProvider{}
 	auditLogRepo := &runMatchAuditLogRepo{}
 	feeScheduleRepo := &runMatchFeeScheduleRepo{}
+	feeRuleProvider := &runMatchFeeRuleProvider{}
 
 	uc, err := command.New(command.UseCaseDeps{
 		ContextProvider:  ctxProvider,
@@ -801,6 +828,7 @@ func newRunMatchUseCase(
 		InfraProvider:    infraProvider,
 		AuditLogRepo:     auditLogRepo,
 		FeeScheduleRepo:  feeScheduleRepo,
+		FeeRuleProvider:  feeRuleProvider,
 	})
 	require.NoError(t, err)
 

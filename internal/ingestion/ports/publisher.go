@@ -1,16 +1,19 @@
 package ports
 
 import (
-	"context"
-
-	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // EventPublisher publishes ingestion events to message broker.
-type EventPublisher interface {
-	// PublishIngestionCompleted publishes completion event with idempotency
-	PublishIngestionCompleted(ctx context.Context, event *entities.IngestionCompletedEvent) error
-
-	// PublishIngestionFailed publishes failure event with idempotency
-	PublishIngestionFailed(ctx context.Context, event *entities.IngestionFailedEvent) error
-}
+// The canonical IngestionEventPublisher interface lives in the shared kernel
+// (internal/shared/ports.IngestionEventPublisher) and is re-exported here
+// as a type alias for backward compatibility.
+//
+// All bounded contexts that need this interface should use the shared kernel directly:
+//
+//	import sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+//
+// This alias exists for backward compatibility with code that already imports
+// this package. No new code outside the ingestion bounded context should import
+// ingestion/ports for the EventPublisher.
+type EventPublisher = sharedPorts.IngestionEventPublisher

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/LerianStudio/lib-uncommons/v2/uncommons/assert"
+	"github.com/LerianStudio/lib-commons/v4/commons/assert"
 
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
@@ -85,6 +85,10 @@ func NewActorMapping(
 // After pseudonymization, the actor mapping retains the actor ID link
 // but no longer exposes personal data.
 func (am *ActorMapping) Pseudonymize() {
+	if am == nil {
+		return
+	}
+
 	redacted := redactedValue
 	am.DisplayName = &redacted
 	am.Email = &redacted
@@ -93,6 +97,10 @@ func (am *ActorMapping) Pseudonymize() {
 
 // IsRedacted returns true if both DisplayName and Email are set to [REDACTED].
 func (am *ActorMapping) IsRedacted() bool {
+	if am == nil {
+		return false
+	}
+
 	if am.DisplayName == nil || am.Email == nil {
 		return false
 	}

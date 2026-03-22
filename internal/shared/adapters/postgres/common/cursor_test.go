@@ -6,12 +6,14 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/Masterminds/squirrel"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 )
 
 // encodeIDCursor is a test helper that creates a valid base64-encoded ID cursor.
@@ -115,7 +117,8 @@ func TestApplySortCursorPagination_ForwardCursor(t *testing.T) {
 		From("test_table").
 		PlaceholderFormat(squirrel.Dollar)
 
-	cursor := libHTTP.EncodeSortCursor("created_at", "2024-01-01T00:00:00Z", "some-id", true)
+	cursor, err := libHTTP.EncodeSortCursor("created_at", "2024-01-01T00:00:00Z", "some-id", true)
+	require.NoError(t, err)
 
 	result, dir, cursorDir, err := ApplySortCursorPagination(
 		builder, cursor, "created_at", "ASC", "test_table", 10,
@@ -141,7 +144,8 @@ func TestApplySortCursorPagination_BackwardCursor(t *testing.T) {
 		From("test_table").
 		PlaceholderFormat(squirrel.Dollar)
 
-	cursor := libHTTP.EncodeSortCursor("created_at", "2024-01-01T00:00:00Z", "some-id", false)
+	cursor, err := libHTTP.EncodeSortCursor("created_at", "2024-01-01T00:00:00Z", "some-id", false)
+	require.NoError(t, err)
 
 	result, dir, cursorDir, err := ApplySortCursorPagination(
 		builder, cursor, "created_at", "ASC", "test_table", 10,
@@ -182,9 +186,10 @@ func TestApplySortCursorPagination_CursorSortColumnMismatch(t *testing.T) {
 		From("test_table").
 		PlaceholderFormat(squirrel.Dollar)
 
-	cursor := libHTTP.EncodeSortCursor("status", "ACTIVE", "some-id", true)
+	cursor, err := libHTTP.EncodeSortCursor("status", "ACTIVE", "some-id", true)
+	require.NoError(t, err)
 
-	_, _, _, err := ApplySortCursorPagination(
+	_, _, _, err = ApplySortCursorPagination(
 		builder, cursor, "created_at", "ASC", "test_table", 10,
 	)
 
@@ -200,7 +205,8 @@ func TestApplySortCursorPagination_DescOrder(t *testing.T) {
 		From("items").
 		PlaceholderFormat(squirrel.Dollar)
 
-	cursor := libHTTP.EncodeSortCursor("status", "ACTIVE", "item-id-1", true)
+	cursor, err := libHTTP.EncodeSortCursor("status", "ACTIVE", "item-id-1", true)
+	require.NoError(t, err)
 
 	result, dir, cursorDir, err := ApplySortCursorPagination(
 		builder, cursor, "status", "DESC", "items", 20,
@@ -312,7 +318,8 @@ func TestApplySortCursorPagination_InvalidSortColumn(t *testing.T) {
 func TestDecodeSortCursorWithDirection_ValidCursorNext(t *testing.T) {
 	t.Parallel()
 
-	cursor := libHTTP.EncodeSortCursor("created_at", "2024-01-01T00:00:00Z", "some-id", true)
+	cursor, err := libHTTP.EncodeSortCursor("created_at", "2024-01-01T00:00:00Z", "some-id", true)
+	require.NoError(t, err)
 
 	sc, direction, err := DecodeSortCursorWithDirection(cursor, "created_at")
 
@@ -327,7 +334,8 @@ func TestDecodeSortCursorWithDirection_ValidCursorNext(t *testing.T) {
 func TestDecodeSortCursorWithDirection_ValidCursorPrev(t *testing.T) {
 	t.Parallel()
 
-	cursor := libHTTP.EncodeSortCursor("created_at", "2024-01-01T00:00:00Z", "some-id", false)
+	cursor, err := libHTTP.EncodeSortCursor("created_at", "2024-01-01T00:00:00Z", "some-id", false)
+	require.NoError(t, err)
 
 	sc, direction, err := DecodeSortCursorWithDirection(cursor, "created_at")
 
@@ -349,9 +357,10 @@ func TestDecodeSortCursorWithDirection_InvalidCursor(t *testing.T) {
 func TestDecodeSortCursorWithDirection_ColumnMismatch(t *testing.T) {
 	t.Parallel()
 
-	cursor := libHTTP.EncodeSortCursor("severity", "HIGH", "some-id", true)
+	cursor, err := libHTTP.EncodeSortCursor("severity", "HIGH", "some-id", true)
+	require.NoError(t, err)
 
-	_, _, err := DecodeSortCursorWithDirection(cursor, "created_at")
+	_, _, err = DecodeSortCursorWithDirection(cursor, "created_at")
 
 	require.Error(t, err)
 	require.ErrorIs(t, err, libHTTP.ErrInvalidCursor)
@@ -381,4 +390,254 @@ func TestSafeIntToUint64(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestCalculateSortCursorPagination_NilCalculator(t *testing.T) {
+	t.Parallel()
+
+	_, err := CalculateSortCursorPagination(
+		true,
+		true,
+		true,
+		"created_at",
+		"2026-01-01T00:00:00Z",
+		"first-id",
+		"2026-01-02T00:00:00Z",
+		"last-id",
+		nil,
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrSortCursorCalculatorRequired)
+}
+
+func TestCalculateSortCursorPagination_PropagatesCalculatorError(t *testing.T) {
+	t.Parallel()
+
+	_, err := CalculateSortCursorPagination(
+		true,
+		true,
+		true,
+		"created_at",
+		"2026-01-01T00:00:00Z",
+		"first-id",
+		"2026-01-02T00:00:00Z",
+		"last-id",
+		func(
+			_ bool,
+			_ bool,
+			_ bool,
+			_ string,
+			_ string,
+			_ string,
+			_ string,
+			_ string,
+		) (string, string, error) {
+			return "", "", ErrInvalidIdentifier
+		},
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrInvalidIdentifier)
+}
+
+func TestCalculateSortCursorPagination_Success(t *testing.T) {
+	t.Parallel()
+
+	pagination, err := CalculateSortCursorPagination(
+		true,
+		true,
+		true,
+		"created_at",
+		"2026-01-01T00:00:00Z",
+		"first-id",
+		"2026-01-02T00:00:00Z",
+		"last-id",
+		func(
+			_ bool,
+			_ bool,
+			_ bool,
+			_ string,
+			_ string,
+			_ string,
+			_ string,
+			_ string,
+		) (string, string, error) {
+			return "next-cursor", "prev-cursor", nil
+		},
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, "next-cursor", pagination.Next)
+	assert.Equal(t, "prev-cursor", pagination.Prev)
+}
+
+func TestCalculateSortCursorPaginationWrapped_PropagatesErrorWithContext(t *testing.T) {
+	t.Parallel()
+
+	_, err := CalculateSortCursorPaginationWrapped(
+		true,
+		true,
+		true,
+		"created_at",
+		"2026-01-01T00:00:00Z",
+		"first-id",
+		"2026-01-02T00:00:00Z",
+		"last-id",
+		nil,
+		"calculate domain pagination",
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrSortCursorCalculatorRequired)
+	assert.Contains(t, err.Error(), "calculate domain pagination")
+}
+
+func TestTrimRecordsAndEncodeTimestampNextCursor_NoTrimWhenWithinLimit(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	items := []libHTTP.TimestampCursor{
+		{Timestamp: now, ID: uuid.New()},
+	}
+
+	result, cursor, err := TrimRecordsAndEncodeTimestampNextCursor(
+		items,
+		5,
+		func(item libHTTP.TimestampCursor) (time.Time, uuid.UUID) {
+			return item.Timestamp, item.ID
+		},
+		libHTTP.EncodeTimestampCursor,
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, items, result)
+	assert.Empty(t, cursor)
+}
+
+func TestTrimRecordsAndEncodeTimestampNextCursor_Success(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	item1 := libHTTP.TimestampCursor{Timestamp: now, ID: uuid.New()}
+	item2 := libHTTP.TimestampCursor{Timestamp: now.Add(-time.Minute), ID: uuid.New()}
+	item3 := libHTTP.TimestampCursor{Timestamp: now.Add(-2 * time.Minute), ID: uuid.New()}
+
+	result, cursor, err := TrimRecordsAndEncodeTimestampNextCursor(
+		[]libHTTP.TimestampCursor{item1, item2, item3},
+		2,
+		func(item libHTTP.TimestampCursor) (time.Time, uuid.UUID) {
+			return item.Timestamp, item.ID
+		},
+		libHTTP.EncodeTimestampCursor,
+	)
+
+	require.NoError(t, err)
+	assert.Len(t, result, 2)
+	assert.Equal(t, item1, result[0])
+	assert.Equal(t, item2, result[1])
+	assert.NotEmpty(t, cursor)
+}
+
+func TestTrimRecordsAndEncodeTimestampNextCursor_EncoderFailure(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	item1 := libHTTP.TimestampCursor{Timestamp: now, ID: uuid.New()}
+	item2 := libHTTP.TimestampCursor{Timestamp: now.Add(-time.Minute), ID: uuid.New()}
+
+	result, cursor, err := TrimRecordsAndEncodeTimestampNextCursor(
+		[]libHTTP.TimestampCursor{item1, item2},
+		1,
+		func(item libHTTP.TimestampCursor) (time.Time, uuid.UUID) {
+			return item.Timestamp, item.ID
+		},
+		func(_ time.Time, _ uuid.UUID) (string, error) {
+			return "", ErrCursorEncoderRequired
+		},
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrCursorEncoderRequired)
+	assert.Len(t, result, 1)
+	assert.Empty(t, cursor)
+}
+
+func TestValidateSortCursorBoundaries(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil boundary returns error", func(t *testing.T) {
+		t.Parallel()
+
+		type cursorRecord struct {
+			id string
+		}
+
+		first := &cursorRecord{id: "a"}
+		var last *cursorRecord
+
+		err := ValidateSortCursorBoundaries(first, last)
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrSortCursorBoundaryRecordNil)
+	})
+
+	t.Run("both boundaries present", func(t *testing.T) {
+		t.Parallel()
+
+		type cursorRecord struct {
+			id string
+		}
+
+		first := &cursorRecord{id: "a"}
+		last := &cursorRecord{id: "b"}
+
+		err := ValidateSortCursorBoundaries(first, last)
+
+		require.NoError(t, err)
+	})
+}
+
+func TestTrimRecordsAndEncodeTimestampNextCursor_NilExtractor(t *testing.T) {
+	t.Parallel()
+
+	items := []libHTTP.TimestampCursor{
+		{Timestamp: time.Now().UTC(), ID: uuid.New()},
+		{Timestamp: time.Now().UTC().Add(-time.Minute), ID: uuid.New()},
+	}
+
+	result, cursor, err := TrimRecordsAndEncodeTimestampNextCursor(
+		items,
+		1,
+		nil,
+		libHTTP.EncodeTimestampCursor,
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrCursorRecordExtractorRequired)
+	assert.Len(t, result, 1)
+	assert.Empty(t, cursor)
+}
+
+func TestTrimRecordsAndEncodeTimestampNextCursor_NilEncoder(t *testing.T) {
+	t.Parallel()
+
+	items := []libHTTP.TimestampCursor{
+		{Timestamp: time.Now().UTC(), ID: uuid.New()},
+		{Timestamp: time.Now().UTC().Add(-time.Minute), ID: uuid.New()},
+	}
+
+	result, cursor, err := TrimRecordsAndEncodeTimestampNextCursor(
+		items,
+		1,
+		func(item libHTTP.TimestampCursor) (time.Time, uuid.UUID) {
+			return item.Timestamp, item.ID
+		},
+		nil,
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrCursorEncoderRequired)
+	assert.Len(t, result, 1)
+	assert.Empty(t, cursor)
 }

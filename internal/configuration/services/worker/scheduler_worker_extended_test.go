@@ -4,7 +4,6 @@ package worker
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"sync/atomic"
 	"testing"
@@ -16,9 +15,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libPostgres "github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres"
-	libRedis "github.com/LerianStudio/lib-uncommons/v2/uncommons/redis"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	sharedTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
@@ -55,23 +53,23 @@ type redisInfraProvider struct {
 
 var _ sharedPorts.InfrastructureProvider = (*redisInfraProvider)(nil)
 
-func (m *redisInfraProvider) GetPostgresConnection(_ context.Context) (*libPostgres.Client, error) {
+func (m *redisInfraProvider) GetPostgresConnection(_ context.Context) (*sharedPorts.PostgresConnectionLease, error) {
 	return nil, nil
 }
 
-func (m *redisInfraProvider) GetRedisConnection(_ context.Context) (*libRedis.Client, error) {
+func (m *redisInfraProvider) GetRedisConnection(_ context.Context) (*sharedPorts.RedisConnectionLease, error) {
 	if m.conn == nil {
 		return nil, errors.New("redis not configured")
 	}
 
-	return m.conn, nil
+	return sharedPorts.NewRedisConnectionLease(m.conn, nil), nil
 }
 
-func (m *redisInfraProvider) BeginTx(_ context.Context) (*sql.Tx, error) {
+func (m *redisInfraProvider) BeginTx(_ context.Context) (*sharedPorts.TxLease, error) {
 	return nil, nil
 }
 
-func (m *redisInfraProvider) GetReplicaDB(_ context.Context) (*sql.DB, error) {
+func (m *redisInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.ReplicaDBLease, error) {
 	return nil, nil
 }
 
@@ -571,19 +569,19 @@ type errorRedisInfraProvider struct {
 
 var _ sharedPorts.InfrastructureProvider = (*errorRedisInfraProvider)(nil)
 
-func (m *errorRedisInfraProvider) GetPostgresConnection(_ context.Context) (*libPostgres.Client, error) {
+func (m *errorRedisInfraProvider) GetPostgresConnection(_ context.Context) (*sharedPorts.PostgresConnectionLease, error) {
 	return nil, nil
 }
 
-func (m *errorRedisInfraProvider) GetRedisConnection(_ context.Context) (*libRedis.Client, error) {
-	return m.conn, nil
+func (m *errorRedisInfraProvider) GetRedisConnection(_ context.Context) (*sharedPorts.RedisConnectionLease, error) {
+	return sharedPorts.NewRedisConnectionLease(m.conn, nil), nil
 }
 
-func (m *errorRedisInfraProvider) BeginTx(_ context.Context) (*sql.Tx, error) {
+func (m *errorRedisInfraProvider) BeginTx(_ context.Context) (*sharedPorts.TxLease, error) {
 	return nil, nil
 }
 
-func (m *errorRedisInfraProvider) GetReplicaDB(_ context.Context) (*sql.DB, error) {
+func (m *errorRedisInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.ReplicaDBLease, error) {
 	return nil, nil
 }
 
@@ -638,24 +636,24 @@ type switchableRedisInfraProvider struct {
 
 var _ sharedPorts.InfrastructureProvider = (*switchableRedisInfraProvider)(nil)
 
-func (m *switchableRedisInfraProvider) GetPostgresConnection(_ context.Context) (*libPostgres.Client, error) {
+func (m *switchableRedisInfraProvider) GetPostgresConnection(_ context.Context) (*sharedPorts.PostgresConnectionLease, error) {
 	return nil, nil
 }
 
-func (m *switchableRedisInfraProvider) GetRedisConnection(_ context.Context) (*libRedis.Client, error) {
+func (m *switchableRedisInfraProvider) GetRedisConnection(_ context.Context) (*sharedPorts.RedisConnectionLease, error) {
 	count := m.callCount.Add(1)
 	if count > m.switchAfter {
-		return m.badConn, nil
+		return sharedPorts.NewRedisConnectionLease(m.badConn, nil), nil
 	}
 
-	return m.goodConn, nil
+	return sharedPorts.NewRedisConnectionLease(m.goodConn, nil), nil
 }
 
-func (m *switchableRedisInfraProvider) BeginTx(_ context.Context) (*sql.Tx, error) {
+func (m *switchableRedisInfraProvider) BeginTx(_ context.Context) (*sharedPorts.TxLease, error) {
 	return nil, nil
 }
 
-func (m *switchableRedisInfraProvider) GetReplicaDB(_ context.Context) (*sql.DB, error) {
+func (m *switchableRedisInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.ReplicaDBLease, error) {
 	return nil, nil
 }
 

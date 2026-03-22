@@ -280,7 +280,7 @@ func TestPagination_MatchGroupsList(t *testing.T) {
 				e2e.WaitForJobComplete(ctx, tc, client, reconciliationContext.ID, bankJob.ID),
 			)
 
-			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := client.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,

@@ -1,3 +1,7 @@
+// Copyright 2025 Lerian Studio. All rights reserved.
+// Use of this source code is governed by an Elastic License 2.0
+// that can be found in the LICENSE.md file.
+
 package bootstrap
 
 import (
@@ -9,9 +13,9 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
-	"github.com/LerianStudio/lib-uncommons/v2/uncommons/runtime"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
@@ -124,7 +128,7 @@ func deriveTelemetryTimeout(ctx context.Context) time.Duration {
 }
 
 // InitTelemetryWithTimeout wraps InitTelemetry with a deadline.
-// lib-uncommons' NewTelemetry internally uses context.Background() for gRPC dials,
+// lib-commons' NewTelemetry internally uses context.Background() for gRPC dials,
 // so we can't propagate a deadline through the library. Instead, we run it in a
 // goroutine and abandon the attempt if the deadline expires.
 //

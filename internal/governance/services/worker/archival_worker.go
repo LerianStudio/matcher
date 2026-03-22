@@ -11,7 +11,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash"
+	"regexp"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -21,17 +23,18 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
-	"github.com/LerianStudio/lib-uncommons/v2/uncommons/runtime"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
 	"github.com/LerianStudio/matcher/internal/governance/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/governance/services/command"
-	"github.com/LerianStudio/matcher/internal/reporting/ports"
+	tenantinfra "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+	"github.com/LerianStudio/matcher/pkg/chanutil"
 	"github.com/LerianStudio/matcher/pkg/storageopt"
 )
 
@@ -47,15 +50,38 @@ const (
 
 	// lockTTLMultiplier is the multiplier applied to the archival interval to compute the lock TTL.
 	lockTTLMultiplier = 2
+
+	// defaultArchivalInterval is the default archival cycle interval (1 hour).
+	defaultArchivalInterval = 1 * time.Hour
+
+	// defaultArchivalBatchSize is the default number of rows per SELECT batch during export.
+	defaultArchivalBatchSize = 1000
+
+	// defaultPartitionLookahead is the default number of future monthly partitions to create.
+	defaultPartitionLookahead = 3
+
+	// partitionExportQueryOverhead is the static portion size of the export SELECT statement.
+	partitionExportQueryOverhead = 160
 )
+
+var archivalPartitionNameRegex = regexp.MustCompile(`^audit_logs_\d{4}_\d{2}$`)
+
+// PartitionManager manages audit log partition lifecycle operations for archival.
+type PartitionManager interface {
+	EnsurePartitionsExist(ctx context.Context, lookaheadMonths int) error
+	ListPartitions(ctx context.Context) ([]command.PartitionInfo, error)
+	DetachPartition(ctx context.Context, name string) error
+	DropPartition(ctx context.Context, name string) error
+}
 
 // ArchivalWorker orchestrates the full partition lifecycle for audit log archival.
 // It provisions future partitions, identifies eligible partitions, exports data,
 // uploads to object storage, verifies integrity, and detaches/drops source partitions.
 type ArchivalWorker struct {
+	mu            sync.Mutex
 	archiveRepo   repositories.ArchiveMetadataRepository
-	partitionMgr  *command.PartitionManager
-	storage       ports.ObjectStorageClient
+	partitionMgr  PartitionManager
+	storage       sharedPorts.ObjectStorageClient
 	db            *sql.DB
 	infraProvider sharedPorts.InfrastructureProvider
 	cfg           ArchivalWorkerConfig
@@ -68,12 +94,84 @@ type ArchivalWorker struct {
 	doneCh   chan struct{}
 }
 
+// UpdateRuntimeConfig updates the worker runtime configuration used on the next start/restart.
+// NOTE: This does NOT affect a currently running worker's ticker. The WorkerManager
+// always performs a full stop→start cycle when config changes, ensuring the new
+// config is picked up when the worker's run() loop creates a fresh ticker.
+func (aw *ArchivalWorker) UpdateRuntimeConfig(cfg ArchivalWorkerConfig) error {
+	aw.mu.Lock()
+	defer aw.mu.Unlock()
+
+	if aw.running.Load() {
+		return ErrRuntimeConfigUpdateWhileRunning
+	}
+
+	aw.cfg = normalizeArchivalWorkerConfig(cfg)
+
+	return nil
+}
+
+// UpdateRuntimeStorage swaps the storage client used on the next start/restart.
+// It must only be called while the worker is stopped so the next archive cycle
+// uses dependencies that match the pending runtime configuration.
+func (aw *ArchivalWorker) UpdateRuntimeStorage(storage sharedPorts.ObjectStorageClient) error {
+	aw.mu.Lock()
+	defer aw.mu.Unlock()
+
+	if aw.running.Load() {
+		return ErrRuntimeConfigUpdateWhileRunning
+	}
+
+	if storage == nil {
+		return ErrNilStorageClient
+	}
+
+	aw.storage = storage
+
+	return nil
+}
+
+// prepareRunState reinitialises the worker's stop/done channels and sync.Once for
+// re-entrant Start→Stop→Start cycles. SAFETY: The caller (WorkerManager) MUST ensure
+// Stop() has fully completed before calling Start(), which calls prepareRunState().
+// The WorkerManager serialises all lifecycle transitions via its mutex.
+func (aw *ArchivalWorker) prepareRunState() {
+	aw.mu.Lock()
+	defer aw.mu.Unlock()
+
+	aw.stopOnce = sync.Once{}
+
+	if chanutil.ClosedSignalChannel(aw.stopCh) {
+		aw.stopCh = make(chan struct{})
+	}
+
+	if chanutil.ClosedSignalChannel(aw.doneCh) {
+		aw.doneCh = make(chan struct{})
+	}
+}
+
+func normalizeArchivalWorkerConfig(cfg ArchivalWorkerConfig) ArchivalWorkerConfig {
+	if cfg.Interval <= 0 {
+		cfg.Interval = defaultArchivalInterval
+	}
+
+	if cfg.BatchSize <= 0 {
+		cfg.BatchSize = defaultArchivalBatchSize
+	}
+
+	if cfg.PartitionLookahead <= 0 {
+		cfg.PartitionLookahead = defaultPartitionLookahead
+	}
+
+	return cfg
+}
+
 // NewArchivalWorker creates a new ArchivalWorker with the given dependencies.
 // All required dependencies must be non-nil.
 func NewArchivalWorker(
 	archiveRepo repositories.ArchiveMetadataRepository,
-	partitionMgr *command.PartitionManager,
-	storage ports.ObjectStorageClient,
+	partitionMgr PartitionManager,
+	storage sharedPorts.ObjectStorageClient,
 	db *sql.DB,
 	infraProvider sharedPorts.InfrastructureProvider,
 	cfg ArchivalWorkerConfig,
@@ -103,6 +201,8 @@ func NewArchivalWorker(
 		logger = &libLog.NopLogger{}
 	}
 
+	cfg = normalizeArchivalWorkerConfig(cfg)
+
 	return &ArchivalWorker{
 		archiveRepo:   archiveRepo,
 		partitionMgr:  partitionMgr,
@@ -122,6 +222,8 @@ func (aw *ArchivalWorker) Start(ctx context.Context) error {
 	if !aw.running.CompareAndSwap(false, true) {
 		return ErrWorkerAlreadyRunning
 	}
+
+	aw.prepareRunState()
 
 	runtime.SafeGoWithContextAndComponent(
 		ctx,
@@ -361,7 +463,7 @@ func (aw *ArchivalWorker) archivePartition(ctx context.Context, metadata *entiti
 
 	span.SetAttributes(
 		attribute.String("partition.name", metadata.PartitionName),
-		attribute.String("partition.status", metadata.Status),
+		attribute.String("partition.status", string(metadata.Status)),
 	)
 
 	// PENDING -> EXPORTING
@@ -458,10 +560,14 @@ func (aw *ArchivalWorker) handleUploadingState(
 		}
 	}
 
-	archiveKey := aw.archiveKey(metadata)
+	archiveKey, err := aw.archiveKey(metadata)
+	if err != nil {
+		return aw.handlePartitionError(ctx, metadata, "build archive key", err)
+	}
+
 	compressedSize := int64(exportBuf.Len())
 
-	_, err := aw.storage.UploadWithOptions(
+	_, err = aw.storage.UploadWithOptions(
 		ctx,
 		archiveKey,
 		exportBuf,
@@ -576,62 +682,101 @@ func (aw *ArchivalWorker) exportPartition(
 
 	span.SetAttributes(attribute.String("partition.name", metadata.PartitionName))
 
-	tx, err := aw.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
-	if err != nil {
-		return nil, 0, "", fmt.Errorf("begin read transaction: %w", err)
-	}
+	result, err := withArchivalCurrentDBResult(ctx, aw, func(currentDB *sql.DB) (struct {
+		buf      *bytes.Buffer
+		rowCount int64
+		checksum string
+	}, error,
+	) {
+		tx, err := currentDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+		if err != nil {
+			return struct {
+				buf      *bytes.Buffer
+				rowCount int64
+				checksum string
+			}{}, fmt.Errorf("begin read transaction: %w", err)
+		}
 
-	defer func() {
-		_ = tx.Rollback()
-	}()
+		defer func() { _ = tx.Rollback() }()
 
-	if err := auth.ApplyTenantSchema(ctx, tx); err != nil {
-		return nil, 0, "", fmt.Errorf("apply tenant schema: %w", err)
-	}
+		if err := auth.ApplyTenantSchema(ctx, tx); err != nil {
+			return struct {
+				buf      *bytes.Buffer
+				rowCount int64
+				checksum string
+			}{}, fmt.Errorf("apply tenant schema: %w", err)
+		}
 
-	//nolint:gosec //#nosec G201 -- partition name is validated by partition manager regex
-	query := fmt.Sprintf(
-		"SELECT id, tenant_id, entity_type, entity_id, action, actor_id, changes, created_at, tenant_seq, prev_hash, record_hash, hash_version FROM %s ORDER BY created_at",
-		metadata.PartitionName,
-	)
+		query, err := buildPartitionExportQuery(metadata.PartitionName)
+		if err != nil {
+			return struct {
+				buf      *bytes.Buffer
+				rowCount int64
+				checksum string
+			}{}, err
+		}
 
-	rows, err := tx.QueryContext(ctx, query)
-	if err != nil {
-		return nil, 0, "", fmt.Errorf("query partition %s: %w", metadata.PartitionName, err)
-	}
+		rows, err := tx.QueryContext(ctx, query)
+		if err != nil {
+			return struct {
+				buf      *bytes.Buffer
+				rowCount int64
+				checksum string
+			}{}, fmt.Errorf("query partition %s: %w", metadata.PartitionName, err)
+		}
+		defer rows.Close()
 
-	defer rows.Close()
+		var buf bytes.Buffer
 
-	var buf bytes.Buffer
+		hasher := sha256.New()
 
-	hasher := sha256.New()
+		gzWriter, err := gzip.NewWriterLevel(&buf, gzip.BestCompression)
+		if err != nil {
+			return struct {
+				buf      *bytes.Buffer
+				rowCount int64
+				checksum string
+			}{}, fmt.Errorf("create gzip writer: %w", err)
+		}
 
-	gzWriter, err := gzip.NewWriterLevel(&buf, gzip.BestCompression)
-	if err != nil {
-		return nil, 0, "", fmt.Errorf("create gzip writer: %w", err)
-	}
+		rowCount, err := encodePartitionRows(rows, gzWriter, hasher)
+		if err != nil {
+			return struct {
+				buf      *bytes.Buffer
+				rowCount int64
+				checksum string
+			}{}, err
+		}
 
-	rowCount, err := encodePartitionRows(rows, gzWriter, hasher)
+		if err := gzWriter.Close(); err != nil {
+			return struct {
+				buf      *bytes.Buffer
+				rowCount int64
+				checksum string
+			}{}, fmt.Errorf("close gzip writer: %w", err)
+		}
+
+		if err := tx.Commit(); err != nil {
+			return struct {
+				buf      *bytes.Buffer
+				rowCount int64
+				checksum string
+			}{}, fmt.Errorf("commit read transaction: %w", err)
+		}
+
+		return struct {
+			buf      *bytes.Buffer
+			rowCount int64
+			checksum string
+		}{buf: &buf, rowCount: rowCount, checksum: hex.EncodeToString(hasher.Sum(nil))}, nil
+	})
 	if err != nil {
 		return nil, 0, "", err
 	}
 
-	if err := gzWriter.Close(); err != nil {
-		return nil, 0, "", fmt.Errorf("close gzip writer: %w", err)
-	}
+	span.SetAttributes(attribute.Int64("archival.row_count", result.rowCount), attribute.Int("archival.compressed_bytes", result.buf.Len()))
 
-	if err := tx.Commit(); err != nil {
-		return nil, 0, "", fmt.Errorf("commit read transaction: %w", err)
-	}
-
-	checksum := hex.EncodeToString(hasher.Sum(nil))
-
-	span.SetAttributes(
-		attribute.Int64("archival.row_count", rowCount),
-		attribute.Int("archival.compressed_bytes", buf.Len()),
-	)
-
-	return &buf, rowCount, checksum, nil
+	return result.buf, result.rowCount, result.checksum, nil
 }
 
 // encodePartitionRows iterates over all rows from a partition query, encodes each
@@ -819,16 +964,22 @@ func (aw *ArchivalWorker) handlePartitionError(
 // The archive_id UUID segment prevents path enumeration attacks: even if a
 // presigned URL for one archive leaks, an attacker cannot guess paths for
 // other tenants' or months' archives without knowing the per-archive UUID.
-func (aw *ArchivalWorker) archiveKey(metadata *entities.ArchiveMetadata) string {
+func (aw *ArchivalWorker) archiveKey(metadata *entities.ArchiveMetadata) (string, error) {
 	year, month, _ := metadata.DateRangeStart.Date()
 
-	return fmt.Sprintf("%s/%s/%04d/%02d/%s/audit_logs_%04d_%02d.jsonl.gz",
+	key, err := tenantinfra.ScopedObjectStorageKey(
 		aw.cfg.StoragePrefix,
 		metadata.TenantID.String(),
-		year, month,
+		fmt.Sprintf("%04d", year),
+		fmt.Sprintf("%02d", month),
 		metadata.ID.String(),
-		year, month,
+		fmt.Sprintf("audit_logs_%04d_%02d.jsonl.gz", year, month),
 	)
+	if err != nil {
+		return "", fmt.Errorf("build scoped archive storage key: %w", err)
+	}
+
+	return key, nil
 }
 
 // resumeIncomplete queries for archives not yet COMPLETE and processes each.
@@ -857,30 +1008,36 @@ func (aw *ArchivalWorker) resumeIncomplete(ctx context.Context) {
 
 // listTenants queries pg_namespace to find all tenant schemas (UUID-named).
 func (aw *ArchivalWorker) listTenants(ctx context.Context) ([]string, error) {
-	rows, err := aw.db.QueryContext(
-		ctx,
-		"SELECT nspname FROM pg_namespace WHERE nspname ~* $1",
-		uuidSchemaRegex,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("query tenant schemas: %w", err)
-	}
+	tenants, err := withArchivalCurrentDBResult(ctx, aw, func(currentDB *sql.DB) ([]string, error) {
+		rows, err := currentDB.QueryContext(
+			ctx,
+			"SELECT nspname FROM pg_namespace WHERE nspname ~* $1",
+			uuidSchemaRegex,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("query tenant schemas: %w", err)
+		}
+		defer rows.Close()
 
-	defer rows.Close()
+		var tenants []string
 
-	var tenants []string
+		for rows.Next() {
+			var tenant string
+			if err := rows.Scan(&tenant); err != nil {
+				return nil, fmt.Errorf("scan tenant schema: %w", err)
+			}
 
-	for rows.Next() {
-		var tenant string
-		if err := rows.Scan(&tenant); err != nil {
-			return nil, fmt.Errorf("scan tenant schema: %w", err)
+			tenants = append(tenants, tenant)
 		}
 
-		tenants = append(tenants, tenant)
-	}
+		if err := rows.Err(); err != nil {
+			return nil, fmt.Errorf("iterate tenant schemas: %w", err)
+		}
 
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate tenant schemas: %w", err)
+		return tenants, nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	// The default tenant uses the public schema (no UUID-named schema
@@ -894,14 +1051,78 @@ func (aw *ArchivalWorker) listTenants(ctx context.Context) ([]string, error) {
 	return tenants, nil
 }
 
+func withArchivalCurrentDBResult[T any](ctx context.Context, aw *ArchivalWorker, fn func(*sql.DB) (T, error)) (T, error) {
+	var zero T
+	if aw == nil {
+		return zero, command.ErrNilDB
+	}
+
+	if aw.infraProvider != nil {
+		return withArchivalProviderDBResult(ctx, aw.infraProvider, fn)
+	}
+
+	if aw.db == nil {
+		return zero, command.ErrNilDB
+	}
+
+	return fn(aw.db)
+}
+
+func withArchivalProviderDBResult[T any](
+	ctx context.Context,
+	infraProvider sharedPorts.InfrastructureProvider,
+	fn func(*sql.DB) (T, error),
+) (T, error) {
+	var zero T
+
+	lease, err := infraProvider.GetPostgresConnection(ctx)
+	if err != nil {
+		return zero, fmt.Errorf("resolve postgres connection: %w", err)
+	}
+	defer lease.Release()
+
+	client := lease.Connection()
+	if client == nil {
+		return zero, command.ErrNilDB
+	}
+
+	resolver, err := client.Resolver(ctx)
+	if err != nil {
+		return zero, fmt.Errorf("resolve postgres db: %w", err)
+	}
+
+	primaryDBs := resolver.PrimaryDBs()
+	if len(primaryDBs) == 0 || primaryDBs[0] == nil {
+		return zero, command.ErrNilDB
+	}
+
+	return fn(primaryDBs[0])
+}
+
+func buildPartitionExportQuery(partitionName string) (string, error) {
+	if !archivalPartitionNameRegex.MatchString(partitionName) {
+		return "", fmt.Errorf("build partition export query: %w: %s", command.ErrInvalidPartitionName, partitionName)
+	}
+
+	var builder strings.Builder
+	builder.Grow(len(partitionName) + partitionExportQueryOverhead)
+	builder.WriteString("SELECT id, tenant_id, entity_type, entity_id, action, actor_id, changes, created_at, tenant_seq, prev_hash, record_hash, hash_version FROM ")
+	builder.WriteString(auth.QuoteIdentifier(partitionName))
+	builder.WriteString(" ORDER BY created_at")
+
+	return builder.String(), nil
+}
+
 // acquireLock attempts to acquire the distributed archival lock via Redis SET NX EX.
 // Returns (acquired, token, error).
 func (aw *ArchivalWorker) acquireLock(ctx context.Context) (bool, string, error) {
-	conn, err := aw.infraProvider.GetRedisConnection(ctx)
+	connLease, err := aw.infraProvider.GetRedisConnection(ctx)
 	if err != nil {
 		return false, "", fmt.Errorf("get redis connection: %w", err)
 	}
+	defer connLease.Release()
 
+	conn := connLease.Connection()
 	if conn == nil {
 		return false, "", ErrNilRedisClient
 	}
@@ -926,13 +1147,15 @@ func (aw *ArchivalWorker) acquireLock(ctx context.Context) (bool, string, error)
 // releaseLock releases the distributed archival lock using a Lua script
 // that only deletes the key if the token matches (safe release).
 func (aw *ArchivalWorker) releaseLock(ctx context.Context, token string) {
-	conn, err := aw.infraProvider.GetRedisConnection(ctx)
+	connLease, err := aw.infraProvider.GetRedisConnection(ctx)
 	if err != nil {
 		aw.logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelWarn, "failed to get redis connection for lock release")
 
 		return
 	}
+	defer connLease.Release()
 
+	conn := connLease.Connection()
 	if conn == nil {
 		return
 	}

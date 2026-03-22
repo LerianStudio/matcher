@@ -11,14 +11,15 @@ import (
 	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/repositories"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
+	"github.com/LerianStudio/matcher/internal/shared/constants"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -84,11 +85,7 @@ type listQueryParams struct {
 
 func prepareListParams(cursor repositories.CursorFilter) listQueryParams {
 	orderDirection := libHTTP.ValidateSortDirection(cursor.SortOrder)
-
-	limit := cursor.Limit
-	if limit <= 0 {
-		limit = 20
-	}
+	limit := libHTTP.ValidateLimit(cursor.Limit, constants.DefaultPaginationLimit, constants.MaximumPaginationLimit)
 
 	sortColumn := normalizeSortColumn(cursor.SortBy)
 
@@ -260,13 +257,18 @@ func calculatePagination(
 		return libHTTP.CursorPagination{}, nil
 	}
 
+	first, last := exceptions[0], exceptions[len(exceptions)-1]
+	if err := pgcommon.ValidateSortCursorBoundaries(first, last); err != nil {
+		return libHTTP.CursorPagination{}, fmt.Errorf("validate pagination boundaries: %w", err)
+	}
+
 	if params.useIDCursor {
 		pagination, err := libHTTP.CalculateCursor(
 			isFirstPage,
 			hasPagination,
 			cursorDirection,
-			exceptions[0].ID.String(),
-			exceptions[len(exceptions)-1].ID.String(),
+			first.ID.String(),
+			last.ID.String(),
 		)
 		if err != nil {
 			return libHTTP.CursorPagination{}, fmt.Errorf("calculate cursor: %w", err)
@@ -275,20 +277,54 @@ func calculatePagination(
 		return pagination, nil
 	}
 
-	first, last := exceptions[0], exceptions[len(exceptions)-1]
 	pointsNext := cursorDirection == libHTTP.CursorDirectionNext
 
-	next, prev := libHTTP.CalculateSortCursorPagination(
-		isFirstPage, hasPagination, pointsNext,
+	return calculateExceptionSortPagination(
+		isFirstPage,
+		hasPagination,
+		pointsNext,
 		params.sortColumn,
-		exceptionSortValue(first, params.sortColumn), first.ID.String(),
-		exceptionSortValue(last, params.sortColumn), last.ID.String(),
+		exceptionSortValue(first, params.sortColumn),
+		first.ID.String(),
+		exceptionSortValue(last, params.sortColumn),
+		last.ID.String(),
+		libHTTP.CalculateSortCursorPagination,
 	)
+}
 
-	return libHTTP.CursorPagination{Next: next, Prev: prev}, nil
+func calculateExceptionSortPagination(
+	isFirstPage, hasPagination, pointsNext bool,
+	sortColumn,
+	firstSortValue,
+	firstID,
+	lastSortValue,
+	lastID string,
+	calculateSortCursor pgcommon.SortCursorCalculator,
+) (libHTTP.CursorPagination, error) {
+	pagination, err := pgcommon.CalculateSortCursorPaginationWrapped(
+		isFirstPage,
+		hasPagination,
+		pointsNext,
+		sortColumn,
+		firstSortValue,
+		firstID,
+		lastSortValue,
+		lastID,
+		calculateSortCursor,
+		"calculate sort cursor pagination",
+	)
+	if err != nil {
+		return libHTTP.CursorPagination{}, fmt.Errorf("calculate exception sort cursor pagination: %w", err)
+	}
+
+	return pagination, nil
 }
 
 func exceptionSortValue(ex *entities.Exception, column string) string {
+	if ex == nil {
+		return ""
+	}
+
 	switch column {
 	case "created_at":
 		return ex.CreatedAt.UTC().Format(time.RFC3339Nano)

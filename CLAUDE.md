@@ -5,7 +5,7 @@ This file helps AI agents work effectively in the Matcher codebase. It complemen
 ## Quick Reference
 
 **Project**: Transaction reconciliation engine for Lerian Studio ecosystem  
-**Language**: Go 1.25.6  
+**Language**: Go 1.26.0  
 **Pattern**: Modular monolith with DDD + Hexagonal Architecture + CQRS-light  
 **Database**: PostgreSQL 17 with schema-per-tenant isolation  
 **Testing**: TDD required; testify + sqlmock + testcontainers
@@ -56,9 +56,8 @@ make clean-docker     # Remove all containers/volumes
 make generate         # Generate mocks (go:generate)
 make generate-docs    # Generate Swagger docs
 
-# Environment
-make set-env          # Copy .env.example to config/.env
-make clear-envs       # Remove config/.env
+# Environment (zero-config — all defaults are baked in)
+# Override via env vars for production. See config/.config-map.example for bootstrap-only keys.
 ```
 
 ## Architecture Quick Start
@@ -67,15 +66,50 @@ make clear-envs       # Remove config/.env
 
 ```
 internal/
-├── configuration/    # Reconciliation contexts, sources, match rules, fee schedules
+├── configuration/    # Reconciliation contexts, sources, match rules, fee schedules/rules, scheduling
+├── discovery/        # External data source discovery, schema detection, extraction management
 ├── ingestion/        # File parsing, normalization, deduplication
 ├── matching/         # Match orchestration, rule execution, fee verification, confidence scoring
 ├── exception/        # Exception lifecycle, disputes, evidence, resolutions
-├── governance/       # Immutable audit logs
+├── governance/       # Immutable audit logs, hash chains, archival
 ├── reporting/        # Dashboard analytics, export jobs, variance reports, archival
 ├── outbox/           # Reliable event publication
-└── shared/           # Cross-context utilities and adapters
+└── shared/           # Shared kernel: cross-context domain types + port abstractions
 ```
+
+### Shared Kernel (`internal/shared/`)
+
+The `shared/` module is the **designated bridge** between bounded contexts. It contains types that multiple contexts legitimately need to share, preventing import cycles between context packages.
+
+```
+internal/shared/
+├── domain/
+│   ├── audit_log.go          # AuditLog entity (used by governance + matching)
+│   ├── events.go             # Domain event base types
+│   ├── field_map.go          # FieldMap for normalization (used by ingestion + matching)
+│   ├── ingestion_events.go   # Ingestion event payloads
+│   ├── match_rule.go         # MatchRule (used by matching + configuration)
+│   ├── outbox_event.go       # OutboxEvent envelope (used by outbox + all publishers)
+│   ├── transaction.go        # Transaction entity (used by ingestion + matching + exception)
+│   ├── exception/            # Exception severity value objects (type-aliased for backward compat)
+│   └── fee/                  # Fee schedule domain (moved from matching; used by config + matching)
+└── ports/
+    ├── audit.go              # AuditRepository interface (cross-context)
+    ├── infrastructure.go     # InfrastructureProvider (DB resolver)
+    ├── match_trigger.go      # MatchTrigger port for auto-match on upload
+    ├── object_storage.go     # ObjectStorage port
+    ├── outbox.go             # OutboxRepository interface (cross-context)
+    └── tx.go                 # TxRunner port
+```
+
+**Type-alias pattern**: When a type migrates to `shared/domain/`, the original package re-exports it via a type alias for backward compatibility:
+```go
+// exception/domain/value_objects/severity.go
+import sharedexception "github.com/LerianStudio/matcher/internal/shared/domain/exception"
+type Severity = sharedexception.Severity  // type alias, not redefinition
+```
+
+**Cross-context import rule**: Bounded contexts **must not** import each other directly. Use `internal/shared/` as the bridge. This is enforced by depguard rules in `.golangci.yml`.
 
 ### Hexagonal Structure (per context)
 
@@ -83,18 +117,33 @@ internal/
 internal/{context}/
 ├── adapters/
 │   ├── http/             # Fiber handlers + DTOs
+│   │   └── dto/          # Request/response data-transfer objects
 │   ├── postgres/         # Repository implementations
 │   │   └── {aggregate}/  # One dir per aggregate root
 │   └── rabbitmq/         # Message publishers/consumers
-├── ports/                # Repository/service interfaces (required)
-├── services/
-│   ├── command/          # Write operations (*_commands.go)
-│   └── query/            # Read operations (*_queries.go)
-└── domain/
-    ├── entities/         # Aggregate roots with business logic
-    ├── enums/            # Type-safe enumerations
-    └── errors/           # Domain-specific sentinel errors
+├── ports/                # External dependency abstractions (EventPublisher, ObjectStorage, etc.)
+├── domain/
+│   ├── entities/         # Aggregate roots with business logic
+│   ├── value_objects/    # Value types (primary convention; most contexts use this)
+│   ├── enums/            # Type-safe enumerations (matching also has this alongside value_objects)
+│   ├── repositories/     # Repository interfaces for the context's own aggregates
+│   └── errors/           # Domain-scoped sentinel errors (preferred location; governance has this;
+│                         #   adapter-level sentinels live in adapters/postgres/{name}/errors.go)
+└── services/
+    ├── command/          # Write operations (*_commands.go)
+    ├── query/            # Read operations (*_queries.go)
+    └── worker/           # Background workers (configuration, governance use this)
 ```
+
+**Interface location convention**:
+- `domain/repositories/` — repository interfaces for the context's own aggregate stores
+- `ports/` — external dependency abstractions (EventPublisher, ObjectStorage, CacheProvider, etc.)
+- `internal/shared/ports/` — cross-context abstractions (OutboxRepository, AuditRepository, etc.)
+
+**Notes on domain subdirectory usage across contexts**:
+- `domain/value_objects/` — used by configuration, exception, ingestion, matching
+- `domain/enums/` — used by matching (alongside value_objects for exception reasons)
+- `domain/errors/` — used by governance; other contexts keep sentinels in `services/command/commands.go` or `adapters/postgres/{name}/errors.go`
 
 ## Code Patterns
 
@@ -226,7 +275,7 @@ func (h *MatchHandler) RunMatch(c *fiber.Ctx) error {
 - Error wrapping with `fmt.Errorf("context: %w", err)`
 - Check with `errors.Is(err, ErrNotFound)`
 - Custom error types when extra context needed
-- Trace errors via `libOpentelemetry.HandleSpanError(&span, "msg", err)`
+- Trace errors via `libOpentelemetry.HandleSpanError(span, "msg", err)`
 
 **Example**:
 ```go
@@ -291,7 +340,11 @@ if err := asserter.NotNil(ctx, txID, "transaction id required"); err != nil {
 //go:build integration
 
 //go:build e2e
+
+//go:build chaos
 ```
+
+> `chaos` is used by 9 files in `tests/chaos/` for fault-injection tests (Toxiproxy, container chaos). These tests require the full docker-compose stack plus Toxiproxy.
 
 **Test structure**:
 - Co-locate tests with source (`*_test.go`)
@@ -406,11 +459,27 @@ Split into `handlers_{feature}.go` when a context has 3+ distinct feature areas:
 - Uses `$(DOCKER_CMD)` variable
 - No need to specify which version you have
 
+### 11. Services Layout: Workers vs Dispatcher
+- Background workers live in `services/worker/` (e.g., `configuration/services/worker/scheduler_worker.go`, `governance/services/worker/archival_worker.go`)
+- The outbox **dispatcher** is a known exception: it lives at `outbox/services/dispatcher.go` (services root, not in command/, query/, or worker/) because it is pure infrastructure — not a use case and not a scheduled job
+
+### 12. Systemplane is the Runtime Config Authority
+- Viper + env vars are **bootstrap-only** — used to load the initial `Config` struct at startup
+- After startup, the **systemplane** (`lib-commons/v4/commons/systemplane`) owns all runtime config
+- For runtime config values: use `configManager.Get()` which returns the systemplane-backed `*Config`
+- For runtime config schema/metadata: use `registry.Get(key)` which returns `KeyDef` metadata
+- Direct systemplane API: `GET /v1/system/configs`, schema: `GET /v1/system/configs/schema`, history: `GET /v1/system/configs/history`
+- Never read Viper directly at runtime
+
 ## Configuration
 
 ### Environment Variables
 
-All env vars are documented in `config/.env.example` and loaded via `internal/bootstrap/config.go`.
+Matcher uses **zero-config defaults** — all configuration has sensible defaults baked into `defaultConfig()`. No `.env` or YAML files are required. Override via environment variables for production.
+
+**Runtime authority**: The systemplane (`lib-commons/v4/commons/systemplane`) is the sole runtime configuration authority. Env vars are bootstrap-only — after startup, the systemplane registry owns all config reads. Runtime queries: `GET /v1/system/configs`, schema: `GET /v1/system/configs/schema`, history: `GET /v1/system/configs/history`.
+
+**Bootstrap-only keys** (require restart): See `config/.config-map.example`. These include server address, TLS, auth, and telemetry settings.
 
 **Categories**:
 - **Application**: `ENV_NAME`, `LOG_LEVEL`, `SERVER_ADDRESS`, `HTTP_BODY_LIMIT_BYTES`
@@ -420,7 +489,7 @@ All env vars are documented in `config/.env.example` and loaded via `internal/bo
 - **PostgreSQL**: `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_SSLMODE`, `POSTGRES_MAX_OPEN_CONNS`, `POSTGRES_MAX_IDLE_CONNS`
 - **PostgreSQL Replica**: `POSTGRES_REPLICA_HOST`, `POSTGRES_REPLICA_PORT`, `POSTGRES_REPLICA_USER`, `POSTGRES_REPLICA_PASSWORD`, `POSTGRES_REPLICA_DB`, `POSTGRES_REPLICA_SSLMODE`
 - **Redis**: `REDIS_HOST`, `REDIS_MASTER_NAME`, `REDIS_PASSWORD`, `REDIS_DB`, `REDIS_PROTOCOL`, `REDIS_TLS`, `REDIS_CA_CERT`, `REDIS_POOL_SIZE`, `REDIS_MIN_IDLE_CONNS`, `REDIS_READ_TIMEOUT_MS`, `REDIS_WRITE_TIMEOUT_MS`, `REDIS_DIAL_TIMEOUT_MS`
-- **RabbitMQ**: `RABBITMQ_URI`, `RABBITMQ_HOST`, `RABBITMQ_PORT`, `RABBITMQ_USER`, `RABBITMQ_PASSWORD`, `RABBITMQ_VHOST`, `RABBITMQ_HEALTH_URL`
+- **RabbitMQ**: `RABBITMQ_URI`, `RABBITMQ_HOST`, `RABBITMQ_PORT`, `RABBITMQ_USER`, `RABBITMQ_PASSWORD`, `RABBITMQ_VHOST`, `RABBITMQ_HEALTH_URL`, `RABBITMQ_ALLOW_INSECURE_HEALTH_CHECK`
 - **Auth**: `AUTH_ENABLED`, `AUTH_SERVICE_ADDRESS`, `AUTH_JWT_SECRET`
 - **OpenTelemetry**: `ENABLE_TELEMETRY`, `OTEL_LIBRARY_NAME`, `OTEL_RESOURCE_SERVICE_NAME`, `OTEL_RESOURCE_SERVICE_VERSION`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_RESOURCE_DEPLOYMENT_ENVIRONMENT`
 
@@ -428,13 +497,13 @@ All env vars are documented in `config/.env.example` and loaded via `internal/bo
 
 **Primary/Replica Setup**:
 - Write operations use primary connection
-- Read operations can use replica (via lib-uncommons)
+- Read operations can use replica (via lib-commons)
 - Connection pooling configured via `POSTGRES_MAX_OPEN_CONNS`, `POSTGRES_MAX_IDLE_CONNS`
 
 **Redis Modes**:
 - Standalone: Set `REDIS_HOST`
 - Sentinel: Set `REDIS_MASTER_NAME` + `REDIS_HOST` (comma-separated sentinels)
-- Cluster: Handled by lib-uncommons based on `REDIS_PROTOCOL`
+- Cluster: Handled by lib-commons based on `REDIS_PROTOCOL`
 
 ## Required Libraries
 
@@ -445,27 +514,41 @@ All env vars are documented in `config/.env.example` and loaded via `internal/bo
   - Authorization: `auth.Authorize(serviceName, "resource", "action")`
   - Apply tenant schema: `auth.ApplyTenantSchema(ctx, tx)`
 
-- **lib-uncommons**: Common utilities, telemetry, infrastructure
+- **lib-commons/v4**: Common utilities, telemetry, infrastructure
   - Tracking: `libCommons.NewTrackingFromContext(ctx)` → logger, tracer, headerID
-  - OpenTelemetry: `libOpentelemetry.HandleSpanError(&span, "msg", err)`
-  - Database: `database.NewPostgreSQLConnection()`, `database.NewPrimaryReplicaConnection()`
-  - Redis: `redis.NewRedisClient()`
-  - Messaging: `messaging.NewRabbitMQ()`
+  - OpenTelemetry: `libOpentelemetry.HandleSpanError(span, "msg", err)`
+  - Database: `libPostgres.New()` / `libPostgres.NewPrimaryReplica()`
+  - Redis: `libRedis.New()`
+  - Messaging: `libRabbitmq.New()`
 
-### Internal Packages
+### lib-commons Packages (used as `pkg/assert`, `pkg/runtime` in docs)
 
-- **pkg/assert**: Safe assertions without panics
+- **lib-commons/v4/commons/assert**: Safe assertions without panics
   - `asserter.That(ctx, condition, "msg", kv...)` → error
   - `asserter.NotEmpty(ctx, value, "msg")` → error
   - `asserter.NotNil(ctx, value, "msg")` → error
 
-- **pkg/runtime**: Panic recovery and runtime observability
+- **lib-commons/v4/commons/runtime**: Panic recovery and runtime observability
   - `runtime.RecoverAndLog(logger, name)` for deferred panic handling with logging
   - `runtime.RecoverAndLogWithContext(ctx, logger, component, name)` for context-aware recovery with metrics/tracing
   - `runtime.RecoverAndCrash(logger, name)` for critical paths that must crash on panic
   - `runtime.RecoverWithPolicy(logger, name, policy)` for configurable recovery policies (`CrashProcess` or log-and-continue)
   - `runtime.HandlePanicValue(ctx, logger, panicValue, component, name)` for framework-recovered panics (e.g., Fiber middleware)
   - All `*WithContext` variants record metrics, span events, and error reports
+
+### Internal Packages (`pkg/`)
+
+- **pkg/chanutil**: Safe channel utilities for goroutine communication
+
+- **pkg/storageopt**: Functional options for object storage operations
+
+### Systemplane (lib-commons)
+
+The systemplane runtime configuration authority now lives in `lib-commons/v4/commons/systemplane`:
+  - Registry, service manager, supervisor, reconcilers
+  - PostgreSQL and MongoDB store adapters
+  - Change feed adapters (PostgreSQL LISTEN/NOTIFY, MongoDB change streams)
+  - Fiber HTTP handler for `/v1/system/configs` API
 
 ## Linting & Security
 
@@ -504,6 +587,20 @@ The following patterns are **blocked** by linter:
 - fmt.Errorf.*%v.*err   # Use %w not %v
 ```
 
+### Architectural Boundary Rules (depguard)
+
+In addition to the standard linters, `depguard` enforces hexagonal architecture boundaries:
+
+| Rule | What it enforces |
+|------|-----------------|
+| `http-handlers-boundary` | HTTP handlers cannot import postgres adapters directly (all 8 contexts) |
+| `cross-context-{name}` | Full cross-context isolation for all 8 bounded contexts; direct imports between contexts are blocked |
+| `service-no-adapters` | `services/command/` and `services/query/` cannot import adapter packages; depend on port interfaces only |
+| `dto-no-services` | `adapters/http/dto/` cannot import service packages; DTOs are pure data structures |
+| `worker-no-adapters` | `services/worker/` cannot import postgres adapter packages directly |
+
+**Shared kernel** (`internal/shared/`) is the designated bridge: when two contexts need to share a type, it moves to `shared/domain/`. When they need a shared interface, it goes in `shared/ports/`. This is the only sanctioned path for cross-context dependencies.
+
 ### Custom Linters (tools/linters/)
 
 Run with `make lint-custom`. These enforce Matcher-specific patterns:
@@ -532,7 +629,7 @@ Run with `make lint-custom`. These enforce Matcher-specific patterns:
 | [CLAUDE.md](CLAUDE.md) | Main agent instruction file (this file's companion) |
 | [docs/PROJECT_RULES.md](docs/PROJECT_RULES.md) | Critical architectural rules and constraints |
 | [README.md](README.md) | User-facing project overview |
-| [config/.env.example](config/.env.example) | Environment variable reference |
+| [config/.config-map.example](config/.config-map.example) | Bootstrap-only env vars (require restart) |
 | [docs/pre-dev/matcher/prd.md](docs/pre-dev/matcher/prd.md) | Product requirements, user stories |
 | [docs/pre-dev/matcher/trd.md](docs/pre-dev/matcher/trd.md) | Technical requirements, security |
 | [docs/pre-dev/matcher/api-design.md](docs/pre-dev/matcher/api-design.md) | API contracts, error codes |
@@ -620,7 +717,7 @@ go tool trace trace.out
 ## Reference Codebases
 
 Located in `.references/` (if available):
-- **lib-uncommons**: DB connections, Redis, RabbitMQ, telemetry, graceful shutdown
+- **lib-commons**: DB connections, Redis, RabbitMQ, telemetry, graceful shutdown
 - **lib-auth**: JWT extraction, authorization middleware patterns
 - **midaz**: Hexagonal structure reference, CQRS separation, migration naming
 

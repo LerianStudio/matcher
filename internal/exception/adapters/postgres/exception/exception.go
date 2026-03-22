@@ -3,7 +3,6 @@ package exception
 
 import (
 	"database/sql"
-	"errors"
 	"fmt"
 	"time"
 
@@ -12,13 +11,6 @@ import (
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
-)
-
-// Repository errors.
-var (
-	ErrRepoNotInitialized     = errors.New("exception repository not initialized")
-	ErrConcurrentModification = errors.New("exception was modified by another process")
-	ErrTransactionRequired    = errors.New("transaction is required")
 )
 
 const columns = "id, transaction_id, severity, status, external_system, external_issue_id, assigned_to, due_at, resolution_notes, resolution_type, resolution_reason, reason, version, created_at, updated_at"

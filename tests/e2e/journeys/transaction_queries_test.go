@@ -356,7 +356,7 @@ func TestTransactionQueries_StatusAfterMatch(t *testing.T) {
 			)
 
 			// Run matching
-			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,

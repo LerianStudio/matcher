@@ -40,6 +40,19 @@ func TestNewPartitionManager_NilDB(t *testing.T) {
 	assert.ErrorIs(t, err, ErrNilDB)
 }
 
+func TestNewPartitionManagerWithClock_NilClock(t *testing.T) {
+	t.Parallel()
+
+	db, _, err := sqlmock.New()
+	require.NoError(t, err)
+
+	defer db.Close()
+
+	pm, err := NewPartitionManagerWithClock(db, nil, nil, nil)
+	assert.Nil(t, pm)
+	assert.ErrorIs(t, err, ErrNowFuncRequired)
+}
+
 // --- Partition name validation tests ---
 
 func TestValidatePartitionName_Valid(t *testing.T) {
@@ -184,15 +197,15 @@ func TestEnsurePartitionsExist_InvalidLookahead(t *testing.T) {
 func TestEnsurePartitionsExist_CreatesCorrectDDL(t *testing.T) {
 	t.Parallel()
 
-	// NOTE: This test may be flaky near month boundaries since both the test and
-	// production code use time.Now(). A clock injection refactor would fix this.
-
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 
 	defer db.Close()
 
-	pm, err := NewPartitionManager(db, nil, nil)
+	fixedNow := time.Date(2026, 2, 15, 12, 0, 0, 0, time.UTC)
+	pm, err := NewPartitionManagerWithClock(db, nil, nil, func() time.Time {
+		return fixedNow
+	})
 	require.NoError(t, err)
 
 	// Use default tenant context so ApplyTenantSchema is a no-op
@@ -203,7 +216,7 @@ func TestEnsurePartitionsExist_CreatesCorrectDDL(t *testing.T) {
 
 	// The service creates partitions for current month + lookaheadMonths (2)
 	// That's 3 partitions total (i in range(3): 0, 1, 2)
-	now := time.Now().UTC()
+	now := fixedNow
 	for i := range 3 {
 		start := monthStart(now, i)
 		end := monthStart(now, i+1)
@@ -407,7 +420,10 @@ func TestDetachPartition_RetentionPeriodActive(t *testing.T) {
 
 	defer db.Close()
 
-	pm, err := NewPartitionManager(db, nil, nil)
+	fixedNow := time.Date(2026, 3, 15, 0, 0, 0, 0, time.UTC)
+	pm, err := NewPartitionManagerWithClock(db, nil, nil, func() time.Time {
+		return fixedNow
+	})
 	require.NoError(t, err)
 
 	err = pm.DetachPartition(context.Background(), "audit_logs_2026_02")
@@ -463,17 +479,20 @@ func TestDropPartition_Success(t *testing.T) {
 
 	defer db.Close()
 
-	pm, err := NewPartitionManager(db, nil, nil)
+	fixedNow := time.Date(2026, 3, 15, 0, 0, 0, 0, time.UTC)
+	pm, err := NewPartitionManagerWithClock(db, nil, nil, func() time.Time {
+		return fixedNow
+	})
 	require.NoError(t, err)
 
 	ctx := context.WithValue(context.Background(), auth.TenantIDKey, "11111111-1111-1111-1111-111111111111")
 
 	mock.ExpectBegin()
-	mock.ExpectExec("DROP TABLE IF EXISTS audit_logs_2026_02").
+	mock.ExpectExec("DROP TABLE IF EXISTS audit_logs_2015_01").
 		WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
 
-	err = pm.DropPartition(ctx, "audit_logs_2026_02")
+	err = pm.DropPartition(ctx, "audit_logs_2015_01")
 	assert.NoError(t, err)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
@@ -501,7 +520,10 @@ func TestDropPartition_ExecError(t *testing.T) {
 
 	defer db.Close()
 
-	pm, err := NewPartitionManager(db, nil, nil)
+	fixedNow := time.Date(2026, 3, 15, 0, 0, 0, 0, time.UTC)
+	pm, err := NewPartitionManagerWithClock(db, nil, nil, func() time.Time {
+		return fixedNow
+	})
 	require.NoError(t, err)
 
 	ctx := context.WithValue(context.Background(), auth.TenantIDKey, "11111111-1111-1111-1111-111111111111")
@@ -511,9 +533,28 @@ func TestDropPartition_ExecError(t *testing.T) {
 		WillReturnError(errors.New("permission denied"))
 	mock.ExpectRollback()
 
-	err = pm.DropPartition(ctx, "audit_logs_2026_02")
+	err = pm.DropPartition(ctx, "audit_logs_2015_01")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "drop partition")
+}
+
+func TestDropPartition_RetentionPeriodActive(t *testing.T) {
+	t.Parallel()
+
+	db, _, err := sqlmock.New()
+	require.NoError(t, err)
+
+	defer db.Close()
+
+	fixedNow := time.Date(2026, 3, 15, 0, 0, 0, 0, time.UTC)
+	pm, err := NewPartitionManagerWithClock(db, nil, nil, func() time.Time {
+		return fixedNow
+	})
+	require.NoError(t, err)
+
+	err = pm.DropPartition(context.Background(), "audit_logs_2026_02")
+	assert.ErrorIs(t, err, ErrRetentionPeriodActive)
+	assert.Contains(t, err.Error(), "retention period")
 }
 
 // --- parsePartitionBound tests ---
@@ -576,6 +617,7 @@ func TestSentinelErrors_Distinct(t *testing.T) {
 
 	sentinels := []error{
 		ErrNilDB,
+		ErrNowFuncRequired,
 		ErrPartitionNotFound,
 		ErrInvalidLookahead,
 		ErrInvalidPartitionName,

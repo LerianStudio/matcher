@@ -69,7 +69,7 @@ func TestScanArchiveMetadata_PartialNullable_ArchiveKeyAndChecksumOnly(t *testin
 		*dest[7].(*sql.NullString) = sql.NullString{String: "sha256:abc123", Valid: true}
 		*dest[8].(*sql.NullInt64) = sql.NullInt64{Valid: false}
 		*dest[9].(*sql.NullString) = sql.NullString{Valid: false}
-		*dest[10].(*string) = entities.StatusExported
+		*dest[10].(*entities.ArchiveStatus) = entities.StatusExported
 		*dest[11].(*sql.NullString) = sql.NullString{Valid: false}
 		*dest[12].(*sql.NullTime) = sql.NullTime{Valid: false}
 		*dest[13].(*time.Time) = createdAt
@@ -112,7 +112,7 @@ func TestScanArchiveMetadata_PartialNullable_ErrorMessageAndArchivedAtOnly(t *te
 		*dest[7].(*sql.NullString) = sql.NullString{Valid: false}
 		*dest[8].(*sql.NullInt64) = sql.NullInt64{Valid: false}
 		*dest[9].(*sql.NullString) = sql.NullString{Valid: false}
-		*dest[10].(*string) = entities.StatusComplete
+		*dest[10].(*entities.ArchiveStatus) = entities.StatusComplete
 		*dest[11].(*sql.NullString) = sql.NullString{String: "upload retry succeeded", Valid: true}
 		*dest[12].(*sql.NullTime) = sql.NullTime{Time: archivedAt, Valid: true}
 		*dest[13].(*time.Time) = createdAt
@@ -152,7 +152,7 @@ func TestScanArchiveMetadata_PartialNullable_CompressedSizeAndStorageClassOnly(t
 		*dest[7].(*sql.NullString) = sql.NullString{Valid: false}
 		*dest[8].(*sql.NullInt64) = sql.NullInt64{Int64: 8192, Valid: true}
 		*dest[9].(*sql.NullString) = sql.NullString{String: "STANDARD", Valid: true}
-		*dest[10].(*string) = entities.StatusUploaded
+		*dest[10].(*entities.ArchiveStatus) = entities.StatusUploaded
 		*dest[11].(*sql.NullString) = sql.NullString{Valid: false}
 		*dest[12].(*sql.NullTime) = sql.NullTime{Valid: false}
 		*dest[13].(*time.Time) = createdAt
@@ -171,6 +171,75 @@ func TestScanArchiveMetadata_PartialNullable_CompressedSizeAndStorageClassOnly(t
 	assert.Equal(t, "STANDARD", result.StorageClass)
 	assert.Empty(t, result.ErrorMessage)
 	assert.Nil(t, result.ArchivedAt)
+}
+
+// --- scanArchiveMetadata invalid status validation ---
+
+func TestScanArchiveMetadata_InvalidStatusFromDatabase(t *testing.T) {
+	t.Parallel()
+
+	metadataID := uuid.New()
+	tenantID := uuid.New()
+	createdAt := time.Now().UTC()
+
+	scanner := &fakeScanner{scan: func(dest ...any) error {
+		*dest[0].(*uuid.UUID) = metadataID
+		*dest[1].(*uuid.UUID) = tenantID
+		*dest[2].(*string) = "audit_logs_2026_01"
+		*dest[3].(*time.Time) = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+		*dest[4].(*time.Time) = time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
+		*dest[5].(*int64) = 100
+		*dest[6].(*sql.NullString) = sql.NullString{Valid: false}
+		*dest[7].(*sql.NullString) = sql.NullString{Valid: false}
+		*dest[8].(*sql.NullInt64) = sql.NullInt64{Valid: false}
+		*dest[9].(*sql.NullString) = sql.NullString{Valid: false}
+		*dest[10].(*entities.ArchiveStatus) = entities.ArchiveStatus("CORRUPTED")
+		*dest[11].(*sql.NullString) = sql.NullString{Valid: false}
+		*dest[12].(*sql.NullTime) = sql.NullTime{Valid: false}
+		*dest[13].(*time.Time) = createdAt
+		*dest[14].(*time.Time) = createdAt
+
+		return nil
+	}}
+
+	result, err := scanArchiveMetadata(scanner)
+	require.Error(t, err)
+	require.Nil(t, result)
+	require.ErrorIs(t, err, ErrInvalidArchiveStatus)
+	require.Contains(t, err.Error(), "CORRUPTED")
+}
+
+func TestScanArchiveMetadata_EmptyStatusFromDatabase(t *testing.T) {
+	t.Parallel()
+
+	metadataID := uuid.New()
+	tenantID := uuid.New()
+	createdAt := time.Now().UTC()
+
+	scanner := &fakeScanner{scan: func(dest ...any) error {
+		*dest[0].(*uuid.UUID) = metadataID
+		*dest[1].(*uuid.UUID) = tenantID
+		*dest[2].(*string) = "audit_logs_2026_01"
+		*dest[3].(*time.Time) = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+		*dest[4].(*time.Time) = time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
+		*dest[5].(*int64) = 0
+		*dest[6].(*sql.NullString) = sql.NullString{Valid: false}
+		*dest[7].(*sql.NullString) = sql.NullString{Valid: false}
+		*dest[8].(*sql.NullInt64) = sql.NullInt64{Valid: false}
+		*dest[9].(*sql.NullString) = sql.NullString{Valid: false}
+		*dest[10].(*entities.ArchiveStatus) = entities.ArchiveStatus("")
+		*dest[11].(*sql.NullString) = sql.NullString{Valid: false}
+		*dest[12].(*sql.NullTime) = sql.NullTime{Valid: false}
+		*dest[13].(*time.Time) = createdAt
+		*dest[14].(*time.Time) = createdAt
+
+		return nil
+	}}
+
+	result, err := scanArchiveMetadata(scanner)
+	require.Error(t, err)
+	require.Nil(t, result)
+	require.ErrorIs(t, err, ErrInvalidArchiveStatus)
 }
 
 // --- scanArchiveMetadata edge case tests ---
@@ -194,7 +263,7 @@ func TestScanArchiveMetadata_ValidEmptyStrings(t *testing.T) {
 		*dest[7].(*sql.NullString) = sql.NullString{String: "", Valid: true}
 		*dest[8].(*sql.NullInt64) = sql.NullInt64{Valid: false}
 		*dest[9].(*sql.NullString) = sql.NullString{String: "", Valid: true}
-		*dest[10].(*string) = entities.StatusPending
+		*dest[10].(*entities.ArchiveStatus) = entities.StatusPending
 		*dest[11].(*sql.NullString) = sql.NullString{String: "", Valid: true}
 		*dest[12].(*sql.NullTime) = sql.NullTime{Valid: false}
 		*dest[13].(*time.Time) = createdAt
@@ -233,7 +302,7 @@ func TestScanArchiveMetadata_ValidZeroCompressedSize(t *testing.T) {
 		// Valid=true with Int64=0: exercises the compressedSizeBytes.Valid branch
 		*dest[8].(*sql.NullInt64) = sql.NullInt64{Int64: 0, Valid: true}
 		*dest[9].(*sql.NullString) = sql.NullString{Valid: false}
-		*dest[10].(*string) = entities.StatusPending
+		*dest[10].(*entities.ArchiveStatus) = entities.StatusPending
 		*dest[11].(*sql.NullString) = sql.NullString{Valid: false}
 		*dest[12].(*sql.NullTime) = sql.NullTime{Valid: false}
 		*dest[13].(*time.Time) = createdAt
@@ -267,7 +336,7 @@ func TestScanArchiveMetadata_ArchivedAtPointerIsIndependent(t *testing.T) {
 		*dest[7].(*sql.NullString) = sql.NullString{Valid: false}
 		*dest[8].(*sql.NullInt64) = sql.NullInt64{Valid: false}
 		*dest[9].(*sql.NullString) = sql.NullString{Valid: false}
-		*dest[10].(*string) = entities.StatusComplete
+		*dest[10].(*entities.ArchiveStatus) = entities.StatusComplete
 		*dest[11].(*sql.NullString) = sql.NullString{Valid: false}
 		*dest[12].(*sql.NullTime) = sql.NullTime{Time: archivedAt, Valid: true}
 		*dest[13].(*time.Time) = createdAt
@@ -325,7 +394,7 @@ func TestScanArchiveMetadata_MandatoryFieldsPopulated(t *testing.T) {
 		*dest[7].(*sql.NullString) = sql.NullString{Valid: false}
 		*dest[8].(*sql.NullInt64) = sql.NullInt64{Valid: false}
 		*dest[9].(*sql.NullString) = sql.NullString{Valid: false}
-		*dest[10].(*string) = status
+		*dest[10].(*entities.ArchiveStatus) = status
 		*dest[11].(*sql.NullString) = sql.NullString{Valid: false}
 		*dest[12].(*sql.NullTime) = sql.NullTime{Valid: false}
 		*dest[13].(*time.Time) = createdAt

@@ -17,10 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libPostgres "github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres"
-	libRedis "github.com/LerianStudio/lib-uncommons/v2/uncommons/redis"
-
-	sharedhttp "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	sharedhttp "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 	governanceEntities "github.com/LerianStudio/matcher/internal/governance/domain/entities"
 	governanceRepositories "github.com/LerianStudio/matcher/internal/governance/domain/repositories"
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
@@ -28,6 +25,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/matching/ports"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 var (
@@ -50,7 +48,7 @@ func (s *stubInfraProvider) Close() {
 
 func (s *stubInfraProvider) GetPostgresConnection(
 	_ context.Context,
-) (*libPostgres.Client, error) {
+) (*sharedPorts.PostgresConnectionLease, error) {
 	if s.connErr != nil {
 		return nil, s.connErr
 	}
@@ -73,20 +71,20 @@ func (s *stubInfraProvider) GetPostgresConnection(
 	resolver := dbresolver.New(dbresolver.WithPrimaryDBs(db))
 	conn := testutil.NewClientWithResolver(resolver)
 
-	return conn, nil
+	return sharedPorts.NewPostgresConnectionLease(conn, nil), nil
 }
 
 func (s *stubInfraProvider) GetRedisConnection(
 	_ context.Context,
-) (*libRedis.Client, error) {
+) (*sharedPorts.RedisConnectionLease, error) {
 	return nil, nil
 }
 
-func (s *stubInfraProvider) BeginTx(_ context.Context) (*sql.Tx, error) {
+func (s *stubInfraProvider) BeginTx(_ context.Context) (*sharedPorts.TxLease, error) {
 	return nil, nil
 }
 
-func (s *stubInfraProvider) GetReplicaDB(_ context.Context) (*sql.DB, error) {
+func (s *stubInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.ReplicaDBLease, error) {
 	return nil, nil
 }
 
@@ -749,8 +747,25 @@ func (s *stubAdjustmentRepoWithError) Create(
 
 func (s *stubAdjustmentRepoWithError) CreateWithTx(
 	_ context.Context,
-	_ any,
+	_ *sql.Tx,
 	_ *matchingEntities.Adjustment,
+) (*matchingEntities.Adjustment, error) {
+	return nil, s.err
+}
+
+func (s *stubAdjustmentRepoWithError) CreateWithAuditLog(
+	_ context.Context,
+	_ *matchingEntities.Adjustment,
+	_ *shared.AuditLog,
+) (*matchingEntities.Adjustment, error) {
+	return nil, s.err
+}
+
+func (s *stubAdjustmentRepoWithError) CreateWithAuditLogWithTx(
+	_ context.Context,
+	_ *sql.Tx,
+	_ *matchingEntities.Adjustment,
+	_ *shared.AuditLog,
 ) (*matchingEntities.Adjustment, error) {
 	return nil, s.err
 }

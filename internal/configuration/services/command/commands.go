@@ -27,6 +27,9 @@ var (
 // ErrContextNameAlreadyExists indicates that a context with the given name already exists.
 var ErrContextNameAlreadyExists = errors.New("a reconciliation context with this name already exists")
 
+// ErrContextNotFound indicates that a reconciliation context was not found.
+var ErrContextNotFound = errors.New("reconciliation context not found")
+
 // UseCase provides command operations for configuration entities.
 type UseCase struct {
 	contextRepo     repositories.ContextRepository
@@ -35,6 +38,7 @@ type UseCase struct {
 	matchRuleRepo   repositories.MatchRuleRepository
 	auditPublisher  configPorts.AuditPublisher
 	feeScheduleRepo configPorts.FeeScheduleRepository
+	feeRuleRepo     repositories.FeeRuleRepository
 	scheduleRepo    configPorts.ScheduleRepository
 	infraProvider   sharedPorts.InfrastructureProvider
 }

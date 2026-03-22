@@ -12,7 +12,6 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
-	"github.com/LerianStudio/matcher/internal/configuration/services/command"
 )
 
 func TestCloneResultToResponse_Nil(t *testing.T) {
@@ -29,7 +28,7 @@ func TestCloneResultToResponse_WithData(t *testing.T) {
 
 	now := time.Now().UTC()
 
-	result := &command.CloneResult{
+	result := &entities.CloneResult{
 		Context: &entities.ReconciliationContext{
 			ID:              uuid.New(),
 			TenantID:        uuid.New(),
@@ -42,10 +41,10 @@ func TestCloneResultToResponse_WithData(t *testing.T) {
 			CreatedAt:       now,
 			UpdatedAt:       now,
 		},
-		SourcesCloned:      3,
-		RulesCloned:        5,
-		FieldMapsCloned:    2,
-		FeeSchedulesCloned: 1,
+		SourcesCloned:   3,
+		RulesCloned:     5,
+		FeeRulesCloned:  2,
+		FieldMapsCloned: 2,
 	}
 
 	resp := CloneResultToResponse(result)
@@ -53,6 +52,6 @@ func TestCloneResultToResponse_WithData(t *testing.T) {
 	assert.Equal(t, "Cloned Context", resp.Context.Name)
 	assert.Equal(t, 3, resp.SourcesCloned)
 	assert.Equal(t, 5, resp.RulesCloned)
+	assert.Equal(t, 2, resp.FeeRulesCloned)
 	assert.Equal(t, 2, resp.FieldMapsCloned)
-	assert.Equal(t, 1, resp.FeeSchedulesCloned)
 }

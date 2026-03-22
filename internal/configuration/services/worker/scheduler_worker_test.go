@@ -5,6 +5,7 @@ package worker
 import (
 	"context"
 	"database/sql"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -12,9 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libPostgres "github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres"
-	libRedis "github.com/LerianStudio/lib-uncommons/v2/uncommons/redis"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	configPorts "github.com/LerianStudio/matcher/internal/configuration/ports"
@@ -103,19 +102,19 @@ type stubInfraProvider struct{}
 
 var _ sharedPorts.InfrastructureProvider = (*stubInfraProvider)(nil)
 
-func (m *stubInfraProvider) GetPostgresConnection(_ context.Context) (*libPostgres.Client, error) {
+func (m *stubInfraProvider) GetPostgresConnection(_ context.Context) (*sharedPorts.PostgresConnectionLease, error) {
 	return nil, nil
 }
 
-func (m *stubInfraProvider) GetRedisConnection(_ context.Context) (*libRedis.Client, error) {
+func (m *stubInfraProvider) GetRedisConnection(_ context.Context) (*sharedPorts.RedisConnectionLease, error) {
 	return nil, nil
 }
 
-func (m *stubInfraProvider) BeginTx(_ context.Context) (*sql.Tx, error) {
+func (m *stubInfraProvider) BeginTx(_ context.Context) (*sharedPorts.TxLease, error) {
 	return nil, nil
 }
 
-func (m *stubInfraProvider) GetReplicaDB(_ context.Context) (*sql.DB, error) {
+func (m *stubInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.ReplicaDBLease, error) {
 	return nil, nil
 }
 
@@ -341,6 +340,56 @@ func TestSchedulerWorker_Done_ClosedAfterStop(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("Done channel should be closed after Stop")
 	}
+}
+
+func TestSchedulerWorker_StartStopStartStop_Success(t *testing.T) {
+	t.Parallel()
+
+	var dueCalls atomic.Int32
+
+	worker, err := NewSchedulerWorker(
+		&stubScheduleRepo{
+			findDueSchedulesFn: func(context.Context, time.Time) ([]*entities.ReconciliationSchedule, error) {
+				dueCalls.Add(1)
+				return nil, nil
+			},
+		},
+		&stubMatchTrigger{},
+		&stubInfraProvider{},
+		SchedulerWorkerConfig{Interval: 100 * time.Millisecond},
+		&stubLogger{},
+	)
+	require.NoError(t, err)
+
+	require.NoError(t, worker.Start(context.Background()))
+	require.Eventually(t, func() bool {
+		return dueCalls.Load() >= 1
+	}, 300*time.Millisecond, 10*time.Millisecond)
+	require.NoError(t, worker.Stop())
+	before := dueCalls.Load()
+	require.NoError(t, worker.Start(context.Background()))
+	require.Eventually(t, func() bool {
+		return dueCalls.Load() > before
+	}, 300*time.Millisecond, 10*time.Millisecond)
+	require.NoError(t, worker.Stop())
+}
+
+func TestSchedulerWorker_UpdateRuntimeConfig_WhileRunning_ReturnsError(t *testing.T) {
+	t.Parallel()
+
+	worker, err := NewSchedulerWorker(
+		&stubScheduleRepo{},
+		&stubMatchTrigger{},
+		&stubInfraProvider{},
+		SchedulerWorkerConfig{Interval: 100 * time.Millisecond},
+		&stubLogger{},
+	)
+	require.NoError(t, err)
+	require.NoError(t, worker.Start(context.Background()))
+
+	err = worker.UpdateRuntimeConfig(SchedulerWorkerConfig{Interval: time.Second})
+	require.ErrorIs(t, err, ErrRuntimeConfigUpdateWhileRunning)
+	require.NoError(t, worker.Stop())
 }
 
 // --- Sentinel errors ---

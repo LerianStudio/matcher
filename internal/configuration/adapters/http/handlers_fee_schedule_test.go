@@ -19,10 +19,11 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/http/dto"
+	"github.com/LerianStudio/matcher/internal/configuration/services/command"
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
@@ -60,7 +61,7 @@ func TestCreateFeeSchedule_Handler(t *testing.T) {
 	app := newFeeScheduleTestApp(ctx)
 	fixture := newHandlerFixture(t)
 
-	app.Post("/v1/config/fee-schedules", fixture.handler.CreateFeeSchedule)
+	app.Post("/v1/fee-schedules", fixture.handler.CreateFeeSchedule)
 
 	payload := dto.CreateFeeScheduleRequest{
 		Name:             "Test Schedule",
@@ -81,15 +82,13 @@ func TestCreateFeeSchedule_Handler(t *testing.T) {
 	body, err := json.Marshal(payload)
 	require.NoError(t, err)
 
-	req := httptest.NewRequest(http.MethodPost, "/v1/config/fee-schedules", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/v1/fee-schedules", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := app.Test(req)
 	require.NoError(t, err)
 
-	// Without a fee schedule repo wired in the fixture, the command service returns a nil repo error (internal)
-	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode,
-		"expected 500 when fee schedule repo is nil, got %d", resp.StatusCode)
+	assert.Equal(t, http.StatusCreated, resp.StatusCode)
 }
 
 func TestListFeeSchedules_Handler(t *testing.T) {
@@ -100,16 +99,14 @@ func TestListFeeSchedules_Handler(t *testing.T) {
 	app := newFeeScheduleTestApp(ctx)
 	fixture := newHandlerFixture(t)
 
-	app.Get("/v1/config/fee-schedules", fixture.handler.ListFeeSchedules)
+	app.Get("/v1/fee-schedules", fixture.handler.ListFeeSchedules)
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/config/fee-schedules", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/fee-schedules", nil)
 
 	resp, err := app.Test(req)
 	require.NoError(t, err)
 
-	// Without fee schedule repo, this returns an internal server error
-	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode,
-		"expected 500 when fee schedule repo is nil, got %d", resp.StatusCode)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
 func TestGetFeeSchedule_Handler_InvalidID(t *testing.T) {
@@ -120,9 +117,9 @@ func TestGetFeeSchedule_Handler_InvalidID(t *testing.T) {
 	app := newFeeScheduleTestApp(ctx)
 	fixture := newHandlerFixture(t)
 
-	app.Get("/v1/config/fee-schedules/:scheduleId", fixture.handler.GetFeeSchedule)
+	app.Get("/v1/fee-schedules/:scheduleId", fixture.handler.GetFeeSchedule)
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/config/fee-schedules/invalid-uuid", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/fee-schedules/invalid-uuid", nil)
 
 	resp, err := app.Test(req)
 	require.NoError(t, err)
@@ -137,13 +134,33 @@ func TestDeleteFeeSchedule_Handler_InvalidID(t *testing.T) {
 	app := newFeeScheduleTestApp(ctx)
 	fixture := newHandlerFixture(t)
 
-	app.Delete("/v1/config/fee-schedules/:scheduleId", fixture.handler.DeleteFeeSchedule)
+	app.Delete("/v1/fee-schedules/:scheduleId", fixture.handler.DeleteFeeSchedule)
 
-	req := httptest.NewRequest(http.MethodDelete, "/v1/config/fee-schedules/invalid-uuid", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/v1/fee-schedules/invalid-uuid", nil)
 
 	resp, err := app.Test(req)
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestDeleteFeeSchedule_Handler_InUseConflict(t *testing.T) {
+	t.Parallel()
+
+	tenantID := uuid.New()
+	ctx := newFeeScheduleTestContext(tenantID)
+	app := newFeeScheduleTestApp(ctx)
+	fixture := newHandlerFixture(t)
+	schedule := fixture.seedFeeSchedule(t, tenantID)
+	fixture.feeScheduleRepo.deleteErr = command.ErrFeeScheduleReferencedByFeeRule
+
+	app.Delete("/v1/config/fee-schedules/:scheduleId", fixture.handler.DeleteFeeSchedule)
+
+	req := httptest.NewRequest(http.MethodDelete, "/v1/config/fee-schedules/"+schedule.ID.String(), nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusConflict, resp.StatusCode)
 }
 
 func TestSimulateFeeSchedule_Handler_InvalidID(t *testing.T) {
@@ -154,7 +171,7 @@ func TestSimulateFeeSchedule_Handler_InvalidID(t *testing.T) {
 	app := newFeeScheduleTestApp(ctx)
 	fixture := newHandlerFixture(t)
 
-	app.Post("/v1/config/fee-schedules/:scheduleId/simulate", fixture.handler.SimulateFeeSchedule)
+	app.Post("/v1/fee-schedules/:scheduleId/simulate", fixture.handler.SimulateFeeSchedule)
 
 	payload := dto.SimulateFeeRequest{
 		GrossAmount: "100.00",
@@ -164,7 +181,7 @@ func TestSimulateFeeSchedule_Handler_InvalidID(t *testing.T) {
 	body, err := json.Marshal(payload)
 	require.NoError(t, err)
 
-	req := httptest.NewRequest(http.MethodPost, "/v1/config/fee-schedules/invalid-uuid/simulate", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/v1/fee-schedules/invalid-uuid/simulate", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := app.Test(req)

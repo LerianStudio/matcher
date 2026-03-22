@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libPostgres "github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres"
+	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
@@ -262,7 +262,7 @@ func TestWithTenantTxProvider_ProviderReturnsError(t *testing.T) {
 	)
 
 	require.Error(t, err)
-	require.ErrorContains(t, err, "failed to get postgres connection")
+	require.ErrorContains(t, err, "failed to begin transaction")
 	assert.Empty(t, result)
 }
 
@@ -282,7 +282,7 @@ func TestWithTenantTxProvider_ProviderReturnsNilConnection(t *testing.T) {
 	)
 
 	require.Error(t, err)
-	require.ErrorIs(t, err, ErrConnectionRequired)
+	require.ErrorContains(t, err, "failed to begin transaction")
 	assert.Empty(t, result)
 }
 
@@ -500,7 +500,7 @@ func TestBeginTenantTx_ProviderReturnsError(t *testing.T) {
 	tx, cancel, err := BeginTenantTx(context.Background(), provider)
 
 	require.Error(t, err)
-	require.ErrorContains(t, err, "failed to get postgres connection")
+	require.ErrorContains(t, err, "failed to begin transaction")
 	assert.Nil(t, tx)
 	assert.NotNil(t, cancel)
 	cancel()
@@ -516,7 +516,7 @@ func TestBeginTenantTx_ProviderReturnsNilConnection(t *testing.T) {
 	tx, cancel, err := BeginTenantTx(context.Background(), provider)
 
 	require.Error(t, err)
-	require.ErrorIs(t, err, ErrConnectionRequired)
+	require.ErrorContains(t, err, "failed to begin transaction")
 	assert.Nil(t, tx)
 	assert.NotNil(t, cancel)
 	cancel()
@@ -808,7 +808,7 @@ func TestBeginTenantTx_NonDefaultTenant_SchemaError(t *testing.T) {
 	tx, cancel, err := BeginTenantTx(ctx, provider)
 
 	require.Error(t, err)
-	require.ErrorContains(t, err, "failed to apply tenant schema")
+	require.ErrorContains(t, err, "apply tenant schema")
 	assert.Nil(t, tx)
 	assert.NotNil(t, cancel)
 	cancel()

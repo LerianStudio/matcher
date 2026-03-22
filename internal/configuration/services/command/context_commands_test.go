@@ -8,17 +8,22 @@ import (
 	"errors"
 	"testing"
 
+	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	repoMocks "github.com/LerianStudio/matcher/internal/configuration/domain/repositories/mocks"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	configPorts "github.com/LerianStudio/matcher/internal/configuration/ports"
 	portMocks "github.com/LerianStudio/matcher/internal/configuration/ports/mocks"
+	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
+	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 )
 
 // Sentinel errors for stub repositories.
@@ -36,6 +41,7 @@ var (
 	errFindBySourceNotImplemented      = errors.New("find by source not implemented")
 	errFindByPriorityNotImplemented    = errors.New("find by priority not implemented")
 	errReorderNotImplemented           = errors.New("reorder not implemented")
+	errFindFeeRulesNotImplemented      = errors.New("find fee rules not implemented")
 )
 
 type contextRepoStub struct {
@@ -267,6 +273,46 @@ type matchRuleRepoStub struct {
 	reorderFn                func(context.Context, uuid.UUID, []uuid.UUID) error
 }
 
+type feeRuleRepoStub struct {
+	findByContextIDFn func(context.Context, uuid.UUID) ([]*sharedfee.FeeRule, error)
+}
+
+func (stub *feeRuleRepoStub) Create(_ context.Context, _ *sharedfee.FeeRule) error {
+	return errCreateNotImplemented
+}
+
+func (stub *feeRuleRepoStub) CreateWithTx(_ context.Context, _ *sql.Tx, _ *sharedfee.FeeRule) error {
+	return errCreateNotImplemented
+}
+
+func (stub *feeRuleRepoStub) FindByID(_ context.Context, _ uuid.UUID) (*sharedfee.FeeRule, error) {
+	return nil, errFindByIDNotImplemented
+}
+
+func (stub *feeRuleRepoStub) FindByContextID(ctx context.Context, contextID uuid.UUID) ([]*sharedfee.FeeRule, error) {
+	if stub.findByContextIDFn != nil {
+		return stub.findByContextIDFn(ctx, contextID)
+	}
+
+	return nil, errFindFeeRulesNotImplemented
+}
+
+func (stub *feeRuleRepoStub) Update(_ context.Context, _ *sharedfee.FeeRule) error {
+	return errUpdateNotImplemented
+}
+
+func (stub *feeRuleRepoStub) UpdateWithTx(_ context.Context, _ *sql.Tx, _ *sharedfee.FeeRule) error {
+	return errUpdateNotImplemented
+}
+
+func (stub *feeRuleRepoStub) Delete(_ context.Context, _, _ uuid.UUID) error {
+	return errDeleteNotImplemented
+}
+
+func (stub *feeRuleRepoStub) DeleteWithTx(_ context.Context, _ *sql.Tx, _, _ uuid.UUID) error {
+	return errDeleteNotImplemented
+}
+
 func (stub *matchRuleRepoStub) Create(
 	ctx context.Context,
 	entity *entities.MatchRule,
@@ -357,6 +403,85 @@ func (stub *matchRuleRepoStub) ReorderPriorities(
 	}
 
 	return errReorderNotImplemented
+}
+
+type contextRepoTxStub struct {
+	*contextRepoStub
+	createWithTxFn func(context.Context, *sql.Tx, *entities.ReconciliationContext) (*entities.ReconciliationContext, error)
+}
+
+func (stub *contextRepoTxStub) CreateWithTx(
+	ctx context.Context,
+	tx *sql.Tx,
+	entity *entities.ReconciliationContext,
+) (*entities.ReconciliationContext, error) {
+	if stub.createWithTxFn != nil {
+		return stub.createWithTxFn(ctx, tx, entity)
+	}
+
+	return nil, errCreateNotImplemented
+}
+
+type sourceRepoTxStub struct {
+	*sourceRepoStub
+	createWithTxFn func(context.Context, *sql.Tx, *entities.ReconciliationSource) (*entities.ReconciliationSource, error)
+}
+
+func (stub *sourceRepoTxStub) CreateWithTx(
+	ctx context.Context,
+	tx *sql.Tx,
+	entity *entities.ReconciliationSource,
+) (*entities.ReconciliationSource, error) {
+	if stub.createWithTxFn != nil {
+		return stub.createWithTxFn(ctx, tx, entity)
+	}
+
+	return nil, errCreateNotImplemented
+}
+
+type fieldMapRepoTxStub struct {
+	*fieldMapRepoStub
+	createWithTxFn func(context.Context, *sql.Tx, *entities.FieldMap) (*entities.FieldMap, error)
+}
+
+func (stub *fieldMapRepoTxStub) CreateWithTx(
+	ctx context.Context,
+	tx *sql.Tx,
+	entity *entities.FieldMap,
+) (*entities.FieldMap, error) {
+	if stub.createWithTxFn != nil {
+		return stub.createWithTxFn(ctx, tx, entity)
+	}
+
+	return nil, errCreateNotImplemented
+}
+
+type matchRuleRepoTxStub struct {
+	*matchRuleRepoStub
+	createWithTxFn func(context.Context, *sql.Tx, *entities.MatchRule) (*entities.MatchRule, error)
+}
+
+func (stub *matchRuleRepoTxStub) CreateWithTx(
+	ctx context.Context,
+	tx *sql.Tx,
+	entity *entities.MatchRule,
+) (*entities.MatchRule, error) {
+	if stub.createWithTxFn != nil {
+		return stub.createWithTxFn(ctx, tx, entity)
+	}
+
+	return nil, errCreateNotImplemented
+}
+
+func setupInfraProviderWithSQLMock(t *testing.T) (*testutil.MockInfrastructureProvider, sqlmock.Sqlmock, *sql.DB) {
+	t.Helper()
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+
+	provider := testutil.NewMockProviderFromDB(t, db)
+
+	return provider, mock, db
 }
 
 func TestCreateContext_Command(t *testing.T) {
@@ -470,6 +595,763 @@ func TestCreateContext_Command(t *testing.T) {
 	}
 }
 
+func TestCreateContext_InlineCreateWithoutInfrastructureProvider(t *testing.T) {
+	t.Parallel()
+
+	createCalled := false
+	repo := &contextRepoStub{
+		findByNameFn: func(_ context.Context, _ string) (*entities.ReconciliationContext, error) {
+			return nil, nil
+		},
+		createFn: func(_ context.Context, entity *entities.ReconciliationContext) (*entities.ReconciliationContext, error) {
+			createCalled = true
+			return entity, nil
+		},
+	}
+
+	useCase, err := NewUseCase(repo, &sourceRepoStub{}, &fieldMapRepoStub{}, &matchRuleRepoStub{})
+	require.NoError(t, err)
+
+	_, err = useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
+		Name:     "Inline Context",
+		Type:     value_objects.ContextTypeOneToOne,
+		Interval: "0 0 * * *",
+		Sources: []entities.CreateContextSourceInput{
+			{Name: "Bank", Type: value_objects.SourceTypeBank, Side: sharedfee.MatchingSideLeft},
+		},
+	})
+	require.ErrorIs(t, err, ErrInlineCreateRequiresInfrastructure)
+	assert.False(t, createCalled, "contextRepo.Create must not run when inline create is invalid")
+}
+
+func TestCreateContext_WithInfrastructureProviderAndNoInlineResources_UsesRegularCreate(t *testing.T) {
+	t.Parallel()
+
+	provider := &testutil.MockInfrastructureProvider{}
+	createCalled := 0
+
+	repo := &contextRepoStub{
+		findByNameFn: func(_ context.Context, _ string) (*entities.ReconciliationContext, error) {
+			return nil, nil
+		},
+		createFn: func(_ context.Context, entity *entities.ReconciliationContext) (*entities.ReconciliationContext, error) {
+			createCalled++
+			return entity, nil
+		},
+	}
+
+	useCase, err := NewUseCase(
+		repo,
+		&sourceRepoStub{},
+		&fieldMapRepoStub{},
+		&matchRuleRepoStub{},
+		WithInfrastructureProvider(provider),
+	)
+	require.NoError(t, err)
+
+	created, err := useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
+		Name:     "Regular Create",
+		Type:     value_objects.ContextTypeOneToOne,
+		Interval: "0 0 * * *",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, created)
+	assert.Equal(t, 1, createCalled)
+}
+
+func TestCreateContext_TransactionalInlineCreate_Success(t *testing.T) {
+	t.Parallel()
+
+	provider, mock, db := setupInfraProviderWithSQLMock(t)
+	defer db.Close()
+
+	mock.ExpectBegin()
+	mock.ExpectCommit()
+
+	contextCreateWithTxCalls := 0
+	sourceCreateWithTxCalls := 0
+	fieldMapCreateWithTxCalls := 0
+	ruleCreateWithTxCalls := 0
+
+	ctxRepo := &contextRepoTxStub{
+		contextRepoStub: &contextRepoStub{
+			findByNameFn: func(_ context.Context, _ string) (*entities.ReconciliationContext, error) {
+				return nil, nil
+			},
+		},
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.ReconciliationContext) (*entities.ReconciliationContext, error) {
+			contextCreateWithTxCalls++
+			return entity, nil
+		},
+	}
+
+	srcRepo := &sourceRepoTxStub{
+		sourceRepoStub: &sourceRepoStub{},
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.ReconciliationSource) (*entities.ReconciliationSource, error) {
+			sourceCreateWithTxCalls++
+			return entity, nil
+		},
+	}
+
+	fmRepo := &fieldMapRepoTxStub{
+		fieldMapRepoStub: &fieldMapRepoStub{},
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.FieldMap) (*entities.FieldMap, error) {
+			fieldMapCreateWithTxCalls++
+			return entity, nil
+		},
+	}
+
+	ruleRepo := &matchRuleRepoTxStub{
+		matchRuleRepoStub: &matchRuleRepoStub{},
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.MatchRule) (*entities.MatchRule, error) {
+			ruleCreateWithTxCalls++
+			return entity, nil
+		},
+	}
+
+	useCase, err := NewUseCase(
+		ctxRepo,
+		srcRepo,
+		fmRepo,
+		ruleRepo,
+		WithInfrastructureProvider(provider),
+	)
+	require.NoError(t, err)
+
+	created, err := useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
+		Name:     "Transactional Context",
+		Type:     value_objects.ContextTypeOneToOne,
+		Interval: "0 0 * * *",
+		Sources: []entities.CreateContextSourceInput{
+			{
+				Name:    "Bank",
+				Type:    value_objects.SourceTypeBank,
+				Side:    sharedfee.MatchingSideLeft,
+				Mapping: map[string]any{"amount": "col_amount"},
+			},
+		},
+		Rules: []entities.CreateMatchRuleInput{
+			{
+				Priority: 1,
+				Type:     value_objects.RuleTypeExact,
+				Config:   map[string]any{"matchAmount": true},
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, created)
+	assert.Equal(t, "Transactional Context", created.Name)
+	assert.Equal(t, value_objects.ContextTypeOneToOne, created.Type)
+	assert.Equal(t, value_objects.ContextStatusDraft, created.Status)
+	assert.Equal(t, 1, contextCreateWithTxCalls)
+	assert.Equal(t, 1, sourceCreateWithTxCalls)
+	assert.Equal(t, 1, fieldMapCreateWithTxCalls)
+	assert.Equal(t, 1, ruleCreateWithTxCalls)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestCreateContext_TransactionalInlineCreate_EmptyMappingSkipsFieldMap(t *testing.T) {
+	t.Parallel()
+
+	provider, mock, db := setupInfraProviderWithSQLMock(t)
+	defer db.Close()
+
+	mock.ExpectBegin()
+	mock.ExpectCommit()
+
+	fieldMapCreateWithTxCalls := 0
+
+	ctxRepo := &contextRepoTxStub{
+		contextRepoStub: &contextRepoStub{
+			findByNameFn: func(_ context.Context, _ string) (*entities.ReconciliationContext, error) {
+				return nil, nil
+			},
+		},
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.ReconciliationContext) (*entities.ReconciliationContext, error) {
+			return entity, nil
+		},
+	}
+
+	srcRepo := &sourceRepoTxStub{
+		sourceRepoStub: &sourceRepoStub{},
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.ReconciliationSource) (*entities.ReconciliationSource, error) {
+			return entity, nil
+		},
+	}
+
+	fmRepo := &fieldMapRepoTxStub{
+		fieldMapRepoStub: &fieldMapRepoStub{},
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.FieldMap) (*entities.FieldMap, error) {
+			fieldMapCreateWithTxCalls++
+			return entity, nil
+		},
+	}
+
+	ruleRepo := &matchRuleRepoTxStub{
+		matchRuleRepoStub: &matchRuleRepoStub{},
+	}
+
+	useCase, err := NewUseCase(
+		ctxRepo,
+		srcRepo,
+		fmRepo,
+		ruleRepo,
+		WithInfrastructureProvider(provider),
+	)
+	require.NoError(t, err)
+
+	_, err = useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
+		Name:     "Empty Mapping Context",
+		Type:     value_objects.ContextTypeOneToOne,
+		Interval: "0 0 * * *",
+		Sources: []entities.CreateContextSourceInput{
+			{
+				Name:    "Bank",
+				Type:    value_objects.SourceTypeBank,
+				Side:    sharedfee.MatchingSideLeft,
+				Mapping: map[string]any{},
+			},
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 0, fieldMapCreateWithTxCalls)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestCreateContext_TransactionalInlineCreate_DuplicateRulePriority(t *testing.T) {
+	t.Parallel()
+
+	provider, _, db := setupInfraProviderWithSQLMock(t)
+	defer db.Close()
+
+	contextCreateWithTxCalls := 0
+
+	ctxRepo := &contextRepoTxStub{
+		contextRepoStub: &contextRepoStub{
+			findByNameFn: func(_ context.Context, _ string) (*entities.ReconciliationContext, error) {
+				return nil, nil
+			},
+		},
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.ReconciliationContext) (*entities.ReconciliationContext, error) {
+			contextCreateWithTxCalls++
+			return entity, nil
+		},
+	}
+
+	useCase, err := NewUseCase(
+		ctxRepo,
+		&sourceRepoTxStub{sourceRepoStub: &sourceRepoStub{}},
+		&fieldMapRepoTxStub{fieldMapRepoStub: &fieldMapRepoStub{}},
+		&matchRuleRepoTxStub{matchRuleRepoStub: &matchRuleRepoStub{}},
+		WithInfrastructureProvider(provider),
+	)
+	require.NoError(t, err)
+
+	_, err = useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
+		Name:     "Duplicate Priorities",
+		Type:     value_objects.ContextTypeOneToOne,
+		Interval: "0 0 * * *",
+		Rules: []entities.CreateMatchRuleInput{
+			{Priority: 1, Type: value_objects.RuleTypeExact, Config: map[string]any{"matchAmount": true}},
+			{Priority: 1, Type: value_objects.RuleTypeTolerance, Config: map[string]any{"absTolerance": 0.01}},
+		},
+	})
+	require.ErrorIs(t, err, entities.ErrRulePriorityConflict)
+	assert.Equal(t, 0, contextCreateWithTxCalls)
+}
+
+func TestCreateContext_TransactionalInlineCreate_SourceCreateError(t *testing.T) {
+	t.Parallel()
+
+	provider, mock, db := setupInfraProviderWithSQLMock(t)
+	defer db.Close()
+
+	mock.ExpectBegin()
+	mock.ExpectRollback()
+
+	ctxRepo := &contextRepoTxStub{
+		contextRepoStub: &contextRepoStub{
+			findByNameFn: func(_ context.Context, _ string) (*entities.ReconciliationContext, error) {
+				return nil, nil
+			},
+		},
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.ReconciliationContext) (*entities.ReconciliationContext, error) {
+			return entity, nil
+		},
+	}
+
+	srcRepo := &sourceRepoTxStub{
+		sourceRepoStub: &sourceRepoStub{},
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, _ *entities.ReconciliationSource) (*entities.ReconciliationSource, error) {
+			return nil, errCreateFailed
+		},
+	}
+
+	useCase, err := NewUseCase(
+		ctxRepo,
+		srcRepo,
+		&fieldMapRepoTxStub{fieldMapRepoStub: &fieldMapRepoStub{}},
+		&matchRuleRepoTxStub{matchRuleRepoStub: &matchRuleRepoStub{}},
+		WithInfrastructureProvider(provider),
+	)
+	require.NoError(t, err)
+
+	_, err = useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
+		Name:     "Source Create Failure",
+		Type:     value_objects.ContextTypeOneToOne,
+		Interval: "0 0 * * *",
+		Sources: []entities.CreateContextSourceInput{{
+			Name: "Bank",
+			Type: value_objects.SourceTypeBank,
+			Side: sharedfee.MatchingSideLeft,
+		}},
+	})
+	require.Error(t, err)
+	require.ErrorContains(t, err, "creating source")
+	require.ErrorIs(t, err, errCreateFailed)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestCreateContext_TransactionalInlineCreate_FieldMapCreateError(t *testing.T) {
+	t.Parallel()
+
+	provider, mock, db := setupInfraProviderWithSQLMock(t)
+	defer db.Close()
+
+	mock.ExpectBegin()
+	mock.ExpectRollback()
+
+	ctxRepo := &contextRepoTxStub{
+		contextRepoStub: &contextRepoStub{
+			findByNameFn: func(_ context.Context, _ string) (*entities.ReconciliationContext, error) {
+				return nil, nil
+			},
+		},
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.ReconciliationContext) (*entities.ReconciliationContext, error) {
+			return entity, nil
+		},
+	}
+
+	srcRepo := &sourceRepoTxStub{
+		sourceRepoStub: &sourceRepoStub{},
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.ReconciliationSource) (*entities.ReconciliationSource, error) {
+			return entity, nil
+		},
+	}
+
+	fmRepo := &fieldMapRepoTxStub{
+		fieldMapRepoStub: &fieldMapRepoStub{},
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, _ *entities.FieldMap) (*entities.FieldMap, error) {
+			return nil, errCreateFailed
+		},
+	}
+
+	useCase, err := NewUseCase(
+		ctxRepo,
+		srcRepo,
+		fmRepo,
+		&matchRuleRepoTxStub{matchRuleRepoStub: &matchRuleRepoStub{}},
+		WithInfrastructureProvider(provider),
+	)
+	require.NoError(t, err)
+
+	_, err = useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
+		Name:     "Field Map Create Failure",
+		Type:     value_objects.ContextTypeOneToOne,
+		Interval: "0 0 * * *",
+		Sources: []entities.CreateContextSourceInput{{
+			Name:    "Bank",
+			Type:    value_objects.SourceTypeBank,
+			Side:    sharedfee.MatchingSideLeft,
+			Mapping: map[string]any{"amount": "col_amount"},
+		}},
+	})
+	require.Error(t, err)
+	require.ErrorContains(t, err, "creating field map")
+	require.ErrorIs(t, err, errCreateFailed)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestCreateContext_TransactionalInlineCreate_RuleCreateError(t *testing.T) {
+	t.Parallel()
+
+	provider, mock, db := setupInfraProviderWithSQLMock(t)
+	defer db.Close()
+
+	mock.ExpectBegin()
+	mock.ExpectRollback()
+
+	ctxRepo := &contextRepoTxStub{
+		contextRepoStub: &contextRepoStub{
+			findByNameFn: func(_ context.Context, _ string) (*entities.ReconciliationContext, error) {
+				return nil, nil
+			},
+		},
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.ReconciliationContext) (*entities.ReconciliationContext, error) {
+			return entity, nil
+		},
+	}
+
+	ruleRepo := &matchRuleRepoTxStub{
+		matchRuleRepoStub: &matchRuleRepoStub{},
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, _ *entities.MatchRule) (*entities.MatchRule, error) {
+			return nil, errCreateFailed
+		},
+	}
+
+	useCase, err := NewUseCase(
+		ctxRepo,
+		&sourceRepoTxStub{sourceRepoStub: &sourceRepoStub{}},
+		&fieldMapRepoTxStub{fieldMapRepoStub: &fieldMapRepoStub{}},
+		ruleRepo,
+		WithInfrastructureProvider(provider),
+	)
+	require.NoError(t, err)
+
+	_, err = useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
+		Name:     "Rule Create Failure",
+		Type:     value_objects.ContextTypeOneToOne,
+		Interval: "0 0 * * *",
+		Rules: []entities.CreateMatchRuleInput{{
+			Priority: 1,
+			Type:     value_objects.RuleTypeExact,
+			Config:   map[string]any{"matchAmount": true},
+		}},
+	})
+	require.Error(t, err)
+	require.ErrorContains(t, err, "creating rule")
+	require.ErrorIs(t, err, errCreateFailed)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestCreateContext_TransactionalInlineCreate_CommitError(t *testing.T) {
+	t.Parallel()
+
+	provider, mock, db := setupInfraProviderWithSQLMock(t)
+	defer db.Close()
+
+	mock.ExpectBegin()
+	mock.ExpectCommit().WillReturnError(errCreateFailed)
+
+	ctxRepo := &contextRepoTxStub{
+		contextRepoStub: &contextRepoStub{
+			findByNameFn: func(_ context.Context, _ string) (*entities.ReconciliationContext, error) {
+				return nil, nil
+			},
+		},
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.ReconciliationContext) (*entities.ReconciliationContext, error) {
+			return entity, nil
+		},
+	}
+
+	ruleRepo := &matchRuleRepoTxStub{
+		matchRuleRepoStub: &matchRuleRepoStub{},
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.MatchRule) (*entities.MatchRule, error) {
+			return entity, nil
+		},
+	}
+
+	useCase, err := NewUseCase(
+		ctxRepo,
+		&sourceRepoTxStub{sourceRepoStub: &sourceRepoStub{}},
+		&fieldMapRepoTxStub{fieldMapRepoStub: &fieldMapRepoStub{}},
+		ruleRepo,
+		WithInfrastructureProvider(provider),
+	)
+	require.NoError(t, err)
+
+	_, err = useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
+		Name:     "Commit Failure",
+		Type:     value_objects.ContextTypeOneToOne,
+		Interval: "0 0 * * *",
+		Rules: []entities.CreateMatchRuleInput{{
+			Priority: 1,
+			Type:     value_objects.RuleTypeExact,
+			Config:   map[string]any{"matchAmount": true},
+		}},
+	})
+	require.Error(t, err)
+	require.ErrorContains(t, err, "commit create transaction")
+	require.ErrorIs(t, err, errCreateFailed)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestCreateContext_TransactionalInlineCreate_MixedMappings(t *testing.T) {
+	t.Parallel()
+
+	provider, mock, db := setupInfraProviderWithSQLMock(t)
+	defer db.Close()
+
+	mock.ExpectBegin()
+	mock.ExpectCommit()
+
+	sourceCreateWithTxCalls := 0
+	fieldMapCreateWithTxCalls := 0
+
+	ctxRepo := &contextRepoTxStub{
+		contextRepoStub: &contextRepoStub{
+			findByNameFn: func(_ context.Context, _ string) (*entities.ReconciliationContext, error) {
+				return nil, nil
+			},
+		},
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.ReconciliationContext) (*entities.ReconciliationContext, error) {
+			return entity, nil
+		},
+	}
+
+	srcRepo := &sourceRepoTxStub{
+		sourceRepoStub: &sourceRepoStub{},
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.ReconciliationSource) (*entities.ReconciliationSource, error) {
+			sourceCreateWithTxCalls++
+			return entity, nil
+		},
+	}
+
+	fmRepo := &fieldMapRepoTxStub{
+		fieldMapRepoStub: &fieldMapRepoStub{},
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.FieldMap) (*entities.FieldMap, error) {
+			fieldMapCreateWithTxCalls++
+			return entity, nil
+		},
+	}
+
+	useCase, err := NewUseCase(
+		ctxRepo,
+		srcRepo,
+		fmRepo,
+		&matchRuleRepoTxStub{matchRuleRepoStub: &matchRuleRepoStub{}},
+		WithInfrastructureProvider(provider),
+	)
+	require.NoError(t, err)
+
+	_, err = useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
+		Name:     "Mixed Mapping Context",
+		Type:     value_objects.ContextTypeOneToOne,
+		Interval: "0 0 * * *",
+		Sources: []entities.CreateContextSourceInput{
+			{Name: "Bank A", Type: value_objects.SourceTypeBank, Side: sharedfee.MatchingSideLeft, Mapping: map[string]any{"amount": "col_amount"}},
+			{Name: "Bank B", Type: value_objects.SourceTypeBank, Side: sharedfee.MatchingSideRight, Mapping: map[string]any{}},
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 2, sourceCreateWithTxCalls)
+	assert.Equal(t, 1, fieldMapCreateWithTxCalls)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestCreateContext_TransactionalInlineCreate_ContextRepoReturnsNilEntity(t *testing.T) {
+	t.Parallel()
+
+	provider, mock, db := setupInfraProviderWithSQLMock(t)
+	defer db.Close()
+
+	mock.ExpectBegin()
+	mock.ExpectRollback()
+
+	ctxRepo := &contextRepoTxStub{
+		contextRepoStub: &contextRepoStub{
+			findByNameFn: func(_ context.Context, _ string) (*entities.ReconciliationContext, error) {
+				return nil, nil
+			},
+		},
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, _ *entities.ReconciliationContext) (*entities.ReconciliationContext, error) {
+			return nil, nil
+		},
+	}
+
+	useCase, err := NewUseCase(
+		ctxRepo,
+		&sourceRepoTxStub{sourceRepoStub: &sourceRepoStub{}},
+		&fieldMapRepoTxStub{fieldMapRepoStub: &fieldMapRepoStub{}},
+		&matchRuleRepoTxStub{matchRuleRepoStub: &matchRuleRepoStub{}},
+		WithInfrastructureProvider(provider),
+	)
+	require.NoError(t, err)
+
+	_, err = useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
+		Name:     "Nil Context",
+		Type:     value_objects.ContextTypeOneToOne,
+		Interval: "0 0 * * *",
+		Sources:  []entities.CreateContextSourceInput{{Name: "Bank", Type: value_objects.SourceTypeBank, Side: sharedfee.MatchingSideLeft}},
+	})
+	require.ErrorIs(t, err, ErrCreateContextReturnedNil)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestCreateContext_TransactionalInlineCreate_SourceRepoReturnsNilEntity(t *testing.T) {
+	t.Parallel()
+
+	provider, mock, db := setupInfraProviderWithSQLMock(t)
+	defer db.Close()
+
+	mock.ExpectBegin()
+	mock.ExpectRollback()
+
+	ctxRepo := &contextRepoTxStub{
+		contextRepoStub: &contextRepoStub{
+			findByNameFn: func(_ context.Context, _ string) (*entities.ReconciliationContext, error) {
+				return nil, nil
+			},
+		},
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.ReconciliationContext) (*entities.ReconciliationContext, error) {
+			return entity, nil
+		},
+	}
+
+	srcRepo := &sourceRepoTxStub{
+		sourceRepoStub: &sourceRepoStub{},
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, _ *entities.ReconciliationSource) (*entities.ReconciliationSource, error) {
+			return nil, nil
+		},
+	}
+
+	useCase, err := NewUseCase(
+		ctxRepo,
+		srcRepo,
+		&fieldMapRepoTxStub{fieldMapRepoStub: &fieldMapRepoStub{}},
+		&matchRuleRepoTxStub{matchRuleRepoStub: &matchRuleRepoStub{}},
+		WithInfrastructureProvider(provider),
+	)
+	require.NoError(t, err)
+
+	_, err = useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
+		Name:     "Nil Source",
+		Type:     value_objects.ContextTypeOneToOne,
+		Interval: "0 0 * * *",
+		Sources:  []entities.CreateContextSourceInput{{Name: "Bank", Type: value_objects.SourceTypeBank, Side: sharedfee.MatchingSideLeft}},
+	})
+	require.ErrorIs(t, err, ErrCreateSourceReturnedNil)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestCreateContext_TransactionalInlineCreate_MissingTxSupport(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+
+	mockCtxRepo := repoMocks.NewMockContextRepository(ctrl)
+	mockSrcRepo := repoMocks.NewMockSourceRepository(ctrl)
+	mockFmRepo := repoMocks.NewMockFieldMapRepository(ctrl)
+	mockMrRepo := repoMocks.NewMockMatchRuleRepository(ctrl)
+
+	mockCtxRepo.EXPECT().FindByName(gomock.Any(), "Tx Unsupported").Return(nil, nil)
+
+	provider := &testutil.MockInfrastructureProvider{}
+	useCase, err := NewUseCase(
+		mockCtxRepo,
+		mockSrcRepo,
+		mockFmRepo,
+		mockMrRepo,
+		WithInfrastructureProvider(provider),
+	)
+	require.NoError(t, err)
+
+	_, err = useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
+		Name:     "Tx Unsupported",
+		Type:     value_objects.ContextTypeOneToOne,
+		Interval: "0 0 * * *",
+		Sources:  []entities.CreateContextSourceInput{{Name: "Bank", Type: value_objects.SourceTypeBank, Side: sharedfee.MatchingSideLeft}},
+	})
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrCreateContextTxSupportRequired)
+}
+
+func TestCreateContext_DatabaseUniqueViolationMapsToContextNameAlreadyExists(t *testing.T) {
+	t.Parallel()
+
+	repo := &contextRepoStub{
+		findByNameFn: func(_ context.Context, _ string) (*entities.ReconciliationContext, error) {
+			return nil, nil
+		},
+		createFn: func(_ context.Context, _ *entities.ReconciliationContext) (*entities.ReconciliationContext, error) {
+			return nil, &pgconn.PgError{Code: postgresUniqueViolationCode, ConstraintName: "uq_context_tenant_name"}
+		},
+	}
+
+	useCase, err := NewUseCase(repo, &sourceRepoStub{}, &fieldMapRepoStub{}, &matchRuleRepoStub{})
+	require.NoError(t, err)
+
+	_, err = useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
+		Name:     "Race Context",
+		Type:     value_objects.ContextTypeOneToOne,
+		Interval: "0 0 * * *",
+	})
+	require.ErrorIs(t, err, ErrContextNameAlreadyExists)
+}
+
+func TestCreateContext_WithAuditPublisher_IncludesInlineCounts(t *testing.T) {
+	t.Parallel()
+
+	provider, mock, db := setupInfraProviderWithSQLMock(t)
+	defer db.Close()
+
+	mock.ExpectBegin()
+	mock.ExpectCommit()
+
+	ctrl := gomock.NewController(t)
+	mockAuditPub := portMocks.NewMockAuditPublisher(ctrl)
+
+	ctxRepo := &contextRepoTxStub{
+		contextRepoStub: &contextRepoStub{
+			findByNameFn: func(_ context.Context, _ string) (*entities.ReconciliationContext, error) {
+				return nil, nil
+			},
+		},
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.ReconciliationContext) (*entities.ReconciliationContext, error) {
+			return entity, nil
+		},
+	}
+
+	srcRepo := &sourceRepoTxStub{
+		sourceRepoStub: &sourceRepoStub{},
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.ReconciliationSource) (*entities.ReconciliationSource, error) {
+			return entity, nil
+		},
+	}
+
+	fmRepo := &fieldMapRepoTxStub{fieldMapRepoStub: &fieldMapRepoStub{}}
+	ruleRepo := &matchRuleRepoTxStub{
+		matchRuleRepoStub: &matchRuleRepoStub{},
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.MatchRule) (*entities.MatchRule, error) {
+			return entity, nil
+		},
+	}
+
+	mockAuditPub.EXPECT().
+		Publish(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, event configPorts.AuditEvent) error {
+			require.Equal(t, "context", event.EntityType)
+			require.Equal(t, "create", event.Action)
+			assert.Equal(t, 1, event.Changes["sources_count"])
+			assert.Equal(t, 1, event.Changes["rules_count"])
+			return nil
+		})
+
+	useCase, err := NewUseCase(
+		ctxRepo,
+		srcRepo,
+		fmRepo,
+		ruleRepo,
+		WithInfrastructureProvider(provider),
+		WithAuditPublisher(mockAuditPub),
+	)
+	require.NoError(t, err)
+
+	_, err = useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
+		Name:     "Audited Context",
+		Type:     value_objects.ContextTypeOneToOne,
+		Interval: "0 0 * * *",
+		Sources:  []entities.CreateContextSourceInput{{Name: "Bank", Type: value_objects.SourceTypeBank, Side: sharedfee.MatchingSideLeft}},
+		Rules: []entities.CreateMatchRuleInput{{
+			Priority: 1,
+			Type:     value_objects.RuleTypeExact,
+			Config:   map[string]any{"matchAmount": true},
+		}},
+	})
+	require.NoError(t, err)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestUpdateContext_CommandValidation(t *testing.T) {
 	t.Parallel()
 
@@ -578,7 +1460,7 @@ func TestCreateContext_NilContextRepo(t *testing.T) {
 	require.ErrorIs(t, err, ErrNilContextRepository)
 }
 
-func TestCreateContext_WithAuditPublisher(t *testing.T) {
+func TestCreateContext_WithAuditPublisher_SimpleCreate(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
@@ -1361,4 +2243,461 @@ func TestUpdateContext_FindByNameTransientError(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorContains(t, err, "checking context name uniqueness")
 	require.ErrorIs(t, err, transientErr)
+}
+
+func TestDeleteContext_BlockedBySchedules(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+
+	mockCtxRepo := repoMocks.NewMockContextRepository(ctrl)
+	mockSrcRepo := repoMocks.NewMockSourceRepository(ctrl)
+	mockFmRepo := repoMocks.NewMockFieldMapRepository(ctrl)
+	mockMrRepo := repoMocks.NewMockMatchRuleRepository(ctrl)
+
+	tenantID := uuid.New()
+	existing, err := entities.NewReconciliationContext(
+		context.Background(),
+		tenantID,
+		entities.CreateReconciliationContextInput{
+			Name:     "Has Schedules",
+			Type:     value_objects.ContextTypeOneToOne,
+			Interval: "0 0 * * *",
+		},
+	)
+	require.NoError(t, err)
+
+	mockCtxRepo.EXPECT().
+		FindByID(gomock.Any(), existing.ID).
+		Return(existing, nil)
+
+	// No sources or rules — those checks pass.
+	mockSrcRepo.EXPECT().
+		FindByContextID(gomock.Any(), existing.ID, "", 1).
+		Return(nil, libHTTP.CursorPagination{}, nil)
+
+	mockMrRepo.EXPECT().
+		FindByContextID(gomock.Any(), existing.ID, "", 1).
+		Return(nil, libHTTP.CursorPagination{}, nil)
+
+	scheduleRepo := &mockScheduleRepo{
+		findByContextIDFn: func(_ context.Context, _ uuid.UUID) ([]*entities.ReconciliationSchedule, error) {
+			return []*entities.ReconciliationSchedule{
+				{ID: uuid.New(), ContextID: existing.ID},
+			}, nil
+		},
+	}
+
+	uc, err := NewUseCase(
+		mockCtxRepo,
+		mockSrcRepo,
+		mockFmRepo,
+		mockMrRepo,
+		WithScheduleRepository(scheduleRepo),
+	)
+	require.NoError(t, err)
+
+	err = uc.DeleteContext(context.Background(), existing.ID)
+	require.ErrorIs(t, err, ErrContextHasChildEntities)
+}
+
+func TestDeleteContext_BlockedByFeeRules(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+
+	mockCtxRepo := repoMocks.NewMockContextRepository(ctrl)
+	mockSrcRepo := repoMocks.NewMockSourceRepository(ctrl)
+	mockFmRepo := repoMocks.NewMockFieldMapRepository(ctrl)
+	mockMrRepo := repoMocks.NewMockMatchRuleRepository(ctrl)
+
+	tenantID := uuid.New()
+	existing, err := entities.NewReconciliationContext(
+		context.Background(),
+		tenantID,
+		entities.CreateReconciliationContextInput{
+			Name:     "Has Fee Rules",
+			Type:     value_objects.ContextTypeOneToOne,
+			Interval: "0 0 * * *",
+		},
+	)
+	require.NoError(t, err)
+
+	mockCtxRepo.EXPECT().
+		FindByID(gomock.Any(), existing.ID).
+		Return(existing, nil)
+
+	mockSrcRepo.EXPECT().
+		FindByContextID(gomock.Any(), existing.ID, "", 1).
+		Return(nil, libHTTP.CursorPagination{}, nil)
+
+	mockMrRepo.EXPECT().
+		FindByContextID(gomock.Any(), existing.ID, "", 1).
+		Return(nil, libHTTP.CursorPagination{}, nil)
+
+	feeRuleRepo := &feeRuleRepoStub{
+		findByContextIDFn: func(_ context.Context, _ uuid.UUID) ([]*sharedfee.FeeRule, error) {
+			return []*sharedfee.FeeRule{{ID: uuid.New(), ContextID: existing.ID}}, nil
+		},
+	}
+
+	uc, err := NewUseCase(
+		mockCtxRepo,
+		mockSrcRepo,
+		mockFmRepo,
+		mockMrRepo,
+		WithFeeRuleRepository(feeRuleRepo),
+	)
+	require.NoError(t, err)
+
+	err = uc.DeleteContext(context.Background(), existing.ID)
+	require.ErrorIs(t, err, ErrContextHasChildEntities)
+}
+
+func TestDeleteContext_FeeRuleCheckError(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+
+	mockCtxRepo := repoMocks.NewMockContextRepository(ctrl)
+	mockSrcRepo := repoMocks.NewMockSourceRepository(ctrl)
+	mockFmRepo := repoMocks.NewMockFieldMapRepository(ctrl)
+	mockMrRepo := repoMocks.NewMockMatchRuleRepository(ctrl)
+
+	tenantID := uuid.New()
+	existing, err := entities.NewReconciliationContext(
+		context.Background(),
+		tenantID,
+		entities.CreateReconciliationContextInput{
+			Name:     "Fee Rule Error",
+			Type:     value_objects.ContextTypeOneToOne,
+			Interval: "0 0 * * *",
+		},
+	)
+	require.NoError(t, err)
+
+	mockCtxRepo.EXPECT().
+		FindByID(gomock.Any(), existing.ID).
+		Return(existing, nil)
+
+	mockSrcRepo.EXPECT().
+		FindByContextID(gomock.Any(), existing.ID, "", 1).
+		Return(nil, libHTTP.CursorPagination{}, nil)
+
+	mockMrRepo.EXPECT().
+		FindByContextID(gomock.Any(), existing.ID, "", 1).
+		Return(nil, libHTTP.CursorPagination{}, nil)
+
+	checkErr := errors.New("fee rule repo unavailable")
+	feeRuleRepo := &feeRuleRepoStub{
+		findByContextIDFn: func(_ context.Context, _ uuid.UUID) ([]*sharedfee.FeeRule, error) {
+			return nil, checkErr
+		},
+	}
+
+	uc, err := NewUseCase(
+		mockCtxRepo,
+		mockSrcRepo,
+		mockFmRepo,
+		mockMrRepo,
+		WithFeeRuleRepository(feeRuleRepo),
+	)
+	require.NoError(t, err)
+
+	err = uc.DeleteContext(context.Background(), existing.ID)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "checking context fee rules")
+	require.ErrorIs(t, err, checkErr)
+}
+
+func TestDeleteContext_ScheduleCheckError(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+
+	mockCtxRepo := repoMocks.NewMockContextRepository(ctrl)
+	mockSrcRepo := repoMocks.NewMockSourceRepository(ctrl)
+	mockFmRepo := repoMocks.NewMockFieldMapRepository(ctrl)
+	mockMrRepo := repoMocks.NewMockMatchRuleRepository(ctrl)
+
+	tenantID := uuid.New()
+	existing, err := entities.NewReconciliationContext(
+		context.Background(),
+		tenantID,
+		entities.CreateReconciliationContextInput{
+			Name:     "Schedule Error",
+			Type:     value_objects.ContextTypeOneToOne,
+			Interval: "0 0 * * *",
+		},
+	)
+	require.NoError(t, err)
+
+	mockCtxRepo.EXPECT().
+		FindByID(gomock.Any(), existing.ID).
+		Return(existing, nil)
+
+	// No sources or rules — those checks pass.
+	mockSrcRepo.EXPECT().
+		FindByContextID(gomock.Any(), existing.ID, "", 1).
+		Return(nil, libHTTP.CursorPagination{}, nil)
+
+	mockMrRepo.EXPECT().
+		FindByContextID(gomock.Any(), existing.ID, "", 1).
+		Return(nil, libHTTP.CursorPagination{}, nil)
+
+	scheduleCheckErr := errors.New("schedule repo unavailable")
+	scheduleRepo := &mockScheduleRepo{
+		findByContextIDFn: func(_ context.Context, _ uuid.UUID) ([]*entities.ReconciliationSchedule, error) {
+			return nil, scheduleCheckErr
+		},
+	}
+
+	uc, err := NewUseCase(
+		mockCtxRepo,
+		mockSrcRepo,
+		mockFmRepo,
+		mockMrRepo,
+		WithScheduleRepository(scheduleRepo),
+	)
+	require.NoError(t, err)
+
+	err = uc.DeleteContext(context.Background(), existing.ID)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "checking context schedules")
+	require.ErrorIs(t, err, scheduleCheckErr)
+}
+
+func TestCreateContext_TransactionalInlineCreate_AllSourcesWithMappings(t *testing.T) {
+	t.Parallel()
+
+	provider, mock, db := setupInfraProviderWithSQLMock(t)
+	defer db.Close()
+
+	mock.ExpectBegin()
+	mock.ExpectCommit()
+
+	sourceCreateWithTxCalls := 0
+	fieldMapCreateWithTxCalls := 0
+
+	ctxRepo := &contextRepoTxStub{
+		contextRepoStub: &contextRepoStub{
+			findByNameFn: func(_ context.Context, _ string) (*entities.ReconciliationContext, error) {
+				return nil, nil
+			},
+		},
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.ReconciliationContext) (*entities.ReconciliationContext, error) {
+			return entity, nil
+		},
+	}
+
+	srcRepo := &sourceRepoTxStub{
+		sourceRepoStub: &sourceRepoStub{},
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.ReconciliationSource) (*entities.ReconciliationSource, error) {
+			sourceCreateWithTxCalls++
+			return entity, nil
+		},
+	}
+
+	fmRepo := &fieldMapRepoTxStub{
+		fieldMapRepoStub: &fieldMapRepoStub{},
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.FieldMap) (*entities.FieldMap, error) {
+			fieldMapCreateWithTxCalls++
+			return entity, nil
+		},
+	}
+
+	useCase, err := NewUseCase(
+		ctxRepo,
+		srcRepo,
+		fmRepo,
+		&matchRuleRepoTxStub{matchRuleRepoStub: &matchRuleRepoStub{}},
+		WithInfrastructureProvider(provider),
+	)
+	require.NoError(t, err)
+
+	_, err = useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
+		Name:     "All Mapped Context",
+		Type:     value_objects.ContextTypeOneToOne,
+		Interval: "0 0 * * *",
+		Sources: []entities.CreateContextSourceInput{
+			{Name: "Bank A", Type: value_objects.SourceTypeBank, Side: sharedfee.MatchingSideLeft, Mapping: map[string]any{"amount": "col_amount"}},
+			{Name: "Bank B", Type: value_objects.SourceTypeBank, Side: sharedfee.MatchingSideRight, Mapping: map[string]any{"date": "col_date"}},
+			{Name: "Bank C", Type: value_objects.SourceTypeBank, Side: sharedfee.MatchingSideRight, Mapping: map[string]any{"ref": "col_ref"}},
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 3, sourceCreateWithTxCalls)
+	assert.Equal(t, 3, fieldMapCreateWithTxCalls)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestCreateContext_TransactionalInlineCreate_BeginTxError(t *testing.T) {
+	t.Parallel()
+
+	provider, mock, db := setupInfraProviderWithSQLMock(t)
+	defer db.Close()
+
+	beginErr := errors.New("database unavailable")
+	mock.ExpectBegin().WillReturnError(beginErr)
+
+	ctxRepo := &contextRepoTxStub{
+		contextRepoStub: &contextRepoStub{
+			findByNameFn: func(_ context.Context, _ string) (*entities.ReconciliationContext, error) {
+				return nil, nil
+			},
+		},
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.ReconciliationContext) (*entities.ReconciliationContext, error) {
+			return entity, nil
+		},
+	}
+
+	useCase, err := NewUseCase(
+		ctxRepo,
+		&sourceRepoTxStub{sourceRepoStub: &sourceRepoStub{}},
+		&fieldMapRepoTxStub{fieldMapRepoStub: &fieldMapRepoStub{}},
+		&matchRuleRepoTxStub{matchRuleRepoStub: &matchRuleRepoStub{}},
+		WithInfrastructureProvider(provider),
+	)
+	require.NoError(t, err)
+
+	_, err = useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
+		Name:     "Begin Tx Error Context",
+		Type:     value_objects.ContextTypeOneToOne,
+		Interval: "0 0 * * *",
+		Sources: []entities.CreateContextSourceInput{{
+			Name: "Bank",
+			Type: value_objects.SourceTypeBank,
+			Side: sharedfee.MatchingSideLeft,
+		}},
+	})
+	require.Error(t, err)
+	require.ErrorContains(t, err, "begin create transaction")
+	require.ErrorIs(t, err, beginErr)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestCreateContext_TransactionalInlineCreate_NilMappingSkipsFieldMap(t *testing.T) {
+	t.Parallel()
+
+	provider, mock, db := setupInfraProviderWithSQLMock(t)
+	defer db.Close()
+
+	mock.ExpectBegin()
+	mock.ExpectCommit()
+
+	fieldMapCreateWithTxCalls := 0
+
+	ctxRepo := &contextRepoTxStub{
+		contextRepoStub: &contextRepoStub{
+			findByNameFn: func(_ context.Context, _ string) (*entities.ReconciliationContext, error) {
+				return nil, nil
+			},
+		},
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.ReconciliationContext) (*entities.ReconciliationContext, error) {
+			return entity, nil
+		},
+	}
+
+	srcRepo := &sourceRepoTxStub{
+		sourceRepoStub: &sourceRepoStub{},
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.ReconciliationSource) (*entities.ReconciliationSource, error) {
+			return entity, nil
+		},
+	}
+
+	fmRepo := &fieldMapRepoTxStub{
+		fieldMapRepoStub: &fieldMapRepoStub{},
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.FieldMap) (*entities.FieldMap, error) {
+			fieldMapCreateWithTxCalls++
+			return entity, nil
+		},
+	}
+
+	ruleRepo := &matchRuleRepoTxStub{
+		matchRuleRepoStub: &matchRuleRepoStub{},
+	}
+
+	useCase, err := NewUseCase(
+		ctxRepo,
+		srcRepo,
+		fmRepo,
+		ruleRepo,
+		WithInfrastructureProvider(provider),
+	)
+	require.NoError(t, err)
+
+	_, err = useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
+		Name:     "Nil Mapping Context",
+		Type:     value_objects.ContextTypeOneToOne,
+		Interval: "0 0 * * *",
+		Sources: []entities.CreateContextSourceInput{
+			{
+				Name:    "Bank",
+				Type:    value_objects.SourceTypeBank,
+				Side:    sharedfee.MatchingSideLeft,
+				Mapping: nil, // explicitly nil — distinct from map[string]any{}
+			},
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 0, fieldMapCreateWithTxCalls, "field map creator must NOT be called when Mapping is nil")
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestCreateContext_TransactionalInlineCreate_SecondSourceCreateError(t *testing.T) {
+	t.Parallel()
+
+	provider, mock, db := setupInfraProviderWithSQLMock(t)
+	defer db.Close()
+
+	mock.ExpectBegin()
+	mock.ExpectRollback()
+
+	ctxRepo := &contextRepoTxStub{
+		contextRepoStub: &contextRepoStub{
+			findByNameFn: func(_ context.Context, _ string) (*entities.ReconciliationContext, error) {
+				return nil, nil
+			},
+		},
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.ReconciliationContext) (*entities.ReconciliationContext, error) {
+			return entity, nil
+		},
+	}
+
+	sourceCallCount := 0
+	srcRepo := &sourceRepoTxStub{
+		sourceRepoStub: &sourceRepoStub{},
+		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.ReconciliationSource) (*entities.ReconciliationSource, error) {
+			sourceCallCount++
+			if sourceCallCount == 2 {
+				return nil, errCreateFailed
+			}
+
+			return entity, nil
+		},
+	}
+
+	useCase, err := NewUseCase(
+		ctxRepo,
+		srcRepo,
+		&fieldMapRepoTxStub{fieldMapRepoStub: &fieldMapRepoStub{}},
+		&matchRuleRepoTxStub{matchRuleRepoStub: &matchRuleRepoStub{}},
+		WithInfrastructureProvider(provider),
+	)
+	require.NoError(t, err)
+
+	_, err = useCase.CreateContext(context.Background(), uuid.New(), entities.CreateReconciliationContextInput{
+		Name:     "Two Sources Second Fails",
+		Type:     value_objects.ContextTypeOneToOne,
+		Interval: "0 0 * * *",
+		Sources: []entities.CreateContextSourceInput{
+			{Name: "Bank A", Type: value_objects.SourceTypeBank, Side: sharedfee.MatchingSideLeft},
+			{Name: "Bank B", Type: value_objects.SourceTypeBank, Side: sharedfee.MatchingSideRight},
+		},
+	})
+	require.Error(t, err)
+	require.ErrorContains(t, err, "creating source")
+	require.ErrorIs(t, err, errCreateFailed)
+	assert.Equal(t, 2, sourceCallCount, "source creator must be called twice: once for success, once for failure")
+	require.NoError(t, mock.ExpectationsWereMet())
 }

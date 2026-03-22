@@ -31,6 +31,9 @@ boilerplate/
 .env.*
 !.env.example
 
+# Config files
+config/matcher.yaml
+
 # Local tooling and runtime
 .ring/
 console/
@@ -50,3 +53,5 @@ docs/pre-dev/
 # Test data
 internal/bootstrap/testdata/fuzz/
 **/testdata/fuzz/
+.dmux/
+.tmp_*.log

@@ -10,10 +10,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
@@ -327,7 +327,7 @@ func (repo *Repository) listMatchedQuery(
 
 	findAll = findAll.
 		OrderBy("t.id " + effectiveOrder).
-		Limit(uint64(args.limit + 1)) //nolint:gosec //#nosec G115 -- limit is validated positive by buildPaginationArgs
+		Limit(safeLimitForPage(args.limit) + 1)
 
 	query, queryArgs, err := findAll.ToSql()
 	if err != nil {
@@ -417,7 +417,7 @@ func (repo *Repository) listUnmatchedQuery(
 
 	findAll = findAll.
 		OrderBy("t.id " + effectiveOrder).
-		Limit(uint64(args.limit + 1)) //nolint:gosec //#nosec G115 -- limit is validated positive by buildPaginationArgs
+		Limit(safeLimitForPage(args.limit) + 1)
 
 	query, queryArgs, err := findAll.ToSql()
 	if err != nil {

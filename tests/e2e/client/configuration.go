@@ -24,7 +24,7 @@ func (c *ConfigurationClient) CreateContext(
 	req CreateContextRequest,
 ) (*Context, error) {
 	var resp Context
-	err := c.client.DoJSON(ctx, http.MethodPost, "/v1/config/contexts", req, &resp)
+	err := c.client.DoJSON(ctx, http.MethodPost, "/v1/contexts", req, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("create context: %w", err)
 	}
@@ -34,7 +34,7 @@ func (c *ConfigurationClient) CreateContext(
 // GetContext retrieves a context by ID.
 func (c *ConfigurationClient) GetContext(ctx context.Context, contextID string) (*Context, error) {
 	var resp Context
-	err := c.client.DoJSON(ctx, http.MethodGet, "/v1/config/contexts/"+contextID, nil, &resp)
+	err := c.client.DoJSON(ctx, http.MethodGet, "/v1/contexts/"+contextID, nil, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("get context: %w", err)
 	}
@@ -46,7 +46,7 @@ func (c *ConfigurationClient) ListContexts(ctx context.Context) ([]Context, erro
 	var resp struct {
 		Items []Context `json:"items"`
 	}
-	err := c.client.DoJSON(ctx, http.MethodGet, "/v1/config/contexts", nil, &resp)
+	err := c.client.DoJSON(ctx, http.MethodGet, "/v1/contexts", nil, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("list contexts: %w", err)
 	}
@@ -60,7 +60,7 @@ func (c *ConfigurationClient) UpdateContext(
 	req UpdateContextRequest,
 ) (*Context, error) {
 	var resp Context
-	err := c.client.DoJSON(ctx, http.MethodPatch, "/v1/config/contexts/"+contextID, req, &resp)
+	err := c.client.DoJSON(ctx, http.MethodPatch, "/v1/contexts/"+contextID, req, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("update context: %w", err)
 	}
@@ -69,7 +69,7 @@ func (c *ConfigurationClient) UpdateContext(
 
 // DeleteContext deletes a context.
 func (c *ConfigurationClient) DeleteContext(ctx context.Context, contextID string) error {
-	err := c.client.DoJSON(ctx, http.MethodDelete, "/v1/config/contexts/"+contextID, nil, nil)
+	err := c.client.DoJSON(ctx, http.MethodDelete, "/v1/contexts/"+contextID, nil, nil)
 	if err != nil {
 		return fmt.Errorf("delete context: %w", err)
 	}
@@ -83,7 +83,7 @@ func (c *ConfigurationClient) CreateSource(
 	req CreateSourceRequest,
 ) (*Source, error) {
 	var resp Source
-	path := fmt.Sprintf("/v1/config/contexts/%s/sources", contextID)
+	path := fmt.Sprintf("/v1/contexts/%s/sources", contextID)
 	err := c.client.DoJSON(ctx, http.MethodPost, path, req, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("create source: %w", err)
@@ -97,7 +97,7 @@ func (c *ConfigurationClient) GetSource(
 	contextID, sourceID string,
 ) (*Source, error) {
 	var resp Source
-	path := fmt.Sprintf("/v1/config/contexts/%s/sources/%s", contextID, sourceID)
+	path := fmt.Sprintf("/v1/contexts/%s/sources/%s", contextID, sourceID)
 	err := c.client.DoJSON(ctx, http.MethodGet, path, nil, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("get source: %w", err)
@@ -110,7 +110,7 @@ func (c *ConfigurationClient) ListSources(ctx context.Context, contextID string)
 	var resp struct {
 		Items []Source `json:"items"`
 	}
-	path := fmt.Sprintf("/v1/config/contexts/%s/sources", contextID)
+	path := fmt.Sprintf("/v1/contexts/%s/sources", contextID)
 	err := c.client.DoJSON(ctx, http.MethodGet, path, nil, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("list sources: %w", err)
@@ -125,7 +125,7 @@ func (c *ConfigurationClient) UpdateSource(
 	req UpdateSourceRequest,
 ) (*Source, error) {
 	var resp Source
-	path := fmt.Sprintf("/v1/config/contexts/%s/sources/%s", contextID, sourceID)
+	path := fmt.Sprintf("/v1/contexts/%s/sources/%s", contextID, sourceID)
 	err := c.client.DoJSON(ctx, http.MethodPatch, path, req, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("update source: %w", err)
@@ -135,7 +135,7 @@ func (c *ConfigurationClient) UpdateSource(
 
 // DeleteSource deletes a source.
 func (c *ConfigurationClient) DeleteSource(ctx context.Context, contextID, sourceID string) error {
-	path := fmt.Sprintf("/v1/config/contexts/%s/sources/%s", contextID, sourceID)
+	path := fmt.Sprintf("/v1/contexts/%s/sources/%s", contextID, sourceID)
 	err := c.client.DoJSON(ctx, http.MethodDelete, path, nil, nil)
 	if err != nil {
 		return fmt.Errorf("delete source: %w", err)
@@ -150,7 +150,7 @@ func (c *ConfigurationClient) CreateFieldMap(
 	req CreateFieldMapRequest,
 ) (*FieldMap, error) {
 	var resp FieldMap
-	path := fmt.Sprintf("/v1/config/contexts/%s/sources/%s/field-maps", contextID, sourceID)
+	path := fmt.Sprintf("/v1/contexts/%s/sources/%s/field-maps", contextID, sourceID)
 	err := c.client.DoJSON(ctx, http.MethodPost, path, req, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("create field map: %w", err)
@@ -164,7 +164,7 @@ func (c *ConfigurationClient) GetFieldMapBySource(
 	contextID, sourceID string,
 ) (*FieldMap, error) {
 	var resp FieldMap
-	path := fmt.Sprintf("/v1/config/contexts/%s/sources/%s/field-maps", contextID, sourceID)
+	path := fmt.Sprintf("/v1/contexts/%s/sources/%s/field-maps", contextID, sourceID)
 	err := c.client.DoJSON(ctx, http.MethodGet, path, nil, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("get field map: %w", err)
@@ -179,7 +179,7 @@ func (c *ConfigurationClient) UpdateFieldMap(
 	req UpdateFieldMapRequest,
 ) (*FieldMap, error) {
 	var resp FieldMap
-	path := fmt.Sprintf("/v1/config/field-maps/%s", fieldMapID)
+	path := fmt.Sprintf("/v1/field-maps/%s", fieldMapID)
 	err := c.client.DoJSON(ctx, http.MethodPatch, path, req, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("update field map: %w", err)
@@ -189,11 +189,78 @@ func (c *ConfigurationClient) UpdateFieldMap(
 
 // DeleteFieldMap deletes a field map.
 func (c *ConfigurationClient) DeleteFieldMap(ctx context.Context, fieldMapID string) error {
-	path := fmt.Sprintf("/v1/config/field-maps/%s", fieldMapID)
+	path := fmt.Sprintf("/v1/field-maps/%s", fieldMapID)
 	err := c.client.DoJSON(ctx, http.MethodDelete, path, nil, nil)
 	if err != nil {
 		return fmt.Errorf("delete field map: %w", err)
 	}
+	return nil
+}
+
+// CreateFeeRule creates a new fee rule within a context.
+func (c *ConfigurationClient) CreateFeeRule(
+	ctx context.Context,
+	contextID string,
+	req CreateFeeRuleRequest,
+) (*FeeRuleResponse, error) {
+	var resp FeeRuleResponse
+	path := fmt.Sprintf("/v1/config/contexts/%s/fee-rules", contextID)
+	err := c.client.DoJSON(ctx, http.MethodPost, path, req, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("create fee rule: %w", err)
+	}
+
+	return &resp, nil
+}
+
+// GetFeeRule retrieves a fee rule by ID.
+func (c *ConfigurationClient) GetFeeRule(ctx context.Context, feeRuleID string) (*FeeRuleResponse, error) {
+	var resp FeeRuleResponse
+	path := fmt.Sprintf("/v1/config/fee-rules/%s", feeRuleID)
+	err := c.client.DoJSON(ctx, http.MethodGet, path, nil, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("get fee rule: %w", err)
+	}
+
+	return &resp, nil
+}
+
+// ListFeeRules retrieves all fee rules for a context.
+func (c *ConfigurationClient) ListFeeRules(ctx context.Context, contextID string) ([]FeeRuleResponse, error) {
+	var resp []FeeRuleResponse
+	path := fmt.Sprintf("/v1/config/contexts/%s/fee-rules", contextID)
+	err := c.client.DoJSON(ctx, http.MethodGet, path, nil, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("list fee rules: %w", err)
+	}
+
+	return resp, nil
+}
+
+// UpdateFeeRule updates an existing fee rule.
+func (c *ConfigurationClient) UpdateFeeRule(
+	ctx context.Context,
+	feeRuleID string,
+	req UpdateFeeRuleRequest,
+) (*FeeRuleResponse, error) {
+	var resp FeeRuleResponse
+	path := fmt.Sprintf("/v1/config/fee-rules/%s", feeRuleID)
+	err := c.client.DoJSON(ctx, http.MethodPatch, path, req, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("update fee rule: %w", err)
+	}
+
+	return &resp, nil
+}
+
+// DeleteFeeRule deletes a fee rule.
+func (c *ConfigurationClient) DeleteFeeRule(ctx context.Context, feeRuleID string) error {
+	path := fmt.Sprintf("/v1/config/fee-rules/%s", feeRuleID)
+	err := c.client.DoJSON(ctx, http.MethodDelete, path, nil, nil)
+	if err != nil {
+		return fmt.Errorf("delete fee rule: %w", err)
+	}
+
 	return nil
 }
 
@@ -204,7 +271,7 @@ func (c *ConfigurationClient) CreateMatchRule(
 	req CreateMatchRuleRequest,
 ) (*MatchRule, error) {
 	var resp MatchRule
-	path := fmt.Sprintf("/v1/config/contexts/%s/rules", contextID)
+	path := fmt.Sprintf("/v1/contexts/%s/rules", contextID)
 	err := c.client.DoJSON(ctx, http.MethodPost, path, req, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("create match rule: %w", err)
@@ -218,7 +285,7 @@ func (c *ConfigurationClient) GetMatchRule(
 	contextID, ruleID string,
 ) (*MatchRule, error) {
 	var resp MatchRule
-	path := fmt.Sprintf("/v1/config/contexts/%s/rules/%s", contextID, ruleID)
+	path := fmt.Sprintf("/v1/contexts/%s/rules/%s", contextID, ruleID)
 	err := c.client.DoJSON(ctx, http.MethodGet, path, nil, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("get match rule: %w", err)
@@ -234,7 +301,7 @@ func (c *ConfigurationClient) ListMatchRules(
 	var resp struct {
 		Items []MatchRule `json:"items"`
 	}
-	path := fmt.Sprintf("/v1/config/contexts/%s/rules", contextID)
+	path := fmt.Sprintf("/v1/contexts/%s/rules", contextID)
 	err := c.client.DoJSON(ctx, http.MethodGet, path, nil, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("list match rules: %w", err)
@@ -249,7 +316,7 @@ func (c *ConfigurationClient) UpdateMatchRule(
 	req UpdateMatchRuleRequest,
 ) (*MatchRule, error) {
 	var resp MatchRule
-	path := fmt.Sprintf("/v1/config/contexts/%s/rules/%s", contextID, ruleID)
+	path := fmt.Sprintf("/v1/contexts/%s/rules/%s", contextID, ruleID)
 	err := c.client.DoJSON(ctx, http.MethodPatch, path, req, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("update match rule: %w", err)
@@ -259,7 +326,7 @@ func (c *ConfigurationClient) UpdateMatchRule(
 
 // DeleteMatchRule deletes a match rule.
 func (c *ConfigurationClient) DeleteMatchRule(ctx context.Context, contextID, ruleID string) error {
-	path := fmt.Sprintf("/v1/config/contexts/%s/rules/%s", contextID, ruleID)
+	path := fmt.Sprintf("/v1/contexts/%s/rules/%s", contextID, ruleID)
 	err := c.client.DoJSON(ctx, http.MethodDelete, path, nil, nil)
 	if err != nil {
 		return fmt.Errorf("delete match rule: %w", err)
@@ -273,7 +340,7 @@ func (c *ConfigurationClient) ReorderMatchRules(
 	contextID string,
 	req ReorderMatchRulesRequest,
 ) error {
-	path := fmt.Sprintf("/v1/config/contexts/%s/rules/reorder", contextID)
+	path := fmt.Sprintf("/v1/contexts/%s/rules/reorder", contextID)
 	err := c.client.DoJSON(ctx, http.MethodPost, path, req, nil)
 	if err != nil {
 		return fmt.Errorf("reorder match rules: %w", err)
@@ -288,7 +355,7 @@ func (c *ConfigurationClient) CloneContext(
 	req CloneContextRequest,
 ) (*CloneContextResponse, error) {
 	var resp CloneContextResponse
-	path := fmt.Sprintf("/v1/config/contexts/%s/clone", contextID)
+	path := fmt.Sprintf("/v1/contexts/%s/clone", contextID)
 	err := c.client.DoJSON(ctx, http.MethodPost, path, req, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("clone context: %w", err)
@@ -303,7 +370,7 @@ func (c *ConfigurationClient) CreateSchedule(
 	req CreateScheduleRequest,
 ) (*ScheduleResponse, error) {
 	var resp ScheduleResponse
-	path := fmt.Sprintf("/v1/config/contexts/%s/schedules", contextID)
+	path := fmt.Sprintf("/v1/contexts/%s/schedules", contextID)
 	err := c.client.DoJSON(ctx, http.MethodPost, path, req, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("create schedule: %w", err)
@@ -317,7 +384,7 @@ func (c *ConfigurationClient) GetSchedule(
 	contextID, scheduleID string,
 ) (*ScheduleResponse, error) {
 	var resp ScheduleResponse
-	path := fmt.Sprintf("/v1/config/contexts/%s/schedules/%s", contextID, scheduleID)
+	path := fmt.Sprintf("/v1/contexts/%s/schedules/%s", contextID, scheduleID)
 	err := c.client.DoJSON(ctx, http.MethodGet, path, nil, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("get schedule: %w", err)
@@ -331,7 +398,7 @@ func (c *ConfigurationClient) ListSchedules(
 	contextID string,
 ) ([]ScheduleResponse, error) {
 	var resp []ScheduleResponse
-	path := fmt.Sprintf("/v1/config/contexts/%s/schedules", contextID)
+	path := fmt.Sprintf("/v1/contexts/%s/schedules", contextID)
 	err := c.client.DoJSON(ctx, http.MethodGet, path, nil, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("list schedules: %w", err)
@@ -346,7 +413,7 @@ func (c *ConfigurationClient) UpdateSchedule(
 	req UpdateScheduleRequest,
 ) (*ScheduleResponse, error) {
 	var resp ScheduleResponse
-	path := fmt.Sprintf("/v1/config/contexts/%s/schedules/%s", contextID, scheduleID)
+	path := fmt.Sprintf("/v1/contexts/%s/schedules/%s", contextID, scheduleID)
 	err := c.client.DoJSON(ctx, http.MethodPatch, path, req, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("update schedule: %w", err)
@@ -359,7 +426,7 @@ func (c *ConfigurationClient) DeleteSchedule(
 	ctx context.Context,
 	contextID, scheduleID string,
 ) error {
-	path := fmt.Sprintf("/v1/config/contexts/%s/schedules/%s", contextID, scheduleID)
+	path := fmt.Sprintf("/v1/contexts/%s/schedules/%s", contextID, scheduleID)
 	err := c.client.DoJSON(ctx, http.MethodDelete, path, nil, nil)
 	if err != nil {
 		return fmt.Errorf("delete schedule: %w", err)

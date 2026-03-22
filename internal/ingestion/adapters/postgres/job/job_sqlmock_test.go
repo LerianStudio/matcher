@@ -15,10 +15,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	pkgHTTP "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	pkgHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/value_objects"
+	sharedpg "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	sharedtestutil "github.com/LerianStudio/matcher/internal/shared/testutil"
 )
@@ -485,6 +486,80 @@ func TestJobSortValue(t *testing.T) {
 		result := jobSortValue(job, "unknown")
 		assert.Equal(t, jobID.String(), result)
 	})
+
+	t.Run("nil job returns empty string", func(t *testing.T) {
+		t.Parallel()
+
+		assert.Empty(t, jobSortValue(nil, columnCreatedAt))
+	})
+}
+
+func TestCalculateJobSortPagination_PropagatesCalculatorError(t *testing.T) {
+	t.Parallel()
+
+	_, err := calculateJobSortPagination(
+		true,
+		true,
+		true,
+		columnCreatedAt,
+		time.Now().UTC().Format(time.RFC3339Nano),
+		uuid.New().String(),
+		time.Now().UTC().Add(time.Minute).Format(time.RFC3339Nano),
+		uuid.New().String(),
+		func(
+			_ bool,
+			_ bool,
+			_ bool,
+			_ string,
+			_ string,
+			_ string,
+			_ string,
+			_ string,
+		) (string, string, error) {
+			return "", "", sql.ErrTxDone
+		},
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, sql.ErrTxDone)
+	assert.Contains(t, err.Error(), "calculate sort cursor pagination")
+}
+
+func TestCalculateJobSortPagination_NilCalculator(t *testing.T) {
+	t.Parallel()
+
+	_, err := calculateJobSortPagination(
+		true,
+		true,
+		true,
+		columnCreatedAt,
+		time.Now().UTC().Format(time.RFC3339Nano),
+		uuid.New().String(),
+		time.Now().UTC().Add(time.Minute).Format(time.RFC3339Nano),
+		uuid.New().String(),
+		nil,
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, sharedpg.ErrSortCursorCalculatorRequired)
+	assert.Contains(t, err.Error(), "calculate sort cursor pagination")
+}
+
+func TestCalculateJobPagination_NilBoundaryRecord(t *testing.T) {
+	t.Parallel()
+
+	_, err := calculateJobPagination(
+		[]*entities.IngestionJob{nil},
+		true,
+		true,
+		false,
+		pkgHTTP.CursorDirectionNext,
+		columnCreatedAt,
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, sharedpg.ErrSortCursorBoundaryRecordNil)
+	assert.Contains(t, err.Error(), "validate job pagination boundaries")
 }
 
 func TestSentinelErrors_HaveMessages(t *testing.T) {
@@ -1106,6 +1181,32 @@ func TestRepository_FindByContextID_DefaultLimit(t *testing.T) {
 
 	result, _, err := repo.FindByContextID(ctx, contextID, repositories.CursorFilter{
 		Limit:  0,
+		SortBy: "id",
+	})
+
+	require.NoError(t, err)
+	require.Empty(t, result)
+}
+
+func TestRepository_FindByContextID_LimitCappedAtMaximum(t *testing.T) {
+	t.Parallel()
+
+	repo, mock, finish := setupMock(t)
+	defer finish()
+
+	ctx := context.Background()
+	contextID := uuid.New()
+
+	rows := sqlmock.NewRows([]string{
+		"id", "context_id", "source_id", "status", "started_at", "completed_at", "metadata", "created_at", "updated_at",
+	})
+
+	mock.ExpectBegin()
+	mock.ExpectQuery("(?i)limit 201").WillReturnRows(rows)
+	mock.ExpectCommit()
+
+	result, _, err := repo.FindByContextID(ctx, contextID, repositories.CursorFilter{
+		Limit:  999,
 		SortBy: "id",
 	})
 

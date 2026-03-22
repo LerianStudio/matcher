@@ -18,12 +18,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	sharedhttp "github.com/LerianStudio/lib-uncommons/v2/uncommons/net/http"
+	sharedhttp "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 	"github.com/LerianStudio/matcher/internal/auth"
-	archivePostgres "github.com/LerianStudio/matcher/internal/governance/adapters/postgres/archive_metadata"
+	governanceDTO "github.com/LerianStudio/matcher/internal/governance/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
+	governanceErrors "github.com/LerianStudio/matcher/internal/governance/domain/errors"
 	repoMocks "github.com/LerianStudio/matcher/internal/governance/domain/repositories/mocks"
-	storageMocks "github.com/LerianStudio/matcher/internal/reporting/ports/mocks"
+	"github.com/LerianStudio/matcher/internal/shared/constants"
+	storageMocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
 )
 
 var (
@@ -95,7 +97,11 @@ func TestListArchives(t *testing.T) {
 
 		repo := repoMocks.NewMockArchiveMetadataRepository(ctrl)
 		repo.EXPECT().
-			ListByTenant(gomock.Any(), tenantID, entities.StatusComplete, (*time.Time)(nil), (*time.Time)(nil), sharedhttp.DefaultLimit+1, sharedhttp.DefaultOffset).
+			ListByTenant(
+				gomock.Any(), tenantID, entities.StatusComplete,
+				(*time.Time)(nil), (*time.Time)(nil),
+				constants.DefaultPaginationLimit+1, 0,
+			).
 			Return(archives, nil)
 
 		storage := storageMocks.NewMockObjectStorageClient(ctrl)
@@ -113,7 +119,7 @@ func TestListArchives(t *testing.T) {
 		var response ListArchivesResponse
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
 		require.Len(t, response.Items, 2)
-		require.Equal(t, sharedhttp.DefaultLimit, response.Limit)
+		require.Equal(t, constants.DefaultPaginationLimit, response.Limit)
 		assert.Equal(t, archives[0].ID.String(), response.Items[0].ID)
 		assert.Equal(t, "COMPLETE", response.Items[0].Status)
 		assert.False(t, response.HasMore)
@@ -127,7 +133,11 @@ func TestListArchives(t *testing.T) {
 
 		repo := repoMocks.NewMockArchiveMetadataRepository(ctrl)
 		repo.EXPECT().
-			ListByTenant(gomock.Any(), tenantID, entities.StatusComplete, gomock.Not(gomock.Nil()), gomock.Not(gomock.Nil()), sharedhttp.DefaultLimit+1, sharedhttp.DefaultOffset).
+			ListByTenant(
+				gomock.Any(), tenantID, entities.StatusComplete,
+				gomock.Not(gomock.Nil()), gomock.Not(gomock.Nil()),
+				constants.DefaultPaginationLimit+1, 0,
+			).
 			Return([]*entities.ArchiveMetadata{}, nil)
 
 		storage := storageMocks.NewMockObjectStorageClient(ctrl)
@@ -156,7 +166,11 @@ func TestListArchives(t *testing.T) {
 
 		repo := repoMocks.NewMockArchiveMetadataRepository(ctrl)
 		repo.EXPECT().
-			ListByTenant(gomock.Any(), tenantID, entities.StatusComplete, gomock.Not(gomock.Nil()), gomock.Not(gomock.Nil()), sharedhttp.DefaultLimit+1, sharedhttp.DefaultOffset).
+			ListByTenant(
+				gomock.Any(), tenantID, entities.StatusComplete,
+				gomock.Not(gomock.Nil()), gomock.Not(gomock.Nil()),
+				constants.DefaultPaginationLimit+1, 0,
+			).
 			Return([]*entities.ArchiveMetadata{}, nil)
 
 		storage := storageMocks.NewMockObjectStorageClient(ctrl)
@@ -220,6 +234,63 @@ func TestListArchives(t *testing.T) {
 		require.Contains(t, errResp.Message, "to")
 	})
 
+	t.Run("negative offset clamps to default offset", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		tenantID := uuid.New()
+
+		repo := repoMocks.NewMockArchiveMetadataRepository(ctrl)
+		repo.EXPECT().
+			ListByTenant(
+				gomock.Any(), tenantID, entities.StatusComplete,
+				(*time.Time)(nil), (*time.Time)(nil),
+				constants.DefaultPaginationLimit+1, 0,
+			).
+			Return([]*entities.ArchiveMetadata{}, nil)
+
+		storage := storageMocks.NewMockObjectStorageClient(ctrl)
+
+		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry)
+		require.NoError(t, err)
+
+		ctx := createTestContextWithTenant(tenantID)
+		resp := testListArchivesRequest(ctx, t, handler, "offset=-1")
+
+		defer resp.Body.Close()
+
+		require.Equal(t, fiber.StatusOK, resp.StatusCode)
+
+		var response ListArchivesResponse
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
+		require.Equal(t, constants.DefaultPaginationLimit, response.Limit)
+	})
+
+	t.Run("malformed offset returns bad request", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		tenantID := uuid.New()
+
+		repo := repoMocks.NewMockArchiveMetadataRepository(ctrl)
+		storage := storageMocks.NewMockObjectStorageClient(ctrl)
+
+		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry)
+		require.NoError(t, err)
+
+		ctx := createTestContextWithTenant(tenantID)
+		resp := testListArchivesRequest(ctx, t, handler, "offset=abc")
+
+		defer resp.Body.Close()
+
+		require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+
+		var errResp sharedhttp.ErrorResponse
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
+		require.Equal(t, fiber.StatusBadRequest, errResp.Code)
+		require.Contains(t, errResp.Message, "invalid pagination")
+	})
+
 	t.Run("limit capped at max", func(t *testing.T) {
 		t.Parallel()
 
@@ -228,7 +299,11 @@ func TestListArchives(t *testing.T) {
 
 		repo := repoMocks.NewMockArchiveMetadataRepository(ctrl)
 		repo.EXPECT().
-			ListByTenant(gomock.Any(), tenantID, entities.StatusComplete, (*time.Time)(nil), (*time.Time)(nil), sharedhttp.MaxLimit+1, sharedhttp.DefaultOffset).
+			ListByTenant(
+				gomock.Any(), tenantID, entities.StatusComplete,
+				(*time.Time)(nil), (*time.Time)(nil),
+				constants.MaximumPaginationLimit+1, 0,
+			).
 			Return([]*entities.ArchiveMetadata{}, nil)
 
 		storage := storageMocks.NewMockObjectStorageClient(ctrl)
@@ -245,7 +320,7 @@ func TestListArchives(t *testing.T) {
 
 		var response ListArchivesResponse
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
-		require.Equal(t, sharedhttp.MaxLimit, response.Limit)
+		require.Equal(t, constants.MaximumPaginationLimit, response.Limit)
 	})
 
 	t.Run("internal error", func(t *testing.T) {
@@ -256,7 +331,11 @@ func TestListArchives(t *testing.T) {
 
 		repo := repoMocks.NewMockArchiveMetadataRepository(ctrl)
 		repo.EXPECT().
-			ListByTenant(gomock.Any(), tenantID, entities.StatusComplete, (*time.Time)(nil), (*time.Time)(nil), sharedhttp.DefaultLimit+1, sharedhttp.DefaultOffset).
+			ListByTenant(
+				gomock.Any(), tenantID, entities.StatusComplete,
+				(*time.Time)(nil), (*time.Time)(nil),
+				constants.DefaultPaginationLimit+1, 0,
+			).
 			Return(nil, errTestRepoFailed)
 
 		storage := storageMocks.NewMockObjectStorageClient(ctrl)
@@ -280,7 +359,11 @@ func TestListArchives(t *testing.T) {
 
 		repo := repoMocks.NewMockArchiveMetadataRepository(ctrl)
 		repo.EXPECT().
-			ListByTenant(gomock.Any(), tenantID, entities.StatusComplete, (*time.Time)(nil), (*time.Time)(nil), sharedhttp.DefaultLimit+1, sharedhttp.DefaultOffset).
+			ListByTenant(
+				gomock.Any(), tenantID, entities.StatusComplete,
+				(*time.Time)(nil), (*time.Time)(nil),
+				constants.DefaultPaginationLimit+1, 0,
+			).
 			Return([]*entities.ArchiveMetadata{}, nil)
 
 		storage := storageMocks.NewMockObjectStorageClient(ctrl)
@@ -313,7 +396,7 @@ func TestListArchives(t *testing.T) {
 
 		repo := repoMocks.NewMockArchiveMetadataRepository(ctrl)
 		repo.EXPECT().
-			ListByTenant(gomock.Any(), tenantID, entities.StatusComplete, (*time.Time)(nil), (*time.Time)(nil), 6, sharedhttp.DefaultOffset).
+			ListByTenant(gomock.Any(), tenantID, entities.StatusComplete, (*time.Time)(nil), (*time.Time)(nil), 6, 0).
 			Return(archives, nil)
 
 		storage := storageMocks.NewMockObjectStorageClient(ctrl)
@@ -346,7 +429,7 @@ func TestListArchives(t *testing.T) {
 
 		repo := repoMocks.NewMockArchiveMetadataRepository(ctrl)
 		repo.EXPECT().
-			ListByTenant(gomock.Any(), tenantID, entities.StatusComplete, (*time.Time)(nil), (*time.Time)(nil), 6, sharedhttp.DefaultOffset).
+			ListByTenant(gomock.Any(), tenantID, entities.StatusComplete, (*time.Time)(nil), (*time.Time)(nil), 6, 0).
 			Return(archives, nil)
 
 		storage := storageMocks.NewMockObjectStorageClient(ctrl)
@@ -406,6 +489,41 @@ func TestDownloadArchive(t *testing.T) {
 		assert.NotEmpty(t, response.ExpiresAt)
 	})
 
+	t.Run("uses runtime presign expiry override when configured", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		tenantID := uuid.New()
+		archiveID := uuid.New()
+		now := time.Now().UTC()
+		runtimeExpiry := 45 * time.Minute
+
+		archive := createTestArchiveMetadata(tenantID, archiveID, now)
+
+		repo := repoMocks.NewMockArchiveMetadataRepository(ctrl)
+		repo.EXPECT().GetByID(gomock.Any(), archiveID).Return(archive, nil)
+
+		storage := storageMocks.NewMockObjectStorageClient(ctrl)
+		storage.EXPECT().
+			GeneratePresignedURL(gomock.Any(), archive.ArchiveKey, runtimeExpiry).
+			Return(testPresignedURL, nil)
+
+		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry)
+		require.NoError(t, err)
+		handler.SetRuntimePresignExpiryGetter(func() time.Duration { return runtimeExpiry })
+
+		ctx := createTestContextWithTenant(tenantID)
+		resp := testDownloadArchiveRequest(ctx, t, handler, archiveID.String())
+		defer resp.Body.Close()
+
+		require.Equal(t, fiber.StatusOK, resp.StatusCode)
+
+		var response ArchiveDownloadResponse
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
+		assert.Equal(t, testPresignedURL, response.DownloadURL)
+		assert.Equal(t, archive.Checksum, response.Checksum)
+	})
+
 	t.Run("missing archive id", func(t *testing.T) {
 		t.Parallel()
 
@@ -459,7 +577,7 @@ func TestDownloadArchive(t *testing.T) {
 		archiveID := uuid.New()
 
 		repo := repoMocks.NewMockArchiveMetadataRepository(ctrl)
-		repo.EXPECT().GetByID(gomock.Any(), archiveID).Return(nil, archivePostgres.ErrMetadataNotFound)
+		repo.EXPECT().GetByID(gomock.Any(), archiveID).Return(nil, governanceErrors.ErrMetadataNotFound)
 
 		storage := storageMocks.NewMockObjectStorageClient(ctrl)
 
@@ -583,7 +701,7 @@ func TestArchiveMetadataToResponse(t *testing.T) {
 	t.Run("nil input returns empty response", func(t *testing.T) {
 		t.Parallel()
 
-		resp := archiveMetadataToResponse(nil)
+		resp := governanceDTO.ArchiveMetadataToResponse(nil)
 		assert.Empty(t, resp.ID)
 		assert.Empty(t, resp.PartitionName)
 	})
@@ -605,7 +723,7 @@ func TestArchiveMetadataToResponse(t *testing.T) {
 			ArchivedAt:          &now,
 		}
 
-		resp := archiveMetadataToResponse(archive)
+		resp := governanceDTO.ArchiveMetadataToResponse(archive)
 		assert.Equal(t, "11111111-1111-1111-1111-111111111111", resp.ID)
 		assert.Equal(t, "audit_logs_2024_q1", resp.PartitionName)
 		assert.Equal(t, "2024-01-01T00:00:00Z", resp.DateRangeStart)
@@ -628,7 +746,7 @@ func TestArchiveMetadataToResponse(t *testing.T) {
 			Status:         entities.StatusPending,
 		}
 
-		resp := archiveMetadataToResponse(archive)
+		resp := governanceDTO.ArchiveMetadataToResponse(archive)
 		assert.Nil(t, resp.ArchivedAt)
 	})
 }
@@ -639,7 +757,7 @@ func TestArchiveMetadataToResponses(t *testing.T) {
 	t.Run("nil slice returns empty slice", func(t *testing.T) {
 		t.Parallel()
 
-		result := archiveMetadataToResponses(nil)
+		result := governanceDTO.ArchiveMetadataToResponses(nil)
 		assert.NotNil(t, result)
 		assert.Empty(t, result)
 	})
@@ -658,7 +776,7 @@ func TestArchiveMetadataToResponses(t *testing.T) {
 			nil,
 		}
 
-		result := archiveMetadataToResponses(archives)
+		result := governanceDTO.ArchiveMetadataToResponses(archives)
 		assert.Len(t, result, 1)
 	})
 }
@@ -706,10 +824,10 @@ func TestRegisterArchiveRoutes(t *testing.T) {
 		app := fiber.New()
 		protectedCalled := false
 
-		protected := func(resource, action string) fiber.Router {
+		protected := func(resource string, actions ...string) fiber.Router {
 			protectedCalled = true
 			require.Equal(t, auth.ResourceGovernance, resource)
-			require.Equal(t, auth.ActionArchiveRead, action)
+			require.Equal(t, []string{auth.ActionArchiveRead}, actions)
 
 			return app
 		}
@@ -737,7 +855,7 @@ func TestRegisterArchiveRoutes(t *testing.T) {
 		t.Parallel()
 
 		app := fiber.New()
-		protected := func(_, _ string) fiber.Router {
+		protected := func(_ string, _ ...string) fiber.Router {
 			return app
 		}
 

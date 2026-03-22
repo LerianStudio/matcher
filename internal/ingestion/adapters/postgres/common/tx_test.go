@@ -10,9 +10,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	libPostgres "github.com/LerianStudio/lib-uncommons/v2/uncommons/postgres"
-	libRedis "github.com/LerianStudio/lib-uncommons/v2/uncommons/redis"
+	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
+	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
 
+	sharedCommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -28,20 +29,52 @@ type mockInfrastructureProvider struct {
 	replicaDBErr  error
 }
 
-func (m *mockInfrastructureProvider) GetPostgresConnection(_ context.Context) (*libPostgres.Client, error) {
-	return m.postgresConn, m.postgresErr
+func (m *mockInfrastructureProvider) GetPostgresConnection(_ context.Context) (*ports.PostgresConnectionLease, error) {
+	if m.postgresErr != nil {
+		return nil, m.postgresErr
+	}
+
+	return ports.NewPostgresConnectionLease(m.postgresConn, nil), nil
 }
 
-func (m *mockInfrastructureProvider) GetRedisConnection(_ context.Context) (*libRedis.Client, error) {
-	return m.redisConn, m.redisErr
+func (m *mockInfrastructureProvider) GetRedisConnection(_ context.Context) (*ports.RedisConnectionLease, error) {
+	if m.redisErr != nil {
+		return nil, m.redisErr
+	}
+
+	return ports.NewRedisConnectionLease(m.redisConn, nil), nil
 }
 
-func (m *mockInfrastructureProvider) BeginTx(_ context.Context) (*sql.Tx, error) {
-	return m.beginTxResult, m.beginTxErr
+func (m *mockInfrastructureProvider) BeginTx(_ context.Context) (*ports.TxLease, error) {
+	if m.beginTxErr != nil {
+		return nil, m.beginTxErr
+	}
+
+	if m.postgresErr != nil {
+		return nil, m.postgresErr
+	}
+
+	if m.beginTxResult != nil {
+		return ports.NewTxLease(m.beginTxResult, nil), nil
+	}
+
+	if m.postgresConn == nil {
+		return nil, sharedCommon.ErrConnectionRequired
+	}
+
+	if _, err := m.postgresConn.Resolver(context.Background()); err != nil {
+		return nil, err
+	}
+
+	return nil, sharedCommon.ErrConnectionRequired
 }
 
-func (m *mockInfrastructureProvider) GetReplicaDB(_ context.Context) (*sql.DB, error) {
-	return m.replicaDB, m.replicaDBErr
+func (m *mockInfrastructureProvider) GetReplicaDB(_ context.Context) (*ports.ReplicaDBLease, error) {
+	if m.replicaDBErr != nil {
+		return nil, m.replicaDBErr
+	}
+
+	return ports.NewReplicaDBLease(m.replicaDB, nil), nil
 }
 
 var _ ports.InfrastructureProvider = (*mockInfrastructureProvider)(nil)

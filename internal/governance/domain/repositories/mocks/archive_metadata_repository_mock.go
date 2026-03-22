@@ -103,7 +103,7 @@ func (mr *MockArchiveMetadataRepositoryMockRecorder) GetByPartition(ctx, tenantI
 }
 
 // ListByTenant mocks base method.
-func (m *MockArchiveMetadataRepository) ListByTenant(ctx context.Context, tenantID uuid.UUID, status string, from, to *time.Time, limit, offset int) ([]*entities.ArchiveMetadata, error) {
+func (m *MockArchiveMetadataRepository) ListByTenant(ctx context.Context, tenantID uuid.UUID, status entities.ArchiveStatus, from, to *time.Time, limit, offset int) ([]*entities.ArchiveMetadata, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListByTenant", ctx, tenantID, status, from, to, limit, offset)
 	ret0, _ := ret[0].([]*entities.ArchiveMetadata)

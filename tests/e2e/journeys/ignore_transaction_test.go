@@ -163,7 +163,7 @@ func TestIgnoreTransaction_ExcludedFromMatching(t *testing.T) {
 			require.NoError(t, err)
 			tc.Logf("Ignored ledger transaction: %s", ledgerTxs[0].ID)
 
-			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,
@@ -353,7 +353,7 @@ func TestIgnoreTransaction_AlreadyMatchedTransaction(t *testing.T) {
 				e2e.WaitForJobComplete(ctx, tc, apiClient, reconciliationContext.ID, bankJob.ID),
 			)
 
-			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID, "")
+			matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
 			require.NoError(t, err)
 			require.NoError(
 				t,

@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -19,15 +18,17 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
-	"github.com/LerianStudio/lib-uncommons/v2/uncommons/runtime"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/reporting/ports"
 	"github.com/LerianStudio/matcher/internal/reporting/services/query/exports"
+	tenantinfra "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant"
+	"github.com/LerianStudio/matcher/pkg/chanutil"
 )
 
 const (
@@ -46,6 +47,8 @@ var (
 	ErrWorkerAlreadyRunning = errors.New("worker already running")
 	// ErrWorkerNotRunning indicates the worker is not started.
 	ErrWorkerNotRunning = errors.New("worker not running")
+	// ErrRuntimeConfigUpdateWhileRunning indicates runtime config can only change while stopped.
+	ErrRuntimeConfigUpdateWhileRunning = errors.New("worker runtime config update requires stopped worker")
 	// ErrNilJobRepository indicates job repository is nil.
 	ErrNilJobRepository = errors.New("job repository is required")
 	// ErrNilReportRepository indicates report repository is nil.
@@ -71,6 +74,7 @@ type ExportWorkerConfig struct {
 
 // ExportWorker processes queued export jobs in the background.
 type ExportWorker struct {
+	mu         sync.Mutex
 	jobRepo    repositories.ExportJobRepository
 	reportRepo repositories.ReportRepository
 	storage    ports.ObjectStorageClient
@@ -85,26 +89,7 @@ type ExportWorker struct {
 	cancelFunc context.CancelFunc
 }
 
-// NewExportWorker creates a new export worker.
-func NewExportWorker(
-	jobRepo repositories.ExportJobRepository,
-	reportRepo repositories.ReportRepository,
-	storage ports.ObjectStorageClient,
-	cfg ExportWorkerConfig,
-	logger libLog.Logger,
-) (*ExportWorker, error) {
-	if jobRepo == nil {
-		return nil, ErrNilJobRepository
-	}
-
-	if reportRepo == nil {
-		return nil, ErrNilReportRepository
-	}
-
-	if storage == nil {
-		return nil, ErrNilStorageClient
-	}
-
+func normalizeExportWorkerConfig(cfg ExportWorkerConfig) ExportWorkerConfig {
 	if cfg.PollInterval <= 0 {
 		cfg.PollInterval = defaultPollInterval
 	}
@@ -133,6 +118,31 @@ func NewExportWorker(
 		cfg.BackoffMultiplier = defaultBackoffMultiplier
 	}
 
+	return cfg
+}
+
+// NewExportWorker creates a new export worker.
+func NewExportWorker(
+	jobRepo repositories.ExportJobRepository,
+	reportRepo repositories.ReportRepository,
+	storage ports.ObjectStorageClient,
+	cfg ExportWorkerConfig,
+	logger libLog.Logger,
+) (*ExportWorker, error) {
+	if jobRepo == nil {
+		return nil, ErrNilJobRepository
+	}
+
+	if reportRepo == nil {
+		return nil, ErrNilReportRepository
+	}
+
+	if storage == nil {
+		return nil, ErrNilStorageClient
+	}
+
+	cfg = normalizeExportWorkerConfig(cfg)
+
 	return &ExportWorker{
 		jobRepo:    jobRepo,
 		reportRepo: reportRepo,
@@ -145,17 +155,63 @@ func NewExportWorker(
 	}, nil
 }
 
+// prepareRunState reinitialises the worker's stop/done channels and sync.Once for
+// re-entrant Start→Stop→Start cycles. SAFETY: The caller (WorkerManager) MUST ensure
+// Stop() has fully completed before calling Start(), which calls prepareRunState().
+// The WorkerManager serialises all lifecycle transitions via its mutex.
+func (worker *ExportWorker) prepareRunState(ctx context.Context) context.Context {
+	worker.mu.Lock()
+	defer worker.mu.Unlock()
+
+	worker.stopOnce = sync.Once{}
+
+	if chanutil.ClosedSignalChannel(worker.stopCh) {
+		worker.stopCh = make(chan struct{})
+	}
+
+	if chanutil.ClosedSignalChannel(worker.doneCh) {
+		worker.doneCh = make(chan struct{})
+	}
+
+	// Cancel any previous context before creating a new one to prevent
+	// leaked goroutines from a prior Start→Stop→Start cycle.
+	if worker.cancelFunc != nil {
+		worker.cancelFunc()
+	}
+
+	runCtx, cancel := context.WithCancel(ctx)
+	worker.cancelFunc = cancel
+
+	return runCtx
+}
+
+// UpdateRuntimeConfig updates the worker runtime configuration used on the next start/restart.
+// NOTE: This does NOT affect a currently running worker's ticker. The WorkerManager
+// always performs a full stop→start cycle when config changes, ensuring the new
+// config is picked up when the worker's run() loop creates a fresh ticker.
+func (worker *ExportWorker) UpdateRuntimeConfig(cfg ExportWorkerConfig) error {
+	worker.mu.Lock()
+	defer worker.mu.Unlock()
+
+	if worker.running.Load() {
+		return ErrRuntimeConfigUpdateWhileRunning
+	}
+
+	worker.cfg = normalizeExportWorkerConfig(cfg)
+
+	return nil
+}
+
 // Start begins processing export jobs.
 func (worker *ExportWorker) Start(ctx context.Context) error {
 	if !worker.running.CompareAndSwap(false, true) {
 		return ErrWorkerAlreadyRunning
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
-	worker.cancelFunc = cancel
+	runCtx := worker.prepareRunState(ctx)
 
 	runtime.SafeGoWithContextAndComponent(
-		ctx,
+		runCtx,
 		worker.logger,
 		"reporting",
 		"export_worker",
@@ -287,7 +343,13 @@ func (worker *ExportWorker) processJob(ctx context.Context, job *entities.Export
 		return
 	}
 
-	fileKey := worker.generateFileKey(job)
+	fileKey, err := worker.generateFileKey(job)
+	if err != nil {
+		worker.failJob(ctx, job, fmt.Errorf("build export storage key: %w", err))
+
+		return
+	}
+
 	fileName := entities.GenerateFileName(
 		job.ReportType,
 		job.Format,
@@ -1015,8 +1077,8 @@ func (worker *ExportWorker) calculateBackoff(attempt int) time.Duration {
 	return time.Duration(backoff)
 }
 
-func (worker *ExportWorker) generateFileKey(job *entities.ExportJob) string {
-	return filepath.Join(
+func (worker *ExportWorker) generateFileKey(job *entities.ExportJob) (string, error) {
+	return tenantinfra.ScopedObjectStorageKey(
 		"exports",
 		job.TenantID.String(),
 		job.ContextID.String(),
@@ -1024,7 +1086,7 @@ func (worker *ExportWorker) generateFileKey(job *entities.ExportJob) string {
 	)
 }
 
-func (worker *ExportWorker) getExtension(format string) string {
+func (worker *ExportWorker) getExtension(format entities.ExportFormat) string {
 	switch format {
 	case entities.ExportFormatCSV:
 		return "csv"
@@ -1037,7 +1099,7 @@ func (worker *ExportWorker) getExtension(format string) string {
 	}
 }
 
-func (worker *ExportWorker) getContentType(format string) string {
+func (worker *ExportWorker) getContentType(format entities.ExportFormat) string {
 	switch format {
 	case entities.ExportFormatCSV:
 		return "text/csv"

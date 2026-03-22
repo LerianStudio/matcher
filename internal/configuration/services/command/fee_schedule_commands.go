@@ -8,11 +8,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/shopspring/decimal"
 
-	libCommons "github.com/LerianStudio/lib-uncommons/v2/uncommons"
-	libLog "github.com/LerianStudio/lib-uncommons/v2/uncommons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-uncommons/v2/uncommons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
@@ -25,6 +26,8 @@ var (
 	ErrCreatedFeeScheduleNil = errors.New("created fee schedule is nil")
 	// ErrUnknownFeeStructureType is returned when the fee structure type is not recognized.
 	ErrUnknownFeeStructureType = errors.New("unknown fee structure type")
+	// ErrFeeScheduleReferencedByFeeRule is returned when a fee schedule is still referenced by fee rules.
+	ErrFeeScheduleReferencedByFeeRule = errors.New("fee schedule is referenced by fee rules")
 )
 
 // CreateFeeSchedule creates a new fee schedule.
@@ -164,6 +167,11 @@ func (uc *UseCase) DeleteFeeSchedule(ctx context.Context, scheduleID uuid.UUID) 
 	}
 
 	if err := uc.feeScheduleRepo.Delete(ctx, scheduleID); err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" && pgErr.ConstraintName == constraintFeeRuleSchedule {
+			return ErrFeeScheduleReferencedByFeeRule
+		}
+
 		libOpentelemetry.HandleSpanError(span, "failed to delete fee schedule", err)
 
 		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to delete fee schedule")

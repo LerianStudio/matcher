@@ -13,7 +13,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 
+	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/value_objects"
 	sharedRabbitmq "github.com/LerianStudio/matcher/internal/shared/adapters/rabbitmq"
@@ -24,6 +27,7 @@ type mockConfirmableChannel struct {
 	mu          sync.Mutex
 	confirms    chan amqp.Confirmation
 	closeNotify chan *amqp.Error
+	publishMsg  amqp.Publishing
 }
 
 func newMockConfirmableChannel() *mockConfirmableChannel {
@@ -47,8 +51,27 @@ func (m *mockConfirmableChannel) NotifyClose(chan *amqp.Error) chan *amqp.Error 
 	return m.closeNotify
 }
 
-func (*mockConfirmableChannel) PublishWithContext(context.Context, string, string, bool, bool, amqp.Publishing) error {
+func (m *mockConfirmableChannel) PublishWithContext(_ context.Context, _ string, _ string, _ bool, _ bool, msg amqp.Publishing) error {
+	m.mu.Lock()
+	m.publishMsg = msg
+	m.mu.Unlock()
+
 	return nil
+}
+
+func ackPublishedMessage(t *testing.T, ch *mockConfirmableChannel) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		ch.mu.Lock()
+		confirms := ch.confirms
+		ch.mu.Unlock()
+		if confirms == nil {
+			return false
+		}
+
+		confirms <- amqp.Confirmation{DeliveryTag: 1, Ack: true}
+		return true
+	}, time.Second, time.Millisecond)
 }
 
 func (m *mockConfirmableChannel) Close() error {
@@ -257,4 +280,55 @@ func TestEventPublisher_Close_ClosesConfirmablePublisher(t *testing.T) {
 
 	err = publisher.PublishIngestionCompleted(context.Background(), event)
 	require.ErrorIs(t, err, sharedRabbitmq.ErrPublisherClosed)
+}
+
+func TestPublish_AddsTenantHeader(t *testing.T) {
+	t.Parallel()
+
+	originalPropagator := otel.GetTextMapPropagator()
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+	t.Cleanup(func() {
+		otel.SetTextMapPropagator(originalPropagator)
+	})
+
+	ch := newMockConfirmableChannel()
+	confirmablePublisher, err := sharedRabbitmq.NewConfirmablePublisherFromChannel(ch)
+	require.NoError(t, err)
+	publisher := &EventPublisher{confirmablePublisher: confirmablePublisher, propagator: otel.GetTextMapPropagator()}
+	t.Cleanup(func() { require.NoError(t, publisher.Close()) })
+
+	job := &entities.IngestionJob{ID: uuid.New(), ContextID: uuid.New(), SourceID: uuid.New(), Metadata: entities.JobMetadata{}}
+	event, err := entities.NewIngestionCompletedEvent(context.Background(), job, 1, time.Now().UTC(), time.Now().UTC(), 1, 0)
+	require.NoError(t, err)
+
+	traceID := trace.TraceID{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}
+	spanID := trace.SpanID{2, 2, 2, 2, 2, 2, 2, 2}
+	ctx := trace.ContextWithSpanContext(context.Background(), trace.NewSpanContext(trace.SpanContextConfig{TraceID: traceID, SpanID: spanID, TraceFlags: trace.FlagsSampled}))
+	ctx = context.WithValue(ctx, auth.TenantIDKey, "tenant-a")
+
+	go ackPublishedMessage(t, ch)
+
+	require.NoError(t, publisher.PublishIngestionCompleted(ctx, event))
+	assert.Equal(t, "tenant-a", ch.publishMsg.Headers["X-Tenant-ID"])
+	assert.NotEmpty(t, ch.publishMsg.Headers["traceparent"])
+}
+
+func TestPublish_DoesNotAddTenantHeaderWithoutExplicitTenant(t *testing.T) {
+	t.Parallel()
+
+	ch := newMockConfirmableChannel()
+	confirmablePublisher, err := sharedRabbitmq.NewConfirmablePublisherFromChannel(ch)
+	require.NoError(t, err)
+	publisher := &EventPublisher{confirmablePublisher: confirmablePublisher, propagator: otel.GetTextMapPropagator()}
+	t.Cleanup(func() { require.NoError(t, publisher.Close()) })
+
+	job := &entities.IngestionJob{ID: uuid.New(), ContextID: uuid.New(), SourceID: uuid.New(), Metadata: entities.JobMetadata{}}
+	event, err := entities.NewIngestionCompletedEvent(context.Background(), job, 1, time.Now().UTC(), time.Now().UTC(), 1, 0)
+	require.NoError(t, err)
+
+	go ackPublishedMessage(t, ch)
+
+	require.NoError(t, publisher.PublishIngestionCompleted(context.Background(), event))
+	_, exists := ch.publishMsg.Headers["X-Tenant-ID"]
+	assert.False(t, exists)
 }

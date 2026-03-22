@@ -77,20 +77,15 @@ func ReconciliationSourceToResponse(
 		config = map[string]any{}
 	}
 
-	var feeScheduleID string
-	if src.FeeScheduleID != nil {
-		feeScheduleID = src.FeeScheduleID.String()
-	}
-
 	return ReconciliationSourceResponse{
-		ID:            src.ID.String(),
-		ContextID:     src.ContextID.String(),
-		Name:          src.Name,
-		Type:          src.Type.String(),
-		Config:        config,
-		FeeScheduleID: feeScheduleID,
-		CreatedAt:     src.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:     src.UpdatedAt.Format(time.RFC3339),
+		ID:        src.ID.String(),
+		ContextID: src.ContextID.String(),
+		Name:      src.Name,
+		Type:      src.Type.String(),
+		Side:      string(src.Side),
+		Config:    config,
+		CreatedAt: src.CreatedAt.Format(time.RFC3339),
+		UpdatedAt: src.UpdatedAt.Format(time.RFC3339),
 	}
 }
 

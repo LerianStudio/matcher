@@ -16,6 +16,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/matching/ports"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 func TestLockManager_AcquireAndRelease(t *testing.T) {
@@ -491,7 +492,7 @@ func TestLock_Release(t *testing.T) {
 	t.Run("nil connection", func(t *testing.T) {
 		t.Parallel()
 
-		lck := &lock{conn: nil, key: "test-key", token: "test-token"}
+		lck := &lock{lease: nil, key: "test-key", token: "test-token"}
 
 		err := lck.Release(context.Background())
 
@@ -502,7 +503,7 @@ func TestLock_Release(t *testing.T) {
 		t.Parallel()
 
 		lck := &lock{
-			conn:  testutil.NewRedisClientWithMock(nil),
+			lease: sharedPorts.NewRedisConnectionLease(testutil.NewRedisClientWithMock(nil), nil),
 			key:   "test-key",
 			token: "test-token",
 		}
@@ -517,7 +518,7 @@ func TestLock_Release(t *testing.T) {
 
 		srv := miniredis.RunT(t)
 		client := redis.NewClient(&redis.Options{Addr: srv.Addr()})
-		lck := &lock{conn: testutil.NewRedisClientWithMock(client), key: "", token: "test-token"}
+		lck := &lock{lease: sharedPorts.NewRedisConnectionLease(testutil.NewRedisClientWithMock(client), nil), key: "", token: "test-token"}
 
 		err := lck.Release(context.Background())
 
@@ -530,7 +531,7 @@ func TestLock_Release(t *testing.T) {
 		srv := miniredis.RunT(t)
 		client := redis.NewClient(&redis.Options{Addr: srv.Addr()})
 		lck := &lock{
-			conn:  testutil.NewRedisClientWithMock(client),
+			lease: sharedPorts.NewRedisConnectionLease(testutil.NewRedisClientWithMock(client), nil),
 			key:   "   ",
 			token: "test-token",
 		}
@@ -551,7 +552,7 @@ func TestLock_Release(t *testing.T) {
 		require.NoError(t, err)
 
 		lck := &lock{
-			conn:  testutil.NewRedisClientWithMock(client),
+			lease: sharedPorts.NewRedisConnectionLease(testutil.NewRedisClientWithMock(client), nil),
 			key:   key,
 			token: "wrong-token",
 		}
@@ -566,7 +567,7 @@ func TestLock_Release(t *testing.T) {
 		srv := miniredis.RunT(t)
 		client := redis.NewClient(&redis.Options{Addr: srv.Addr()})
 		lck := &lock{
-			conn:  testutil.NewRedisClientWithMock(client),
+			lease: sharedPorts.NewRedisConnectionLease(testutil.NewRedisClientWithMock(client), nil),
 			key:   "test-key",
 			token: "test-token",
 		}
@@ -596,7 +597,7 @@ func TestLock_Refresh_NilChecks(t *testing.T) {
 	t.Run("nil connection", func(t *testing.T) {
 		t.Parallel()
 
-		lck := &lock{conn: nil, key: "test-key", token: "test-token"}
+		lck := &lock{lease: nil, key: "test-key", token: "test-token"}
 
 		err := lck.Refresh(context.Background(), time.Minute)
 
@@ -607,7 +608,7 @@ func TestLock_Refresh_NilChecks(t *testing.T) {
 		t.Parallel()
 
 		lck := &lock{
-			conn:  testutil.NewRedisClientWithMock(nil),
+			lease: sharedPorts.NewRedisConnectionLease(testutil.NewRedisClientWithMock(nil), nil),
 			key:   "test-key",
 			token: "test-token",
 		}
@@ -626,7 +627,7 @@ func TestLock_Refresh_EmptyKey(t *testing.T) {
 
 		srv := miniredis.RunT(t)
 		client := redis.NewClient(&redis.Options{Addr: srv.Addr()})
-		lck := &lock{conn: testutil.NewRedisClientWithMock(client), key: "", token: "test-token"}
+		lck := &lock{lease: sharedPorts.NewRedisConnectionLease(testutil.NewRedisClientWithMock(client), nil), key: "", token: "test-token"}
 
 		err := lck.Refresh(context.Background(), time.Minute)
 
@@ -639,7 +640,7 @@ func TestLock_Refresh_EmptyKey(t *testing.T) {
 		srv := miniredis.RunT(t)
 		client := redis.NewClient(&redis.Options{Addr: srv.Addr()})
 		lck := &lock{
-			conn:  testutil.NewRedisClientWithMock(client),
+			lease: sharedPorts.NewRedisConnectionLease(testutil.NewRedisClientWithMock(client), nil),
 			key:   "   ",
 			token: "test-token",
 		}
@@ -665,7 +666,7 @@ func TestLock_Refresh_Operations(t *testing.T) {
 		require.NoError(t, err)
 		srv.SetTTL(key, 30*time.Second)
 
-		lck := &lock{conn: testutil.NewRedisClientWithMock(client), key: key, token: token}
+		lck := &lock{lease: sharedPorts.NewRedisConnectionLease(testutil.NewRedisClientWithMock(client), nil), key: key, token: token}
 
 		err = lck.Refresh(context.Background(), 2*time.Minute)
 
@@ -686,7 +687,7 @@ func TestLock_Refresh_Operations(t *testing.T) {
 		require.NoError(t, err)
 
 		lck := &lock{
-			conn:  testutil.NewRedisClientWithMock(client),
+			lease: sharedPorts.NewRedisConnectionLease(testutil.NewRedisClientWithMock(client), nil),
 			key:   key,
 			token: "wrong-token",
 		}
@@ -703,7 +704,7 @@ func TestLock_Refresh_Operations(t *testing.T) {
 		client := redis.NewClient(&redis.Options{Addr: srv.Addr()})
 
 		lck := &lock{
-			conn:  testutil.NewRedisClientWithMock(client),
+			lease: sharedPorts.NewRedisConnectionLease(testutil.NewRedisClientWithMock(client), nil),
 			key:   "nonexistent-key",
 			token: "some-token",
 		}
@@ -719,7 +720,7 @@ func TestLock_Refresh_Operations(t *testing.T) {
 		srv := miniredis.RunT(t)
 		client := redis.NewClient(&redis.Options{Addr: srv.Addr()})
 		lck := &lock{
-			conn:  testutil.NewRedisClientWithMock(client),
+			lease: sharedPorts.NewRedisConnectionLease(testutil.NewRedisClientWithMock(client), nil),
 			key:   "test-key",
 			token: "test-token",
 		}
