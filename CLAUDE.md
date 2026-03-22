@@ -465,7 +465,7 @@ Split into `handlers_{feature}.go` when a context has 3+ distinct feature areas:
 
 ### 12. Systemplane is the Runtime Config Authority
 - Viper + env vars are **bootstrap-only** — used to load the initial `Config` struct at startup
-- After startup, the **systemplane** (`pkg/systemplane`) owns all runtime config
+- After startup, the **systemplane** (`lib-commons/v4/commons/systemplane`) owns all runtime config
 - For runtime config values: use `configManager.Get()` which returns the systemplane-backed `*Config`
 - For runtime config schema/metadata: use `registry.Get(key)` which returns `KeyDef` metadata
 - Direct systemplane API: `GET /v1/system/configs`, schema: `GET /v1/system/configs/schema`, history: `GET /v1/system/configs/history`
@@ -477,7 +477,7 @@ Split into `handlers_{feature}.go` when a context has 3+ distinct feature areas:
 
 Matcher uses **zero-config defaults** — all configuration has sensible defaults baked into `defaultConfig()`. No `.env` or YAML files are required. Override via environment variables for production.
 
-**Runtime authority**: The systemplane (`pkg/systemplane`) is the sole runtime configuration authority. Env vars are bootstrap-only — after startup, the systemplane registry owns all config reads. Runtime queries: `GET /v1/system/configs`, schema: `GET /v1/system/configs/schema`, history: `GET /v1/system/configs/history`.
+**Runtime authority**: The systemplane (`lib-commons/v4/commons/systemplane`) is the sole runtime configuration authority. Env vars are bootstrap-only — after startup, the systemplane registry owns all config reads. Runtime queries: `GET /v1/system/configs`, schema: `GET /v1/system/configs/schema`, history: `GET /v1/system/configs/history`.
 
 **Bootstrap-only keys** (require restart): See `config/.config-map.example`. These include server address, TLS, auth, and telemetry settings.
 
@@ -538,15 +538,17 @@ Matcher uses **zero-config defaults** — all configuration has sensible default
 
 ### Internal Packages (`pkg/`)
 
-- **pkg/systemplane**: Runtime configuration authority (control plane)
+- **pkg/chanutil**: Safe channel utilities for goroutine communication
+
+- **pkg/storageopt**: Functional options for object storage operations
+
+### Systemplane (lib-commons)
+
+The systemplane runtime configuration authority now lives in `lib-commons/v4/commons/systemplane`:
   - Registry, service manager, supervisor, reconcilers
   - PostgreSQL and MongoDB store adapters
   - Change feed adapters (PostgreSQL LISTEN/NOTIFY, MongoDB change streams)
   - Fiber HTTP handler for `/v1/system/configs` API
-
-- **pkg/chanutil**: Safe channel utilities for goroutine communication
-
-- **pkg/storageopt**: Functional options for object storage operations
 
 ## Linting & Security
 

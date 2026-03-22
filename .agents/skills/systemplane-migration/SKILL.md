@@ -14,10 +14,30 @@ Use this skill when:
 - Understanding the systemplane architecture for code review or troubleshooting
 - Building a new `BundleFactory`, `Reconciler`, or `SnapshotReader` for a service
 
+## Import Paths
+
+The systemplane is a shared library in lib-commons (since v4.3.0). All services
+import it via:
+
+```go
+import (
+    "github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
+    "github.com/LerianStudio/lib-commons/v4/commons/systemplane/ports"
+    "github.com/LerianStudio/lib-commons/v4/commons/systemplane/registry"
+    "github.com/LerianStudio/lib-commons/v4/commons/systemplane/service"
+    "github.com/LerianStudio/lib-commons/v4/commons/systemplane/bootstrap"
+    "github.com/LerianStudio/lib-commons/v4/commons/systemplane/bootstrap/builtin"
+    "github.com/LerianStudio/lib-commons/v4/commons/systemplane/adapters/changefeed"
+    fiberhttp "github.com/LerianStudio/lib-commons/v4/commons/systemplane/adapters/http/fiber"
+)
+```
+
+Requires `lib-commons v4.3.0+` in your `go.mod`.
+
 ## Table of Contents
 
 1. [Architecture Overview](#1-architecture-overview)
-2. [Package Reference: `pkg/systemplane/`](#2-package-reference)
+2. [Package Reference: `lib-commons/v4/commons/systemplane/`](#2-package-reference)
 3. [The Three Configuration Authorities](#3-the-three-configuration-authorities)
 4. [Apply Behavior Taxonomy](#4-apply-behavior-taxonomy)
 5. [Migration Methodology (10 Steps)](#5-migration-methodology)
@@ -108,14 +128,15 @@ SHUTDOWN:
 
 ## 2. Package Reference
 
-The systemplane lives in `pkg/systemplane/` — a self-contained, backend-agnostic
-library with **zero imports of internal application packages**. After stabilization,
-it will migrate to `lib-commons`.
+The systemplane lives in `lib-commons/v4/commons/systemplane/` — a self-contained,
+backend-agnostic library with **zero imports of internal application packages**.
+It was extracted from Matcher's `pkg/systemplane/` into lib-commons v4.3.0 to be
+shared across all Lerian services.
 
 ### 2.1 Directory Structure
 
 ```
-pkg/systemplane/
+commons/systemplane/                            # in lib-commons repo
 ├── doc.go                                      # Package doc
 ├── domain/                                     # Pure value objects, no infra deps
 │   ├── actor.go                                # Actor{ID}
@@ -216,7 +237,7 @@ pkg/systemplane/
     └── fake_incremental_bundle.go              # FakeIncrementalBundleFactory
 ```
 
-### 2.2 Domain Layer (`pkg/systemplane/domain/`)
+### 2.2 Domain Layer (`commons/systemplane/domain/`)
 
 Pure value objects. No infrastructure dependencies.
 
@@ -268,7 +289,7 @@ var (
 Per-enum parse errors: `ErrInvalidKind`, `ErrInvalidBackendKind`, `ErrInvalidScope`,
 `ErrInvalidApplyBehavior`, `ErrInvalidValueType`, `ErrInvalidReconcilerPhase`.
 
-### 2.3 Ports Layer (`pkg/systemplane/ports/`)
+### 2.3 Ports Layer (`commons/systemplane/ports/`)
 
 Seven interfaces defining all external dependencies:
 
@@ -350,7 +371,7 @@ type BundleReconciler interface {
 }
 ```
 
-### 2.4 Registry (`pkg/systemplane/registry/`)
+### 2.4 Registry (`commons/systemplane/registry/`)
 
 Thread-safe in-memory registry of key definitions:
 
@@ -372,7 +393,7 @@ func New() Registry   // returns *inMemoryRegistry (RWMutex-protected)
 - `isObjectCompatible(value)` uses `reflect.Map`; `isArrayCompatible(value)` uses `reflect.Array`/`Slice`
 - Nil values always pass validation (they mean "reset to default")
 
-### 2.5 Service Layer (`pkg/systemplane/service/`)
+### 2.5 Service Layer (`commons/systemplane/service/`)
 
 #### Manager
 
@@ -507,7 +528,7 @@ func Escalate(reg Registry, ops []WriteOp) (ApplyBehavior, []string, error)
 - Empty batch → `ApplyLiveRead`
 - Returns the list of keys that drove the escalation
 
-### 2.6 Bootstrap (`pkg/systemplane/bootstrap/`)
+### 2.6 Bootstrap (`commons/systemplane/bootstrap/`)
 
 | File | Purpose |
 |------|---------|
@@ -571,7 +592,7 @@ func Escalate(reg Registry, ops []WriteOp) (ApplyBehavior, []string, error)
 | `ErrReloadFailed` | 500 | `system_reload_failed` |
 | `ErrSupervisorStopped` | 503 | `system_unavailable` |
 
-### 2.8 Test Utilities (`pkg/systemplane/testutil/`)
+### 2.8 Test Utilities (`commons/systemplane/testutil/`)
 
 | Fake | Implements | Key Features |
 |------|-----------|--------------|

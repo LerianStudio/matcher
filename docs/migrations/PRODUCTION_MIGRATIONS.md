@@ -45,10 +45,10 @@ ORDER BY n_live_tup DESC;
 make migrate-up
 ```
 
-3. Verify service health and key APIs:
+4. Verify service health and key APIs:
    - `GET /health`
    - `GET /ready`
-4. Re-enable normal traffic.
+5. Re-enable normal traffic.
 
 ## Rollback Procedure
 
