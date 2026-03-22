@@ -101,11 +101,20 @@ If the environment can be recreated, reset the data and rerun migrations from sc
 
 If the environment must be preserved, follow the phased cutover:
 
+> **Important**: After clearing legacy `fee_schedule_id` bindings in Step 1, you
+> must recreate equivalent fee rules via the API **before** running match
+> operations. The new matching engine uses context-level fee rules (not
+> source-level fee schedules) for fee normalization.
+
 ```sql
 -- Step 1: Clear legacy fee schedule bindings (before 000016).
 UPDATE reconciliation_sources SET fee_schedule_id = NULL WHERE fee_schedule_id IS NOT NULL;
 
 -- Step 2: Run 000016 (creates fee_rules table) and 000017 (adds nullable side column).
+-- To stop at a specific version with golang-migrate CLI:
+-- migrate -path migrations -database "$DATABASE_URL" goto 17
+-- Or use the Makefile target:
+-- make migrate-to VERSION=17
 
 -- Step 3: Backfill explicit side assignments (between 000017 and 000018).
 -- Inspect current sources:
@@ -117,6 +126,9 @@ UPDATE reconciliation_sources SET side = 'RIGHT' WHERE name LIKE '%gateway%';
 
 -- Verify no NULL sides remain:
 SELECT COUNT(*) FROM reconciliation_sources WHERE side IS NULL;  -- must be 0
+
+-- Also verify no invalid values exist:
+SELECT COUNT(*) FROM reconciliation_sources WHERE side NOT IN ('LEFT', 'RIGHT') AND side IS NOT NULL;  -- must be 0
 
 -- Step 4: Run 000018 (enforces NOT NULL) and 000019 (drops legacy column).
 ```
