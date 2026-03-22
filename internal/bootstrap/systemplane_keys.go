@@ -51,7 +51,7 @@ const (
 	defaultPGHost            = "localhost"
 	defaultPGPort            = "5432"
 	defaultPGUser            = "matcher"
-	defaultPGPassword        = "matcher_dev_password" //nolint:gosec // G101: Dev-mode default; rejected by validateProductionConfig in production.
+	defaultPGPassword        = "matcher_dev_password" // #nosec G101 -- Dev-mode default; rejected by validateProductionConfig in production. //nolint:gosec
 	defaultPGDB              = "matcher"
 	defaultPGSSLMode         = "disable"
 	defaultPGMaxOpenConns    = 25
@@ -78,7 +78,7 @@ const (
 	defaultRabbitHost                = "localhost"
 	defaultRabbitPort                = "5672"
 	defaultRabbitUser                = "matcher_admin"
-	defaultRabbitPassword            = "matcher_dev_password" //nolint:gosec // G101: Dev-mode default; rejected by validateProductionConfig in production.
+	defaultRabbitPassword            = "matcher_dev_password" // #nosec G101 -- Dev-mode default; rejected by validateProductionConfig in production. //nolint:gosec
 	defaultRabbitVHost               = "/"
 	defaultRabbitHealthURL           = "http://localhost:15672"
 	defaultRabbitAllowInsecureHealth = false

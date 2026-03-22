@@ -680,7 +680,7 @@ func startChangeFeed(
 		return nil, errChangeFeedSupervisorRequired
 	}
 
-	feedCtx, cancel := context.WithCancel(ctx)
+	feedCtx, cancel := context.WithCancel(ctx) // #nosec G118 -- cancel is returned to the caller
 
 	runtime.SafeGoWithContextAndComponent(
 		feedCtx,

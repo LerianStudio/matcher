@@ -73,12 +73,12 @@ func New(ctx context.Context, cfg *bootstrap.PostgresBootstrapConfig, secrets *b
 	}
 
 	if err := db.PingContext(ctx); err != nil {
-		db.Close()
+		_ = db.Close() // best-effort cleanup; original err is more relevant
 		return nil, nil, nil, fmt.Errorf("postgres store: ping: %w", err)
 	}
 
 	if err := executeDDL(ctx, db, schema, entriesTable, historyTable, revisionTable); err != nil {
-		db.Close()
+		_ = db.Close() // best-effort cleanup; original err is more relevant
 		return nil, nil, nil, fmt.Errorf("postgres store: execute ddl: %w", err)
 	}
 
