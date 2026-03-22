@@ -6,6 +6,7 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -26,6 +27,19 @@ import (
 type Routes struct {
 	API       fiber.Router
 	Protected func(resource string, actions ...string) fiber.Router
+
+	// registrationErrs accumulates errors from the Protected closure.
+	// Since Protected returns fiber.Router (no error), failures during
+	// auth group creation are collected here and surfaced via RegistrationErr()
+	// after all modules have registered their routes.
+	registrationErrs []error
+}
+
+// RegistrationErr returns any errors that occurred during Protected route
+// registration. Callers must check this after all route registrations complete
+// to ensure no auth group creations failed silently.
+func (r *Routes) RegistrationErr() error {
+	return errors.Join(r.registrationErrs...)
 }
 
 // RegisterRoutes configures health endpoints and API route groups with authentication.
@@ -92,14 +106,16 @@ func RegisterRoutes(
 		},
 	)
 
-	var protected func(resource string, actions ...string) fiber.Router
-
 	rateLimiter := NewRateLimiter(cfg, rateLimitStorage)
 	if configGetter != nil {
 		rateLimiter = NewDynamicRateLimiter(configGetter, rateLimitStorage)
 	}
 
-	protected = func(resource string, actions ...string) fiber.Router {
+	routes := &Routes{
+		API: app.Group(""),
+	}
+
+	routes.Protected = func(resource string, actions ...string) fiber.Router {
 		group, err := auth.ProtectedGroupWithActionsWithMiddleware(
 			app,
 			authClient,
@@ -114,16 +130,21 @@ func RegisterRoutes(
 			// not at request time. tenantExtractor is validated non-nil above
 			// and actions are hardcoded string literals in every call site,
 			// so an error here indicates a programmer bug in route definitions.
-			panic(fmt.Sprintf("protected route registration failed for resource=%q actions=%v: %v", resource, actions, err))
+			// The error is collected and surfaced via RegistrationErr() after
+			// all modules complete registration; the stub group prevents nil
+			// dereferences on chained .Post()/.Get() calls.
+			routes.registrationErrs = append(routes.registrationErrs, fmt.Errorf(
+				"protected route registration failed for resource=%q actions=%v: %w",
+				resource, actions, err,
+			))
+
+			return app.Group("")
 		}
 
 		return group
 	}
 
-	return &Routes{
-		API:       app.Group(""),
-		Protected: protected,
-	}, nil
+	return routes, nil
 }
 
 func runtimeSwaggerHandler(initialCfg *Config, configGetter func() *Config, next fiber.Handler) fiber.Handler {

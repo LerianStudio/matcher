@@ -2111,6 +2111,13 @@ func initModulesAndMessaging(
 		schedulerWorker = createSchedulerWorker(ctx, cfg, provider, matchingUseCase, logger)
 	}
 
+	// Surface any errors that occurred during Protected route group creation.
+	// The Protected closure collects errors instead of panicking so that all
+	// modules finish registration before we fail, giving a complete error picture.
+	if err := routes.RegistrationErr(); err != nil {
+		return nil, fmt.Errorf("route registration: %w", err)
+	}
+
 	return &modulesResult{
 		outboxDispatcher: outboxDispatcher,
 		ingestionEvents:  runtimeIngestionPublisher,

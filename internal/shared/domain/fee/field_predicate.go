@@ -199,6 +199,8 @@ func stringifyPredicateValue(raw any) string {
 			if rv.IsNil() {
 				return ""
 			}
+		default:
+			// Non-nilable kinds (Int, String, Struct, …) — no guard needed.
 		}
 
 		return value.String()
