@@ -11,22 +11,31 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
+
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 
 	matching "github.com/LerianStudio/matcher/internal/matching/domain/services"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
+func noopSpan() trace.Span {
+	_, span := noop.NewTracerProvider().Tracer("test").Start(context.Background(), "test")
+	return span
+}
+
 func TestValidateExecuteRulesInput_NilContextID(t *testing.T) {
 	t.Parallel()
 
-	err := validateExecuteRulesInput(context.Background(), nil, nil, uuid.Nil)
+	err := validateExecuteRulesInput(context.Background(), &libLog.NopLogger{}, noopSpan(), uuid.Nil)
 	require.ErrorIs(t, err, ErrContextIDRequired)
 }
 
 func TestValidateExecuteRulesInput_ValidContextID(t *testing.T) {
 	t.Parallel()
 
-	err := validateExecuteRulesInput(context.Background(), nil, nil, uuid.New())
+	err := validateExecuteRulesInput(context.Background(), &libLog.NopLogger{}, noopSpan(), uuid.New())
 	require.NoError(t, err)
 }
 
@@ -34,7 +43,7 @@ func TestLoadRuleDefinitions_ProviderError(t *testing.T) {
 	t.Parallel()
 
 	provider := &stubRuleProviderForExec{err: errors.New("provider error")}
-	_, err := loadRuleDefinitions(context.Background(), nil, nil, provider, uuid.New())
+	_, err := loadRuleDefinitions(context.Background(), noopSpan(), &libLog.NopLogger{}, provider, uuid.New())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to load match rules")
 }
@@ -43,7 +52,7 @@ func TestLoadRuleDefinitions_EmptyRules(t *testing.T) {
 	t.Parallel()
 
 	provider := &stubRuleProviderForExec{rules: shared.MatchRules{}}
-	defs, err := loadRuleDefinitions(context.Background(), nil, nil, provider, uuid.New())
+	defs, err := loadRuleDefinitions(context.Background(), noopSpan(), &libLog.NopLogger{}, provider, uuid.New())
 	require.NoError(t, err)
 	assert.Empty(t, defs)
 }
@@ -62,7 +71,7 @@ func TestLoadRuleDefinitions_ValidExactRule(t *testing.T) {
 	}
 
 	provider := &stubRuleProviderForExec{rules: shared.MatchRules{rule}}
-	defs, err := loadRuleDefinitions(context.Background(), nil, nil, provider, uuid.New())
+	defs, err := loadRuleDefinitions(context.Background(), noopSpan(), &libLog.NopLogger{}, provider, uuid.New())
 	require.NoError(t, err)
 	require.Len(t, defs, 1)
 }
@@ -124,7 +133,7 @@ func TestRequiresBaseMatching_ToleranceBaseAmount(t *testing.T) {
 	t.Parallel()
 
 	defs := []matching.RuleDefinition{
-		{Tolerance: &matching.ToleranceRuleConfig{MatchBaseAmount: true}},
+		{Tolerance: &matching.ToleranceConfig{MatchBaseAmount: true}},
 	}
 	assert.True(t, requiresBaseMatching(defs))
 }
@@ -133,7 +142,7 @@ func TestRequiresBaseMatching_ToleranceBaseCurrency(t *testing.T) {
 	t.Parallel()
 
 	defs := []matching.RuleDefinition{
-		{Tolerance: &matching.ToleranceRuleConfig{MatchBaseCurrency: true}},
+		{Tolerance: &matching.ToleranceConfig{MatchBaseCurrency: true}},
 	}
 	assert.True(t, requiresBaseMatching(defs))
 }
@@ -142,7 +151,7 @@ func TestRequiresBaseMatching_ExactBaseAmount(t *testing.T) {
 	t.Parallel()
 
 	defs := []matching.RuleDefinition{
-		{Exact: &matching.ExactRuleConfig{MatchBaseAmount: true}},
+		{Exact: &matching.ExactConfig{MatchBaseAmount: true}},
 	}
 	assert.True(t, requiresBaseMatching(defs))
 }
@@ -151,7 +160,7 @@ func TestRequiresBaseMatching_ExactBaseCurrency(t *testing.T) {
 	t.Parallel()
 
 	defs := []matching.RuleDefinition{
-		{Exact: &matching.ExactRuleConfig{MatchBaseCurrency: true}},
+		{Exact: &matching.ExactConfig{MatchBaseCurrency: true}},
 	}
 	assert.True(t, requiresBaseMatching(defs))
 }
@@ -169,8 +178,8 @@ func TestRequiresBaseMatching_NoneRequiresBase(t *testing.T) {
 	t.Parallel()
 
 	defs := []matching.RuleDefinition{
-		{Exact: &matching.ExactRuleConfig{MatchBaseAmount: false}},
-		{Tolerance: &matching.ToleranceRuleConfig{MatchBaseAmount: false}},
+		{Exact: &matching.ExactConfig{MatchBaseAmount: false}},
+		{Tolerance: &matching.ToleranceConfig{MatchBaseAmount: false}},
 	}
 	assert.False(t, requiresBaseMatching(defs))
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	matchingVO "github.com/LerianStudio/matcher/internal/matching/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/matching/ports"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
@@ -88,7 +89,7 @@ func TestLoadFeeRulesAndSchedules_ProviderError(t *testing.T) {
 	assert.Nil(t, schedules)
 }
 
-func TestLoadFeeRulesAndSchedules_NilFeeScheduleRepo(t *testing.T) {
+func TestLoadFeeRulesAndSchedules_NilFeeScheduleRepo_ReturnsError(t *testing.T) {
 	t.Parallel()
 
 	contextID := uuid.MustParse("00000000-0000-0000-0000-000000240020")
@@ -143,7 +144,7 @@ func TestLoadFeeRulesAndSchedules_ScheduleLoadError(t *testing.T) {
 	assert.Contains(t, err.Error(), "loading fee schedules")
 }
 
-func TestLoadFeeRulesAndSchedules_MissingScheduleReference(t *testing.T) {
+func TestLoadFeeRulesAndSchedules_MissingScheduleReference_ReturnsCount(t *testing.T) {
 	t.Parallel()
 
 	contextID := uuid.MustParse("00000000-0000-0000-0000-000000240040")
@@ -292,7 +293,7 @@ func TestCompleteEmptyRun_SetsCorrectStats(t *testing.T) {
 
 	run, groups, err := uc.completeEmptyRun(
 		context.Background(),
-		RunMatchInput{ContextID: uuid.New(), Mode: "dry_run"},
+		RunMatchInput{ContextID: uuid.New(), Mode: matchingVO.MatchRunModeDryRun},
 		stats,
 		leftTx,
 		rightTx,

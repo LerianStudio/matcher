@@ -201,7 +201,7 @@ func TestReleaseMatchLock_ReleaseError_LogsOnly(t *testing.T) {
 	uc.releaseMatchLock(context.Background(), nil, lock, &libLog.NopLogger{})
 }
 
-func TestFinalizeRunFailure_NilRun(t *testing.T) {
+func TestFinalizeRunFailure_NilRun_ReturnsOriginalCause(t *testing.T) {
 	t.Parallel()
 
 	uc := &UseCase{matchRunRepo: &stubMatchRunRepo{}}
@@ -211,7 +211,7 @@ func TestFinalizeRunFailure_NilRun(t *testing.T) {
 	assert.Equal(t, cause, result)
 }
 
-func TestFinalizeRunFailure_UpdatesRun(t *testing.T) {
+func TestFinalizeRunFailure_SetsFailureReasonOnRun(t *testing.T) {
 	t.Parallel()
 
 	matchRunRepo := &stubMatchRunRepo{}
@@ -228,7 +228,7 @@ func TestFinalizeRunFailure_UpdatesRun(t *testing.T) {
 	require.NotNil(t, matchRunRepo.updated.FailureReason)
 }
 
-func TestFinalizeRunFailure_UpdateError(t *testing.T) {
+func TestFinalizeRunFailure_WrapsUpdateError(t *testing.T) {
 	t.Parallel()
 
 	matchRunRepo := &stubMatchRunRepo{updateErr: errors.New("db error")}
