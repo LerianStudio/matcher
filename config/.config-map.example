@@ -21,6 +21,15 @@
 # forces rate limiting). Values: development, staging, production.
 ENV_NAME=development
 
+# ── Tenancy ─────────────────────────────────────────────────────────────────
+# Default tenant identity used when auth is disabled or claims are unavailable.
+DEFAULT_TENANT_ID=11111111-1111-1111-1111-111111111111
+DEFAULT_TENANT_SLUG=default
+
+# Deprecated compatibility alias for MULTI_TENANT_ENABLED bootstrap seeding.
+# Prefer MULTI_TENANT_ENABLED via systemplane instead of this env var.
+# MULTI_TENANT_INFRA_ENABLED=false
+
 # ── Server ───────────────────────────────────────────────────────────────────
 # HTTP listen address. Change requires server restart.
 SERVER_ADDRESS=:4018
@@ -60,6 +69,15 @@ OTEL_EXPORTER_OTLP_ENDPOINT=localhost:4317
 # Database metrics scrape interval (seconds).
 DB_METRICS_INTERVAL_SEC=15
 
+# ── Infrastructure ───────────────────────────────────────────────────────────
+# Startup timeout for connecting to Postgres, Redis, RabbitMQ, and S3.
+INFRA_CONNECT_TIMEOUT_SEC=30
+
+# ── Idempotency ──────────────────────────────────────────────────────────────
+# Optional HMAC secret for signing idempotency keys before storing them.
+# SECURITY: Use a strong random secret (minimum 32 bytes) in production.
+# IDEMPOTENCY_HMAC_SECRET=
+
 # ── Systemplane ──────────────────────────────────────────────────────────────
 # Backend store for runtime configuration. Default: postgres (reuses the
 # application Postgres DSN). Set to "mongodb" for a Mongo-backed store.
@@ -68,6 +86,21 @@ DB_METRICS_INTERVAL_SEC=15
 # Override the connection DSN for the systemplane store. When unset, the
 # application's primary Postgres DSN is used.
 # SYSTEMPLANE_POSTGRES_DSN=
+
+# Optional Postgres backend overrides for the systemplane store.
+# SYSTEMPLANE_POSTGRES_SCHEMA=
+# SYSTEMPLANE_POSTGRES_ENTRIES_TABLE=
+# SYSTEMPLANE_POSTGRES_HISTORY_TABLE=
+# SYSTEMPLANE_POSTGRES_REVISION_TABLE=
+# SYSTEMPLANE_POSTGRES_NOTIFY_CHANNEL=
+
+# MongoDB backend settings. Only used when SYSTEMPLANE_BACKEND=mongodb.
+# SYSTEMPLANE_MONGODB_URI=mongodb://localhost:27017
+# SYSTEMPLANE_MONGODB_DATABASE=matcher_systemplane
+# SYSTEMPLANE_MONGODB_ENTRIES_COLLECTION=entries
+# SYSTEMPLANE_MONGODB_HISTORY_COLLECTION=history
+# SYSTEMPLANE_MONGODB_WATCH_MODE=change_stream
+# SYSTEMPLANE_MONGODB_POLL_INTERVAL_SEC=30
 
 # REQUIRED: AES-256-GCM master key for encrypting secret config values.
 # Generate a unique value per environment:
