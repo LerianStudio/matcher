@@ -21,8 +21,8 @@ github.com/KyleBanks/depth v1.2.1 h1:5h8fQADFrWtarTdtDudMmGsC7GPbOAu6RVB3ffsVFHc
 github.com/KyleBanks/depth v1.2.1/go.mod h1:jzSb9d0L43HxTQfT+oSA1EEp2q+ne2uh6XgeJcm8brE=
 github.com/LerianStudio/lib-auth/v2 v2.5.0 h1:PUchYPGgqaOQwbC6Bcv7WKwjarZl7fgrw6O427iuP8k=
 github.com/LerianStudio/lib-auth/v2 v2.5.0/go.mod h1:AAbJCVaVokfO9bLa4aCIGzVMP6to/Ml5MC4X9B6jLZ0=
-github.com/LerianStudio/lib-commons/v4 v4.2.0 h1:4gbQRcTiToo2JVsFymbMPE6eDui5wiVZInkR98+KoXs=
-github.com/LerianStudio/lib-commons/v4 v4.2.0/go.mod h1:89mzZKE3Hf0aDdKo3qfjfPL38ZsQRciqRbEeR718O+g=
+github.com/LerianStudio/lib-commons/v4 v4.3.0 h1:PYTp7wUhGybkrUXsiCnruSYUS2+w8GJoaDTn8w9C7U0=
+github.com/LerianStudio/lib-commons/v4 v4.3.0/go.mod h1:vED5XhyyfhLnIA5MGNsioMBEs2hd/PPoMN5B6ftydvY=
 github.com/Masterminds/squirrel v1.5.4 h1:uUcX/aBc8O7Fg9kaISIUsHXdKuqehiXAMQTYX8afzqM=
 github.com/Masterminds/squirrel v1.5.4/go.mod h1:NNaOrjSoIDfDA40n7sr2tPNZRfjzjA400rg+riTZj10=
 github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=
