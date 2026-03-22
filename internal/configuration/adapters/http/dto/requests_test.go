@@ -159,8 +159,37 @@ func TestCreateContextSourceRequest_ToDomainInput(t *testing.T) {
 
 		input, err := req.ToDomainInput()
 		require.NoError(t, err)
+		assert.Equal(t, "Gateway Source", input.Name)
 		assert.Equal(t, value_objects.SourceType("GATEWAY"), input.Type)
 		assert.Equal(t, "id", input.Mapping["externalId"])
+	})
+
+	t.Run("whitespace-only name returns error", func(t *testing.T) {
+		t.Parallel()
+
+		req := CreateContextSourceRequest{
+			Name: "   ",
+			Type: "BANK",
+			Side: "LEFT",
+		}
+
+		_, err := req.ToDomainInput()
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrNameWhitespaceOnly)
+	})
+
+	t.Run("trims whitespace from name", func(t *testing.T) {
+		t.Parallel()
+
+		req := CreateContextSourceRequest{
+			Name: "  Inline Source  ",
+			Type: "BANK",
+			Side: "LEFT",
+		}
+
+		input, err := req.ToDomainInput()
+		require.NoError(t, err)
+		assert.Equal(t, "Inline Source", input.Name)
 	})
 }
 
@@ -414,6 +443,34 @@ func TestCreateSourceRequest_ToDomainInput(t *testing.T) {
 		assert.Nil(t, input.Config)
 		assert.Equal(t, sharedfee.MatchingSideRight, input.Side)
 	})
+
+	t.Run("whitespace-only name returns error", func(t *testing.T) {
+		t.Parallel()
+
+		req := CreateSourceRequest{
+			Name: "   ",
+			Type: "BANK",
+			Side: "LEFT",
+		}
+
+		_, err := req.ToDomainInput()
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrNameWhitespaceOnly)
+	})
+
+	t.Run("trims leading and trailing whitespace from name", func(t *testing.T) {
+		t.Parallel()
+
+		req := CreateSourceRequest{
+			Name: "  Bank Source  ",
+			Type: "BANK",
+			Side: "LEFT",
+		}
+
+		input, err := req.ToDomainInput()
+		require.NoError(t, err)
+		assert.Equal(t, "Bank Source", input.Name)
+	})
 }
 
 func TestUpdateSourceRequest_ToDomainInput(t *testing.T) {
@@ -435,11 +492,49 @@ func TestUpdateSourceRequest_ToDomainInput(t *testing.T) {
 		input, err := req.ToDomainInput()
 		assert.NoError(t, err)
 
-		assert.Equal(t, &name, input.Name)
+		assert.NotNil(t, input.Name)
+		assert.Equal(t, "Updated", *input.Name)
 		assert.NotNil(t, input.Type)
 		assert.Equal(t, value_objects.SourceType("GATEWAY"), *input.Type)
 		assert.NotNil(t, input.Side)
 		assert.Equal(t, sharedfee.MatchingSideRight, *input.Side)
+	})
+
+	t.Run("whitespace-only name returns error", func(t *testing.T) {
+		t.Parallel()
+
+		wsName := "   \t\n  "
+		req := UpdateSourceRequest{
+			Name: &wsName,
+		}
+
+		_, err := req.ToDomainInput()
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrNameWhitespaceOnly)
+	})
+
+	t.Run("trims leading and trailing whitespace from name", func(t *testing.T) {
+		t.Parallel()
+
+		name := "  Trimmed Source  "
+		req := UpdateSourceRequest{
+			Name: &name,
+		}
+
+		input, err := req.ToDomainInput()
+		require.NoError(t, err)
+		require.NotNil(t, input.Name)
+		assert.Equal(t, "Trimmed Source", *input.Name)
+	})
+
+	t.Run("nil name stays nil", func(t *testing.T) {
+		t.Parallel()
+
+		req := UpdateSourceRequest{}
+
+		input, err := req.ToDomainInput()
+		require.NoError(t, err)
+		assert.Nil(t, input.Name)
 	})
 }
 

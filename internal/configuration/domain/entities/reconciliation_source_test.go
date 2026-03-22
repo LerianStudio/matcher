@@ -71,6 +71,34 @@ func TestNewReconciliationSource(t *testing.T) {
 		assert.Equal(t, ErrSourceNameRequired, err)
 	})
 
+	t.Run("fails with whitespace-only name", func(t *testing.T) {
+		t.Parallel()
+
+		input := CreateReconciliationSourceInput{
+			Name: "   \t\n  ",
+			Type: value_objects.SourceTypeBank,
+			Side: sharedfee.MatchingSideLeft,
+		}
+
+		_, err := NewReconciliationSource(context.Background(), contextID, input)
+		require.Error(t, err)
+		assert.Equal(t, ErrSourceNameRequired, err)
+	})
+
+	t.Run("trims whitespace from name", func(t *testing.T) {
+		t.Parallel()
+
+		input := CreateReconciliationSourceInput{
+			Name: "  Bank Source  ",
+			Type: value_objects.SourceTypeBank,
+			Side: sharedfee.MatchingSideLeft,
+		}
+
+		source, err := NewReconciliationSource(context.Background(), contextID, input)
+		require.NoError(t, err)
+		assert.Equal(t, "Bank Source", source.Name)
+	})
+
 	t.Run("succeeds with name at max length", func(t *testing.T) {
 		t.Parallel()
 
@@ -227,6 +255,22 @@ func TestReconciliationSource_Update(t *testing.T) {
 		assert.Equal(t, originalType, source.Type)
 		assert.Equal(t, originalConfig, source.Config)
 		assert.Equal(t, originalUpdatedAt, source.UpdatedAt)
+	})
+
+	t.Run("fails with whitespace-only name", func(t *testing.T) {
+		t.Parallel()
+
+		source := createSource(t)
+		originalName := source.Name
+
+		wsName := "   \t  "
+		err := source.Update(
+			context.Background(),
+			UpdateReconciliationSourceInput{Name: &wsName},
+		)
+		require.Error(t, err)
+		assert.Equal(t, ErrSourceNameRequired, err)
+		assert.Equal(t, originalName, source.Name)
 	})
 
 	t.Run("fails with invalid type", func(t *testing.T) {

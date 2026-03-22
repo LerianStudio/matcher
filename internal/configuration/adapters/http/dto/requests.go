@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -13,11 +14,12 @@ import (
 	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
-// Sentinel errors for JSON field validation.
+// Sentinel errors for DTO validation.
 var (
 	ErrJSONFieldTooLarge  = errors.New("JSON field exceeds maximum size")
 	ErrJSONNestingTooDeep = errors.New("JSON field exceeds maximum nesting depth")
 	ErrJSONTooManyKeys    = errors.New("JSON field exceeds maximum key count")
+	ErrNameWhitespaceOnly = errors.New("name must contain non-whitespace characters")
 )
 
 const (
@@ -104,6 +106,11 @@ func (req *CreateContextRequest) ToDomainInput() (entities.CreateReconciliationC
 
 // ToDomainInput converts the API request to a domain input struct.
 func (req *CreateContextSourceRequest) ToDomainInput() (entities.CreateContextSourceInput, error) {
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		return entities.CreateContextSourceInput{}, ErrNameWhitespaceOnly
+	}
+
 	if err := validateJSONField("source.config", req.Config); err != nil {
 		return entities.CreateContextSourceInput{}, err
 	}
@@ -113,7 +120,7 @@ func (req *CreateContextSourceRequest) ToDomainInput() (entities.CreateContextSo
 	}
 
 	return entities.CreateContextSourceInput{
-		Name:    req.Name,
+		Name:    name,
 		Type:    value_objects.SourceType(req.Type),
 		Side:    sharedfee.MatchingSide(req.Side),
 		Config:  req.Config,
@@ -183,12 +190,17 @@ type CreateSourceRequest struct {
 // ToDomainInput converts the API request to a domain input struct.
 // Callers must validate the request (via ParseBodyAndValidate) before calling this method.
 func (req *CreateSourceRequest) ToDomainInput() (entities.CreateReconciliationSourceInput, error) {
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		return entities.CreateReconciliationSourceInput{}, ErrNameWhitespaceOnly
+	}
+
 	if err := validateJSONField("source.config", req.Config); err != nil {
 		return entities.CreateReconciliationSourceInput{}, err
 	}
 
 	return entities.CreateReconciliationSourceInput{
-		Name:   req.Name,
+		Name:   name,
 		Type:   value_objects.SourceType(req.Type),
 		Side:   sharedfee.MatchingSide(req.Side),
 		Config: req.Config,
@@ -212,8 +224,16 @@ func (req *UpdateSourceRequest) ToDomainInput() (entities.UpdateReconciliationSo
 	}
 
 	input := entities.UpdateReconciliationSourceInput{
-		Name:   req.Name,
 		Config: req.Config,
+	}
+
+	if req.Name != nil {
+		trimmed := strings.TrimSpace(*req.Name)
+		if trimmed == "" {
+			return entities.UpdateReconciliationSourceInput{}, ErrNameWhitespaceOnly
+		}
+
+		input.Name = &trimmed
 	}
 
 	if req.Type != nil {

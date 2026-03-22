@@ -90,6 +90,7 @@ func TestMapFeeRuleError_InvalidSide(t *testing.T) {
 	defer resp.Body.Close()
 
 	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+	requireBadRequestResponse(t, resp, "invalid_request", fee.ErrInvalidMatchingSide.Error())
 }
 
 func TestMapFeeRuleError_MissingFeeSchedule(t *testing.T) {

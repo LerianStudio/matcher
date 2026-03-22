@@ -916,3 +916,120 @@ func TestWithFeeRuleRepository_SetsRepo(t *testing.T) {
 
 	assert.NotNil(t, uc.feeRuleRepo)
 }
+
+// --- Cross-context / IDOR regression tests (H14) ---
+//
+// These tests verify that findFeeRuleInContext enforces context-level scoping:
+// a fee rule belonging to context A must not be accessible when queried via
+// context B. This is the application-level guard; cross-tenant isolation is
+// additionally enforced at the PostgreSQL schema level via schema-per-tenant
+// (pgcommon.WithTenantTxProvider), making cross-tenant access impossible at
+// the database layer even if the application check were bypassed.
+
+func TestFindFeeRuleInContext_CrossContextAccess_ReturnsNotFound(t *testing.T) {
+	t.Parallel()
+
+	repo := newFeeRuleMockRepo()
+	uc := newUseCaseWithFeeRuleRepo(repo)
+
+	contextA := uuid.New()
+	contextB := uuid.New()
+	require.NotEqual(t, contextA, contextB)
+
+	// Seed a fee rule owned by context A.
+	rule, err := fee.NewFeeRule(
+		context.Background(),
+		contextA,
+		uuid.New(),
+		fee.MatchingSideLeft,
+		"context-a-rule",
+		1,
+		validPredicates(),
+	)
+	require.NoError(t, err)
+	repo.rules[rule.ID] = rule
+
+	// Access via the owning context succeeds.
+	found, err := uc.findFeeRuleInContext(context.Background(), contextA, rule.ID)
+	require.NoError(t, err)
+	require.NotNil(t, found)
+	assert.Equal(t, rule.ID, found.ID)
+
+	// Access via a different context must return ErrFeeRuleNotFound.
+	notFound, err := uc.findFeeRuleInContext(context.Background(), contextB, rule.ID)
+	assert.Nil(t, notFound)
+	assert.ErrorIs(t, err, fee.ErrFeeRuleNotFound,
+		"fee rule belonging to context A must not be found when queried via context B (IDOR regression)")
+}
+
+func TestUpdateFeeRule_CrossContextAccess_ReturnsNotFound(t *testing.T) {
+	t.Parallel()
+
+	repo := newFeeRuleMockRepo()
+	uc := newUseCaseWithFeeRuleRepo(repo)
+
+	contextA := uuid.New()
+	contextB := uuid.New()
+
+	rule, err := fee.NewFeeRule(
+		context.Background(),
+		contextA,
+		uuid.New(),
+		fee.MatchingSideLeft,
+		"cross-context-update",
+		1,
+		validPredicates(),
+	)
+	require.NoError(t, err)
+	repo.rules[rule.ID] = rule
+
+	// Attempt to update via a foreign context.
+	newName := "hijacked"
+	result, err := uc.UpdateFeeRule(
+		context.Background(),
+		contextB,
+		rule.ID,
+		nil,
+		nil,
+		&newName,
+		nil,
+		nil,
+	)
+
+	assert.Nil(t, result)
+	assert.ErrorIs(t, err, fee.ErrFeeRuleNotFound,
+		"updating a fee rule via a foreign context must fail with not-found (IDOR regression)")
+
+	// Verify the original was not mutated.
+	assert.Equal(t, "cross-context-update", repo.rules[rule.ID].Name)
+}
+
+func TestDeleteFeeRule_CrossContextAccess_ReturnsNotFound(t *testing.T) {
+	t.Parallel()
+
+	repo := newFeeRuleMockRepo()
+	uc := newUseCaseWithFeeRuleRepo(repo)
+
+	contextA := uuid.New()
+	contextB := uuid.New()
+
+	rule, err := fee.NewFeeRule(
+		context.Background(),
+		contextA,
+		uuid.New(),
+		fee.MatchingSideLeft,
+		"cross-context-delete",
+		1,
+		validPredicates(),
+	)
+	require.NoError(t, err)
+	repo.rules[rule.ID] = rule
+
+	// Attempt to delete via a foreign context.
+	err = uc.DeleteFeeRuleInContext(context.Background(), contextB, rule.ID)
+	assert.ErrorIs(t, err, fee.ErrFeeRuleNotFound,
+		"deleting a fee rule via a foreign context must fail with not-found (IDOR regression)")
+
+	// Verify the rule was not deleted.
+	assert.Contains(t, repo.rules, rule.ID, "fee rule must survive cross-context delete attempt")
+}

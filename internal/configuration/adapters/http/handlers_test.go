@@ -343,6 +343,20 @@ func requireConflictResponse(
 	require.Equal(t, expectedMessage, payload["message"])
 }
 
+func requireBadRequestResponse(
+	t *testing.T,
+	response *http.Response,
+	expectedTitle, expectedMessage string,
+) {
+	t.Helper()
+
+	var payload map[string]any
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&payload))
+	require.Equal(t, float64(400), payload["code"])
+	require.Equal(t, expectedTitle, payload["title"])
+	require.Equal(t, expectedMessage, payload["message"])
+}
+
 type contextHandlerTestCase struct {
 	name           string
 	method         string

@@ -191,10 +191,14 @@ func stringifyPredicateValue(raw any) string {
 		return strconv.FormatBool(value)
 	case fmt.Stringer:
 		// Guard against typed-nil interface values (e.g. (*time.Time)(nil) satisfies
-		// fmt.Stringer but calling String() on it panics).
+		// fmt.Stringer but calling String() on it panics). We check all nil-able kinds
+		// (pointer, map, slice, chan, func, interface) to be fully defensive.
 		rv := reflect.ValueOf(value)
-		if rv.Kind() == reflect.Ptr && rv.IsNil() {
-			return ""
+		switch rv.Kind() {
+		case reflect.Ptr, reflect.Map, reflect.Slice, reflect.Chan, reflect.Func, reflect.Interface:
+			if rv.IsNil() {
+				return ""
+			}
 		}
 
 		return value.String()
