@@ -117,6 +117,53 @@ func (repo *Repository) FindByContextIDAndType(
 	return sources, pagination, nil
 }
 
+// FindByContextIDWithTx retrieves all reconciliation sources for a context using
+// cursor-based pagination within an existing transaction. This enables consistent
+// snapshot reads when the caller already holds a transaction (e.g. clone operations).
+func (repo *Repository) FindByContextIDWithTx(
+	ctx stdctx.Context,
+	tx *sql.Tx,
+	contextID uuid.UUID,
+	cursor string,
+	limit int,
+) ([]*entities.ReconciliationSource, libHTTP.CursorPagination, error) {
+	if repo == nil || repo.provider == nil {
+		return nil, libHTTP.CursorPagination{}, ErrRepoNotInitialized
+	}
+
+	if tx == nil {
+		return nil, libHTTP.CursorPagination{}, ErrTransactionRequired
+	}
+
+	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
+
+	ctx, span := tracer.Start(ctx, "repository.source.list_with_tx")
+	defer span.End()
+
+	limit = libHTTP.ValidateLimit(limit, constants.DefaultPaginationLimit, constants.MaximumPaginationLimit)
+
+	decodedCursor, err := parseCursor(cursor)
+	if err != nil {
+		return nil, libHTTP.CursorPagination{}, err
+	}
+
+	baseQuery := squirrel.Select(strings.Split(sourceColumns, ", ")...).
+		From("reconciliation_sources").
+		Where(squirrel.Eq{"context_id": contextID.String()}).
+		PlaceholderFormat(squirrel.Dollar)
+
+	sources, pagination, err := executeSourceQueryWithTx(ctx, tx, baseQuery, cursor, decodedCursor, limit)
+	if err != nil {
+		libOpentelemetry.HandleSpanError(span, "failed to list reconciliation sources with tx", err)
+
+		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to list reconciliation sources with tx")
+
+		return nil, libHTTP.CursorPagination{}, fmt.Errorf("failed to find reconciliation sources by context with tx: %w", err)
+	}
+
+	return sources, pagination, nil
+}
+
 // executeSourceQuery executes a paginated source query within a tenant transaction.
 func executeSourceQuery(
 	ctx stdctx.Context,
@@ -140,6 +187,25 @@ func executeSourceQuery(
 	}
 
 	return result, pagination, nil
+}
+
+// executeSourceQueryWithTx executes a paginated source query using an existing transaction.
+func executeSourceQueryWithTx(
+	ctx stdctx.Context,
+	tx *sql.Tx,
+	baseQuery squirrel.SelectBuilder,
+	cursor string,
+	decodedCursor libHTTP.Cursor,
+	limit int,
+) ([]*entities.ReconciliationSource, libHTTP.CursorPagination, error) {
+	var pagination libHTTP.CursorPagination
+
+	sources, err := fetchPaginatedSources(ctx, tx, baseQuery, cursor, decodedCursor, limit, &pagination)
+	if err != nil {
+		return nil, libHTTP.CursorPagination{}, fmt.Errorf("execute source query with tx: %w", err)
+	}
+
+	return sources, pagination, nil
 }
 
 // fetchPaginatedSources applies pagination and fetches sources from the database.

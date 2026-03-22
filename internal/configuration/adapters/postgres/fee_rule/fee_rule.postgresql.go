@@ -234,6 +234,72 @@ func (repo *Repository) FindByContextID(
 	return result, nil
 }
 
+// FindByContextIDWithTx retrieves all fee rules for a context using an existing
+// transaction. This enables consistent snapshot reads when the caller already
+// holds a transaction (e.g. clone operations).
+func (repo *Repository) FindByContextIDWithTx(
+	ctx stdctx.Context,
+	tx *sql.Tx,
+	contextID uuid.UUID,
+) ([]*fee.FeeRule, error) {
+	if repo == nil || repo.provider == nil {
+		return nil, ErrRepoNotInitialized
+	}
+
+	if tx == nil {
+		return nil, ErrTransactionRequired
+	}
+
+	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
+
+	ctx, span := tracer.Start(ctx, "postgres.find_fee_rules_by_context_with_tx")
+	defer span.End()
+
+	result, err := pgcommon.WithTenantTxOrExistingProvider(
+		ctx,
+		repo.provider,
+		tx,
+		func(innerTx *sql.Tx) ([]*fee.FeeRule, error) {
+			rows, err := innerTx.QueryContext(
+				ctx,
+				"SELECT "+feeRuleColumns+" FROM fee_rules WHERE context_id = $1 ORDER BY priority ASC",
+				contextID.String(),
+			)
+			if err != nil {
+				return nil, err
+			}
+
+			defer rows.Close()
+
+			var rules []*fee.FeeRule
+
+			for rows.Next() {
+				rule, scanErr := scanFeeRule(rows)
+				if scanErr != nil {
+					return nil, scanErr
+				}
+
+				rules = append(rules, rule)
+			}
+
+			if err := rows.Err(); err != nil {
+				return nil, err
+			}
+
+			return rules, nil
+		},
+	)
+	if err != nil {
+		libOpentelemetry.HandleSpanError(span, "failed to list fee rules with tx", err)
+
+		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to list fee rules by context with tx")
+
+		return nil, fmt.Errorf("find fee rules by context with tx: %w", err)
+	}
+
+	return result, nil
+}
+
 // Update modifies an existing fee rule.
 func (repo *Repository) Update(ctx stdctx.Context, rule *fee.FeeRule) error {
 	if repo == nil || repo.provider == nil {

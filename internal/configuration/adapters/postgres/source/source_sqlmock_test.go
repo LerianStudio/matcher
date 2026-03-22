@@ -2224,6 +2224,88 @@ func TestRepository_FindByContextID_InvalidCursor(t *testing.T) {
 	})
 }
 
+// TestScanSource_InvalidPersistedSide verifies adapter boundary behavior when
+// the database contains an unrecognized side value. The toDomain conversion at
+// source.go:96-99 casts any string to MatchingSide without validation.
+// This test ensures the scan path does not panic and faithfully passes the raw
+// value through, leaving domain-level validation to the caller.
+func TestScanSource_InvalidPersistedSide(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+
+	defer db.Close()
+
+	now := time.Now().UTC()
+	id := uuid.New()
+	contextID := uuid.New()
+	configJSON := []byte(`{}`)
+
+	rows := sqlmock.NewRows([]string{
+		"id", "context_id", "name", "type", "side", "config", "created_at", "updated_at",
+	}).AddRow(
+		id.String(), contextID.String(), "Test Source", "LEDGER", "INVALID", configJSON, now, now,
+	)
+	mock.ExpectQuery("SELECT").WillReturnRows(rows)
+
+	sqlRows, err := db.QueryContext(ctx, "SELECT 1")
+	require.NoError(t, err)
+
+	defer sqlRows.Close()
+
+	require.True(t, sqlRows.Next())
+
+	result, err := scanSource(sqlRows)
+	require.NoError(t, err, "scanSource must not panic or error on unrecognized side value")
+	require.NotNil(t, result)
+	require.Equal(t, id, result.ID)
+
+	// The adapter faithfully passes through the raw string; domain validation
+	// (MatchingSide.IsValid()) is the caller's responsibility.
+	assert.Equal(t, sharedfee.MatchingSide("INVALID"), result.Side)
+	assert.False(t, result.Side.IsValid(), "INVALID side must not pass domain validation")
+}
+
+// TestScanSource_EmptyPersistedSide verifies that a NULL side from the database
+// produces an empty MatchingSide (zero value).
+func TestScanSource_EmptyPersistedSide(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+
+	defer db.Close()
+
+	now := time.Now().UTC()
+	id := uuid.New()
+	contextID := uuid.New()
+	configJSON := []byte(`{}`)
+
+	// sql.NullString with empty string simulates a NULL column.
+	rows := sqlmock.NewRows([]string{
+		"id", "context_id", "name", "type", "side", "config", "created_at", "updated_at",
+	}).AddRow(
+		id.String(), contextID.String(), "Test Source", "LEDGER", nil, configJSON, now, now,
+	)
+	mock.ExpectQuery("SELECT").WillReturnRows(rows)
+
+	sqlRows, err := db.QueryContext(ctx, "SELECT 1")
+	require.NoError(t, err)
+
+	defer sqlRows.Close()
+
+	require.True(t, sqlRows.Next())
+
+	result, err := scanSource(sqlRows)
+	require.NoError(t, err, "scanSource must not panic on NULL side")
+	require.NotNil(t, result)
+	assert.Equal(t, sharedfee.MatchingSide(""), result.Side)
+	assert.False(t, result.Side.IsExclusive(), "empty side must not be exclusive")
+}
+
 func TestRepository_FindByContextIDAndType_InvalidCursor(t *testing.T) {
 	t.Parallel()
 
