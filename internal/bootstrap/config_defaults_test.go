@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
 )
 
 func TestDefaultConfig_NotNil(t *testing.T) {
@@ -140,7 +140,7 @@ func TestDefaultConfig_TelemetryDisabled(t *testing.T) {
 	assert.False(t, cfg.Telemetry.Enabled)
 	assert.Equal(t, "matcher", cfg.Telemetry.ServiceName)
 	assert.Equal(t, "github.com/LerianStudio/matcher", cfg.Telemetry.LibraryName)
-	assert.Equal(t, "1.0.0", cfg.Telemetry.ServiceVersion)
+	assert.Equal(t, "1.1.0", cfg.Telemetry.ServiceVersion)
 	assert.Equal(t, "development", cfg.Telemetry.DeploymentEnv)
 	assert.Equal(t, "localhost:4317", cfg.Telemetry.CollectorEndpoint)
 	assert.Equal(t, 15, cfg.Telemetry.DBMetricsIntervalSec)

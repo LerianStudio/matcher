@@ -320,7 +320,9 @@ func TestProtectedGroupWithActionsWithMiddleware_MultiActionEnforcement(t *testi
 				}
 			}
 			w.Header().Set("Content-Type", "application/json")
-			require.NoError(t, json.NewEncoder(w).Encode(map[string]any{"authorized": true}))
+			if err := json.NewEncoder(w).Encode(map[string]any{"authorized": true}); err != nil {
+				http.Error(w, "encode error", http.StatusInternalServerError)
+			}
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -380,7 +382,9 @@ func TestProtectedGroupWithMiddleware_AdditionalMiddlewareSeesTenantAndUserAfter
 			_, _ = w.Write([]byte("healthy"))
 		case "/v1/authorize":
 			w.Header().Set("Content-Type", "application/json")
-			require.NoError(t, json.NewEncoder(w).Encode(map[string]any{"authorized": true}))
+			if err := json.NewEncoder(w).Encode(map[string]any{"authorized": true}); err != nil {
+				http.Error(w, "encode error", http.StatusInternalServerError)
+			}
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}

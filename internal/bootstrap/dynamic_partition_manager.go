@@ -18,7 +18,11 @@ import (
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
-var errPartitionManagerProviderUnavailable = errors.New("partition manager: infrastructure provider not available")
+var (
+	errPartitionManagerProviderUnavailable = errors.New("partition manager: infrastructure provider not available")
+	errPartitionManagerNilDependency       = errors.New("partition manager: nil dependency provided at construction")
+	errPartitionManagerNilLease            = errors.New("partition manager: postgres connection returned nil lease")
+)
 
 type dynamicPartitionManager struct {
 	provider sharedPorts.InfrastructureProvider
@@ -32,8 +36,12 @@ func newDynamicPartitionManager(
 	provider sharedPorts.InfrastructureProvider,
 	logger libLog.Logger,
 	tracer trace.Tracer,
-) governanceWorker.PartitionManager {
-	return &dynamicPartitionManager{provider: provider, logger: logger, tracer: tracer}
+) (governanceWorker.PartitionManager, error) {
+	if provider == nil || isNilInterface(logger) || tracer == nil {
+		return nil, errPartitionManagerNilDependency
+	}
+
+	return &dynamicPartitionManager{provider: provider, logger: logger, tracer: tracer}, nil
 }
 
 // EnsurePartitionsExist delegates partition provisioning to a runtime-backed manager.
@@ -105,6 +113,10 @@ func (manager *dynamicPartitionManager) current(ctx context.Context) (*governanc
 	lease, err := manager.provider.GetPostgresConnection(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("get postgres connection for partition manager: %w", err)
+	}
+
+	if lease == nil {
+		return nil, nil, errPartitionManagerNilLease
 	}
 
 	client := lease.Connection()

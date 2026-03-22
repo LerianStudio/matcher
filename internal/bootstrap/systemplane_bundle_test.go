@@ -17,7 +17,7 @@ import (
 
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 
-	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
 )
 
 // Compile-time interface satisfaction check.

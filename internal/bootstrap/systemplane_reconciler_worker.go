@@ -9,8 +9,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
-	"github.com/LerianStudio/matcher/pkg/systemplane/ports"
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/ports"
 )
 
 // Compile-time interface check.

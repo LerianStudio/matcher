@@ -20,10 +20,10 @@ import (
 	authMiddleware "github.com/LerianStudio/lib-auth/v2/auth/middleware"
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/ports"
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/service"
 	"github.com/LerianStudio/matcher/internal/auth"
-	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
-	"github.com/LerianStudio/matcher/pkg/systemplane/ports"
-	"github.com/LerianStudio/matcher/pkg/systemplane/service"
 )
 
 type mockManagerForMount struct {

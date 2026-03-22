@@ -13,11 +13,11 @@ import (
 
 	authMiddleware "github.com/LerianStudio/lib-auth/v2/auth/middleware"
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	fiberhttp "github.com/LerianStudio/lib-commons/v4/commons/systemplane/adapters/http/fiber"
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/service"
 
 	"github.com/LerianStudio/matcher/internal/auth"
-	fiberhttp "github.com/LerianStudio/matcher/pkg/systemplane/adapters/http/fiber"
-	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
-	"github.com/LerianStudio/matcher/pkg/systemplane/service"
 )
 
 var (

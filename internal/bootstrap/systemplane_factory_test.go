@@ -16,8 +16,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
-	"github.com/LerianStudio/matcher/pkg/systemplane/ports"
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/ports"
 )
 
 // Compile-time interface satisfaction check.
@@ -51,7 +51,7 @@ func testBootstrapConfig() *BootstrapOnlyConfig {
 		TelemetryEnabled:           false,
 		TelemetryServiceName:       "matcher",
 		TelemetryLibraryName:       "github.com/LerianStudio/matcher",
-		TelemetryServiceVersion:    "1.0.0",
+		TelemetryServiceVersion:    "1.1.0",
 		TelemetryDeploymentEnv:     "development",
 		TelemetryCollectorEndpoint: "localhost:4317",
 		TelemetryDBMetricsInterval: 15,

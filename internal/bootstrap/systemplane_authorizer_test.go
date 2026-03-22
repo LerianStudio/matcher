@@ -13,8 +13,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
-	"github.com/LerianStudio/matcher/pkg/systemplane/ports"
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/ports"
 )
 
 func TestMatcherAuthorizer_ImplementsInterface(t *testing.T) {

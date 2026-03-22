@@ -31,7 +31,7 @@ func TestInitTelemetry(t *testing.T) {
 				Telemetry: TelemetryConfig{
 					Enabled:        false,
 					ServiceName:    "matcher-test",
-					ServiceVersion: "1.0.0",
+					ServiceVersion: "1.1.0",
 				},
 			}
 			logger := &mockLoggerForTelemetry{}
@@ -69,7 +69,7 @@ func TestInitTelemetry(t *testing.T) {
 			Telemetry: TelemetryConfig{
 				Enabled:        false,
 				ServiceName:    "propagator-test",
-				ServiceVersion: "1.0.0",
+				ServiceVersion: "1.1.0",
 			},
 		}
 		logger := &mockLoggerForTelemetry{}
@@ -109,7 +109,7 @@ func TestInitTelemetryWithTimeout(t *testing.T) {
 			Telemetry: TelemetryConfig{
 				Enabled:        false,
 				ServiceName:    "timeout-test",
-				ServiceVersion: "1.0.0",
+				ServiceVersion: "1.1.0",
 			},
 		}
 		logger := &mockLoggerForTelemetry{}
@@ -134,7 +134,7 @@ func TestInitTelemetryWithTimeout(t *testing.T) {
 			Telemetry: TelemetryConfig{
 				Enabled:           true,
 				ServiceName:       "timeout-test",
-				ServiceVersion:    "1.0.0",
+				ServiceVersion:    "1.1.0",
 				CollectorEndpoint: "unreachable-host:4317",
 			},
 		}
@@ -165,7 +165,7 @@ func TestInitTelemetryWithTimeout(t *testing.T) {
 			Telemetry: TelemetryConfig{
 				Enabled:           true,
 				ServiceName:       "timeout-fallback-test",
-				ServiceVersion:    "1.0.0",
+				ServiceVersion:    "1.1.0",
 				CollectorEndpoint: "localhost:4317",
 			},
 		}
@@ -211,7 +211,7 @@ func TestInitTelemetryWithTimeout(t *testing.T) {
 			Telemetry: TelemetryConfig{
 				Enabled:        true,
 				ServiceName:    "expired-parent-context",
-				ServiceVersion: "1.0.0",
+				ServiceVersion: "1.1.0",
 			},
 		}
 

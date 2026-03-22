@@ -863,14 +863,14 @@ func TestConfig_InfraConnectTimeout(t *testing.T) {
 			expected: 10 * time.Second,
 		},
 		{
-			name:     "zero value returns minimum duration",
+			name:     "zero value returns default 30s",
 			timeout:  0,
-			expected: 1 * time.Second,
+			expected: 30 * time.Second,
 		},
 		{
-			name:     "negative value returns minimum duration",
+			name:     "negative value returns default 30s",
 			timeout:  -1,
-			expected: 1 * time.Second,
+			expected: 30 * time.Second,
 		},
 		{
 			name:     "caps absurdly high values",

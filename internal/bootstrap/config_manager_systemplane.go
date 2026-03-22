@@ -4,7 +4,7 @@
 
 package bootstrap
 
-import "github.com/LerianStudio/matcher/pkg/systemplane/domain"
+import "github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
 
 // configFromSnapshot hydrates every Config field from the snapshot alone, with
 // no dependency on a previous Config. This is the pure hydration path — used by

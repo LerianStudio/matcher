@@ -1206,9 +1206,9 @@ func TestClientErrorMessageForStatusCases(t *testing.T) {
 			expected: "request_failed",
 		},
 		{
-			name:     "too many requests returns request_failed",
+			name:     "too many requests returns rate_limited",
 			status:   http.StatusTooManyRequests,
-			expected: "request_failed",
+			expected: "rate_limited",
 		},
 		{
 			name:     "internal server error returns request_failed",
@@ -1338,7 +1338,7 @@ func TestCustomErrorHandler_TooManyRequests(t *testing.T) {
 
 	var body map[string]any
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
-	assert.Equal(t, "request_failed", body["title"])
+	assert.Equal(t, "rate_limited", body["title"])
 }
 
 func TestCustomErrorHandler_Forbidden(t *testing.T) {

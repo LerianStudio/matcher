@@ -21,10 +21,12 @@ type spyLogger struct {
 func (l *spyLogger) Log(_ context.Context, _ libLog.Level, msg string, _ ...libLog.Field) {
 	l.msgs = append(l.msgs, msg)
 }
+
 func (l *spyLogger) With(fields ...libLog.Field) libLog.Logger {
 	l.fields = append(l.fields, fields...)
 	return l
 }
+
 func (l *spyLogger) WithGroup(name string) libLog.Logger {
 	l.groups = append(l.groups, name)
 	return l

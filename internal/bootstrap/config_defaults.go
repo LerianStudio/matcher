@@ -7,7 +7,7 @@ package bootstrap
 import (
 	"time"
 
-	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
 )
 
 // defaultConfig returns a Config populated with sensible defaults derived from

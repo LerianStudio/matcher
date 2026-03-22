@@ -7,9 +7,10 @@ package bootstrap
 import (
 	"context"
 
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/ports"
+
 	"github.com/LerianStudio/matcher/internal/auth"
-	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
-	"github.com/LerianStudio/matcher/pkg/systemplane/ports"
 )
 
 // Compile-time interface check.

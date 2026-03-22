@@ -4,7 +4,7 @@
 
 package bootstrap
 
-import "github.com/LerianStudio/matcher/pkg/systemplane/domain"
+import "github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
 
 func matcherKeyDefsWorkers() []domain.KeyDef {
 	return []domain.KeyDef{

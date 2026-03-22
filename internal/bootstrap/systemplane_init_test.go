@@ -17,10 +17,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
-	"github.com/LerianStudio/matcher/pkg/systemplane/ports"
-	"github.com/LerianStudio/matcher/pkg/systemplane/registry"
-	"github.com/LerianStudio/matcher/pkg/systemplane/service"
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/ports"
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/registry"
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/service"
 )
 
 type seedInitStoreMock struct {
@@ -364,9 +364,11 @@ func (supervisor *reloadCountingSupervisor) Snapshot() domain.Snapshot     { ret
 func (supervisor *reloadCountingSupervisor) PublishSnapshot(context.Context, domain.Snapshot, string) error {
 	return nil
 }
+
 func (supervisor *reloadCountingSupervisor) ReconcileCurrent(context.Context, domain.Snapshot, string) error {
 	return nil
 }
+
 func (supervisor *reloadCountingSupervisor) Reload(_ context.Context, reason string, _ ...string) error {
 	supervisor.reloads.Add(1)
 	supervisor.lastReason.Store(reason)

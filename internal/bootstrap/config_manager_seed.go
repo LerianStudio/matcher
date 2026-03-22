@@ -11,10 +11,9 @@ import (
 	"reflect"
 
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-
-	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
-	"github.com/LerianStudio/matcher/pkg/systemplane/ports"
-	"github.com/LerianStudio/matcher/pkg/systemplane/registry"
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/ports"
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/registry"
 )
 
 // seedSource is the source label recorded in the systemplane store for

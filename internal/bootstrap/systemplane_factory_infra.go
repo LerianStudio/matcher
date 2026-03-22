@@ -18,11 +18,11 @@ import (
 	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
 	libRabbitmq "github.com/LerianStudio/lib-commons/v4/commons/rabbitmq"
 	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
 
 	"github.com/LerianStudio/matcher/internal/reporting/adapters/storage"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 	"github.com/LerianStudio/matcher/pkg/storageopt"
-	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
 )
 
 // buildPostgresClient creates a PostgreSQL client from snapshot values.
@@ -266,7 +266,7 @@ func (factory *MatcherBundleFactory) extractPostgresConfig(snap domain.Snapshot)
 type redisConfigSnapshot struct {
 	Host           string
 	MasterName     string
-	Password       string
+	Password       string `json:"-"`
 	DB             int
 	Protocol       int
 	TLS            bool
@@ -302,7 +302,7 @@ type rabbitMQConfigSnapshot struct {
 	Host                     string
 	Port                     string
 	User                     string
-	Password                 string
+	Password                 string `json:"-"`
 	VHost                    string
 	HealthURL                string
 	AllowInsecureHealthCheck bool

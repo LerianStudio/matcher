@@ -340,8 +340,8 @@ func TestInfraConnectTimeout(t *testing.T) {
 		sec      int
 		expected time.Duration
 	}{
-		{name: "defaults_to_1s_when_zero", sec: 0, expected: time.Second},
-		{name: "defaults_to_1s_when_negative", sec: -5, expected: time.Second},
+		{name: "defaults_to_30s_when_zero", sec: 0, expected: 30 * time.Second},
+		{name: "defaults_to_30s_when_negative", sec: -5, expected: 30 * time.Second},
 		{name: "uses_configured_value", sec: 30, expected: 30 * time.Second},
 		{name: "caps_at_300s", sec: 999, expected: 300 * time.Second},
 	}

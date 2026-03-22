@@ -227,8 +227,8 @@ func (collector *DBMetricsCollector) collect(ctx context.Context) {
 			}
 
 			collector.lastResolverID = currentID
-			collector.lastStatsMu.Unlock()
 			collector.db = db
+			collector.lastStatsMu.Unlock()
 		}
 	}
 

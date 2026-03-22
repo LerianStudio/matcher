@@ -167,7 +167,6 @@ func TestNewReconciliationSource(t *testing.T) {
 			require.Error(t, err)
 			assert.Equal(t, ErrSourceSideInvalid, err)
 		})
-
 	})
 }
 

@@ -39,9 +39,11 @@ func (stub *feeRuleRepositoryStub) Create(context.Context, *fee.FeeRule) error {
 func (stub *feeRuleRepositoryStub) CreateWithTx(context.Context, *sql.Tx, *fee.FeeRule) error {
 	return nil
 }
+
 func (stub *feeRuleRepositoryStub) FindByID(context.Context, uuid.UUID) (*fee.FeeRule, error) {
 	return nil, nil
 }
+
 func (stub *feeRuleRepositoryStub) FindByContextID(context.Context, uuid.UUID) ([]*fee.FeeRule, error) {
 	if stub.err != nil {
 		return nil, stub.err

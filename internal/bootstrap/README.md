@@ -84,7 +84,7 @@ Exports PostgreSQL connection pool metrics (open connections, in-use, idle, wait
 
 ### Systemplane Integration
 
-The systemplane (`pkg/systemplane`) is integrated during bootstrap to provide runtime configuration authority:
+The systemplane (`lib-commons/v4/commons/systemplane`) is integrated during bootstrap to provide runtime configuration authority:
 
 - **Config Manager**: Wraps the systemplane service to provide `configManager.Get()` for runtime config reads.
 - **Key Registry**: All configurable keys are registered with types, defaults, scopes, and mutability metadata.

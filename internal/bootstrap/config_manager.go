@@ -11,8 +11,7 @@ import (
 	"sync/atomic"
 
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-
-	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
 )
 
 // errConfigNilAtomicLoad is returned when the atomic config pointer unexpectedly
@@ -72,6 +71,10 @@ func NewConfigManager(cfg *Config, logger libLog.Logger) (*ConfigManager, error)
 // Get returns the current configuration. This is the hot path — it uses an
 // atomic load with zero locking overhead. Safe to call from any goroutine.
 func (cm *ConfigManager) Get() *Config {
+	if cm == nil {
+		return nil
+	}
+
 	return cm.config.Load()
 }
 
@@ -84,6 +87,10 @@ func (cm *ConfigManager) Stop() {}
 // systemplane Supervisor. In seed mode, hot-reload is disabled and callers
 // should use the systemplane API for runtime configuration changes.
 func (cm *ConfigManager) InSeedMode() bool {
+	if cm == nil {
+		return false
+	}
+
 	return cm.seedMode.Load()
 }
 

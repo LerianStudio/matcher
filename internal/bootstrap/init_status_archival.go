@@ -257,7 +257,11 @@ func initArchivalComponents(
 	}
 
 	tracer := otel.Tracer(constants.ApplicationName)
-	partitionMgr := newDynamicPartitionManager(provider, logger, tracer)
+
+	partitionMgr, err := newDynamicPartitionManager(provider, logger, tracer)
+	if err != nil {
+		return nil, fmt.Errorf("create partition manager: %w", err)
+	}
 
 	archivalWorkerCfg := governanceWorker.ArchivalWorkerConfig{
 		Interval:            cfg.ArchivalInterval(),

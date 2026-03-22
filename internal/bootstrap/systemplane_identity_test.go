@@ -13,8 +13,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/ports"
 	"github.com/LerianStudio/matcher/internal/auth"
-	"github.com/LerianStudio/matcher/pkg/systemplane/ports"
 )
 
 func TestMatcherIdentityResolver_ImplementsInterface(t *testing.T) {

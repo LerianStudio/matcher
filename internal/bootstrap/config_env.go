@@ -235,8 +235,10 @@ func (cfg *Config) QueryTimeout() time.Duration {
 // This is the maximum time allowed for all infrastructure connections (PostgreSQL, Redis, RabbitMQ)
 // to complete during application startup.
 func (cfg *Config) InfraConnectTimeout() time.Duration {
+	const defaultInfraConnectTimeoutSec = 30
+
 	if cfg.Infrastructure.ConnectTimeoutSec <= 0 {
-		return time.Second
+		return time.Duration(defaultInfraConnectTimeoutSec) * time.Second
 	}
 
 	if cfg.Infrastructure.ConnectTimeoutSec > maxInfraConnectTimeoutSec {

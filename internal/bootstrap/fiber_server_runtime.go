@@ -86,7 +86,7 @@ func (srv *Server) Run(_ *libCommons.Launcher) error {
 		return fmt.Errorf("server run: %w", err)
 	}
 
-	if strings.TrimSpace(srv.cfg.Server.TLSCertFile) != "" ||
+	if strings.TrimSpace(srv.cfg.Server.TLSCertFile) != "" &&
 		strings.TrimSpace(srv.cfg.Server.TLSKeyFile) != "" {
 		if err := srv.app.ListenTLS(srv.cfg.Server.Address, srv.cfg.Server.TLSCertFile, srv.cfg.Server.TLSKeyFile); err != nil {
 			return fmt.Errorf("server listen tls: %w", err)

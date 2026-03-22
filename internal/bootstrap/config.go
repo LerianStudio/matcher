@@ -154,7 +154,7 @@ type TelemetryConfig struct {
 	Enabled           bool   `env:"ENABLE_TELEMETRY"                     envDefault:"false"                          mapstructure:"enabled"`
 	ServiceName       string `env:"OTEL_RESOURCE_SERVICE_NAME"           envDefault:"matcher"                        mapstructure:"service_name"`
 	LibraryName       string `env:"OTEL_LIBRARY_NAME"                    envDefault:"github.com/LerianStudio/matcher" mapstructure:"library_name"`
-	ServiceVersion    string `env:"OTEL_RESOURCE_SERVICE_VERSION"        envDefault:"1.0.0"                          mapstructure:"service_version"`
+	ServiceVersion    string `env:"OTEL_RESOURCE_SERVICE_VERSION"        envDefault:"1.1.0"                          mapstructure:"service_version"`
 	DeploymentEnv     string `env:"OTEL_RESOURCE_DEPLOYMENT_ENVIRONMENT" envDefault:"development"                    mapstructure:"deployment_env"`
 	CollectorEndpoint string `env:"OTEL_EXPORTER_OTLP_ENDPOINT"          envDefault:"localhost:4317"                 mapstructure:"collector_endpoint"`
 	// DBMetricsIntervalSec configures how often database connection pool metrics

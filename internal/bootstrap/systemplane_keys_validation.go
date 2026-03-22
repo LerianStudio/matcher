@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
 )
 
 func validateAbsoluteHTTPURL(value any) error {

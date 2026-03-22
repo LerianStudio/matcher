@@ -54,8 +54,10 @@ type feeRuleRepoTxStub struct {
 	findByContextIDWithTxFn func(context.Context, *sql.Tx, uuid.UUID) ([]*fee.FeeRule, error)
 }
 
-var _ feeRuleTxCreator = (*feeRuleRepoTxStub)(nil)
-var _ feeRuleTxFinder = (*feeRuleRepoTxStub)(nil)
+var (
+	_ feeRuleTxCreator = (*feeRuleRepoTxStub)(nil)
+	_ feeRuleTxFinder  = (*feeRuleRepoTxStub)(nil)
+)
 
 func (stub *feeRuleRepoTxStub) CreateWithTx(ctx context.Context, tx *sql.Tx, rule *fee.FeeRule) error {
 	if stub.createWithTxFn != nil {

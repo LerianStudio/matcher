@@ -35,7 +35,9 @@ func TestNewProviderBackedSchemaCache_NilProvider(t *testing.T) {
 
 	cache := newProviderBackedSchemaCache(nil, false)
 
-	assert.Nil(t, cache, "nil provider must produce nil cache")
+	require.NotNil(t, cache, "nil provider must produce a safe no-op cache, not nil")
+	_, isNoop := cache.(*noopSchemaCache)
+	assert.True(t, isNoop, "nil provider must produce a *noopSchemaCache")
 }
 
 func TestNewProviderBackedSchemaCache_NonNilProvider(t *testing.T) {
@@ -53,7 +55,9 @@ func TestNewDynamicSchemaCache_NilInner(t *testing.T) {
 
 	cache := newDynamicSchemaCache(nil, func() time.Duration { return time.Minute })
 
-	assert.Nil(t, cache, "nil inner must return nil")
+	require.NotNil(t, cache, "nil inner must return a safe no-op cache, not nil")
+	_, isNoop := cache.(*noopSchemaCache)
+	assert.True(t, isNoop, "nil inner must produce a *noopSchemaCache")
 }
 
 func TestNewDynamicSchemaCache_NilTTLGetter(t *testing.T) {
@@ -170,7 +174,9 @@ func TestNewDynamicExtractionPoller_NilConfigGetter(t *testing.T) {
 
 	poller := newDynamicExtractionPoller(nil, nil, nil, nil)
 
-	assert.Nil(t, poller, "nil configGetter must produce nil poller")
+	require.NotNil(t, poller, "nil configGetter must produce a safe no-op poller, not nil")
+	_, isNoop := poller.(*noopExtractionPoller)
+	assert.True(t, isNoop, "nil configGetter must produce a *noopExtractionPoller")
 }
 
 func TestNewDynamicExtractionPoller_ValidArgs(t *testing.T) {

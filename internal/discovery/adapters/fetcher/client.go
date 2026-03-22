@@ -452,6 +452,10 @@ func rejectEmptyOrNullBody(body []byte) error {
 // when MaxRetries is set to a high value.
 const maxBackoffDelay = 30 * time.Second
 
+// maxRetryShift caps the bit-shift exponent to prevent integer overflow
+// in the exponential backoff calculation (1 << shift).
+const maxRetryShift = 30
+
 // doRequest performs an HTTP request with retry and exponential backoff.
 //
 //nolint:gocognit,gocyclo,cyclop // retry loop with error classification is inherently branchy; extraction done via classifyResponse.
@@ -483,7 +487,12 @@ func (client *HTTPFetcherClient) doRequest(ctx context.Context, method, requestU
 
 	for attempt := 0; attempt < attempts; attempt++ {
 		if attempt > 0 {
-			delay := client.cfg.RetryBaseDelay * time.Duration(1<<uint(attempt-1))
+			shift := attempt - 1
+			if shift > maxRetryShift {
+				shift = maxRetryShift // cap shift to prevent integer overflow
+			}
+
+			delay := client.cfg.RetryBaseDelay * time.Duration(1<<uint(shift))
 			if delay > maxBackoffDelay {
 				delay = maxBackoffDelay
 			}

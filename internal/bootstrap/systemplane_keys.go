@@ -8,8 +8,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
-	"github.com/LerianStudio/matcher/pkg/systemplane/registry"
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/registry"
 )
 
 var (
@@ -94,7 +94,7 @@ const (
 	defaultTelemetryEnabled         = false
 	defaultTelemetryServiceName     = "matcher"
 	defaultTelemetryLibraryName     = "github.com/LerianStudio/matcher"
-	defaultTelemetryServiceVersion  = "1.0.0"
+	defaultTelemetryServiceVersion  = "1.1.0"
 	defaultTelemetryDeploymentEnv   = "development"
 	defaultTelemetryCollectorEP     = "localhost:4317"
 	defaultTelemetryDBMetricsIntSec = 15

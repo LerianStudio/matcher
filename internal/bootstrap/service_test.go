@@ -23,8 +23,8 @@ import (
 	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
-	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
 )
 
 // mockApp satisfies libCommons.App for testing.
@@ -53,6 +53,7 @@ func (supervisor *orderingSupervisor) Snapshot() domain.Snapshot     { return do
 func (supervisor *orderingSupervisor) PublishSnapshot(context.Context, domain.Snapshot, string) error {
 	return nil
 }
+
 func (supervisor *orderingSupervisor) ReconcileCurrent(context.Context, domain.Snapshot, string) error {
 	return nil
 }

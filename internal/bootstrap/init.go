@@ -37,6 +37,9 @@ import (
 	libRabbitmq "github.com/LerianStudio/lib-commons/v4/commons/rabbitmq"
 	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
 	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/adapters/changefeed"
+	systemplaneDomain "github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
+	systemplaneService "github.com/LerianStudio/lib-commons/v4/commons/systemplane/service"
 	libZap "github.com/LerianStudio/lib-commons/v4/commons/zap"
 
 	"github.com/LerianStudio/matcher/internal/auth"
@@ -109,9 +112,6 @@ import (
 	sharedRabbitmq "github.com/LerianStudio/matcher/internal/shared/adapters/rabbitmq"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
-	"github.com/LerianStudio/matcher/pkg/systemplane/adapters/changefeed"
-	systemplaneDomain "github.com/LerianStudio/matcher/pkg/systemplane/domain"
-	systemplaneService "github.com/LerianStudio/matcher/pkg/systemplane/service"
 )
 
 const (

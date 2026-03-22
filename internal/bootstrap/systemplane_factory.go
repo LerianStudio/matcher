@@ -13,11 +13,11 @@ import (
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
 	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/ports"
 	libZap "github.com/LerianStudio/lib-commons/v4/commons/zap"
 
 	"github.com/LerianStudio/matcher/internal/shared/constants"
-	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
-	"github.com/LerianStudio/matcher/pkg/systemplane/ports"
 )
 
 // Compile-time interface checks.

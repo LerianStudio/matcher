@@ -142,14 +142,15 @@ func TestDynamicPartitionManager_Current_NilProvider(t *testing.T) {
 	assert.Nil(t, release)
 }
 
-func TestNewDynamicPartitionManager_ReturnsNonNil(t *testing.T) {
+func TestNewDynamicPartitionManager_NilDeps_ReturnsError(t *testing.T) {
 	t.Parallel()
 
-	// newDynamicPartitionManager should return a non-nil PartitionManager
-	// even when provider is nil (nil safety is checked at call time).
-	pm := newDynamicPartitionManager(nil, nil, nil)
+	// newDynamicPartitionManager must fail fast when dependencies are nil.
+	pm, err := newDynamicPartitionManager(nil, nil, nil)
 
-	require.NotNil(t, pm)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errPartitionManagerNilDependency)
+	assert.Nil(t, pm)
 }
 
 func TestErrPartitionManagerProviderUnavailable_Message(t *testing.T) {

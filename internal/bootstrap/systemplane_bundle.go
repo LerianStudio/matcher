@@ -14,10 +14,10 @@ import (
 	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
 	libRabbitmq "github.com/LerianStudio/lib-commons/v4/commons/rabbitmq"
 	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
 
 	ingestionRabbitmq "github.com/LerianStudio/matcher/internal/ingestion/adapters/rabbitmq"
 	matchingRabbitmq "github.com/LerianStudio/matcher/internal/matching/adapters/rabbitmq"
-	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
 )
 
 // MatcherBundle is the runtime dependency container for the Matcher service.

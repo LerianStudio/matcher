@@ -135,6 +135,8 @@ func clientErrorMessageForStatus(code int) string {
 		return "forbidden"
 	case fiber.StatusNotFound:
 		return "not_found"
+	case fiber.StatusTooManyRequests:
+		return "rate_limited"
 	case fiber.StatusRequestEntityTooLarge:
 		return "request_entity_too_large"
 	default:
@@ -149,33 +151,26 @@ func sanitizeHeaderID(headerID string) string {
 		return uuid.NewString()
 	}
 
-	if len(trimmed) > maxHeaderIDLength {
-		return truncateHeaderID(trimmed)
-	}
-
-	for _, char := range trimmed {
-		if !isSafeHeaderChar(char) {
-			sanitized := strings.Map(func(r rune) rune {
-				if !isSafeHeaderChar(r) {
-					return -1
-				}
-
-				return r
-			}, trimmed)
-
-			if strings.TrimSpace(sanitized) == "" {
-				return uuid.NewString()
-			}
-
-			if len(sanitized) > maxHeaderIDLength {
-				return truncateHeaderID(sanitized)
-			}
-
-			return sanitized
+	// Always sanitize unsafe characters first, before any truncation.
+	// This prevents control characters (\r, \n, ;) from surviving inside
+	// the first maxHeaderIDLength runes of an overlong input.
+	sanitized := strings.Map(func(r rune) rune {
+		if !isSafeHeaderChar(r) {
+			return -1
 		}
+
+		return r
+	}, trimmed)
+
+	if strings.TrimSpace(sanitized) == "" {
+		return uuid.NewString()
 	}
 
-	return trimmed
+	if len(sanitized) > maxHeaderIDLength {
+		return truncateHeaderID(sanitized)
+	}
+
+	return sanitized
 }
 
 // isSafeHeaderChar returns true if the rune is safe for use in header IDs.

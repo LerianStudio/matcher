@@ -97,12 +97,10 @@ func (cfg *Config) enforceProductionSecurityDefaults(logger libLog.Logger) {
 			OTelLibraryName: "github.com/LerianStudio/matcher",
 		})
 		if logErr != nil {
-			// Cannot enforce security defaults without a logger to report warnings.
-			// Note: Validate() does NOT check Swagger or rate-limit settings, so
-			// returning here skips enforcement silently. In practice, the normal
-			// bootstrap chain always provides a non-nil logger (initLogger fails
-			// hard on error), so this path is a defensive fallback only.
-			return
+			// Fallback logger creation failed, but security enforcement must
+			// still proceed. Use a no-op logger so enforcement logic executes
+			// even though warnings won't be emitted.
+			logger = &libLog.NopLogger{}
 		}
 	}
 

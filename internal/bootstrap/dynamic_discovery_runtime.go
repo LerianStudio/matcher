@@ -6,6 +6,7 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -25,12 +26,33 @@ type providerBackedSchemaCache struct {
 	allowTenantPrefix bool
 }
 
+var errSchemaCacheProviderNil = errors.New("schema cache: infrastructure provider not available")
+
 func newProviderBackedSchemaCache(provider sharedPorts.InfrastructureProvider, allowTenantPrefix bool) discoveryPorts.SchemaCache {
 	if provider == nil {
-		return nil
+		return &noopSchemaCache{}
 	}
 
 	return &providerBackedSchemaCache{provider: provider, allowTenantPrefix: allowTenantPrefix}
+}
+
+// noopSchemaCache is a safe no-op implementation returned when the provider is nil.
+// Callers get clear errors instead of nil-pointer panics.
+type noopSchemaCache struct{}
+
+// GetSchema returns errSchemaCacheProviderNil because no provider is configured.
+func (*noopSchemaCache) GetSchema(_ context.Context, _ string) (*sharedPorts.FetcherSchema, error) {
+	return nil, errSchemaCacheProviderNil
+}
+
+// SetSchema returns errSchemaCacheProviderNil because no provider is configured.
+func (*noopSchemaCache) SetSchema(_ context.Context, _ string, _ *sharedPorts.FetcherSchema, _ time.Duration) error {
+	return errSchemaCacheProviderNil
+}
+
+// InvalidateSchema returns errSchemaCacheProviderNil because no provider is configured.
+func (*noopSchemaCache) InvalidateSchema(_ context.Context, _ string) error {
+	return errSchemaCacheProviderNil
 }
 
 // GetSchema retrieves cached schema data using the current provider-backed Redis client.
@@ -113,7 +135,11 @@ type dynamicSchemaCache struct {
 
 func newDynamicSchemaCache(inner discoveryPorts.SchemaCache, ttlGetter func() time.Duration) discoveryPorts.SchemaCache {
 	if inner == nil || ttlGetter == nil {
-		return inner
+		if inner != nil {
+			return inner
+		}
+
+		return &noopSchemaCache{}
 	}
 
 	return &dynamicSchemaCache{inner: inner, ttlGetter: ttlGetter}
@@ -160,6 +186,8 @@ type dynamicExtractionPoller struct {
 	logger         libLog.Logger
 }
 
+var errExtractionPollerUnavailable = errors.New("extraction poller: config getter not provided")
+
 func newDynamicExtractionPoller(
 	fetcherClient sharedPorts.FetcherClient,
 	extractionRepo discoveryRepos.ExtractionRepository,
@@ -167,7 +195,7 @@ func newDynamicExtractionPoller(
 	logger libLog.Logger,
 ) discoveryPorts.ExtractionJobPoller {
 	if configGetter == nil {
-		return nil
+		return &noopExtractionPoller{}
 	}
 
 	return &dynamicExtractionPoller{
@@ -208,4 +236,19 @@ func (poller *dynamicExtractionPoller) PollUntilComplete(
 	}
 
 	delegate.PollUntilComplete(ctx, extractionID, onComplete, onFailed)
+}
+
+// noopExtractionPoller is a safe no-op returned when configGetter is nil.
+type noopExtractionPoller struct{}
+
+// PollUntilComplete invokes onFailed because no extraction poller is configured.
+func (*noopExtractionPoller) PollUntilComplete(
+	ctx context.Context,
+	_ uuid.UUID,
+	_ func(ctx context.Context, resultPath string) error,
+	onFailed func(ctx context.Context, errMsg string),
+) {
+	if onFailed != nil {
+		onFailed(ctx, errExtractionPollerUnavailable.Error())
+	}
 }

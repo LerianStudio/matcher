@@ -19,6 +19,7 @@ type stubIngestionPublisher struct{ err error }
 func (p *stubIngestionPublisher) PublishIngestionCompleted(context.Context, *sharedDomain.IngestionCompletedEvent) error {
 	return p.err
 }
+
 func (p *stubIngestionPublisher) PublishIngestionFailed(context.Context, *sharedDomain.IngestionFailedEvent) error {
 	return p.err
 }
@@ -28,12 +29,15 @@ type stubMatchPublisher struct{ err error }
 func (p *stubMatchPublisher) PublishMatchConfirmed(context.Context, *sharedDomain.MatchConfirmedEvent) error {
 	return p.err
 }
+
 func (p *stubMatchPublisher) PublishMatchUnmatched(context.Context, *sharedDomain.MatchUnmatchedEvent) error {
 	return p.err
 }
 
-var _ sharedPorts.IngestionEventPublisher = (*stubIngestionPublisher)(nil)
-var _ sharedDomain.MatchEventPublisher = (*stubMatchPublisher)(nil)
+var (
+	_ sharedPorts.IngestionEventPublisher = (*stubIngestionPublisher)(nil)
+	_ sharedDomain.MatchEventPublisher    = (*stubMatchPublisher)(nil)
+)
 
 func TestSwappableIngestionPublisher_SwapReturnsPreviousAndDelegates(t *testing.T) {
 	t.Parallel()

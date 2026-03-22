@@ -11,9 +11,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/LerianStudio/matcher/pkg/systemplane/domain"
-	"github.com/LerianStudio/matcher/pkg/systemplane/ports"
-	"github.com/LerianStudio/matcher/pkg/systemplane/registry"
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/ports"
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/registry"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

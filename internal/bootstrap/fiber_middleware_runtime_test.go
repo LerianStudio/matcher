@@ -335,9 +335,8 @@ func TestDbQueryTimeoutMiddleware_AppliesTimeout(t *testing.T) {
 func TestDbQueryTimeoutMiddleware_ZeroTimeout_NoDeadline(t *testing.T) {
 	t.Parallel()
 
-	// QueryTimeoutSec <= 0 → QueryTimeout() returns default (30s), but
-	// currentQueryTimeout returns the actual timeout. Let's test zero.
-	cfg := &Config{Postgres: PostgresConfig{QueryTimeoutSec: 10}}
+	// QueryTimeoutSec == 0 → no deadline should be applied by the middleware.
+	cfg := &Config{Postgres: PostgresConfig{QueryTimeoutSec: 0}}
 
 	app := fiber.New()
 	app.Use(dbQueryTimeoutMiddleware(cfg, nil))

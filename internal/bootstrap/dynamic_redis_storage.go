@@ -15,8 +15,10 @@ import (
 )
 
 type dynamicRedisStorage struct {
-	getter   func() *libRedis.Client
-	fallback fiber.Storage
+	getter        func() *libRedis.Client
+	fallback      fiber.Storage
+	cachedStorage fiber.Storage
+	lastClient    *libRedis.Client
 }
 
 func newDynamicRedisStorage(getter func() *libRedis.Client, fallback *libRedis.Client) fiber.Storage {
@@ -99,7 +101,15 @@ func (storage *dynamicRedisStorage) current() fiber.Storage {
 
 	if storage.getter != nil {
 		if client := storage.getter(); client != nil {
-			return ratelimit.NewRedisStorage(client)
+			// Reuse cached wrapper when the underlying client hasn't changed.
+			if client == storage.lastClient && storage.cachedStorage != nil {
+				return storage.cachedStorage
+			}
+
+			storage.cachedStorage = ratelimit.NewRedisStorage(client)
+			storage.lastClient = client
+
+			return storage.cachedStorage
 		}
 	}
 

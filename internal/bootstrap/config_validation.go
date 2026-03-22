@@ -6,6 +6,7 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -15,6 +16,9 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
+
+// errURLParsedToNil is returned when url.Parse succeeds but yields a nil *url.URL.
+var errURLParsedToNil = errors.New("production config validation: URL parsed to nil")
 
 const (
 	maxRateLimitRequestsPerWindow = 1_000_000
@@ -399,7 +403,7 @@ func (cfg *Config) validateProductionCoreConfig(asserter *assert.Asserter) error
 		return fmt.Errorf("production config validation: %w", err)
 	}
 
-	if err := asserter.That(ctx, strings.TrimSpace(cfg.Server.CORSAllowedOrigins) != "" && !strings.Contains(cfg.Server.CORSAllowedOrigins, "*"), "CORS_ALLOWED_ORIGINS must be restricted in production", "cors_origins", cfg.Server.CORSAllowedOrigins); err != nil {
+	if err := asserter.That(ctx, strings.TrimSpace(cfg.Server.CORSAllowedOrigins) != "" && !corsContainsWildcard(cfg.Server.CORSAllowedOrigins), "CORS_ALLOWED_ORIGINS must be restricted in production (exact \"*\" not allowed)", "cors_origins", cfg.Server.CORSAllowedOrigins); err != nil {
 		return fmt.Errorf("production config validation: %w", err)
 	}
 
@@ -473,13 +477,19 @@ func (cfg *Config) validateProductionEndpoints(asserter *assert.Asserter) error 
 // used in both the assertion message and the structured key-value pair.
 func requireProductionHTTPS(ctx context.Context, asserter *assert.Asserter, rawURL, envVar string) error {
 	parsed, parseErr := url.Parse(strings.TrimSpace(rawURL))
-	if parseErr == nil && parsed != nil {
-		if err := asserter.That(ctx,
-			strings.EqualFold(parsed.Scheme, "https"),
-			envVar+" must use HTTPS in production",
-			strings.ToLower(envVar), rawURL); err != nil {
-			return fmt.Errorf("production config validation: %w", err)
-		}
+	if parseErr != nil {
+		return fmt.Errorf("production config validation: invalid URL %q for %s: %w", rawURL, envVar, parseErr)
+	}
+
+	if parsed == nil {
+		return fmt.Errorf("%s: %w", envVar, errURLParsedToNil)
+	}
+
+	if err := asserter.That(ctx,
+		strings.EqualFold(parsed.Scheme, "https"),
+		envVar+" must use HTTPS in production",
+		strings.ToLower(envVar), rawURL); err != nil {
+		return fmt.Errorf("production config validation: %w", err)
 	}
 
 	return nil
@@ -541,6 +551,18 @@ func (cfg *Config) validateReportingStorageConfig(asserter *assert.Asserter) err
 	}
 
 	return nil
+}
+
+// corsContainsWildcard returns true if the comma-separated origin list contains
+// an exact "*" entry. Subdomain wildcards like "https://*.example.com" are allowed.
+func corsContainsWildcard(origins string) bool {
+	for _, entry := range strings.Split(origins, ",") {
+		if strings.TrimSpace(entry) == "*" {
+			return true
+		}
+	}
+
+	return false
 }
 
 func newConfigAsserter(ctx context.Context, operation string) *assert.Asserter {
