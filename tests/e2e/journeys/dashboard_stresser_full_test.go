@@ -46,7 +46,7 @@ func TestDashboardStresser_FullJourney(t *testing.T) {
 			reconciliationContext := f.Context.NewContext().
 				WithName("dashboard-stresser").
 				WithDescription("E2E dashboard stresser - full data journey").
-				OneToOne().
+				OneToMany().
 				MustCreate(ctx)
 			tc.Logf("Context created: %s", reconciliationContext.ID)
 

@@ -371,7 +371,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 			t,
 			client,
 			"POST",
-			baseURL+"/v1/config/fee-schedules",
+			baseURL+"/v1/fee-schedules",
 			schedulePayload,
 			http.StatusCreated,
 		)
@@ -385,7 +385,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 				t,
 				client,
 				"DELETE",
-				fmt.Sprintf("%s/v1/config/fee-schedules/%s", baseURL, scheduleID),
+				fmt.Sprintf("%s/v1/fee-schedules/%s", baseURL, scheduleID),
 				nil,
 				http.StatusNoContent,
 			)
@@ -418,6 +418,21 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 		require.NotEmpty(t, feeRuleIDVal)
 		feeRuleID := feeRuleIDVal
 		t.Logf("Created Fee Rule: %s", feeRuleID)
+		feeRuleDeleted := false
+		// NOTE: t.Cleanup is LIFO. This runs BEFORE the fee schedule cleanup
+		// (registered earlier), ensuring correct FK deletion order.
+		t.Cleanup(func() {
+			if !feeRuleDeleted {
+				makeRequest(
+					t,
+					client,
+					"DELETE",
+					fmt.Sprintf("%s/v1/config/fee-rules/%s", baseURL, feeRuleID),
+					nil,
+					http.StatusNoContent,
+				)
+			}
+		})
 
 		// Verify created values.
 		require.Equal(t, "RIGHT", feeRuleResp["side"])
@@ -466,7 +481,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 		t.Log("Verified Update Fee Rule")
 
 		// --- Step 13: List Fee Rules for Context ---
-		listFeeRulesResp := makeRequest(
+		listFeeRulesResp := makeListRequest(
 			t,
 			client,
 			"GET",
@@ -474,9 +489,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 			nil,
 			http.StatusOK,
 		)
-		feeRulesItems, ok := listFeeRulesResp["items"].([]any)
-		require.True(t, ok, "Expected 'items' in fee rules list: %v", listFeeRulesResp)
-		require.Len(t, feeRulesItems, 1)
+		require.Len(t, listFeeRulesResp, 1)
 		t.Log("Verified List Fee Rules")
 
 		// --- Step 14: Delete Fee Rule ---
@@ -488,6 +501,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 			nil,
 			http.StatusNoContent,
 		)
+		feeRuleDeleted = true
 		t.Log("Deleted Fee Rule")
 
 		// Verify deletion — GET should 404.
@@ -551,6 +565,60 @@ func makeRequest(
 
 	if err := json.Unmarshal(bodyBytes, &result); err != nil {
 		t.Fatalf("Failed to parse JSON response: %v. Body: %s", err, string(bodyBytes))
+	}
+
+	return result
+}
+
+// makeListRequest is like makeRequest but for endpoints that return a JSON array.
+func makeListRequest(
+	t *testing.T,
+	client *http.Client,
+	method, url string,
+	body any,
+	expectedStatus int,
+) []map[string]any {
+	t.Helper()
+
+	var bodyReader io.Reader
+
+	if body != nil {
+		jsonBody, err := json.Marshal(body)
+		require.NoError(t, err)
+
+		bodyReader = bytes.NewBuffer(jsonBody)
+	}
+
+	req, err := http.NewRequest(method, url, bodyReader)
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	require.NoError(t, err, "Failed to read response body")
+
+	if resp.StatusCode != expectedStatus {
+		t.Fatalf(
+			"Unexpected status code for %s %s: got %d, want %d. Body: %s",
+			method,
+			url,
+			resp.StatusCode,
+			expectedStatus,
+			string(bodyBytes),
+		)
+	}
+
+	if len(bodyBytes) == 0 {
+		return nil
+	}
+
+	var result []map[string]any
+
+	if err := json.Unmarshal(bodyBytes, &result); err != nil {
+		t.Fatalf("Failed to parse JSON array response: %v. Body: %s", err, string(bodyBytes))
 	}
 
 	return result

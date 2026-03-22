@@ -194,14 +194,14 @@ func createContextWithoutCleanup(
 	name string,
 	skipCleanup bool,
 ) *client.Context {
-	builder := f.Context.NewContext().WithName(name).OneToOne()
+	builder := f.Context.NewContext().WithName(name).OneToMany()
 	if skipCleanup {
 		// Use direct API call without registering cleanup
 		created, err := f.Context.Client().Configuration.CreateContext(
 			ctx,
 			client.CreateContextRequest{
 				Name:     builder.GetRequest().Name,
-				Type:     "1:1",
+				Type:     "1:N",
 				Interval: "0 0 * * *",
 			},
 		)
