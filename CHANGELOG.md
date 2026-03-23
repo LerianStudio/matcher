@@ -1,3 +1,10 @@
+## [1.3.0-beta.1](https://github.com/LerianStudio/matcher/compare/v1.2.1...v1.3.0-beta.1) (2026-03-23)
+
+
+### Features
+
+* **rabbitmq:** add multi-tenant vhost isolation for event publishers ([9a473cb](https://github.com/LerianStudio/matcher/commit/9a473cb1da9184ebaa8183843383f47543cf2d4d))
+
 # Matcher Changelog
 
 ## [1.2.1](https://github.com/LerianStudio/matcher/releases/tag/v1.2.1)
@@ -459,4 +466,3 @@ Contributors: @bedatty, @dependabot[bot], @ferr3ira-gabriel, @ferr3ira.gabriel, 
 * **e2e:** resolve dashboard stresser flakiness with unique names ([7e93cfc](https://github.com/LerianStudio/matcher/commit/7e93cfcc13d9d074eceebe09b39e9f8b7f7f42ed))
 
 ## 1.0.0 (2026-02-19)
-
