@@ -5,341 +5,221 @@
 package bootstrap
 
 import (
-	"strconv"
 	"sync"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/limiter"
 
-	sharedhttp "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	"github.com/LerianStudio/lib-commons/v4/commons/log"
+	"github.com/LerianStudio/lib-commons/v4/commons/net/http/ratelimit"
+	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 )
 
-// rateLimitKeyGenerator returns a key generator closure for rate limiting.
-// The key prefers UserID (from JWT) → TenantID+IP composite → raw IP fallback.
-// The prefix parameter namespaces keys for different limiter tiers (e.g., "export:", "dispatch:").
-func rateLimitKeyGenerator(prefix string) func(*fiber.Ctx) string {
+// passthrough is a no-op middleware that passes control to the next handler.
+var passthrough = func(c *fiber.Ctx) error {
+	return c.Next()
+}
+
+// rateLimitIdentityFunc returns a ratelimit.IdentityFunc that extracts the client
+// identity from JWT context values. Priority: UserID -> TenantID#IP -> IP fallback.
+// This MUST be applied AFTER auth middleware to access user context.
+func rateLimitIdentityFunc() ratelimit.IdentityFunc {
 	return func(fiberCtx *fiber.Ctx) string {
 		ctx := fiberCtx.UserContext()
 		if ctx != nil {
 			if userID, ok := ctx.Value(auth.UserIDKey).(string); ok && userID != "" {
-				return prefix + userID
+				return "user:" + userID
 			}
 
 			if tenantID, ok := ctx.Value(auth.TenantIDKey).(string); ok && tenantID != "" {
-				return prefix + tenantID + ":" + fiberCtx.IP()
+				return "tenant:" + tenantID + "#ip:" + fiberCtx.IP()
 			}
 		}
 
-		return prefix + fiberCtx.IP()
+		return "ip:" + fiberCtx.IP()
 	}
 }
 
-// dynamicLimiterConfig holds the parameters for a dynamic rate limiter.
-type dynamicLimiterConfig struct {
-	// maxFunc returns the current per-window request limit. Called per-request.
-	maxFunc func() int
-	// expiration is the fixed window duration (static — Fiber v2 limitation).
-	expiration time.Duration
-	// expirationFunc returns the current window duration (optional, per-request).
-	expirationFunc func() time.Duration
-	// keyGenerator produces a per-client key from the request context.
-	keyGenerator func(*fiber.Ctx) string
-	// limitReached is invoked when a request exceeds the limit.
-	limitReached fiber.Handler
-}
-
-// newDynamicLimiter creates a fixed-window rate limiter middleware that reads Max
-// from a closure on every request, enabling hot-reload of rate limits.
-//
-// Fiber v2's built-in FixedWindow captures cfg.Max once at creation (both as an int
-// for limit checks and a string for X-RateLimit-Limit headers). This wrapper reimplements
-// the fixed-window algorithm with a dynamic max while preserving identical counting
-// and expiration semantics.
-//
-// The rate limiter uses an in-memory map for hit counting with periodic GC to evict
-// expired entries (sweep interval = 2x window duration). This prevents unbounded
-// memory growth from unique client keys that stop sending requests.
-func newDynamicLimiter(cfg dynamicLimiterConfig) fiber.Handler {
-	// Validate required function pointers — callers must provide all three.
-	if cfg.maxFunc == nil || cfg.keyGenerator == nil || cfg.limitReached == nil {
-		return func(fiberCtx *fiber.Ctx) error {
-			return fiberCtx.Next()
-		}
-	}
-
-	type rateLimitEntry struct {
-		hits int
-		exp  int64 // unix timestamp when window expires
-	}
-
-	// NOTE: In-memory rate limit counters are per-instance. Multi-instance
-	// deployments have per-node limits. Use a shared storage backend (Redis)
-	// via NewRateLimiter/NewExportRateLimiter for cross-instance consistency.
-	var (
-		mu      sync.Mutex
-		entries = make(map[string]*rateLimitEntry)
-		lastGC  int64
+// NewLibRateLimiter creates a lib-commons RateLimiter instance configured with
+// Matcher's custom identity function and key prefix. Returns nil (safe to use)
+// when rate limiting is disabled or conn is nil.
+func NewLibRateLimiter(conn *libRedis.Client, logger log.Logger) *ratelimit.RateLimiter {
+	return ratelimit.New(conn,
+		ratelimit.WithKeyPrefix("matcher"),
+		ratelimit.WithIdentityFunc(rateLimitIdentityFunc()),
+		ratelimit.WithLogger(logger),
+		ratelimit.WithFailOpen(true),
 	)
+}
 
-	return func(fiberCtx *fiber.Ctx) error {
-		currentMax := cfg.maxFunc()
+// rateLimiterProvider resolves the current *ratelimit.RateLimiter at request time.
+// It caches the limiter and rebuilds only when the underlying Redis client changes
+// (detected by pointer identity). This ensures that after a systemplane bundle reload
+// swaps the Redis connection, subsequent rate-limited requests use the new client.
+type rateLimiterProvider struct {
+	mu        sync.Mutex
+	current   *ratelimit.RateLimiter
+	lastRedis *libRedis.Client
+	redisFunc func() *libRedis.Client
+	logger    log.Logger
+}
 
-		// Guard: if max is zero or negative, treat rate limiting as disabled
-		// for this request. This prevents accidentally blocking all traffic
-		// when config returns a non-positive value (e.g., during hot-reload
-		// with an invalid value).
-		if currentMax <= 0 {
-			return fiberCtx.Next()
-		}
-
-		// NOTE: When expiry changes via hot-reload, existing rate-limit entries
-		// retain their original expiration timestamp. This means the old window
-		// may persist until entries naturally expire. This is inherent to
-		// fixed-window rate limiting and self-corrects within one window duration.
-		expirationDuration := cfg.expiration
-		if cfg.expirationFunc != nil {
-			expirationDuration = cfg.expirationFunc()
-		}
-
-		expirationSec := int64(expirationDuration.Seconds())
-		if expirationSec < 1 {
-			expirationSec = 1
-		}
-
-		gcInterval := expirationSec * 2 //nolint:mnd // sweep every 2x the window duration
-
-		key := cfg.keyGenerator(fiberCtx)
-		now := time.Now().Unix()
-
-		mu.Lock()
-
-		// Lazy GC: sweep expired entries periodically to prevent unbounded memory growth.
-		if now-lastGC > gcInterval {
-			for k, ent := range entries {
-				if now >= ent.exp {
-					delete(entries, k)
-				}
-			}
-
-			lastGC = now
-		}
-
-		entry, exists := entries[key]
-		if !exists || now >= entry.exp {
-			entry = &rateLimitEntry{hits: 0, exp: now + expirationSec}
-			entries[key] = entry
-		}
-
-		entry.hits++
-		hits := entry.hits
-		resetInSec := entry.exp - now
-
-		mu.Unlock()
-
-		remaining := currentMax - hits
-
-		// Set rate limit headers on ALL responses (including 429).
-		fiberCtx.Set(headerRateLimitLimit, strconv.Itoa(currentMax))
-		fiberCtx.Set(headerRateLimitReset, strconv.FormatInt(resetInSec, 10))
-
-		if remaining < 0 {
-			fiberCtx.Set(headerRateLimitRemaining, "0")
-			fiberCtx.Set(fiber.HeaderRetryAfter, strconv.FormatInt(resetInSec, 10))
-
-			return cfg.limitReached(fiberCtx)
-		}
-
-		fiberCtx.Set(headerRateLimitRemaining, strconv.Itoa(remaining))
-
-		return fiberCtx.Next()
+// newRateLimiterProvider creates a provider that lazily builds and caches a
+// *ratelimit.RateLimiter, rebuilding when the Redis client returned by redisFunc changes.
+func newRateLimiterProvider(redisFunc func() *libRedis.Client, logger log.Logger) *rateLimiterProvider {
+	return &rateLimiterProvider{
+		redisFunc: redisFunc,
+		logger:    logger,
 	}
 }
 
-// NewRateLimiter creates a rate limiter middleware that uses UserID/TenantID from context.
-// This middleware MUST be applied AFTER auth middleware to access user context.
-// Order: Auth → RateLimiter → Handlers
-// If storage is provided, uses it for distributed rate limiting across multiple instances.
-// Returns a no-op middleware if rate limiting is disabled or cfg is nil.
-func NewRateLimiter(cfg *Config, storage fiber.Storage) fiber.Handler {
+// Get returns the current rate limiter, rebuilding it if the underlying Redis client
+// has changed since the last call. Safe for concurrent use.
+func (rlp *rateLimiterProvider) Get() *ratelimit.RateLimiter {
+	redis := rlp.redisFunc()
+
+	// Fast path: no Redis client change since last build.
+	rlp.mu.Lock()
+	defer rlp.mu.Unlock()
+
+	if redis == rlp.lastRedis && rlp.current != nil {
+		return rlp.current
+	}
+
+	rlp.current = NewLibRateLimiter(redis, rlp.logger)
+	rlp.lastRedis = redis
+
+	return rlp.current
+}
+
+// NewGlobalRateLimit creates a fiber.Handler for the global rate limiter tier.
+// The rlGetter is called at request time to obtain the current rate limiter,
+// allowing transparent Redis client swaps via systemplane bundle reloads.
+func NewGlobalRateLimit(rlGetter func() *ratelimit.RateLimiter, cfg *Config, configGetter func() *Config) fiber.Handler {
+	if configGetter != nil {
+		return dynamicRateLimitHandler(rlGetter, configGetter, func(c *Config) ratelimit.Tier {
+			return ratelimit.Tier{
+				Name:   "global",
+				Max:    c.RateLimit.Max,
+				Window: time.Duration(safeExpiry(c.RateLimit.ExpirySec)) * time.Second,
+			}
+		})
+	}
+
 	if cfg == nil || !cfg.RateLimit.Enabled {
-		return func(c *fiber.Ctx) error {
-			return c.Next()
-		}
+		return passthrough
 	}
 
-	limiterCfg := limiter.Config{
-		Max:          cfg.RateLimit.Max,
-		Expiration:   time.Duration(cfg.RateLimit.ExpirySec) * time.Second,
-		KeyGenerator: rateLimitKeyGenerator(""),
-		LimitReached: func(fiberCtx *fiber.Ctx) error {
-			fiberCtx.Set("Retry-After", strconv.Itoa(cfg.RateLimit.ExpirySec))
-
-			return sharedhttp.RespondError(
-				fiberCtx,
-				fiber.StatusTooManyRequests,
-				"rate_limit_exceeded",
-				"rate limit exceeded",
-			)
-		},
-	}
-
-	if storage != nil {
-		limiterCfg.Storage = storage
-	}
-
-	return limiter.New(limiterCfg)
-}
-
-type dynamicLimiterOptions struct {
-	prefix      string
-	errorCode   string
-	errorMsg    string
-	getMax      func(*Config) int
-	getExpiry   func(*Config) int
-	isRateLimit func(*Config) bool
-}
-
-// dynamicLimiterContext holds the shared state used by both in-memory and
-// distributed limiter paths in newRuntimeDynamicLimiter.
-type dynamicLimiterContext struct {
-	configGetter func() *Config
-	initialCfg   *Config
-	opts         dynamicLimiterOptions
-	keyGen       func(*fiber.Ctx) string
-	safeExpiry   func(*Config) int
-	limitReached func(*fiber.Ctx) error
-}
-
-// buildLimitReachedHandler creates the handler invoked when a client exceeds the rate limit.
-func buildLimitReachedHandler(dlCtx *dynamicLimiterContext) func(*fiber.Ctx) error {
-	return func(fiberCtx *fiber.Ctx) error {
-		cfg := dlCtx.configGetter()
-		if cfg == nil {
-			cfg = dlCtx.initialCfg
-		}
-
-		expiry := dlCtx.safeExpiry(cfg)
-		rateMax := dlCtx.opts.getMax(cfg)
-
-		if rateMax < 0 {
-			rateMax = 0
-		}
-
-		fiberCtx.Set(fiber.HeaderRetryAfter, strconv.Itoa(expiry))
-		fiberCtx.Set(headerRateLimitLimit, strconv.Itoa(rateMax))
-		fiberCtx.Set(headerRateLimitRemaining, "0")
-		fiberCtx.Set(headerRateLimitReset, strconv.Itoa(expiry))
-
-		return sharedhttp.RespondError(
-			fiberCtx,
-			fiber.StatusTooManyRequests,
-			dlCtx.opts.errorCode,
-			dlCtx.opts.errorMsg,
-		)
-	}
-}
-
-// buildInMemoryDynamicHandler creates a limiter middleware backed by an in-memory store
-// that reads Max dynamically per request (hot-reload of rate limits).
-func buildInMemoryDynamicHandler(dlCtx *dynamicLimiterContext) fiber.Handler {
-	limiterHandler := newDynamicLimiter(dynamicLimiterConfig{
-		maxFunc: func() int {
-			if cfg := dlCtx.configGetter(); cfg != nil {
-				return dlCtx.opts.getMax(cfg)
-			}
-
-			return dlCtx.opts.getMax(dlCtx.initialCfg)
-		},
-		expiration: time.Duration(dlCtx.safeExpiry(dlCtx.initialCfg)) * time.Second,
-		expirationFunc: func() time.Duration {
-			if cfg := dlCtx.configGetter(); cfg != nil {
-				return time.Duration(dlCtx.safeExpiry(cfg)) * time.Second
-			}
-
-			return time.Duration(dlCtx.safeExpiry(dlCtx.initialCfg)) * time.Second
-		},
-		keyGenerator: dlCtx.keyGen,
-		limitReached: dlCtx.limitReached,
+	return staticRateLimitHandler(rlGetter, ratelimit.Tier{
+		Name:   "global",
+		Max:    cfg.RateLimit.Max,
+		Window: time.Duration(safeExpiry(cfg.RateLimit.ExpirySec)) * time.Second,
 	})
+}
 
+// NewExportRateLimit creates a fiber.Handler for the export rate limiter tier.
+// The rlGetter is called at request time to obtain the current rate limiter,
+// allowing transparent Redis client swaps via systemplane bundle reloads.
+func NewExportRateLimit(rlGetter func() *ratelimit.RateLimiter, cfg *Config, configGetter func() *Config) fiber.Handler {
+	if configGetter != nil {
+		return dynamicRateLimitHandler(rlGetter, configGetter, func(c *Config) ratelimit.Tier {
+			return ratelimit.Tier{
+				Name:   "export",
+				Max:    c.RateLimit.ExportMax,
+				Window: time.Duration(safeExpiry(c.RateLimit.ExportExpirySec)) * time.Second,
+			}
+		})
+	}
+
+	if cfg == nil || !cfg.RateLimit.Enabled {
+		return passthrough
+	}
+
+	return staticRateLimitHandler(rlGetter, ratelimit.Tier{
+		Name:   "export",
+		Max:    cfg.RateLimit.ExportMax,
+		Window: time.Duration(safeExpiry(cfg.RateLimit.ExportExpirySec)) * time.Second,
+	})
+}
+
+// NewDispatchRateLimit creates a fiber.Handler for the dispatch rate limiter tier.
+// The rlGetter is called at request time to obtain the current rate limiter,
+// allowing transparent Redis client swaps via systemplane bundle reloads.
+func NewDispatchRateLimit(rlGetter func() *ratelimit.RateLimiter, cfg *Config, configGetter func() *Config) fiber.Handler {
+	if configGetter != nil {
+		return dynamicRateLimitHandler(rlGetter, configGetter, func(c *Config) ratelimit.Tier {
+			return ratelimit.Tier{
+				Name:   "dispatch",
+				Max:    c.RateLimit.DispatchMax,
+				Window: time.Duration(safeExpiry(c.RateLimit.DispatchExpirySec)) * time.Second,
+			}
+		})
+	}
+
+	if cfg == nil || !cfg.RateLimit.Enabled {
+		return passthrough
+	}
+
+	return staticRateLimitHandler(rlGetter, ratelimit.Tier{
+		Name:   "dispatch",
+		Max:    cfg.RateLimit.DispatchMax,
+		Window: time.Duration(safeExpiry(cfg.RateLimit.DispatchExpirySec)) * time.Second,
+	})
+}
+
+// resolveRL safely calls the getter and returns the current rate limiter.
+// Returns nil (which produces pass-through handlers) when getter is nil.
+func resolveRL(rlGetter func() *ratelimit.RateLimiter) *ratelimit.RateLimiter {
+	if rlGetter == nil {
+		return nil
+	}
+
+	return rlGetter()
+}
+
+// staticRateLimitHandler resolves the current rate limiter at request time and applies
+// a fixed tier. Used when no configGetter is available (static configuration).
+func staticRateLimitHandler(rlGetter func() *ratelimit.RateLimiter, tier ratelimit.Tier) fiber.Handler {
 	return func(fiberCtx *fiber.Ctx) error {
-		cfg := dlCtx.configGetter()
-		if cfg == nil || !dlCtx.opts.isRateLimit(cfg) || dlCtx.opts.getMax(cfg) <= 0 {
+		// resolveRL handles nil getter; WithRateLimit handles nil receiver.
+		return resolveRL(rlGetter).WithRateLimit(tier)(fiberCtx)
+	}
+}
+
+// dynamicRateLimitHandler resolves both the current rate limiter and config at request
+// time, enabling transparent Redis client swaps and hot-reload of rate limit settings.
+func dynamicRateLimitHandler(
+	rlGetter func() *ratelimit.RateLimiter,
+	configGetter func() *Config,
+	tierBuilder func(*Config) ratelimit.Tier,
+) fiber.Handler {
+	return func(fiberCtx *fiber.Ctx) error {
+		currentCfg := configGetter()
+		if currentCfg == nil || !currentCfg.RateLimit.Enabled {
 			return fiberCtx.Next()
 		}
 
-		return limiterHandler(fiberCtx)
+		tier := tierBuilder(currentCfg)
+		if tier.Max <= 0 {
+			return fiberCtx.Next()
+		}
+
+		// resolveRL handles nil getter; WithDynamicRateLimit handles nil receiver.
+		rl := resolveRL(rlGetter)
+
+		return rl.WithDynamicRateLimit(func(_ *fiber.Ctx) ratelimit.Tier {
+			return tier
+		})(fiberCtx)
 	}
 }
 
-// NewExportRateLimiter creates a rate limiter middleware for export endpoints.
-// It applies stricter limits than the global rate limiter to protect resource-intensive
-// report generation operations.
-// If storage is provided, uses it for distributed rate limiting across multiple instances.
-// Returns a no-op middleware if rate limiting is disabled or cfg is nil.
-func NewExportRateLimiter(cfg *Config, storage fiber.Storage) fiber.Handler {
-	if cfg == nil || !cfg.RateLimit.Enabled {
-		return func(c *fiber.Ctx) error {
-			return c.Next()
-		}
+// safeExpiry clamps expiry seconds to a minimum of 1.
+func safeExpiry(expirySec int) int {
+	if expirySec < 1 {
+		return 1
 	}
 
-	limiterCfg := limiter.Config{
-		Max:          cfg.RateLimit.ExportMax,
-		Expiration:   time.Duration(cfg.RateLimit.ExportExpirySec) * time.Second,
-		KeyGenerator: rateLimitKeyGenerator("export:"),
-		LimitReached: func(fiberCtx *fiber.Ctx) error {
-			fiberCtx.Set("Retry-After", strconv.Itoa(cfg.RateLimit.ExportExpirySec))
-
-			return sharedhttp.RespondError(
-				fiberCtx,
-				fiber.StatusTooManyRequests,
-				"export_rate_limit_exceeded",
-				"too many export requests, please try again later",
-			)
-		},
-	}
-
-	if storage != nil {
-		limiterCfg.Storage = storage
-	}
-
-	return limiter.New(limiterCfg)
-}
-
-// NewDispatchRateLimiter creates a rate limiter middleware for exception dispatch endpoints.
-// It applies moderate limits to protect external system integrations from overload.
-// If storage is provided, uses it for distributed rate limiting across multiple instances.
-// Returns a no-op middleware if rate limiting is disabled or cfg is nil.
-func NewDispatchRateLimiter(cfg *Config, storage fiber.Storage) fiber.Handler {
-	if cfg == nil || !cfg.RateLimit.Enabled {
-		return func(c *fiber.Ctx) error {
-			return c.Next()
-		}
-	}
-
-	limiterCfg := limiter.Config{
-		Max:          cfg.RateLimit.DispatchMax,
-		Expiration:   time.Duration(cfg.RateLimit.DispatchExpirySec) * time.Second,
-		KeyGenerator: rateLimitKeyGenerator("dispatch:"),
-		LimitReached: func(fiberCtx *fiber.Ctx) error {
-			fiberCtx.Set("Retry-After", strconv.Itoa(cfg.RateLimit.DispatchExpirySec))
-
-			return sharedhttp.RespondError(
-				fiberCtx,
-				fiber.StatusTooManyRequests,
-				"dispatch_rate_limit_exceeded",
-				"too many dispatch requests, please try again later",
-			)
-		},
-	}
-
-	if storage != nil {
-		limiterCfg.Storage = storage
-	}
-
-	return limiter.New(limiterCfg)
+	return expirySec
 }

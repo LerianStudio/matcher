@@ -97,7 +97,8 @@ func NewHealthDependencies(
 	}
 }
 
-// healthHandler responds to liveness probe requests.
+// livenessHandler is the Kubernetes liveness probe handler.
+// It delegates to the lib-commons Ping handler, which returns HTTP 200 with "healthy".
 //
 //	@Summary		Liveness check
 //	@Description	Returns a simple health check response to indicate the service is alive.
@@ -107,10 +108,31 @@ func NewHealthDependencies(
 //	@Success		200	{string}	string	"healthy"
 //	@Router			/health [get]
 //	@ID				getHealth
-func healthHandler(c *fiber.Ctx) error {
-	c.Type("txt")
+func livenessHandler(c *fiber.Ctx) error {
+	if err := sharedhttp.Ping(c); err != nil {
+		return fmt.Errorf("liveness handler: ping: %w", err)
+	}
 
-	return c.SendString("healthy")
+	return nil
+}
+
+// versionHandler returns the service version from the VERSION environment variable.
+// It delegates to the lib-commons Version handler, which returns JSON with
+// the version string and the current request timestamp.
+//
+//	@Summary		Service version
+//	@Description	Returns the service version from the VERSION environment variable (defaults to "0.0.0").
+//	@Tags			Health
+//	@Produce		json
+//	@Success		200	{object}	map[string]interface{}	"version and requestDate"
+//	@Router			/version [get]
+//	@ID				getVersion
+func versionHandler(c *fiber.Ctx) error {
+	if err := sharedhttp.Version(c); err != nil {
+		return fmt.Errorf("version handler: %w", err)
+	}
+
+	return nil
 }
 
 // readinessHandler creates a handler that responds to readiness probe requests.

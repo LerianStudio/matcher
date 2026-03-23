@@ -86,7 +86,7 @@ func initDiscoveryModule(
 	tenantLister sharedPorts.TenantLister,
 	logger libLog.Logger,
 ) (*discoveryWorker.DiscoveryWorker, error) {
-	fetcherClient := newDynamicFetcherClient(cfg, configGetter)
+	fetcherClient := newDynamicFetcherClient(cfg, configGetter, logger)
 
 	connRepo := discoveryConnRepo.NewRepository(provider)
 	schemaRepo := discoverySchemaRepo.NewRepository(provider)

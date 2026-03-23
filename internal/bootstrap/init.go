@@ -32,6 +32,7 @@ import (
 	"github.com/LerianStudio/lib-commons/v4/commons/assert"
 	"github.com/LerianStudio/lib-commons/v4/commons/errgroup"
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	"github.com/LerianStudio/lib-commons/v4/commons/net/http/ratelimit"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
 	libRabbitmq "github.com/LerianStudio/lib-commons/v4/commons/rabbitmq"
@@ -554,13 +555,10 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 
 	app := NewFiberApp(cfg, logger, telemetry, configManager.Get)
 
-	rateLimitStorage := newDynamicRedisStorage(func() *libRedis.Client {
-		if bundle := bundleState.Current(); bundle != nil && bundle.RedisClient() != nil {
-			return bundle.RedisClient()
-		}
-
-		return redisConnection
-	}, redisConnection)
+	rlProvider := newRateLimiterProvider(func() *libRedis.Client {
+		return currentRedisClient(bundleState, redisConnection)
+	}, logger)
+	rateLimiterGetter := rlProvider.Get
 
 	infraProvider, connectionManager := createInfraProviderWithBundleState(
 		cfg,
@@ -590,7 +588,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		logger,
 		authClient,
 		tenantExtractor,
-		rateLimitStorage,
+		rateLimiterGetter,
 		idempotencyRepo,
 	)
 	if err != nil {
@@ -612,7 +610,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		infraProvider,
 		bundleState,
 		rabbitMQConnection,
-		rateLimitStorage,
+		rateLimiterGetter,
 		logger,
 	)
 	if err != nil {
@@ -1964,7 +1962,7 @@ func initModulesAndMessaging(
 	provider sharedPorts.InfrastructureProvider,
 	bundleState *activeMatcherBundleState,
 	rabbitMQConnection *libRabbitmq.RabbitMQConnection,
-	rateLimitStorage fiber.Storage,
+	rateLimiterGetter func() *ratelimit.RateLimiter,
 	logger libLog.Logger,
 ) (*modulesResult, error) {
 	sharedOutboxRepository := outboxPgRepo.NewRepository(provider)
@@ -2026,7 +2024,7 @@ func initModulesAndMessaging(
 		configGetter,
 		provider,
 		storage,
-		rateLimitStorage,
+		rateLimiterGetter,
 		logger,
 		sharedRepos,
 		isProduction,
@@ -2039,12 +2037,7 @@ func initModulesAndMessaging(
 		return nil, err
 	}
 
-	var dispatchLimiter fiber.Handler
-	if configGetter != nil {
-		dispatchLimiter = NewDynamicDispatchRateLimiter(configGetter, rateLimitStorage)
-	} else {
-		dispatchLimiter = NewDispatchRateLimiter(cfg, rateLimitStorage)
-	}
+	dispatchLimiter := NewDispatchRateLimit(rateLimiterGetter, cfg, configGetter)
 
 	//nolint:contextcheck // Exception config accessors are not context-aware.
 	if err := initExceptionModule(cfg, configGetter, routes, provider, sharedOutboxRepository, dispatchLimiter, sharedRepos, isProduction); err != nil {
@@ -2303,6 +2296,11 @@ func createSchedulerWorker(
 		return nil
 	}
 
+	// Use a provider-backed lock manager that resolves Redis lazily per lock
+	// attempt. This ensures the scheduler survives transient Redis outages at
+	// boot and benefits from runtime infrastructure bundle swaps.
+	lockManager := newProviderBackedLockManager(provider)
+
 	workerCfg := configWorker.SchedulerWorkerConfig{
 		Interval: schedulerInterval(cfg),
 	}
@@ -2310,7 +2308,7 @@ func createSchedulerWorker(
 	sw, err := configWorker.NewSchedulerWorker(
 		configScheduleRepository,
 		matchTrigger,
-		provider,
+		lockManager,
 		workerCfg,
 		logger,
 	)
@@ -2661,7 +2659,7 @@ func initReportingModule(
 	configGetter func() *Config,
 	provider sharedPorts.InfrastructureProvider,
 	storage reportingPorts.ObjectStorageClient,
-	rateLimitStorage fiber.Storage,
+	rateLimiterGetter func() *ratelimit.RateLimiter,
 	logger libLog.Logger,
 	repos *sharedRepositories,
 	production bool,
@@ -2693,12 +2691,7 @@ func initReportingModule(
 		return nil, nil, fmt.Errorf("create reporting handler: %w", err)
 	}
 
-	var exportLimiter fiber.Handler
-	if configGetter != nil {
-		exportLimiter = NewDynamicExportRateLimiter(configGetter, rateLimitStorage)
-	} else {
-		exportLimiter = NewExportRateLimiter(cfg, rateLimitStorage)
-	}
+	exportLimiter := NewExportRateLimit(rateLimiterGetter, cfg, configGetter)
 
 	if err := reportingHTTP.RegisterRoutes(routes.Protected, reportingHandler, exportLimiter); err != nil {
 		return nil, nil, fmt.Errorf("register reporting routes: %w", err)

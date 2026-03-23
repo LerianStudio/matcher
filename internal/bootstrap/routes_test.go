@@ -11,15 +11,19 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/gofiber/fiber/v2"
+	goredis "github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	authMiddleware "github.com/LerianStudio/lib-auth/v2/auth/middleware"
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	"github.com/LerianStudio/lib-commons/v4/commons/net/http/ratelimit"
 
 	swagger "github.com/LerianStudio/matcher/docs/swagger"
 	"github.com/LerianStudio/matcher/internal/auth"
+	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 )
 
 func TestRegisterRoutes_NilTenantExtractor_ReturnsError(t *testing.T) {
@@ -447,6 +451,15 @@ func TestRegisterRoutes_HealthEndpoints(t *testing.T) {
 
 		assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
 	})
+
+	t.Run("version endpoint is accessible", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/version", http.NoBody)
+		resp, err := app.Test(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
 }
 
 func TestRoutesStruct(t *testing.T) {
@@ -501,6 +514,16 @@ func TestRoutesStruct(t *testing.T) {
 func TestRegisterRoutes_DynamicRateLimitToggle(t *testing.T) {
 	t.Parallel()
 
+	// Set up an in-memory Redis via miniredis so the lib-commons rate limiter
+	// can execute its Lua-based counter logic without a real Redis instance.
+	server := miniredis.RunT(t)
+	redisClient := goredis.NewClient(&goredis.Options{Addr: server.Addr()})
+	conn := testutil.NewRedisClientWithMock(redisClient)
+	rl := ratelimit.New(conn, ratelimit.WithFailOpen(false))
+	require.NotNil(t, rl, "rate limiter must be non-nil with a valid Redis connection")
+
+	rateLimiterGetter := func() *ratelimit.RateLimiter { return rl }
+
 	app := fiber.New()
 	cfg := &Config{
 		App: AppConfig{EnvName: "test"},
@@ -526,7 +549,7 @@ func TestRegisterRoutes_DynamicRateLimitToggle(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	routes, err := RegisterRoutes(app, cfg, configGetter, nil, nil, &libLog.NopLogger{}, client, extractor, nil, nil)
+	routes, err := RegisterRoutes(app, cfg, configGetter, nil, nil, &libLog.NopLogger{}, client, extractor, rateLimiterGetter, nil)
 	require.NoError(t, err)
 
 	router := routes.Protected("configuration", "read")

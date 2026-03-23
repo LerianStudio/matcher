@@ -16,6 +16,7 @@ import (
 	authMiddleware "github.com/LerianStudio/lib-auth/v2/auth/middleware"
 	"github.com/LerianStudio/lib-commons/v4/commons/assert"
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	"github.com/LerianStudio/lib-commons/v4/commons/net/http/ratelimit"
 
 	swagger "github.com/LerianStudio/matcher/docs/swagger"
 	"github.com/LerianStudio/matcher/internal/auth"
@@ -46,7 +47,7 @@ func (r *Routes) RegistrationErr() error {
 // Middleware order: Auth -> TenantExtract -> Idempotency -> RateLimiter -> Handlers
 // Idempotency middleware is applied before rate limiting to ensure duplicate requests
 // are handled correctly even if rate limiting would otherwise block them.
-// If rateLimitStorage is provided, uses it for distributed rate limiting across multiple instances.
+// The rateLimiter uses lib-commons ratelimit for distributed Redis-backed rate limiting.
 func RegisterRoutes(
 	app *fiber.App,
 	cfg *Config,
@@ -56,7 +57,7 @@ func RegisterRoutes(
 	logger libLog.Logger,
 	authClient *authMiddleware.AuthClient,
 	tenantExtractor *auth.TenantExtractor,
-	rateLimitStorage fiber.Storage,
+	rateLimiterGetter func() *ratelimit.RateLimiter,
 	idempotencyRepo sharedHTTP.IdempotencyRepository,
 ) (*Routes, error) {
 	asserter := assert.New(
@@ -83,8 +84,18 @@ func RegisterRoutes(
 		drainingGetter = readiness.isDraining
 	}
 
-	app.Get("/health", healthHandler)
+	app.Get("/health", livenessHandler)
 	app.Get("/ready", readinessHandler(cfg, configGetter, drainingGetter, deps, logger))
+
+	// /version is registered unconditionally (including production).
+	// This is intentional: operational tooling (Kubernetes probes, deployment
+	// verification scripts, CI/CD pipelines) relies on /version to confirm
+	// which build is running.  The endpoint returns only the build tag and
+	// timestamp — no sensitive configuration, secrets, or internal topology.
+	// If stricter control is needed in the future, gate it behind auth
+	// rather than removing it, so that automated tooling can still reach it
+	// with a service account token.
+	app.Get("/version", versionHandler)
 
 	if cfg.Swagger.Enabled && !IsProductionEnvironment(cfg.App.EnvName) {
 		applySwaggerInfo(cfg)
@@ -102,14 +113,12 @@ func RegisterRoutes(
 			SkipPaths: []string{
 				"/health",
 				"/ready",
+				"/version",
 			},
 		},
 	)
 
-	rateLimiter := NewRateLimiter(cfg, rateLimitStorage)
-	if configGetter != nil {
-		rateLimiter = NewDynamicRateLimiter(configGetter, rateLimitStorage)
-	}
+	globalRateLimit := NewGlobalRateLimit(rateLimiterGetter, cfg, configGetter)
 
 	routes := &Routes{
 		API: app.Group(""),
@@ -123,7 +132,7 @@ func RegisterRoutes(
 			resource,
 			actions,
 			idempotencyMiddleware,
-			rateLimiter,
+			globalRateLimit,
 		)
 		if err != nil {
 			// This closure is called during route registration at startup,

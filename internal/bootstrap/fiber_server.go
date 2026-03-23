@@ -33,11 +33,6 @@ const (
 	defaultWriteTimeout = 30
 	defaultIdleTimeout  = 120
 	statusUnknown       = "unknown"
-
-	// Rate limit response headers (mirrored from Fiber's unexported constants).
-	headerRateLimitLimit     = "X-RateLimit-Limit"
-	headerRateLimitRemaining = "X-RateLimit-Remaining"
-	headerRateLimitReset     = "X-RateLimit-Reset"
 )
 
 var (
