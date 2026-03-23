@@ -33,7 +33,7 @@ func (uc *UseCase) CreateMatchRule(
 
 	if err := uc.ensurePriorityAvailable(ctx, contextID, input.Priority); err != nil {
 		if errors.Is(err, entities.ErrRulePriorityConflict) {
-			libOpentelemetry.HandleSpanError(span, "match rule priority conflict", err)
+			libOpentelemetry.HandleSpanBusinessErrorEvent(span, "match rule priority conflict", err)
 			return nil, err
 		}
 
@@ -46,11 +46,11 @@ func (uc *UseCase) CreateMatchRule(
 
 	if err := entities.ValidateMatchRuleConfig(input.Type, input.Config); err != nil {
 		if errors.Is(err, entities.ErrRuleConfigRequired) {
-			libOpentelemetry.HandleSpanError(span, "rule config is required", err)
+			libOpentelemetry.HandleSpanBusinessErrorEvent(span, "rule config is required", err)
 			return nil, err
 		}
 
-		libOpentelemetry.HandleSpanError(span, "invalid rule config schema", err)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "invalid rule config schema", err)
 
 		logger.With(
 			libLog.Any("rule.type", string(input.Type)),
@@ -62,7 +62,7 @@ func (uc *UseCase) CreateMatchRule(
 
 	entity, err := entities.NewMatchRule(ctx, contextID, input)
 	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "invalid match rule input", err)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "invalid match rule input", err)
 		return nil, err
 	}
 
@@ -145,7 +145,7 @@ func (uc *UseCase) loadMatchRuleForUpdate(
 	}
 
 	if entity == nil {
-		libOpentelemetry.HandleSpanError(span, "match rule not found", sql.ErrNoRows)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "match rule not found", sql.ErrNoRows)
 
 		return nil, sql.ErrNoRows
 	}
@@ -167,9 +167,10 @@ func (uc *UseCase) validatePriorityUpdate(
 	}
 
 	if err := uc.checkPriorityConflict(ctx, contextID, ruleID, *input.Priority); err != nil {
-		libOpentelemetry.HandleSpanError(span, "match rule priority conflict", err)
-
-		if !errors.Is(err, entities.ErrRulePriorityConflict) {
+		if errors.Is(err, entities.ErrRulePriorityConflict) {
+			libOpentelemetry.HandleSpanBusinessErrorEvent(span, "match rule priority conflict", err)
+		} else {
+			libOpentelemetry.HandleSpanError(span, "match rule priority conflict", err)
 			logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to check match rule priority")
 		}
 
@@ -189,12 +190,12 @@ func (uc *UseCase) validateRuleConfig(
 ) error {
 	if err := entities.ValidateMatchRuleConfig(ruleType, config); err != nil {
 		if errors.Is(err, entities.ErrRuleConfigRequired) {
-			libOpentelemetry.HandleSpanError(span, "rule config is required", err)
+			libOpentelemetry.HandleSpanBusinessErrorEvent(span, "rule config is required", err)
 
 			return err
 		}
 
-		libOpentelemetry.HandleSpanError(span, "invalid rule config schema", err)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "invalid rule config schema", err)
 
 		logger.With(
 			libLog.Any("rule.type", string(ruleType)),
@@ -256,7 +257,7 @@ func (uc *UseCase) UpdateMatchRule(
 	}
 
 	if err := entity.Update(ctx, input); err != nil {
-		libOpentelemetry.HandleSpanError(span, "invalid match rule update", err)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "invalid match rule update", err)
 
 		return nil, fmt.Errorf("applying match rule update: %w", err)
 	}

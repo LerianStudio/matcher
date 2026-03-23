@@ -22,7 +22,6 @@ import (
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/ingestion/ports"
-	outboxEntities "github.com/LerianStudio/matcher/internal/outbox/domain/entities"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
@@ -342,19 +341,19 @@ func (d *concurrentDedupe) SeenCount() int {
 
 type concurrentOutboxRepo struct {
 	mu     sync.RWMutex
-	events []*outboxEntities.OutboxEvent
+	events []*shared.OutboxEvent
 }
 
 func newConcurrentOutboxRepo() *concurrentOutboxRepo {
 	return &concurrentOutboxRepo{
-		events: make([]*outboxEntities.OutboxEvent, 0),
+		events: make([]*shared.OutboxEvent, 0),
 	}
 }
 
 func (r *concurrentOutboxRepo) Create(
 	_ context.Context,
-	event *outboxEntities.OutboxEvent,
-) (*outboxEntities.OutboxEvent, error) {
+	event *shared.OutboxEvent,
+) (*shared.OutboxEvent, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -366,15 +365,15 @@ func (r *concurrentOutboxRepo) Create(
 func (r *concurrentOutboxRepo) CreateWithTx(
 	_ context.Context,
 	_ *sql.Tx,
-	event *outboxEntities.OutboxEvent,
-) (*outboxEntities.OutboxEvent, error) {
+	event *shared.OutboxEvent,
+) (*shared.OutboxEvent, error) {
 	return r.Create(context.Background(), event)
 }
 
 func (r *concurrentOutboxRepo) ListPending(
 	_ context.Context,
 	_ int,
-) ([]*outboxEntities.OutboxEvent, error) {
+) ([]*shared.OutboxEvent, error) {
 	return nil, nil
 }
 
@@ -382,7 +381,7 @@ func (r *concurrentOutboxRepo) ListPendingByType(
 	_ context.Context,
 	_ string,
 	_ int,
-) ([]*outboxEntities.OutboxEvent, error) {
+) ([]*shared.OutboxEvent, error) {
 	return nil, nil
 }
 
@@ -393,7 +392,7 @@ func (r *concurrentOutboxRepo) ListTenants(_ context.Context) ([]string, error) 
 func (r *concurrentOutboxRepo) GetByID(
 	_ context.Context,
 	_ uuid.UUID,
-) (*outboxEntities.OutboxEvent, error) {
+) (*shared.OutboxEvent, error) {
 	return nil, nil
 }
 
@@ -410,7 +409,7 @@ func (r *concurrentOutboxRepo) ListFailedForRetry(
 	_ int,
 	_ time.Time,
 	_ int,
-) ([]*outboxEntities.OutboxEvent, error) {
+) ([]*shared.OutboxEvent, error) {
 	return nil, nil
 }
 
@@ -419,7 +418,7 @@ func (r *concurrentOutboxRepo) ResetForRetry(
 	_ int,
 	_ time.Time,
 	_ int,
-) ([]*outboxEntities.OutboxEvent, error) {
+) ([]*shared.OutboxEvent, error) {
 	return nil, nil
 }
 
@@ -428,7 +427,7 @@ func (r *concurrentOutboxRepo) ResetStuckProcessing(
 	_ int,
 	_ time.Time,
 	_ int,
-) ([]*outboxEntities.OutboxEvent, error) {
+) ([]*shared.OutboxEvent, error) {
 	return nil, nil
 }
 
@@ -724,7 +723,7 @@ func TestConcurrentOutboxEvents(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 
-			event, _ := outboxEntities.NewOutboxEvent(
+			event, _ := shared.NewOutboxEvent(
 				ctx,
 				"ingestion.completed",
 				uuid.New(),

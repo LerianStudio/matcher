@@ -3,6 +3,8 @@ package dto
 import (
 	"time"
 
+	"github.com/LerianStudio/lib-commons/v4/commons/pointers"
+
 	"github.com/LerianStudio/matcher/internal/exception/domain/dispute"
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 )
@@ -17,8 +19,7 @@ func ExceptionToResponse(exception *entities.Exception) ExceptionResponse {
 	var dueAt *string
 
 	if exception.DueAt != nil {
-		s := exception.DueAt.Format(time.RFC3339)
-		dueAt = &s
+		dueAt = pointers.String(exception.DueAt.Format(time.RFC3339))
 	}
 
 	return ExceptionResponse{

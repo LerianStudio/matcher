@@ -5,6 +5,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/LerianStudio/lib-commons/v4/commons/pointers"
+
 	"github.com/LerianStudio/matcher/internal/matching/domain/entities"
 )
 
@@ -18,8 +20,7 @@ func MatchRunToResponse(run *entities.MatchRun) MatchRunResponse {
 	var completedAt *string
 
 	if run.CompletedAt != nil {
-		s := run.CompletedAt.Format(time.RFC3339)
-		completedAt = &s
+		completedAt = pointers.String(run.CompletedAt.Format(time.RFC3339))
 	}
 
 	stats := run.Stats
@@ -66,15 +67,13 @@ func MatchGroupToResponse(group *entities.MatchGroup) MatchGroupResponse {
 	var confirmedAt *string
 
 	if group.ConfirmedAt != nil {
-		s := group.ConfirmedAt.Format(time.RFC3339)
-		confirmedAt = &s
+		confirmedAt = pointers.String(group.ConfirmedAt.Format(time.RFC3339))
 	}
 
 	var ruleID *string
 
 	if group.RuleID != uuid.Nil {
-		s := group.RuleID.String()
-		ruleID = &s
+		ruleID = pointers.String(group.RuleID.String())
 	}
 
 	items := MatchItemsToResponse(group.Items)
@@ -152,15 +151,13 @@ func AdjustmentToResponse(adj *entities.Adjustment) AdjustmentResponse {
 	var matchGroupID *string
 
 	if adj.MatchGroupID != nil {
-		s := adj.MatchGroupID.String()
-		matchGroupID = &s
+		matchGroupID = pointers.String(adj.MatchGroupID.String())
 	}
 
 	var transactionID *string
 
 	if adj.TransactionID != nil {
-		s := adj.TransactionID.String()
-		transactionID = &s
+		transactionID = pointers.String(adj.TransactionID.String())
 	}
 
 	return AdjustmentResponse{

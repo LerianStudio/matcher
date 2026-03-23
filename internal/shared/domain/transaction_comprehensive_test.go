@@ -3,6 +3,7 @@
 package shared_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -223,6 +224,8 @@ func TestNewTransaction_DefaultValues(t *testing.T) {
 	metadata := map[string]any{"key": "value"}
 
 	tx, err := shared.NewTransaction(
+		context.Background(),
+		uuid.New(),
 		jobID,
 		sourceID,
 		"ext-001",
@@ -259,6 +262,8 @@ func TestNewTransaction_NilMetadata(t *testing.T) {
 	t.Parallel()
 
 	tx, err := shared.NewTransaction(
+		context.Background(),
+		uuid.New(),
 		uuid.New(),
 		uuid.New(),
 		"ext-002",
@@ -278,6 +283,8 @@ func TestNewTransaction_ZeroAmount(t *testing.T) {
 	t.Parallel()
 
 	tx, err := shared.NewTransaction(
+		context.Background(),
+		uuid.New(),
 		uuid.New(),
 		uuid.New(),
 		"ext-003",
@@ -327,6 +334,8 @@ func TestTransaction_MarkExtractionComplete_FromPending(t *testing.T) {
 	t.Parallel()
 
 	tx, err := shared.NewTransaction(
+		context.Background(),
+		uuid.New(),
 		uuid.New(),
 		uuid.New(),
 		"ext-004",
@@ -351,6 +360,8 @@ func TestTransaction_MarkExtractionComplete_AlreadyComplete(t *testing.T) {
 	t.Parallel()
 
 	tx, err := shared.NewTransaction(
+		context.Background(),
+		uuid.New(),
 		uuid.New(),
 		uuid.New(),
 		"ext-005",
@@ -371,6 +382,8 @@ func TestTransaction_MarkExtractionComplete_AlreadyFailed(t *testing.T) {
 	t.Parallel()
 
 	tx, err := shared.NewTransaction(
+		context.Background(),
+		uuid.New(),
 		uuid.New(),
 		uuid.New(),
 		"ext-006",
@@ -391,6 +404,8 @@ func TestTransaction_MarkExtractionFailed_FromPending(t *testing.T) {
 	t.Parallel()
 
 	tx, err := shared.NewTransaction(
+		context.Background(),
+		uuid.New(),
 		uuid.New(),
 		uuid.New(),
 		"ext-007",
@@ -415,6 +430,8 @@ func TestTransaction_MarkExtractionFailed_AlreadyFailed(t *testing.T) {
 	t.Parallel()
 
 	tx, err := shared.NewTransaction(
+		context.Background(),
+		uuid.New(),
 		uuid.New(),
 		uuid.New(),
 		"ext-008",
@@ -435,6 +452,8 @@ func TestTransaction_MarkExtractionFailed_AlreadyComplete(t *testing.T) {
 	t.Parallel()
 
 	tx, err := shared.NewTransaction(
+		context.Background(),
+		uuid.New(),
 		uuid.New(),
 		uuid.New(),
 		"ext-009",
@@ -455,6 +474,8 @@ func TestTransaction_SetFXConversion_Success(t *testing.T) {
 	t.Parallel()
 
 	tx, err := shared.NewTransaction(
+		context.Background(),
+		uuid.New(),
 		uuid.New(),
 		uuid.New(),
 		"ext-010",
@@ -496,6 +517,8 @@ func TestTransaction_SetFXConversion_EmptyBaseCurrency(t *testing.T) {
 	t.Parallel()
 
 	tx, err := shared.NewTransaction(
+		context.Background(),
+		uuid.New(),
 		uuid.New(),
 		uuid.New(),
 		"ext-011",
@@ -521,6 +544,8 @@ func TestTransaction_SetFXConversion_WhitespaceBaseCurrency(t *testing.T) {
 	t.Parallel()
 
 	tx, err := shared.NewTransaction(
+		context.Background(),
+		uuid.New(),
 		uuid.New(),
 		uuid.New(),
 		"ext-012",
@@ -546,6 +571,8 @@ func TestTransaction_SetFXConversion_NegativeAmount(t *testing.T) {
 	t.Parallel()
 
 	tx, err := shared.NewTransaction(
+		context.Background(),
+		uuid.New(),
 		uuid.New(),
 		uuid.New(),
 		"ext-013",
@@ -571,6 +598,8 @@ func TestTransaction_SetFXConversion_ZeroFXRate(t *testing.T) {
 	t.Parallel()
 
 	tx, err := shared.NewTransaction(
+		context.Background(),
+		uuid.New(),
 		uuid.New(),
 		uuid.New(),
 		"ext-014",
@@ -596,6 +625,8 @@ func TestTransaction_SetFXConversion_NegativeFXRate(t *testing.T) {
 	t.Parallel()
 
 	tx, err := shared.NewTransaction(
+		context.Background(),
+		uuid.New(),
 		uuid.New(),
 		uuid.New(),
 		"ext-015",
@@ -621,6 +652,8 @@ func TestTransaction_SetFXConversion_ZeroAmount(t *testing.T) {
 	t.Parallel()
 
 	tx, err := shared.NewTransaction(
+		context.Background(),
+		uuid.New(),
 		uuid.New(),
 		uuid.New(),
 		"ext-016",
@@ -649,6 +682,8 @@ func TestTransaction_SetFXConversion_TrimsCurrency(t *testing.T) {
 	t.Parallel()
 
 	tx, err := shared.NewTransaction(
+		context.Background(),
+		uuid.New(),
 		uuid.New(),
 		uuid.New(),
 		"ext-017",
@@ -675,6 +710,8 @@ func TestTransaction_SetFXConversion_Precision(t *testing.T) {
 	t.Parallel()
 
 	tx, err := shared.NewTransaction(
+		context.Background(),
+		uuid.New(),
 		uuid.New(),
 		uuid.New(),
 		"ext-018",

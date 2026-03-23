@@ -273,7 +273,7 @@ func TestRepository_UpdateStatus_Success(t *testing.T) {
 
 	ctx := context.Background()
 	job := newTestJob(t)
-	job.MarkRunning()
+	require.NoError(t, job.MarkRunning())
 
 	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE export_jobs").
@@ -298,7 +298,7 @@ func TestRepository_UpdateStatusWithTx_Success(t *testing.T) {
 
 	ctx := context.Background()
 	job := newTestJob(t)
-	job.MarkRunning()
+	require.NoError(t, job.MarkRunning())
 
 	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE export_jobs").
@@ -690,7 +690,7 @@ func TestRepository_ClaimNextQueued_Success(t *testing.T) {
 
 	ctx := context.Background()
 	job := newTestJob(t)
-	job.MarkRunning()
+	require.NoError(t, job.MarkRunning())
 
 	filterJSON, err := job.Filter.ToJSON()
 	require.NoError(t, err)

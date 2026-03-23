@@ -14,25 +14,25 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/configuration/ports"
-	outboxEntities "github.com/LerianStudio/matcher/internal/outbox/domain/entities"
-	outboxRepositories "github.com/LerianStudio/matcher/internal/outbox/domain/repositories"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // errOutboxRepoFailure is a sentinel error for outbox repository failures in tests.
 var errOutboxRepoFailure = errors.New("outbox repo failure")
 
 // Compile-time interface compliance check.
-var _ outboxRepositories.OutboxRepository = (*stubOutboxRepo)(nil)
+var _ sharedPorts.OutboxRepository = (*stubOutboxRepo)(nil)
 
 type stubOutboxRepo struct {
-	created *outboxEntities.OutboxEvent
+	created *shared.OutboxEvent
 	err     error
 }
 
 func (s *stubOutboxRepo) Create(
 	_ context.Context,
-	event *outboxEntities.OutboxEvent,
-) (*outboxEntities.OutboxEvent, error) {
+	event *shared.OutboxEvent,
+) (*shared.OutboxEvent, error) {
 	if s.err != nil {
 		return nil, s.err
 	}
@@ -44,16 +44,16 @@ func (s *stubOutboxRepo) Create(
 
 func (s *stubOutboxRepo) CreateWithTx(
 	ctx context.Context,
-	_ outboxRepositories.Tx,
-	event *outboxEntities.OutboxEvent,
-) (*outboxEntities.OutboxEvent, error) {
+	_ sharedPorts.Tx,
+	event *shared.OutboxEvent,
+) (*shared.OutboxEvent, error) {
 	return s.Create(ctx, event)
 }
 
 func (s *stubOutboxRepo) ListPending(
 	_ context.Context,
 	_ int,
-) ([]*outboxEntities.OutboxEvent, error) {
+) ([]*shared.OutboxEvent, error) {
 	return nil, nil
 }
 
@@ -61,7 +61,7 @@ func (s *stubOutboxRepo) ListPendingByType(
 	_ context.Context,
 	_ string,
 	_ int,
-) ([]*outboxEntities.OutboxEvent, error) {
+) ([]*shared.OutboxEvent, error) {
 	return nil, nil
 }
 
@@ -69,7 +69,7 @@ func (s *stubOutboxRepo) ListTenants(_ context.Context) ([]string, error) {
 	return nil, nil
 }
 
-func (s *stubOutboxRepo) GetByID(_ context.Context, _ uuid.UUID) (*outboxEntities.OutboxEvent, error) {
+func (s *stubOutboxRepo) GetByID(_ context.Context, _ uuid.UUID) (*shared.OutboxEvent, error) {
 	return nil, nil
 }
 
@@ -86,7 +86,7 @@ func (s *stubOutboxRepo) ListFailedForRetry(
 	_ int,
 	_ time.Time,
 	_ int,
-) ([]*outboxEntities.OutboxEvent, error) {
+) ([]*shared.OutboxEvent, error) {
 	return nil, nil
 }
 
@@ -95,7 +95,7 @@ func (s *stubOutboxRepo) ResetForRetry(
 	_ int,
 	_ time.Time,
 	_ int,
-) ([]*outboxEntities.OutboxEvent, error) {
+) ([]*shared.OutboxEvent, error) {
 	return nil, nil
 }
 
@@ -104,7 +104,7 @@ func (s *stubOutboxRepo) ResetStuckProcessing(
 	_ int,
 	_ time.Time,
 	_ int,
-) ([]*outboxEntities.OutboxEvent, error) {
+) ([]*shared.OutboxEvent, error) {
 	return nil, nil
 }
 

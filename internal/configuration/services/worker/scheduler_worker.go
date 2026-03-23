@@ -4,12 +4,10 @@ package worker
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -17,6 +15,7 @@ import (
 	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
 	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
@@ -30,9 +29,27 @@ const (
 	// schedulerLockKeyPrefix is the Redis lock key prefix for schedule execution.
 	schedulerLockKeyPrefix = "matcher:scheduler:schedule:"
 
-	// lockTTLMultiplier is applied to the worker interval to compute the lock TTL.
-	lockTTLMultiplier = 2
+	// schedulerLockExpiryMultiplier is the factor applied to the poll interval
+	// to determine lock TTL. 2× ensures the lock outlives one full cycle while
+	// auto-expiring well before two cycles pass.
+	schedulerLockExpiryMultiplier = 2
+
+	// schedulerMinLockExpiry is the minimum lock expiry to prevent degenerate
+	// TTLs when the poll interval is very short (e.g. sub-second in tests).
+	schedulerMinLockExpiry = 5 * time.Second
 )
+
+// schedulerLockExpiry returns the lock TTL proportional to the poll interval:
+// max(2 × interval, 5s). This prevents the lock from expiring mid-execution
+// while ensuring it auto-releases before the next cycle would stall.
+func schedulerLockExpiry(interval time.Duration) time.Duration {
+	expiry := time.Duration(schedulerLockExpiryMultiplier) * interval
+	if expiry < schedulerMinLockExpiry {
+		return schedulerMinLockExpiry
+	}
+
+	return expiry
+}
 
 // ErrNilScheduleRepository is re-exported from the command package
 // to avoid duplicate declarations across the configuration context.
@@ -41,11 +58,10 @@ var ErrNilScheduleRepository = configCommand.ErrNilScheduleRepository
 // Sentinel errors for scheduler worker.
 var (
 	ErrNilMatchTrigger                 = errors.New("match trigger is required")
-	ErrNilInfraProvider                = errors.New("infrastructure provider is required")
+	ErrNilLockManager                  = errors.New("lock manager is required")
 	ErrWorkerAlreadyRunning            = errors.New("scheduler worker already running")
 	ErrWorkerNotRunning                = errors.New("scheduler worker not running")
 	ErrRuntimeConfigUpdateWhileRunning = errors.New("worker runtime config update requires stopped worker")
-	ErrRedisClientNil                  = errors.New("redis client is nil")
 )
 
 // SchedulerWorkerConfig holds configuration for the scheduler worker.
@@ -56,13 +72,13 @@ type SchedulerWorkerConfig struct {
 
 // SchedulerWorker polls for due schedules and triggers match runs.
 type SchedulerWorker struct {
-	mu            sync.Mutex
-	scheduleRepo  ports.ScheduleRepository
-	matchTrigger  sharedPorts.MatchTrigger
-	infraProvider sharedPorts.InfrastructureProvider
-	cfg           SchedulerWorkerConfig
-	logger        libLog.Logger
-	tracer        trace.Tracer
+	mu           sync.Mutex
+	scheduleRepo ports.ScheduleRepository
+	matchTrigger sharedPorts.MatchTrigger
+	lockManager  libRedis.LockManager
+	cfg          SchedulerWorkerConfig
+	logger       libLog.Logger
+	tracer       trace.Tracer
 
 	running  atomic.Bool
 	stopOnce sync.Once
@@ -82,7 +98,7 @@ func normalizeSchedulerWorkerConfig(cfg SchedulerWorkerConfig) SchedulerWorkerCo
 func NewSchedulerWorker(
 	scheduleRepo ports.ScheduleRepository,
 	matchTrigger sharedPorts.MatchTrigger,
-	infraProvider sharedPorts.InfrastructureProvider,
+	lockManager libRedis.LockManager,
 	cfg SchedulerWorkerConfig,
 	logger libLog.Logger,
 ) (*SchedulerWorker, error) {
@@ -94,8 +110,8 @@ func NewSchedulerWorker(
 		return nil, ErrNilMatchTrigger
 	}
 
-	if infraProvider == nil {
-		return nil, ErrNilInfraProvider
+	if lockManager == nil {
+		return nil, ErrNilLockManager
 	}
 
 	cfg = normalizeSchedulerWorkerConfig(cfg)
@@ -105,14 +121,14 @@ func NewSchedulerWorker(
 	}
 
 	return &SchedulerWorker{
-		scheduleRepo:  scheduleRepo,
-		matchTrigger:  matchTrigger,
-		infraProvider: infraProvider,
-		cfg:           cfg,
-		logger:        logger,
-		tracer:        otel.Tracer("configuration.scheduler_worker"),
-		stopCh:        make(chan struct{}),
-		doneCh:        make(chan struct{}),
+		scheduleRepo: scheduleRepo,
+		matchTrigger: matchTrigger,
+		lockManager:  lockManager,
+		cfg:          cfg,
+		logger:       logger,
+		tracer:       otel.Tracer("configuration.scheduler_worker"),
+		stopCh:       make(chan struct{}),
+		doneCh:       make(chan struct{}),
 	}, nil
 }
 
@@ -263,105 +279,42 @@ func (worker *SchedulerWorker) processSchedule(
 
 	lockKey := schedulerLockKeyPrefix + schedule.ID.String()
 
-	acquired, token, err := worker.acquireLock(ctx, lockKey)
-	if err != nil {
+	// Use WithLockOptions with Tries=1 for non-blocking semantics (same as TryLock)
+	// but with a proportional TTL: 2× the poll interval ensures the lock outlives
+	// a single cycle while auto-expiring before the next would stall.
+	lockOpts := libRedis.LockOptions{
+		Expiry:      schedulerLockExpiry(worker.cfg.Interval),
+		Tries:       1,
+		RetryDelay:  libRedis.DefaultLockOptions().RetryDelay,
+		DriftFactor: libRedis.DefaultLockOptions().DriftFactor,
+	}
+
+	lockErr := worker.lockManager.WithLockOptions(ctx, lockKey, lockOpts, func(lockCtx context.Context) error {
+		// Trigger match run using the tenant ID resolved via JOIN in FindDueSchedules.
+		worker.matchTrigger.TriggerMatchForContext(lockCtx, schedule.TenantID, schedule.ContextID)
+
+		// Update schedule after run.
+		schedule.MarkRun(now)
+
+		if _, updateErr := worker.scheduleRepo.Update(lockCtx, schedule); updateErr != nil {
+			logger.With(
+				libLog.String("schedule.id", schedule.ID.String()),
+				libLog.Any("error", updateErr.Error()),
+			).Log(lockCtx, libLog.LevelWarn, "scheduler: failed to update schedule after run")
+		}
+
+		logger.With(
+			libLog.String("context.id", schedule.ContextID.String()),
+			libLog.String("schedule.id", schedule.ID.String()),
+		).Log(lockCtx, libLog.LevelInfo, "scheduler: triggered match run for context")
+
+		return nil
+	})
+	if lockErr != nil {
 		logger.With(
 			libLog.String("schedule.id", schedule.ID.String()),
-			libLog.Any("error", err.Error()),
+			libLog.Any("error", lockErr.Error()),
 		).Log(ctx, libLog.LevelWarn, "scheduler: lock error for schedule")
-
-		return
-	}
-
-	if !acquired {
-		return
-	}
-
-	defer worker.releaseLock(ctx, lockKey, token)
-
-	// Trigger match run using the tenant ID resolved via JOIN in FindDueSchedules.
-	worker.matchTrigger.TriggerMatchForContext(ctx, schedule.TenantID, schedule.ContextID)
-
-	// Update schedule after run
-	schedule.MarkRun(now)
-
-	if _, err := worker.scheduleRepo.Update(ctx, schedule); err != nil {
-		logger.With(
-			libLog.String("schedule.id", schedule.ID.String()),
-			libLog.Any("error", err.Error()),
-		).Log(ctx, libLog.LevelWarn, "scheduler: failed to update schedule after run")
-	}
-
-	logger.With(
-		libLog.String("context.id", schedule.ContextID.String()),
-		libLog.String("schedule.id", schedule.ID.String()),
-	).Log(ctx, libLog.LevelInfo, "scheduler: triggered match run for context")
-}
-
-// acquireLock attempts to acquire a Redis distributed lock.
-func (worker *SchedulerWorker) acquireLock(ctx context.Context, key string) (bool, string, error) {
-	connLease, err := worker.infraProvider.GetRedisConnection(ctx)
-	if err != nil {
-		return false, "", fmt.Errorf("get redis connection: %w", err)
-	}
-	defer connLease.Release()
-
-	conn := connLease.Connection()
-	if conn == nil {
-		return false, "", ErrRedisClientNil
-	}
-
-	rdb, err := conn.GetClient(ctx)
-	if err != nil {
-		return false, "", fmt.Errorf("get redis client for lock acquire: %w", err)
-	}
-
-	lockTTL := lockTTLMultiplier * worker.cfg.Interval
-	token := uuid.New().String()
-
-	ok, err := rdb.SetNX(ctx, key, token, lockTTL).Result()
-	if err != nil {
-		return false, "", fmt.Errorf("redis setnx: %w", err)
-	}
-
-	return ok, token, nil
-}
-
-// releaseLock releases a Redis distributed lock.
-func (worker *SchedulerWorker) releaseLock(ctx context.Context, key, token string) {
-	connLease, err := worker.infraProvider.GetRedisConnection(ctx)
-	if err != nil {
-		return
-	}
-	defer connLease.Release()
-
-	conn := connLease.Connection()
-	if conn == nil {
-		return
-	}
-
-	rdb, rdbErr := conn.GetClient(ctx)
-	if rdbErr != nil {
-		worker.logger.With(
-			libLog.String("lock.key", key),
-			libLog.Any("error", rdbErr.Error()),
-		).Log(ctx, libLog.LevelWarn, "scheduler: failed to acquire redis client for lock release")
-
-		return
-	}
-
-	script := `
-if redis.call("GET", KEYS[1]) == ARGV[1] then
-  return redis.call("DEL", KEYS[1])
-else
-  return 0
-end
-`
-	if _, err := rdb.Eval(ctx, script, []string{key}, token).Result(); err != nil {
-		worker.logger.With(
-			libLog.String("lock.key", key),
-			libLog.Any("error", err.Error()),
-		).Log(ctx, libLog.LevelWarn, "scheduler: failed to release lock")
 	}
 }
 

@@ -9,6 +9,9 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/LerianStudio/lib-commons/v4/commons/circuitbreaker"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+
 	discoveryFetcher "github.com/LerianStudio/matcher/internal/discovery/adapters/fetcher"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
@@ -19,10 +22,21 @@ type dynamicFetcherClient struct {
 	mu           sync.Mutex
 	activeKey    string
 	activeClient sharedPorts.FetcherClient
+	breaker      circuitbreaker.Manager
 }
 
-func newDynamicFetcherClient(initialCfg *Config, configGetter func() *Config) sharedPorts.FetcherClient {
-	return &dynamicFetcherClient{initialCfg: initialCfg, configGetter: configGetter}
+func newDynamicFetcherClient(initialCfg *Config, configGetter func() *Config, logger libLog.Logger) sharedPorts.FetcherClient {
+	var breaker circuitbreaker.Manager
+
+	if mgr, err := circuitbreaker.NewManager(logger); err == nil {
+		breaker = mgr
+	}
+
+	return &dynamicFetcherClient{
+		initialCfg:   initialCfg,
+		configGetter: configGetter,
+		breaker:      breaker,
+	}
 }
 
 // IsHealthy reports whether the active Fetcher client is healthy.
@@ -130,7 +144,7 @@ func (client *dynamicFetcherClient) current() (sharedPorts.FetcherClient, error)
 		return client.activeClient, nil
 	}
 
-	fetcherClient, err := discoveryFetcher.NewHTTPFetcherClient(fetcherHTTPClientConfig(cfg))
+	fetcherClient, err := discoveryFetcher.NewHTTPFetcherClient(fetcherHTTPClientConfig(cfg), client.breaker)
 	if err != nil {
 		return nil, fmt.Errorf("%w: create fetcher client: %w", sharedPorts.ErrFetcherUnavailable, err)
 	}

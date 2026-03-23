@@ -49,7 +49,7 @@ func (uc *CommentQueryUseCase) ListComments(
 	defer span.End()
 
 	if exceptionID == uuid.Nil {
-		libOpentelemetry.HandleSpanError(span, "exception id required", ErrCommentExceptionIDRequired)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "exception id required", ErrCommentExceptionIDRequired)
 
 		return nil, ErrCommentExceptionIDRequired
 	}

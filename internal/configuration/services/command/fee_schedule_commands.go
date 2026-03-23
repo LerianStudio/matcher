@@ -62,7 +62,7 @@ func (uc *UseCase) CreateFeeSchedule(
 
 	entity, err := fee.NewFeeSchedule(ctx, input)
 	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "invalid fee schedule input", err)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "invalid fee schedule input", err)
 		return nil, fmt.Errorf("create fee schedule: %w", err)
 	}
 

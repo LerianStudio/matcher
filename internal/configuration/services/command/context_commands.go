@@ -18,6 +18,11 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/ports"
 )
 
+// TODO(telemetry): configuration/adapters/http/handlers.go — logSpanError uses HandleSpanError for
+// business outcomes (badRequest, notFound, writeNotFound). Add logSpanBusinessEvent using
+// HandleSpanBusinessErrorEvent and create badRequestBiz/notFoundBiz variants for 400/404 responses.
+// See reporting/adapters/http/handlers_export_job.go for the reference implementation.
+
 const postgresUniqueViolationCode = "23505"
 
 var (
@@ -111,13 +116,13 @@ func (uc *UseCase) CreateContext(
 
 	entity, err := entities.NewReconciliationContext(ctx, tenantID, input)
 	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "invalid reconciliation context input", err)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "invalid reconciliation context input", err)
 		return nil, err
 	}
 
 	inlineCreateRequested := len(input.Sources) > 0 || len(input.Rules) > 0
 	if inlineCreateRequested && uc.infraProvider == nil {
-		libOpentelemetry.HandleSpanError(span, "inline create requires infrastructure provider", ErrInlineCreateRequiresInfrastructure)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "inline create requires infrastructure provider", ErrInlineCreateRequiresInfrastructure)
 
 		logger.With(
 			libLog.String("context.name", input.Name),
@@ -409,7 +414,7 @@ func (uc *UseCase) UpdateContext(
 	}
 
 	if err := entity.Update(ctx, input); err != nil {
-		libOpentelemetry.HandleSpanError(span, "invalid reconciliation context update", err)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "invalid reconciliation context update", err)
 		return nil, err
 	}
 

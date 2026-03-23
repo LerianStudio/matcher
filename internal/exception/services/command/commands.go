@@ -54,6 +54,7 @@ var (
 	ErrNilCallbackRateLimiter    = errors.New("callback rate limiter is required")
 	ErrCallbackInProgress        = errors.New("callback is already being processed")
 	ErrCallbackRetryable         = errors.New("callback can be retried")
+	ErrUnexpectedNilResult       = errors.New("unexpected nil result")
 )
 
 // UseCase implements exception resolution commands.
@@ -126,6 +127,22 @@ func (uc *UseCase) initMetrics() error {
 	}
 
 	return nil
+}
+
+// isBusinessError returns true when the error originates from a domain/business
+// rule violation (not-found, nil entity, invalid state transition, pending state).
+// Infrastructure failures (database, transaction, network) are NOT business errors
+// and should be reported with HandleSpanError for proper telemetry classification.
+func isBusinessError(err error) bool {
+	return errors.Is(err, entities.ErrExceptionNotFound) ||
+		errors.Is(err, entities.ErrExceptionNil) ||
+		errors.Is(err, entities.ErrExceptionMustBeOpenToAssign) ||
+		errors.Is(err, entities.ErrExceptionMustBeOpenOrAssignedToResolve) ||
+		errors.Is(err, entities.ErrExceptionPendingResolution) ||
+		errors.Is(err, entities.ErrAssigneeRequired) ||
+		errors.Is(err, entities.ErrResolutionNotesRequired) ||
+		errors.Is(err, value_objects.ErrInvalidResolutionTransition) ||
+		errors.Is(err, value_objects.ErrInvalidExceptionStatus)
 }
 
 // executeWithRevert executes a gateway operation and reverts exception status on failure.

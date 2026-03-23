@@ -195,10 +195,11 @@ func TestCollectFeeFindings_SkipsNilAndNonConfirmed(t *testing.T) {
 			Confidence: confidence,
 		},
 	}
-	findings := collectFeeFindings(
+	findings, err := collectFeeFindings(
 		context.Background(), nil, groups, nil,
 		&feeVerificationInput{}, &fee.Rate{}, fee.Tolerance{},
 	)
+	require.NoError(t, err)
 	assert.Empty(t, findings.variances)
 	assert.Empty(t, findings.exceptionInputs)
 }

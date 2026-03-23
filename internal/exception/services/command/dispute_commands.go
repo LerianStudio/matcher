@@ -177,13 +177,13 @@ func (uc *DisputeUseCase) processOpenDispute(
 		params.actor,
 	)
 	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to create dispute", err)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "failed to create dispute", err)
 
 		return nil, fmt.Errorf("create dispute: %w", err)
 	}
 
 	if err := newDispute.Open(ctx); err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to open dispute", err)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "failed to open dispute", err)
 
 		return nil, fmt.Errorf("open dispute: %w", err)
 	}
@@ -324,7 +324,7 @@ func (uc *DisputeUseCase) processCloseDispute(
 
 	if cmd.Won {
 		if err := existingDispute.Win(ctx, params.resolution); err != nil {
-			libOpentelemetry.HandleSpanError(span, "failed to win dispute", err)
+			libOpentelemetry.HandleSpanBusinessErrorEvent(span, "failed to win dispute", err)
 
 			return nil, fmt.Errorf("win dispute: %w", err)
 		}
@@ -332,7 +332,7 @@ func (uc *DisputeUseCase) processCloseDispute(
 		action = "DISPUTE_WON"
 	} else {
 		if err := existingDispute.Lose(ctx, params.resolution); err != nil {
-			libOpentelemetry.HandleSpanError(span, "failed to lose dispute", err)
+			libOpentelemetry.HandleSpanBusinessErrorEvent(span, "failed to lose dispute", err)
 
 			return nil, fmt.Errorf("lose dispute: %w", err)
 		}
@@ -494,7 +494,7 @@ func (uc *DisputeUseCase) processSubmitEvidence(
 	}
 
 	if err := existingDispute.AddEvidence(ctx, params.comment, params.actor, params.fileURL); err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to add evidence", err)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "failed to add evidence", err)
 
 		return nil, fmt.Errorf("add evidence: %w", err)
 	}

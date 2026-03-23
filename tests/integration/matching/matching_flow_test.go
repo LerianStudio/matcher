@@ -67,6 +67,8 @@ func TestMatchingFlow_CompleteReconciliation(t *testing.T) {
 		require.NoError(t, err)
 
 		tx1, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"LEDGER-001",
@@ -82,6 +84,8 @@ func TestMatchingFlow_CompleteReconciliation(t *testing.T) {
 		require.NoError(t, err)
 
 		tx2, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"BANK-001",
@@ -97,6 +101,8 @@ func TestMatchingFlow_CompleteReconciliation(t *testing.T) {
 		require.NoError(t, err)
 
 		tx3, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"LEDGER-002",
@@ -112,6 +118,8 @@ func TestMatchingFlow_CompleteReconciliation(t *testing.T) {
 		require.NoError(t, err)
 
 		tx4, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"BANK-002",
@@ -256,6 +264,8 @@ func TestMatchingFlow_DryRunMode(t *testing.T) {
 		require.NoError(t, err)
 
 		tx1, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"DRY-001",
@@ -271,6 +281,8 @@ func TestMatchingFlow_DryRunMode(t *testing.T) {
 		require.NoError(t, err)
 
 		tx2, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"DRY-002",
@@ -428,6 +440,8 @@ func TestMatchingFlow_MultipleRulesWithPriority(t *testing.T) {
 		require.NoError(t, err)
 
 		tx1, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"EXACT-MATCH-1",
@@ -443,6 +457,8 @@ func TestMatchingFlow_MultipleRulesWithPriority(t *testing.T) {
 		require.NoError(t, err)
 
 		tx2, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"EXACT-MATCH-2",
@@ -458,6 +474,8 @@ func TestMatchingFlow_MultipleRulesWithPriority(t *testing.T) {
 		require.NoError(t, err)
 
 		tx3, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"TOLERANCE-1",
@@ -473,6 +491,8 @@ func TestMatchingFlow_MultipleRulesWithPriority(t *testing.T) {
 		require.NoError(t, err)
 
 		tx4, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"TOLERANCE-2",

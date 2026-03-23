@@ -35,10 +35,9 @@ import (
 	"github.com/LerianStudio/matcher/internal/ingestion/ports"
 	"github.com/LerianStudio/matcher/internal/ingestion/services/command"
 	"github.com/LerianStudio/matcher/internal/ingestion/services/query"
-	outboxEntities "github.com/LerianStudio/matcher/internal/outbox/domain/entities"
-	outboxMocks "github.com/LerianStudio/matcher/internal/outbox/domain/repositories/mocks"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	outboxMocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
 	"github.com/LerianStudio/matcher/internal/shared/testutil"
 )
 
@@ -263,8 +262,8 @@ func (a *transactionRepoAdapter) CleanupFailedJobTransactionsWithTx(
 
 func (a *outboxRepoAdapter) Create(
 	ctx context.Context,
-	event *outboxEntities.OutboxEvent,
-) (*outboxEntities.OutboxEvent, error) {
+	event *shared.OutboxEvent,
+) (*shared.OutboxEvent, error) {
 	result, err := a.base.Create(ctx, event)
 	if err != nil {
 		return nil, fmt.Errorf("mock outbox create: %w", err)
@@ -276,8 +275,8 @@ func (a *outboxRepoAdapter) Create(
 func (a *outboxRepoAdapter) CreateWithTx(
 	ctx context.Context,
 	tx *sql.Tx,
-	event *outboxEntities.OutboxEvent,
-) (*outboxEntities.OutboxEvent, error) {
+	event *shared.OutboxEvent,
+) (*shared.OutboxEvent, error) {
 	result, err := a.base.CreateWithTx(ctx, tx, event)
 	if err != nil {
 		return nil, fmt.Errorf("mock outbox create with tx: %w", err)
@@ -289,7 +288,7 @@ func (a *outboxRepoAdapter) CreateWithTx(
 func (a *outboxRepoAdapter) ListPending(
 	ctx context.Context,
 	limit int,
-) ([]*outboxEntities.OutboxEvent, error) {
+) ([]*shared.OutboxEvent, error) {
 	result, err := a.base.ListPending(ctx, limit)
 	if err != nil {
 		return nil, fmt.Errorf("mock outbox list pending: %w", err)
@@ -302,7 +301,7 @@ func (a *outboxRepoAdapter) ListPendingByType(
 	ctx context.Context,
 	eventType string,
 	limit int,
-) ([]*outboxEntities.OutboxEvent, error) {
+) ([]*shared.OutboxEvent, error) {
 	result, err := a.base.ListPendingByType(ctx, eventType, limit)
 	if err != nil {
 		return nil, fmt.Errorf("mock outbox list pending by type: %w", err)
@@ -343,7 +342,7 @@ func (a *outboxRepoAdapter) MarkFailed(ctx context.Context, id uuid.UUID, errMsg
 func (a *outboxRepoAdapter) GetByID(
 	ctx context.Context,
 	id uuid.UUID,
-) (*outboxEntities.OutboxEvent, error) {
+) (*shared.OutboxEvent, error) {
 	result, err := a.base.GetByID(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("mock outbox get by id: %w", err)
@@ -357,7 +356,7 @@ func (a *outboxRepoAdapter) ListFailedForRetry(
 	limit int,
 	failedBefore time.Time,
 	maxAttempts int,
-) ([]*outboxEntities.OutboxEvent, error) {
+) ([]*shared.OutboxEvent, error) {
 	result, err := a.base.ListFailedForRetry(ctx, limit, failedBefore, maxAttempts)
 	if err != nil {
 		return nil, fmt.Errorf("mock outbox list failed for retry: %w", err)
@@ -371,7 +370,7 @@ func (a *outboxRepoAdapter) ResetForRetry(
 	limit int,
 	failedBefore time.Time,
 	maxAttempts int,
-) ([]*outboxEntities.OutboxEvent, error) {
+) ([]*shared.OutboxEvent, error) {
 	result, err := a.base.ResetForRetry(ctx, limit, failedBefore, maxAttempts)
 	if err != nil {
 		return nil, fmt.Errorf("mock outbox reset for retry: %w", err)
@@ -385,7 +384,7 @@ func (a *outboxRepoAdapter) ResetStuckProcessing(
 	limit int,
 	processingBefore time.Time,
 	maxAttempts int,
-) ([]*outboxEntities.OutboxEvent, error) {
+) ([]*shared.OutboxEvent, error) {
 	result, err := a.base.ResetStuckProcessing(ctx, limit, processingBefore, maxAttempts)
 	if err != nil {
 		return nil, fmt.Errorf("mock outbox reset stuck processing: %w", err)
@@ -692,7 +691,7 @@ func TestUploadFileSuccess(t *testing.T) {
 		Return([]*shared.Transaction{}, nil)
 	fixture.outbox.EXPECT().
 		CreateWithTx(gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(&outboxEntities.OutboxEvent{}, nil)
+		Return(&shared.OutboxEvent{}, nil)
 
 	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)

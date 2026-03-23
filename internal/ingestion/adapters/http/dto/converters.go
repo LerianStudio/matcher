@@ -5,6 +5,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/LerianStudio/lib-commons/v4/commons/pointers"
+
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
@@ -19,15 +21,13 @@ func JobToResponse(job *entities.IngestionJob) JobResponse {
 	var startedAt *string
 
 	if !job.StartedAt.IsZero() {
-		s := job.StartedAt.Format(time.RFC3339)
-		startedAt = &s
+		startedAt = pointers.String(job.StartedAt.Format(time.RFC3339))
 	}
 
 	var completedAt *string
 
 	if job.CompletedAt != nil {
-		s := job.CompletedAt.Format(time.RFC3339)
-		completedAt = &s
+		completedAt = pointers.String(job.CompletedAt.Format(time.RFC3339))
 	}
 
 	return JobResponse{

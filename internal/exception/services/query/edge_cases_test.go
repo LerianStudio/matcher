@@ -15,7 +15,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
-	govEntities "github.com/LerianStudio/matcher/internal/governance/domain/entities"
+	govEntities "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
 // Test GetException with adapter-specific not found error.

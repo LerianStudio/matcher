@@ -5,6 +5,7 @@ import (
 	"time"
 
 	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	"github.com/LerianStudio/lib-commons/v4/commons/pointers"
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 )
@@ -468,13 +469,11 @@ func UnmatchedItemsToResponse(items []*entities.UnmatchedItem) []UnmatchedItemRe
 		}
 
 		if item.ExceptionID != nil {
-			exID := item.ExceptionID.String()
-			resp.ExceptionID = &exID
+			resp.ExceptionID = pointers.String(item.ExceptionID.String())
 		}
 
 		if item.DueAt != nil {
-			dueAt := item.DueAt.Format(time.RFC3339)
-			resp.DueAt = &dueAt
+			resp.DueAt = pointers.String(item.DueAt.Format(time.RFC3339))
 		}
 
 		result = append(result, resp)
@@ -526,8 +525,7 @@ func VarianceRowsToResponse(rows []*entities.VarianceReportRow) []VarianceReport
 		}
 
 		if row.VariancePct != nil {
-			pct := row.VariancePct.String()
-			resp.VariancePct = &pct
+			resp.VariancePct = pointers.String(row.VariancePct.String())
 		}
 
 		result = append(result, resp)

@@ -15,16 +15,13 @@ import (
 
 	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
-	governanceEntities "github.com/LerianStudio/matcher/internal/governance/domain/entities"
-	governanceRepositories "github.com/LerianStudio/matcher/internal/governance/domain/repositories"
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	matchingRepositories "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/matching/ports"
-	outboxEntities "github.com/LerianStudio/matcher/internal/outbox/domain/entities"
-	outboxmocks "github.com/LerianStudio/matcher/internal/outbox/domain/repositories/mocks"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+	outboxmocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
 )
 
 func TestSentinelErrors(t *testing.T) {
@@ -531,8 +528,8 @@ type mockAuditLogRepo struct {
 
 func (m *mockAuditLogRepo) Create(
 	_ context.Context,
-	auditLog *governanceEntities.AuditLog,
-) (*governanceEntities.AuditLog, error) {
+	auditLog *shared.AuditLog,
+) (*shared.AuditLog, error) {
 	if m.createErr != nil {
 		return nil, m.createErr
 	}
@@ -542,9 +539,9 @@ func (m *mockAuditLogRepo) Create(
 
 func (m *mockAuditLogRepo) CreateWithTx(
 	_ context.Context,
-	_ governanceRepositories.Tx,
-	auditLog *governanceEntities.AuditLog,
-) (*governanceEntities.AuditLog, error) {
+	_ sharedPorts.Tx,
+	auditLog *shared.AuditLog,
+) (*shared.AuditLog, error) {
 	if m.createErr != nil {
 		return nil, m.createErr
 	}
@@ -555,7 +552,7 @@ func (m *mockAuditLogRepo) CreateWithTx(
 func (m *mockAuditLogRepo) GetByID(
 	_ context.Context,
 	_ uuid.UUID,
-) (*governanceEntities.AuditLog, error) {
+) (*shared.AuditLog, error) {
 	return nil, nil
 }
 
@@ -565,16 +562,16 @@ func (m *mockAuditLogRepo) ListByEntity(
 	_ uuid.UUID,
 	_ *libHTTP.TimestampCursor,
 	_ int,
-) ([]*governanceEntities.AuditLog, string, error) {
+) ([]*shared.AuditLog, string, error) {
 	return nil, "", nil
 }
 
 func (m *mockAuditLogRepo) List(
 	_ context.Context,
-	_ governanceEntities.AuditLogFilter,
+	_ shared.AuditLogFilter,
 	_ *libHTTP.TimestampCursor,
 	_ int,
-) ([]*governanceEntities.AuditLog, string, error) {
+) ([]*shared.AuditLog, string, error) {
 	return nil, "", nil
 }
 
@@ -586,15 +583,15 @@ func TestNewUseCase(t *testing.T) {
 		outboxRepo := outboxmocks.NewMockOutboxRepository(ctrl)
 		outboxRepo.EXPECT().
 			Create(gomock.Any(), gomock.Any()).
-			Return(&outboxEntities.OutboxEvent{}, nil).
+			Return(&shared.OutboxEvent{}, nil).
 			AnyTimes()
 		outboxRepo.EXPECT().
 			CreateWithTx(gomock.Any(), gomock.Any(), gomock.Any()).
-			Return(&outboxEntities.OutboxEvent{}, nil).
+			Return(&shared.OutboxEvent{}, nil).
 			AnyTimes()
 		outboxRepo.EXPECT().
 			ListPending(gomock.Any(), gomock.Any()).
-			Return([]*outboxEntities.OutboxEvent{}, nil).
+			Return([]*shared.OutboxEvent{}, nil).
 			AnyTimes()
 		outboxRepo.EXPECT().ListTenants(gomock.Any()).Return([]string{}, nil).AnyTimes()
 		outboxRepo.EXPECT().GetByID(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
@@ -608,15 +605,15 @@ func TestNewUseCase(t *testing.T) {
 			AnyTimes()
 		outboxRepo.EXPECT().
 			ListFailedForRetry(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-			Return([]*outboxEntities.OutboxEvent{}, nil).
+			Return([]*shared.OutboxEvent{}, nil).
 			AnyTimes()
 		outboxRepo.EXPECT().
 			ResetForRetry(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-			Return([]*outboxEntities.OutboxEvent{}, nil).
+			Return([]*shared.OutboxEvent{}, nil).
 			AnyTimes()
 		outboxRepo.EXPECT().
 			ResetStuckProcessing(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-			Return([]*outboxEntities.OutboxEvent{}, nil).
+			Return([]*shared.OutboxEvent{}, nil).
 			AnyTimes()
 		outboxRepo.EXPECT().
 			MarkInvalid(gomock.Any(), gomock.Any(), gomock.Any()).
@@ -843,15 +840,15 @@ func TestUseCaseFieldsInitialized(t *testing.T) {
 	outboxRepo := outboxmocks.NewMockOutboxRepository(ctrl)
 	outboxRepo.EXPECT().
 		Create(gomock.Any(), gomock.Any()).
-		Return(&outboxEntities.OutboxEvent{}, nil).
+		Return(&shared.OutboxEvent{}, nil).
 		AnyTimes()
 	outboxRepo.EXPECT().
 		CreateWithTx(gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(&outboxEntities.OutboxEvent{}, nil).
+		Return(&shared.OutboxEvent{}, nil).
 		AnyTimes()
 	outboxRepo.EXPECT().
 		ListPending(gomock.Any(), gomock.Any()).
-		Return([]*outboxEntities.OutboxEvent{}, nil).
+		Return([]*shared.OutboxEvent{}, nil).
 		AnyTimes()
 	outboxRepo.EXPECT().ListTenants(gomock.Any()).Return([]string{}, nil).AnyTimes()
 	outboxRepo.EXPECT().GetByID(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
@@ -862,15 +859,15 @@ func TestUseCaseFieldsInitialized(t *testing.T) {
 	outboxRepo.EXPECT().MarkFailed(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	outboxRepo.EXPECT().
 		ListFailedForRetry(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Return([]*outboxEntities.OutboxEvent{}, nil).
+		Return([]*shared.OutboxEvent{}, nil).
 		AnyTimes()
 	outboxRepo.EXPECT().
 		ResetForRetry(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Return([]*outboxEntities.OutboxEvent{}, nil).
+		Return([]*shared.OutboxEvent{}, nil).
 		AnyTimes()
 	outboxRepo.EXPECT().
 		ResetStuckProcessing(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Return([]*outboxEntities.OutboxEvent{}, nil).
+		Return([]*shared.OutboxEvent{}, nil).
 		AnyTimes()
 
 	uc, err := New(UseCaseDeps{

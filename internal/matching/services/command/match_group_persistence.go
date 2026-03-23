@@ -190,12 +190,20 @@ func (uc *UseCase) performFeeVerification(
 		return fmt.Errorf("load rate for fee verification: %w", err)
 	}
 
+	if rate == nil {
+		return fmt.Errorf("load rate for fee verification: %w: ID %s", ErrRateNotFound, *feeInput.ctxInfo.RateID)
+	}
+
 	tolerance := fee.Tolerance{
 		Abs:     feeInput.ctxInfo.FeeToleranceAbs,
 		Percent: feeInput.ctxInfo.FeeTolerancePct,
 	}
 
-	findings := collectFeeFindings(ctx, span, groups, createdRun, feeInput, rate, tolerance)
+	findings, feeErr := collectFeeFindings(ctx, span, groups, createdRun, feeInput, rate, tolerance)
+	if feeErr != nil {
+		libOpentelemetry.HandleSpanError(span, "fee finding collection failed", feeErr)
+		return fmt.Errorf("collect fee findings: %w", feeErr)
+	}
 
 	span.SetAttributes(
 		attribute.String("fee.currency", rate.Currency),
@@ -216,7 +224,7 @@ func collectFeeFindings(
 	feeInput *feeVerificationInput,
 	rate *fee.Rate,
 	tolerance fee.Tolerance,
-) *feeFindings {
+) (*feeFindings, error) {
 	findings := &feeFindings{}
 
 	for _, group := range groups {
@@ -230,6 +238,10 @@ func collectFeeFindings(
 				continue
 			}
 
+			if result.fatalErr != nil {
+				return nil, result.fatalErr
+			}
+
 			if result.variance != nil {
 				findings.variances = append(findings.variances, result.variance)
 			}
@@ -240,7 +252,7 @@ func collectFeeFindings(
 		}
 	}
 
-	return findings
+	return findings, nil
 }
 
 func (uc *UseCase) persistFeeFindings(
@@ -345,7 +357,7 @@ func processFeeForItem(
 		)
 		if fvErr != nil {
 			libOpentelemetry.HandleSpanError(span, "failed to create fee variance entity", fvErr)
-			return nil
+			return &feeItemResult{fatalErr: fmt.Errorf("create fee variance: %w", fvErr)}
 		}
 
 		return &feeItemResult{

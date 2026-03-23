@@ -15,7 +15,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/auth"
 	matchingVO "github.com/LerianStudio/matcher/internal/matching/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/matching/ports"
-	outboxmocks "github.com/LerianStudio/matcher/internal/outbox/domain/repositories/mocks"
+	outboxmocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )

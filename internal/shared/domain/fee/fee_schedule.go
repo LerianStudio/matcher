@@ -108,6 +108,10 @@ type NewFeeScheduleInput struct {
 func NewFeeSchedule(ctx context.Context, input NewFeeScheduleInput) (*FeeSchedule, error) {
 	asserter := assert.New(ctx, nil, constants.ApplicationName, "matching.fee.schedule.new")
 
+	if err := asserter.That(ctx, input.TenantID != uuid.Nil, ErrScheduleTenantIDRequired.Error()); err != nil {
+		return nil, fmt.Errorf("fee schedule tenant id: %w", ErrScheduleTenantIDRequired)
+	}
+
 	if err := asserter.NotEmpty(ctx, input.Name, ErrScheduleNameRequired.Error()); err != nil {
 		return nil, fmt.Errorf("fee schedule name: %w", ErrScheduleNameRequired)
 	}

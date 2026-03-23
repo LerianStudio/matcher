@@ -45,6 +45,8 @@ func TestExceptionCreatorRepository_CreateExceptions(t *testing.T) {
 		require.NoError(t, err)
 
 		tx1, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"exc-ref-1",
@@ -61,6 +63,8 @@ func TestExceptionCreatorRepository_CreateExceptions(t *testing.T) {
 		require.NoError(t, err)
 
 		tx2, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"exc-ref-2",
@@ -133,6 +137,8 @@ func TestExceptionCreatorRepository_CreateExceptions_NilReasons(t *testing.T) {
 		require.NoError(t, err)
 
 		tx, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"exc-nil-reason",
@@ -179,6 +185,8 @@ func TestExceptionCreatorRepository_CreateExceptions_Idempotent(t *testing.T) {
 		require.NoError(t, err)
 
 		tx, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"exc-idempotent",
@@ -228,6 +236,8 @@ func TestExceptionCreatorRepository_CreateExceptions_SkipsNilUUIDs(t *testing.T)
 		require.NoError(t, err)
 
 		tx, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"exc-skip-nil",

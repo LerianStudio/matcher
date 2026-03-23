@@ -49,6 +49,8 @@ func TestTransactionRepository_ForeignKeyConstraint(t *testing.T) {
 		nonExistentJobID := uuid.New()
 
 		tx, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			nonExistentJobID,
 			h.Seed.SourceID,
 			"orphan-tx",
@@ -79,6 +81,8 @@ func TestTransactionRepository_DuplicateExternalID(t *testing.T) {
 		require.NoError(t, err)
 
 		tx1, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"DUP-001",
@@ -94,6 +98,8 @@ func TestTransactionRepository_DuplicateExternalID(t *testing.T) {
 		require.NoError(t, err)
 
 		tx2, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"DUP-001",
@@ -131,6 +137,8 @@ func TestTransactionRepository_LargeAmount(t *testing.T) {
 
 		largeAmount := decimal.NewFromFloat(999999999999.99)
 		tx, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"LARGE-001",
@@ -173,6 +181,8 @@ func TestTransactionRepository_SmallAmount(t *testing.T) {
 
 		smallAmount := decimal.NewFromFloat(0.0001)
 		tx, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"SMALL-001",
@@ -215,6 +225,8 @@ func TestTransactionRepository_NegativeAmount(t *testing.T) {
 
 		negativeAmount := decimal.NewFromFloat(-500.00)
 		tx, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"NEG-001",
@@ -257,6 +269,8 @@ func TestTransactionRepository_UnicodeDescription(t *testing.T) {
 
 		unicodeDesc := "Payment from 日本語 - Ümlauts - Émojis 🎉 - Кириллица"
 		tx, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"UNICODE-001",
@@ -306,6 +320,8 @@ func TestTransactionRepository_MetadataJSON(t *testing.T) {
 		}
 
 		tx, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"META-001",

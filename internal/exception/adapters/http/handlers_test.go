@@ -30,7 +30,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/exception/services/command"
 	"github.com/LerianStudio/matcher/internal/exception/services/query"
-	govEntities "github.com/LerianStudio/matcher/internal/governance/domain/entities"
+	govEntities "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/testutil"
 )
 

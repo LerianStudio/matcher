@@ -2,6 +2,7 @@
 package shared
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -9,6 +10,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
+
+	"github.com/LerianStudio/lib-commons/v4/commons/assert"
+
+	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
 
 // Static errors for extraction status validation.
@@ -43,6 +48,8 @@ var (
 	ErrExternalIDRequired = errors.New("external id is required")
 	// ErrCurrencyRequired indicates currency is required.
 	ErrCurrencyRequired = errors.New("currency is required")
+	// ErrTransactionTenantIDRequired indicates a valid tenant ID is required.
+	ErrTransactionTenantIDRequired = errors.New("tenant id is required")
 )
 
 // ExtractionStatus matches PostgreSQL enum `transaction_extraction_status` from 000001_init_schema.up.sql.
@@ -148,6 +155,8 @@ type Transaction struct {
 // NewTransaction creates a new Transaction with the provided values and default statuses.
 // Returns an error if required fields are missing or invalid.
 func NewTransaction(
+	ctx context.Context,
+	tenantID uuid.UUID,
 	jobID, sourceID uuid.UUID,
 	externalID string,
 	amount decimal.Decimal,
@@ -156,21 +165,41 @@ func NewTransaction(
 	description string,
 	metadata map[string]any,
 ) (*Transaction, error) {
-	if jobID == uuid.Nil {
-		return nil, ErrIngestionJobIDRequired
+	// tenantID is validated to ensure the caller operates within a valid tenant
+	// context, but is NOT stored on the Transaction struct. Tenant isolation is
+	// enforced at the PostgreSQL schema level (search_path per tenant), not at
+	// the entity level. This validation prevents transaction creation outside
+	// a valid tenant context.
+	asserter := assert.New(ctx, nil, constants.ApplicationName, "shared.transaction.new")
+
+	if err := asserter.That(ctx, tenantID != uuid.Nil, "tenant id is required"); err != nil {
+		return nil, fmt.Errorf("transaction tenant id: %w", ErrTransactionTenantIDRequired)
 	}
 
-	if sourceID == uuid.Nil {
-		return nil, ErrSourceIDRequired
+	if err := asserter.That(ctx, jobID != uuid.Nil, "ingestion job id is required"); err != nil {
+		return nil, fmt.Errorf("transaction ingestion job id: %w", ErrIngestionJobIDRequired)
 	}
 
-	if strings.TrimSpace(externalID) == "" {
-		return nil, ErrExternalIDRequired
+	if err := asserter.That(ctx, sourceID != uuid.Nil, "source id is required"); err != nil {
+		return nil, fmt.Errorf("transaction source id: %w", ErrSourceIDRequired)
+	}
+
+	if err := asserter.NotEmpty(ctx, strings.TrimSpace(externalID), "external id is required"); err != nil {
+		return nil, fmt.Errorf("transaction external id: %w", ErrExternalIDRequired)
 	}
 
 	normalizedCurrency := strings.ToUpper(strings.TrimSpace(currency))
-	if normalizedCurrency == "" {
-		return nil, ErrCurrencyRequired
+
+	if err := asserter.NotEmpty(ctx, normalizedCurrency, "currency is required"); err != nil {
+		return nil, fmt.Errorf("transaction currency: %w", ErrCurrencyRequired)
+	}
+
+	var metaCopy map[string]any
+	if metadata != nil {
+		metaCopy = make(map[string]any, len(metadata))
+		for k, v := range metadata {
+			metaCopy[k] = cloneMetadataValue(v)
+		}
 	}
 
 	now := time.Now().UTC()
@@ -186,7 +215,7 @@ func NewTransaction(
 		Status:           TransactionStatusUnmatched,
 		Date:             date,
 		Description:      description,
-		Metadata:         metadata,
+		Metadata:         metaCopy,
 		CreatedAt:        now,
 		UpdatedAt:        now,
 	}, nil
@@ -273,4 +302,29 @@ func (txn *Transaction) SetFXConversion(
 	txn.UpdatedAt = time.Now().UTC()
 
 	return nil
+}
+
+// cloneMetadataValue recursively deep-copies a metadata value so that nested
+// maps and slices are fully independent of the caller's original references.
+// Scalar types (string, int, float64, bool, nil, etc.) are returned as-is
+// since they are already value types or immutable.
+func cloneMetadataValue(value any) any {
+	switch val := value.(type) {
+	case map[string]any:
+		cp := make(map[string]any, len(val))
+		for k, inner := range val {
+			cp[k] = cloneMetadataValue(inner)
+		}
+
+		return cp
+	case []any:
+		cp := make([]any, len(val))
+		for i, inner := range val {
+			cp[i] = cloneMetadataValue(inner)
+		}
+
+		return cp
+	default:
+		return value
+	}
 }

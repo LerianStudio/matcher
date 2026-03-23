@@ -9857,6 +9857,28 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/version": {
+            "get": {
+                "description": "Returns the service version from the VERSION environment variable (defaults to \"0.0.0\").",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Health"
+                ],
+                "summary": "Service version",
+                "operationId": "getVersion",
+                "responses": {
+                    "200": {
+                        "description": "version and requestDate",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {

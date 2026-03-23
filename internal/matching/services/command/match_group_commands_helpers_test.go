@@ -22,9 +22,9 @@ import (
 	"github.com/LerianStudio/matcher/internal/matching/domain/enums"
 	matchingVO "github.com/LerianStudio/matcher/internal/matching/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/matching/ports"
-	outboxmocks "github.com/LerianStudio/matcher/internal/outbox/domain/repositories/mocks"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
+	outboxmocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
 )
 
 // --- parseAmount tests ---
@@ -676,6 +676,75 @@ func TestProcessFeeForItem_FeeExtractionError(t *testing.T) {
 	assert.Nil(t, result.variance)
 }
 
+// TestProcessFeeForItem_NewFeeVarianceFailure exercises the branch where fee
+// extraction and verification succeed (producing a non-match variance) but
+// NewFeeVariance fails due to an invalid input (uuid.Nil rate ID).
+// The function must return a fatalErr so the caller can abort the run.
+func TestProcessFeeForItem_NewFeeVarianceFailure(t *testing.T) {
+	t.Parallel()
+
+	txID := uuid.MustParse("00000000-0000-0000-0000-000000100110")
+	sourceID := uuid.MustParse("00000000-0000-0000-0000-000000100111")
+	contextID := uuid.MustParse("00000000-0000-0000-0000-000000100112")
+	runID := uuid.MustParse("00000000-0000-0000-0000-000000100113")
+	groupID := uuid.MustParse("00000000-0000-0000-0000-000000100114")
+
+	item := &matchingEntities.MatchItem{TransactionID: txID}
+
+	// Transaction with valid fee metadata so extractActualFee succeeds.
+	// Actual fee = 50 USD, but expected fee from the flat rate = 10 USD,
+	// which produces a variance well outside zero tolerance.
+	txn := &shared.Transaction{
+		ID:       txID,
+		SourceID: sourceID,
+		Amount:   decimal.NewFromInt(1000),
+		Currency: "USD",
+		Metadata: map[string]any{
+			"fee": map[string]any{
+				"amount":   "50.00",
+				"currency": "USD",
+			},
+		},
+	}
+
+	group := &matchingEntities.MatchGroup{ID: groupID}
+	createdRun := &matchingEntities.MatchRun{
+		ID:        runID,
+		ContextID: contextID,
+	}
+
+	// RateID is uuid.Nil ⟹ NewFeeVariance will fail on "rate id is required".
+	nilRateID := uuid.Nil
+	feeIn := &feeVerificationInput{
+		ctxInfo: &ports.ReconciliationContextInfo{
+			ID:     contextID,
+			RateID: &nilRateID,
+		},
+		txByID:         map[uuid.UUID]*shared.Transaction{txID: txn},
+		sourceTypeByID: map[uuid.UUID]string{sourceID: "file"},
+	}
+
+	rate := &fee.Rate{
+		ID:       uuid.New(),
+		Currency: "USD",
+		Structure: fee.FlatFee{
+			Amount: decimal.NewFromInt(10), // expected = 10 USD, actual = 50 USD → OVERCHARGE
+		},
+	}
+	tolerance := fee.Tolerance{} // zero tolerance → variance guaranteed
+
+	result := processFeeForItem(
+		context.Background(), nil, item, group, createdRun,
+		feeIn, rate, tolerance,
+	)
+
+	// NewFeeVariance fails ⟹ fatalErr must be set so the run aborts.
+	require.NotNil(t, result, "expected non-nil result with fatalErr")
+	require.Error(t, result.fatalErr, "expected fatalErr when NewFeeVariance fails")
+	assert.Contains(t, result.fatalErr.Error(), "create fee variance")
+	assert.Nil(t, result.variance, "variance must be nil on construction failure")
+}
+
 // --- persistFeeFindings tests ---
 
 func TestPersistFeeFindings_EmptyFindings(t *testing.T) {
@@ -695,10 +764,11 @@ func TestCollectFeeFindings_SkipsNilGroups(t *testing.T) {
 	t.Parallel()
 
 	groups := []*matchingEntities.MatchGroup{nil}
-	findings := collectFeeFindings(
+	findings, err := collectFeeFindings(
 		context.Background(), nil, groups, nil,
 		&feeVerificationInput{}, &fee.Rate{}, fee.Tolerance{},
 	)
+	require.NoError(t, err)
 	assert.Empty(t, findings.variances)
 	assert.Empty(t, findings.exceptionInputs)
 }
@@ -714,10 +784,11 @@ func TestCollectFeeFindings_SkipsNonConfirmedGroups(t *testing.T) {
 			Confidence: confidence,
 		},
 	}
-	findings := collectFeeFindings(
+	findings, err := collectFeeFindings(
 		context.Background(), nil, groups, nil,
 		&feeVerificationInput{}, &fee.Rate{}, fee.Tolerance{},
 	)
+	require.NoError(t, err)
 	assert.Empty(t, findings.variances)
 	assert.Empty(t, findings.exceptionInputs)
 }

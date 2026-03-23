@@ -16,6 +16,7 @@ var (
 	ErrActualFeeMissing        = errors.New("actual fee is missing")
 
 	// Fee schedule errors.
+	ErrScheduleTenantIDRequired = errors.New("fee schedule tenant id is required")
 	ErrScheduleNameRequired     = errors.New("fee schedule name is required")
 	ErrScheduleNameTooLong      = errors.New("fee schedule name exceeds 100 characters")
 	ErrScheduleItemsRequired    = errors.New("fee schedule must have at least one item")

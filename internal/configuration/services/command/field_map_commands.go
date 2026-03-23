@@ -30,7 +30,7 @@ func (uc *UseCase) CreateFieldMap(
 
 	entity, err := entities.NewFieldMap(ctx, contextID, sourceID, input)
 	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "invalid field map input", err)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "invalid field map input", err)
 		return nil, err
 	}
 
@@ -83,7 +83,7 @@ func (uc *UseCase) UpdateFieldMap(
 	}
 
 	if err := entity.Update(ctx, input); err != nil {
-		libOpentelemetry.HandleSpanError(span, "invalid field map update", err)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "invalid field map update", err)
 
 		logger.With(
 			libLog.Any("field_map.id", fieldMapID.String()),

@@ -2,6 +2,7 @@ package command
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
@@ -151,7 +152,7 @@ func logProposalError(
 	message string,
 	err error,
 ) {
-	libOpentelemetry.HandleSpanError(span, message, err)
+	libOpentelemetry.HandleSpanBusinessErrorEvent(span, message, err)
 	logger.With(libLog.Any("transaction.id", txID.String())).Log(ctx, libLog.LevelError, message)
 }
 
@@ -203,7 +204,7 @@ func (uc *UseCase) processProposals(
 	proposals []matching.MatchProposal,
 	leftByID map[uuid.UUID]*shared.Transaction,
 	rightByID map[uuid.UUID]*shared.Transaction,
-) proposalProcessingResult {
+) (proposalProcessingResult, error) {
 	result := proposalProcessingResult{
 		groups:           make([]*matchingEntities.MatchGroup, 0, len(proposals)),
 		items:            make([]*matchingEntities.MatchItem, 0, len(proposals)*sliceCapMultiplier),
@@ -219,11 +220,11 @@ func (uc *UseCase) processProposals(
 	}
 
 	for _, proposal := range proposals {
-		if ctx.Err() != nil {
-			break
+		if err := ctx.Err(); err != nil {
+			return result, fmt.Errorf("process proposals: %w", err)
 		}
 
-		group := uc.processSingleProposal(
+		group, err := uc.processSingleProposal(
 			ctx,
 			span,
 			logger,
@@ -234,6 +235,10 @@ func (uc *UseCase) processProposals(
 			rightByID,
 			result.unmatchedReasons,
 		)
+		if err != nil {
+			return result, fmt.Errorf("process proposal: %w", err)
+		}
+
 		if group == nil {
 			continue
 		}
@@ -241,7 +246,7 @@ func (uc *UseCase) processProposals(
 		recordGroupResults(&result, group, leftByID, rightByID)
 	}
 
-	return result
+	return result, nil
 }
 
 func (uc *UseCase) processSingleProposal(
@@ -254,13 +259,13 @@ func (uc *UseCase) processSingleProposal(
 	leftByID map[uuid.UUID]*shared.Transaction,
 	rightByID map[uuid.UUID]*shared.Transaction,
 	unmatchedReasons map[uuid.UUID]string,
-) *matchingEntities.MatchGroup {
+) (*matchingEntities.MatchGroup, error) {
 	confidence, err := matchingVO.ParseConfidenceScore(proposal.Score)
 	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "match proposal processing failed", err)
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "match proposal processing failed")
+		libOpentelemetry.HandleSpanError(span, "invalid proposal confidence score", err)
+		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "invalid proposal confidence score")
 
-		return nil
+		return nil, fmt.Errorf("invalid proposal score %d: %w", proposal.Score, err)
 	}
 
 	leftItems, invalid := buildProposalItems(
@@ -278,7 +283,7 @@ func (uc *UseCase) processSingleProposal(
 		unmatchedReasons,
 	)
 	if invalid || len(leftItems) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	rightItems, invalid := buildProposalItems(
@@ -296,7 +301,7 @@ func (uc *UseCase) processSingleProposal(
 		unmatchedReasons,
 	)
 	if invalid || len(rightItems) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	proposalItems := make([]*matchingEntities.MatchItem, 0, len(leftItems)+len(rightItems))
@@ -304,7 +309,7 @@ func (uc *UseCase) processSingleProposal(
 	proposalItems = append(proposalItems, rightItems...)
 
 	if len(proposalItems) < minMatchedItemsCount {
-		return nil
+		return nil, nil
 	}
 
 	group, err := matchingEntities.NewMatchGroup(
@@ -316,20 +321,20 @@ func (uc *UseCase) processSingleProposal(
 		proposalItems,
 	)
 	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "match proposal processing failed", err)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "match proposal processing failed", err)
 		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "match proposal processing failed")
 
-		return nil
+		return nil, nil
 	}
 
 	if group.CanAutoConfirm() {
 		if confirmErr := group.Confirm(ctx); confirmErr != nil {
-			libOpentelemetry.HandleSpanError(span, "match proposal confirm failed", confirmErr)
+			libOpentelemetry.HandleSpanBusinessErrorEvent(span, "match proposal confirm failed", confirmErr)
 			logger.With(libLog.Any("error", confirmErr.Error())).Log(ctx, libLog.LevelError, "match proposal confirm failed")
 		}
 	}
 
-	return group
+	return group, nil
 }
 
 func buildExceptionInputs(

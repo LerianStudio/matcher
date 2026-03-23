@@ -11,12 +11,16 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"reflect"
 	"strings"
 	"time"
 
+	"github.com/sony/gobreaker"
 	"go.opentelemetry.io/otel/attribute"
 
 	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libBackoff "github.com/LerianStudio/lib-commons/v4/commons/backoff"
+	"github.com/LerianStudio/lib-commons/v4/commons/circuitbreaker"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
@@ -39,13 +43,21 @@ var (
 	ErrFetcherResultPathNotAbsolute   = errors.New("result path must be absolute")
 	ErrFetcherResultPathInvalidFormat = errors.New("result path must not include URL scheme, query, or fragment")
 	ErrFetcherResultPathTraversal     = errors.New("result path must not contain traversal segments")
+	ErrFetcherCircuitOpen             = errors.New("fetcher service circuit breaker is open")
+	ErrFetcherServerError             = errors.New("fetcher returned server error")
 )
+
+// fetcherCircuitBreakerName is the service name used for the fetcher circuit breaker.
+// All requests to the fetcher share a single breaker because the fetcher service is
+// a single upstream identified by its base URL.
+const fetcherCircuitBreakerName = "fetcher"
 
 // HTTPFetcherClient communicates with the Fetcher REST API over HTTP.
 type HTTPFetcherClient struct {
 	httpClient *http.Client
 	baseURL    string
 	cfg        HTTPClientConfig
+	breaker    circuitbreaker.Manager
 }
 
 func (client *HTTPFetcherClient) ensureReady() error {
@@ -57,7 +69,9 @@ func (client *HTTPFetcherClient) ensureReady() error {
 }
 
 // NewHTTPFetcherClient creates a new Fetcher HTTP client.
-func NewHTTPFetcherClient(cfg HTTPClientConfig) (*HTTPFetcherClient, error) {
+// The optional circuitbreaker.Manager protects outbound calls; when nil the client
+// operates without circuit-breaker protection (backward-compatible).
+func NewHTTPFetcherClient(cfg HTTPClientConfig, breaker ...circuitbreaker.Manager) (*HTTPFetcherClient, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid fetcher config: %w", err)
 	}
@@ -72,11 +86,25 @@ func NewHTTPFetcherClient(cfg HTTPClientConfig) (*HTTPFetcherClient, error) {
 		},
 	}
 
-	return &HTTPFetcherClient{
+	client := &HTTPFetcherClient{
 		httpClient: httpClient,
 		baseURL:    strings.TrimRight(cfg.BaseURL, "/"),
 		cfg:        cfg,
-	}, nil
+	}
+
+	if len(breaker) > 0 && breaker[0] != nil {
+		// Guard against typed-nil interface values (e.g. (*concreteManager)(nil)
+		// assigned to circuitbreaker.Manager) that pass the != nil check above.
+		if rv := reflect.ValueOf(breaker[0]); rv.IsValid() && !rv.IsNil() {
+			client.breaker = breaker[0]
+
+			if _, err := client.breaker.GetOrCreate(fetcherCircuitBreakerName, circuitbreaker.HTTPServiceConfig()); err != nil {
+				return nil, fmt.Errorf("register fetcher circuit breaker: %w", err)
+			}
+		}
+	}
+
+	return client, nil
 }
 
 // IsHealthy checks if the Fetcher service is reachable and healthy.
@@ -452,10 +480,6 @@ func rejectEmptyOrNullBody(body []byte) error {
 // when MaxRetries is set to a high value.
 const maxBackoffDelay = 30 * time.Second
 
-// maxRetryShift caps the bit-shift exponent to prevent integer overflow
-// in the exponential backoff calculation (1 << shift).
-const maxRetryShift = 30
-
 // doRequest performs an HTTP request with retry and exponential backoff.
 //
 //nolint:gocognit,gocyclo,cyclop // retry loop with error classification is inherently branchy; extraction done via classifyResponse.
@@ -487,20 +511,13 @@ func (client *HTTPFetcherClient) doRequest(ctx context.Context, method, requestU
 
 	for attempt := 0; attempt < attempts; attempt++ {
 		if attempt > 0 {
-			shift := attempt - 1
-			if shift > maxRetryShift {
-				shift = maxRetryShift // cap shift to prevent integer overflow
-			}
-
-			delay := client.cfg.RetryBaseDelay * time.Duration(1<<uint(shift))
+			delay := libBackoff.ExponentialWithJitter(client.cfg.RetryBaseDelay, attempt-1)
 			if delay > maxBackoffDelay {
 				delay = maxBackoffDelay
 			}
 
-			select {
-			case <-ctx.Done():
-				return nil, fmt.Errorf("request canceled: %w", ctx.Err())
-			case <-time.After(delay):
+			if err := libBackoff.WaitContext(ctx, delay); err != nil {
+				return nil, fmt.Errorf("request canceled: %w", err)
 			}
 		}
 
@@ -518,8 +535,18 @@ func (client *HTTPFetcherClient) doRequest(ctx context.Context, method, requestU
 			req.Header.Set("Content-Type", "application/json")
 		}
 
-		resp, err := client.httpClient.Do(req)
+		respBody, statusCode, err := client.doHTTPAttempt(req)
 		if err != nil {
+			// Circuit breaker open/half-open: fail fast without retrying.
+			// Wrap with ErrFetcherUnavailable so downstream error normalization
+			// (extraction_commands.go) correctly maps this to HTTP 503.
+			if isBreakerRejection(err) {
+				cbErr := fmt.Errorf("%w: %w: %w", sharedPorts.ErrFetcherUnavailable, ErrFetcherCircuitOpen, err)
+				libOpentelemetry.HandleSpanError(span, "fetcher circuit breaker rejected request", cbErr)
+
+				return nil, cbErr
+			}
+
 			lastErr = fmt.Errorf("%w: %v", ErrFetcherUnreachable, err) //nolint:errorlint // wrapping sentinel with context detail
 			libOpentelemetry.HandleSpanError(span, "fetcher http request failed", lastErr)
 
@@ -530,32 +557,16 @@ func (client *HTTPFetcherClient) doRequest(ctx context.Context, method, requestU
 			continue
 		}
 
-		respBody, bodyErr := func() ([]byte, error) {
-			defer func() {
-				_ = resp.Body.Close()
-			}()
-
-			return readBoundedBody(resp.Body)
-		}()
-		if bodyErr != nil {
-			lastErr = bodyErr
-			if !retryable {
-				return nil, lastErr
-			}
-
-			continue
-		}
-
-		result, statusErr := classifyResponse(resp.StatusCode, respBody)
+		result, statusErr := classifyResponse(statusCode, respBody)
 		if statusErr == nil {
-			span.SetAttributes(attribute.Int("http.status_code", resp.StatusCode))
+			span.SetAttributes(attribute.Int("http.status_code", statusCode))
 
 			return result, nil
 		}
 
 		libOpentelemetry.HandleSpanError(span, "fetcher classify response", statusErr)
 
-		if resp.StatusCode >= http.StatusInternalServerError && retryable {
+		if statusCode >= http.StatusInternalServerError && retryable {
 			lastErr = statusErr
 
 			continue // retry on 5xx
@@ -569,6 +580,86 @@ func (client *HTTPFetcherClient) doRequest(ctx context.Context, method, requestU
 	}
 
 	return nil, lastErr
+}
+
+// httpAttemptResult holds the outcome of a single HTTP round-trip so it can
+// travel through the circuit breaker's func() (any, error) signature.
+type httpAttemptResult struct {
+	body       []byte
+	statusCode int
+}
+
+// doHTTPAttempt executes a single HTTP round-trip, optionally through the
+// circuit breaker when one is configured. It returns the response body, status
+// code, and any transport-level error.
+func (client *HTTPFetcherClient) doHTTPAttempt(req *http.Request) ([]byte, int, error) {
+	if client.breaker == nil {
+		return client.rawHTTPAttempt(req)
+	}
+
+	result, err := client.breaker.Execute(fetcherCircuitBreakerName, func() (any, error) {
+		body, statusCode, httpErr := client.rawHTTPAttempt(req)
+		if httpErr != nil {
+			return nil, httpErr
+		}
+
+		// Report server errors as failures to the breaker so it can track them,
+		// but still return the body and status so the caller can decide on retries.
+		if statusCode >= http.StatusInternalServerError {
+			return &httpAttemptResult{body: body, statusCode: statusCode},
+				fmt.Errorf("%w: status %d", ErrFetcherServerError, statusCode)
+		}
+
+		return &httpAttemptResult{body: body, statusCode: statusCode}, nil
+	})
+	if err != nil {
+		// If we got a result despite an error (5xx case), extract it.
+		if result != nil {
+			if attemptResult, ok := result.(*httpAttemptResult); ok {
+				return attemptResult.body, attemptResult.statusCode, nil
+			}
+		}
+
+		return nil, 0, fmt.Errorf("circuit breaker execute: %w", err)
+	}
+
+	attemptResult, ok := result.(*httpAttemptResult)
+	if !ok {
+		return nil, 0, fmt.Errorf("%w: unexpected circuit breaker result type", ErrFetcherBadResponse)
+	}
+
+	return attemptResult.body, attemptResult.statusCode, nil
+}
+
+// rawHTTPAttempt performs the actual HTTP call and reads the response body.
+func (client *HTTPFetcherClient) rawHTTPAttempt(req *http.Request) ([]byte, int, error) {
+	// The request URL is built from the configured and validated baseURL
+	// (see NewHTTPFetcherClient / Validate) combined with well-known API
+	// path segments — it is not constructed from untrusted user input.
+	resp, err := client.httpClient.Do(req) // #nosec G704 -- URL comes from validated fetcher config, not user input
+	if err != nil {
+		return nil, 0, fmt.Errorf("fetcher http request: %w", err)
+	}
+
+	respBody, bodyErr := func() ([]byte, error) {
+		defer func() {
+			_ = resp.Body.Close()
+		}()
+
+		return readBoundedBody(resp.Body)
+	}()
+	if bodyErr != nil {
+		return nil, 0, bodyErr
+	}
+
+	return respBody, resp.StatusCode, nil
+}
+
+// isBreakerRejection returns true when the error originates from the circuit
+// breaker rejecting a request (open or half-open state), as opposed to an
+// error from the wrapped HTTP call itself.
+func isBreakerRejection(err error) bool {
+	return errors.Is(err, gobreaker.ErrOpenState) || errors.Is(err, gobreaker.ErrTooManyRequests)
 }
 
 // classifyResponse maps HTTP status codes to domain errors or returns the body on success.

@@ -8,6 +8,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 
+	"github.com/LerianStudio/lib-commons/v4/commons/pointers"
+
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 )
@@ -59,8 +61,7 @@ func NewContextPostgreSQLModel(
 	var rateID *string
 
 	if entity.RateID != nil {
-		s := entity.RateID.String()
-		rateID = &s
+		rateID = pointers.String(entity.RateID.String())
 	}
 
 	return &ContextPostgreSQLModel{

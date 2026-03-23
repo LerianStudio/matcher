@@ -88,7 +88,7 @@ func (uc *ExportJobUseCase) CreateExportJob(
 		input.Filter,
 	)
 	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to create export job entity", err)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "failed to create export job entity", err)
 
 		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to create export job entity: %v", err))
 
@@ -127,13 +127,18 @@ func (uc *ExportJobUseCase) CancelExportJob(ctx context.Context, id uuid.UUID) e
 
 	job, err := uc.repo.GetByID(ctx, id)
 	if err != nil {
+		if errors.Is(err, repositories.ErrExportJobNotFound) {
+			libOpentelemetry.HandleSpanBusinessErrorEvent(span, "export job not found for cancellation", err)
+
+			logger.Log(ctx, libLog.LevelWarn, "export job not found for cancellation",
+				libLog.String("exportJobId", id.String()))
+
+			return ErrExportJobNotFound
+		}
+
 		libOpentelemetry.HandleSpanError(span, "failed to get export job for cancellation", err)
 
 		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to get export job for cancellation: %v", err))
-
-		if errors.Is(err, repositories.ErrExportJobNotFound) {
-			return ErrExportJobNotFound
-		}
 
 		return fmt.Errorf("getting export job: %w", err)
 	}
@@ -142,7 +147,9 @@ func (uc *ExportJobUseCase) CancelExportJob(ctx context.Context, id uuid.UUID) e
 		return fmt.Errorf("%w: %s", ErrJobInTerminalState, string(job.Status))
 	}
 
-	job.MarkCanceled()
+	if err := job.MarkCanceled(); err != nil {
+		return fmt.Errorf("mark export job canceled: %w", err)
+	}
 
 	if err := uc.repo.UpdateStatus(ctx, job); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to cancel export job", err)

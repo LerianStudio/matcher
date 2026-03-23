@@ -243,7 +243,7 @@ linters:
         # This prevents handlers from bypassing the service/use-case layer and
         # calling the database directly, which would break hexagonal architecture.
         http-handlers-boundary:
-          list-mode: lax
+          list-mode: original
           files:
             - "**/adapters/http/**/*.go"
           deny:
@@ -270,31 +270,36 @@ linters:
         # reporting/ports. Scoped to governance only so reporting's own HTTP handlers
         # can legitimately use their own ports package.
         governance-http-no-reporting-ports:
-          list-mode: lax
+          list-mode: original
           files:
             - "**/governance/adapters/http/**/*.go"
           deny:
             - pkg: "github.com/LerianStudio/matcher/internal/reporting/ports"
               desc: "Hexagonal violation: governance HTTP handler must not import reporting/ports directly. Move the shared port to internal/shared/ports."
         # ===========================================
-        # Cross-Context Isolation (STRICT)
+        # Cross-Context Isolation (ENFORCED)
         # Bounded contexts must be fully isolated.
-        # Shared types belong in internal/domain/shared/ (shared kernel).
+        # Shared types belong in internal/shared/domain/ (shared kernel).
+        # Shared interfaces belong in internal/shared/ports/.
         # Inter-context communication uses ports/interfaces only.
+        # All rules use list-mode: original (deny violations are errors).
         # ===========================================
         cross-context-configuration:
-          list-mode: lax
+          list-mode: original
           files:
             - "**/internal/configuration/**/*.go"
+            # fee_schedule_test.go excluded: compile-time interface compliance check
+            # imports matching/adapters/postgres/fee_schedule to verify the adapter
+            # implements the configuration FeeScheduleRepository port contract.
+            - "!**/internal/configuration/ports/fee_schedule_test.go"
           deny:
             # Block ALL imports from Ingestion context
             - pkg: "github.com/LerianStudio/matcher/internal/ingestion"
-              desc: "Cross-context violation: Configuration cannot import Ingestion. Use shared kernel (internal/domain/shared/) or port interfaces."
+              desc: "Cross-context violation: Configuration cannot import Ingestion. Use shared kernel (internal/shared/domain/) or port interfaces."
             # Block ALL imports from Matching context
             - pkg: "github.com/LerianStudio/matcher/internal/matching"
-              desc: "Cross-context violation: Configuration cannot import Matching. Use shared kernel (internal/domain/shared/) or port interfaces."
-            # Block ALL imports from Governance, Exception, Reporting, Outbox contexts
-            # (preventive — no current violations, but the boundary must be explicit):
+              desc: "Cross-context violation: Configuration cannot import Matching. Use shared kernel (internal/shared/domain/) or port interfaces."
+            # Block Governance, Exception, Reporting, Outbox contexts:
             - pkg: "github.com/LerianStudio/matcher/internal/governance"
               desc: "Cross-context violation: Configuration cannot import Governance. Use shared/ports or shared kernel."
             - pkg: "github.com/LerianStudio/matcher/internal/exception"
@@ -302,23 +307,21 @@ linters:
             - pkg: "github.com/LerianStudio/matcher/internal/reporting"
               desc: "Cross-context violation: Configuration cannot import Reporting. Use shared/ports or shared kernel."
             - pkg: "github.com/LerianStudio/matcher/internal/outbox"
-              desc: "Cross-context violation: Configuration cannot import Outbox. Move OutboxRepository interface to shared/ports and inject via constructor."
+              desc: "Cross-context violation: Configuration cannot import Outbox. Use shared/ports or shared kernel."
             - pkg: "github.com/LerianStudio/matcher/internal/discovery"
               desc: "Cross-context violation: Configuration cannot import Discovery. Use shared/ports or shared kernel."
         cross-context-ingestion:
-          list-mode: lax
+          list-mode: original
           files:
             - "**/internal/ingestion/**/*.go"
           deny:
             # Block ALL imports from Configuration context
             - pkg: "github.com/LerianStudio/matcher/internal/configuration"
-              desc: "Cross-context violation: Ingestion cannot import Configuration. Use shared kernel (internal/domain/shared/) or port interfaces."
+              desc: "Cross-context violation: Ingestion cannot import Configuration. Use shared kernel (internal/shared/domain/) or port interfaces."
             # Block ALL imports from Matching context
             - pkg: "github.com/LerianStudio/matcher/internal/matching"
-              desc: "Cross-context violation: Ingestion cannot import Matching. Use shared kernel (internal/domain/shared/) or port interfaces."
-            # Block Governance, Exception, Reporting, Outbox contexts.
-            # NOTE: ingestion/services/command/commands.go currently imports outbox/domain/*
-            # — move OutboxRepository interface to shared/ports to resolve this violation:
+              desc: "Cross-context violation: Ingestion cannot import Matching. Use shared kernel (internal/shared/domain/) or port interfaces."
+            # Block Governance, Exception, Reporting, Outbox contexts:
             - pkg: "github.com/LerianStudio/matcher/internal/governance"
               desc: "Cross-context violation: Ingestion cannot import Governance. Use shared/ports or shared kernel."
             - pkg: "github.com/LerianStudio/matcher/internal/exception"
@@ -326,32 +329,29 @@ linters:
             - pkg: "github.com/LerianStudio/matcher/internal/reporting"
               desc: "Cross-context violation: Ingestion cannot import Reporting. Use shared/ports or shared kernel."
             - pkg: "github.com/LerianStudio/matcher/internal/outbox"
-              desc: "Cross-context violation: Ingestion cannot import Outbox. Move OutboxRepository interface to shared/ports and inject via constructor."
+              desc: "Cross-context violation: Ingestion cannot import Outbox. Use shared/ports or shared kernel."
             - pkg: "github.com/LerianStudio/matcher/internal/discovery"
               desc: "Cross-context violation: Ingestion cannot import Discovery. Use shared/ports or shared kernel."
         cross-context-matching:
-          list-mode: lax
+          list-mode: original
           files:
             - "**/internal/matching/**/*.go"
           deny:
             # Block ALL imports from Configuration context
             - pkg: "github.com/LerianStudio/matcher/internal/configuration"
-              desc: "Cross-context violation: Matching cannot import Configuration. Move shared types to internal/domain/shared/ or use port interfaces."
+              desc: "Cross-context violation: Matching cannot import Configuration. Move shared types to internal/shared/domain/ or use port interfaces."
             # Block ALL imports from Ingestion context
             - pkg: "github.com/LerianStudio/matcher/internal/ingestion"
-              desc: "Cross-context violation: Matching cannot import Ingestion. Move Transaction entity to internal/domain/shared/ as shared kernel."
-            # Block Governance, Exception, Reporting, Outbox contexts.
-            # NOTE: matching/services/command/commands.go currently imports governance/domain/repositories
-            # and outbox/domain/*; matching/services/command/adjustment_commands.go imports
-            # governance/domain/entities — move these to shared/ports or shared/domain to resolve:
+              desc: "Cross-context violation: Matching cannot import Ingestion. Move Transaction entity to internal/shared/domain/ as shared kernel."
+            # Block Governance, Exception, Reporting, Outbox contexts:
             - pkg: "github.com/LerianStudio/matcher/internal/governance"
-              desc: "Cross-context violation: Matching cannot import Governance. Move AuditRepository interface to shared/ports; move AuditEntry to shared/domain."
+              desc: "Cross-context violation: Matching cannot import Governance. Use shared/ports or shared kernel."
             - pkg: "github.com/LerianStudio/matcher/internal/exception"
               desc: "Cross-context violation: Matching cannot import Exception. Use shared/ports or shared kernel."
             - pkg: "github.com/LerianStudio/matcher/internal/reporting"
               desc: "Cross-context violation: Matching cannot import Reporting. Use shared/ports or shared kernel."
             - pkg: "github.com/LerianStudio/matcher/internal/outbox"
-              desc: "Cross-context violation: Matching cannot import Outbox. Move OutboxRepository interface to shared/ports and inject via constructor."
+              desc: "Cross-context violation: Matching cannot import Outbox. Use shared/ports or shared kernel."
             - pkg: "github.com/LerianStudio/matcher/internal/discovery"
               desc: "Cross-context violation: Matching cannot import Discovery. Use shared/ports or shared kernel."
         # ===========================================
@@ -361,7 +361,7 @@ linters:
         # shared kernel types. All six other contexts are blocked here.
         # ===========================================
         cross-context-outbox:
-          list-mode: lax
+          list-mode: original
           files:
             - "**/internal/outbox/**/*.go"
           deny:
@@ -384,7 +384,7 @@ linters:
         # Future Bounded Contexts (add as they're created)
         # ===========================================
         cross-context-exception:
-          list-mode: lax
+          list-mode: original
           files:
             - "**/internal/exception/**/*.go"
           deny:
@@ -394,11 +394,9 @@ linters:
               desc: "Cross-context violation: Exception cannot import Ingestion directly."
             - pkg: "github.com/LerianStudio/matcher/internal/matching"
               desc: "Cross-context violation: Exception cannot import Matching directly."
-            # Extended: governance, reporting, outbox.
-            # NOTE: exception/services/query/queries.go currently imports
-            # governance/domain/repositories — move AuditRepository to shared/ports to resolve:
+            # Block Governance, Reporting, Outbox contexts:
             - pkg: "github.com/LerianStudio/matcher/internal/governance"
-              desc: "Cross-context violation: Exception cannot import Governance. Move AuditRepository to shared/ports and inject it."
+              desc: "Cross-context violation: Exception cannot import Governance. Use shared/ports or shared kernel."
             - pkg: "github.com/LerianStudio/matcher/internal/reporting"
               desc: "Cross-context violation: Exception cannot import Reporting. Use shared/ports or shared kernel."
             - pkg: "github.com/LerianStudio/matcher/internal/outbox"
@@ -406,7 +404,7 @@ linters:
             - pkg: "github.com/LerianStudio/matcher/internal/discovery"
               desc: "Cross-context violation: Exception cannot import Discovery. Use shared/ports or shared kernel."
         cross-context-governance:
-          list-mode: lax
+          list-mode: original
           files:
             - "**/internal/governance/**/*.go"
           deny:
@@ -418,11 +416,9 @@ linters:
               desc: "Cross-context violation: Governance cannot import Matching directly."
             - pkg: "github.com/LerianStudio/matcher/internal/exception"
               desc: "Cross-context violation: Governance cannot import Exception directly."
-            # Extended: reporting and outbox.
-            # NOTE: governance/services/worker/archival_worker.go currently imports
-            # reporting/ports — move ArchiveJobRepository/StorageProvider to shared/ports to resolve:
+            # Block Reporting and Outbox contexts:
             - pkg: "github.com/LerianStudio/matcher/internal/reporting"
-              desc: "Cross-context violation: Governance cannot import Reporting. Move ArchiveJobRepository/StorageProvider interfaces to shared/ports."
+              desc: "Cross-context violation: Governance cannot import Reporting. Use shared/ports or shared kernel."
             - pkg: "github.com/LerianStudio/matcher/internal/outbox"
               desc: "Cross-context violation: Governance cannot import Outbox. Use shared/ports or shared kernel."
             - pkg: "github.com/LerianStudio/matcher/internal/discovery"
@@ -434,7 +430,7 @@ linters:
         # No current violations; rule is fully preventive.
         # ===========================================
         cross-context-reporting:
-          list-mode: lax
+          list-mode: original
           files:
             - "**/internal/reporting/**/*.go"
           deny:
@@ -457,7 +453,7 @@ linters:
         # Discovery context must not import other bounded contexts directly.
         # ===========================================
         cross-context-discovery:
-          list-mode: lax
+          list-mode: original
           files:
             - "**/internal/discovery/**/*.go"
           deny:
@@ -481,7 +477,7 @@ linters:
         # never to adapter implementations. Keeps the hexagonal core adapter-free.
         # ===========================================
         service-no-adapters:
-          list-mode: lax
+          list-mode: original
           files:
             - "**/services/command/*.go"
             - "**/services/command/**/*.go"
@@ -522,7 +518,7 @@ linters:
         # would invert the correct dependency direction (handler → service → domain).
         # ===========================================
         dto-no-services:
-          list-mode: lax
+          list-mode: original
           files:
             - "**/adapters/http/dto/*.go"
             - "**/adapters/http/dto/**/*.go"
@@ -551,7 +547,7 @@ linters:
         # No current violations; rule is preventive.
         # ===========================================
         worker-no-adapters:
-          list-mode: lax
+          list-mode: original
           files:
             - "**/services/worker/*.go"
             - "**/services/worker/**/*.go"
@@ -583,7 +579,7 @@ linters:
         # Commands handle writes, Queries handle reads.
         # ===========================================
         cqrs-command-isolation:
-          list-mode: lax
+          list-mode: original
           files:
             - "**/services/command/**/*.go"
           deny:
@@ -595,7 +591,7 @@ linters:
             - pkg: "github.com/LerianStudio/matcher/internal/matching/services/query"
               desc: "CQRS violation: Command cannot import Query package. Commands should not depend on query use cases."
         cqrs-query-isolation:
-          list-mode: lax
+          list-mode: original
           files:
             - "**/services/query/**/*.go"
           deny:
@@ -612,7 +608,7 @@ linters:
         # They should not depend on application services (command/query).
         # ===========================================
         domain-purity:
-          list-mode: lax
+          list-mode: original
           files:
             - "**/domain/services/**/*.go"
           deny:
@@ -648,7 +644,7 @@ linters:
         # Domain Layer: no logging/tracing dependencies
         # ===========================================
         domain-no-logging:
-          list-mode: lax
+          list-mode: original
           files:
             - "**/domain/**/*.go"
           deny:
@@ -682,7 +678,7 @@ linters:
         # Exception: cross/ package is the anti-corruption layer
         # ===========================================
         shared-adapters-boundary:
-          list-mode: lax
+          list-mode: original
           files:
             - "**/internal/shared/adapters/postgres/**/*.go"
             - "**/internal/shared/adapters/redis/**/*.go"
@@ -708,7 +704,7 @@ linters:
         # Cross adapters can import other contexts but must convert to shared types
         # ===========================================
         cross-adapter-output:
-          list-mode: lax
+          list-mode: original
           files:
             - "**/internal/shared/adapters/cross/**/*.go"
           deny:
@@ -734,7 +730,7 @@ linters:
         # Ports cannot import adapters (dependency inversion)
         # ===========================================
         ports-no-adapters:
-          list-mode: lax
+          list-mode: original
           files:
             - "**/ports/**/*.go"
           deny:
@@ -751,7 +747,7 @@ linters:
         # Domain entities must remain pure (no infrastructure dependencies)
         # ===========================================
         entity-purity:
-          list-mode: lax
+          list-mode: original
           files:
             - "**/domain/entities/**/*.go"
           deny:
@@ -774,7 +770,7 @@ linters:
         # Testutil cannot import production adapters
         # ===========================================
         testutil-isolation:
-          list-mode: lax
+          list-mode: original
           files:
             - "**/testutil/**/*.go"
           deny:

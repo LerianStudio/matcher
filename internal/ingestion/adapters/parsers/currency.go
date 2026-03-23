@@ -1,6 +1,8 @@
 // Package parsers provides file parsing utilities for ingestion.
 package parsers
 
+const maxCurrencyLength = 3
+
 // validCurrencyCodes contains the set of valid ISO 4217 currency codes.
 // This list includes active currencies as of 2026.
 // Note: HRK (Croatian Kuna) was removed as Croatia adopted EUR on 2023-01-01.

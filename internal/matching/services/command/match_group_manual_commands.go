@@ -17,6 +17,11 @@ import (
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
+// TODO(telemetry): matching/adapters/http/handlers.go — logSpanError uses HandleSpanError for
+// business outcomes (badRequest, writeNotFound, forbidden). Add logSpanBusinessEvent using
+// HandleSpanBusinessErrorEvent and create business-aware variants for 400/404/409 responses.
+// See reporting/adapters/http/handlers_export_job.go for the reference implementation.
+
 const (
 	minManualMatchTransactions = 2
 	manualMatchConfidence      = 100
@@ -92,6 +97,10 @@ func (uc *UseCase) ManualMatch(
 	}
 
 	for _, txn := range transactions {
+		if txn == nil {
+			return nil, ErrTransactionNotFound
+		}
+
 		if txn.Status != shared.TransactionStatusUnmatched {
 			return nil, fmt.Errorf(
 				"%w: transaction %s has status %s",
@@ -113,7 +122,7 @@ func (uc *UseCase) ManualMatch(
 
 	run, err := matchingEntities.NewMatchRun(ctx, in.ContextID, matchingVO.MatchRunModeCommit)
 	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to create match run entity", err)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "failed to create match run entity", err)
 		return nil, fmt.Errorf("%w: %w", ErrManualMatchCreatingRun, err)
 	}
 
@@ -123,6 +132,10 @@ func (uc *UseCase) ManualMatch(
 		createdRun, txErr := uc.matchRunRepo.CreateWithTx(ctx, tx, run)
 		if txErr != nil {
 			return fmt.Errorf("create match run: %w", txErr)
+		}
+
+		if createdRun == nil {
+			return ErrMatchRunPersistedNil
 		}
 
 		items := make([]*matchingEntities.MatchItem, 0, len(transactions))
@@ -204,6 +217,14 @@ func (uc *UseCase) ManualMatch(
 
 		if _, updateErr := uc.matchRunRepo.UpdateWithTx(ctx, tx, createdRun); updateErr != nil {
 			return fmt.Errorf("update match run: %w", updateErr)
+		}
+
+		if outboxErr := uc.enqueueMatchConfirmedEvents(
+			ctx,
+			tx,
+			[]*matchingEntities.MatchGroup{createdGroup},
+		); outboxErr != nil {
+			return fmt.Errorf("enqueue match confirmed event: %w", outboxErr)
 		}
 
 		return nil

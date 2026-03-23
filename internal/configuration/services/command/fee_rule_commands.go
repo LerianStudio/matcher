@@ -73,14 +73,14 @@ func (uc *UseCase) CreateFeeRule(
 
 	if len(existingRules) >= fee.MaxFeeRulesPerContext {
 		limitErr := fmt.Errorf("create fee rule: %w", fee.ErrFeeRuleCountLimitExceeded)
-		libOpentelemetry.HandleSpanError(span, "fee rule count limit exceeded", limitErr)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "fee rule count limit exceeded", limitErr)
 
 		return nil, limitErr
 	}
 
 	entity, err := fee.NewFeeRule(ctx, contextID, feeScheduleID, fee.MatchingSide(side), name, priority, predicates)
 	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "invalid fee rule input", err)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "invalid fee rule input", err)
 		return nil, fmt.Errorf("create fee rule: %w", err)
 	}
 
@@ -150,7 +150,7 @@ func (uc *UseCase) UpdateFeeRule(
 		Priority:      priority,
 		Predicates:    predicates,
 	}); err != nil {
-		libOpentelemetry.HandleSpanError(span, "invalid fee rule update", err)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "invalid fee rule update", err)
 		return nil, fmt.Errorf("update fee rule: %w", err)
 	}
 

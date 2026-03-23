@@ -51,6 +51,8 @@ func TestTransactionRepository_ListUnmatchedByContext(t *testing.T) {
 	offset := 0
 
 	tx1, err := shared.NewTransaction(
+		context.Background(),
+		uuid.New(),
 		uuid.New(),
 		uuid.New(),
 		"ext-1",
@@ -62,6 +64,8 @@ func TestTransactionRepository_ListUnmatchedByContext(t *testing.T) {
 	)
 	require.NoError(t, err)
 	tx2, err := shared.NewTransaction(
+		context.Background(),
+		uuid.New(),
 		uuid.New(),
 		uuid.New(),
 		"ext-2",

@@ -9,69 +9,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
-	sharedTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
-	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
-
-type capturingWarnLogger struct {
-	warnCalled bool
-	messages   []string
-}
-
-func (l *capturingWarnLogger) Log(_ context.Context, level libLog.Level, msg string, _ ...libLog.Field) {
-	if level == libLog.LevelWarn {
-		l.warnCalled = true
-		l.messages = append(l.messages, msg)
-	}
-}
-
-//nolint:ireturn
-func (l *capturingWarnLogger) With(_ ...libLog.Field) libLog.Logger { return l }
-
-//nolint:ireturn
-func (l *capturingWarnLogger) WithGroup(_ string) libLog.Logger { return l }
-
-func (l *capturingWarnLogger) Enabled(_ libLog.Level) bool { return true }
-
-func (l *capturingWarnLogger) Sync(_ context.Context) error { return nil }
-
-// --- redisInfraProvider wraps stubInfraProvider with real Redis ---
-
-type redisInfraProvider struct {
-	conn *libRedis.Client
-}
-
-var _ sharedPorts.InfrastructureProvider = (*redisInfraProvider)(nil)
-
-func (m *redisInfraProvider) GetPostgresConnection(_ context.Context) (*sharedPorts.PostgresConnectionLease, error) {
-	return nil, nil
-}
-
-func (m *redisInfraProvider) GetRedisConnection(_ context.Context) (*sharedPorts.RedisConnectionLease, error) {
-	if m.conn == nil {
-		return nil, errors.New("redis not configured")
-	}
-
-	return sharedPorts.NewRedisConnectionLease(m.conn, nil), nil
-}
-
-func (m *redisInfraProvider) BeginTx(_ context.Context) (*sharedPorts.TxLease, error) {
-	return nil, nil
-}
-
-func (m *redisInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.ReplicaDBLease, error) {
-	return nil, nil
-}
 
 // --- pollCycle tests ---
 
@@ -86,7 +31,7 @@ func TestPollCycle_NoDueSchedules(t *testing.T) {
 	}
 
 	w, err := NewSchedulerWorker(
-		repo, trigger, &stubInfraProvider{},
+		repo, trigger, &stubLockManager{},
 		SchedulerWorkerConfig{Interval: time.Hour},
 		&stubLogger{},
 	)
@@ -107,7 +52,7 @@ func TestPollCycle_FindDueSchedulesError(t *testing.T) {
 	}
 
 	w, err := NewSchedulerWorker(
-		repo, trigger, &stubInfraProvider{},
+		repo, trigger, &stubLockManager{},
 		SchedulerWorkerConfig{Interval: time.Hour},
 		&stubLogger{},
 	)
@@ -120,11 +65,6 @@ func TestPollCycle_FindDueSchedulesError(t *testing.T) {
 
 func TestPollCycle_WithDueSchedules(t *testing.T) {
 	t.Parallel()
-
-	srv := miniredis.RunT(t)
-	redisClient := redis.NewClient(&redis.Options{Addr: srv.Addr()})
-	conn := sharedTestutil.NewRedisClientWithMock(redisClient)
-	provider := &redisInfraProvider{conn: conn}
 
 	trigger := &stubMatchTrigger{}
 	tenantID := uuid.MustParse("00000000-0000-0000-0000-000000200000")
@@ -146,7 +86,7 @@ func TestPollCycle_WithDueSchedules(t *testing.T) {
 	}
 
 	w, err := NewSchedulerWorker(
-		repo, trigger, provider,
+		repo, trigger, &stubLockManager{},
 		SchedulerWorkerConfig{Interval: time.Hour},
 		&stubLogger{},
 	)
@@ -165,12 +105,16 @@ func TestProcessSchedule_LockAcquireError(t *testing.T) {
 	t.Parallel()
 
 	trigger := &stubMatchTrigger{}
-	provider := &stubInfraProvider{} // Returns nil redis connection
+	locker := &stubLockManager{
+		withLockOptionsFn: func(_ context.Context, _ string, _ libRedis.LockOptions, _ func(context.Context) error) error {
+			return errors.New("redis unavailable")
+		},
+	}
 
 	repo := &stubScheduleRepo{}
 
 	w, err := NewSchedulerWorker(
-		repo, trigger, provider,
+		repo, trigger, locker,
 		SchedulerWorkerConfig{Interval: time.Hour},
 		&stubLogger{},
 	)
@@ -191,32 +135,29 @@ func TestProcessSchedule_LockAcquireError(t *testing.T) {
 func TestProcessSchedule_LockNotAcquired(t *testing.T) {
 	t.Parallel()
 
-	srv := miniredis.RunT(t)
-	redisClient := redis.NewClient(&redis.Options{Addr: srv.Addr()})
-	conn := sharedTestutil.NewRedisClientWithMock(redisClient)
-	provider := &redisInfraProvider{conn: conn}
-
 	trigger := &stubMatchTrigger{}
+	locker := &stubLockManager{
+		withLockOptionsFn: func(_ context.Context, _ string, _ libRedis.LockOptions, _ func(context.Context) error) error {
+			// Simulate lock busy — WithLockOptions returns an error when lock is contended.
+			return errors.New("failed to acquire lock matcher:scheduler:schedule:*: lock busy")
+		},
+	}
+
 	repo := &stubScheduleRepo{}
 
 	w, err := NewSchedulerWorker(
-		repo, trigger, provider,
+		repo, trigger, locker,
 		SchedulerWorkerConfig{Interval: time.Hour},
 		&stubLogger{},
 	)
 	require.NoError(t, err)
 
-	scheduleID := uuid.MustParse("00000000-0000-0000-0000-000000200010")
 	schedule := &entities.ReconciliationSchedule{
-		ID:             scheduleID,
+		ID:             uuid.New(),
 		ContextID:      uuid.New(),
 		CronExpression: "0 * * * *",
 		Enabled:        true,
 	}
-
-	// Pre-acquire the lock
-	lockKey := schedulerLockKeyPrefix + scheduleID.String()
-	srv.Set(lockKey, "someone-else")
 
 	w.processSchedule(context.Background(), schedule, time.Now().UTC())
 	assert.False(t, trigger.triggerCalled)
@@ -224,11 +165,6 @@ func TestProcessSchedule_LockNotAcquired(t *testing.T) {
 
 func TestProcessSchedule_SuccessfulTrigger(t *testing.T) {
 	t.Parallel()
-
-	srv := miniredis.RunT(t)
-	redisClient := redis.NewClient(&redis.Options{Addr: srv.Addr()})
-	conn := sharedTestutil.NewRedisClientWithMock(redisClient)
-	provider := &redisInfraProvider{conn: conn}
 
 	trigger := &stubMatchTrigger{}
 	tenantID := uuid.MustParse("00000000-0000-0000-0000-000000200019")
@@ -245,7 +181,7 @@ func TestProcessSchedule_SuccessfulTrigger(t *testing.T) {
 	}
 
 	w, err := NewSchedulerWorker(
-		repo, trigger, provider,
+		repo, trigger, &stubLockManager{},
 		SchedulerWorkerConfig{Interval: time.Hour},
 		&stubLogger{},
 	)
@@ -274,11 +210,6 @@ func TestProcessSchedule_SuccessfulTrigger(t *testing.T) {
 func TestProcessSchedule_UpdateError(t *testing.T) {
 	t.Parallel()
 
-	srv := miniredis.RunT(t)
-	redisClient := redis.NewClient(&redis.Options{Addr: srv.Addr()})
-	conn := sharedTestutil.NewRedisClientWithMock(redisClient)
-	provider := &redisInfraProvider{conn: conn}
-
 	trigger := &stubMatchTrigger{}
 
 	repo := &stubScheduleRepo{
@@ -288,7 +219,7 @@ func TestProcessSchedule_UpdateError(t *testing.T) {
 	}
 
 	w, err := NewSchedulerWorker(
-		repo, trigger, provider,
+		repo, trigger, &stubLockManager{},
 		SchedulerWorkerConfig{Interval: time.Hour},
 		&stubLogger{},
 	)
@@ -306,135 +237,74 @@ func TestProcessSchedule_UpdateError(t *testing.T) {
 	assert.True(t, trigger.triggerCalled)
 }
 
-// --- acquireLock tests ---
-
-func TestAcquireLock_RedisConnectionError(t *testing.T) {
+func TestProcessSchedule_LockError_DoesNotPanic(t *testing.T) {
 	t.Parallel()
 
-	provider := &stubInfraProvider{} // Returns nil redis connection
+	trigger := &stubMatchTrigger{}
+	locker := &stubLockManager{
+		withLockOptionsFn: func(_ context.Context, _ string, _ libRedis.LockOptions, _ func(context.Context) error) error {
+			return errors.New("lock infrastructure error")
+		},
+	}
+
+	repo := &stubScheduleRepo{}
 
 	w, err := NewSchedulerWorker(
-		&stubScheduleRepo{}, &stubMatchTrigger{}, provider,
+		repo, trigger, locker,
 		SchedulerWorkerConfig{Interval: time.Hour},
 		&stubLogger{},
 	)
 	require.NoError(t, err)
 
-	acquired, token, err := w.acquireLock(context.Background(), "test-key")
-	assert.Error(t, err)
-	assert.False(t, acquired)
-	assert.Empty(t, token)
+	schedule := &entities.ReconciliationSchedule{
+		ID:             uuid.New(),
+		ContextID:      uuid.New(),
+		CronExpression: "0 * * * *",
+		Enabled:        true,
+	}
+
+	// processSchedule should not panic even when lock fails.
+	require.NotPanics(t, func() {
+		w.processSchedule(context.Background(), schedule, time.Now().UTC())
+	})
+	assert.False(t, trigger.triggerCalled, "trigger should not be called when lock fails")
 }
 
-func TestAcquireLock_Success(t *testing.T) {
+func TestProcessSchedule_CorrectLockKey(t *testing.T) {
 	t.Parallel()
 
-	srv := miniredis.RunT(t)
-	redisClient := redis.NewClient(&redis.Options{Addr: srv.Addr()})
-	conn := sharedTestutil.NewRedisClientWithMock(redisClient)
-	provider := &redisInfraProvider{conn: conn}
+	trigger := &stubMatchTrigger{}
+	scheduleID := uuid.MustParse("00000000-0000-0000-0000-000000200050")
+
+	var capturedLockKey string
+
+	locker := &stubLockManager{
+		withLockOptionsFn: func(_ context.Context, lockKey string, _ libRedis.LockOptions, fn func(context.Context) error) error {
+			capturedLockKey = lockKey
+			return fn(context.Background())
+		},
+	}
+
+	repo := &stubScheduleRepo{}
 
 	w, err := NewSchedulerWorker(
-		&stubScheduleRepo{}, &stubMatchTrigger{}, provider,
+		repo, trigger, locker,
 		SchedulerWorkerConfig{Interval: time.Hour},
 		&stubLogger{},
 	)
 	require.NoError(t, err)
 
-	acquired, token, err := w.acquireLock(context.Background(), "test-key")
-	assert.NoError(t, err)
-	assert.True(t, acquired)
-	assert.NotEmpty(t, token)
-}
+	schedule := &entities.ReconciliationSchedule{
+		ID:             scheduleID,
+		ContextID:      uuid.New(),
+		CronExpression: "0 * * * *",
+		Enabled:        true,
+	}
 
-func TestAcquireLock_AlreadyHeld(t *testing.T) {
-	t.Parallel()
+	w.processSchedule(context.Background(), schedule, time.Now().UTC())
 
-	srv := miniredis.RunT(t)
-	redisClient := redis.NewClient(&redis.Options{Addr: srv.Addr()})
-	conn := sharedTestutil.NewRedisClientWithMock(redisClient)
-	provider := &redisInfraProvider{conn: conn}
-
-	w, err := NewSchedulerWorker(
-		&stubScheduleRepo{}, &stubMatchTrigger{}, provider,
-		SchedulerWorkerConfig{Interval: time.Hour},
-		&stubLogger{},
-	)
-	require.NoError(t, err)
-
-	// Pre-acquire the lock
-	srv.Set("test-key-held", "other-token")
-
-	acquired, _, err := w.acquireLock(context.Background(), "test-key-held")
-	assert.NoError(t, err)
-	assert.False(t, acquired)
-}
-
-// --- releaseLock tests ---
-
-func TestReleaseLock_RedisConnectionError(t *testing.T) {
-	t.Parallel()
-
-	provider := &stubInfraProvider{} // Returns nil redis connection
-
-	w, err := NewSchedulerWorker(
-		&stubScheduleRepo{}, &stubMatchTrigger{}, provider,
-		SchedulerWorkerConfig{Interval: time.Hour},
-		&stubLogger{},
-	)
-	require.NoError(t, err)
-
-	// Should not panic
-	w.releaseLock(context.Background(), "test-key", "test-token")
-}
-
-func TestReleaseLock_CorrectTokenReleases(t *testing.T) {
-	t.Parallel()
-
-	srv := miniredis.RunT(t)
-	redisClient := redis.NewClient(&redis.Options{Addr: srv.Addr()})
-	conn := sharedTestutil.NewRedisClientWithMock(redisClient)
-	provider := &redisInfraProvider{conn: conn}
-
-	w, err := NewSchedulerWorker(
-		&stubScheduleRepo{}, &stubMatchTrigger{}, provider,
-		SchedulerWorkerConfig{Interval: time.Hour},
-		&stubLogger{},
-	)
-	require.NoError(t, err)
-
-	// Set the key
-	srv.Set("release-test-key", "my-token")
-
-	w.releaseLock(context.Background(), "release-test-key", "my-token")
-
-	// Key should be deleted
-	assert.False(t, srv.Exists("release-test-key"))
-}
-
-func TestReleaseLock_WrongTokenDoesNotRelease(t *testing.T) {
-	t.Parallel()
-
-	srv := miniredis.RunT(t)
-	redisClient := redis.NewClient(&redis.Options{Addr: srv.Addr()})
-	conn := sharedTestutil.NewRedisClientWithMock(redisClient)
-	provider := &redisInfraProvider{conn: conn}
-
-	w, err := NewSchedulerWorker(
-		&stubScheduleRepo{}, &stubMatchTrigger{}, provider,
-		SchedulerWorkerConfig{Interval: time.Hour},
-		&stubLogger{},
-	)
-	require.NoError(t, err)
-
-	// Set the key with one token
-	srv.Set("release-test-key-2", "correct-token")
-
-	// Try to release with wrong token
-	w.releaseLock(context.Background(), "release-test-key-2", "wrong-token")
-
-	// Key should still exist
-	assert.True(t, srv.Exists("release-test-key-2"))
+	expectedKey := schedulerLockKeyPrefix + scheduleID.String()
+	assert.Equal(t, expectedKey, capturedLockKey)
 }
 
 // --- tracking tests ---
@@ -443,7 +313,7 @@ func TestTracking_FallsBackToInstanceValues(t *testing.T) {
 	t.Parallel()
 
 	w, err := NewSchedulerWorker(
-		&stubScheduleRepo{}, &stubMatchTrigger{}, &stubInfraProvider{},
+		&stubScheduleRepo{}, &stubMatchTrigger{}, &stubLockManager{},
 		SchedulerWorkerConfig{Interval: time.Hour},
 		&stubLogger{},
 	)
@@ -458,7 +328,7 @@ func TestTracking_NilInstanceLogger_FallsBackToContextOrNone(t *testing.T) {
 	t.Parallel()
 
 	w, err := NewSchedulerWorker(
-		&stubScheduleRepo{}, &stubMatchTrigger{}, &stubInfraProvider{},
+		&stubScheduleRepo{}, &stubMatchTrigger{}, &stubLockManager{},
 		SchedulerWorkerConfig{Interval: time.Hour},
 		nil, // nil instance logger
 	)
@@ -476,11 +346,6 @@ func TestTracking_NilInstanceLogger_FallsBackToContextOrNone(t *testing.T) {
 
 func TestPollCycle_MultipleSchedules(t *testing.T) {
 	t.Parallel()
-
-	srv := miniredis.RunT(t)
-	redisClient := redis.NewClient(&redis.Options{Addr: srv.Addr()})
-	conn := sharedTestutil.NewRedisClientWithMock(redisClient)
-	provider := &redisInfraProvider{conn: conn}
 
 	var triggerCount atomic.Int32
 	trigger := &countingMatchTrigger{count: &triggerCount}
@@ -511,7 +376,7 @@ func TestPollCycle_MultipleSchedules(t *testing.T) {
 	}
 
 	w, err := NewSchedulerWorker(
-		repo, trigger, provider,
+		repo, trigger, &stubLockManager{},
 		SchedulerWorkerConfig{Interval: time.Hour},
 		&stubLogger{},
 	)
@@ -539,7 +404,7 @@ func TestSchedulerWorker_StopsDuringRun(t *testing.T) {
 	w, err := NewSchedulerWorker(
 		&stubScheduleRepo{},
 		&stubMatchTrigger{},
-		&stubInfraProvider{},
+		&stubLockManager{},
 		SchedulerWorkerConfig{Interval: time.Hour},
 		&stubLogger{},
 	)
@@ -560,199 +425,6 @@ func TestSchedulerWorker_StopsDuringRun(t *testing.T) {
 	}
 }
 
-// --- GetClient error path tests ---
-
-// errorRedisInfraProvider returns a *libRedis.Client where GetClient(ctx) will fail.
-type errorRedisInfraProvider struct {
-	conn *libRedis.Client
-}
-
-var _ sharedPorts.InfrastructureProvider = (*errorRedisInfraProvider)(nil)
-
-func (m *errorRedisInfraProvider) GetPostgresConnection(_ context.Context) (*sharedPorts.PostgresConnectionLease, error) {
-	return nil, nil
-}
-
-func (m *errorRedisInfraProvider) GetRedisConnection(_ context.Context) (*sharedPorts.RedisConnectionLease, error) {
-	return sharedPorts.NewRedisConnectionLease(m.conn, nil), nil
-}
-
-func (m *errorRedisInfraProvider) BeginTx(_ context.Context) (*sharedPorts.TxLease, error) {
-	return nil, nil
-}
-
-func (m *errorRedisInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.ReplicaDBLease, error) {
-	return nil, nil
-}
-
-func TestSchedulerWorker_GetClient_LockAcquisitionError(t *testing.T) {
-	t.Parallel()
-
-	// NewRedisClientWithMock(nil) creates a client where GetClient(ctx) returns an error
-	// (simulating an unconnected client).
-	conn := sharedTestutil.NewRedisClientWithMock(nil)
-	provider := &errorRedisInfraProvider{conn: conn}
-
-	trigger := &stubMatchTrigger{}
-	scheduleID := uuid.MustParse("00000000-0000-0000-0000-000000300001")
-	contextID := uuid.MustParse("00000000-0000-0000-0000-000000300002")
-
-	repo := &stubScheduleRepo{
-		findDueSchedulesFn: func(_ context.Context, _ time.Time) ([]*entities.ReconciliationSchedule, error) {
-			return []*entities.ReconciliationSchedule{
-				{
-					ID:             scheduleID,
-					ContextID:      contextID,
-					CronExpression: "0 * * * *",
-					Enabled:        true,
-				},
-			}, nil
-		},
-	}
-
-	w, err := NewSchedulerWorker(
-		repo, trigger, provider,
-		SchedulerWorkerConfig{Interval: time.Hour},
-		&stubLogger{},
-	)
-	require.NoError(t, err)
-
-	// pollCycle should gracefully handle the GetClient error without panicking.
-	// The tick should continue (match trigger should NOT be called since lock was not acquired).
-	require.NotPanics(t, func() {
-		w.pollCycle(context.Background())
-	})
-	assert.False(t, trigger.triggerCalled, "match trigger should not be called when lock acquisition fails due to GetClient error")
-}
-
-// switchableRedisInfraProvider returns the good connection for the first N calls
-// to GetRedisConnection, then switches to the bad connection.
-type switchableRedisInfraProvider struct {
-	goodConn    *libRedis.Client
-	badConn     *libRedis.Client
-	switchAfter int32 // switch after this many calls
-	callCount   atomic.Int32
-}
-
-var _ sharedPorts.InfrastructureProvider = (*switchableRedisInfraProvider)(nil)
-
-func (m *switchableRedisInfraProvider) GetPostgresConnection(_ context.Context) (*sharedPorts.PostgresConnectionLease, error) {
-	return nil, nil
-}
-
-func (m *switchableRedisInfraProvider) GetRedisConnection(_ context.Context) (*sharedPorts.RedisConnectionLease, error) {
-	count := m.callCount.Add(1)
-	if count > m.switchAfter {
-		return sharedPorts.NewRedisConnectionLease(m.badConn, nil), nil
-	}
-
-	return sharedPorts.NewRedisConnectionLease(m.goodConn, nil), nil
-}
-
-func (m *switchableRedisInfraProvider) BeginTx(_ context.Context) (*sharedPorts.TxLease, error) {
-	return nil, nil
-}
-
-func (m *switchableRedisInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.ReplicaDBLease, error) {
-	return nil, nil
-}
-
-func TestSchedulerWorker_GetClient_LockReleaseError(t *testing.T) {
-	t.Parallel()
-
-	// Use a real miniredis for lock acquisition, but switch the provider
-	// to a bad connection for lock release.
-	srv := miniredis.RunT(t)
-	redisClient := redis.NewClient(&redis.Options{Addr: srv.Addr()})
-	goodConn := sharedTestutil.NewRedisClientWithMock(redisClient)
-	badConn := sharedTestutil.NewRedisClientWithMock(nil)
-
-	// acquireLock calls GetRedisConnection twice (once for conn, once for GetClient internally
-	// via the same conn). Actually, it calls GetRedisConnection once and then conn.GetClient.
-	// So we need switchAfter=1: first call (acquire) returns good, second call (release) returns bad.
-	provider := &switchableRedisInfraProvider{
-		goodConn:    goodConn,
-		badConn:     badConn,
-		switchAfter: 1, // First GetRedisConnection call succeeds (acquire), second fails (release)
-	}
-
-	trigger := &stubMatchTrigger{}
-	scheduleID := uuid.MustParse("00000000-0000-0000-0000-000000300003")
-	contextID := uuid.MustParse("00000000-0000-0000-0000-000000300004")
-	tenantID := uuid.MustParse("00000000-0000-0000-0000-000000300005")
-
-	repo := &stubScheduleRepo{}
-
-	w, err := NewSchedulerWorker(
-		repo, trigger, provider,
-		SchedulerWorkerConfig{Interval: time.Hour},
-		&stubLogger{},
-	)
-	require.NoError(t, err)
-
-	schedule := &entities.ReconciliationSchedule{
-		ID:             scheduleID,
-		ContextID:      contextID,
-		CronExpression: "0 * * * *",
-		Enabled:        true,
-		TenantID:       tenantID,
-	}
-
-	// processSchedule should not panic even when lock release encounters GetClient error.
-	require.NotPanics(t, func() {
-		w.processSchedule(context.Background(), schedule, time.Now().UTC())
-	})
-
-	// The match trigger should have been called since the lock was acquired successfully.
-	assert.True(t, trigger.triggerCalled, "match trigger should be called since lock acquisition succeeded")
-}
-
-func TestAcquireLock_GetClientError(t *testing.T) {
-	t.Parallel()
-
-	// Create a redis client where GetClient returns an error.
-	conn := sharedTestutil.NewRedisClientWithMock(nil)
-	provider := &errorRedisInfraProvider{conn: conn}
-
-	w, err := NewSchedulerWorker(
-		&stubScheduleRepo{}, &stubMatchTrigger{}, provider,
-		SchedulerWorkerConfig{Interval: time.Hour},
-		&stubLogger{},
-	)
-	require.NoError(t, err)
-
-	acquired, token, err := w.acquireLock(context.Background(), "test-get-client-error")
-	assert.Error(t, err, "acquireLock should return error when GetClient fails")
-	assert.False(t, acquired)
-	assert.Empty(t, token)
-	assert.Contains(t, err.Error(), "get redis client for lock acquire")
-}
-
-func TestReleaseLock_GetClientError(t *testing.T) {
-	t.Parallel()
-
-	// Create a redis client where GetClient returns an error.
-	conn := sharedTestutil.NewRedisClientWithMock(nil)
-	provider := &errorRedisInfraProvider{conn: conn}
-
-	logger := &capturingWarnLogger{}
-
-	w, err := NewSchedulerWorker(
-		&stubScheduleRepo{}, &stubMatchTrigger{}, provider,
-		SchedulerWorkerConfig{Interval: time.Hour},
-		logger,
-	)
-	require.NoError(t, err)
-
-	// releaseLock should not panic when GetClient fails - it should silently return.
-	require.NotPanics(t, func() {
-		w.releaseLock(context.Background(), "test-release-get-client-error", "some-token")
-	})
-
-	assert.True(t, logger.warnCalled, "releaseLock should log warning when redis client acquisition fails")
-	assert.Contains(t, logger.messages, "scheduler: failed to acquire redis client for lock release")
-}
-
 // --- Done channel behavior ---
 
 func TestSchedulerWorker_DoneNotClosedBeforeStart(t *testing.T) {
@@ -761,7 +433,7 @@ func TestSchedulerWorker_DoneNotClosedBeforeStart(t *testing.T) {
 	w, err := NewSchedulerWorker(
 		&stubScheduleRepo{},
 		&stubMatchTrigger{},
-		&stubInfraProvider{},
+		&stubLockManager{},
 		SchedulerWorkerConfig{Interval: time.Hour},
 		&stubLogger{},
 	)
@@ -773,4 +445,93 @@ func TestSchedulerWorker_DoneNotClosedBeforeStart(t *testing.T) {
 	default:
 		// Expected: channel is open
 	}
+}
+
+// --- Lock TTL tests ---
+
+func TestSchedulerLockExpiry_ProportionalToInterval(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		interval time.Duration
+		expected time.Duration
+	}{
+		{
+			name:     "1 minute interval gives 2 minute expiry",
+			interval: time.Minute,
+			expected: 2 * time.Minute,
+		},
+		{
+			name:     "30 second interval gives 1 minute expiry",
+			interval: 30 * time.Second,
+			expected: time.Minute,
+		},
+		{
+			name:     "1 hour interval gives 2 hour expiry",
+			interval: time.Hour,
+			expected: 2 * time.Hour,
+		},
+		{
+			name:     "very short interval clamps to minimum 5s",
+			interval: time.Second,
+			expected: schedulerMinLockExpiry,
+		},
+		{
+			name:     "sub-second interval clamps to minimum 5s",
+			interval: 100 * time.Millisecond,
+			expected: schedulerMinLockExpiry,
+		},
+		{
+			name:     "zero interval clamps to minimum 5s",
+			interval: 0,
+			expected: schedulerMinLockExpiry,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.expected, schedulerLockExpiry(tt.interval))
+		})
+	}
+}
+
+func TestProcessSchedule_LockOptionsUseProportionalTTL(t *testing.T) {
+	t.Parallel()
+
+	trigger := &stubMatchTrigger{}
+	scheduleID := uuid.MustParse("00000000-0000-0000-0000-000000200060")
+	interval := 30 * time.Second
+
+	var capturedOpts libRedis.LockOptions
+
+	locker := &stubLockManager{
+		withLockOptionsFn: func(_ context.Context, _ string, opts libRedis.LockOptions, fn func(context.Context) error) error {
+			capturedOpts = opts
+			return fn(context.Background())
+		},
+	}
+
+	repo := &stubScheduleRepo{}
+
+	w, err := NewSchedulerWorker(
+		repo, trigger, locker,
+		SchedulerWorkerConfig{Interval: interval},
+		&stubLogger{},
+	)
+	require.NoError(t, err)
+
+	schedule := &entities.ReconciliationSchedule{
+		ID:             scheduleID,
+		ContextID:      uuid.New(),
+		CronExpression: "0 * * * *",
+		Enabled:        true,
+	}
+
+	w.processSchedule(context.Background(), schedule, time.Now().UTC())
+
+	assert.True(t, trigger.triggerCalled)
+	assert.Equal(t, schedulerLockExpiry(interval), capturedOpts.Expiry, "lock expiry must be 2× poll interval")
+	assert.Equal(t, 1, capturedOpts.Tries, "must use single try (non-blocking)")
 }

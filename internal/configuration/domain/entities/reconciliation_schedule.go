@@ -10,6 +10,7 @@ import (
 
 	"github.com/LerianStudio/lib-commons/v4/commons/assert"
 	"github.com/LerianStudio/lib-commons/v4/commons/cron"
+	"github.com/LerianStudio/lib-commons/v4/commons/pointers"
 
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
@@ -173,7 +174,7 @@ func (schedule *ReconciliationSchedule) MarkRun(now time.Time) {
 
 	now = now.UTC()
 
-	schedule.LastRunAt = &now
+	schedule.LastRunAt = pointers.Time(now)
 	nextRun := schedule.CalculateNextRun(now)
 	schedule.NextRunAt = nextRun
 	schedule.UpdatedAt = now

@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/google/uuid"
+
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
 	"github.com/LerianStudio/matcher/internal/ingestion/ports"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
@@ -82,6 +84,11 @@ func (parser *JSONParser) ParseStreaming(
 		chunkSize = ports.DefaultChunkSize
 	}
 
+	tenantID, err := tenantIDFromContext(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("resolve tenant: %w", err)
+	}
+
 	mapping, err := mappingFromFieldMap(fieldMap)
 	if err != nil {
 		return nil, err
@@ -97,11 +104,11 @@ func (parser *JSONParser) ParseStreaming(
 
 	delim, isDelim := token.(json.Delim)
 	if isDelim && delim == '[' {
-		return parser.streamJSONArray(ctx, decoder, job, mapping, chunkSize, callback)
+		return parser.streamJSONArray(ctx, tenantID, decoder, job, mapping, chunkSize, callback)
 	}
 
 	if isDelim && delim == '{' {
-		return parser.processSingleObject(ctx, decoder, job, mapping, callback)
+		return parser.processSingleObject(ctx, tenantID, decoder, job, mapping, callback)
 	}
 
 	return nil, errJSONPayloadInvalid
@@ -120,6 +127,7 @@ type jsonStreamState struct {
 // streamJSONArray processes a JSON array by streaming objects one at a time.
 func (parser *JSONParser) streamJSONArray(
 	ctx context.Context,
+	tenantID uuid.UUID,
 	decoder *json.Decoder,
 	job *entities.IngestionJob,
 	mapping map[string]string,
@@ -138,7 +146,7 @@ func (parser *JSONParser) streamJSONArray(
 			return nil, fmt.Errorf("json parsing cancelled: %w", err)
 		}
 
-		if err := parser.processNextArrayElement(decoder, job, mapping, state); err != nil {
+		if err := parser.processNextArrayElement(ctx, tenantID, decoder, job, mapping, state); err != nil {
 			return nil, err
 		}
 
@@ -166,6 +174,8 @@ func (parser *JSONParser) streamJSONArray(
 
 // processNextArrayElement decodes one JSON object from the array.
 func (parser *JSONParser) processNextArrayElement(
+	ctx context.Context,
+	tenantID uuid.UUID,
 	decoder *json.Decoder,
 	job *entities.IngestionJob,
 	mapping map[string]string,
@@ -188,7 +198,7 @@ func (parser *JSONParser) processNextArrayElement(
 
 	state.rowNumber++
 
-	transaction, parseErr := normalizeTransaction(job, mapping, row, state.rowNumber)
+	transaction, parseErr := normalizeTransaction(ctx, tenantID, job, mapping, row, state.rowNumber)
 	if parseErr != nil {
 		state.chunkErrors = append(state.chunkErrors, *parseErr)
 
@@ -252,6 +262,7 @@ func (parser *JSONParser) decodeObjectFields(decoder *json.Decoder) (map[string]
 // processSingleObject handles a JSON object (not array) by decoding the remaining fields.
 func (parser *JSONParser) processSingleObject(
 	ctx context.Context,
+	tenantID uuid.UUID,
 	decoder *json.Decoder,
 	job *entities.IngestionJob,
 	mapping map[string]string,
@@ -268,7 +279,7 @@ func (parser *JSONParser) processSingleObject(
 
 	result := &ports.StreamingParseResult{TotalRecords: 1}
 
-	transaction, parseErr := normalizeTransaction(job, mapping, row, 1)
+	transaction, parseErr := normalizeTransaction(ctx, tenantID, job, mapping, row, 1)
 	if parseErr != nil {
 		result.TotalRecords = 0
 		result.TotalErrors = 1

@@ -37,6 +37,8 @@ func TestTransactionRepository_CreateAndFindByID(t *testing.T) {
 		require.NoError(t, err)
 
 		tx, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"ref-001",
@@ -82,6 +84,8 @@ func TestTransactionRepository_ListUnmatchedByContext(t *testing.T) {
 		require.NoError(t, err)
 
 		matchedTx, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"matched-1",
@@ -98,6 +102,8 @@ func TestTransactionRepository_ListUnmatchedByContext(t *testing.T) {
 		require.NoError(t, err)
 
 		unmatchedTx, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"unmatched-1",
@@ -114,6 +120,8 @@ func TestTransactionRepository_ListUnmatchedByContext(t *testing.T) {
 		require.NoError(t, err)
 
 		pendingTx, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"pending-1",
@@ -130,6 +138,8 @@ func TestTransactionRepository_ListUnmatchedByContext(t *testing.T) {
 		require.NoError(t, err)
 
 		incompleteTx, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"incomplete-1",
@@ -177,6 +187,8 @@ func TestTransactionRepository_MarkMatched(t *testing.T) {
 		require.NoError(t, err)
 
 		tx1, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"mark-match-1",
@@ -192,6 +204,8 @@ func TestTransactionRepository_MarkMatched(t *testing.T) {
 		require.NoError(t, err)
 
 		tx2, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"mark-match-2",
@@ -239,6 +253,8 @@ func TestTransactionRepository_MarkPendingReview(t *testing.T) {
 		require.NoError(t, err)
 
 		tx1, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"review-1",
@@ -254,6 +270,8 @@ func TestTransactionRepository_MarkPendingReview(t *testing.T) {
 		require.NoError(t, err)
 
 		tx2, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"review-2",

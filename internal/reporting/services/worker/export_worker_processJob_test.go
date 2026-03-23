@@ -54,6 +54,7 @@ func TestExportWorker_ProcessJob_Success(t *testing.T) {
 		ReportType: entities.ExportReportTypeMatched,
 		Format:     entities.ExportFormatCSV,
 		Filter:     entities.ExportJobFilter{},
+		Status:     entities.ExportJobStatusRunning,
 	}
 
 	jobRepo.EXPECT().
@@ -105,6 +106,7 @@ func TestExportWorker_ProcessJob_StreamExportError(t *testing.T) {
 		Format:     entities.ExportFormatCSV,
 		Filter:     entities.ExportJobFilter{},
 		Attempts:   1,
+		Status:     entities.ExportJobStatusRunning,
 	}
 
 	jobRepo.EXPECT().
@@ -150,6 +152,7 @@ func TestExportWorker_ProcessJob_UploadError(t *testing.T) {
 		Format:     entities.ExportFormatCSV,
 		Filter:     entities.ExportJobFilter{},
 		Attempts:   1,
+		Status:     entities.ExportJobStatusRunning,
 	}
 
 	jobRepo.EXPECT().
@@ -196,6 +199,7 @@ func TestExportWorker_ProcessJob_UpdateJobError(t *testing.T) {
 		ReportType: entities.ExportReportTypeMatched,
 		Format:     entities.ExportFormatCSV,
 		Filter:     entities.ExportJobFilter{},
+		Status:     entities.ExportJobStatusRunning,
 	}
 
 	jobRepo.EXPECT().
@@ -250,6 +254,7 @@ func TestExportWorker_ProcessJob_UnsupportedReportType(t *testing.T) {
 		Format:     entities.ExportFormatCSV,
 		Filter:     entities.ExportJobFilter{},
 		Attempts:   1,
+		Status:     entities.ExportJobStatusRunning,
 	}
 
 	jobRepo.EXPECT().
@@ -483,6 +488,7 @@ func TestExportWorker_ProcessJob_NilLogger(t *testing.T) {
 		ReportType: entities.ExportReportTypeMatched,
 		Format:     entities.ExportFormatCSV,
 		Filter:     entities.ExportJobFilter{},
+		Status:     entities.ExportJobStatusRunning,
 	}
 
 	jobRepo.EXPECT().

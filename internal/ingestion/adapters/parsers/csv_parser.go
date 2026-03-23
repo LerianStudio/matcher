@@ -86,6 +86,11 @@ func (p *CSVParser) ParseStreaming(
 		chunkSize = ports.DefaultChunkSize
 	}
 
+	tenantID, err := tenantIDFromContext(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("resolve tenant: %w", err)
+	}
+
 	mapping, err := mappingFromFieldMap(fieldMap)
 	if err != nil {
 		return nil, err
@@ -156,7 +161,7 @@ func (p *CSVParser) ParseStreaming(
 			})
 		}
 
-		transaction, parseErr := normalizeTransaction(job, mapping, row, rowNumber)
+		transaction, parseErr := normalizeTransaction(ctx, tenantID, job, mapping, row, rowNumber)
 		if parseErr != nil {
 			chunkErrors = append(chunkErrors, *parseErr)
 

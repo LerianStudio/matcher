@@ -8,6 +8,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/LerianStudio/lib-commons/v4/commons/pointers"
+
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
@@ -233,7 +235,7 @@ func (req *UpdateSourceRequest) ToDomainInput() (entities.UpdateReconciliationSo
 			return entities.UpdateReconciliationSourceInput{}, ErrNameWhitespaceOnly
 		}
 
-		input.Name = &trimmed
+		input.Name = pointers.String(trimmed)
 	}
 
 	if req.Type != nil {

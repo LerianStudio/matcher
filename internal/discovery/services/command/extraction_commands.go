@@ -39,7 +39,7 @@ func (uc *UseCase) StartExtraction(
 	defer span.End()
 
 	if err := validateExtractionRequest(tables, params); err != nil {
-		libOpentelemetry.HandleSpanError(span, "validate extraction request", err)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "validate extraction request", err)
 
 		return nil, err
 	}
@@ -52,24 +52,26 @@ func (uc *UseCase) StartExtraction(
 
 	conn, err := uc.connRepo.FindByID(ctx, connectionID)
 	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "find connection", err)
-
 		if errors.Is(err, repositories.ErrConnectionNotFound) {
+			libOpentelemetry.HandleSpanBusinessErrorEvent(span, "connection not found", err)
+
 			return nil, ErrConnectionNotFound
 		}
+
+		libOpentelemetry.HandleSpanError(span, "find connection", err)
 
 		return nil, fmt.Errorf("find connection: %w", err)
 	}
 
 	if conn == nil {
-		libOpentelemetry.HandleSpanError(span, "find connection", ErrConnectionNotFound)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "connection not found", ErrConnectionNotFound)
 
 		return nil, ErrConnectionNotFound
 	}
 
 	if conn.Status != vo.ConnectionStatusAvailable || !conn.SchemaDiscovered {
 		err = fmt.Errorf("%w: connection schema is not available for extraction", ErrInvalidExtractionRequest)
-		libOpentelemetry.HandleSpanError(span, "connection not ready for extraction", err)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "connection not ready for extraction", err)
 
 		return nil, err
 	}
@@ -82,7 +84,7 @@ func (uc *UseCase) StartExtraction(
 	}
 
 	if err := validateExtractionScope(tables, schemas); err != nil {
-		libOpentelemetry.HandleSpanError(span, "validate extraction scope", err)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "validate extraction scope", err)
 
 		return nil, err
 	}
@@ -332,17 +334,19 @@ func (uc *UseCase) PollExtractionStatus(ctx context.Context, extractionID uuid.U
 
 	req, err := uc.extractionRepo.FindByID(ctx, extractionID)
 	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "find extraction request", err)
-
 		if errors.Is(err, repositories.ErrExtractionNotFound) {
+			libOpentelemetry.HandleSpanBusinessErrorEvent(span, "extraction request not found", err)
+
 			return nil, ErrExtractionNotFound
 		}
+
+		libOpentelemetry.HandleSpanError(span, "find extraction request", err)
 
 		return nil, fmt.Errorf("find extraction request: %w", err)
 	}
 
 	if req == nil {
-		libOpentelemetry.HandleSpanError(span, "nil extraction request", ErrExtractionNotFound)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "extraction request not found", ErrExtractionNotFound)
 
 		return nil, ErrExtractionNotFound
 	}
@@ -447,7 +451,7 @@ func (uc *UseCase) applyExtractionStatusTransition(
 		previousUpdatedAt := req.UpdatedAt
 
 		if err := req.MarkExtracting(); err != nil {
-			libOpentelemetry.HandleSpanError(span, "mark extracting", err)
+			libOpentelemetry.HandleSpanBusinessErrorEvent(span, "mark extracting", err)
 
 			return false, fmt.Errorf("mark extracting: %w", err)
 		}
@@ -460,7 +464,7 @@ func (uc *UseCase) applyExtractionStatusTransition(
 		previousUpdatedAt := req.UpdatedAt
 
 		if err := req.MarkComplete(status.ResultPath); err != nil {
-			libOpentelemetry.HandleSpanError(span, "mark complete", err)
+			libOpentelemetry.HandleSpanBusinessErrorEvent(span, "mark complete", err)
 
 			return false, fmt.Errorf("mark complete: %w", err)
 		}
@@ -476,7 +480,7 @@ func (uc *UseCase) applyExtractionStatusTransition(
 		previousUpdatedAt := req.UpdatedAt
 
 		if err := req.MarkFailed(entities.SanitizedExtractionFailureMessage); err != nil {
-			libOpentelemetry.HandleSpanError(span, "mark failed", err)
+			libOpentelemetry.HandleSpanBusinessErrorEvent(span, "mark failed", err)
 
 			return false, fmt.Errorf("mark failed: %w", err)
 		}
@@ -492,7 +496,7 @@ func (uc *UseCase) applyExtractionStatusTransition(
 		previousUpdatedAt := req.UpdatedAt
 
 		if err := req.MarkCancelled(); err != nil {
-			libOpentelemetry.HandleSpanError(span, "mark cancelled", err)
+			libOpentelemetry.HandleSpanBusinessErrorEvent(span, "mark cancelled", err)
 
 			return false, fmt.Errorf("mark cancelled: %w", err)
 		}

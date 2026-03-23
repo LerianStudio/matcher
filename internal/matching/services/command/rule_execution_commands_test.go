@@ -14,7 +14,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	matching "github.com/LerianStudio/matcher/internal/matching/domain/services"
-	outboxmocks "github.com/LerianStudio/matcher/internal/outbox/domain/repositories/mocks"
+	outboxmocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 

@@ -237,10 +237,14 @@ func (worker *CleanupWorker) markJobExpiredIfNeeded(ctx context.Context, job *en
 		return
 	}
 
-	job.MarkExpired()
+	if err := job.MarkExpired(); err != nil {
+		worker.logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to transition job %s to expired: %v", job.ID, err))
+
+		return
+	}
 
 	if err := worker.jobRepo.Update(ctx, job); err != nil {
-		worker.logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to mark job %s as expired: %v", job.ID, err))
+		worker.logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to persist job %s expired status: %v", job.ID, err))
 
 		return
 	}

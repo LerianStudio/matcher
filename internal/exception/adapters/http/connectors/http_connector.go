@@ -12,13 +12,18 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"syscall"
 	"time"
 	"unicode"
 
+	"github.com/sony/gobreaker"
+	"go.opentelemetry.io/otel/trace"
+
 	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
 	"github.com/LerianStudio/lib-commons/v4/commons/backoff"
+	"github.com/LerianStudio/lib-commons/v4/commons/circuitbreaker"
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
@@ -28,11 +33,16 @@ import (
 
 // Dispatch errors.
 var (
-	ErrNonRetryableStatus     = errors.New("non-retryable HTTP status")
-	ErrMaxRetriesExceeded     = errors.New("max retries exceeded")
-	ErrUnsupportedTarget      = errors.New("unsupported routing target")
-	ErrConnectorNotConfigured = errors.New("connector not configured for target")
-	ErrRetryableHTTPStatus    = errors.New("retryable HTTP status")
+	ErrNonRetryableStatus             = errors.New("non-retryable HTTP status")
+	ErrMaxRetriesExceeded             = errors.New("max retries exceeded")
+	ErrUnsupportedTarget              = errors.New("unsupported routing target")
+	ErrConnectorNotConfigured         = errors.New("connector not configured for target")
+	ErrRetryableHTTPStatus            = errors.New("retryable HTTP status")
+	ErrCircuitBreakerOpen             = errors.New("circuit breaker is open for target")
+	ErrServerError                    = errors.New("server error")
+	ErrUnexpectedCircuitBreakerResult = errors.New("unexpected circuit breaker result type")
+	ErrHTTPClientDo                   = errors.New("http client request failed")
+	ErrCircuitBreakerExecute          = errors.New("circuit breaker execute failed")
 )
 
 // Response body sanitization limits.
@@ -46,18 +56,25 @@ const (
 	maxBodyReadLimit = 1024
 )
 
+// connectorCircuitBreakerPrefix is prepended to target hosts to form the
+// per-target circuit breaker service name.
+const connectorCircuitBreakerPrefix = "webhook-"
+
 // HTTPConnector dispatches exceptions to external systems via HTTP.
 type HTTPConnector struct {
 	client               *http.Client
 	config               ConnectorConfig
 	webhookTimeoutGetter func() time.Duration
+	breaker              circuitbreaker.Manager
 }
 
 // NewHTTPConnector creates a new HTTP connector with the given configuration.
 // Unless AllowPrivateIPs is set, the HTTP client uses a custom net.Dialer with a
 // ControlContext hook that validates resolved IP addresses at connection time,
 // mitigating DNS rebinding / TOCTOU attacks.
-func NewHTTPConnector(config ConnectorConfig) (*HTTPConnector, error) {
+// The optional circuitbreaker.Manager protects outbound calls; when nil the
+// connector operates without circuit-breaker protection (backward-compatible).
+func NewHTTPConnector(config ConnectorConfig, breaker ...circuitbreaker.Manager) (*HTTPConnector, error) {
 	transport := newSSRFSafeTransport(config.AllowPrivateIPs)
 
 	client := &http.Client{
@@ -65,10 +82,16 @@ func NewHTTPConnector(config ConnectorConfig) (*HTTPConnector, error) {
 		Transport: transport,
 	}
 
-	return &HTTPConnector{
+	connector := &HTTPConnector{
 		client: client,
 		config: config,
-	}, nil
+	}
+
+	if len(breaker) > 0 && breaker[0] != nil {
+		connector.breaker = breaker[0]
+	}
+
+	return connector, nil
 }
 
 // SetWebhookTimeoutGetter injects a live config-backed webhook timeout source.
@@ -331,7 +354,7 @@ func (conn *HTTPConnector) executeWithRetry(
 	maxRetries int,
 	baseBackoff time.Duration,
 ) (*http.Response, error) {
-	logger, _, _, _ := libCommons.NewTrackingFromContext(ctx) //nolint:dogsled // only logger needed from tracking context
+	logger, _, _, _ := libCommons.NewTrackingFromContext(ctx) //nolint:dogsled // only logger needed
 
 	bodyBytes, err := readRequestBody(ctx, req, logger)
 	if err != nil {
@@ -385,9 +408,15 @@ func (conn *HTTPConnector) executeAttempt(
 		reqCopy.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 	}
 
-	resp, err := client.Do(reqCopy) // #nosec G704 -- URL is from validated connector configuration, not user input
+	resp, err := conn.doHTTPWithBreaker(client, reqCopy)
 	if err != nil {
+		// Circuit breaker open/half-open: fail fast, do not retry.
+		if isConnectorBreakerRejection(err) {
+			return nil, false, fmt.Errorf("%w: %w", ErrCircuitBreakerOpen, err)
+		}
+
 		retry := attempt < maxRetries-1
+
 		return nil, retry, fmt.Errorf("attempt %d/%d: %w", attempt+1, maxRetries, err)
 	}
 
@@ -414,6 +443,86 @@ func (conn *HTTPConnector) executeAttempt(
 	retry := attempt < maxRetries-1
 
 	return nil, retry, retryErr
+}
+
+// doHTTPWithBreaker executes a single HTTP call, optionally through a
+// per-target circuit breaker when one is configured.
+func (conn *HTTPConnector) doHTTPWithBreaker(client *http.Client, req *http.Request) (*http.Response, error) {
+	if conn.breaker == nil {
+		resp, err := client.Do(req) // #nosec G704 -- URL is from validated connector configuration, not user input
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrHTTPClientDo, err)
+		}
+
+		return resp, nil
+	}
+
+	serviceName := connectorBreakerName(req.URL)
+
+	// Lazily register a breaker for this target host if not yet created.
+	if _, err := conn.breaker.GetOrCreate(serviceName, circuitbreaker.HTTPServiceConfig()); err != nil {
+		// If config mismatch (already created with same config), ignore; any
+		// other error is unexpected — log degradation and fall through without breaker.
+		if !errors.Is(err, circuitbreaker.ErrConfigMismatch) {
+			logger, _, _, _ := libCommons.NewTrackingFromContext(req.Context())
+			logger.Log(req.Context(), libLog.LevelWarn,
+				fmt.Sprintf("circuit breaker registration failed for %s, falling back to unprotected request: %v", serviceName, err))
+
+			span := trace.SpanFromContext(req.Context())
+			libOpentelemetry.HandleSpanError(span, "circuit breaker registration failed, falling back to unprotected request", err)
+
+			resp, doErr := client.Do(req) // #nosec G704 -- fallback without breaker
+			if doErr != nil {
+				return nil, fmt.Errorf("%w: %w", ErrHTTPClientDo, doErr)
+			}
+
+			return resp, nil
+		}
+	}
+
+	result, err := conn.breaker.Execute(serviceName, func() (any, error) {
+		resp, doErr := client.Do(req) // #nosec G704 -- URL is from validated connector configuration, not user input
+		if doErr != nil {
+			return nil, fmt.Errorf("%w: %w", ErrHTTPClientDo, doErr)
+		}
+
+		// Report server errors as failures to the breaker and close the body
+		// so it does not leak — the error message carries the status code for
+		// diagnostic purposes.
+		if resp.StatusCode >= http.StatusInternalServerError {
+			_ = resp.Body.Close()
+			return nil, fmt.Errorf("%w: status %d", ErrServerError, resp.StatusCode)
+		}
+
+		return resp, nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrCircuitBreakerExecute, err)
+	}
+
+	resp, ok := result.(*http.Response)
+	if !ok {
+		return nil, ErrUnexpectedCircuitBreakerResult
+	}
+
+	return resp, nil
+}
+
+// connectorBreakerName derives a per-target circuit breaker service name from
+// the request URL. Different webhook targets (different hosts) get independent
+// breakers so that one failing target does not block dispatches to healthy ones.
+func connectorBreakerName(u *url.URL) string {
+	if u == nil {
+		return connectorCircuitBreakerPrefix + "unknown"
+	}
+
+	return connectorCircuitBreakerPrefix + u.Host
+}
+
+// isConnectorBreakerRejection returns true when the error originates from the
+// circuit breaker rejecting a request (open or half-open state).
+func isConnectorBreakerRejection(err error) bool {
+	return errors.Is(err, gobreaker.ErrOpenState) || errors.Is(err, gobreaker.ErrTooManyRequests)
 }
 
 func readRequestBody(ctx context.Context, req *http.Request, logger libLog.Logger) ([]byte, error) {

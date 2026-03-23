@@ -18,8 +18,8 @@ import (
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
-	govEntities "github.com/LerianStudio/matcher/internal/governance/domain/entities"
-	governanceRepositories "github.com/LerianStudio/matcher/internal/governance/domain/repositories"
+	govEntities "github.com/LerianStudio/matcher/internal/shared/domain"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // Sentinel errors for testing.
@@ -98,7 +98,7 @@ func (repo *stubAuditLogRepository) Create(
 
 func (repo *stubAuditLogRepository) CreateWithTx(
 	ctx context.Context,
-	_ governanceRepositories.Tx,
+	_ sharedPorts.Tx,
 	auditLog *govEntities.AuditLog,
 ) (*govEntities.AuditLog, error) {
 	return repo.Create(ctx, auditLog)

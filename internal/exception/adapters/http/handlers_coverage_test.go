@@ -24,8 +24,8 @@ import (
 	exceptionRepositories "github.com/LerianStudio/matcher/internal/exception/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/exception/services/command"
 	"github.com/LerianStudio/matcher/internal/exception/services/query"
-	govEntities "github.com/LerianStudio/matcher/internal/governance/domain/entities"
-	govRepositories "github.com/LerianStudio/matcher/internal/governance/domain/repositories"
+	govEntities "github.com/LerianStudio/matcher/internal/shared/domain"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 	crossAdapters "github.com/LerianStudio/matcher/internal/shared/adapters/cross"
 )
 
@@ -137,7 +137,7 @@ func newHandlersWithQueryOptions(
 	t *testing.T,
 	exRepo *stubExceptionRepo,
 	dRepo exceptionRepositories.DisputeRepository,
-	auditRepo govRepositories.AuditLogRepository,
+	auditRepo sharedPorts.AuditLogRepository,
 	tenantExtractor query.TenantExtractor,
 ) *Handlers {
 	t.Helper()

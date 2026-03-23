@@ -23,7 +23,6 @@ import (
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/ingestion/ports"
-	outboxEntities "github.com/LerianStudio/matcher/internal/outbox/domain/entities"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
@@ -156,28 +155,28 @@ func (jobRepo *fakeJobRepo) UpdateWithTx(
 
 type fakeOutboxRepo struct {
 	createErr error
-	created   *outboxEntities.OutboxEvent
+	created   *shared.OutboxEvent
 }
 
 func (f *fakeOutboxRepo) Create(
 	_ context.Context,
-	_ *outboxEntities.OutboxEvent,
-) (*outboxEntities.OutboxEvent, error) {
+	_ *shared.OutboxEvent,
+) (*shared.OutboxEvent, error) {
 	return f.created, f.createErr
 }
 
 func (f *fakeOutboxRepo) CreateWithTx(
 	_ context.Context,
 	_ *sql.Tx,
-	_ *outboxEntities.OutboxEvent,
-) (*outboxEntities.OutboxEvent, error) {
+	_ *shared.OutboxEvent,
+) (*shared.OutboxEvent, error) {
 	return f.created, f.createErr
 }
 
 func (f *fakeOutboxRepo) ListPending(
 	_ context.Context,
 	_ int,
-) ([]*outboxEntities.OutboxEvent, error) {
+) ([]*shared.OutboxEvent, error) {
 	return nil, nil
 }
 
@@ -185,7 +184,7 @@ func (f *fakeOutboxRepo) ListPendingByType(
 	_ context.Context,
 	_ string,
 	_ int,
-) ([]*outboxEntities.OutboxEvent, error) {
+) ([]*shared.OutboxEvent, error) {
 	return nil, nil
 }
 
@@ -196,7 +195,7 @@ func (f *fakeOutboxRepo) ListTenants(_ context.Context) ([]string, error) {
 func (f *fakeOutboxRepo) GetByID(
 	_ context.Context,
 	_ uuid.UUID,
-) (*outboxEntities.OutboxEvent, error) {
+) (*shared.OutboxEvent, error) {
 	return f.created, f.createErr
 }
 
@@ -213,7 +212,7 @@ func (f *fakeOutboxRepo) ListFailedForRetry(
 	_ int,
 	_ time.Time,
 	_ int,
-) ([]*outboxEntities.OutboxEvent, error) {
+) ([]*shared.OutboxEvent, error) {
 	return nil, nil
 }
 
@@ -222,7 +221,7 @@ func (f *fakeOutboxRepo) ResetForRetry(
 	_ int,
 	_ time.Time,
 	_ int,
-) ([]*outboxEntities.OutboxEvent, error) {
+) ([]*shared.OutboxEvent, error) {
 	return nil, nil
 }
 
@@ -231,7 +230,7 @@ func (f *fakeOutboxRepo) ResetStuckProcessing(
 	_ int,
 	_ time.Time,
 	_ int,
-) ([]*outboxEntities.OutboxEvent, error) {
+) ([]*shared.OutboxEvent, error) {
 	return nil, nil
 }
 

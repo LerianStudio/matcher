@@ -5,7 +5,7 @@ This file helps AI agents work effectively in the Matcher codebase. It complemen
 ## Quick Reference
 
 **Project**: Transaction reconciliation engine for Lerian Studio ecosystem  
-**Language**: Go 1.26.0  
+**Language**: Go 1.26.1  
 **Pattern**: Modular monolith with DDD + Hexagonal Architecture + CQRS-light  
 **Database**: PostgreSQL 17 with schema-per-tenant isolation  
 **Testing**: TDD required; testify + sqlmock + testcontainers
@@ -42,6 +42,7 @@ make check-coverage   # Verify coverage thresholds
 make migrate-up       # Apply migrations
 make migrate-down     # Rollback last migration
 make migrate-create NAME=add_feature  # New migration
+make check-migrations # Verify migration pairs and sequential numbering
 
 # Docker
 make up               # Start infrastructure (postgres, redis, rabbitmq)
@@ -130,7 +131,7 @@ internal/{context}/
 │   └── errors/           # Domain-scoped sentinel errors (preferred location; governance has this;
 │                         #   adapter-level sentinels live in adapters/postgres/{name}/errors.go)
 └── services/
-    ├── command/          # Write operations (*_commands.go)
+    ├── command/          # Write operations (*_commands.go + helper files)
     ├── query/            # Read operations (*_queries.go)
     └── worker/           # Background workers (configuration, governance use this)
 ```
@@ -391,6 +392,7 @@ Each aggregate directory follows Pattern A:
 - Commands: `*_commands.go` (entity-grouped, plural) — e.g., `match_group_commands.go`, `adjustment_commands.go`
 - Queries: `*_queries.go` (entity-grouped, plural) — e.g., `dashboard_queries.go`
 - Entry point: `commands.go` (UseCase struct, constructor, shared errors)
+- Helper files: private helper methods on the UseCase struct may use descriptive names without the `_commands.go` suffix (e.g., `match_group_persistence.go`, `rule_execution_support.go`, `tx_helpers.go`). These files contain internal implementation details, not public use-case entry points.
 
 ### HTTP Handlers
 Split into `handlers_{feature}.go` when a context has 3+ distinct feature areas:
@@ -423,6 +425,7 @@ Split into `handlers_{feature}.go` when a context has 3+ distinct feature areas:
 ### 4. CQRS File Naming
 - Write operations: `*_commands.go` (e.g., `match_group_commands.go`, `adjustment_commands.go`)
 - Read operations: `*_queries.go` (e.g., `dashboard_queries.go`)
+- Helper files in `command/` may omit the `_commands.go` suffix when they contain only private methods on the UseCase struct (e.g., persistence helpers, rule execution support, transaction utilities)
 - Helps identify command/query separation at a glance
 
 ### 5. Observability is Everywhere
@@ -480,6 +483,8 @@ Matcher uses **zero-config defaults** — all configuration has sensible default
 **Runtime authority**: The systemplane (`lib-commons/v4/commons/systemplane`) is the sole runtime configuration authority. Env vars are bootstrap-only — after startup, the systemplane registry owns all config reads. Runtime queries: `GET /v1/system/configs`, schema: `GET /v1/system/configs/schema`, history: `GET /v1/system/configs/history`.
 
 **Bootstrap-only keys** (require restart): See `config/.config-map.example`. These include server address, TLS, auth, and telemetry settings.
+
+**Bootstrap config reference**: See [`config/.config-map.example`](config/.config-map.example) for the complete list of bootstrap-only keys with documentation.
 
 **Categories**:
 - **Application**: `ENV_NAME`, `LOG_LEVEL`, `SERVER_ADDRESS`, `HTTP_BODY_LIMIT_BYTES`
@@ -645,7 +650,7 @@ Coverage threshold enforced via workflow parameters (not local config file).
 
 - **go-combined-analysis.yml**: Lint, security scan, unit tests, coverage (via `go-pr-analysis.yml` shared workflow)
   - Runs on PRs to `develop`/`release-candidate`/`main`
-  - Go version: 1.25, golangci-lint v2.6.2
+  - Go version: 1.26.1, golangci-lint v2.10.1
   - Coverage threshold: 70%, enforced via `fail_on_coverage_threshold: true`
 
 - **build.yml**: Docker image build and GitOps deployment updates (on tag push)
@@ -671,8 +676,9 @@ Before pushing code:
 5. `make test-int` → integration tests pass (if you changed adapters)
 6. `make check-tests` → every `.go` has a `_test.go`
 7. `make check-test-tags` → test files have proper build tags
-8. `make generate-docs` → Swagger docs updated (if you changed API)
-9. Commit message follows conventional commits (optional but encouraged)
+8. `make check-migrations` → migration pairs and numbering are valid (if you changed migrations)
+9. `make generate-docs` → Swagger docs updated (if you changed API)
+10. Commit message follows conventional commits (optional but encouraged)
 
 ## Debugging Tips
 

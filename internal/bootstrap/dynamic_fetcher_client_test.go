@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+
 	discoveryWorker "github.com/LerianStudio/matcher/internal/discovery/services/worker"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
@@ -19,7 +21,7 @@ func TestDynamicFetcherClient_Current_DisabledReturnsUnavailable(t *testing.T) {
 
 	cfg := defaultConfig()
 	cfg.Fetcher.Enabled = false
-	client := newDynamicFetcherClient(cfg, nil)
+	client := newDynamicFetcherClient(cfg, nil, &libLog.NopLogger{})
 
 	_, err := client.(*dynamicFetcherClient).current()
 	require.Error(t, err)
@@ -32,7 +34,7 @@ func TestDynamicFetcherClient_Current_ReusesUntilConfigChanges(t *testing.T) {
 	activeCfg := defaultConfig()
 	activeCfg.Fetcher.Enabled = true
 	activeCfg.Fetcher.URL = "https://fetcher-a.example"
-	client := newDynamicFetcherClient(activeCfg, func() *Config { return activeCfg }).(*dynamicFetcherClient)
+	client := newDynamicFetcherClient(activeCfg, func() *Config { return activeCfg }, &libLog.NopLogger{}).(*dynamicFetcherClient)
 
 	first, err := client.current()
 	require.NoError(t, err)

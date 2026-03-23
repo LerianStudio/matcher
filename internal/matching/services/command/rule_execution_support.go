@@ -20,7 +20,7 @@ func validateExecuteRulesInput(ctx context.Context, logger libLog.Logger, span t
 		return nil
 	}
 
-	libOpentelemetry.HandleSpanError(span, "invalid context id", ErrContextIDRequired)
+	libOpentelemetry.HandleSpanBusinessErrorEvent(span, "invalid context id", ErrContextIDRequired)
 
 	logger.With(libLog.Any("context.id", contextID.String())).Log(ctx, libLog.LevelError, "invalid context id")
 

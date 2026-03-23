@@ -2,8 +2,29 @@
 package parsers
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
+)
+
+// Package-level sentinel errors for all parsers.
+var (
+	errMissingFieldMap        = errors.New("field map is required")
+	errMissingFieldMapping    = errors.New("field map mapping is required")
+	errMissingIngestionJob    = errors.New("ingestion job is required")
+	errInvalidMappingFormat   = errors.New("field map mapping must contain string values")
+	errReaderRequired         = errors.New("reader is required")
+	errCallbackRequired       = errors.New("chunk callback is required")
+	errMissingMappingKey      = errors.New("field map missing required mapping key")
+	errEmptyMappingValue      = errors.New("field map mapping value must be non-empty")
+	errDateEmpty              = errors.New("date value is empty")
+	errUnsupportedDateFormat  = errors.New("unsupported date format")
+	errRegistryNotInitialized = errors.New("parser registry not initialized")
+	errUnsupportedFormat      = errors.New("unsupported format")
+	errJSONPayloadInvalid     = errors.New("json payload must be an object or array of objects")
+	errJSONArrayNotObjects    = errors.New("json array must contain objects")
+	errJSONUnexpectedKeyType  = errors.New("expected string key in json object")
+	errInvalidCurrencyCode    = errors.New("invalid ISO 4217 currency code")
 )
 
 // pathPattern matches file system paths in error messages.
