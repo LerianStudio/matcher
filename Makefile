@@ -27,7 +27,7 @@ CONFIG_DIR := ./config
 # Binary configuration
 BINARY_NAME ?= matcher
 BIN_DIR ?= bin
-GOLANGCI_LINT_VERSION ?= v2.6.2
+GOLANGCI_LINT_VERSION ?= v2.10.1
 GO_CI_PACKAGES := ./cmd/... ./internal/... ./migrations/... ./pkg/... ./tests/...
 
 # Migration configuration
@@ -125,6 +125,7 @@ help:
 	@echo "  make format                      - Format code in all packages"
 	@echo "  make sec                         - Run security checks using gosec"
 	@echo "  make check-tests                 - Verify test coverage for components"
+	@echo "  make check-migrations            - Verify migration pairs and sequential numbering"
 	@echo "  make check-coverage              - Check coverage against thresholds"
 	@echo ""
 	@echo ""
@@ -210,7 +211,7 @@ tidy:
 # Code Quality Commands
 #-------------------------------------------------------
 
-.PHONY: lint lint-fix lint-custom format sec vet vulncheck check-tests check-test-tags check-generated-artifacts check-coverage
+.PHONY: lint lint-fix lint-custom format sec vet vulncheck check-tests check-test-tags check-migrations check-generated-artifacts check-coverage
 
 vet:
 	$(call print_title,Running go vet)
@@ -287,6 +288,10 @@ check-tests:
 check-test-tags:
 	$(call print_title,Checking test build tags)
 	@./scripts/check-test-tags.sh
+
+check-migrations:
+	$(call print_title,Checking migration file integrity)
+	@./scripts/check-migrations.sh
 
 check-generated-artifacts:
 	$(call print_title,Checking generated artifacts)
@@ -406,6 +411,7 @@ ci:
 	@$(MAKE) test-int
 	@$(MAKE) check-tests
 	@$(MAKE) check-test-tags
+	@$(MAKE) check-migrations
 	@$(MAKE) check-generated-artifacts
 	@$(MAKE) sec
 	@$(MAKE) vet

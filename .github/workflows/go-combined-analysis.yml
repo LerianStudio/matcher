@@ -13,7 +13,10 @@ on:
     paths-ignore:
       - '**.md'
       - 'docs/**'
-      - '.github/**'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/PULL_REQUEST_TEMPLATE/**'
+      - '.github/*.md'
+      - '.github/CODEOWNERS'
       - 'LICENSE'
       - 'CODEOWNERS'
       - '.gitignore'
@@ -27,7 +30,7 @@ jobs:
     with:
       runner_type: "blacksmith-4vcpu-ubuntu-2404"
       app_name_prefix: "matcher"
-      go_version: "1.26"
+      go_version: "1.26.1"
       golangci_lint_version: "v2.10.1"
       golangci_lint_args: "--timeout=5m"
       coverage_threshold: 70
@@ -38,3 +41,13 @@ jobs:
       enable_coverage: true
       enable_build: true
     secrets: inherit
+
+  migration-integrity:
+    name: Migration Integrity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check migration file integrity
+        run: |
+          chmod +x scripts/check-migrations.sh
+          ./scripts/check-migrations.sh
