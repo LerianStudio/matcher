@@ -1,48 +1,38 @@
 package parsers
 
 import (
-	"encoding/json"
-	"errors"
+	"context"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 
+	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
 	"github.com/LerianStudio/matcher/internal/ingestion/ports"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
-	"github.com/LerianStudio/matcher/internal/shared/sanitize"
-)
-
-var (
-	errMissingFieldMap        = errors.New("field map is required")
-	errMissingFieldMapping    = errors.New("field map mapping is required")
-	errMissingIngestionJob    = errors.New("ingestion job is required")
-	errInvalidMappingFormat   = errors.New("field map mapping must contain string values")
-	errReaderRequired         = errors.New("reader is required")
-	errCallbackRequired       = errors.New("chunk callback is required")
-	errMissingMappingKey      = errors.New("field map missing required mapping key")
-	errEmptyMappingValue      = errors.New("field map mapping value must be non-empty")
-	errDateEmpty              = errors.New("date value is empty")
-	errUnsupportedDateFormat  = errors.New("unsupported date format")
-	errRegistryNotInitialized = errors.New("parser registry not initialized")
-	errUnsupportedFormat      = errors.New("unsupported format")
-	errJSONPayloadInvalid     = errors.New("json payload must be an object or array of objects")
-	errJSONArrayNotObjects    = errors.New("json array must contain objects")
-	errJSONUnexpectedKeyType  = errors.New("expected string key in json object")
-	errInvalidCurrencyCode    = errors.New("invalid ISO 4217 currency code")
-)
-
-const maxCurrencyLength = 3
-
-const (
-	unixTimestampSecondsLen = 10
-	unixTimestampMillisLen  = 13
-	base10                  = 10
 )
 
 var requiredMappingKeys = []string{"external_id", "amount", "currency", "date"}
+
+// tenantIDFromContext extracts the tenant ID from context as a uuid.UUID.
+// Falls back to the default tenant when the context does not carry explicit
+// tenant claims (single-tenant / auth-disabled mode).
+// Returns an error if the tenant ID string cannot be parsed as a UUID,
+// enabling callers to fail fast on systemic context problems instead of
+// producing N misleading per-row parse errors.
+func tenantIDFromContext(ctx context.Context) (uuid.UUID, error) {
+	tid := auth.GetTenantID(ctx)
+
+	parsed, err := uuid.Parse(tid)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("invalid tenant id in context %q: %w", tid, err)
+	}
+
+	return parsed, nil
+}
 
 func mappingFromFieldMap(fieldMap *shared.FieldMap) (map[string]string, error) {
 	if fieldMap == nil {
@@ -85,7 +75,11 @@ func mappingFromFieldMap(fieldMap *shared.FieldMap) (map[string]string, error) {
 	return mapping, nil
 }
 
+// normalizeTransaction converts a raw parsed row into a domain Transaction.
+// It orchestrates field extraction, validation, and entity construction.
 func normalizeTransaction(
+	ctx context.Context,
+	tenantID uuid.UUID,
 	job *entities.IngestionJob,
 	mapping map[string]string,
 	row map[string]any,
@@ -99,28 +93,17 @@ func normalizeTransaction(
 		}
 	}
 
-	// NOTE: external_id is sanitized against formula injection via getStringValue.
-	// For CSV this is backward-compatible (previously sanitized at parse time).
-	// For JSON/XML this is a behavioral change — external IDs starting with
-	// formula characters (=, @, non-numeric +/-) now get a ' prefix, which
-	// affects dedup hash calculation. This is intentional security hardening.
-	externalID, parseErr := requiredString(row, mapping, "external_id", rowNumber)
+	// external_id is extracted WITHOUT formula sanitization to preserve the raw
+	// value for dedup hash integrity and search. Formula injection is a display
+	// concern handled at output boundaries (preview, export, API responses).
+	externalID, parseErr := requiredRawString(row, mapping, "external_id", rowNumber)
 	if parseErr != nil {
 		return nil, parseErr
 	}
 
-	amountValue, parseErr := requiredString(row, mapping, "amount", rowNumber)
+	amount, parseErr := parseAmount(mapping, row, rowNumber)
 	if parseErr != nil {
 		return nil, parseErr
-	}
-
-	amount, err := decimal.NewFromString(amountValue)
-	if err != nil {
-		return nil, &ports.ParseError{
-			Row:     rowNumber,
-			Field:   "amount",
-			Message: "invalid decimal amount",
-		}
 	}
 
 	currency, parseErr := parseCurrency(row, mapping, rowNumber)
@@ -128,28 +111,76 @@ func normalizeTransaction(
 		return nil, parseErr
 	}
 
-	dateValue, parseErr := requiredString(row, mapping, "date", rowNumber)
+	date, parseErr := extractDate(mapping, row, rowNumber)
 	if parseErr != nil {
 		return nil, parseErr
 	}
 
-	date, err := parseTime(dateValue)
-	if err != nil {
-		return nil, &ports.ParseError{Row: rowNumber, Field: "date", Message: "invalid date format"}
-	}
+	// Extract optional description field.
+	var description string
 
-	description := ""
-
-	if fieldName, ok := mapping["description"]; ok {
-		if value, ok := getStringValue(row, fieldName); ok {
-			description = value
+	if descField, ok := mapping["description"]; ok {
+		if v, found := getStringValue(row, descField); found {
+			description = v
 		}
 	}
 
-	mappedFields := buildMappedFieldSet(mapping)
-	metadata := buildMetadata(row, mappedFields)
+	// Gather all unmapped fields into metadata.
+	metadata := buildMetadata(row, buildMappedFieldSet(mapping))
 
+	return buildTransaction(ctx, tenantID, job, externalID, amount, currency, date, description, metadata, rowNumber)
+}
+
+// parseAmount extracts the amount string and converts it to a decimal value.
+func parseAmount(mapping map[string]string, row map[string]any, rowNumber int) (decimal.Decimal, *ports.ParseError) {
+	amountValue, parseErr := requiredString(row, mapping, "amount", rowNumber)
+	if parseErr != nil {
+		return decimal.Zero, parseErr
+	}
+
+	amount, err := decimal.NewFromString(amountValue)
+	if err != nil {
+		return decimal.Zero, &ports.ParseError{
+			Row:     rowNumber,
+			Field:   "amount",
+			Message: "invalid decimal amount",
+		}
+	}
+
+	return amount, nil
+}
+
+// extractDate retrieves the date string and parses it into a time.Time.
+func extractDate(mapping map[string]string, row map[string]any, rowNumber int) (time.Time, *ports.ParseError) {
+	dateValue, parseErr := requiredString(row, mapping, "date", rowNumber)
+	if parseErr != nil {
+		return time.Time{}, parseErr
+	}
+
+	date, err := parseTime(dateValue)
+	if err != nil {
+		return time.Time{}, &ports.ParseError{Row: rowNumber, Field: "date", Message: "invalid date format"}
+	}
+
+	return date, nil
+}
+
+// buildTransaction constructs the domain Transaction entity and marks it extraction-complete.
+func buildTransaction(
+	ctx context.Context,
+	tenantID uuid.UUID,
+	job *entities.IngestionJob,
+	externalID string,
+	amount decimal.Decimal,
+	currency string,
+	date time.Time,
+	description string,
+	metadata map[string]any,
+	rowNumber int,
+) (*shared.Transaction, *ports.ParseError) {
 	transaction, err := shared.NewTransaction(
+		ctx,
+		tenantID,
 		job.ID,
 		job.SourceID,
 		externalID,
@@ -176,213 +207,4 @@ func normalizeTransaction(
 	}
 
 	return transaction, nil
-}
-
-func requiredString(
-	row map[string]any,
-	mapping map[string]string,
-	canonicalField string,
-	rowNumber int,
-) (string, *ports.ParseError) {
-	fieldName, ok := mapping[canonicalField]
-	if !ok {
-		return "", &ports.ParseError{
-			Row:     rowNumber,
-			Field:   canonicalField,
-			Message: "missing field mapping",
-		}
-	}
-
-	value, ok := getStringValue(row, fieldName)
-	if !ok || strings.TrimSpace(value) == "" {
-		return "", &ports.ParseError{
-			Row:     rowNumber,
-			Field:   canonicalField,
-			Message: "missing required field",
-		}
-	}
-
-	return value, nil
-}
-
-func parseCurrency(
-	row map[string]any,
-	mapping map[string]string,
-	rowNumber int,
-) (string, *ports.ParseError) {
-	currency, parseErr := requiredString(row, mapping, "currency", rowNumber)
-	if parseErr != nil {
-		return "", parseErr
-	}
-
-	currency = strings.ToUpper(currency)
-	if !isValidCurrencyCode(currency) {
-		return "", &ports.ParseError{
-			Row:     rowNumber,
-			Field:   "currency",
-			Message: errInvalidCurrencyCode.Error(),
-		}
-	}
-
-	return currency, nil
-}
-
-// sanitizeFormulaInjection delegates to the shared sanitize package to prevent
-// CSV/spreadsheet formula injection. See sanitize.SanitizeFormulaInjection for
-// full documentation.
-func sanitizeFormulaInjection(value string) string {
-	return sanitize.SanitizeFormulaInjection(value)
-}
-
-// getStringValue extracts a string value from a row map, trims whitespace,
-// and sanitizes against formula injection. Note: sanitization runs before
-// downstream parsing (e.g., decimal.NewFromString for amount fields), so
-// formula-prefixed values like "=100.50" become "'=100.50" and will fail
-// type-specific parsing with a generic error. This is intentional — formula
-// characters in numeric fields indicate malformed or malicious input.
-func getStringValue(row map[string]any, fieldName string) (string, bool) {
-	value, ok := row[fieldName]
-	if !ok || value == nil {
-		return "", false
-	}
-
-	var result string
-
-	switch typed := value.(type) {
-	case string:
-		result = strings.TrimSpace(typed)
-	case json.Number:
-		result = strings.TrimSpace(typed.String())
-	default:
-		result = strings.TrimSpace(fmt.Sprintf("%v", typed))
-	}
-
-	return sanitizeFormulaInjection(result), true
-}
-
-// dateLayouts contains supported date formats in order of parsing priority.
-// Formats are ordered from most specific to least specific to avoid ambiguity.
-// Note: Ambiguous formats like MM/DD/YYYY and DD/MM/YYYY are intentionally excluded
-// as they cannot be reliably distinguished without explicit configuration.
-var dateLayouts = []string{
-	time.RFC3339Nano,
-	time.RFC3339,
-	"2006-01-02T15:04:05",
-	"2006-01-02 15:04:05",
-	"2006-01-02",
-	"2006/01/02 15:04:05",
-	"2006/01/02",
-	"20060102150405",
-	"20060102",
-	"02-Jan-2006 15:04:05",
-	"02-Jan-2006",
-	"Jan 2, 2006 15:04:05",
-	"Jan 2, 2006",
-	"January 2, 2006 15:04:05",
-	"January 2, 2006",
-	"2 Jan 2006 15:04:05",
-	"2 Jan 2006",
-}
-
-func parseTime(value string) (time.Time, error) {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return time.Time{}, errDateEmpty
-	}
-
-	for _, layout := range dateLayouts {
-		if parsed, err := time.Parse(layout, value); err == nil {
-			return parsed.UTC(), nil
-		}
-	}
-
-	if parsed, ok := parseUnixTimestamp(value); ok {
-		return parsed, nil
-	}
-
-	return time.Time{}, fmt.Errorf("%w: %s", errUnsupportedDateFormat, value)
-}
-
-// parseUnixTimestamp attempts to parse a string as a Unix timestamp.
-// Supports exactly 10 digits (seconds) or 13 digits (milliseconds).
-func parseUnixTimestamp(value string) (time.Time, bool) {
-	if len(value) != unixTimestampSecondsLen && len(value) != unixTimestampMillisLen {
-		return time.Time{}, false
-	}
-
-	for _, c := range value {
-		if c < '0' || c > '9' {
-			return time.Time{}, false
-		}
-	}
-
-	var timestamp int64
-	for _, c := range value {
-		timestamp = timestamp*base10 + int64(c-'0')
-	}
-
-	if len(value) == unixTimestampSecondsLen {
-		return time.Unix(timestamp, 0).UTC(), true
-	}
-
-	return time.UnixMilli(timestamp).UTC(), true
-}
-
-func updateDateRange(dateRange *ports.DateRange, date time.Time) *ports.DateRange {
-	if dateRange == nil {
-		return &ports.DateRange{Start: date, End: date}
-	}
-
-	if date.Before(dateRange.Start) {
-		dateRange.Start = date
-	}
-
-	if date.After(dateRange.End) {
-		dateRange.End = date
-	}
-
-	return dateRange
-}
-
-// buildMappedFieldSet creates a set of raw field names that are already stored
-// in dedicated columns (external_id, amount, currency, date, description).
-// These fields should be excluded from the metadata JSONB to avoid data
-// duplication and inadvertent storage of sensitive values that are already
-// persisted elsewhere.
-func buildMappedFieldSet(mapping map[string]string) map[string]bool {
-	mapped := make(map[string]bool, len(mapping))
-	for _, rawFieldName := range mapping {
-		if rawFieldName != "" {
-			mapped[rawFieldName] = true
-		}
-	}
-
-	return mapped
-}
-
-// buildMetadata creates a metadata map from the raw row data, excluding fields
-// that are already persisted in dedicated transaction columns.
-// String values are sanitized against formula injection before storage.
-func buildMetadata(row map[string]any, mappedFields map[string]bool) map[string]any {
-	if row == nil {
-		return map[string]any{}
-	}
-
-	metadata := make(map[string]any, len(row))
-	for key, value := range row {
-		if mappedFields[key] {
-			continue
-		}
-
-		switch v := value.(type) {
-		case string:
-			metadata[key] = sanitizeFormulaInjection(strings.TrimSpace(v))
-		case json.Number:
-			metadata[key] = sanitizeFormulaInjection(strings.TrimSpace(v.String()))
-		default:
-			metadata[key] = value
-		}
-	}
-
-	return metadata
 }

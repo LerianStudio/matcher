@@ -8,6 +8,8 @@ import (
 	"io"
 	"strings"
 
+	"github.com/google/uuid"
+
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
 	"github.com/LerianStudio/matcher/internal/ingestion/ports"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
@@ -114,6 +116,11 @@ func (p *XMLParser) ParseStreaming(
 		return nil, err
 	}
 
+	tenantID, err := tenantIDFromContext(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("resolve tenant: %w", err)
+	}
+
 	if chunkSize <= 0 {
 		chunkSize = ports.DefaultChunkSize
 	}
@@ -141,7 +148,7 @@ func (p *XMLParser) ParseStreaming(
 			return nil, fmt.Errorf("failed to decode xml: %w", err)
 		}
 
-		if err := p.handleXMLToken(token, job, mapping, state, callback); err != nil {
+		if err := p.handleXMLToken(ctx, tenantID, token, job, mapping, state, callback); err != nil {
 			return nil, err
 		}
 	}
@@ -161,6 +168,8 @@ func (p *XMLParser) ParseStreaming(
 //
 //nolint:varnamelen // receiver name matches consistent pattern
 func (p *XMLParser) handleXMLToken(
+	ctx context.Context,
+	tenantID uuid.UUID,
 	token xml.Token,
 	job *entities.IngestionJob,
 	mapping map[string]string,
@@ -174,7 +183,7 @@ func (p *XMLParser) handleXMLToken(
 			state.current = make(map[string]any)
 		}
 	case xml.EndElement:
-		if err := p.handleEndElement(typed, job, mapping, state, callback); err != nil {
+		if err := p.handleEndElement(ctx, tenantID, typed, job, mapping, state, callback); err != nil {
 			return err
 		}
 	case xml.CharData:
@@ -186,6 +195,8 @@ func (p *XMLParser) handleXMLToken(
 
 // handleEndElement processes an XML end element token.
 func (p *XMLParser) handleEndElement(
+	ctx context.Context,
+	tenantID uuid.UUID,
 	elem xml.EndElement,
 	job *entities.IngestionJob,
 	mapping map[string]string,
@@ -200,7 +211,7 @@ func (p *XMLParser) handleEndElement(
 
 	state.rowNumber++
 
-	transaction, parseErr := normalizeTransaction(job, mapping, state.current, state.rowNumber)
+	transaction, parseErr := normalizeTransaction(ctx, tenantID, job, mapping, state.current, state.rowNumber)
 	if parseErr != nil {
 		state.chunkErrors = append(state.chunkErrors, *parseErr)
 	} else {
