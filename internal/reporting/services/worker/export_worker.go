@@ -22,12 +22,12 @@ import (
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
+	libS3 "github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/s3"
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/reporting/ports"
 	"github.com/LerianStudio/matcher/internal/reporting/services/query/exports"
-	tenantinfra "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant"
 	"github.com/LerianStudio/matcher/pkg/chanutil"
 )
 
@@ -1096,12 +1096,14 @@ func (worker *ExportWorker) calculateBackoff(attempt int) time.Duration {
 }
 
 func (worker *ExportWorker) generateFileKey(job *entities.ExportJob) (string, error) {
-	return tenantinfra.ScopedObjectStorageKey(
-		"exports",
-		job.TenantID.String(),
+	originalKey := fmt.Sprintf("exports/%s/%s-%s.%s",
 		job.ContextID.String(),
-		fmt.Sprintf("%s-%s.%s", job.ID.String(), job.ReportType, worker.getExtension(job.Format)),
+		job.ID.String(),
+		job.ReportType,
+		worker.getExtension(job.Format),
 	)
+
+	return libS3.GetObjectStorageKey(job.TenantID.String(), originalKey)
 }
 
 func (worker *ExportWorker) getExtension(format entities.ExportFormat) string {

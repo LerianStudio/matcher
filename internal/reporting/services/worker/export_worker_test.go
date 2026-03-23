@@ -841,7 +841,7 @@ func TestExportWorker_GenerateFileKey(t *testing.T) {
 	tests := []struct {
 		name     string
 		job      *entities.ExportJob
-		contains []string
+		expected string
 	}{
 		{
 			name: "CSV file key",
@@ -852,14 +852,7 @@ func TestExportWorker_GenerateFileKey(t *testing.T) {
 				ReportType: entities.ExportReportTypeMatched,
 				Format:     entities.ExportFormatCSV,
 			},
-			contains: []string{
-				"exports",
-				tenantID.String(),
-				contextID.String(),
-				jobID.String(),
-				"MATCHED",
-				".csv",
-			},
+			expected: "11111111-1111-1111-1111-111111111111/exports/22222222-2222-2222-2222-222222222222/33333333-3333-3333-3333-333333333333-MATCHED.csv",
 		},
 		{
 			name: "JSON file key",
@@ -870,14 +863,7 @@ func TestExportWorker_GenerateFileKey(t *testing.T) {
 				ReportType: entities.ExportReportTypeUnmatched,
 				Format:     entities.ExportFormatJSON,
 			},
-			contains: []string{
-				"exports",
-				tenantID.String(),
-				contextID.String(),
-				jobID.String(),
-				"UNMATCHED",
-				".json",
-			},
+			expected: "11111111-1111-1111-1111-111111111111/exports/22222222-2222-2222-2222-222222222222/33333333-3333-3333-3333-333333333333-UNMATCHED.json",
 		},
 		{
 			name: "XML file key",
@@ -888,14 +874,7 @@ func TestExportWorker_GenerateFileKey(t *testing.T) {
 				ReportType: entities.ExportReportTypeVariance,
 				Format:     entities.ExportFormatXML,
 			},
-			contains: []string{
-				"exports",
-				tenantID.String(),
-				contextID.String(),
-				jobID.String(),
-				"VARIANCE",
-				".xml",
-			},
+			expected: "11111111-1111-1111-1111-111111111111/exports/22222222-2222-2222-2222-222222222222/33333333-3333-3333-3333-333333333333-VARIANCE.xml",
 		},
 	}
 
@@ -905,9 +884,7 @@ func TestExportWorker_GenerateFileKey(t *testing.T) {
 
 			result, err := worker.generateFileKey(tt.job)
 			require.NoError(t, err)
-			for _, substr := range tt.contains {
-				assert.Contains(t, result, substr)
-			}
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
@@ -946,7 +923,7 @@ func TestExportWorker_GenerateFileKey_ExactFormat(t *testing.T) {
 
 	result, err := worker.generateFileKey(job)
 	require.NoError(t, err)
-	assert.Equal(t, "exports/550e8400-e29b-41d4-a716-446655440000/660e8400-e29b-41d4-a716-446655440000/aabbccdd-0011-2233-4455-667788990011-MATCHED.csv", result)
+	assert.Equal(t, "550e8400-e29b-41d4-a716-446655440000/exports/660e8400-e29b-41d4-a716-446655440000/aabbccdd-0011-2233-4455-667788990011-MATCHED.csv", result)
 }
 
 func TestExportWorker_NegativeConfigValues(t *testing.T) {

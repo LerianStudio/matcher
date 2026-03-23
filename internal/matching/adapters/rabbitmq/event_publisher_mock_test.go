@@ -369,7 +369,7 @@ func TestEventPublisher_PublishMatchConfirmed_PublishFailure(t *testing.T) {
 
 	err = pub.PublishMatchConfirmed(context.Background(), event)
 	require.Error(t, err)
-	require.ErrorContains(t, err, "failed to publish match event")
+	require.ErrorContains(t, err, "failed to publish event")
 }
 
 func TestEventPublisher_PublishMatchConfirmed_NilPublisher(t *testing.T) {

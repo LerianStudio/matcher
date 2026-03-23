@@ -479,7 +479,7 @@ func TestArchivalWorker_ArchiveKey(t *testing.T) {
 	key, err := w.archiveKey(metadata)
 	require.NoError(t, err)
 
-	expected := "archives/audit-logs/550e8400-e29b-41d4-a716-446655440000/2025/06/aabbccdd-0011-2233-4455-667788990000/audit_logs_2025_06.jsonl.gz"
+	expected := "550e8400-e29b-41d4-a716-446655440000/archives/audit-logs/2025/06/aabbccdd-0011-2233-4455-667788990000/audit_logs_2025_06.jsonl.gz"
 	assert.Equal(t, expected, key)
 }
 

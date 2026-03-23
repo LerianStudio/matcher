@@ -27,12 +27,12 @@ import (
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
+	libS3 "github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/s3"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
 	"github.com/LerianStudio/matcher/internal/governance/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/governance/services/command"
-	tenantinfra "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 	"github.com/LerianStudio/matcher/pkg/chanutil"
 	"github.com/LerianStudio/matcher/pkg/storageopt"
@@ -959,7 +959,7 @@ func (aw *ArchivalWorker) handlePartitionError(
 }
 
 // archiveKey generates the object storage key for an archive.
-// Format: {prefix}/{tenant_id}/{year}/{month}/{archive_id}/audit_logs_{YYYY_MM}.jsonl.gz
+// Format: {tenant_id}/{prefix}/{year}/{month}/{archive_id}/audit_logs_{YYYY_MM}.jsonl.gz
 //
 // The archive_id UUID segment prevents path enumeration attacks: even if a
 // presigned URL for one archive leaks, an attacker cannot guess paths for
@@ -967,14 +967,16 @@ func (aw *ArchivalWorker) handlePartitionError(
 func (aw *ArchivalWorker) archiveKey(metadata *entities.ArchiveMetadata) (string, error) {
 	year, month, _ := metadata.DateRangeStart.Date()
 
-	key, err := tenantinfra.ScopedObjectStorageKey(
+	originalKey := fmt.Sprintf("%s/%04d/%02d/%s/audit_logs_%04d_%02d.jsonl.gz",
 		aw.cfg.StoragePrefix,
-		metadata.TenantID.String(),
-		fmt.Sprintf("%04d", year),
-		fmt.Sprintf("%02d", month),
+		year,
+		month,
 		metadata.ID.String(),
-		fmt.Sprintf("audit_logs_%04d_%02d.jsonl.gz", year, month),
+		year,
+		month,
 	)
+
+	key, err := libS3.GetObjectStorageKey(metadata.TenantID.String(), originalKey)
 	if err != nil {
 		return "", fmt.Errorf("build scoped archive storage key: %w", err)
 	}
