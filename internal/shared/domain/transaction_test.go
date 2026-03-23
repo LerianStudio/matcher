@@ -3,6 +3,7 @@
 package shared_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -20,6 +21,8 @@ func TestTransactionLifecycle(t *testing.T) {
 	sourceID := uuid.New()
 
 	tx, err := shared.NewTransaction(
+		context.Background(),
+		uuid.New(),
 		jobID,
 		sourceID,
 		"ext-123",
@@ -63,6 +66,8 @@ func TestTransactionExtractionFailure(t *testing.T) {
 	sourceID := uuid.New()
 
 	tx, err := shared.NewTransaction(
+		context.Background(),
+		uuid.New(),
 		jobID,
 		sourceID,
 		"ext-124",
@@ -87,6 +92,8 @@ func TestTransactionFXConversionValidation(t *testing.T) {
 	sourceID := uuid.New()
 
 	tx, err := shared.NewTransaction(
+		context.Background(),
+		uuid.New(),
 		jobID,
 		sourceID,
 		"ext-125",
@@ -147,6 +154,8 @@ func TestTransactionImmutability(t *testing.T) {
 	sourceID := uuid.New()
 
 	tx, err := shared.NewTransaction(
+		context.Background(),
+		uuid.New(),
 		jobID,
 		sourceID,
 		"ext",
@@ -276,4 +285,131 @@ func TestTransactionStatusParsing(t *testing.T) {
 			require.Equal(t, tc.wantStatus, parsed)
 		})
 	}
+}
+
+func TestNewTransaction_NilTenantID_ReturnsError(t *testing.T) {
+	t.Parallel()
+
+	tx, err := shared.NewTransaction(
+		context.Background(),
+		uuid.Nil,
+		uuid.New(),
+		uuid.New(),
+		"ext-tenant-nil",
+		decimal.NewFromInt(100),
+		"USD",
+		time.Now().UTC(),
+		"test",
+		nil,
+	)
+	require.ErrorIs(t, err, shared.ErrTransactionTenantIDRequired)
+	require.Nil(t, tx)
+}
+
+func TestNewTransaction_NilContext_DoesNotPanic(t *testing.T) {
+	t.Parallel()
+
+	// A nil ctx should not cause a panic; the constructor should still
+	// succeed when all other arguments are valid.
+	//nolint:staticcheck // intentionally passing nil context for test
+	tx, err := shared.NewTransaction(
+		nil,
+		uuid.New(),
+		uuid.New(),
+		uuid.New(),
+		"ext-nil-ctx",
+		decimal.NewFromInt(100),
+		"USD",
+		time.Now().UTC(),
+		"test",
+		nil,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, tx)
+}
+
+func TestNewTransaction_MetadataDefensiveCopy(t *testing.T) {
+	t.Parallel()
+
+	nestedMap := map[string]any{"inner": "original_inner"}
+	nestedSlice := []any{"a", "b"}
+
+	original := map[string]any{
+		"key1":   "value1",
+		"key2":   "value2",
+		"nested": nestedMap,
+		"list":   nestedSlice,
+	}
+
+	tx, err := shared.NewTransaction(
+		context.Background(),
+		uuid.New(),
+		uuid.New(),
+		uuid.New(),
+		"ext-meta-copy",
+		decimal.NewFromInt(100),
+		"USD",
+		time.Now().UTC(),
+		"test",
+		original,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, tx)
+
+	// Verify initial values are correct.
+	require.Equal(t, "value1", tx.Metadata["key1"])
+	require.Equal(t, "value2", tx.Metadata["key2"])
+
+	txNested, ok := tx.Metadata["nested"].(map[string]any)
+	require.True(t, ok, "nested metadata value must be map[string]any")
+	require.Equal(t, "original_inner", txNested["inner"])
+
+	txList, ok := tx.Metadata["list"].([]any)
+	require.True(t, ok, "list metadata value must be []any")
+	require.Equal(t, []any{"a", "b"}, txList)
+
+	// Mutate the original top-level map after construction.
+	original["key1"] = "mutated"
+	original["key3"] = "new_key"
+
+	// The entity's metadata must remain unchanged.
+	require.Equal(t, "value1", tx.Metadata["key1"], "entity metadata must not be affected by external mutation")
+	_, hasKey3 := tx.Metadata["key3"]
+	require.False(t, hasKey3, "entity metadata must not gain keys added to original map after construction")
+
+	// Mutate the nested map — the transaction must be fully isolated.
+	nestedMap["inner"] = "mutated_inner"
+	nestedMap["injected"] = "attack"
+
+	require.Equal(t, "original_inner", txNested["inner"],
+		"nested map mutation must not propagate into transaction metadata")
+	_, hasInjected := txNested["injected"]
+	require.False(t, hasInjected,
+		"keys added to original nested map must not appear in transaction metadata")
+
+	// Mutate the nested slice — the transaction must be fully isolated.
+	nestedSlice[0] = "MUTATED"
+
+	require.Equal(t, "a", txList[0],
+		"nested slice mutation must not propagate into transaction metadata")
+}
+
+func TestNewTransaction_NilMetadata_RemainsNil(t *testing.T) {
+	t.Parallel()
+
+	tx, err := shared.NewTransaction(
+		context.Background(),
+		uuid.New(),
+		uuid.New(),
+		uuid.New(),
+		"ext-nil-meta",
+		decimal.NewFromInt(100),
+		"USD",
+		time.Now().UTC(),
+		"test",
+		nil,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, tx)
+	require.Nil(t, tx.Metadata, "nil metadata should remain nil, not become an empty map")
 }

@@ -100,6 +100,18 @@ func TestNewFeeSchedule(t *testing.T) {
 		}
 	})
 
+	t.Run("fails with nil tenant id", func(t *testing.T) {
+		t.Parallel()
+
+		input := validScheduleInput()
+		input.TenantID = uuid.Nil
+
+		_, err := NewFeeSchedule(ctx, input)
+		require.Error(t, err)
+		require.ErrorIs(t, err, ErrScheduleTenantIDRequired)
+		assert.Contains(t, err.Error(), "tenant")
+	})
+
 	t.Run("fails with empty name", func(t *testing.T) {
 		t.Parallel()
 
