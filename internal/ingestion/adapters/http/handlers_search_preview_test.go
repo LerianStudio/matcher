@@ -30,7 +30,6 @@ import (
 	"github.com/LerianStudio/matcher/internal/ingestion/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
 	"github.com/LerianStudio/matcher/internal/ingestion/ports"
-	outboxEntities "github.com/LerianStudio/matcher/internal/outbox/domain/entities"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
@@ -1062,7 +1061,7 @@ func TestHandleIngestionError_EOFError(t *testing.T) {
 		}).AnyTimes()
 	fixture.outbox.EXPECT().
 		CreateWithTx(gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(&outboxEntities.OutboxEvent{}, nil).AnyTimes()
+		Return(&shared.OutboxEvent{}, nil).AnyTimes()
 
 	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)
@@ -1113,7 +1112,7 @@ func TestHandleIngestionError_EmptyFileFromParser(t *testing.T) {
 		}).AnyTimes()
 	fixture.outbox.EXPECT().
 		CreateWithTx(gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(&outboxEntities.OutboxEvent{}, nil).AnyTimes()
+		Return(&shared.OutboxEvent{}, nil).AnyTimes()
 
 	handlers, err := NewHandlers(fixture.commandUC, fixture.queryUC, fixture.contextProvider, false)
 	require.NoError(t, err)

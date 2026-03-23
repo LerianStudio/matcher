@@ -7,6 +7,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/LerianStudio/lib-commons/v4/commons/pointers"
+
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	matchingVO "github.com/LerianStudio/matcher/internal/matching/domain/value_objects"
 )
@@ -36,8 +38,7 @@ func NewPostgreSQLModel(entity *matchingEntities.MatchGroup) (*PostgreSQLModel, 
 	var ruleID *string
 
 	if entity.RuleID != uuid.Nil {
-		s := entity.RuleID.String()
-		ruleID = &s
+		ruleID = pointers.String(entity.RuleID.String())
 	}
 
 	return &PostgreSQLModel{

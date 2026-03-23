@@ -57,6 +57,8 @@ func TestIngestionFlow_CompleteJobWithTransactions(t *testing.T) {
 
 		for _, txData := range transactions {
 			tx, err := shared.NewTransaction(
+				ctx,
+				h.Seed.TenantID,
 				createdJob.ID,
 				h.Seed.SourceID,
 				txData.externalID,
@@ -126,6 +128,8 @@ func TestIngestionFlow_JobWithPartialFailures(t *testing.T) {
 		require.NoError(t, err)
 
 		tx1, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"GOOD-001",
@@ -141,6 +145,8 @@ func TestIngestionFlow_JobWithPartialFailures(t *testing.T) {
 		require.NoError(t, err)
 
 		tx2, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"GOOD-002",
@@ -156,6 +162,8 @@ func TestIngestionFlow_JobWithPartialFailures(t *testing.T) {
 		require.NoError(t, err)
 
 		tx3, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"BAD-001",
@@ -239,6 +247,8 @@ func TestIngestionFlow_MultipleJobsSameContext(t *testing.T) {
 		require.NoError(t, err)
 
 		tx1, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob1.ID,
 			h.Seed.SourceID,
 			"B1-001",
@@ -254,6 +264,8 @@ func TestIngestionFlow_MultipleJobsSameContext(t *testing.T) {
 		require.NoError(t, err)
 
 		tx2, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob2.ID,
 			h.Seed.SourceID,
 			"B2-001",
@@ -306,6 +318,8 @@ func TestIngestionFlow_TransactionDateFiltering(t *testing.T) {
 		lastWeek := now.Add(-7 * 24 * time.Hour)
 
 		tx1, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"OLD-001",
@@ -321,6 +335,8 @@ func TestIngestionFlow_TransactionDateFiltering(t *testing.T) {
 		require.NoError(t, err)
 
 		tx2, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"RECENT-001",
@@ -336,6 +352,8 @@ func TestIngestionFlow_TransactionDateFiltering(t *testing.T) {
 		require.NoError(t, err)
 
 		tx3, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"TODAY-001",

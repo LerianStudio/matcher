@@ -15,15 +15,11 @@ import (
 
 	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
-	governanceEntities "github.com/LerianStudio/matcher/internal/governance/domain/entities"
-	governanceRepositories "github.com/LerianStudio/matcher/internal/governance/domain/repositories"
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	matchingRepositories "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/matching/ports"
 	"github.com/LerianStudio/matcher/internal/matching/services/command"
 	matchingQuery "github.com/LerianStudio/matcher/internal/matching/services/query"
-	outboxEntities "github.com/LerianStudio/matcher/internal/outbox/domain/entities"
-	outboxRepositories "github.com/LerianStudio/matcher/internal/outbox/domain/repositories"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	matchingFee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
@@ -471,23 +467,23 @@ type runMatchOutboxRepo struct{}
 
 func (r *runMatchOutboxRepo) Create(
 	_ context.Context,
-	event *outboxEntities.OutboxEvent,
-) (*outboxEntities.OutboxEvent, error) {
+	event *shared.OutboxEvent,
+) (*shared.OutboxEvent, error) {
 	return event, nil
 }
 
 func (r *runMatchOutboxRepo) CreateWithTx(
 	_ context.Context,
-	_ outboxRepositories.Tx,
-	event *outboxEntities.OutboxEvent,
-) (*outboxEntities.OutboxEvent, error) {
+	_ sharedPorts.Tx,
+	event *shared.OutboxEvent,
+) (*shared.OutboxEvent, error) {
 	return event, nil
 }
 
 func (r *runMatchOutboxRepo) ListPending(
 	_ context.Context,
 	_ int,
-) ([]*outboxEntities.OutboxEvent, error) {
+) ([]*shared.OutboxEvent, error) {
 	return nil, nil
 }
 
@@ -495,7 +491,7 @@ func (r *runMatchOutboxRepo) ListPendingByType(
 	_ context.Context,
 	_ string,
 	_ int,
-) ([]*outboxEntities.OutboxEvent, error) {
+) ([]*shared.OutboxEvent, error) {
 	return nil, nil
 }
 
@@ -506,7 +502,7 @@ func (r *runMatchOutboxRepo) ListTenants(_ context.Context) ([]string, error) {
 func (r *runMatchOutboxRepo) GetByID(
 	_ context.Context,
 	_ uuid.UUID,
-) (*outboxEntities.OutboxEvent, error) {
+) (*shared.OutboxEvent, error) {
 	return nil, nil
 }
 
@@ -523,7 +519,7 @@ func (r *runMatchOutboxRepo) ListFailedForRetry(
 	_ int,
 	_ time.Time,
 	_ int,
-) ([]*outboxEntities.OutboxEvent, error) {
+) ([]*shared.OutboxEvent, error) {
 	return nil, nil
 }
 
@@ -532,7 +528,7 @@ func (r *runMatchOutboxRepo) ResetForRetry(
 	_ int,
 	_ time.Time,
 	_ int,
-) ([]*outboxEntities.OutboxEvent, error) {
+) ([]*shared.OutboxEvent, error) {
 	return nil, nil
 }
 
@@ -541,7 +537,7 @@ func (r *runMatchOutboxRepo) ResetStuckProcessing(
 	_ int,
 	_ time.Time,
 	_ int,
-) ([]*outboxEntities.OutboxEvent, error) {
+) ([]*shared.OutboxEvent, error) {
 	return nil, nil
 }
 
@@ -647,23 +643,23 @@ type runMatchAuditLogRepo struct{}
 
 func (r *runMatchAuditLogRepo) Create(
 	_ context.Context,
-	auditLog *governanceEntities.AuditLog,
-) (*governanceEntities.AuditLog, error) {
+	auditLog *shared.AuditLog,
+) (*shared.AuditLog, error) {
 	return auditLog, nil
 }
 
 func (r *runMatchAuditLogRepo) CreateWithTx(
 	_ context.Context,
-	_ governanceRepositories.Tx,
-	auditLog *governanceEntities.AuditLog,
-) (*governanceEntities.AuditLog, error) {
+	_ sharedPorts.Tx,
+	auditLog *shared.AuditLog,
+) (*shared.AuditLog, error) {
 	return auditLog, nil
 }
 
 func (r *runMatchAuditLogRepo) GetByID(
 	_ context.Context,
 	_ uuid.UUID,
-) (*governanceEntities.AuditLog, error) {
+) (*shared.AuditLog, error) {
 	return nil, nil
 }
 
@@ -673,16 +669,16 @@ func (r *runMatchAuditLogRepo) ListByEntity(
 	_ uuid.UUID,
 	_ *libHTTP.TimestampCursor,
 	_ int,
-) ([]*governanceEntities.AuditLog, string, error) {
+) ([]*shared.AuditLog, string, error) {
 	return nil, "", nil
 }
 
 func (r *runMatchAuditLogRepo) List(
 	_ context.Context,
-	_ governanceEntities.AuditLogFilter,
+	_ shared.AuditLogFilter,
 	_ *libHTTP.TimestampCursor,
 	_ int,
-) ([]*governanceEntities.AuditLog, string, error) {
+) ([]*shared.AuditLog, string, error) {
 	return nil, "", nil
 }
 

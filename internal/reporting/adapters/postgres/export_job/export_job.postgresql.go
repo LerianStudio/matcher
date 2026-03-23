@@ -15,6 +15,7 @@ import (
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v4/commons/pointers"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
@@ -811,15 +812,15 @@ func scanExportJobs(rows *sql.Rows, err error) ([]*entities.ExportJob, error) {
 		job.Error = errMsg.String
 
 		if nextRetryAt.Valid {
-			job.NextRetryAt = &nextRetryAt.Time
+			job.NextRetryAt = pointers.Time(nextRetryAt.Time)
 		}
 
 		if startedAt.Valid {
-			job.StartedAt = &startedAt.Time
+			job.StartedAt = pointers.Time(startedAt.Time)
 		}
 
 		if finishedAt.Valid {
-			job.FinishedAt = &finishedAt.Time
+			job.FinishedAt = pointers.Time(finishedAt.Time)
 		}
 
 		jobs = append(jobs, &job)

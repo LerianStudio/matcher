@@ -3,6 +3,7 @@
 package integration
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -196,6 +197,8 @@ func TestCrossDomainFlow_EndToEndReconciliation(t *testing.T) {
 		var createdLedgerTxIDs []uuid.UUID
 		for _, txData := range ledgerTxs {
 			tx, err := shared.NewTransaction(
+				ctx,
+				h.Seed.TenantID,
 				createdLedgerJob.ID,
 				createdLedgerSource.ID,
 				txData.extID,
@@ -242,6 +245,8 @@ func TestCrossDomainFlow_EndToEndReconciliation(t *testing.T) {
 		var createdBankTxIDs []uuid.UUID
 		for _, txData := range bankTxs {
 			tx, err := shared.NewTransaction(
+				ctx,
+				h.Seed.TenantID,
 				createdBankJob.ID,
 				createdBankSource.ID,
 				txData.extID,
@@ -465,6 +470,45 @@ func buildExceptionInputFromTx(
 		FXMissing:       fxMissing,
 		Reason:          reason,
 	}
+}
+
+func TestCrossDomainFlow_FeeScheduleInvariant(t *testing.T) {
+	RunWithDatabase(t, func(t *testing.T, h *TestHarness) {
+		ctx := h.Ctx()
+
+		validInput := sharedfee.NewFeeScheduleInput{
+			TenantID:         h.Seed.TenantID,
+			Name:             "Integration Test Fee Schedule",
+			Currency:         "USD",
+			ApplicationOrder: sharedfee.ApplicationOrderParallel,
+			RoundingScale:    2,
+			RoundingMode:     sharedfee.RoundingModeHalfUp,
+			Items: []sharedfee.FeeScheduleItemInput{
+				{
+					Name:      "Flat Processing Fee",
+					Priority:  1,
+					Structure: sharedfee.FlatFee{Amount: decimal.NewFromFloat(1.50)},
+				},
+			},
+		}
+
+		schedule, err := sharedfee.NewFeeSchedule(ctx, validInput)
+		require.NoError(t, err)
+		require.NotNil(t, schedule)
+		require.Equal(t, h.Seed.TenantID, schedule.TenantID)
+		require.Equal(t, "USD", schedule.Currency)
+		require.Len(t, schedule.Items, 1)
+		t.Log("✓ FeeSchedule created successfully with valid tenant ID")
+
+		nilTenantInput := validInput
+		nilTenantInput.TenantID = uuid.Nil
+
+		_, err = sharedfee.NewFeeSchedule(ctx, nilTenantInput)
+		require.Error(t, err)
+		require.True(t, errors.Is(err, sharedfee.ErrScheduleTenantIDRequired),
+			"expected ErrScheduleTenantIDRequired, got: %v", err)
+		t.Log("✓ FeeSchedule correctly rejected uuid.Nil tenant ID")
+	})
 }
 
 func TestCrossDomainFlow_MultiTenantIsolation(t *testing.T) {

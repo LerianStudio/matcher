@@ -514,7 +514,7 @@ func TestExportJob_StatusTransitions(t *testing.T) {
 		assert.Equal(t, entities.ExportJobStatusQueued, job.Status)
 		assert.Nil(t, job.StartedAt)
 
-		job.MarkRunning()
+		require.NoError(t, job.MarkRunning())
 
 		assert.Equal(t, entities.ExportJobStatusRunning, job.Status)
 		assert.NotNil(t, job.StartedAt)
@@ -533,8 +533,8 @@ func TestExportJob_StatusTransitions(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		job.MarkRunning()
-		job.MarkSucceeded("file-key", "export.csv", "sha256hash", 100, 5000)
+		require.NoError(t, job.MarkRunning())
+		require.NoError(t, job.MarkSucceeded("file-key", "export.csv", "sha256hash", 100, 5000))
 
 		assert.Equal(t, entities.ExportJobStatusSucceeded, job.Status)
 		assert.Equal(t, "file-key", job.FileKey)
@@ -558,8 +558,8 @@ func TestExportJob_StatusTransitions(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		job.MarkRunning()
-		job.MarkFailed("something went wrong")
+		require.NoError(t, job.MarkRunning())
+		require.NoError(t, job.MarkFailed("something went wrong"))
 
 		assert.Equal(t, entities.ExportJobStatusFailed, job.Status)
 		assert.Equal(t, "something went wrong", job.Error)
@@ -579,9 +579,9 @@ func TestExportJob_StatusTransitions(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		job.MarkRunning()
-		job.MarkSucceeded("key", "file", "hash", 10, 100)
-		job.MarkExpired()
+		require.NoError(t, job.MarkRunning())
+		require.NoError(t, job.MarkSucceeded("key", "file", "hash", 10, 100))
+		require.NoError(t, job.MarkExpired())
 
 		assert.Equal(t, entities.ExportJobStatusExpired, job.Status)
 	})
@@ -599,8 +599,8 @@ func TestExportJob_StatusTransitions(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		job.MarkRunning()
-		job.MarkCanceled()
+		require.NoError(t, job.MarkRunning())
+		require.NoError(t, job.MarkCanceled())
 
 		assert.Equal(t, entities.ExportJobStatusCanceled, job.Status)
 		assert.NotNil(t, job.FinishedAt)

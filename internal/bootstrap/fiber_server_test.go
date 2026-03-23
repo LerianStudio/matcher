@@ -15,7 +15,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -28,6 +27,7 @@ import (
 	"go.opentelemetry.io/otel"
 
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	"github.com/LerianStudio/lib-commons/v4/commons/net/http/ratelimit"
 	libRabbitmq "github.com/LerianStudio/lib-commons/v4/commons/rabbitmq"
 
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
@@ -357,9 +357,13 @@ func TestNewFiberAppDefaults(t *testing.T) {
 func TestRateLimiterMiddleware(t *testing.T) {
 	t.Parallel()
 
-	const testRateLimitMax = 5
+	// With nil Redis the lib-commons rate limiter operates in fail-open mode:
+	// all requests pass through because Redis is unavailable. This test verifies
+	// the middleware is correctly wired (health bypasses the group, API routes go
+	// through the limiter handler) and that fail-open allows all requests.
+	// Actual rate-limiting behavior requires a live Redis (integration tests).
 
-	const testRateLimitExpirySec = 60
+	const requestCount = 10
 
 	cfg := &Config{
 		Server: ServerConfig{
@@ -369,62 +373,44 @@ func TestRateLimiterMiddleware(t *testing.T) {
 		},
 		RateLimit: RateLimitConfig{
 			Enabled:   true,
-			Max:       testRateLimitMax,
-			ExpirySec: testRateLimitExpirySec,
+			Max:       5,
+			ExpirySec: 60,
 		},
 	}
 	app := NewFiberApp(cfg, &libLog.NopLogger{}, nil, nil)
 
-	rateLimiter := NewRateLimiter(cfg, nil)
+	rl := NewLibRateLimiter(nil, &libLog.NopLogger{})
+	rlGetter := func() *ratelimit.RateLimiter { return rl }
+	rateLimiterHandler := NewGlobalRateLimit(rlGetter, cfg, nil)
 
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.SendStatus(http.StatusOK)
 	})
 
-	api := app.Group("/api", rateLimiter)
+	api := app.Group("/api", rateLimiterHandler)
 	api.Get("/test", func(c *fiber.Ctx) error {
 		return c.SendStatus(http.StatusOK)
 	})
 
-	for i := 0; i < testRateLimitMax+10; i++ {
+	// Health endpoint: always reachable (outside rate-limited group).
+	for i := 0; i < requestCount; i++ {
 		req := httptest.NewRequest(http.MethodGet, "/health", http.NoBody)
 		req.Header.Set("X-Forwarded-For", "10.0.0.1")
 		resp, err := app.Test(req)
 		require.NoError(t, err)
 		resp.Body.Close()
-		assert.Equal(
-			t,
-			http.StatusOK,
-			resp.StatusCode,
-			"health endpoint should not be rate limited on request %d",
-			i+1,
-		)
+		assert.Equal(t, http.StatusOK, resp.StatusCode,
+			"health endpoint should not be rate limited on request %d", i+1)
 	}
 
-	for i := 0; i < testRateLimitMax+5; i++ {
+	// API endpoint: with nil Redis, fail-open means all requests pass through.
+	for i := 0; i < requestCount; i++ {
 		req := httptest.NewRequest(http.MethodGet, "/api/test", http.NoBody)
 		req.Header.Set("X-Forwarded-For", "10.0.0.2")
 		resp, err := app.Test(req)
 		require.NoError(t, err)
-
-		if i >= testRateLimitMax {
-			assert.Equal(
-				t,
-				http.StatusTooManyRequests,
-				resp.StatusCode,
-				"api endpoint should be rate limited on request %d",
-				i+1,
-			)
-			assert.Equal(
-				t,
-				strconv.Itoa(testRateLimitExpirySec),
-				resp.Header.Get("Retry-After"),
-				"Retry-After header should be set",
-			)
-		} else {
-			assert.Equal(t, http.StatusOK, resp.StatusCode, "api endpoint should not be rate limited on request %d", i+1)
-		}
-
+		assert.Equal(t, http.StatusOK, resp.StatusCode,
+			"api endpoint should pass through in fail-open mode on request %d", i+1)
 		resp.Body.Close()
 	}
 }
@@ -722,11 +708,11 @@ func TestResolveRabbitMQCheck(t *testing.T) {
 	})
 }
 
-func TestHealthHandler(t *testing.T) {
+func TestLivenessHandler(t *testing.T) {
 	t.Parallel()
 
 	app := fiber.New()
-	app.Get("/health", healthHandler)
+	app.Get("/health", livenessHandler)
 
 	req := httptest.NewRequest(http.MethodGet, "/health", http.NoBody)
 	resp, err := app.Test(req)
@@ -739,6 +725,29 @@ func TestHealthHandler(t *testing.T) {
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	assert.Equal(t, "healthy", string(body))
+}
+
+func TestVersionHandler(t *testing.T) {
+	t.Parallel()
+
+	app := fiber.New()
+	app.Get("/version", versionHandler)
+
+	req := httptest.NewRequest(http.MethodGet, "/version", http.NoBody)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Contains(t, resp.Header.Get("Content-Type"), "application/json")
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	var result map[string]interface{}
+	require.NoError(t, json.Unmarshal(body, &result))
+	assert.Contains(t, result, "version")
+	assert.Contains(t, result, "requestDate")
 }
 
 func TestExportRateLimiter(t *testing.T) {
@@ -755,7 +764,7 @@ func TestExportRateLimiter(t *testing.T) {
 			},
 		}
 
-		handler := NewExportRateLimiter(cfg, nil)
+		handler := NewExportRateLimit(nil, cfg, nil)
 
 		require.NotNil(t, handler)
 
@@ -773,8 +782,13 @@ func TestExportRateLimiter(t *testing.T) {
 		}
 	})
 
-	t.Run("applies rate limiting when enabled", func(t *testing.T) {
+	t.Run("wires handler when enabled with nil redis (fail-open)", func(t *testing.T) {
 		t.Parallel()
+
+		// With nil Redis the lib-commons rate limiter operates in fail-open mode:
+		// all requests pass through. This test verifies the export rate limit handler
+		// is correctly wired and returns a valid handler that passes requests through.
+		// Actual limiting behavior requires a live Redis (integration tests).
 
 		cfg := &Config{
 			RateLimit: RateLimitConfig{
@@ -784,7 +798,9 @@ func TestExportRateLimiter(t *testing.T) {
 			},
 		}
 
-		handler := NewExportRateLimiter(cfg, nil)
+		rl := NewLibRateLimiter(nil, &libLog.NopLogger{})
+		rlGetter := func() *ratelimit.RateLimiter { return rl }
+		handler := NewExportRateLimit(rlGetter, cfg, nil)
 
 		require.NotNil(t, handler)
 
@@ -793,18 +809,14 @@ func TestExportRateLimiter(t *testing.T) {
 			return c.SendStatus(http.StatusOK)
 		})
 
+		// All requests pass through in fail-open mode (nil Redis).
 		for i := 0; i < 5; i++ {
 			req := httptest.NewRequest(http.MethodGet, "/export", http.NoBody)
 			req.Header.Set("X-Forwarded-For", "192.168.1.1")
 			resp, err := app.Test(req)
 			require.NoError(t, err)
-
-			if i >= 3 {
-				assert.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
-				assert.NotEmpty(t, resp.Header.Get("Retry-After"))
-			} else {
-				assert.Equal(t, http.StatusOK, resp.StatusCode)
-			}
+			assert.Equal(t, http.StatusOK, resp.StatusCode,
+				"export endpoint should pass through in fail-open mode on request %d", i+1)
 			resp.Body.Close()
 		}
 	})
@@ -1279,7 +1291,7 @@ func TestNewRateLimiterReturnsHandler(t *testing.T) {
 			},
 		}
 
-		handler := NewRateLimiter(cfg, nil)
+		handler := NewGlobalRateLimit(nil, cfg, nil)
 
 		require.NotNil(t, handler)
 	})
@@ -1295,7 +1307,9 @@ func TestNewRateLimiterReturnsHandler(t *testing.T) {
 			},
 		}
 
-		handler := NewRateLimiter(cfg, nil)
+		rl := NewLibRateLimiter(nil, &libLog.NopLogger{})
+		rlGetter := func() *ratelimit.RateLimiter { return rl }
+		handler := NewGlobalRateLimit(rlGetter, cfg, nil)
 
 		require.NotNil(t, handler)
 	})

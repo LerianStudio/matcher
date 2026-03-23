@@ -62,6 +62,8 @@ func TestMatchItemRepository_CreateBatch(t *testing.T) {
 		require.NoError(t, err)
 
 		txA, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"ITEM-TX-A",
@@ -77,6 +79,8 @@ func TestMatchItemRepository_CreateBatch(t *testing.T) {
 		require.NoError(t, err)
 
 		txB, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"ITEM-TX-B",
@@ -195,6 +199,8 @@ func TestMatchItemRepository_CreateBatch_PartialAllocation(t *testing.T) {
 		require.NoError(t, err)
 
 		txA, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"PARTIAL-TX-A",
@@ -210,6 +216,8 @@ func TestMatchItemRepository_CreateBatch_PartialAllocation(t *testing.T) {
 		require.NoError(t, err)
 
 		txB, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			"PARTIAL-TX-B",
@@ -322,6 +330,8 @@ func TestMatchItemRepository_CreateBatch_LargeSet(t *testing.T) {
 
 		for i := 0; i < itemCount; i++ {
 			tx, err := shared.NewTransaction(
+				ctx,
+				h.Seed.TenantID,
 				createdJob.ID,
 				h.Seed.SourceID,
 				"LARGE-TX-"+string(rune('A'+i%26))+string(rune('0'+i/26)),

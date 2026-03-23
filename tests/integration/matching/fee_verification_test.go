@@ -86,6 +86,8 @@ func setupFeeVariancePrereqs(
 	require.NoError(t, err)
 
 	tx, err := shared.NewTransaction(
+		ctx,
+		h.Seed.TenantID,
 		createdJob.ID,
 		h.Seed.SourceID,
 		"FEE-VAR-TX-"+uuid.NewString()[:8],
@@ -132,6 +134,8 @@ func setupFeeVariancePrereqs(
 
 	// second item uses a synthetic transaction ID – we insert a second tx for FK integrity.
 	tx2, err := shared.NewTransaction(
+		ctx,
+		h.Seed.TenantID,
 		createdJob.ID,
 		h.Seed.SourceID,
 		"FEE-VAR-TX2-"+uuid.NewString()[:8],
@@ -385,6 +389,8 @@ func TestFeeVariance_MultipleFeeVariancesPerRun(t *testing.T) {
 		require.NoError(t, err)
 
 		extraTx1, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID, h.Seed.SourceID,
 			"FEE-MULTI-A-"+uuid.NewString()[:8],
 			decimal.NewFromFloat(200.00), "USD", time.Now().UTC(),
@@ -396,6 +402,8 @@ func TestFeeVariance_MultipleFeeVariancesPerRun(t *testing.T) {
 		require.NoError(t, err)
 
 		extraTx2, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID, h.Seed.SourceID,
 			"FEE-MULTI-B-"+uuid.NewString()[:8],
 			decimal.NewFromFloat(200.00), "USD", time.Now().UTC(),

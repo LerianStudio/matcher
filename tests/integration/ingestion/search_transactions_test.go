@@ -59,6 +59,8 @@ func seedSearchTransactions(t *testing.T, h *integration.TestHarness) {
 		require.NoError(t, err)
 
 		tx, err := shared.NewTransaction(
+			ctx,
+			h.Seed.TenantID,
 			createdJob.ID,
 			h.Seed.SourceID,
 			td.externalID,

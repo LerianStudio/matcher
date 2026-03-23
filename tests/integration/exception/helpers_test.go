@@ -346,7 +346,12 @@ func createTransaction(
 ) *shared.Transaction {
 	t.Helper()
 
+	tenantID, err := uuid.Parse(auth.GetTenantID(ctx))
+	require.NoError(t, err, "createTransaction: context must carry a valid tenant ID")
+
 	tx, err := shared.NewTransaction(
+		ctx,
+		tenantID,
 		jobID,
 		sourceID,
 		externalID,

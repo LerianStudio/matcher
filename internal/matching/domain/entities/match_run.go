@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/LerianStudio/lib-commons/v4/commons/assert"
+	"github.com/LerianStudio/lib-commons/v4/commons/pointers"
 
 	"github.com/LerianStudio/matcher/internal/matching/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
@@ -90,7 +91,7 @@ func (run *MatchRun) Complete(ctx context.Context, stats map[string]int) error {
 
 	run.Stats = statsCopy
 	now := time.Now().UTC()
-	run.CompletedAt = &now
+	run.CompletedAt = pointers.Time(now)
 	run.UpdatedAt = now
 
 	return nil
@@ -113,9 +114,9 @@ func (run *MatchRun) Fail(ctx context.Context, reason string) error {
 	}
 
 	run.Status = value_objects.MatchRunStatusFailed
-	run.FailureReason = &reason
+	run.FailureReason = pointers.String(reason)
 	now := time.Now().UTC()
-	run.CompletedAt = &now
+	run.CompletedAt = pointers.Time(now)
 	run.UpdatedAt = now
 
 	return nil

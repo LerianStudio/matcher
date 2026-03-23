@@ -15,9 +15,16 @@ import (
 	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v4/commons/security"
 
 	valueObjects "github.com/LerianStudio/matcher/internal/ingestion/domain/value_objects"
+	"github.com/LerianStudio/matcher/internal/shared/sanitize"
 )
+
+// TODO(telemetry): ingestion/adapters/http/handlers.go — logSpanError uses HandleSpanError for
+// business outcomes (badRequest, notFound, writeNotFound). Add logSpanBusinessEvent using
+// HandleSpanBusinessErrorEvent and create business-aware variants for 400/404 responses.
+// See reporting/adapters/http/handlers_export_job.go for the reference implementation.
 
 const (
 	defaultPreviewMaxRows = 5
@@ -105,6 +112,7 @@ func (uc *UseCase) PreviewFile(
 	}
 
 	result.Format = format
+	redactSensitivePreviewColumns(result)
 
 	return result, nil
 }
@@ -157,7 +165,7 @@ func previewCSV(ctx context.Context, reader io.Reader, maxRows int) (*FilePrevie
 		row := make([]string, len(headers))
 		for i := range headers {
 			if i < len(record) {
-				row[i] = strings.TrimSpace(record[i])
+				row[i] = sanitize.SanitizeFormulaInjection(strings.TrimSpace(record[i]))
 			}
 		}
 
@@ -239,13 +247,13 @@ func previewJSONArray(ctx context.Context, decoder *json.Decoder, maxRows int) (
 
 	sort.Strings(allColumns)
 
-	// Build rows with deterministic column order.
+	// Build rows with deterministic column order, sanitizing against formula injection.
 	rows := make([][]string, 0, len(objects))
 
 	for _, obj := range objects {
 		row := make([]string, len(allColumns))
 		for i, col := range allColumns {
-			row[i] = formatJSONValue(obj[col])
+			row[i] = sanitize.SanitizeFormulaInjection(formatJSONValue(obj[col]))
 		}
 
 		rows = append(rows, row)
@@ -300,7 +308,7 @@ func previewJSONObject(ctx context.Context, decoder *json.Decoder) (*FilePreview
 
 	row := make([]string, 0, len(obj))
 	for _, key := range columns {
-		row = append(row, formatJSONValue(obj[key]))
+		row = append(row, sanitize.SanitizeFormulaInjection(formatJSONValue(obj[key])))
 	}
 
 	if len(columns) == 0 {
@@ -401,7 +409,7 @@ parseLoop:
 			if current != nil && currentElement != "" {
 				value := strings.TrimSpace(string(typed))
 				if value != "" {
-					current[currentElement] = value
+					current[currentElement] = sanitize.SanitizeFormulaInjection(value)
 				}
 			}
 		}
@@ -424,4 +432,38 @@ parseLoop:
 		RowCount:    len(rows),
 		ParseErrors: 0,
 	}, nil
+}
+
+// sensitivePreviewRedaction is the placeholder value shown for sensitive
+// column values in file preview responses.
+const sensitivePreviewRedaction = "***REDACTED***"
+
+// redactSensitivePreviewColumns replaces sample row values with a redaction
+// placeholder for every column whose name is classified as sensitive by
+// security.IsSensitiveField. Column names are kept intact so the user can
+// still see which fields exist, but their values are never exposed.
+func redactSensitivePreviewColumns(result *FilePreviewResult) {
+	if result == nil || len(result.Columns) == 0 {
+		return
+	}
+
+	// Build a set of column indices that need redaction.
+	sensitiveIdx := make([]int, 0, len(result.Columns))
+	for i, col := range result.Columns {
+		if security.IsSensitiveField(col) {
+			sensitiveIdx = append(sensitiveIdx, i)
+		}
+	}
+
+	if len(sensitiveIdx) == 0 {
+		return
+	}
+
+	for _, row := range result.SampleRows {
+		for _, idx := range sensitiveIdx {
+			if idx < len(row) {
+				row[idx] = sensitivePreviewRedaction
+			}
+		}
+	}
 }

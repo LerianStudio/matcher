@@ -187,7 +187,7 @@ func TestExportJob_MarkRunning(t *testing.T) {
 
 	fixed := sharedtestutil.FixedTime()
 	job := createTestExportJobWithClock(t, mockClock(fixed))
-	job.MarkRunning()
+	require.NoError(t, job.MarkRunning())
 
 	assert.Equal(t, ExportJobStatusRunning, job.Status)
 	require.NotNil(t, job.StartedAt)
@@ -204,15 +204,16 @@ func TestExportJob_MarkRunning_IncrementsAttempts(t *testing.T) {
 
 	assert.Equal(t, 0, job.Attempts)
 
-	job.MarkRunning()
+	require.NoError(t, job.MarkRunning())
 	assert.Equal(t, 1, job.Attempts)
 
-	job.Status = ExportJobStatusQueued
-	job.MarkRunning()
+	// Simulate retry: running -> queued -> running
+	require.NoError(t, job.MarkForRetry("retry", fixed.Add(time.Minute)))
+	require.NoError(t, job.MarkRunning())
 	assert.Equal(t, 2, job.Attempts)
 
-	job.Status = ExportJobStatusQueued
-	job.MarkRunning()
+	require.NoError(t, job.MarkForRetry("retry", fixed.Add(2*time.Minute)))
+	require.NoError(t, job.MarkRunning())
 	assert.Equal(t, 3, job.Attempts)
 }
 
@@ -223,7 +224,7 @@ func TestExportJob_MarkSucceeded(t *testing.T) {
 	finishedAt := startedAt.Add(2 * time.Minute)
 
 	job := createTestExportJobWithClock(t, mockClock(startedAt))
-	job.MarkRunning()
+	require.NoError(t, job.MarkRunning())
 
 	fileKey := "exports/test-file.csv"
 	fileName := "test-file.csv"
@@ -233,7 +234,7 @@ func TestExportJob_MarkSucceeded(t *testing.T) {
 
 	// Advance the clock for the finish time
 	job.SetClock(mockClock(finishedAt))
-	job.MarkSucceeded(fileKey, fileName, sha256, recordsWritten, bytesWritten)
+	require.NoError(t, job.MarkSucceeded(fileKey, fileName, sha256, recordsWritten, bytesWritten))
 
 	assert.Equal(t, ExportJobStatusSucceeded, job.Status)
 	assert.Equal(t, fileKey, job.FileKey)
@@ -253,13 +254,13 @@ func TestExportJob_MarkFailed(t *testing.T) {
 	failedAt := startedAt.Add(time.Minute)
 
 	job := createTestExportJobWithClock(t, mockClock(startedAt))
-	job.MarkRunning()
+	require.NoError(t, job.MarkRunning())
 
 	errMsg := "connection timeout"
 
 	// Advance the clock for the failure time
 	job.SetClock(mockClock(failedAt))
-	job.MarkFailed(errMsg)
+	require.NoError(t, job.MarkFailed(errMsg))
 
 	assert.Equal(t, ExportJobStatusFailed, job.Status)
 	assert.Equal(t, errMsg, job.Error)
@@ -276,15 +277,15 @@ func TestExportJob_MarkExpired(t *testing.T) {
 	expiredAt := startedAt.Add(2 * time.Minute)
 
 	job := createTestExportJobWithClock(t, mockClock(startedAt))
-	job.MarkRunning()
+	require.NoError(t, job.MarkRunning())
 
 	// Advance clock for succeeded
 	job.SetClock(mockClock(succeededAt))
-	job.MarkSucceeded("key", "file", "hash", 10, 100)
+	require.NoError(t, job.MarkSucceeded("key", "file", "hash", 10, 100))
 
 	// Advance clock for expired
 	job.SetClock(mockClock(expiredAt))
-	job.MarkExpired()
+	require.NoError(t, job.MarkExpired())
 
 	assert.Equal(t, ExportJobStatusExpired, job.Status)
 	assert.Equal(t, expiredAt, job.UpdatedAt)
@@ -297,11 +298,11 @@ func TestExportJob_MarkCanceled(t *testing.T) {
 	canceledAt := startedAt.Add(time.Minute)
 
 	job := createTestExportJobWithClock(t, mockClock(startedAt))
-	job.MarkRunning()
+	require.NoError(t, job.MarkRunning())
 
 	// Advance clock for canceled
 	job.SetClock(mockClock(canceledAt))
-	job.MarkCanceled()
+	require.NoError(t, job.MarkCanceled())
 
 	assert.Equal(t, ExportJobStatusCanceled, job.Status)
 	require.NotNil(t, job.FinishedAt)
@@ -317,13 +318,13 @@ func TestExportJob_MarkForRetry(t *testing.T) {
 	nextRetryAt := startedAt.Add(5 * time.Minute)
 
 	job := createTestExportJobWithClock(t, mockClock(startedAt))
-	job.MarkRunning()
+	require.NoError(t, job.MarkRunning())
 
 	job.SetClock(mockClock(retryScheduledAt))
 
 	errMsg := "temporary failure"
 
-	job.MarkForRetry(errMsg, nextRetryAt)
+	require.NoError(t, job.MarkForRetry(errMsg, nextRetryAt))
 
 	assert.Equal(t, ExportJobStatusQueued, job.Status)
 	assert.Equal(t, errMsg, job.Error)
@@ -340,7 +341,7 @@ func TestExportJob_UpdateProgress(t *testing.T) {
 	progressAt := startedAt.Add(time.Minute)
 
 	job := createTestExportJobWithClock(t, mockClock(startedAt))
-	job.MarkRunning()
+	require.NoError(t, job.MarkRunning())
 
 	// Advance clock for progress update
 	job.SetClock(mockClock(progressAt))
@@ -761,11 +762,11 @@ func TestExportJob_StateTransitions(t *testing.T) {
 		assert.Equal(t, ExportJobStatusQueued, job.Status)
 		assert.False(t, job.IsTerminal())
 
-		job.MarkRunning()
+		require.NoError(t, job.MarkRunning())
 		assert.Equal(t, ExportJobStatusRunning, job.Status)
 		assert.False(t, job.IsTerminal())
 
-		job.MarkSucceeded("key", "file", "hash", 100, 5000)
+		require.NoError(t, job.MarkSucceeded("key", "file", "hash", 100, 5000))
 		assert.Equal(t, ExportJobStatusSucceeded, job.Status)
 		assert.True(t, job.IsTerminal())
 		assert.True(t, job.IsDownloadable())
@@ -776,8 +777,8 @@ func TestExportJob_StateTransitions(t *testing.T) {
 
 		job := createTestExportJob(t)
 
-		job.MarkRunning()
-		job.MarkFailed("error occurred")
+		require.NoError(t, job.MarkRunning())
+		require.NoError(t, job.MarkFailed("error occurred"))
 
 		assert.Equal(t, ExportJobStatusFailed, job.Status)
 		assert.True(t, job.IsTerminal())
@@ -789,7 +790,7 @@ func TestExportJob_StateTransitions(t *testing.T) {
 
 		job := createTestExportJob(t)
 
-		job.MarkCanceled()
+		require.NoError(t, job.MarkCanceled())
 
 		assert.Equal(t, ExportJobStatusCanceled, job.Status)
 		assert.True(t, job.IsTerminal())
@@ -799,14 +800,127 @@ func TestExportJob_StateTransitions(t *testing.T) {
 		t.Parallel()
 
 		job := createTestExportJob(t)
-		job.MarkRunning()
-		job.MarkSucceeded("key", "file", "hash", 100, 5000)
+		require.NoError(t, job.MarkRunning())
+		require.NoError(t, job.MarkSucceeded("key", "file", "hash", 100, 5000))
 
-		job.MarkExpired()
+		require.NoError(t, job.MarkExpired())
 
 		assert.Equal(t, ExportJobStatusExpired, job.Status)
 		assert.True(t, job.IsTerminal())
 		assert.False(t, job.IsDownloadable())
+	})
+
+	t.Run("running -> retry (queued) -> running again", func(t *testing.T) {
+		t.Parallel()
+
+		job := createTestExportJob(t)
+		require.NoError(t, job.MarkRunning())
+		require.NoError(t, job.MarkForRetry("temp error", time.Now().UTC().Add(time.Minute)))
+		assert.Equal(t, ExportJobStatusQueued, job.Status)
+
+		require.NoError(t, job.MarkRunning())
+		assert.Equal(t, ExportJobStatusRunning, job.Status)
+	})
+
+	t.Run("failed -> retry (queued) -> running", func(t *testing.T) {
+		t.Parallel()
+
+		job := createTestExportJob(t)
+		require.NoError(t, job.MarkRunning())
+		require.NoError(t, job.MarkFailed("first attempt"))
+
+		// Failed jobs can be retried (queued again)
+		require.NoError(t, job.MarkForRetry("retry", time.Now().UTC().Add(time.Minute)))
+		assert.Equal(t, ExportJobStatusQueued, job.Status)
+
+		require.NoError(t, job.MarkRunning())
+		assert.Equal(t, ExportJobStatusRunning, job.Status)
+	})
+}
+
+func TestExportJob_InvalidStateTransitions(t *testing.T) {
+	t.Parallel()
+
+	t.Run("queued -> succeeded is invalid", func(t *testing.T) {
+		t.Parallel()
+
+		job := createTestExportJob(t)
+		err := job.MarkSucceeded("key", "file", "hash", 100, 5000)
+
+		require.Error(t, err)
+		require.ErrorIs(t, err, ErrInvalidExportJobTransition)
+		assert.Equal(t, ExportJobStatusQueued, job.Status) // unchanged
+	})
+
+	t.Run("canceled -> retry is invalid", func(t *testing.T) {
+		t.Parallel()
+
+		job := createTestExportJob(t)
+		require.NoError(t, job.MarkCanceled())
+
+		err := job.MarkForRetry("retry", time.Now().UTC().Add(time.Minute))
+		require.Error(t, err)
+		require.ErrorIs(t, err, ErrInvalidExportJobTransition)
+	})
+
+	t.Run("succeeded -> running is invalid", func(t *testing.T) {
+		t.Parallel()
+
+		job := createTestExportJob(t)
+		require.NoError(t, job.MarkRunning())
+		require.NoError(t, job.MarkSucceeded("key", "file", "hash", 100, 5000))
+
+		err := job.MarkRunning()
+		require.Error(t, err)
+		require.ErrorIs(t, err, ErrInvalidExportJobTransition)
+	})
+
+	t.Run("canceled -> running is invalid", func(t *testing.T) {
+		t.Parallel()
+
+		job := createTestExportJob(t)
+		require.NoError(t, job.MarkCanceled())
+
+		err := job.MarkRunning()
+		require.Error(t, err)
+		require.ErrorIs(t, err, ErrInvalidExportJobTransition)
+	})
+
+	t.Run("expired -> running is invalid", func(t *testing.T) {
+		t.Parallel()
+
+		job := createTestExportJob(t)
+		require.NoError(t, job.MarkRunning())
+		require.NoError(t, job.MarkSucceeded("key", "file", "hash", 100, 5000))
+		require.NoError(t, job.MarkExpired())
+
+		err := job.MarkRunning()
+		require.Error(t, err)
+		require.ErrorIs(t, err, ErrInvalidExportJobTransition)
+	})
+
+	t.Run("failed -> failed is invalid", func(t *testing.T) {
+		t.Parallel()
+
+		job := createTestExportJob(t)
+		require.NoError(t, job.MarkRunning())
+		require.NoError(t, job.MarkFailed("first error"))
+
+		err := job.MarkFailed("second error")
+		require.Error(t, err)
+		require.ErrorIs(t, err, ErrInvalidExportJobTransition)
+		assert.Equal(t, "first error", job.Error) // unchanged
+	})
+
+	t.Run("error message includes transition details", func(t *testing.T) {
+		t.Parallel()
+
+		job := createTestExportJob(t)
+		err := job.MarkSucceeded("key", "file", "hash", 100, 5000)
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "QUEUED")
+		assert.Contains(t, err.Error(), "SUCCEEDED")
 	})
 }
 
@@ -817,12 +931,13 @@ func TestExportJob_NilReceiverGuards(t *testing.T) {
 
 	nextRetry := time.Now().UTC().Add(time.Minute)
 
-	require.NotPanics(t, func() { job.MarkRunning() })
-	require.NotPanics(t, func() { job.MarkSucceeded("k", "f", "s", 1, 1) })
-	require.NotPanics(t, func() { job.MarkFailed("err") })
-	require.NotPanics(t, func() { job.MarkForRetry("err", nextRetry) })
-	require.NotPanics(t, func() { job.MarkExpired() })
-	require.NotPanics(t, func() { job.MarkCanceled() })
+	// Nil receiver should return nil error (no panic, no error)
+	require.NoError(t, job.MarkRunning())
+	require.NoError(t, job.MarkSucceeded("k", "f", "s", 1, 1))
+	require.NoError(t, job.MarkFailed("err"))
+	require.NoError(t, job.MarkForRetry("err", nextRetry))
+	require.NoError(t, job.MarkExpired())
+	require.NoError(t, job.MarkCanceled())
 	require.NotPanics(t, func() { job.UpdateProgress(1, 1) })
 	require.NotPanics(t, func() { job.SetClock(DefaultClock) })
 

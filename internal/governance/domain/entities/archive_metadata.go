@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/LerianStudio/lib-commons/v4/commons/assert"
+	"github.com/LerianStudio/lib-commons/v4/commons/pointers"
 
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
@@ -269,7 +270,7 @@ func (am *ArchiveMetadata) MarkComplete() error {
 
 	now := time.Now().UTC()
 	am.Status = StatusComplete
-	am.ArchivedAt = &now
+	am.ArchivedAt = pointers.Time(now)
 	am.UpdatedAt = now
 
 	return nil

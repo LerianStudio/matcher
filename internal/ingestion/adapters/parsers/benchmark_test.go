@@ -403,8 +403,11 @@ func BenchmarkNormalizeTransaction_SingleRow(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
+	ctx := context.Background()
+	tenantID := uuid.New()
+
 	for i := 0; i < b.N; i++ {
-		_, err := normalizeTransaction(job, mapping, row, 1)
+		_, err := normalizeTransaction(ctx, tenantID, job, mapping, row, 1)
 		if err != nil {
 			b.Fatalf("normalize failed: %v", err.Message)
 		}

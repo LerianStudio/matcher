@@ -4,6 +4,7 @@ package factories
 
 import (
 	"context"
+	"sync"
 
 	"github.com/LerianStudio/matcher/tests/e2e"
 	"github.com/LerianStudio/matcher/tests/e2e/client"
@@ -13,6 +14,7 @@ import (
 type SourceFactory struct {
 	tc                 *e2e.TestContext
 	client             *e2e.Client
+	mu                 sync.Mutex
 	sideCountByContext map[string]int
 }
 
@@ -138,6 +140,9 @@ func (b *SourceBuilder) resolveSide() {
 		return
 	}
 	b.sideResolved = true
+
+	b.factory.mu.Lock()
+	defer b.factory.mu.Unlock()
 
 	if b.req.Side == "" {
 		if b.factory.sideCountByContext[b.contextID] == 0 {

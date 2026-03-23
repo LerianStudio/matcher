@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/LerianStudio/lib-commons/v4/commons/assert"
+	"github.com/LerianStudio/lib-commons/v4/commons/pointers"
 
 	"github.com/LerianStudio/matcher/internal/matching/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
@@ -120,7 +121,7 @@ func (group *MatchGroup) Confirm(ctx context.Context) error {
 
 	now := time.Now().UTC()
 	group.Status = value_objects.MatchGroupStatusConfirmed
-	group.ConfirmedAt = &now
+	group.ConfirmedAt = pointers.Time(now)
 	group.UpdatedAt = now
 
 	return nil
@@ -154,7 +155,7 @@ func (group *MatchGroup) Reject(ctx context.Context, reason string) error {
 	}
 
 	group.Status = value_objects.MatchGroupStatusRejected
-	group.RejectedReason = &reason
+	group.RejectedReason = pointers.String(reason)
 	group.UpdatedAt = time.Now().UTC()
 
 	return nil
@@ -183,7 +184,7 @@ func (group *MatchGroup) Revoke(ctx context.Context, reason string) error {
 	}
 
 	group.Status = value_objects.MatchGroupStatusRevoked
-	group.RejectedReason = &reason
+	group.RejectedReason = pointers.String(reason)
 	group.UpdatedAt = time.Now().UTC()
 
 	return nil

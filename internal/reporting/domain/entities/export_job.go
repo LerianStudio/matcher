@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/LerianStudio/lib-commons/v4/commons/assert"
+	"github.com/LerianStudio/lib-commons/v4/commons/pointers"
 
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
@@ -119,6 +120,34 @@ const DefaultExportExpiry = 7 * 24 * time.Hour
 
 // DefaultPresignExpiry defines the default expiration time for presigned download URLs.
 const DefaultPresignExpiry = 1 * time.Hour
+
+// validExportJobTransitions defines the allowed state transitions for export jobs.
+var validExportJobTransitions = map[ExportJobStatus]map[ExportJobStatus]bool{
+	ExportJobStatusQueued: {
+		ExportJobStatusRunning:  true,
+		ExportJobStatusFailed:   true, // last-resort failure when requeue persistence fails
+		ExportJobStatusCanceled: true,
+		ExportJobStatusExpired:  true, // cleanup worker expires stale queued jobs
+	},
+	ExportJobStatusRunning: {
+		ExportJobStatusSucceeded: true,
+		ExportJobStatusFailed:    true,
+		ExportJobStatusQueued:    true, // retry resets to queued
+		ExportJobStatusCanceled:  true,
+		ExportJobStatusExpired:   true, // cleanup worker expires stale running jobs
+	},
+	ExportJobStatusFailed: {
+		ExportJobStatusQueued:  true, // retry
+		ExportJobStatusExpired: true, // cleanup worker expires old failed jobs
+	},
+	ExportJobStatusSucceeded: {
+		ExportJobStatusExpired: true, // file expiry lifecycle
+	},
+	// Terminal states with no outgoing transitions: Expired, Canceled.
+}
+
+// ErrInvalidExportJobTransition indicates an invalid state transition was attempted.
+var ErrInvalidExportJobTransition = errors.New("invalid export job status transition")
 
 // ErrInvalidExportFormat is returned when an unsupported export format is requested.
 var ErrInvalidExportFormat = errors.New("invalid export format")
@@ -256,26 +285,50 @@ func NewExportJob(
 	}, nil
 }
 
-// MarkRunning transitions the job to running status.
-func (job *ExportJob) MarkRunning() {
+// validateTransition checks whether transitioning from the current status to next is allowed.
+func (job *ExportJob) validateTransition(next ExportJobStatus) error {
 	if job == nil {
-		return
+		return nil
+	}
+
+	allowed, exists := validExportJobTransitions[job.Status]
+	if !exists || !allowed[next] {
+		return fmt.Errorf("%w: %s -> %s", ErrInvalidExportJobTransition, job.Status, next)
+	}
+
+	return nil
+}
+
+// MarkRunning transitions the job to running status.
+func (job *ExportJob) MarkRunning() error {
+	if job == nil {
+		return nil
+	}
+
+	if err := job.validateTransition(ExportJobStatusRunning); err != nil {
+		return err
 	}
 
 	now := job.now()
 	job.Status = ExportJobStatusRunning
-	job.StartedAt = &now
+	job.StartedAt = pointers.Time(now)
 	job.Attempts++
 	job.UpdatedAt = now
+
+	return nil
 }
 
 // MarkSucceeded transitions the job to succeeded status with file details.
 func (job *ExportJob) MarkSucceeded(
 	fileKey, fileName, sha256 string,
 	recordsWritten, bytesWritten int64,
-) {
+) error {
 	if job == nil {
-		return
+		return nil
+	}
+
+	if err := job.validateTransition(ExportJobStatusSucceeded); err != nil {
+		return err
 	}
 
 	now := job.now()
@@ -285,59 +338,85 @@ func (job *ExportJob) MarkSucceeded(
 	job.SHA256 = sha256
 	job.RecordsWritten = recordsWritten
 	job.BytesWritten = bytesWritten
-	job.FinishedAt = &now
+	job.FinishedAt = pointers.Time(now)
 	job.UpdatedAt = now
+
+	return nil
 }
 
 // MarkFailed transitions the job to failed status with error message.
-func (job *ExportJob) MarkFailed(errMsg string) {
+func (job *ExportJob) MarkFailed(errMsg string) error {
 	if job == nil {
-		return
+		return nil
+	}
+
+	if err := job.validateTransition(ExportJobStatusFailed); err != nil {
+		return err
 	}
 
 	now := job.now()
 	job.Status = ExportJobStatusFailed
 	job.Error = errMsg
-	job.FinishedAt = &now
+	job.FinishedAt = pointers.Time(now)
 	job.UpdatedAt = now
+
+	return nil
 }
 
 // MarkForRetry transitions the job back to queued status for retry.
 // The nextRetryAt specifies when the job should be retried.
-func (job *ExportJob) MarkForRetry(errMsg string, nextRetryAt time.Time) {
+func (job *ExportJob) MarkForRetry(errMsg string, nextRetryAt time.Time) error {
 	if job == nil {
-		return
+		return nil
+	}
+
+	if err := job.validateTransition(ExportJobStatusQueued); err != nil {
+		return err
 	}
 
 	now := job.now()
 	job.Status = ExportJobStatusQueued
 	job.Error = errMsg
 	job.StartedAt = nil
-	job.NextRetryAt = &nextRetryAt
+	job.NextRetryAt = pointers.Time(nextRetryAt)
 	job.UpdatedAt = now
+
+	return nil
 }
 
 // MarkExpired transitions the job to expired status.
-func (job *ExportJob) MarkExpired() {
+func (job *ExportJob) MarkExpired() error {
 	if job == nil {
-		return
+		return nil
+	}
+
+	if err := job.validateTransition(ExportJobStatusExpired); err != nil {
+		return err
 	}
 
 	now := job.now()
 	job.Status = ExportJobStatusExpired
 	job.UpdatedAt = now
+
+	return nil
 }
 
 // MarkCanceled transitions the job to canceled status.
-func (job *ExportJob) MarkCanceled() {
+func (job *ExportJob) MarkCanceled() error {
 	if job == nil {
-		return
+		return nil
+	}
+
+	if err := job.validateTransition(ExportJobStatusCanceled); err != nil {
+		return err
 	}
 
 	now := job.now()
 	job.Status = ExportJobStatusCanceled
-	job.FinishedAt = &now
+	job.FinishedAt = pointers.Time(now)
 	job.UpdatedAt = now
+
+	return nil
 }
 
 // UpdateProgress updates the records and bytes written counters.
