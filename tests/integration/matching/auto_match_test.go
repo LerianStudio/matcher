@@ -26,7 +26,7 @@ import (
 	outboxRepo "github.com/LerianStudio/matcher/internal/outbox/adapters/postgres"
 	sharedCross "github.com/LerianStudio/matcher/internal/shared/adapters/cross"
 	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
-	tenantAdapters "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant/adapters"
+	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
@@ -126,7 +126,7 @@ func seedAutoMatchConfig(
 	t.Helper()
 
 	ctx := e4t9Ctx(t, h)
-	provider := tenantAdapters.NewSingleTenantInfrastructureProvider(h.Connection, nil)
+	provider := infraTestutil.NewSingleTenantInfrastructureProvider(h.Connection, nil)
 
 	ctxRepo := configContextRepo.NewRepository(provider)
 	srcRepo, err := configSourceRepo.NewRepository(provider)
@@ -254,7 +254,7 @@ func wireIngestionWithTrigger(
 	t.Helper()
 
 	redisConn := mustRedisConn(t, h.RedisAddr)
-	provider := tenantAdapters.NewSingleTenantInfrastructureProvider(h.Connection, redisConn)
+	provider := infraTestutil.NewSingleTenantInfrastructureProvider(h.Connection, redisConn)
 
 	jobRepo := ingestionJobRepo.NewRepository(provider)
 	txRepo := ingestionTxRepo.NewRepository(provider)

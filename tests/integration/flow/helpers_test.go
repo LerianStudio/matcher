@@ -21,7 +21,7 @@ import (
 	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	configVO "github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
-	tenantAdapters "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant/adapters"
+	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	"github.com/LerianStudio/matcher/tests/integration"
 	"github.com/LerianStudio/matcher/tests/integration/server"
 )
@@ -570,7 +570,7 @@ func EnsureContext(t *testing.T, sh *server.ServerHarness, contextID uuid.UUID) 
 	t.Helper()
 
 	ctx := sh.ServerCtx()
-	provider := tenantAdapters.NewSingleTenantInfrastructureProvider(sh.Connection, nil)
+	provider := infraTestutil.NewSingleTenantInfrastructureProvider(sh.Connection, nil)
 	repo := configContextRepo.NewRepository(provider)
 	found, err := repo.FindByID(ctx, contextID)
 	require.NoError(t, err)
@@ -601,7 +601,7 @@ func createMultiRuleFlowTestConfig(
 ) multiRuleFlowTestSeedParts {
 	t.Helper()
 
-	provider := tenantAdapters.NewSingleTenantInfrastructureProvider(conn, nil)
+	provider := infraTestutil.NewSingleTenantInfrastructureProvider(conn, nil)
 	srcRepo, err := configSourceRepo.NewRepository(provider)
 	require.NoError(t, err)
 	fmRepo := configFieldMapRepo.NewRepository(provider)
@@ -814,7 +814,7 @@ func SetupFlowTestConfigWithOptionsGeneric(
 	ctx := h.ServerCtx()
 	conn := h.GetConnection()
 	seed := h.GetSeed()
-	provider := tenantAdapters.NewSingleTenantInfrastructureProvider(conn, nil)
+	provider := infraTestutil.NewSingleTenantInfrastructureProvider(conn, nil)
 
 	tenantID := seed.TenantID
 	contextID := seed.ContextID
@@ -1052,7 +1052,7 @@ func EnsureContextGeneric(t *testing.T, h TestHarnessLike, contextID uuid.UUID) 
 
 	ctx := h.ServerCtx()
 	conn := h.GetConnection()
-	provider := tenantAdapters.NewSingleTenantInfrastructureProvider(conn, nil)
+	provider := infraTestutil.NewSingleTenantInfrastructureProvider(conn, nil)
 	repo := configContextRepo.NewRepository(provider)
 	found, err := repo.FindByID(ctx, contextID)
 	require.NoError(t, err)

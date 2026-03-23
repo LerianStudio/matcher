@@ -22,7 +22,7 @@ import (
 	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	configVO "github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
-	tenantAdapters "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant/adapters"
+	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	"github.com/LerianStudio/matcher/tests/integration"
 	"github.com/LerianStudio/matcher/tests/integration/server"
 )
@@ -258,7 +258,7 @@ func setupIdempotencyTestConfigWithConnection(
 ) idempotencyTestSeed {
 	t.Helper()
 
-	provider := tenantAdapters.NewSingleTenantInfrastructureProvider(conn, nil)
+	provider := infraTestutil.NewSingleTenantInfrastructureProvider(conn, nil)
 
 	srcRepo, err := configSourceRepo.NewRepository(provider)
 	require.NoError(t, err)

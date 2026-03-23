@@ -41,7 +41,6 @@ import (
 	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	configVO "github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
-	tenantAdapters "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant/adapters"
 	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 	embeddedmigrations "github.com/LerianStudio/matcher/migrations"
@@ -382,7 +381,7 @@ func (h *ChaosHarness) Ctx() context.Context {
 
 // Provider returns an InfrastructureProvider wrapping the proxied connections.
 func (h *ChaosHarness) Provider() ports.InfrastructureProvider {
-	return tenantAdapters.NewSingleTenantInfrastructureProvider(h.Connection, nil)
+	return infraTestutil.NewSingleTenantInfrastructureProvider(h.Connection, nil)
 }
 
 // ResetDatabase truncates all tables and re-seeds for test isolation.
@@ -524,7 +523,7 @@ func waitForDB(db *sql.DB) {
 }
 
 func setupChaosSeedData(connection *libPostgres.Client) (SeedData, error) {
-	provider := tenantAdapters.NewSingleTenantInfrastructureProvider(connection, nil)
+	provider := infraTestutil.NewSingleTenantInfrastructureProvider(connection, nil)
 	contextRepo := configContextRepo.NewRepository(provider)
 
 	sourceRepo, err := configSourceRepo.NewRepository(provider)

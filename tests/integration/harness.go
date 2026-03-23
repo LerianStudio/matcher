@@ -30,7 +30,6 @@ import (
 	configVO "github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
-	tenantAdapters "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant/adapters"
 	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 	embeddedmigrations "github.com/LerianStudio/matcher/migrations"
@@ -330,7 +329,7 @@ func (h *TestHarness) Ctx() context.Context {
 // Provider returns an InfrastructureProvider wrapping the test harness connections.
 // This should be used to pass to repository constructors instead of h.Connection directly.
 func (h *TestHarness) Provider() ports.InfrastructureProvider {
-	return tenantAdapters.NewSingleTenantInfrastructureProvider(h.Connection, nil)
+	return infraTestutil.NewSingleTenantInfrastructureProvider(h.Connection, nil)
 }
 
 func terminateContainer(ctx context.Context, container testcontainers.Container) error {
@@ -431,7 +430,7 @@ func initializeTestConnection(
 func setupSeedData(t *testing.T, connection *libPostgres.Client) (SeedData, error) {
 	t.Helper()
 
-	provider := tenantAdapters.NewSingleTenantInfrastructureProvider(connection, nil)
+	provider := infraTestutil.NewSingleTenantInfrastructureProvider(connection, nil)
 
 	contextRepo := configContextRepo.NewRepository(provider)
 	sourceRepo, err := configSourceRepo.NewRepository(provider)

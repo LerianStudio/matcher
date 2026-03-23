@@ -16,7 +16,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/auth"
 	matchLockManager "github.com/LerianStudio/matcher/internal/matching/adapters/redis"
 	matchingPorts "github.com/LerianStudio/matcher/internal/matching/ports"
-	tenantAdapters "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant/adapters"
+	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
@@ -28,7 +28,7 @@ func mustLockManager(t *testing.T, h *integration.TestHarness) *matchLockManager
 	t.Helper()
 
 	redisConn := mustRedisConn(t, h.RedisAddr)
-	provider := tenantAdapters.NewSingleTenantInfrastructureProvider(h.Connection, redisConn)
+	provider := infraTestutil.NewSingleTenantInfrastructureProvider(h.Connection, redisConn)
 
 	return matchLockManager.NewLockManager(provider)
 }

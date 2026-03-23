@@ -63,7 +63,6 @@ import (
 	sharedCross "github.com/LerianStudio/matcher/internal/shared/adapters/cross"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
-	tenantAdapters "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant/adapters"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 
 	"github.com/LerianStudio/matcher/tests/integration"
@@ -218,7 +217,7 @@ func wireServices(t *testing.T, h *integration.TestHarness) wiredServices {
 	t.Helper()
 
 	redisConn := mustRedisConn(t, h.RedisAddr)
-	provider := tenantAdapters.NewSingleTenantInfrastructureProvider(h.Connection, redisConn)
+	provider := infraTestutil.NewSingleTenantInfrastructureProvider(h.Connection, redisConn)
 
 	jobRepo := ingestionJobRepo.NewRepository(provider)
 	txRepo := ingestionTxRepo.NewRepository(provider)
@@ -476,7 +475,7 @@ func wireIdempotencyRepo(
 	t.Helper()
 
 	redisConn := mustRedisConn(t, h.RedisAddr)
-	provider := tenantAdapters.NewSingleTenantInfrastructureProvider(h.Connection, redisConn)
+	provider := infraTestutil.NewSingleTenantInfrastructureProvider(h.Connection, redisConn)
 
 	repo, err := exceptionRedis.NewIdempotencyRepository(provider)
 	require.NoError(t, err)
@@ -596,7 +595,7 @@ func wireExceptionUseCase(
 	t.Helper()
 
 	redisConn := mustRedisConn(t, h.RedisAddr)
-	provider := tenantAdapters.NewSingleTenantInfrastructureProvider(h.Connection, redisConn)
+	provider := infraTestutil.NewSingleTenantInfrastructureProvider(h.Connection, redisConn)
 
 	exceptionRepo := exceptionRepoAdapter.NewRepository(provider)
 	outbox := outboxRepo.NewRepository(provider)
@@ -626,7 +625,7 @@ func wireDisputeUseCase(
 	t.Helper()
 
 	redisConn := mustRedisConn(t, h.RedisAddr)
-	provider := tenantAdapters.NewSingleTenantInfrastructureProvider(h.Connection, redisConn)
+	provider := infraTestutil.NewSingleTenantInfrastructureProvider(h.Connection, redisConn)
 
 	exceptionRepo := exceptionRepoAdapter.NewRepository(provider)
 	disputeRepo := disputeRepoAdapter.NewRepository(provider)

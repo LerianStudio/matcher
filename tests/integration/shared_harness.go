@@ -32,7 +32,6 @@ import (
 	configVO "github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
-	tenantAdapters "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant/adapters"
 	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	embeddedmigrations "github.com/LerianStudio/matcher/migrations"
 )
@@ -659,7 +658,7 @@ func setupSharedSeedData(
 ) (SeedData, error) {
 	t.Helper()
 
-	provider := tenantAdapters.NewSingleTenantInfrastructureProvider(connection, nil)
+	provider := infraTestutil.NewSingleTenantInfrastructureProvider(connection, nil)
 	contextRepo := configContextRepo.NewRepository(provider)
 	sourceRepo, err := configSourceRepo.NewRepository(provider)
 	if err != nil {

@@ -279,6 +279,19 @@ func NewRedisClientConnected() *libRedis.Client {
 	return client
 }
 
+// NewSingleTenantInfrastructureProvider creates an InfrastructureProvider that wraps
+// singleton postgres and redis connections for integration and chaos tests that
+// need a real InfrastructureProvider without multi-tenant routing.
+func NewSingleTenantInfrastructureProvider(
+	postgres *libPostgres.Client,
+	redisClient *libRedis.Client,
+) *MockInfrastructureProvider {
+	return &MockInfrastructureProvider{
+		PostgresConn: postgres,
+		RedisConn:    redisClient,
+	}
+}
+
 // NewMockProviderFromDB creates a MockInfrastructureProvider that wraps a *sql.DB
 // (typically from sqlmock) as the primary database connection. This is the standard
 // way to construct a provider for repository unit tests that need real SQL expectations.

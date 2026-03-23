@@ -16,7 +16,6 @@ import (
 
 	reportingRedis "github.com/LerianStudio/matcher/internal/reporting/adapters/redis"
 	reportingEntities "github.com/LerianStudio/matcher/internal/reporting/domain/entities"
-	tenantAdapters "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant/adapters"
 	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
@@ -56,7 +55,7 @@ func newCacheService(
 
 	rawClient := mustCacheRedisConn(t, harness.RedisAddr)
 	libClient := infraTestutil.NewRedisClientWithMock(rawClient)
-	provider := tenantAdapters.NewSingleTenantInfrastructureProvider(harness.Connection, libClient)
+	provider := infraTestutil.NewSingleTenantInfrastructureProvider(harness.Connection, libClient)
 
 	return reportingRedis.NewCacheService(provider, ttl)
 }
