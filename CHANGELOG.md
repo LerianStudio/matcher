@@ -1,3 +1,22 @@
+# Matcher Changelog
+
+## [1.2.0](https://github.com/LerianStudio/matcher/releases/tag/v1.2.0)
+
+- **Features:**
+  - Refactored the ingestion process by splitting the monolithic normalizer into focused modules.
+  - Strengthened domain model validation and added mocks in the shared domain.
+  - Migrated the bootstrap process to the lib-commons systemplane.
+
+- **Improvements:**
+  - Updated the test suite and adapters to align with new APIs.
+  - Adapted the service layer to integrate with new shared domain APIs.
+
+Contributors: @fred
+
+[Compare changes](https://github.com/LerianStudio/matcher/compare/v1.1.1...v1.2.0)
+
+---
+
 ## [1.2.0](https://github.com/LerianStudio/matcher/compare/v1.1.1...v1.2.0) (2026-03-23)
 
 ## [1.1.1](https://github.com/LerianStudio/matcher/compare/v1.1.0...v1.1.1) (2026-03-22)
@@ -424,3 +443,4 @@ Contributors: @bedatty, @dependabot[bot], @ferr3ira-gabriel, @ferr3ira.gabriel, 
 * **e2e:** resolve dashboard stresser flakiness with unique names ([7e93cfc](https://github.com/LerianStudio/matcher/commit/7e93cfcc13d9d074eceebe09b39e9f8b7f7f42ed))
 
 ## 1.0.0 (2026-02-19)
+
