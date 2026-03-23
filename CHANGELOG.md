@@ -1,3 +1,5 @@
+## [1.2.0](https://github.com/LerianStudio/matcher/compare/v1.1.1...v1.2.0) (2026-03-23)
+
 ## [1.1.1](https://github.com/LerianStudio/matcher/compare/v1.1.0...v1.1.1) (2026-03-22)
 
 # Matcher Changelog
