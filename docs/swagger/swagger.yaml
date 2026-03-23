@@ -9915,6 +9915,22 @@ paths:
       summary: Export variance report
       tags:
       - Reporting
+  /version:
+    get:
+      description: Returns the service version from the VERSION environment variable
+        (defaults to "0.0.0").
+      operationId: getVersion
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: version and requestDate
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Service version
+      tags:
+      - Health
 schemes:
 - https
 securityDefinitions:
