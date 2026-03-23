@@ -6,14 +6,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	goredis "github.com/redis/go-redis/v9"
 
+	"github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/valkey"
+
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/ports"
-	tenantinfra "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -62,22 +64,27 @@ func (svc *CacheService) buildKey(
 	keyType string,
 	dateFrom, dateTo time.Time,
 	sourceID *uuid.UUID,
-) string {
+) (string, error) {
 	sourceKey := "all"
 	if sourceID != nil {
 		sourceKey = sourceID.String()
 	}
 
-	return tenantinfra.ScopedRedisSegments(
-		ctx,
-		false,
+	rawKey := strings.Join([]string{
 		dashboardCachePrefix,
 		contextID.String(),
 		keyType,
 		dateFrom.Format(time.DateOnly),
 		dateTo.Format(time.DateOnly),
 		sourceKey,
-	)
+	}, ":")
+
+	result, err := valkey.GetKeyFromContext(ctx, rawKey)
+	if err != nil {
+		return "", fmt.Errorf("build dashboard cache redis key: %w", err)
+	}
+
+	return result, nil
 }
 
 func (svc *CacheService) redisClient(
@@ -125,7 +132,7 @@ func (svc *CacheService) GetVolumeStats(
 	}
 	defer release()
 
-	key := svc.buildKey(
+	key, keyErr := svc.buildKey(
 		ctx,
 		filter.ContextID,
 		volumeKeyType,
@@ -133,6 +140,9 @@ func (svc *CacheService) GetVolumeStats(
 		filter.DateTo,
 		filter.SourceID,
 	)
+	if keyErr != nil {
+		return nil, fmt.Errorf("build cache key: %w", keyErr)
+	}
 
 	data, err := rdb.Get(ctx, key).Bytes()
 	if err != nil {
@@ -167,7 +177,7 @@ func (svc *CacheService) SetVolumeStats(
 	}
 	defer release()
 
-	key := svc.buildKey(
+	key, keyErr := svc.buildKey(
 		ctx,
 		filter.ContextID,
 		volumeKeyType,
@@ -175,6 +185,9 @@ func (svc *CacheService) SetVolumeStats(
 		filter.DateTo,
 		filter.SourceID,
 	)
+	if keyErr != nil {
+		return fmt.Errorf("build cache key: %w", keyErr)
+	}
 
 	data, err := json.Marshal(stats)
 	if err != nil {
@@ -203,7 +216,7 @@ func (svc *CacheService) GetSLAStats(
 	}
 	defer release()
 
-	key := svc.buildKey(
+	key, keyErr := svc.buildKey(
 		ctx,
 		filter.ContextID,
 		slaKeyType,
@@ -211,6 +224,9 @@ func (svc *CacheService) GetSLAStats(
 		filter.DateTo,
 		filter.SourceID,
 	)
+	if keyErr != nil {
+		return nil, fmt.Errorf("build cache key: %w", keyErr)
+	}
 
 	data, err := rdb.Get(ctx, key).Bytes()
 	if err != nil {
@@ -245,7 +261,7 @@ func (svc *CacheService) SetSLAStats(
 	}
 	defer release()
 
-	key := svc.buildKey(
+	key, keyErr := svc.buildKey(
 		ctx,
 		filter.ContextID,
 		slaKeyType,
@@ -253,6 +269,9 @@ func (svc *CacheService) SetSLAStats(
 		filter.DateTo,
 		filter.SourceID,
 	)
+	if keyErr != nil {
+		return fmt.Errorf("build cache key: %w", keyErr)
+	}
 
 	data, err := json.Marshal(stats)
 	if err != nil {
@@ -281,7 +300,7 @@ func (svc *CacheService) GetMatchRateStats(
 	}
 	defer release()
 
-	key := svc.buildKey(
+	key, keyErr := svc.buildKey(
 		ctx,
 		filter.ContextID,
 		matchRateKeyType,
@@ -289,6 +308,9 @@ func (svc *CacheService) GetMatchRateStats(
 		filter.DateTo,
 		filter.SourceID,
 	)
+	if keyErr != nil {
+		return nil, fmt.Errorf("build cache key: %w", keyErr)
+	}
 
 	data, err := rdb.Get(ctx, key).Bytes()
 	if err != nil {
@@ -323,7 +345,7 @@ func (svc *CacheService) SetMatchRateStats(
 	}
 	defer release()
 
-	key := svc.buildKey(
+	key, keyErr := svc.buildKey(
 		ctx,
 		filter.ContextID,
 		matchRateKeyType,
@@ -331,6 +353,9 @@ func (svc *CacheService) SetMatchRateStats(
 		filter.DateTo,
 		filter.SourceID,
 	)
+	if keyErr != nil {
+		return fmt.Errorf("build cache key: %w", keyErr)
+	}
 
 	data, err := json.Marshal(stats)
 	if err != nil {
@@ -359,7 +384,7 @@ func (svc *CacheService) GetDashboardAggregates(
 	}
 	defer release()
 
-	key := svc.buildKey(
+	key, keyErr := svc.buildKey(
 		ctx,
 		filter.ContextID,
 		aggregatesKeyType,
@@ -367,6 +392,9 @@ func (svc *CacheService) GetDashboardAggregates(
 		filter.DateTo,
 		filter.SourceID,
 	)
+	if keyErr != nil {
+		return nil, fmt.Errorf("build cache key: %w", keyErr)
+	}
 
 	data, err := rdb.Get(ctx, key).Bytes()
 	if err != nil {
@@ -401,7 +429,7 @@ func (svc *CacheService) SetDashboardAggregates(
 	}
 	defer release()
 
-	key := svc.buildKey(
+	key, keyErr := svc.buildKey(
 		ctx,
 		filter.ContextID,
 		aggregatesKeyType,
@@ -409,6 +437,9 @@ func (svc *CacheService) SetDashboardAggregates(
 		filter.DateTo,
 		filter.SourceID,
 	)
+	if keyErr != nil {
+		return fmt.Errorf("build cache key: %w", keyErr)
+	}
 
 	data, err := json.Marshal(aggregates)
 	if err != nil {
@@ -437,7 +468,7 @@ func (svc *CacheService) GetMatcherDashboardMetrics(
 	}
 	defer release()
 
-	key := svc.buildKey(
+	key, keyErr := svc.buildKey(
 		ctx,
 		filter.ContextID,
 		metricsKeyType,
@@ -445,6 +476,9 @@ func (svc *CacheService) GetMatcherDashboardMetrics(
 		filter.DateTo,
 		filter.SourceID,
 	)
+	if keyErr != nil {
+		return nil, fmt.Errorf("build cache key: %w", keyErr)
+	}
 
 	data, err := rdb.Get(ctx, key).Bytes()
 	if err != nil {
@@ -479,7 +513,7 @@ func (svc *CacheService) SetMatcherDashboardMetrics(
 	}
 	defer release()
 
-	key := svc.buildKey(
+	key, keyErr := svc.buildKey(
 		ctx,
 		filter.ContextID,
 		metricsKeyType,
@@ -487,6 +521,9 @@ func (svc *CacheService) SetMatcherDashboardMetrics(
 		filter.DateTo,
 		filter.SourceID,
 	)
+	if keyErr != nil {
+		return fmt.Errorf("build cache key: %w", keyErr)
+	}
 
 	data, err := json.Marshal(metrics)
 	if err != nil {
@@ -512,7 +549,12 @@ func (svc *CacheService) InvalidateContext(ctx context.Context, contextID uuid.U
 	}
 	defer release()
 
-	pattern := tenantinfra.ScopedRedisSegments(ctx, false, dashboardCachePrefix, contextID.String(), "*")
+	rawPattern := dashboardCachePrefix + ":" + contextID.String() + ":*"
+
+	pattern, err := valkey.GetPatternFromContext(ctx, rawPattern)
+	if err != nil {
+		return fmt.Errorf("build cache invalidation pattern: %w", err)
+	}
 
 	const batchSize = 500
 

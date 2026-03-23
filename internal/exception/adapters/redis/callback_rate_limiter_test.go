@@ -13,7 +13,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/LerianStudio/matcher/internal/auth"
+	"github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/core"
+
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 )
 
@@ -106,8 +107,8 @@ func TestCallbackRateLimiter_SameExternalKeyDifferentTenants(t *testing.T) {
 	provider := &testutil.MockInfrastructureProvider{RedisConn: conn}
 	limiter := newTestRateLimiter(t, provider, 1, time.Minute)
 
-	tenantA := context.WithValue(context.Background(), auth.TenantIDKey, "tenant-a")
-	tenantB := context.WithValue(context.Background(), auth.TenantIDKey, "tenant-b")
+	tenantA := core.SetTenantIDInContext(context.Background(), "tenant-a")
+	tenantB := core.SetTenantIDInContext(context.Background(), "tenant-b")
 
 	allowed, err := limiter.Allow(tenantA, "JIRA")
 	require.NoError(t, err)
@@ -129,36 +130,30 @@ func TestCallbackRateLimiter_SameExternalKeyDifferentTenants(t *testing.T) {
 func TestScopedRateLimitRedisKey(t *testing.T) {
 	t.Parallel()
 
-	t.Run("missing tenant preserves legacy default-tenant scope", func(t *testing.T) {
+	t.Run("no tenant in context returns raw key unchanged", func(t *testing.T) {
 		t.Parallel()
 
-		assert.Equal(
-			t,
-			"matcher:callback:ratelimit:"+auth.DefaultTenantID+":JIRA",
-			scopedRateLimitRedisKey(context.Background(), "JIRA"),
-		)
+		key, err := scopedRateLimitRedisKey(context.Background(), "JIRA")
+		require.NoError(t, err)
+		assert.Equal(t, "matcher:callback:ratelimit:JIRA", key)
 	})
 
-	t.Run("explicit default tenant preserves legacy format", func(t *testing.T) {
+	t.Run("tenant in context returns tenant-prefixed key", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := context.WithValue(context.Background(), auth.TenantIDKey, auth.DefaultTenantID)
-		assert.Equal(
-			t,
-			"matcher:callback:ratelimit:"+auth.DefaultTenantID+":JIRA",
-			scopedRateLimitRedisKey(ctx, "JIRA"),
-		)
+		ctx := core.SetTenantIDInContext(context.Background(), "tenant-a")
+		key, err := scopedRateLimitRedisKey(ctx, "JIRA")
+		require.NoError(t, err)
+		assert.Equal(t, "tenant:tenant-a:matcher:callback:ratelimit:JIRA", key)
 	})
 
-	t.Run("explicit custom tenant is scoped without double colon", func(t *testing.T) {
+	t.Run("default tenant in context returns tenant-prefixed key", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := context.WithValue(context.Background(), auth.TenantIDKey, "tenant-a")
-		assert.Equal(
-			t,
-			"matcher:callback:ratelimit:tenant-a:JIRA",
-			scopedRateLimitRedisKey(ctx, "JIRA"),
-		)
+		ctx := core.SetTenantIDInContext(context.Background(), "11111111-1111-1111-1111-111111111111")
+		key, err := scopedRateLimitRedisKey(ctx, "JIRA")
+		require.NoError(t, err)
+		assert.Equal(t, "tenant:11111111-1111-1111-1111-111111111111:matcher:callback:ratelimit:JIRA", key)
 	})
 }
 

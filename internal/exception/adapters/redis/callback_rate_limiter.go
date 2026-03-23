@@ -11,10 +11,9 @@ import (
 	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/valkey"
 
-	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/exception/ports"
-	tenantinfra "github.com/LerianStudio/matcher/internal/shared/infrastructure/tenant"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -137,7 +136,11 @@ func (rl *CallbackRateLimiter) Allow(ctx context.Context, key string) (bool, err
 		return false, fmt.Errorf("%w: %w", ErrRateLimiterRedisClientNil, err)
 	}
 
-	redisKey := scopedRateLimitRedisKey(ctx, key)
+	redisKey, err := scopedRateLimitRedisKey(ctx, key)
+	if err != nil {
+		libOpentelemetry.HandleSpanError(span, "failed to build scoped redis key", err)
+		return false, fmt.Errorf("rate limiter build scoped key: %w", err)
+	}
 
 	// Lua script atomically increments counter and sets TTL on first request.
 	// This avoids race conditions between INCR and EXPIRE.
@@ -187,16 +190,13 @@ return 1
 // Ensure CallbackRateLimiter implements the port interface.
 var _ ports.CallbackRateLimiter = (*CallbackRateLimiter)(nil)
 
-//nolint:contextcheck // This helper derives a scoped context exclusively for redis key namespacing.
-func scopedRateLimitRedisKey(ctx context.Context, key string) string {
-	if ctx == nil {
-		ctx = context.Background()
+func scopedRateLimitRedisKey(ctx context.Context, key string) (string, error) {
+	rawKey := callbackRateLimitKeyPrefix + ":" + key
+
+	result, err := valkey.GetKeyFromContext(ctx, rawKey)
+	if err != nil {
+		return "", fmt.Errorf("scoped rate limit redis key: %w", err)
 	}
 
-	return tenantinfra.ScopedRedisSegments(
-		context.WithValue(ctx, auth.TenantIDKey, auth.GetTenantID(ctx)),
-		true,
-		callbackRateLimitKeyPrefix,
-		key,
-	)
+	return result, nil
 }

@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/bxcodec/dbresolver/v2"
 	"github.com/redis/go-redis/v9"
@@ -15,32 +14,6 @@ import (
 	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
 	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
 )
-
-// TenantConfig holds infrastructure configuration for a specific tenant.
-type TenantConfig struct {
-	PostgresPrimaryDSN string `json:"postgresPrimaryDSN"`
-	PostgresReplicaDSN string `json:"postgresReplicaDSN"`
-	PostgresPrimaryDB  string `json:"postgresPrimaryDB"`
-	PostgresReplicaDB  string `json:"postgresReplicaDB"`
-
-	RedisAddresses    []string      `json:"redisAddresses"`
-	RedisPassword     string        `json:"redisPassword"`
-	RedisDB           int           `json:"redisDB"`
-	RedisMasterName   string        `json:"redisMasterName"`
-	RedisProtocol     int           `json:"redisProtocol"`
-	RedisUseTLS       bool          `json:"redisUseTLS"`
-	RedisCACert       string        `json:"redisCACert"`
-	RedisReadTimeout  time.Duration `json:"redisReadTimeout"`
-	RedisWriteTimeout time.Duration `json:"redisWriteTimeout"`
-	RedisDialTimeout  time.Duration `json:"redisDialTimeout"`
-	RedisPoolSize     int           `json:"redisPoolSize"`
-	RedisMinIdleConns int           `json:"redisMinIdleConns"`
-}
-
-// ConfigurationPort resolves infrastructure configuration for a given tenant.
-type ConfigurationPort interface {
-	GetTenantConfig(ctx context.Context, tenantID string) (*TenantConfig, error)
-}
 
 var (
 	// ErrPostgresLeaseUnavailable indicates the lease has no postgres connection.
