@@ -5,6 +5,7 @@ package bootstrap
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -18,30 +19,48 @@ import (
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
 	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
+	"github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/core"
 	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 )
 
-func TestDynamicInfrastructureProvider_RebuildsMultiTenantManagerWhenKeyChanges(t *testing.T) {
+func TestDynamicInfrastructureProvider_RebuildsManagerWhenKeyChanges(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"config":{"postgres_primary_dsn":"postgres://tenant-a","redis_addresses":["redis:6379"]}}`))
+		resp := core.TenantConfig{
+			ID:            "tenant-a",
+			IsolationMode: "isolated",
+			Databases: map[string]core.DatabaseConfig{
+				"matcher": {
+					PostgreSQL: &core.PostgreSQLConfig{
+						Host:     "localhost",
+						Port:     5432,
+						Database: "tenant_a",
+						Username: "user",
+						Password: "pass",
+					},
+				},
+			},
+		}
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}))
 	defer server.Close()
 
 	activeCfg := defaultConfig()
 	activeCfg.Tenancy.MultiTenantEnabled = true
-	activeCfg.Tenancy.MultiTenantInfraEnabled = true
 	activeCfg.Tenancy.MultiTenantURL = server.URL
 	activeCfg.Tenancy.MultiTenantServiceAPIKey = "service-api-key"
 	activeCfg.Tenancy.MultiTenantEnvironment = "staging"
 
-	provider := newDynamicInfrastructureProvider(activeCfg, func() *Config { return activeCfg }, nil, nil, nil, &libLog.NopLogger{})
+	provider := newDynamicInfrastructureProvider(activeCfg, func() *Config { return activeCfg }, nil, nil, nil, &libLog.NopLogger{}, nil)
 
-	first, err := provider.currentMultiTenantManager(context.Background(), activeCfg)
+	first, err := provider.currentPGManager(context.Background(), activeCfg)
 	require.NoError(t, err)
-	second, err := provider.currentMultiTenantManager(context.Background(), activeCfg)
+	second, err := provider.currentPGManager(context.Background(), activeCfg)
 	require.NoError(t, err)
 	assert.Same(t, first, second)
 
@@ -49,7 +68,7 @@ func TestDynamicInfrastructureProvider_RebuildsMultiTenantManagerWhenKeyChanges(
 	updatedCfg.Tenancy.MultiTenantCircuitBreakerTimeoutSec = activeCfg.Tenancy.MultiTenantCircuitBreakerTimeoutSec + 5
 	activeCfg = &updatedCfg
 
-	third, err := provider.currentMultiTenantManager(context.Background(), activeCfg)
+	third, err := provider.currentPGManager(context.Background(), activeCfg)
 	require.NoError(t, err)
 	assert.NotSame(t, first, third)
 	require.NoError(t, provider.Close())
@@ -60,7 +79,7 @@ func TestDynamicInfrastructureProvider_SingleTenantUsesActiveBundleConnections(t
 
 	bootstrapCfg := defaultConfig()
 	bundleState := newActiveMatcherBundleState()
-	provider := newDynamicInfrastructureProvider(bootstrapCfg, nil, bundleState, nil, nil, &libLog.NopLogger{})
+	provider := newDynamicInfrastructureProvider(bootstrapCfg, nil, bundleState, nil, nil, &libLog.NopLogger{}, nil)
 
 	bundleState.Update(&MatcherBundle{Infra: &InfraBundle{Postgres: testPostgresClient(t), Redis: testRedisClient(t)}})
 
@@ -71,6 +90,100 @@ func TestDynamicInfrastructureProvider_SingleTenantUsesActiveBundleConnections(t
 	redisLease, err := provider.GetRedisConnection(context.Background())
 	require.NoError(t, err)
 	assert.Same(t, bundleState.Current().RedisClient(), redisLease.Connection())
+}
+
+func TestDynamicInfrastructureProvider_MultiTenantModeEnabled(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		cfg      *Config
+		expected bool
+	}{
+		{
+			name:     "nil config returns false",
+			cfg:      nil,
+			expected: false,
+		},
+		{
+			name: "disabled returns false",
+			cfg: &Config{
+				Tenancy: TenancyConfig{MultiTenantEnabled: false},
+			},
+			expected: false,
+		},
+		{
+			name: "enabled returns true",
+			cfg: &Config{
+				Tenancy: TenancyConfig{MultiTenantEnabled: true},
+			},
+			expected: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.expected, multiTenantModeEnabled(tc.cfg))
+		})
+	}
+}
+
+func TestDynamicInfrastructureProvider_DynamicMultiTenantKey(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil config returns empty", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, "", dynamicMultiTenantKey(nil))
+	})
+
+	t.Run("different configs produce different keys", func(t *testing.T) {
+		t.Parallel()
+
+		cfg1 := defaultConfig()
+		cfg1.Tenancy.MultiTenantURL = "http://url-a"
+		cfg1.Tenancy.MultiTenantServiceAPIKey = "key-a"
+
+		cfg2 := defaultConfig()
+		cfg2.Tenancy.MultiTenantURL = "http://url-b"
+		cfg2.Tenancy.MultiTenantServiceAPIKey = "key-b"
+
+		assert.NotEqual(t, dynamicMultiTenantKey(cfg1), dynamicMultiTenantKey(cfg2))
+	})
+}
+
+func TestDynamicInfrastructureProvider_SingleTenantPostgresNotConfigured(t *testing.T) {
+	t.Parallel()
+
+	bootstrapCfg := defaultConfig()
+	provider := newDynamicInfrastructureProvider(bootstrapCfg, nil, nil, nil, nil, &libLog.NopLogger{}, nil)
+
+	_, err := provider.GetPostgresConnection(context.Background())
+	require.ErrorIs(t, err, ErrPostgresConnectionNotConfigured)
+}
+
+func TestDynamicInfrastructureProvider_SingleTenantRedisNotConfigured(t *testing.T) {
+	t.Parallel()
+
+	bootstrapCfg := defaultConfig()
+	provider := newDynamicInfrastructureProvider(bootstrapCfg, nil, nil, nil, nil, &libLog.NopLogger{}, nil)
+
+	_, err := provider.GetRedisConnection(context.Background())
+	require.ErrorIs(t, err, ErrRedisConnectionNotConfigured)
+}
+
+func TestDynamicInfrastructureProvider_CloseNilProvider(t *testing.T) {
+	t.Parallel()
+
+	var provider *dynamicInfrastructureProvider
+	require.NoError(t, provider.Close())
+}
+
+func TestDynamicInfrastructureProvider_CloseWithNoManager(t *testing.T) {
+	t.Parallel()
+
+	provider := newDynamicInfrastructureProvider(defaultConfig(), nil, nil, nil, nil, &libLog.NopLogger{}, nil)
+	require.NoError(t, provider.Close())
 }
 
 func testPostgresClient(t *testing.T) *libPostgres.Client {

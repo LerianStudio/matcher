@@ -39,15 +39,6 @@ func (cfg *Config) normalizeTenancyConfig() {
 	if cfg.Tenancy.MultiTenantEnvironment == "" {
 		cfg.Tenancy.MultiTenantEnvironment = cfg.effectiveMultiTenantEnvironment()
 	}
-
-	if cfg.Tenancy.MultiTenantEnabled {
-		cfg.Tenancy.MultiTenantInfraEnabled = true
-		return
-	}
-
-	if cfg.Tenancy.MultiTenantInfraEnabled {
-		cfg.Tenancy.MultiTenantEnabled = true
-	}
 }
 
 func (cfg *Config) effectiveMultiTenantEnvironment() string {

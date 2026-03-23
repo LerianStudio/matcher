@@ -1063,10 +1063,6 @@ linters:
         text: G118
         path: internal/reporting/services/worker/export_worker\.go
       - linters:
-          - gosec
-        text: G118
-        path: internal/shared/infrastructure/tenant/adapters/connection_manager\.go
-      - linters:
           - errcheck
           - gosec
         path: _test\.go

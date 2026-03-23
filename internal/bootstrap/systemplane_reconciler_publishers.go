@@ -11,22 +11,26 @@ import (
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
 	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/ports"
+	tmrabbitmq "github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/rabbitmq"
 )
 
 var _ ports.BundleReconciler = (*PublisherReconciler)(nil)
 
 // PublisherReconciler validates staged RabbitMQ publishers for a candidate bundle.
 type PublisherReconciler struct {
-	logger libLog.Logger
+	logger       libLog.Logger
+	configGetter func() *Config
 }
 
 // NewPublisherReconciler builds a publisher reconciler with a safe logger fallback.
-func NewPublisherReconciler(logger libLog.Logger) *PublisherReconciler {
+// configGetter provides access to the current runtime config so the reconciler can
+// detect multi-tenant mode and build an rmqManager for staged publishers.
+func NewPublisherReconciler(logger libLog.Logger, configGetter func() *Config) *PublisherReconciler {
 	if logger == nil {
 		logger = &libLog.NopLogger{}
 	}
 
-	return &PublisherReconciler{logger: logger}
+	return &PublisherReconciler{logger: logger, configGetter: configGetter}
 }
 
 // Name returns the reconciler identifier used in logs and metrics.
@@ -69,7 +73,15 @@ func (reconciler *PublisherReconciler) Reconcile(
 		return fmt.Errorf("publisher reconciler ensure rabbitmq channel: %w", err)
 	}
 
-	matchingPublisher, ingestionPublisher, err := initEventPublishers(ctx, currentConn, reconciler.logger)
+	// Build an rmqManager when multi-tenant mode is enabled so that staged
+	// publishers use per-tenant vhost isolation. Without this, a config rebuild
+	// would silently downgrade multi-tenant publishers to single-tenant.
+	var rmqManager *tmrabbitmq.Manager
+	if cfg := reconciler.currentConfig(); cfg != nil && multiTenantModeEnabled(cfg) {
+		rmqManager = buildRabbitMQTenantManager(ctx, cfg, reconciler.logger)
+	}
+
+	matchingPublisher, ingestionPublisher, err := initEventPublishers(ctx, currentConn, reconciler.logger, rmqManager)
 	if err != nil {
 		return fmt.Errorf("publisher reconciler init publishers: %w", err)
 	}
@@ -78,4 +90,13 @@ func (reconciler *PublisherReconciler) Reconcile(
 	currentBundle.StagedIngestionPublisher = ingestionPublisher
 
 	return nil
+}
+
+// currentConfig returns the runtime config from the configGetter, or nil.
+func (reconciler *PublisherReconciler) currentConfig() *Config {
+	if reconciler.configGetter == nil {
+		return nil
+	}
+
+	return reconciler.configGetter()
 }

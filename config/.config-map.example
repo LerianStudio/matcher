@@ -26,10 +26,6 @@ ENV_NAME=development
 DEFAULT_TENANT_ID=11111111-1111-1111-1111-111111111111
 DEFAULT_TENANT_SLUG=default
 
-# Deprecated compatibility alias for MULTI_TENANT_ENABLED bootstrap seeding.
-# Prefer MULTI_TENANT_ENABLED via systemplane instead of this env var.
-# MULTI_TENANT_INFRA_ENABLED=false
-
 # ── Server ───────────────────────────────────────────────────────────────────
 # HTTP listen address. Change requires server restart.
 SERVER_ADDRESS=:4018

@@ -45,7 +45,6 @@ const (
 	defaultMultiTenantIdleTimeoutSec       = 300
 	defaultMultiTenantCircuitBreakerThresh = 5
 	defaultMultiTenantCircuitBreakerSec    = 30
-	defaultMultiTenantInfraEnabled         = false
 
 	// PostgreSQL defaults.
 	defaultPGHost            = "localhost"

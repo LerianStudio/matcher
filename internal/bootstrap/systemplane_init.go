@@ -418,7 +418,7 @@ func InitSystemplane(
 		return nil, fmt.Errorf("init systemplane: %w", err)
 	}
 
-	reconcilers, err := buildReconcilers(workerManager, logger)
+	reconcilers, err := buildReconcilers(workerManager, logger, configGetterFuncFromManager(configManager))
 	if err != nil {
 		closeSystemplaneBackend(backend.Closer)
 		return nil, fmt.Errorf("init systemplane: %w", err)
@@ -551,11 +551,11 @@ func systemplaneApplyBehaviors(reg registry.Registry) map[string]domain.ApplyBeh
 // uses on each reload. Execution order is determined by each reconciler's
 // Phase() — StateSync runs first, then Validation, then SideEffect.
 // Registration order within the same phase is preserved (stable sort).
-func buildReconcilers(workerManager *WorkerManager, logger libLog.Logger) ([]ports.BundleReconciler, error) {
+func buildReconcilers(workerManager *WorkerManager, logger libLog.Logger, configGetter func() *Config) ([]ports.BundleReconciler, error) {
 	var reconcilers []ports.BundleReconciler
 
 	reconcilers = append(reconcilers, NewHTTPPolicyReconciler())
-	reconcilers = append(reconcilers, NewPublisherReconciler(logger))
+	reconcilers = append(reconcilers, NewPublisherReconciler(logger, configGetter))
 
 	if workerManager != nil {
 		workerReconciler, err := NewWorkerReconciler(workerManager)

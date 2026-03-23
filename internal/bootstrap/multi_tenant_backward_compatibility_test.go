@@ -16,6 +16,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/core"
+
 	"github.com/LerianStudio/matcher/internal/auth"
 	sharedTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
@@ -28,10 +30,10 @@ func TestMultiTenant_BackwardCompatibility(t *testing.T) {
 	redisConn := sharedTestutil.NewRedisClientWithMock(nil)
 	cfg := defaultConfig()
 	cfg.Tenancy.MultiTenantEnabled = false
-	cfg.Tenancy.MultiTenantInfraEnabled = false
 
-	provider, manager := createInfraProviderWithBundleState(cfg, nil, postgresConn, redisConn, nil)
+	provider, manager, tenantDBHandler := createInfraProviderWithBundleState(cfg, nil, postgresConn, redisConn, nil)
 	require.NotNil(t, manager)
+	assert.Nil(t, tenantDBHandler, "single-tenant mode should not create tenant DB middleware")
 
 	resolvedPostgres, err := provider.GetPostgresConnection(context.Background())
 	require.NoError(t, err)
@@ -53,36 +55,152 @@ func TestMultiTenant_BackwardCompatibility(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestCreateInfraProvider_MultiTenantEnabled_ReturnsTenantConnectionManager(t *testing.T) {
+func TestMultiTenant_BackwardCompatibility_ConfigLoadsWithoutMultiTenantVars(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+
+	assert.False(t, cfg.Tenancy.MultiTenantEnabled, "multi-tenant should be disabled by default")
+	assert.Empty(t, cfg.Tenancy.MultiTenantURL, "multi-tenant URL should be empty by default")
+	assert.Equal(t, "11111111-1111-1111-1111-111111111111", cfg.Tenancy.DefaultTenantID,
+		"default tenant ID should be populated")
+	assert.Equal(t, "default", cfg.Tenancy.DefaultTenantSlug,
+		"default tenant slug should be populated")
+
+	err := cfg.Validate()
+	require.NoError(t, err, "default config must validate without any multi-tenant vars")
+}
+
+func TestMultiTenant_BackwardCompatibility_NoTenantManagerRequired(t *testing.T) {
+	t.Parallel()
+
+	postgresConn := sharedTestutil.NewClientWithResolver(nil)
+	redisConn := sharedTestutil.NewRedisClientWithMock(nil)
+	cfg := defaultConfig()
+	cfg.Tenancy.MultiTenantEnabled = false
+
+	provider, manager, tenantDBHandler := createInfraProviderWithBundleState(cfg, nil, postgresConn, redisConn, nil)
+	require.NotNil(t, manager, "config manager should be created in single-tenant mode")
+	assert.Nil(t, tenantDBHandler, "no tenant DB handler in single-tenant mode")
+
+	ctx := context.WithValue(context.Background(), auth.TenantIDKey, auth.DefaultTenantID)
+
+	resolvedPG, err := provider.GetPostgresConnection(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, resolvedPG, "postgres should resolve without tenant manager")
+
+	resolvedRedis, err := provider.GetRedisConnection(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, resolvedRedis, "redis should resolve without tenant manager")
+}
+
+func TestMultiTenant_BackwardCompatibility_ConnectionResolutionWithoutTenantContext(t *testing.T) {
+	t.Parallel()
+
+	postgresConn := sharedTestutil.NewClientWithResolver(nil)
+	redisConn := sharedTestutil.NewRedisClientWithMock(nil)
+	cfg := defaultConfig()
+	cfg.Tenancy.MultiTenantEnabled = false
+
+	provider, _, _ := createInfraProviderWithBundleState(cfg, nil, postgresConn, redisConn, nil)
+
+	tests := []struct {
+		name string
+		ctx  context.Context
+	}{
+		{
+			name: "with default tenant in context",
+			ctx:  context.WithValue(context.Background(), auth.TenantIDKey, auth.DefaultTenantID),
+		},
+		{
+			name: "with bare background context",
+			ctx:  context.Background(),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			pg, err := provider.GetPostgresConnection(tt.ctx)
+			require.NoError(t, err, "postgres should work %s", tt.name)
+			require.NotNil(t, pg)
+
+			redis, err := provider.GetRedisConnection(tt.ctx)
+			require.NoError(t, err, "redis should work %s", tt.name)
+			require.NotNil(t, redis)
+		})
+	}
+}
+
+func TestMultiTenant_BackwardCompatibility_MetricsNoopWhenDisabled(t *testing.T) {
+	t.Parallel()
+
+	m, err := NewMultiTenantMetrics(false)
+	require.NoError(t, err, "creating noop metrics should not fail")
+	require.NotNil(t, m, "noop metrics struct should be non-nil")
+
+	ctx := context.Background()
+
+	assert.NotPanics(t, func() {
+		m.RecordConnection(ctx, "tenant-a", "success")
+		m.RecordConnectionError(ctx, "tenant-a", "timeout")
+		m.SetActiveConsumers(ctx, "tenant-a", "events", 5)
+		m.RecordMessageProcessed(ctx, "tenant-a", "events", "success")
+	}, "all metric methods should be no-op without panic when disabled")
+}
+
+func TestCreateInfraProvider_MultiTenantEnabled_CreatesCanonicalManager(t *testing.T) {
 	t.Parallel()
 
 	requested := false
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requested = true
-		assert.Equal(t, "/tenants/tenant-a/services/matcher/settings", r.URL.Path)
-		assert.Equal(t, "staging", r.URL.Query().Get("environment"))
-		assert.Equal(t, "staging", r.Header.Get("X-Tenant-Environment"))
+		// The canonical lib-commons client calls: /v1/tenants/{tenantID}/associations/{service}/connections
+		assert.Contains(t, r.URL.Path, "/v1/tenants/tenant-a/associations/matcher/connections")
 		assert.Equal(t, "service-api-key", r.Header.Get("X-API-Key"))
-		require.NoError(t, json.NewEncoder(w).Encode(map[string]any{"config": sharedPorts.TenantConfig{PostgresPrimaryDSN: "postgres://tenant-a", RedisAddresses: []string{"redis:6379"}}}))
+
+		// Return a valid TenantConfig response
+		resp := core.TenantConfig{
+			ID:            "tenant-a",
+			IsolationMode: "isolated",
+			Databases: map[string]core.DatabaseConfig{
+				"matcher": {
+					PostgreSQL: &core.PostgreSQLConfig{
+						Host:     "localhost",
+						Port:     5432,
+						Database: "tenant_a",
+						Username: "user",
+						Password: "pass",
+					},
+				},
+			},
+		}
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}))
 	defer server.Close()
 
 	cfg := defaultConfig()
 	cfg.Tenancy.MultiTenantEnabled = true
-	cfg.Tenancy.MultiTenantInfraEnabled = true
 	cfg.Tenancy.MultiTenantURL = server.URL
-	cfg.Tenancy.MultiTenantEnvironment = "staging"
 	cfg.Tenancy.MultiTenantServiceAPIKey = "service-api-key"
 	cfg.Tenancy.MultiTenantMaxTenantPools = 10
 	cfg.Tenancy.MultiTenantIdleTimeoutSec = 300
 	cfg.Tenancy.MultiTenantCircuitBreakerThreshold = 5
 	cfg.Tenancy.MultiTenantCircuitBreakerTimeoutSec = 30
 
-	provider, manager := createInfraProviderWithBundleState(cfg, nil, nil, nil, nil)
+	provider, manager, tenantDBHandler := createInfraProviderWithBundleState(cfg, nil, nil, nil, nil)
 	require.NotNil(t, manager)
+	assert.NotNil(t, tenantDBHandler, "multi-tenant mode should create tenant DB middleware")
 
-	ctx := context.WithValue(context.Background(), auth.TenantIDKey, "tenant-a")
+	// Use the core context key for tenant ID (canonical approach)
+	ctx := core.ContextWithTenantID(context.Background(), "tenant-a")
 	_, err := provider.GetPostgresConnection(ctx)
+	// The connection will fail because we can't actually connect to "localhost:5432"
+	// in a unit test, but the request to the tenant manager should have been made.
 	require.Error(t, err)
-	assert.True(t, requested, "multi-tenant provider should resolve tenant settings through the remote adapter")
+	assert.True(t, requested, "multi-tenant provider should resolve tenant config through the canonical client")
 }

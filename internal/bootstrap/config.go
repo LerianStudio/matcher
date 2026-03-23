@@ -66,12 +66,7 @@ type TenancyConfig struct {
 	MultiTenantIdleTimeoutSec           int    `env:"MULTI_TENANT_IDLE_TIMEOUT_SEC"                envDefault:"300"     mapstructure:"multi_tenant_idle_timeout_sec"`
 	MultiTenantCircuitBreakerThreshold  int    `env:"MULTI_TENANT_CIRCUIT_BREAKER_THRESHOLD"       envDefault:"5"       mapstructure:"multi_tenant_circuit_breaker_threshold"`
 	MultiTenantCircuitBreakerTimeoutSec int    `env:"MULTI_TENANT_CIRCUIT_BREAKER_TIMEOUT_SEC"     envDefault:"30"      mapstructure:"multi_tenant_circuit_breaker_timeout_sec"`
-	MultiTenantServiceAPIKey            string `env:"MULTI_TENANT_SERVICE_API_KEY"                                         mapstructure:"multi_tenant_service_api_key"`
-
-	// MultiTenantInfraEnabled is a deprecated backward-compatible alias for the
-	// previous matcher-specific flag. The primary control surface is now
-	// MultiTenantEnabled. Keep this field until callers fully migrate.
-	MultiTenantInfraEnabled bool `env:"MULTI_TENANT_INFRA_ENABLED" envDefault:"false" mapstructure:"multi_tenant_infra_enabled"`
+	MultiTenantServiceAPIKey            string `env:"MULTI_TENANT_SERVICE_API_KEY"                    json:"-"             mapstructure:"multi_tenant_service_api_key"`
 }
 
 // PostgresConfig configures primary/replica connections and pooling.

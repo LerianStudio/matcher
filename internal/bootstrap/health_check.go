@@ -364,7 +364,7 @@ func shouldIncludeReadinessDetails(cfg *Config) bool {
 	}
 
 	switch strings.ToLower(strings.TrimSpace(cfg.App.EnvName)) {
-	case "development", "test":
+	case defaultEnvName, "test":
 		return true
 	default:
 		return false

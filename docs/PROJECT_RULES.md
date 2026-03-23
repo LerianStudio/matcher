@@ -150,7 +150,7 @@ This project follows Lerian Studio Ring standards for Go services.
 - Distributed locking: `matcher:matchrun:lock:{contextID}` with Lua-verified release.
 - Transaction deduplication: hash of `sourceID:externalID`, Redis SETNX with TTL (via `ingestion/adapters/redis/dedupe_service.go`).
 - Idempotency cache: response caching for duplicate request detection.
-- All keys tenant-scoped via `tenantinfra.ScopedRedisSegments()`.
+- All keys tenant-scoped via `valkey.GetKeyFromContext()` (lib-commons tenant-manager).
 
 ## 12. RabbitMQ + Outbox Pattern
 

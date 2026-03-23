@@ -19,7 +19,6 @@ func TestDefaultConfig_TenancyPrimaryFields(t *testing.T) {
 	cfg := defaultConfig()
 
 	assert.False(t, cfg.Tenancy.MultiTenantEnabled)
-	assert.False(t, cfg.Tenancy.MultiTenantInfraEnabled)
 	assert.Empty(t, cfg.Tenancy.MultiTenantEnvironment)
 	assert.Equal(t, 100, cfg.Tenancy.MultiTenantMaxTenantPools)
 	assert.Equal(t, 300, cfg.Tenancy.MultiTenantIdleTimeoutSec)
@@ -29,72 +28,11 @@ func TestDefaultConfig_TenancyPrimaryFields(t *testing.T) {
 	assert.Empty(t, cfg.Tenancy.MultiTenantServiceAPIKey)
 }
 
-func TestLoadConfigFromEnv_TenancyEnvAliasBackwardCompatibility(t *testing.T) {
-	clearConfigEnvVars(t)
-
-	t.Run("deprecated alias enables primary field when new env is absent", func(t *testing.T) {
-		cfg := defaultConfig()
-		t.Setenv("MULTI_TENANT_INFRA_ENABLED", "true")
-
-		require.NoError(t, loadConfigFromEnv(cfg))
-
-		assert.True(t, cfg.Tenancy.MultiTenantEnabled)
-		assert.True(t, cfg.Tenancy.MultiTenantInfraEnabled)
-	})
-
-	t.Run("primary env wins when both are present", func(t *testing.T) {
-		cfg := defaultConfig()
-		t.Setenv("MULTI_TENANT_ENABLED", "true")
-		t.Setenv("MULTI_TENANT_INFRA_ENABLED", "false")
-
-		require.NoError(t, loadConfigFromEnv(cfg))
-
-		assert.True(t, cfg.Tenancy.MultiTenantEnabled)
-		assert.True(t, cfg.Tenancy.MultiTenantInfraEnabled)
-	})
-
-	t.Run("primary explicit disable wins when legacy alias is still true", func(t *testing.T) {
-		cfg := defaultConfig()
-		t.Setenv("MULTI_TENANT_ENABLED", "false")
-		t.Setenv("MULTI_TENANT_INFRA_ENABLED", "true")
-
-		require.NoError(t, loadConfigFromEnv(cfg))
-
-		assert.False(t, cfg.Tenancy.MultiTenantEnabled)
-		assert.False(t, cfg.Tenancy.MultiTenantInfraEnabled)
-	})
-
-	t.Run("deprecated alias preserves broader bool parsing", func(t *testing.T) {
-		tests := []struct {
-			name  string
-			raw   string
-			value bool
-		}{
-			{name: "numeric truthy", raw: "1", value: true},
-			{name: "short truthy", raw: "t", value: true},
-			{name: "numeric falsey", raw: "0", value: false},
-		}
-
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				cfg := defaultConfig()
-				t.Setenv("MULTI_TENANT_INFRA_ENABLED", tt.raw)
-
-				require.NoError(t, loadConfigFromEnv(cfg))
-
-				assert.Equal(t, tt.value, cfg.Tenancy.MultiTenantEnabled)
-				assert.Equal(t, tt.value, cfg.Tenancy.MultiTenantInfraEnabled)
-			})
-		}
-	})
-}
-
 func TestConfigValidate_MultiTenantRequiresTenantManagerSettings(t *testing.T) {
 	t.Parallel()
 
 	cfg := defaultConfig()
 	cfg.Tenancy.MultiTenantEnabled = true
-	cfg.Tenancy.MultiTenantInfraEnabled = true
 
 	err := cfg.Validate()
 	require.Error(t, err)
@@ -129,7 +67,6 @@ func TestConfigValidate_MultiTenantFieldConstraints(t *testing.T) {
 
 	cfg := defaultConfig()
 	cfg.Tenancy.MultiTenantEnabled = true
-	cfg.Tenancy.MultiTenantInfraEnabled = true
 	cfg.Tenancy.MultiTenantURL = "http://tenant-manager:4003"
 	cfg.Tenancy.MultiTenantServiceAPIKey = "service-api-key"
 

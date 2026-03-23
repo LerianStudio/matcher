@@ -566,7 +566,7 @@ func TestSystemplaneComponents_AllFieldsAccessible(t *testing.T) {
 func TestBuildReconcilers_NilBothManagers(t *testing.T) {
 	t.Parallel()
 
-	reconcilers, err := buildReconcilers(nil, nil)
+	reconcilers, err := buildReconcilers(nil, nil, nil)
 
 	require.NoError(t, err)
 	require.Len(t, reconcilers, 2)
@@ -579,7 +579,7 @@ func TestBuildReconcilers_WithWorkerManager(t *testing.T) {
 
 	wm := NewWorkerManager(nil, nil)
 
-	reconcilers, err := buildReconcilers(wm, nil)
+	reconcilers, err := buildReconcilers(wm, nil, nil)
 
 	require.NoError(t, err)
 	require.Len(t, reconcilers, 3)

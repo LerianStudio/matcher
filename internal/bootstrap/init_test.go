@@ -747,7 +747,7 @@ func TestLogStartupInfo(t *testing.T) {
 			},
 			Auth:      AuthConfig{Enabled: true},
 			Telemetry: TelemetryConfig{Enabled: true},
-			Tenancy:   TenancyConfig{MultiTenantInfraEnabled: true},
+			Tenancy:   TenancyConfig{MultiTenantEnabled: true},
 			ExportWorker: ExportWorkerConfig{
 				Enabled:         true,
 				PollIntervalSec: 5,
@@ -1959,7 +1959,7 @@ func TestInitEventPublishers_OpenChannelFailure_CleansUpOpenedChannel(t *testing
 	})
 	t.Cleanup(restore)
 
-	matchingPublisher, ingestionPublisher, err := initEventPublishers(context.Background(), &libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{})
+	matchingPublisher, ingestionPublisher, err := initEventPublishers(context.Background(), &libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{}, nil)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "open AMQP channels")
@@ -1991,7 +1991,7 @@ func TestInitEventPublishers_MatchingPublisherFailure_CleansUpChannels(t *testin
 	})
 	t.Cleanup(restore)
 
-	matchingPublisher, ingestionPublisher, err := initEventPublishers(context.Background(), &libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{})
+	matchingPublisher, ingestionPublisher, err := initEventPublishers(context.Background(), &libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{}, nil)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "create matching event publisher")
@@ -2029,7 +2029,7 @@ func TestInitEventPublishers_IngestionPublisherFailure_CleansUpPublisherAndChann
 	})
 	t.Cleanup(restore)
 
-	matchingPublisher, ingestionPublisher, err := initEventPublishers(context.Background(), &libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{})
+	matchingPublisher, ingestionPublisher, err := initEventPublishers(context.Background(), &libRabbitmq.RabbitMQConnection{}, &libLog.NopLogger{}, nil)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "create ingestion event publisher")

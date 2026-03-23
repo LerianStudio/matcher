@@ -167,7 +167,6 @@ func TestMatcherKeyDefsTenancyResilience_KeyProperties(t *testing.T) {
 		"tenancy.multi_tenant_circuit_breaker_threshold",
 		"tenancy.multi_tenant_circuit_breaker_timeout_sec",
 		"tenancy.multi_tenant_service_api_key",
-		"tenancy.multi_tenant_infra_enabled",
 	}
 
 	require.Len(t, defs, len(expectedKeys))
@@ -223,19 +222,3 @@ func TestMatcherKeyDefsTenancyResilience_IntFieldsHaveValidators(t *testing.T) {
 	}
 }
 
-func TestMatcherKeyDefsTenancyResilience_InfraEnabledIsBool(t *testing.T) {
-	t.Parallel()
-
-	defs := matcherKeyDefsTenancyResilience()
-
-	var found bool
-
-	for _, def := range defs {
-		if def.Key == "tenancy.multi_tenant_infra_enabled" {
-			found = true
-			assert.Equal(t, domain.ValueTypeBool, def.ValueType)
-		}
-	}
-
-	assert.True(t, found, "tenancy.multi_tenant_infra_enabled must exist")
-}

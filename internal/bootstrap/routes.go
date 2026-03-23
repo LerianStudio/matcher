@@ -43,8 +43,24 @@ func (r *Routes) RegistrationErr() error {
 	return errors.Join(r.registrationErrs...)
 }
 
+// WhenEnabled returns a Fiber handler that delegates to the given middleware when
+// it is non-nil, or calls c.Next() (pass-through) when nil. This enables conditional
+// middleware registration: in single-tenant mode the tenant DB middleware is nil,
+// so it becomes a no-op without affecting the handler chain.
+func WhenEnabled(middleware fiber.Handler) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		if middleware == nil {
+			return c.Next()
+		}
+
+		return middleware(c)
+	}
+}
+
 // RegisterRoutes configures health endpoints and API route groups with authentication.
-// Middleware order: Auth -> TenantExtract -> Idempotency -> RateLimiter -> Handlers
+// Middleware order: Auth -> TenantExtract -> TenantDB (multi-tenant) -> Idempotency -> RateLimiter -> Handlers
+// When multi-tenant mode is enabled, the TenantDB middleware resolves the per-tenant
+// database connection from the canonical lib-commons tenant-manager and stores it in context.
 // Idempotency middleware is applied before rate limiting to ensure duplicate requests
 // are handled correctly even if rate limiting would otherwise block them.
 // The rateLimiter uses lib-commons ratelimit for distributed Redis-backed rate limiting.
@@ -59,6 +75,7 @@ func RegisterRoutes(
 	tenantExtractor *auth.TenantExtractor,
 	rateLimiterGetter func() *ratelimit.RateLimiter,
 	idempotencyRepo sharedHTTP.IdempotencyRepository,
+	tenantDBHandler fiber.Handler,
 ) (*Routes, error) {
 	asserter := assert.New(
 		context.Background(),
@@ -124,6 +141,14 @@ func RegisterRoutes(
 		API: app.Group(""),
 	}
 
+	// Build the additional middleware chain. The tenant DB handler (when enabled)
+	// runs AFTER auth/tenant extraction but BEFORE idempotency and rate limiting.
+	additionalMiddleware := []fiber.Handler{
+		WhenEnabled(tenantDBHandler),
+		idempotencyMiddleware,
+		globalRateLimit,
+	}
+
 	routes.Protected = func(resource string, actions ...string) fiber.Router {
 		group, err := auth.ProtectedGroupWithActionsWithMiddleware(
 			app,
@@ -131,8 +156,7 @@ func RegisterRoutes(
 			tenantExtractor,
 			resource,
 			actions,
-			idempotencyMiddleware,
-			globalRateLimit,
+			additionalMiddleware...,
 		)
 		if err != nil {
 			// This closure is called during route registration at startup,

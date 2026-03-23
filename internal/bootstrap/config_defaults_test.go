@@ -62,7 +62,6 @@ func TestDefaultConfig_Tenancy(t *testing.T) {
 	assert.Equal(t, 300, cfg.Tenancy.MultiTenantIdleTimeoutSec)
 	assert.Equal(t, 5, cfg.Tenancy.MultiTenantCircuitBreakerThreshold)
 	assert.Equal(t, 30, cfg.Tenancy.MultiTenantCircuitBreakerTimeoutSec)
-	assert.False(t, cfg.Tenancy.MultiTenantInfraEnabled)
 }
 
 func TestDefaultConfig_Postgres(t *testing.T) {

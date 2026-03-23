@@ -57,7 +57,6 @@ func configFromSnapshot(snap domain.Snapshot) *Config {
 	cfg.Tenancy.MultiTenantCircuitBreakerThreshold = snapInt(snap, "tenancy.multi_tenant_circuit_breaker_threshold", defaultMultiTenantCircuitBreakerThresh)
 	cfg.Tenancy.MultiTenantCircuitBreakerTimeoutSec = snapInt(snap, "tenancy.multi_tenant_circuit_breaker_timeout_sec", defaultMultiTenantCircuitBreakerSec)
 	cfg.Tenancy.MultiTenantServiceAPIKey = snapString(snap, "tenancy.multi_tenant_service_api_key", "")
-	cfg.Tenancy.MultiTenantInfraEnabled = snapBool(snap, "tenancy.multi_tenant_infra_enabled", defaultMultiTenantInfraEnabled)
 
 	// Postgres.
 	cfg.Postgres.PrimaryHost = snapString(snap, "postgres.primary_host", defaultPGHost)

@@ -41,6 +41,8 @@ import (
 	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/adapters/changefeed"
 	systemplaneDomain "github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
 	systemplaneService "github.com/LerianStudio/lib-commons/v4/commons/systemplane/service"
+	tmmiddleware "github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/middleware"
+	tmrabbitmq "github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/rabbitmq"
 	libZap "github.com/LerianStudio/lib-commons/v4/commons/zap"
 
 	"github.com/LerianStudio/matcher/internal/auth"
@@ -560,7 +562,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 	}, logger)
 	rateLimiterGetter := rlProvider.Get
 
-	infraProvider, connectionManager := createInfraProviderWithBundleState(
+	infraProvider, connectionManager, tenantDBHandler := createInfraProviderWithBundleState(
 		cfg,
 		configManager.Get,
 		postgresConnection,
@@ -590,6 +592,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		tenantExtractor,
 		rateLimiterGetter,
 		idempotencyRepo,
+		tenantDBHandler,
 	)
 	if err != nil {
 		return nil, err
@@ -1391,24 +1394,69 @@ func createInfraProviderWithBundleState(
 	postgres *libPostgres.Client,
 	redis *libRedis.Client,
 	bundleState *activeMatcherBundleState,
-) (sharedPorts.InfrastructureProvider, connectionCloser) {
-	provider := newDynamicInfrastructureProvider(cfg, configGetter, bundleState, postgres, redis, cfg.Logger)
+) (sharedPorts.InfrastructureProvider, connectionCloser, fiber.Handler) {
+	mtEnabled := multiTenantModeEnabled(cfg)
 
-	return provider, provider
+	metrics, metricsErr := NewMultiTenantMetrics(mtEnabled)
+	if metricsErr != nil && cfg.Logger != nil {
+		cfg.Logger.Log(context.Background(), libLog.LevelWarn,
+			fmt.Sprintf("multi-tenant metrics not available: %v", metricsErr))
+	}
+
+	provider := newDynamicInfrastructureProvider(cfg, configGetter, bundleState, postgres, redis, cfg.Logger, metrics)
+
+	// Create the canonical TenantMiddleware when multi-tenant mode is enabled.
+	// The middleware resolves per-tenant database connections from the lib-commons
+	// tenant-manager and stores them in context for downstream handlers/repositories.
+	// In single-tenant mode, tenantDBHandler is nil and WhenEnabled makes it a no-op.
+	tenantDBHandler := initMultiTenantDBHandler(cfg, configGetter, provider)
+
+	return provider, provider, tenantDBHandler
 }
 
-func safePositiveUint32(value int) uint32 {
-	const maxInt32Value = int(^uint32(0) >> 1)
-
-	if value <= 0 {
-		return 0
+// initMultiTenantDBHandler creates a Fiber middleware handler for multi-tenant database
+// resolution when multi-tenant mode is enabled. Returns nil in single-tenant mode.
+func initMultiTenantDBHandler(
+	cfg *Config,
+	configGetter func() *Config,
+	provider *dynamicInfrastructureProvider,
+) fiber.Handler {
+	if !multiTenantModeEnabled(cfg) {
+		return nil
 	}
 
-	if value > maxInt32Value {
-		return uint32(maxInt32Value)
+	tmClient, pgManager, err := buildCanonicalTenantManager(cfg, cfg.Logger)
+	if err != nil && cfg.Logger != nil {
+		cfg.Logger.Log(context.Background(), libLog.LevelWarn,
+			fmt.Sprintf("multi-tenant PG manager not available at startup (will retry lazily): %v", err))
 	}
 
-	return uint32(value)
+	if pgManager != nil {
+		// Share the pgManager and tmClient with the provider so it doesn't create
+		// a duplicate and so tmClient is cleaned up on provider.Close().
+		provider.mu.Lock()
+		provider.pgManager = pgManager
+		provider.tmClient = tmClient
+		provider.multiTenantKey = dynamicMultiTenantKey(cfg)
+		provider.mu.Unlock()
+	}
+
+	// Create a dynamic tenant DB handler that resolves the current PG manager
+	// on each request. This ensures the middleware always uses the latest manager
+	// after a runtime config rebuild (e.g., systemplane reload), instead of
+	// capturing a stale pgManager from startup.
+	return func(fiberCtx *fiber.Ctx) error {
+		mgr, mgrErr := provider.currentPGManager(fiberCtx.UserContext(), configGetter())
+		if mgrErr != nil {
+			return fmt.Errorf("resolve tenant postgres manager: %w", mgrErr)
+		}
+
+		mid := tmmiddleware.NewTenantMiddleware(
+			tmmiddleware.WithPostgresManager(mgr),
+		)
+
+		return mid.WithTenantDB(fiberCtx)
+	}
 }
 
 func buildRedisConfig(cfg *Config, logger libLog.Logger) libRedis.Config {
@@ -1978,7 +2026,26 @@ func initModulesAndMessaging(
 		return nil, err
 	}
 
-	matchingPublisher, ingestionPublisher, err := initEventPublishers(ctx, rabbitMQConnection, logger)
+	// Create RabbitMQ tenant manager when multi-tenant is enabled.
+	// This provides Layer 1 (vhost isolation) for event publishers.
+	var rmqManager *tmrabbitmq.Manager
+
+	if multiTenantModeEnabled(cfg) {
+		rmqTmClient, rmqMgr := buildRabbitMQTenantManagerWithClient(ctx, cfg, logger)
+		rmqManager = rmqMgr
+
+		// Store the RabbitMQ tenant-manager resources on the infrastructure provider
+		// so they are cleaned up on provider.Close(). Without this, the tmClient and
+		// Manager created by buildRabbitMQTenantManagerWithClient would be leaked.
+		if dynProvider, ok := provider.(*dynamicInfrastructureProvider); ok && rmqMgr != nil {
+			dynProvider.mu.Lock()
+			dynProvider.rmqManager = rmqMgr
+			dynProvider.rmqTmClient = rmqTmClient
+			dynProvider.mu.Unlock()
+		}
+	}
+
+	matchingPublisher, ingestionPublisher, err := initEventPublishers(ctx, rabbitMQConnection, logger, rmqManager)
 	if err != nil {
 		return nil, err
 	}
@@ -2201,7 +2268,26 @@ func initEventPublishers(
 	ctx context.Context,
 	rabbitMQConnection *libRabbitmq.RabbitMQConnection,
 	logger libLog.Logger,
+	rmqManager *tmrabbitmq.Manager,
 ) (*matchingRabbitmq.EventPublisher, *ingestionRabbitmq.EventPublisher, error) {
+	// Multi-tenant mode: use per-tenant vhost channels via tmrabbitmq.Manager.
+	// No dedicated AMQP channels or confirmable publishers are needed because
+	// each publish call resolves a tenant-specific channel on demand.
+	if rmqManager != nil {
+		matchingPublisher, err := matchingRabbitmq.NewMultiTenantEventPublisher(rmqManager)
+		if err != nil {
+			return nil, nil, fmt.Errorf("create multi-tenant matching event publisher: %w", err)
+		}
+
+		ingestionPublisher, err := ingestionRabbitmq.NewMultiTenantEventPublisher(rmqManager)
+		if err != nil {
+			return nil, nil, fmt.Errorf("create multi-tenant ingestion event publisher: %w", err)
+		}
+
+		return matchingPublisher, ingestionPublisher, nil
+	}
+
+	// Single-tenant mode: existing behavior with dedicated AMQP channels.
 	success := false
 	openChannelFn := loadOpenDedicatedChannelFn()
 	newMatchingPublisherFn := loadNewMatchingEventPublisherFromChannelFn()

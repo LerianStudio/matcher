@@ -29,6 +29,15 @@ func IsProductionEnvironment(envName string) bool {
 	return strings.EqualFold(strings.TrimSpace(envName), envProduction)
 }
 
+// isLocalDevelopmentEnvironment reports whether envName is a local development
+// environment where insecure HTTP may be acceptable (e.g., for tenant-manager
+// communication over localhost). Staging, pre-production, and other real
+// deployment environments must use HTTPS.
+func isLocalDevelopmentEnvironment(envName string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(envName))
+	return normalized == "development" || normalized == "dev" || normalized == ""
+}
+
 // ResolveLoggerLevel validates and normalizes logger level values.
 // Invalid or empty values fall back to "info".
 func ResolveLoggerLevel(level string) string {

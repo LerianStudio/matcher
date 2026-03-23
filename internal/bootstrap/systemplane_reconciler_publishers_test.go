@@ -28,7 +28,7 @@ func TestNewPublisherReconciler_WithLogger(t *testing.T) {
 	t.Parallel()
 
 	logger := &libLog.NopLogger{}
-	reconciler := NewPublisherReconciler(logger)
+	reconciler := NewPublisherReconciler(logger, nil)
 
 	require.NotNil(t, reconciler)
 	assert.Equal(t, logger, reconciler.logger)
@@ -37,7 +37,7 @@ func TestNewPublisherReconciler_WithLogger(t *testing.T) {
 func TestNewPublisherReconciler_NilLogger(t *testing.T) {
 	t.Parallel()
 
-	reconciler := NewPublisherReconciler(nil)
+	reconciler := NewPublisherReconciler(nil, nil)
 
 	require.NotNil(t, reconciler)
 	assert.NotNil(t, reconciler.logger, "nil logger must be replaced with NopLogger")
@@ -48,7 +48,7 @@ func TestNewPublisherReconciler_NilLogger(t *testing.T) {
 func TestPublisherReconciler_Name(t *testing.T) {
 	t.Parallel()
 
-	reconciler := NewPublisherReconciler(&libLog.NopLogger{})
+	reconciler := NewPublisherReconciler(&libLog.NopLogger{}, nil)
 
 	name := reconciler.Name()
 
@@ -60,7 +60,7 @@ func TestPublisherReconciler_Name(t *testing.T) {
 func TestPublisherReconciler_Phase(t *testing.T) {
 	t.Parallel()
 
-	reconciler := NewPublisherReconciler(&libLog.NopLogger{})
+	reconciler := NewPublisherReconciler(&libLog.NopLogger{}, nil)
 
 	phase := reconciler.Phase()
 
@@ -72,7 +72,7 @@ func TestPublisherReconciler_Phase(t *testing.T) {
 func TestPublisherReconciler_Reconcile_NilCandidate(t *testing.T) {
 	t.Parallel()
 
-	reconciler := NewPublisherReconciler(&libLog.NopLogger{})
+	reconciler := NewPublisherReconciler(&libLog.NopLogger{}, nil)
 
 	err := reconciler.Reconcile(context.Background(), nil, nil, domain.Snapshot{})
 
@@ -82,7 +82,7 @@ func TestPublisherReconciler_Reconcile_NilCandidate(t *testing.T) {
 func TestPublisherReconciler_Reconcile_NonMatcherBundle(t *testing.T) {
 	t.Parallel()
 
-	reconciler := NewPublisherReconciler(&libLog.NopLogger{})
+	reconciler := NewPublisherReconciler(&libLog.NopLogger{}, nil)
 
 	// Pass a non-MatcherBundle candidate: the type assertion should return false.
 	err := reconciler.Reconcile(context.Background(), nil, &mockRuntimeBundle{}, domain.Snapshot{})
@@ -93,7 +93,7 @@ func TestPublisherReconciler_Reconcile_NonMatcherBundle(t *testing.T) {
 func TestPublisherReconciler_Reconcile_NilRabbitMQConn(t *testing.T) {
 	t.Parallel()
 
-	reconciler := NewPublisherReconciler(&libLog.NopLogger{})
+	reconciler := NewPublisherReconciler(&libLog.NopLogger{}, nil)
 
 	// MatcherBundle with no RabbitMQ connection.
 	candidate := &MatcherBundle{}

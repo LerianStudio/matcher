@@ -162,18 +162,5 @@ func matcherKeyDefsTenancyResilience() []domain.KeyDef {
 			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactFull,
 		},
-		{
-			Key:              "tenancy.multi_tenant_infra_enabled",
-			Kind:             domain.KindConfig,
-			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
-			DefaultValue:     defaultMultiTenantInfraEnabled,
-			ValueType:        domain.ValueTypeBool,
-			ApplyBehavior:    domain.ApplyBundleRebuild,
-			MutableAtRuntime: true,
-			Description:      "Deprecated: backward-compatible alias for multi_tenant_enabled",
-			Group:            "tenancy",
-			Component:        domain.ComponentNone,
-			RedactPolicy:     domain.RedactNone,
-		},
 	}
 }

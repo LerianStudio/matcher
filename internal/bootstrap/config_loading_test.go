@@ -53,20 +53,6 @@ func TestLoadConfigWithLogger_TypedNilLogger_CreatesDefault(t *testing.T) {
 	assert.NotNil(t, cfg.Logger)
 }
 
-func TestLoadConfigWithLogger_TenancyAliasConflictUsesPrimaryEnv(t *testing.T) {
-	clearConfigEnvVars(t)
-
-	// When both MULTI_TENANT_ENABLED and MULTI_TENANT_INFRA_ENABLED are set,
-	// the primary (MULTI_TENANT_ENABLED) takes precedence.
-	t.Setenv("MULTI_TENANT_ENABLED", "false")
-	t.Setenv("MULTI_TENANT_INFRA_ENABLED", "true")
-
-	cfg, err := LoadConfigWithLogger(&libLog.NopLogger{})
-	require.NoError(t, err)
-	assert.False(t, cfg.Tenancy.MultiTenantEnabled)
-	assert.False(t, cfg.Tenancy.MultiTenantInfraEnabled)
-}
-
 func TestEnforceProductionSecurityDefaults_Production_DisablesSwagger(t *testing.T) {
 	t.Parallel()
 

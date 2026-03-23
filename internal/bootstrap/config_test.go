@@ -85,7 +85,6 @@ type flatConfig struct {
 	ExportWorkerPollIntervalSec int
 	ObjectStorageEndpoint       string
 	ObjectStorageBucket         string
-	MultiTenantInfraEnabled     bool
 	WebhookTimeoutSec           int
 	ArchivalEnabled             bool
 	ArchivalIntervalHours       int
@@ -108,7 +107,6 @@ func buildConfig(fc flatConfig) Config {
 	cfg.Tenancy.DefaultTenantSlug = fc.DefaultTenantSlug
 	cfg.Tenancy.MultiTenantEnabled = fc.MultiTenantEnabled
 	cfg.Tenancy.MultiTenantURL = fc.MultiTenantURL
-	cfg.Tenancy.MultiTenantInfraEnabled = fc.MultiTenantInfraEnabled
 	cfg.Server.BodyLimitBytes = fc.BodyLimitBytes
 	cfg.Server.CORSAllowedOrigins = fc.CORSAllowedOrigins
 	cfg.Server.TLSTerminatedUpstream = fc.TLSTerminatedUpstream

@@ -69,7 +69,6 @@ func expectedNonHotReloadEnvVars(t *testing.T) map[string]bool {
 	}
 
 	for _, key := range []string{
-		"MULTI_TENANT_INFRA_ENABLED",
 		spBootstrap.EnvBackend,
 		spBootstrap.EnvPostgresDSN,
 		spBootstrap.EnvPostgresSchema,
