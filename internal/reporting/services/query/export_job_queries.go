@@ -58,7 +58,11 @@ func (svc *ExportJobQueryService) GetByID(
 
 	job, err := svc.repo.GetByID(ctx, id)
 	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get export job", err)
+		if errors.Is(err, repositories.ErrExportJobNotFound) {
+			libOpentelemetry.HandleSpanBusinessErrorEvent(span, "export job not found", err)
+		} else {
+			libOpentelemetry.HandleSpanError(span, "failed to get export job", err)
+		}
 
 		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to get export job by ID %s: %v", id.String(), err))
 

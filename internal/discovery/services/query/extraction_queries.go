@@ -23,11 +23,13 @@ func (uc *UseCase) GetExtraction(ctx context.Context, id uuid.UUID) (*entities.E
 
 	req, err := uc.extractionRepo.FindByID(ctx, id)
 	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "get extraction", err)
-
 		if errors.Is(err, repositories.ErrExtractionNotFound) {
+			libOpentelemetry.HandleSpanBusinessErrorEvent(span, "extraction not found", err)
+
 			return nil, ErrExtractionNotFound
 		}
+
+		libOpentelemetry.HandleSpanError(span, "get extraction", err)
 
 		return nil, fmt.Errorf("get extraction: %w", err)
 	}

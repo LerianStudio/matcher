@@ -5,6 +5,7 @@ package command
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
 
@@ -28,6 +29,18 @@ var (
 	errTestItemCreate   = errors.New("item creation failed")
 	errTestMarkFailed   = errors.New("mark failed")
 )
+
+// stubOutboxTxCreatorForManual is a no-op outbox transactional creator used
+// by manual-match tests to satisfy the outbox event emission step.
+type stubOutboxTxCreatorForManual struct{}
+
+func (s *stubOutboxTxCreatorForManual) CreateWithTx(
+	_ context.Context,
+	_ *sql.Tx,
+	event *shared.OutboxEvent,
+) (*shared.OutboxEvent, error) {
+	return event, nil
+}
 
 func TestValidateManualMatchInput(t *testing.T) {
 	t.Parallel()
@@ -332,6 +345,7 @@ func TestManualMatch_Success(t *testing.T) {
 		matchRunRepo:   matchRunRepo,
 		matchGroupRepo: matchGroupRepo,
 		matchItemRepo:  matchItemRepo,
+		outboxRepoTx:   &stubOutboxTxCreatorForManual{},
 	}
 
 	input := ManualMatchInput{
@@ -403,6 +417,7 @@ func TestManualMatch_WithBaseAmount(t *testing.T) {
 		matchRunRepo:   &stubMatchRunRepo{},
 		matchGroupRepo: &stubMatchGroupRepo{},
 		matchItemRepo:  &stubMatchItemRepo{},
+		outboxRepoTx:   &stubOutboxTxCreatorForManual{},
 	}
 
 	input := ManualMatchInput{
@@ -616,6 +631,7 @@ func TestManualMatch_MultipleTransactions(t *testing.T) {
 		matchRunRepo:   &stubMatchRunRepo{},
 		matchGroupRepo: &stubMatchGroupRepo{},
 		matchItemRepo:  &stubMatchItemRepo{},
+		outboxRepoTx:   &stubOutboxTxCreatorForManual{},
 	}
 
 	input := ManualMatchInput{
@@ -686,6 +702,7 @@ func TestManualMatch_RunIsCompleted(t *testing.T) {
 		matchRunRepo:   matchRunRepo,
 		matchGroupRepo: &stubMatchGroupRepo{},
 		matchItemRepo:  &stubMatchItemRepo{},
+		outboxRepoTx:   &stubOutboxTxCreatorForManual{},
 	}
 
 	input := ManualMatchInput{
@@ -740,6 +757,7 @@ func TestManualMatch_ConfidenceIs100(t *testing.T) {
 		matchRunRepo:   &stubMatchRunRepo{},
 		matchGroupRepo: &stubMatchGroupRepo{},
 		matchItemRepo:  &stubMatchItemRepo{},
+		outboxRepoTx:   &stubOutboxTxCreatorForManual{},
 	}
 
 	input := ManualMatchInput{

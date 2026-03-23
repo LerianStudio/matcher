@@ -92,7 +92,11 @@ func (uc *UseCase) BulkAssign(ctx context.Context, input BulkAssignInput) (*Bulk
 	for _, exceptionID := range dedupedIDs {
 		err := uc.assignSingle(ctx, exceptionID, assignee, actor)
 		if err != nil {
-			libOpentelemetry.HandleSpanError(span, "bulk assign item failed", err)
+			if isBusinessError(err) {
+				libOpentelemetry.HandleSpanBusinessErrorEvent(span, "bulk assign item failed", err)
+			} else {
+				libOpentelemetry.HandleSpanError(span, "bulk assign item failed", err)
+			}
 
 			logger.Log(ctx, libLog.LevelError, fmt.Sprintf("bulk assign failed for %s: %v", exceptionID, err))
 
@@ -190,7 +194,11 @@ func (uc *UseCase) BulkResolve(ctx context.Context, input BulkResolveInput) (*Bu
 	for _, exceptionID := range dedupedIDs {
 		err := uc.resolveSingle(ctx, exceptionID, resolution, reason, actor)
 		if err != nil {
-			libOpentelemetry.HandleSpanError(span, "bulk resolve item failed", err)
+			if isBusinessError(err) {
+				libOpentelemetry.HandleSpanBusinessErrorEvent(span, "bulk resolve item failed", err)
+			} else {
+				libOpentelemetry.HandleSpanError(span, "bulk resolve item failed", err)
+			}
 
 			logger.Log(ctx, libLog.LevelError, fmt.Sprintf("bulk resolve failed for %s: %v", exceptionID, err))
 

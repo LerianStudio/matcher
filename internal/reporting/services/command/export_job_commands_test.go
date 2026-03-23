@@ -20,6 +20,7 @@ import (
 	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
+	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
 	repomocks "github.com/LerianStudio/matcher/internal/reporting/domain/repositories/mocks"
 )
 
@@ -49,6 +50,19 @@ type exportJobRepoMockConfig struct {
 	listByContextErr   error
 }
 
+// newExportJobRepoMock builds a mock ExportJobRepository pre-wired with the
+// given config.  All methods default to AnyTimes() so that tests focusing on
+// one use case aren't forced to specify expectations for every unrelated
+// method on the interface.
+//
+// Design decision: AnyTimes() on all methods is a deliberate trade-off for
+// this mock helper.  The ExportJobRepository interface has 10+ methods, and
+// each test typically exercises only 1-2 of them.  Requiring explicit call
+// counts for every method would bloat each test with ~20 lines of irrelevant
+// setup.  The config struct already provides per-method error injection and
+// call tracking (createCalled, updateStatusCalled), which gives targeted
+// assertion power where it matters.  Tests that need stricter call-count
+// verification should build their own gomock expectations directly.
 func newExportJobRepoMock(
 	t *testing.T,
 	cfg exportJobRepoMockConfig,
@@ -406,6 +420,22 @@ func TestExportJobUseCase_CancelExportJob(t *testing.T) {
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "getting export job")
+	})
+
+	t.Run("returns sentinel ErrExportJobNotFound for not-found repository error", func(t *testing.T) {
+		t.Parallel()
+
+		repo := newExportJobRepoMock(t, exportJobRepoMockConfig{
+			getByIDErr: repositories.ErrExportJobNotFound,
+		})
+		uc, err := NewExportJobUseCase(repo)
+		require.NoError(t, err)
+
+		ctx := contextWithTracking()
+		err = uc.CancelExportJob(ctx, uuid.New())
+
+		require.Error(t, err)
+		require.ErrorIs(t, err, ErrExportJobNotFound)
 	})
 
 	t.Run("returns error on update failure", func(t *testing.T) {

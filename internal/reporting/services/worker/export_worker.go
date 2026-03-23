@@ -365,12 +365,16 @@ func (worker *ExportWorker) processJob(ctx context.Context, job *entities.Export
 		return
 	}
 
-	job.MarkSucceeded(fileKey, fileName, sha256Hash, recordCount, bytesWritten)
+	if err := job.MarkSucceeded(fileKey, fileName, sha256Hash, recordCount, bytesWritten); err != nil {
+		worker.logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to mark job %s as succeeded: %v", job.ID, err))
+
+		return
+	}
 
 	if err := worker.jobRepo.Update(ctx, job); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to update job status", err)
 
-		worker.logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to mark job %s as succeeded: %v", job.ID, err))
+		worker.logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to persist job %s succeeded status: %v", job.ID, err))
 
 		return
 	}
@@ -1005,7 +1009,11 @@ func (worker *ExportWorker) failJob(ctx context.Context, job *entities.ExportJob
 		err,
 	))
 
-	job.MarkFailed(err.Error())
+	if markErr := job.MarkFailed(err.Error()); markErr != nil {
+		worker.logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to mark job %s as failed: %v", job.ID, markErr))
+
+		return
+	}
 
 	if updateErr := worker.jobRepo.UpdateStatus(ctx, job); updateErr != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to update job status to failed", updateErr)
@@ -1025,7 +1033,9 @@ func (worker *ExportWorker) requeueForRetry(
 	worker.logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("export job %s failed (attempt %d/%d), retrying in %v: %v",
 		job.ID, job.Attempts, worker.cfg.MaxRetries, backoffDuration, err))
 
-	job.MarkForRetry(err.Error(), nextRetry)
+	if markErr := job.MarkForRetry(err.Error(), nextRetry); markErr != nil {
+		return fmt.Errorf("mark export job for retry: %w", markErr)
+	}
 
 	updateErr := worker.jobRepo.RequeueForRetry(ctx, job)
 	if updateErr == nil {
@@ -1049,11 +1059,19 @@ func (worker *ExportWorker) handleRequeueFailure(
 		originalErr,
 		updateErr,
 	)
-	job.MarkFailed(errMsg)
+	if markErr := job.MarkFailed(errMsg); markErr != nil {
+		worker.logger.Log(ctx, libLog.LevelError, fmt.Sprintf(
+			"failed to mark job %s as failed after requeue error (transition rejected: %v)",
+			job.ID,
+			markErr,
+		))
+
+		return
+	}
 
 	if failErr := worker.jobRepo.UpdateStatus(ctx, job); failErr != nil {
 		worker.logger.Log(ctx, libLog.LevelError, fmt.Sprintf(
-			"failed to mark job %s as failed after requeue error: %v",
+			"failed to persist job %s failed status after requeue error: %v",
 			job.ID,
 			failErr,
 		))

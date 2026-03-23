@@ -16,6 +16,7 @@ import (
 	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
+	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
 	repomocks "github.com/LerianStudio/matcher/internal/reporting/domain/repositories/mocks"
 )
 
@@ -97,6 +98,26 @@ func TestExportJobQueryService_GetByID(t *testing.T) {
 
 		require.Error(t, err)
 		assert.Nil(t, job)
+	})
+
+	t.Run("wraps sentinel ErrExportJobNotFound from repository", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		repo := repomocks.NewMockExportJobRepository(ctrl)
+
+		repo.EXPECT().GetByID(gomock.Any(), gomock.Any()).
+			Return(nil, repositories.ErrExportJobNotFound).
+			Times(1)
+
+		svc, err := NewExportJobQueryService(repo)
+		require.NoError(t, err)
+
+		job, err := svc.GetByID(context.Background(), uuid.New())
+
+		require.Error(t, err)
+		assert.Nil(t, job)
+		require.ErrorIs(t, err, repositories.ErrExportJobNotFound)
 	})
 }
 

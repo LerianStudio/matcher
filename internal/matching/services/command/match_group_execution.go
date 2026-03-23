@@ -2,6 +2,7 @@ package command
 
 import (
 	"context"
+	"fmt"
 	"maps"
 
 	"github.com/google/uuid"
@@ -68,7 +69,7 @@ func (uc *UseCase) executeMatchRules(
 	leftByID := indexTransactions(mrc.leftCandidates)
 	rightByID := indexTransactions(mrc.rightCandidates)
 
-	processOutput := uc.processProposals(
+	processOutput, proposalErr := uc.processProposals(
 		ctx,
 		span,
 		logger,
@@ -78,6 +79,11 @@ func (uc *UseCase) executeMatchRules(
 		leftByID,
 		rightByID,
 	)
+	if proposalErr != nil {
+		libOpentelemetry.HandleSpanError(span, "proposal processing failed", proposalErr)
+		return nil, fmt.Errorf("proposal processing: %w", proposalErr)
+	}
+
 	groups = append(groups, processOutput.groups...)
 	items = append(items, processOutput.items...)
 	autoMatchedIDs = append(autoMatchedIDs, processOutput.autoMatchedIDs...)

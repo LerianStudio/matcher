@@ -16,7 +16,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/auth"
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	matchingVO "github.com/LerianStudio/matcher/internal/matching/domain/value_objects"
-	outboxmocks "github.com/LerianStudio/matcher/internal/outbox/domain/repositories/mocks"
+	outboxmocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
 )
 
 func TestEnqueueMatchConfirmedEvents_NilOutboxRepoTx(t *testing.T) {

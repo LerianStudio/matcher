@@ -52,6 +52,7 @@ var (
 	ErrOutboxRepoNotConfigured          = errors.New("outbox repository is not configured")
 	ErrOutboxRequiresSQLTx              = errors.New("outbox requires *sql.Tx")
 	ErrContextCancelled                 = errors.New("operation cancelled")
+	ErrRateNotFound                     = errors.New("rate not found for fee verification")
 )
 
 const (
@@ -114,6 +115,7 @@ type feeExtractionError struct {
 type feeItemResult struct {
 	variance       *matchingEntities.FeeVariance
 	exceptionInput *ports.ExceptionTransactionInput
+	fatalErr       error // non-nil signals the caller to fail the run
 }
 
 type allocationErrorInfo struct {

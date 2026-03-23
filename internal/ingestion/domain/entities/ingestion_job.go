@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/LerianStudio/lib-commons/v4/commons/assert"
+	"github.com/LerianStudio/lib-commons/v4/commons/pointers"
 
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
@@ -149,7 +150,7 @@ func (job *IngestionJob) Complete(ctx context.Context, total, failed int) error 
 
 	now := time.Now().UTC()
 	job.Status = value_objects.JobStatusCompleted
-	job.CompletedAt = &now
+	job.CompletedAt = pointers.Time(now)
 	job.Metadata.TotalRows = total
 	job.Metadata.FailedRows = failed
 	job.UpdatedAt = now
@@ -183,7 +184,7 @@ func (job *IngestionJob) Fail(ctx context.Context, errMsg string) error {
 
 	now := time.Now().UTC()
 	job.Status = value_objects.JobStatusFailed
-	job.CompletedAt = &now
+	job.CompletedAt = pointers.Time(now)
 	job.Metadata.Error = trimmed
 	job.UpdatedAt = now
 

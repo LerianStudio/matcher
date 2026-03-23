@@ -160,9 +160,13 @@ func (uc *DispatchUseCase) processDispatch(
 		return nil, fmt.Errorf("find exception: %w", err)
 	}
 
+	if exception == nil {
+		return nil, fmt.Errorf("find exception: %w", entities.ErrExceptionNotFound)
+	}
+
 	payload, err := buildDispatchPayload(cmd.ExceptionID, exception, params.target)
 	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to build payload", err)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "failed to build payload", err)
 
 		return nil, fmt.Errorf("build payload: %w", err)
 	}
@@ -344,7 +348,7 @@ func (uc *DispatchUseCase) BulkDispatch(
 			Queue:        queue,
 		})
 		if dispatchErr != nil {
-			libOpentelemetry.HandleSpanError(span, "bulk dispatch item failed", dispatchErr)
+			libOpentelemetry.HandleSpanBusinessErrorEvent(span, "bulk dispatch item failed", dispatchErr)
 
 			logger.Log(ctx, libLog.LevelError, fmt.Sprintf("bulk dispatch failed for %s: %v", exceptionID, dispatchErr))
 

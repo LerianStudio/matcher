@@ -95,7 +95,7 @@ func (pm *PartitionManager) EnsurePartitionsExist(ctx context.Context, lookahead
 	defer span.End()
 
 	if lookaheadMonths <= 0 {
-		libOpentelemetry.HandleSpanError(span, "invalid lookahead", ErrInvalidLookahead)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "invalid lookahead", ErrInvalidLookahead)
 		return ErrInvalidLookahead
 	}
 
@@ -246,14 +246,14 @@ func (pm *PartitionManager) DetachPartition(ctx context.Context, partitionName s
 	defer span.End()
 
 	if err := validatePartitionName(partitionName); err != nil {
-		libOpentelemetry.HandleSpanError(span, "invalid partition name", err)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "invalid partition name", err)
 		return err
 	}
 
 	span.SetAttributes(attribute.String("partition.name", partitionName))
 
 	if err := pm.validateRetentionPeriod(partitionName); err != nil {
-		libOpentelemetry.HandleSpanError(span, "retention period active", err)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "retention period active", err)
 
 		return err
 	}
@@ -299,12 +299,12 @@ func (pm *PartitionManager) DropPartition(ctx context.Context, partitionName str
 	defer span.End()
 
 	if err := validatePartitionName(partitionName); err != nil {
-		libOpentelemetry.HandleSpanError(span, "invalid partition name", err)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "invalid partition name", err)
 		return err
 	}
 
 	if err := pm.validateRetentionPeriod(partitionName); err != nil {
-		libOpentelemetry.HandleSpanError(span, "retention period active", err)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "retention period active", err)
 
 		return err
 	}

@@ -95,8 +95,12 @@ func (uc *UseCase) processForceMatch(
 		return nil, fmt.Errorf("find exception: %w", err)
 	}
 
+	if exception == nil {
+		return nil, fmt.Errorf("find exception: %w", entities.ErrExceptionNotFound)
+	}
+
 	if err := value_objects.ValidateResolutionTransition(exception.Status, value_objects.ExceptionStatusResolved); err != nil {
-		libOpentelemetry.HandleSpanError(span, "invalid resolution transition", err)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "invalid resolution transition", err)
 
 		return nil, fmt.Errorf("validate transition: %w", err)
 	}
@@ -105,7 +109,7 @@ func (uc *UseCase) processForceMatch(
 	previousStatus := exception.Status
 
 	if err := exception.StartResolution(ctx); err != nil {
-		libOpentelemetry.HandleSpanError(span, "start resolution failed", err)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "start resolution failed", err)
 
 		return nil, fmt.Errorf("start resolution: %w", err)
 	}
@@ -115,6 +119,10 @@ func (uc *UseCase) processForceMatch(
 		libOpentelemetry.HandleSpanError(span, "failed to persist pending resolution", err)
 
 		return nil, fmt.Errorf("persist pending resolution: %w", err)
+	}
+
+	if exception == nil {
+		return nil, fmt.Errorf("persist pending resolution: %w", ErrUnexpectedNilResult)
 	}
 
 	// Phase 1: Execute gateway call with automatic revert on failure.
@@ -137,7 +145,7 @@ func (uc *UseCase) processForceMatch(
 		entities.WithResolutionType("FORCE_MATCH"),
 		entities.WithResolutionReason(string(params.overrideReason)),
 	); err != nil {
-		libOpentelemetry.HandleSpanError(span, "resolve exception failed", err)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "resolve exception failed", err)
 
 		return nil, fmt.Errorf("resolve exception: %w", err)
 	}

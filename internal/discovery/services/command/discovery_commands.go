@@ -19,6 +19,11 @@ import (
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
+// TODO(telemetry): discovery/adapters/http/handlers.go — logSpanError uses HandleSpanError for
+// business outcomes (validation, not-found). Add logSpanBusinessEvent using
+// HandleSpanBusinessErrorEvent and create business-aware response variants.
+// See reporting/adapters/http/handlers_export_job.go for the reference implementation.
+
 const discoveryRefreshLockKey = "matcher:discovery:sync"
 
 const defaultDiscoveryRefreshLockTTL = 2 * time.Minute
@@ -54,7 +59,7 @@ func (uc *UseCase) RefreshDiscovery(ctx context.Context) (int, error) {
 	}
 
 	if uc.requireTenantContext && orgID == "" {
-		libOpentelemetry.HandleSpanError(span, "missing tenant context", ErrTenantContextRequired)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "missing tenant context", ErrTenantContextRequired)
 
 		return 0, ErrTenantContextRequired
 	}
@@ -237,17 +242,19 @@ func (uc *UseCase) TestConnection(ctx context.Context, connectionID uuid.UUID) (
 
 	conn, err := uc.connRepo.FindByID(ctx, connectionID)
 	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "find connection", err)
-
 		if errors.Is(err, repositories.ErrConnectionNotFound) {
+			libOpentelemetry.HandleSpanBusinessErrorEvent(span, "connection not found", err)
+
 			return nil, ErrConnectionNotFound
 		}
+
+		libOpentelemetry.HandleSpanError(span, "find connection", err)
 
 		return nil, fmt.Errorf("find connection: %w", err)
 	}
 
 	if conn == nil {
-		libOpentelemetry.HandleSpanError(span, "find connection", ErrConnectionNotFound)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "connection not found", ErrConnectionNotFound)
 
 		return nil, ErrConnectionNotFound
 	}
@@ -260,7 +267,7 @@ func (uc *UseCase) TestConnection(ctx context.Context, connectionID uuid.UUID) (
 	}
 
 	if result == nil {
-		libOpentelemetry.HandleSpanError(span, "test connection", ErrNilTestConnectionResult)
+		libOpentelemetry.HandleSpanError(span, "test connection returned nil", ErrNilTestConnectionResult)
 
 		return nil, ErrNilTestConnectionResult
 	}

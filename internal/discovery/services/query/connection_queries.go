@@ -88,12 +88,14 @@ func (uc *UseCase) GetConnection(ctx context.Context, id uuid.UUID) (*entities.F
 
 	conn, err := uc.connRepo.FindByID(ctx, id)
 	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "get connection", err)
-
 		// Use domain-level sentinel from repositories package for proper error matching.
 		if errors.Is(err, repositories.ErrConnectionNotFound) {
+			libOpentelemetry.HandleSpanBusinessErrorEvent(span, "connection not found", err)
+
 			return nil, ErrConnectionNotFound
 		}
+
+		libOpentelemetry.HandleSpanError(span, "get connection", err)
 
 		return nil, fmt.Errorf("get connection: %w", err)
 	}
@@ -114,11 +116,13 @@ func (uc *UseCase) GetConnectionSchema(ctx context.Context, connectionID uuid.UU
 
 	conn, err := uc.connRepo.FindByID(ctx, connectionID)
 	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "get connection for schema", err)
-
 		if errors.Is(err, repositories.ErrConnectionNotFound) {
+			libOpentelemetry.HandleSpanBusinessErrorEvent(span, "connection not found for schema", err)
+
 			return nil, ErrConnectionNotFound
 		}
+
+		libOpentelemetry.HandleSpanError(span, "get connection for schema", err)
 
 		return nil, fmt.Errorf("get connection for schema: %w", err)
 	}

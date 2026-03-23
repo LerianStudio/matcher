@@ -16,6 +16,7 @@ import (
 	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v4/commons/pointers"
 
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/repositories"
@@ -212,7 +213,7 @@ func (uc *CallbackUseCase) checkRateLimit(
 	}
 
 	if !allowed {
-		libOpentelemetry.HandleSpanError(span, "callback rate limit exceeded", ErrCallbackRateLimitExceeded)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "callback rate limit exceeded", ErrCallbackRateLimitExceeded)
 		return ErrCallbackRateLimitExceeded
 	}
 
@@ -228,7 +229,7 @@ func (uc *CallbackUseCase) handleExistingCallback(
 	cachedResult *value_objects.IdempotencyResult,
 ) error {
 	if cachedResult == nil {
-		libOpentelemetry.HandleSpanError(span, "idempotency state missing", ErrCallbackRetryable)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "idempotency state missing", ErrCallbackRetryable)
 		return ErrCallbackRetryable
 	}
 
@@ -236,13 +237,13 @@ func (uc *CallbackUseCase) handleExistingCallback(
 	case value_objects.IdempotencyStatusComplete:
 		return uc.handleDuplicateCallback(ctx, cmd, params, logger, span)
 	case value_objects.IdempotencyStatusPending:
-		libOpentelemetry.HandleSpanError(span, "callback is still processing", ErrCallbackInProgress)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "callback is still processing", ErrCallbackInProgress)
 		return ErrCallbackInProgress
 	case value_objects.IdempotencyStatusFailed, value_objects.IdempotencyStatusUnknown:
-		libOpentelemetry.HandleSpanError(span, "callback requires retry", ErrCallbackRetryable)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "callback requires retry", ErrCallbackRetryable)
 		return ErrCallbackRetryable
 	default:
-		libOpentelemetry.HandleSpanError(span, "invalid idempotency status", ErrCallbackRetryable)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "invalid idempotency status", ErrCallbackRetryable)
 		return ErrCallbackRetryable
 	}
 }
@@ -269,12 +270,11 @@ func (uc *CallbackUseCase) applyCallback(
 
 	// External tracking fields are set before the status check so callbacks always
 	// update the external reference, even when the status has not changed.
-	externalSystem := params.externalSystem
-	externalIssueID := params.externalIssueID
-	exception.ExternalSystem = &externalSystem
-	exception.ExternalIssueID = &externalIssueID
+	exception.ExternalSystem = pointers.String(params.externalSystem)
+	exception.ExternalIssueID = pointers.String(params.externalIssueID)
 
 	if exception.Status == params.status {
+		applyCallbackMetadataUpdate(exception, params)
 		return nil
 	}
 
@@ -290,6 +290,36 @@ func (uc *CallbackUseCase) applyCallback(
 		return ErrCallbackOpenNotValidTarget
 	}
 
+	return applyCallbackStatusTransition(ctx, exception, params)
+}
+
+// applyCallbackMetadataUpdate applies assignment metadata changes (assignee, due date)
+// when the callback status matches the current exception status.
+func applyCallbackMetadataUpdate(exception *entities.Exception, params *callbackParams) {
+	updated := false
+
+	if trimmed := strings.TrimSpace(params.assignee); trimmed != "" {
+		exception.AssignedTo = &trimmed
+		updated = true
+	}
+
+	if params.dueAt != nil {
+		exception.DueAt = params.dueAt
+		updated = true
+	}
+
+	if updated {
+		exception.UpdatedAt = time.Now().UTC()
+	}
+}
+
+// applyCallbackStatusTransition dispatches the status transition to the appropriate
+// exception method (Assign or Resolve) based on the target status.
+func applyCallbackStatusTransition(
+	ctx context.Context,
+	exception *entities.Exception,
+	params *callbackParams,
+) error {
 	switch params.status {
 	case value_objects.ExceptionStatusAssigned:
 		if strings.TrimSpace(params.assignee) == "" {
@@ -304,8 +334,7 @@ func (uc *CallbackUseCase) applyCallback(
 	case value_objects.ExceptionStatusResolved:
 		notes := params.resolutionNotes
 		if notes == nil || strings.TrimSpace(*notes) == "" {
-			defaultNotes := fmt.Sprintf("Resolved via %s callback", params.externalSystem)
-			notes = &defaultNotes
+			notes = pointers.String(fmt.Sprintf("Resolved via %s callback", params.externalSystem))
 		}
 
 		if err := exception.Resolve(ctx, *notes); err != nil {
@@ -505,7 +534,7 @@ func (uc *CallbackUseCase) processCallback(
 	}
 
 	if err := uc.applyCallback(ctx, exception, params); err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to apply callback", err)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "failed to apply callback", err)
 		uc.markIdempotencyFailed(ctx, params.dedupeKey)
 
 		return fmt.Errorf("apply callback: %w", err)
@@ -531,6 +560,12 @@ func (uc *CallbackUseCase) processCallback(
 		uc.markIdempotencyFailed(ctx, params.dedupeKey)
 
 		return fmt.Errorf("update exception: %w", err)
+	}
+
+	if updated == nil {
+		uc.markIdempotencyFailed(ctx, params.dedupeKey)
+
+		return fmt.Errorf("update exception: %w", ErrUnexpectedNilResult)
 	}
 
 	if err := uc.publishCallbackAudit(ctx, txLease.SQLTx(), cmd, params, updated, span); err != nil {

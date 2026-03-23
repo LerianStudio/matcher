@@ -19,6 +19,11 @@ import (
 	"github.com/LerianStudio/matcher/internal/exception/ports"
 )
 
+// TODO(telemetry): exception/adapters/http/handlers.go — logSpanError uses HandleSpanError for
+// business outcomes (badRequest, notFound, unprocessable, forbidden). Add logSpanBusinessEvent using
+// HandleSpanBusinessErrorEvent and create business-aware variants for 400/404/409/422 responses.
+// See reporting/adapters/http/handlers_export_job.go for the reference implementation.
+
 // AdjustEntryCommand contains parameters for the adjust entry operation.
 type AdjustEntryCommand struct {
 	ExceptionID uuid.UUID
@@ -133,8 +138,12 @@ func (uc *UseCase) processAdjustEntry(
 		return nil, fmt.Errorf("find exception: %w", err)
 	}
 
+	if exception == nil {
+		return nil, fmt.Errorf("find exception: %w", entities.ErrExceptionNotFound)
+	}
+
 	if err := value_objects.ValidateResolutionTransition(exception.Status, value_objects.ExceptionStatusResolved); err != nil {
-		libOpentelemetry.HandleSpanError(span, "invalid resolution transition", err)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "invalid resolution transition", err)
 
 		return nil, fmt.Errorf("validate transition: %w", err)
 	}
@@ -143,7 +152,7 @@ func (uc *UseCase) processAdjustEntry(
 	previousStatus := exception.Status
 
 	if err := exception.StartResolution(ctx); err != nil {
-		libOpentelemetry.HandleSpanError(span, "start resolution failed", err)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "start resolution failed", err)
 
 		return nil, fmt.Errorf("start resolution: %w", err)
 	}
@@ -153,6 +162,10 @@ func (uc *UseCase) processAdjustEntry(
 		libOpentelemetry.HandleSpanError(span, "failed to persist pending resolution", err)
 
 		return nil, fmt.Errorf("persist pending resolution: %w", err)
+	}
+
+	if exception == nil {
+		return nil, fmt.Errorf("persist pending resolution: %w", ErrUnexpectedNilResult)
 	}
 
 	adjustment := ports.AdjustmentInput{
@@ -183,7 +196,7 @@ func (uc *UseCase) processAdjustEntry(
 		entities.WithResolutionType("ADJUST_ENTRY"),
 		entities.WithResolutionReason(string(params.reason)),
 	); err != nil {
-		libOpentelemetry.HandleSpanError(span, "resolve exception failed", err)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "resolve exception failed", err)
 
 		return nil, fmt.Errorf("resolve exception: %w", err)
 	}

@@ -105,7 +105,7 @@ func (uc *UseCase) CloneContext(ctx context.Context, input CloneContextInput) (*
 
 	if sourceContext == nil {
 		wrappedErr := fmt.Errorf("loading source context: %w", ErrContextNotFound)
-		libOpentelemetry.HandleSpanError(span, "source context not found", wrappedErr)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "source context not found", wrappedErr)
 
 		return nil, wrappedErr
 	}

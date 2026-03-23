@@ -6,6 +6,7 @@ package command
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -22,7 +23,8 @@ import (
 	repositoriesmocks "github.com/LerianStudio/matcher/internal/matching/domain/repositories/mocks"
 	matchingVO "github.com/LerianStudio/matcher/internal/matching/domain/value_objects"
 	portsmocks "github.com/LerianStudio/matcher/internal/matching/ports/mocks"
-	outboxmocks "github.com/LerianStudio/matcher/internal/outbox/domain/repositories/mocks"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	outboxmocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
 )
 
 var (
@@ -998,7 +1000,15 @@ func TestUnmatch_ConfirmedGroup_Revokes(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	outboxRepo := outboxmocks.NewMockOutboxRepository(ctrl)
-	outboxRepo.EXPECT().CreateWithTx(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+
+	var capturedOutboxEvent *shared.OutboxEvent
+
+	outboxRepo.EXPECT().CreateWithTx(gomock.Any(), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, _ *sql.Tx, event *shared.OutboxEvent) (*shared.OutboxEvent, error) {
+			capturedOutboxEvent = event
+			return event, nil
+		}).
+		Times(1)
 
 	uc := &UseCase{
 		matchGroupRepo: matchGroupRepo,
@@ -1024,4 +1034,17 @@ func TestUnmatch_ConfirmedGroup_Revokes(t *testing.T) {
 	assert.Len(t, markedIDs, 2)
 	assert.Contains(t, markedIDs, txID1)
 	assert.Contains(t, markedIDs, txID2)
+
+	// Verify the outbox event was emitted with correct type and payload.
+	require.NotNil(t, capturedOutboxEvent, "outbox event must be emitted for revoked confirmed group")
+	assert.Equal(t, matchingEntities.EventTypeMatchUnmatched, capturedOutboxEvent.EventType)
+	assert.NotEqual(t, uuid.Nil, capturedOutboxEvent.AggregateID)
+	require.NotEmpty(t, capturedOutboxEvent.Payload, "outbox event payload must not be empty")
+
+	var unmatchPayload matchingEntities.MatchUnmatchedEvent
+	require.NoError(t, json.Unmarshal(capturedOutboxEvent.Payload, &unmatchPayload))
+	assert.Equal(t, matchGroupID, unmatchPayload.MatchID)
+	assert.Equal(t, contextID, unmatchPayload.ContextID)
+	assert.Equal(t, "Revoke confirmed group", unmatchPayload.Reason)
+	assert.Len(t, unmatchPayload.TransactionIDs, 2)
 }

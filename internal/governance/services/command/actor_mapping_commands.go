@@ -12,6 +12,11 @@ import (
 	"github.com/LerianStudio/matcher/internal/governance/domain/repositories"
 )
 
+// TODO(telemetry): governance/adapters/http/handlers.go — logSpanError uses HandleSpanError for
+// business outcomes (badRequest, notFound, writeNotFound). Add logSpanBusinessEvent using
+// HandleSpanBusinessErrorEvent and create business-aware variants for 400/404 responses.
+// See reporting/adapters/http/handlers_export_job.go for the reference implementation.
+
 // ErrNilActorMappingRepository is an alias for the domain sentinel error.
 var ErrNilActorMappingRepository = entities.ErrNilActorMappingRepository
 
@@ -38,7 +43,7 @@ func (uc *ActorMappingUseCase) UpsertActorMapping(ctx context.Context, actorID s
 
 	mapping, err := entities.NewActorMapping(ctx, actorID, displayName, email)
 	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "invalid actor mapping input", err)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "invalid actor mapping input", err)
 
 		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("invalid actor mapping input: %v", err))
 

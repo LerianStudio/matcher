@@ -18,8 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	sharedhttp "github.com/LerianStudio/lib-commons/v4/commons/net/http"
-	governanceEntities "github.com/LerianStudio/matcher/internal/governance/domain/entities"
-	governanceRepositories "github.com/LerianStudio/matcher/internal/governance/domain/repositories"
+
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	matchingVO "github.com/LerianStudio/matcher/internal/matching/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/matching/ports"
@@ -88,15 +87,15 @@ func (s *stubInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.Replic
 	return nil, nil
 }
 
-// stubAuditLogRepo implements governanceRepositories.AuditLogRepository for testing.
+// stubAuditLogRepo implements sharedPorts.AuditLogRepository for testing.
 type stubAuditLogRepo struct {
 	createErr error
 }
 
 func (s *stubAuditLogRepo) Create(
 	_ context.Context,
-	auditLog *governanceEntities.AuditLog,
-) (*governanceEntities.AuditLog, error) {
+	auditLog *shared.AuditLog,
+) (*shared.AuditLog, error) {
 	if s.createErr != nil {
 		return nil, s.createErr
 	}
@@ -106,9 +105,9 @@ func (s *stubAuditLogRepo) Create(
 
 func (s *stubAuditLogRepo) CreateWithTx(
 	_ context.Context,
-	_ governanceRepositories.Tx,
-	auditLog *governanceEntities.AuditLog,
-) (*governanceEntities.AuditLog, error) {
+	_ sharedPorts.Tx,
+	auditLog *shared.AuditLog,
+) (*shared.AuditLog, error) {
 	if s.createErr != nil {
 		return nil, s.createErr
 	}
@@ -119,7 +118,7 @@ func (s *stubAuditLogRepo) CreateWithTx(
 func (s *stubAuditLogRepo) GetByID(
 	_ context.Context,
 	_ uuid.UUID,
-) (*governanceEntities.AuditLog, error) {
+) (*shared.AuditLog, error) {
 	return nil, nil
 }
 
@@ -129,16 +128,16 @@ func (s *stubAuditLogRepo) ListByEntity(
 	_ uuid.UUID,
 	_ *sharedhttp.TimestampCursor,
 	_ int,
-) ([]*governanceEntities.AuditLog, string, error) {
+) ([]*shared.AuditLog, string, error) {
 	return nil, "", nil
 }
 
 func (s *stubAuditLogRepo) List(
 	_ context.Context,
-	_ governanceEntities.AuditLogFilter,
+	_ shared.AuditLogFilter,
 	_ *sharedhttp.TimestampCursor,
 	_ int,
-) ([]*governanceEntities.AuditLog, string, error) {
+) ([]*shared.AuditLog, string, error) {
 	return nil, "", nil
 }
 

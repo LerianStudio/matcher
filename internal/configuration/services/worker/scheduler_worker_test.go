@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	configPorts "github.com/LerianStudio/matcher/internal/configuration/ports"
@@ -97,25 +98,43 @@ func (m *stubMatchTrigger) TriggerMatchForContext(_ context.Context, tenantID, c
 	m.lastContextID = contextID
 }
 
-// stubInfraProvider implements sharedPorts.InfrastructureProvider.
-type stubInfraProvider struct{}
-
-var _ sharedPorts.InfrastructureProvider = (*stubInfraProvider)(nil)
-
-func (m *stubInfraProvider) GetPostgresConnection(_ context.Context) (*sharedPorts.PostgresConnectionLease, error) {
-	return nil, nil
+// stubLockHandle implements libRedis.LockHandle.
+type stubLockHandle struct {
+	unlockErr error
 }
 
-func (m *stubInfraProvider) GetRedisConnection(_ context.Context) (*sharedPorts.RedisConnectionLease, error) {
-	return nil, nil
+var _ libRedis.LockHandle = (*stubLockHandle)(nil)
+
+func (h *stubLockHandle) Unlock(_ context.Context) error {
+	return h.unlockErr
 }
 
-func (m *stubInfraProvider) BeginTx(_ context.Context) (*sharedPorts.TxLease, error) {
-	return nil, nil
+// stubLockManager implements libRedis.LockManager for worker tests.
+type stubLockManager struct {
+	tryLockFn         func(ctx context.Context, lockKey string) (libRedis.LockHandle, bool, error)
+	withLockOptionsFn func(ctx context.Context, lockKey string, opts libRedis.LockOptions, fn func(context.Context) error) error
 }
 
-func (m *stubInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.ReplicaDBLease, error) {
-	return nil, nil
+var _ libRedis.LockManager = (*stubLockManager)(nil)
+
+func (m *stubLockManager) WithLock(ctx context.Context, lockKey string, fn func(context.Context) error) error {
+	return fn(ctx)
+}
+
+func (m *stubLockManager) WithLockOptions(ctx context.Context, lockKey string, opts libRedis.LockOptions, fn func(context.Context) error) error {
+	if m.withLockOptionsFn != nil {
+		return m.withLockOptionsFn(ctx, lockKey, opts, fn)
+	}
+
+	return fn(ctx)
+}
+
+func (m *stubLockManager) TryLock(ctx context.Context, lockKey string) (libRedis.LockHandle, bool, error) {
+	if m.tryLockFn != nil {
+		return m.tryLockFn(ctx, lockKey)
+	}
+
+	return &stubLockHandle{}, true, nil
 }
 
 // stubLogger implements libLog.Logger (v2) for worker tests.
@@ -141,7 +160,7 @@ func TestNewSchedulerWorker_NilScheduleRepo(t *testing.T) {
 	worker, err := NewSchedulerWorker(
 		nil,
 		&stubMatchTrigger{},
-		&stubInfraProvider{},
+		&stubLockManager{},
 		SchedulerWorkerConfig{Interval: time.Minute},
 		&stubLogger{},
 	)
@@ -156,7 +175,7 @@ func TestNewSchedulerWorker_NilMatchTrigger(t *testing.T) {
 	worker, err := NewSchedulerWorker(
 		&stubScheduleRepo{},
 		nil,
-		&stubInfraProvider{},
+		&stubLockManager{},
 		SchedulerWorkerConfig{Interval: time.Minute},
 		&stubLogger{},
 	)
@@ -165,7 +184,7 @@ func TestNewSchedulerWorker_NilMatchTrigger(t *testing.T) {
 	require.ErrorIs(t, err, ErrNilMatchTrigger)
 }
 
-func TestNewSchedulerWorker_NilInfraProvider(t *testing.T) {
+func TestNewSchedulerWorker_NilLockManager(t *testing.T) {
 	t.Parallel()
 
 	worker, err := NewSchedulerWorker(
@@ -177,7 +196,7 @@ func TestNewSchedulerWorker_NilInfraProvider(t *testing.T) {
 	)
 
 	assert.Nil(t, worker)
-	require.ErrorIs(t, err, ErrNilInfraProvider)
+	require.ErrorIs(t, err, ErrNilLockManager)
 }
 
 func TestNewSchedulerWorker_DefaultInterval(t *testing.T) {
@@ -186,7 +205,7 @@ func TestNewSchedulerWorker_DefaultInterval(t *testing.T) {
 	worker, err := NewSchedulerWorker(
 		&stubScheduleRepo{},
 		&stubMatchTrigger{},
-		&stubInfraProvider{},
+		&stubLockManager{},
 		SchedulerWorkerConfig{Interval: 0},
 		&stubLogger{},
 	)
@@ -201,14 +220,14 @@ func TestNewSchedulerWorker_Success(t *testing.T) {
 
 	repo := &stubScheduleRepo{}
 	trigger := &stubMatchTrigger{}
-	infra := &stubInfraProvider{}
+	locker := &stubLockManager{}
 	logger := &stubLogger{}
 	interval := 30 * time.Second
 
 	worker, err := NewSchedulerWorker(
 		repo,
 		trigger,
-		infra,
+		locker,
 		SchedulerWorkerConfig{Interval: interval},
 		logger,
 	)
@@ -217,7 +236,7 @@ func TestNewSchedulerWorker_Success(t *testing.T) {
 	require.NotNil(t, worker)
 	assert.Equal(t, repo, worker.scheduleRepo)
 	assert.Equal(t, trigger, worker.matchTrigger)
-	assert.Equal(t, infra, worker.infraProvider)
+	assert.Equal(t, locker, worker.lockManager)
 	assert.Equal(t, interval, worker.cfg.Interval)
 	assert.Equal(t, logger, worker.logger)
 	assert.NotNil(t, worker.tracer)
@@ -231,7 +250,7 @@ func TestNewSchedulerWorker_NegativeInterval_DefaultsToMinute(t *testing.T) {
 	worker, err := NewSchedulerWorker(
 		&stubScheduleRepo{},
 		&stubMatchTrigger{},
-		&stubInfraProvider{},
+		&stubLockManager{},
 		SchedulerWorkerConfig{Interval: -5 * time.Second},
 		&stubLogger{},
 	)
@@ -249,7 +268,7 @@ func TestSchedulerWorker_Start_AlreadyRunning(t *testing.T) {
 	worker, err := NewSchedulerWorker(
 		&stubScheduleRepo{},
 		&stubMatchTrigger{},
-		&stubInfraProvider{},
+		&stubLockManager{},
 		SchedulerWorkerConfig{Interval: time.Hour},
 		&stubLogger{},
 	)
@@ -273,7 +292,7 @@ func TestSchedulerWorker_Stop_NotRunning(t *testing.T) {
 	worker, err := NewSchedulerWorker(
 		&stubScheduleRepo{},
 		&stubMatchTrigger{},
-		&stubInfraProvider{},
+		&stubLockManager{},
 		SchedulerWorkerConfig{Interval: time.Hour},
 		&stubLogger{},
 	)
@@ -289,7 +308,7 @@ func TestSchedulerWorker_StartStop_Success(t *testing.T) {
 	worker, err := NewSchedulerWorker(
 		&stubScheduleRepo{},
 		&stubMatchTrigger{},
-		&stubInfraProvider{},
+		&stubLockManager{},
 		SchedulerWorkerConfig{Interval: time.Hour},
 		&stubLogger{},
 	)
@@ -316,7 +335,7 @@ func TestSchedulerWorker_Done_ClosedAfterStop(t *testing.T) {
 	worker, err := NewSchedulerWorker(
 		&stubScheduleRepo{},
 		&stubMatchTrigger{},
-		&stubInfraProvider{},
+		&stubLockManager{},
 		SchedulerWorkerConfig{Interval: time.Hour},
 		&stubLogger{},
 	)
@@ -355,7 +374,7 @@ func TestSchedulerWorker_StartStopStartStop_Success(t *testing.T) {
 			},
 		},
 		&stubMatchTrigger{},
-		&stubInfraProvider{},
+		&stubLockManager{},
 		SchedulerWorkerConfig{Interval: 100 * time.Millisecond},
 		&stubLogger{},
 	)
@@ -380,7 +399,7 @@ func TestSchedulerWorker_UpdateRuntimeConfig_WhileRunning_ReturnsError(t *testin
 	worker, err := NewSchedulerWorker(
 		&stubScheduleRepo{},
 		&stubMatchTrigger{},
-		&stubInfraProvider{},
+		&stubLockManager{},
 		SchedulerWorkerConfig{Interval: 100 * time.Millisecond},
 		&stubLogger{},
 	)
@@ -400,10 +419,9 @@ func TestSchedulerWorkerErrors_AreDistinct(t *testing.T) {
 	errs := []error{
 		ErrNilScheduleRepository,
 		ErrNilMatchTrigger,
-		ErrNilInfraProvider,
+		ErrNilLockManager,
 		ErrWorkerAlreadyRunning,
 		ErrWorkerNotRunning,
-		ErrRedisClientNil,
 	}
 
 	seen := make(map[string]string)

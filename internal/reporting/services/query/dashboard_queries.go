@@ -257,6 +257,7 @@ func (uc *DashboardUseCase) GetMatcherDashboardMetrics(
 	var breakdowns *entities.BreakdownMetrics
 
 	group, groupCtx := errgroup.WithContext(ctx)
+	group.SetLogger(logger)
 
 	group.Go(func() error {
 		var err error

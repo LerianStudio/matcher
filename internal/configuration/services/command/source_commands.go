@@ -33,7 +33,7 @@ func (uc *UseCase) CreateSource(
 
 	entity, err := entities.NewReconciliationSource(ctx, contextID, input)
 	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "invalid reconciliation source input", err)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "invalid reconciliation source input", err)
 		return nil, err
 	}
 
@@ -81,7 +81,7 @@ func (uc *UseCase) UpdateSource(
 	}
 
 	if err := entity.Update(ctx, input); err != nil {
-		libOpentelemetry.HandleSpanError(span, "invalid reconciliation source update", err)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "invalid reconciliation source update", err)
 		return nil, err
 	}
 
@@ -158,7 +158,7 @@ func (uc *UseCase) checkSourceHasNoFieldMap(ctx context.Context, span trace.Span
 	}
 
 	if fieldMap != nil {
-		libOpentelemetry.HandleSpanError(span, "source has associated field map", ErrSourceHasFieldMap)
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "source has associated field map", ErrSourceHasFieldMap)
 
 		logger.With(
 			libLog.String("source.id", sourceID.String()),
