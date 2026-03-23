@@ -5,8 +5,9 @@ FROM --platform=$BUILDPLATFORM golang:1.26.1-alpine AS builder
 
 WORKDIR /matcher-app
 
-COPY . .
+COPY go.mod go.sum ./
 RUN go mod download && go mod vendor
+COPY . .
 
 ARG TARGETARCH
 ARG VERSION=dev
@@ -52,6 +53,11 @@ COPY --from=builder /matcher-app/migrations /components/matcher/migrations
 USER nonroot:nonroot
 
 EXPOSE 4018
+
+# Health probe defaults to http://localhost:4018/health.
+# Override at runtime via HEALTH_PROBE_URL env var for non-default ports.
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=10s \
+    CMD ["/health-probe"]
 
 ENTRYPOINT ["/app"]
 
