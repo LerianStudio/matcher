@@ -17,7 +17,7 @@ func NewTenantOwnershipVerifier(ctxProvider contextProvider) sharedhttp.TenantOw
 			return fmt.Errorf("ingestion context verifier not initialized: %w", sharedhttp.ErrContextAccessDenied)
 		}
 
-		ctxInfo, err := ctxProvider.FindByID(ctx, tenantID, contextID)
+		ctxInfo, err := ctxProvider.FindByID(ctx, contextID)
 		if err != nil {
 			// Return the infrastructure error unwrapped so the classifier
 			// maps it to ErrContextLookupFailed (500) instead of access-denied (403).
@@ -28,9 +28,8 @@ func NewTenantOwnershipVerifier(ctxProvider contextProvider) sharedhttp.TenantOw
 			return sharedhttp.ErrContextNotFound
 		}
 
-		// The contextProvider.FindByID already filters by tenantID.
-		// If we get a result, the context belongs to the tenant.
-		// Additional ID check for defense in depth.
+		// If we get a result, the context is reachable under the ambient tenant context.
+		// Additional ID check is kept for defense in depth.
 		if ctxInfo.ID != contextID {
 			return sharedhttp.ErrContextNotOwned
 		}

@@ -157,11 +157,11 @@ func (repo *Repository) FindByID(
 
 	defer span.End()
 
-	result, err := pgcommon.WithTenantTxProvider(
+	result, err := pgcommon.WithTenantReadQuery(
 		ctx,
 		repo.provider,
-		func(tx *sql.Tx) (*entities.IngestionJob, error) {
-			row := tx.QueryRowContext(
+		func(qe pgcommon.QueryExecutor) (*entities.IngestionJob, error) {
+			row := qe.QueryRowContext(
 				ctx,
 				"SELECT "+jobColumns+" FROM ingestion_jobs WHERE id = $1",
 				id.String(),
@@ -202,10 +202,10 @@ func (repo *Repository) FindByContextID(
 
 	var pagination libHTTP.CursorPagination
 
-	result, err := pgcommon.WithTenantTxProvider(
+	result, err := pgcommon.WithTenantReadQuery(
 		ctx,
 		repo.provider,
-		func(tx *sql.Tx) (jobs []*entities.IngestionJob, err error) {
+		func(qe pgcommon.QueryExecutor) (jobs []*entities.IngestionJob, err error) {
 			orderDirection := libHTTP.ValidateSortDirection(filter.SortOrder)
 			limit := libHTTP.ValidateLimit(
 				filter.Limit,
@@ -235,7 +235,7 @@ func (repo *Repository) FindByContextID(
 				return nil, fmt.Errorf("failed to build SQL: %w", err)
 			}
 
-			rows, err := tx.QueryContext(ctx, query, args...)
+			rows, err := qe.QueryContext(ctx, query, args...)
 			if err != nil {
 				return nil, fmt.Errorf("failed to query jobs: %w", err)
 			}

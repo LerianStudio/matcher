@@ -17,15 +17,15 @@ import (
 var errMockContextProvider = errors.New("mock context provider error")
 
 type mockContextProvider struct {
-	findByIDFunc func(ctx context.Context, tenantID, contextID uuid.UUID) (*ReconciliationContextInfo, error)
+	findByIDFunc func(ctx context.Context, contextID uuid.UUID) (*ReconciliationContextInfo, error)
 }
 
 func (m *mockContextProvider) FindByID(
 	ctx context.Context,
-	tenantID, contextID uuid.UUID,
+	contextID uuid.UUID,
 ) (*ReconciliationContextInfo, error) {
 	if m.findByIDFunc != nil {
-		return m.findByIDFunc(ctx, tenantID, contextID)
+		return m.findByIDFunc(ctx, contextID)
 	}
 
 	return nil, nil
@@ -104,7 +104,7 @@ func TestTenantOwnershipVerifier_VerifyOwnership(t *testing.T) {
 
 func createMockVerifierWithError(err error) libHTTP.TenantOwnershipVerifier {
 	mock := &mockContextProvider{
-		findByIDFunc: func(ctx context.Context, tenantID, contextID uuid.UUID) (*ReconciliationContextInfo, error) {
+		findByIDFunc: func(ctx context.Context, contextID uuid.UUID) (*ReconciliationContextInfo, error) {
 			return nil, err
 		},
 	}
@@ -114,7 +114,7 @@ func createMockVerifierWithError(err error) libHTTP.TenantOwnershipVerifier {
 
 func createMockVerifierWithNilContext() libHTTP.TenantOwnershipVerifier {
 	mock := &mockContextProvider{
-		findByIDFunc: func(ctx context.Context, tenantID, contextID uuid.UUID) (*ReconciliationContextInfo, error) {
+		findByIDFunc: func(ctx context.Context, contextID uuid.UUID) (*ReconciliationContextInfo, error) {
 			return nil, nil
 		},
 	}
@@ -124,7 +124,7 @@ func createMockVerifierWithNilContext() libHTTP.TenantOwnershipVerifier {
 
 func createMockVerifierWithContext(contextID uuid.UUID, active bool) libHTTP.TenantOwnershipVerifier {
 	mock := &mockContextProvider{
-		findByIDFunc: func(ctx context.Context, tenantID, cID uuid.UUID) (*ReconciliationContextInfo, error) {
+		findByIDFunc: func(ctx context.Context, cID uuid.UUID) (*ReconciliationContextInfo, error) {
 			return &ReconciliationContextInfo{
 				ID:     contextID,
 				Active: active,
@@ -169,7 +169,7 @@ func TestNewTenantOwnershipVerifier(t *testing.T) {
 
 		validContextID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 		mock := &mockContextProvider{
-			findByIDFunc: func(ctx context.Context, tenantID, contextID uuid.UUID) (*ReconciliationContextInfo, error) {
+			findByIDFunc: func(ctx context.Context, contextID uuid.UUID) (*ReconciliationContextInfo, error) {
 				return &ReconciliationContextInfo{
 					ID:     validContextID,
 					Active: true,
@@ -188,14 +188,12 @@ func TestNewTenantOwnershipVerifier(t *testing.T) {
 func TestTenantOwnershipVerifier_PassesCorrectParameters(t *testing.T) {
 	t.Parallel()
 
-	expectedTenantID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	expectedContextID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 
-	var capturedTenantID, capturedContextID uuid.UUID
+	var capturedContextID uuid.UUID
 
 	mock := &mockContextProvider{
-		findByIDFunc: func(ctx context.Context, tenantID, contextID uuid.UUID) (*ReconciliationContextInfo, error) {
-			capturedTenantID = tenantID
+		findByIDFunc: func(ctx context.Context, contextID uuid.UUID) (*ReconciliationContextInfo, error) {
 			capturedContextID = contextID
 
 			return &ReconciliationContextInfo{
@@ -206,9 +204,8 @@ func TestTenantOwnershipVerifier_PassesCorrectParameters(t *testing.T) {
 	}
 
 	verifier := NewTenantOwnershipVerifier(mock)
-	err := verifier(context.Background(), expectedTenantID, expectedContextID)
+	err := verifier(context.Background(), uuid.MustParse("11111111-1111-1111-1111-111111111111"), expectedContextID)
 
 	require.NoError(t, err)
-	assert.Equal(t, expectedTenantID, capturedTenantID)
 	assert.Equal(t, expectedContextID, capturedContextID)
 }

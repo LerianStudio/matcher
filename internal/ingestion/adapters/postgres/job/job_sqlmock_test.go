@@ -42,6 +42,7 @@ func setupMock(t *testing.T) (*Repository, sqlmock.Sqlmock, func()) {
 	require.NoError(t, err)
 
 	provider := testutil.NewMockProviderFromDB(t, db)
+	provider.ReplicaDB = db
 	repo := NewRepository(provider)
 
 	finish := func() {

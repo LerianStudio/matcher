@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"reflect"
 	"strings"
 	"time"
 
@@ -177,6 +178,14 @@ func (deps *UseCaseDeps) validate() error {
 func NewUseCase(deps UseCaseDeps) (*UseCase, error) {
 	if err := deps.validate(); err != nil {
 		return nil, err
+	}
+
+	if isNilInterface(deps.MatchTrigger) {
+		deps.MatchTrigger = nil
+	}
+
+	if isNilInterface(deps.ContextProvider) {
+		deps.ContextProvider = nil
 	}
 
 	if deps.DedupeTTL == 0 {
@@ -896,7 +905,7 @@ func (uc *UseCase) cleanupPartialTransactionsBestEffort(ctx context.Context, job
 // for the context and triggers an asynchronous match run if so.
 // This is fire-and-forget; errors are logged but do not affect ingestion.
 func (uc *UseCase) triggerAutoMatchIfEnabled(ctx context.Context, contextID uuid.UUID) {
-	if uc.contextProvider == nil || uc.matchTrigger == nil {
+	if isNilInterface(uc.contextProvider) || isNilInterface(uc.matchTrigger) {
 		return
 	}
 
@@ -934,6 +943,20 @@ func (uc *UseCase) triggerAutoMatchIfEnabled(ctx context.Context, contextID uuid
 	}
 
 	uc.matchTrigger.TriggerMatchForContext(ctx, tenantID, contextID)
+}
+
+func isNilInterface(value any) bool {
+	if value == nil {
+		return true
+	}
+
+	rv := reflect.ValueOf(value)
+	switch rv.Kind() {
+	case reflect.Pointer, reflect.Interface, reflect.Map, reflect.Slice, reflect.Chan, reflect.Func:
+		return rv.IsNil()
+	default:
+		return false
+	}
 }
 
 // maxErrorDetails limits how many row-level errors are included in metadata.

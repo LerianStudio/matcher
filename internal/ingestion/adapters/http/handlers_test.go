@@ -157,17 +157,15 @@ func (r *stubSourceRepo) FindByID(
 type stubContextProvider struct {
 	info              *ReconciliationContextInfo
 	err               error
-	receivedTenantID  uuid.UUID
 	receivedContextID uuid.UUID
 	mu                sync.Mutex
 }
 
 func (prov *stubContextProvider) FindByID(
 	_ context.Context,
-	tenantID, contextID uuid.UUID,
+	contextID uuid.UUID,
 ) (*ReconciliationContextInfo, error) {
 	prov.mu.Lock()
-	prov.receivedTenantID = tenantID
 	prov.receivedContextID = contextID
 	prov.mu.Unlock()
 
