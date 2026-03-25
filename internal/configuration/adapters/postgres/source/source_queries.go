@@ -161,15 +161,15 @@ func executeSourceQuery(
 ) ([]*entities.ReconciliationSource, libHTTP.CursorPagination, error) {
 	var pagination libHTTP.CursorPagination
 
-	result, err := common.WithTenantTxProvider(
+	result, err := common.WithTenantReadQuery(
 		ctx,
 		provider,
-		func(tx *sql.Tx) ([]*entities.ReconciliationSource, error) {
-			return fetchPaginatedSources(ctx, tx, baseQuery, cursor, decodedCursor, limit, &pagination)
+		func(qe common.QueryExecutor) ([]*entities.ReconciliationSource, error) {
+			return fetchPaginatedSources(ctx, qe, baseQuery, cursor, decodedCursor, limit, &pagination)
 		},
 	)
 	if err != nil {
-		return nil, libHTTP.CursorPagination{}, fmt.Errorf("execute tenant tx for source query: %w", err)
+		return nil, libHTTP.CursorPagination{}, fmt.Errorf("execute tenant read query for source query: %w", err)
 	}
 
 	return result, pagination, nil
@@ -197,7 +197,7 @@ func executeSourceQueryWithTx(
 // fetchPaginatedSources applies pagination and fetches sources from the database.
 func fetchPaginatedSources(
 	ctx stdctx.Context,
-	tx *sql.Tx,
+	qe common.QueryExecutor,
 	baseQuery squirrel.SelectBuilder,
 	cursor string,
 	decodedCursor libHTTP.Cursor,
@@ -209,7 +209,7 @@ func fetchPaginatedSources(
 		return nil, err
 	}
 
-	sources, err = executeSourceRows(ctx, tx, paginatedQuery, limit)
+	sources, err = executeSourceRows(ctx, qe, paginatedQuery, limit)
 	if err != nil {
 		return nil, err
 	}
