@@ -131,34 +131,6 @@ func (provider *MatchingConfigurationProvider) FeeRuleProvider() *FeeRuleProvide
 	return &FeeRuleProviderAdapter{provider: provider}
 }
 
-// NewMatchRuleProviderAdapter creates a new adapter for MatchRuleRepository.
-func NewMatchRuleProviderAdapter(repo configRepositories.MatchRuleRepository) (*MatchRuleProviderAdapter, error) {
-	if repo == nil {
-		return nil, ErrMatchRuleRepositoryRequired
-	}
-
-	provider, err := NewMatchingConfigurationProvider(nil, nil, repo, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return provider.MatchRuleProvider(), nil
-}
-
-// NewContextProviderAdapter creates a new adapter for ContextRepository.
-func NewContextProviderAdapter(repo configRepositories.ContextRepository) (*ContextProviderAdapter, error) {
-	if repo == nil {
-		return nil, ErrContextRepositoryRequired
-	}
-
-	provider, err := NewMatchingConfigurationProvider(repo, nil, nil, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return provider.ContextProvider(), nil
-}
-
 // NewSourceProviderAdapter creates a new adapter for SourceRepository.
 func NewSourceProviderAdapter(repo configRepositories.SourceRepository) (*SourceProviderAdapter, error) {
 	if repo == nil {

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -60,10 +61,16 @@ type mockBaseRepo struct {
 	findByContextIDsErr        error
 	markMatchedErr             error
 	markMatchedWithTxErr       error
+	markMatchedWithTxCalled    bool
+	markMatchedCapturedTx      *sql.Tx
 	markPendingReviewErr       error
 	markPendingReviewWithTxErr error
+	markPendingWithTxCalled    bool
+	markPendingCapturedTx      *sql.Tx
 	markUnmatchedErr           error
 	markUnmatchedWithTxErr     error
+	markUnmatchedWithTxCalled  bool
+	markUnmatchedCapturedTx    *sql.Tx
 }
 
 func (m *mockBaseRepo) ListUnmatchedByContext(
@@ -87,7 +94,9 @@ func (m *mockBaseRepo) MarkMatched(_ context.Context, _ uuid.UUID, _ []uuid.UUID
 	return m.markMatchedErr
 }
 
-func (m *mockBaseRepo) MarkMatchedWithTx(_ context.Context, _ *sql.Tx, _ uuid.UUID, _ []uuid.UUID) error {
+func (m *mockBaseRepo) MarkMatchedWithTx(_ context.Context, tx *sql.Tx, _ uuid.UUID, _ []uuid.UUID) error {
+	m.markMatchedWithTxCalled = true
+	m.markMatchedCapturedTx = tx
 	return m.markMatchedWithTxErr
 }
 
@@ -95,7 +104,9 @@ func (m *mockBaseRepo) MarkPendingReview(_ context.Context, _ uuid.UUID, _ []uui
 	return m.markPendingReviewErr
 }
 
-func (m *mockBaseRepo) MarkPendingReviewWithTx(_ context.Context, _ *sql.Tx, _ uuid.UUID, _ []uuid.UUID) error {
+func (m *mockBaseRepo) MarkPendingReviewWithTx(_ context.Context, tx *sql.Tx, _ uuid.UUID, _ []uuid.UUID) error {
+	m.markPendingWithTxCalled = true
+	m.markPendingCapturedTx = tx
 	return m.markPendingReviewWithTxErr
 }
 
@@ -103,7 +114,9 @@ func (m *mockBaseRepo) MarkUnmatched(_ context.Context, _ uuid.UUID, _ []uuid.UU
 	return m.markUnmatchedErr
 }
 
-func (m *mockBaseRepo) MarkUnmatchedWithTx(_ context.Context, _ *sql.Tx, _ uuid.UUID, _ []uuid.UUID) error {
+func (m *mockBaseRepo) MarkUnmatchedWithTx(_ context.Context, tx *sql.Tx, _ uuid.UUID, _ []uuid.UUID) error {
+	m.markUnmatchedWithTxCalled = true
+	m.markUnmatchedCapturedTx = tx
 	return m.markUnmatchedWithTxErr
 }
 
@@ -396,6 +409,28 @@ func TestTransactionRepositoryAdapter_MarkMatchedWithTx_NilBaseRepo(t *testing.T
 	require.ErrorIs(t, err, ErrAdapterNotInitialized)
 }
 
+func TestTransactionRepositoryAdapter_MarkMatchedWithTx_DelegatesToBaseRepo(t *testing.T) {
+	t.Parallel()
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectBegin()
+	tx, err := db.Begin()
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback() }()
+
+	baseRepo := &mockBaseRepo{}
+	adapter := mustNewAdapter(t, &mockInfraProvider{}, baseRepo)
+
+	err = adapter.MarkMatchedWithTx(context.Background(), tx, uuid.New(), []uuid.UUID{uuid.New()})
+	require.NoError(t, err)
+	assert.True(t, baseRepo.markMatchedWithTxCalled)
+	assert.Same(t, tx, baseRepo.markMatchedCapturedTx)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestTransactionRepositoryAdapter_MarkPendingReviewWithTx_NilAdapter(t *testing.T) {
 	t.Parallel()
 
@@ -428,6 +463,28 @@ func TestTransactionRepositoryAdapter_MarkPendingReviewWithTx_NilBaseRepo(t *tes
 	require.ErrorIs(t, err, ErrAdapterNotInitialized)
 }
 
+func TestTransactionRepositoryAdapter_MarkPendingReviewWithTx_DelegatesToBaseRepo(t *testing.T) {
+	t.Parallel()
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectBegin()
+	tx, err := db.Begin()
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback() }()
+
+	baseRepo := &mockBaseRepo{}
+	adapter := mustNewAdapter(t, &mockInfraProvider{}, baseRepo)
+
+	err = adapter.MarkPendingReviewWithTx(context.Background(), tx, uuid.New(), []uuid.UUID{uuid.New()})
+	require.NoError(t, err)
+	assert.True(t, baseRepo.markPendingWithTxCalled)
+	assert.Same(t, tx, baseRepo.markPendingCapturedTx)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 // --- WithTx nil fn with valid provider ---
 
 func TestTransactionRepositoryAdapter_WithTx_NilFnWithProvider(t *testing.T) {
@@ -440,6 +497,33 @@ func TestTransactionRepositoryAdapter_WithTx_NilFnWithProvider(t *testing.T) {
 	err := adapter.WithTx(context.Background(), nil)
 
 	require.NoError(t, err)
+}
+
+func TestTransactionRepositoryAdapter_WithTx_ExecutesCallback(t *testing.T) {
+	t.Parallel()
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	provider := &mockInfraProvider{
+		beginTxFn: func(context.Context) (*sql.Tx, error) {
+			mock.ExpectBegin()
+			mock.ExpectCommit()
+			return db.Begin()
+		},
+	}
+	adapter := mustNewAdapter(t, provider, &mockBaseRepo{})
+
+	called := false
+	err = adapter.WithTx(context.Background(), func(tx matchingRepos.Tx) error {
+		called = true
+		require.NotNil(t, tx)
+		return nil
+	})
+	require.NoError(t, err)
+	assert.True(t, called)
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 // --- Success / Error path tests ---
@@ -791,6 +875,28 @@ func TestTransactionRepositoryAdapter_MarkUnmatchedWithTx_NilBaseRepo(t *testing
 
 	require.Error(t, err)
 	require.ErrorIs(t, err, ErrAdapterNotInitialized)
+}
+
+func TestTransactionRepositoryAdapter_MarkUnmatchedWithTx_DelegatesToBaseRepo(t *testing.T) {
+	t.Parallel()
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectBegin()
+	tx, err := db.Begin()
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback() }()
+
+	baseRepo := &mockBaseRepo{}
+	adapter := mustNewAdapter(t, &mockInfraProvider{}, baseRepo)
+
+	err = adapter.MarkUnmatchedWithTx(context.Background(), tx, uuid.New(), []uuid.UUID{uuid.New()})
+	require.NoError(t, err)
+	assert.True(t, baseRepo.markUnmatchedWithTxCalled)
+	assert.Same(t, tx, baseRepo.markUnmatchedCapturedTx)
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestTransactionRepositoryAdapter_MarkUnmatchedWithTx_EmptyWithProvider(t *testing.T) {

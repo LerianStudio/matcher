@@ -161,6 +161,27 @@ func TestExceptionMatchingGateway_CreateForceMatch_Success(t *testing.T) {
 	assert.Equal(t, []uuid.UUID{transactionID}, txRepo.transactionIDs)
 }
 
+func TestExceptionMatchingGateway_CreateForceMatch_MarkMatchedError(t *testing.T) {
+	t.Parallel()
+
+	transactionID := uuid.New()
+	jobID := uuid.New()
+	contextID := uuid.New()
+	errMarkMatched := errors.New("mark matched failed")
+
+	gateway, err := NewExceptionMatchingGateway(
+		&stubAdjustmentRepo{},
+		&stubTransactionRepo{tx: &shared.Transaction{ID: transactionID, IngestionJobID: jobID}, markMatchedErr: errMarkMatched},
+		&stubJobFinder{job: &ingestionEntities.IngestionJob{ID: jobID, ContextID: contextID}},
+		nil,
+	)
+	require.NoError(t, err)
+
+	err = gateway.CreateForceMatch(context.Background(), exceptionPorts.ForceMatchInput{TransactionID: transactionID})
+	require.Error(t, err)
+	require.ErrorIs(t, err, errMarkMatched)
+}
+
 func TestExceptionMatchingGateway_CreateForceMatch_ContextResolutionErrors(t *testing.T) {
 	t.Parallel()
 
@@ -258,6 +279,13 @@ func TestExceptionMatchingGateway_SourceFallbackNotFoundPreservesPrimaryNotFound
 	require.ErrorIs(t, err, errLookupFailed)
 }
 
+func TestMapSourceLookupError_NotFoundNormalization(t *testing.T) {
+	t.Parallel()
+
+	err := mapSourceLookupError(ErrIngestionJobNotFound, sql.ErrNoRows)
+	require.ErrorIs(t, err, ErrSourceNotFound)
+}
+
 func TestExceptionMatchingGateway_SourceFallbackPreservesPrimaryOperationalError(t *testing.T) {
 	t.Parallel()
 
@@ -328,6 +356,70 @@ func TestExceptionMatchingGateway_CreateAdjustment_InvalidDirection(t *testing.T
 		Reason:        "MANUAL_CORRECTION",
 	})
 	require.ErrorIs(t, err, ErrInvalidDirection)
+}
+
+func TestExceptionMatchingGateway_CreateAdjustment_PersistError(t *testing.T) {
+	t.Parallel()
+
+	transactionID := uuid.New()
+	jobID := uuid.New()
+	contextID := uuid.New()
+	errPersist := errors.New("persist failed")
+
+	gateway, err := NewExceptionMatchingGateway(
+		&stubAdjustmentRepo{err: errPersist},
+		&stubTransactionRepo{tx: &shared.Transaction{ID: transactionID, IngestionJobID: jobID}},
+		&stubJobFinder{job: &ingestionEntities.IngestionJob{ID: jobID, ContextID: contextID}},
+		nil,
+	)
+	require.NoError(t, err)
+
+	err = gateway.CreateAdjustment(context.Background(), exceptionPorts.CreateAdjustmentInput{
+		TransactionID: transactionID,
+		Direction:     "DEBIT",
+		Amount:        decimal.NewFromInt(10),
+		Currency:      "USD",
+		Reason:        "MANUAL_CORRECTION",
+		Notes:         "persist me",
+		Actor:         "tester",
+	})
+	require.Error(t, err)
+	require.ErrorIs(t, err, errPersist)
+}
+
+func TestExceptionMatchingGateway_CreateAdjustment_EntityValidationError(t *testing.T) {
+	t.Parallel()
+
+	transactionID := uuid.New()
+	jobID := uuid.New()
+	contextID := uuid.New()
+
+	gateway, err := NewExceptionMatchingGateway(
+		&stubAdjustmentRepo{},
+		&stubTransactionRepo{tx: &shared.Transaction{ID: transactionID, IngestionJobID: jobID}},
+		&stubJobFinder{job: &ingestionEntities.IngestionJob{ID: jobID, ContextID: contextID}},
+		nil,
+	)
+	require.NoError(t, err)
+
+	err = gateway.CreateAdjustment(context.Background(), exceptionPorts.CreateAdjustmentInput{
+		TransactionID: transactionID,
+		Direction:     "DEBIT",
+		Amount:        decimal.NewFromInt(10),
+		Currency:      "",
+		Reason:        "MANUAL_CORRECTION",
+		Notes:         "invalid currency",
+		Actor:         "tester",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "create adjustment entity")
+}
+
+func TestMapReasonToAdjustmentType(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, matchingEntities.AdjustmentTypeFXDifference, mapReasonToAdjustmentType("CURRENCY_CORRECTION"))
+	assert.Equal(t, matchingEntities.AdjustmentTypeMiscellaneous, mapReasonToAdjustmentType("MANUAL_CORRECTION"))
 }
 
 func TestExceptionMatchingGateway_ImplementsInterface(t *testing.T) {

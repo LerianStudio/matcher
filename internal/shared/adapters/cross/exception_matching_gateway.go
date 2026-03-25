@@ -15,7 +15,6 @@ import (
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	exceptionPorts "github.com/LerianStudio/matcher/internal/exception/ports"
-	ingestionEntities "github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	matchingRepos "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
@@ -35,20 +34,10 @@ var (
 )
 
 // ExceptionTransactionRepository contains the minimal transaction operations needed
-// for exception resolution: lookup for context resolution and force-match status updates.
+// for exception resolution: force-match status updates.
 type ExceptionTransactionRepository interface {
 	FindByID(ctx context.Context, transactionID uuid.UUID) (*shared.Transaction, error)
 	MarkMatched(ctx context.Context, contextID uuid.UUID, transactionIDs []uuid.UUID) error
-}
-
-// JobFinder is an interface for finding ingestion jobs by ID.
-type JobFinder interface {
-	FindByID(ctx context.Context, jobID uuid.UUID) (*ingestionEntities.IngestionJob, error)
-}
-
-// SourceContextFinder is an optional interface for resolving context IDs via the source path.
-type SourceContextFinder interface {
-	GetContextIDBySourceID(ctx context.Context, sourceID uuid.UUID) (uuid.UUID, error)
 }
 
 // ExceptionMatchingGateway implements exception.ports.MatchingGateway by coordinating
@@ -56,8 +45,7 @@ type SourceContextFinder interface {
 type ExceptionMatchingGateway struct {
 	adjustmentRepo  matchingRepos.AdjustmentRepository
 	transactionRepo ExceptionTransactionRepository
-	jobFinder       JobFinder
-	sourceFinder    SourceContextFinder
+	contextLookup   ExceptionContextLookup
 }
 
 // NewExceptionMatchingGateway creates a new matching gateway for exception resolution.
@@ -75,15 +63,15 @@ func NewExceptionMatchingGateway(
 		return nil, ErrNilTransactionRepository
 	}
 
-	if jobFinder == nil {
-		return nil, ErrNilJobFinder
+	contextLookup, err := NewTransactionContextLookup(transactionRepo, jobFinder, sourceFinder)
+	if err != nil {
+		return nil, err
 	}
 
 	return &ExceptionMatchingGateway{
 		adjustmentRepo:  adjustmentRepo,
 		transactionRepo: transactionRepo,
-		jobFinder:       jobFinder,
-		sourceFinder:    sourceFinder,
+		contextLookup:   contextLookup,
 	}, nil
 }
 
@@ -188,58 +176,13 @@ func (gateway *ExceptionMatchingGateway) resolveContextIDByTransactionID(
 	ctx context.Context,
 	transactionID uuid.UUID,
 ) (uuid.UUID, error) {
-	if gateway == nil || gateway.transactionRepo == nil || gateway.jobFinder == nil {
+	if gateway == nil || gateway.contextLookup == nil {
 		return uuid.Nil, ErrContextLookupNotInitialized
 	}
 
-	tx, err := gateway.transactionRepo.FindByID(ctx, transactionID)
+	contextID, err := gateway.contextLookup.GetContextIDByTransactionID(ctx, transactionID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return uuid.Nil, fmt.Errorf("%w: %s", ErrTransactionNotFound, transactionID)
-		}
-
-		return uuid.Nil, fmt.Errorf("find transaction: %w", err)
-	}
-
-	if tx == nil {
-		return uuid.Nil, fmt.Errorf("%w: %s", ErrTransactionNotFound, transactionID)
-	}
-
-	return gateway.resolveContextIDFromTransaction(ctx, tx)
-}
-
-func (gateway *ExceptionMatchingGateway) resolveContextIDFromTransaction(
-	ctx context.Context,
-	tx *shared.Transaction,
-) (uuid.UUID, error) {
-	if tx == nil {
-		return uuid.Nil, ErrTransactionNotFound
-	}
-
-	contextID, jobErr := gateway.resolveViaIngestionJob(ctx, tx.IngestionJobID)
-	if jobErr == nil {
-		return contextID, nil
-	}
-
-	if gateway.sourceFinder == nil || tx.SourceID == uuid.Nil {
-		return uuid.Nil, jobErr
-	}
-
-	fallbackContextID, sourceErr := gateway.resolveViaSource(ctx, tx.SourceID)
-	if sourceErr == nil {
-		return fallbackContextID, nil
-	}
-
-	return uuid.Nil, mapSourceLookupError(jobErr, sourceErr)
-}
-
-func (gateway *ExceptionMatchingGateway) resolveViaSource(
-	ctx context.Context,
-	sourceID uuid.UUID,
-) (uuid.UUID, error) {
-	contextID, err := gateway.sourceFinder.GetContextIDBySourceID(ctx, sourceID)
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("resolve context via source: %w", err)
+		return uuid.Nil, fmt.Errorf("resolve context by transaction id: %w", err)
 	}
 
 	return contextID, nil
@@ -255,26 +198,6 @@ func mapSourceLookupError(jobErr, sourceErr error) error {
 	}
 
 	return jobErr
-}
-
-func (gateway *ExceptionMatchingGateway) resolveViaIngestionJob(
-	ctx context.Context,
-	ingestionJobID uuid.UUID,
-) (uuid.UUID, error) {
-	job, err := gateway.jobFinder.FindByID(ctx, ingestionJobID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return uuid.Nil, fmt.Errorf("%w: %s", ErrIngestionJobNotFound, ingestionJobID)
-		}
-
-		return uuid.Nil, fmt.Errorf("find ingestion job: %w", err)
-	}
-
-	if job == nil {
-		return uuid.Nil, fmt.Errorf("%w: %s", ErrIngestionJobNotFound, ingestionJobID)
-	}
-
-	return job.ContextID, nil
 }
 
 // mapReasonToAdjustmentType maps exception adjustment reasons to matching adjustment types.
