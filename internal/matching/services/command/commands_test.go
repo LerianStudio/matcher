@@ -770,6 +770,19 @@ func TestNewUseCase(t *testing.T) {
 		require.ErrorIs(t, err, ErrNilOutboxRepository)
 	})
 
+	t.Run("typed-nil outbox repository returns error", func(t *testing.T) {
+		t.Parallel()
+
+		deps := validDeps()
+		var typedNilOutboxRepo *outboxmocks.MockOutboxRepository
+		deps.OutboxRepo = typedNilOutboxRepo
+
+		uc, err := New(deps)
+
+		assert.Nil(t, uc)
+		require.ErrorIs(t, err, ErrNilOutboxRepository)
+	})
+
 	t.Run("nil rate repository returns error", func(t *testing.T) {
 		t.Parallel()
 

@@ -6,6 +6,7 @@ import (
 	"context"
 	"testing"
 
+	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -133,6 +134,31 @@ func TestCreateBatchWithTx_WithValidEntities(t *testing.T) {
 
 	assert.Nil(t, result)
 	require.Error(t, err)
+}
+
+func TestCreateBatchWithTx_WithValidTx_Success(t *testing.T) {
+	t.Parallel()
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	provider := testutil.NewMockProviderFromDB(t, db)
+	repo := NewRepository(provider)
+	rows := []*matchingEntities.FeeVariance{createValidFeeVarianceEntity()}
+
+	mock.ExpectBegin()
+	tx, err := db.Begin()
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback() }()
+
+	mock.ExpectPrepare("INSERT INTO match_fee_variances")
+	mock.ExpectExec("INSERT INTO match_fee_variances").WillReturnResult(sqlmock.NewResult(1, 1))
+
+	result, err := repo.CreateBatchWithTx(context.Background(), tx, rows)
+	require.NoError(t, err)
+	assert.Equal(t, rows, result)
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestCreateBatchWithTx_WithNilEntitiesInSlice(t *testing.T) {

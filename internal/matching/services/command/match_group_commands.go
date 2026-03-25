@@ -50,7 +50,7 @@ var (
 	ErrLockRefreshFailed                = errors.New("lock refresh failed")
 	ErrTenantIDMismatch                 = errors.New("tenant id does not match context")
 	ErrOutboxRepoNotConfigured          = errors.New("outbox repository is not configured")
-	ErrOutboxRequiresSQLTx              = errors.New("outbox requires transaction")
+	ErrOutboxRequiresSQLTx              = errors.New("outbox requires an active sql transaction")
 	ErrContextCancelled                 = errors.New("operation cancelled")
 	ErrRateNotFound                     = errors.New("rate not found for fee verification")
 )

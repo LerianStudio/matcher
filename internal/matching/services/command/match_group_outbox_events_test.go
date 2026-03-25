@@ -5,6 +5,7 @@ package command
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/auth"
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	matchingVO "github.com/LerianStudio/matcher/internal/matching/domain/value_objects"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	outboxmocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
 )
 
@@ -162,5 +164,47 @@ func TestEnqueueMatchConfirmedEvents_SkipsNonConfirmed(t *testing.T) {
 
 	ctx := context.WithValue(context.Background(), auth.TenantIDKey, tenantID.String())
 	err := uc.enqueueMatchConfirmedEvents(ctx, new(sql.Tx), groups)
+	require.NoError(t, err)
+}
+
+func TestEnqueueMatchConfirmedEvents_Success(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	t.Cleanup(ctrl.Finish)
+	outboxRepo := outboxmocks.NewMockOutboxRepository(ctrl)
+
+	tenantID := uuid.MustParse("00000000-0000-0000-0000-000000220020")
+	confidence, _ := matchingVO.ParseConfidenceScore(100)
+	now := time.Now().UTC()
+	txID := uuid.New()
+	group := &matchingEntities.MatchGroup{
+		ID:          uuid.New(),
+		ContextID:   uuid.New(),
+		RunID:       uuid.New(),
+		RuleID:      uuid.New(),
+		Status:      matchingVO.MatchGroupStatusConfirmed,
+		Confidence:  confidence,
+		ConfirmedAt: &now,
+		Items:       []*matchingEntities.MatchItem{{TransactionID: txID}},
+	}
+
+	outboxRepo.EXPECT().CreateWithTx(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, _ *sql.Tx, event *shared.OutboxEvent) (*shared.OutboxEvent, error) {
+			require.Equal(t, shared.EventTypeMatchConfirmed, event.EventType)
+
+			var payload shared.MatchConfirmedEvent
+			require.NoError(t, json.Unmarshal(event.Payload, &payload))
+			require.Equal(t, tenantID, payload.TenantID)
+			require.Equal(t, group.ID, payload.MatchID)
+			require.Equal(t, []uuid.UUID{txID}, payload.TransactionIDs)
+
+			return event, nil
+		},
+	)
+
+	uc := &UseCase{outboxRepoTx: outboxRepo}
+	ctx := context.WithValue(context.Background(), auth.TenantIDKey, tenantID.String())
+	err := uc.enqueueMatchConfirmedEvents(ctx, new(sql.Tx), []*matchingEntities.MatchGroup{group})
 	require.NoError(t, err)
 }
