@@ -137,7 +137,7 @@ func NewExportWorker(
 		return nil, ErrNilReportRepository
 	}
 
-	if storage == nil {
+	if sharedPorts.IsNilValue(storage) {
 		return nil, ErrNilStorageClient
 	}
 

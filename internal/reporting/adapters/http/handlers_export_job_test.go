@@ -171,6 +171,18 @@ func TestNewExportJobHandlers(t *testing.T) {
 		require.ErrorIs(t, err, ErrNilStorageClientHandler)
 	})
 
+	t.Run("returns error with typed-nil storage", func(t *testing.T) {
+		t.Parallel()
+
+		var typedNilStorage *portsmocks.MockObjectStorageClient
+
+		handlers, err := NewExportJobHandlers(uc, querySvc, typedNilStorage, ctxProvider, time.Hour)
+
+		require.Error(t, err)
+		assert.Nil(t, handlers)
+		require.ErrorIs(t, err, ErrNilStorageClientHandler)
+	})
+
 	t.Run("returns error with nil context provider", func(t *testing.T) {
 		t.Parallel()
 

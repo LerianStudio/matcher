@@ -134,7 +134,7 @@ func NewExportJobHandlers(
 		return nil, ErrNilExportJobQueryService
 	}
 
-	if storage == nil {
+	if sharedPorts.IsNilValue(storage) {
 		return nil, ErrNilStorageClientHandler
 	}
 

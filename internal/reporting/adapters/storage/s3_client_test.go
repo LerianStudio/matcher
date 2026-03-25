@@ -154,6 +154,30 @@ func TestUploadWithOptions_EmptyKeyReturnsError(t *testing.T) {
 	assert.Empty(t, url)
 }
 
+func TestS3Client_UnavailableClientReturnsSharedError(t *testing.T) {
+	t.Parallel()
+
+	var client *S3Client
+
+	_, err := client.Upload(context.Background(), "key", bytes.NewReader([]byte("data")), "text/plain")
+	require.ErrorIs(t, err, sharedPorts.ErrObjectStorageUnavailable)
+
+	_, err = client.UploadWithOptions(context.Background(), "key", bytes.NewReader([]byte("data")), "text/plain")
+	require.ErrorIs(t, err, sharedPorts.ErrObjectStorageUnavailable)
+
+	_, err = client.Download(context.Background(), "key")
+	require.ErrorIs(t, err, sharedPorts.ErrObjectStorageUnavailable)
+
+	err = client.Delete(context.Background(), "key")
+	require.ErrorIs(t, err, sharedPorts.ErrObjectStorageUnavailable)
+
+	_, err = client.GeneratePresignedURL(context.Background(), "key", time.Hour)
+	require.ErrorIs(t, err, sharedPorts.ErrObjectStorageUnavailable)
+
+	_, err = client.Exists(context.Background(), "key")
+	require.ErrorIs(t, err, sharedPorts.ErrObjectStorageUnavailable)
+}
+
 func TestUploadWithOptions_EmptyKeyReturnsError_NoOptions(t *testing.T) {
 	t.Parallel()
 
@@ -633,8 +657,9 @@ func TestNewS3Client_EndpointVariations(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name     string
-		endpoint string
+		name        string
+		endpoint    string
+		expectError error
 	}{
 		{
 			name:     "seaweedfs",
@@ -649,8 +674,9 @@ func TestNewS3Client_EndpointVariations(t *testing.T) {
 			endpoint: "https://minio.example.com",
 		},
 		{
-			name:     "custom_port",
-			endpoint: "http://storage.local:8080",
+			name:        "custom_port",
+			endpoint:    "http://storage.local:8080",
+			expectError: ErrInsecureEndpoint,
 		},
 		{
 			name:     "no_endpoint",
@@ -668,9 +694,44 @@ func TestNewS3Client_EndpointVariations(t *testing.T) {
 			}
 
 			client, err := NewS3Client(context.Background(), cfg)
+			if tt.expectError != nil {
+				require.ErrorIs(t, err, tt.expectError)
+				require.Nil(t, client)
+				return
+			}
 
 			require.NoError(t, err)
 			require.NotNil(t, client)
+		})
+	}
+}
+
+func TestValidateEndpointSecurity(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		endpoint    string
+		expectError error
+	}{
+		{name: "empty", endpoint: ""},
+		{name: "localhost http", endpoint: "http://localhost:8333"},
+		{name: "loopback ip", endpoint: "http://127.0.0.1:9000"},
+		{name: "https remote", endpoint: "https://storage.example.com"},
+		{name: "remote http", endpoint: "http://storage.example.com", expectError: ErrInsecureEndpoint},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := validateEndpointSecurity(tt.endpoint)
+			if tt.expectError != nil {
+				require.ErrorIs(t, err, tt.expectError)
+				return
+			}
+
+			require.NoError(t, err)
 		})
 	}
 }

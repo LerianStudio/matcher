@@ -144,6 +144,24 @@ func TestNewExportWorker(t *testing.T) {
 		require.ErrorIs(t, err, ErrNilStorageClient)
 	})
 
+	t.Run("returns error with typed-nil storage", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		jobRepo := repomocks.NewMockExportJobRepository(ctrl)
+		reportRepo := &mockReportRepoForWorker{}
+		cfg := ExportWorkerConfig{}
+		logger := &libLog.NopLogger{}
+
+		var typedNilStorage *portsmocks.MockObjectStorageClient
+
+		worker, err := NewExportWorker(jobRepo, reportRepo, typedNilStorage, cfg, logger)
+
+		require.Error(t, err)
+		assert.Nil(t, worker)
+		require.ErrorIs(t, err, ErrNilStorageClient)
+	})
+
 	t.Run("applies default poll interval", func(t *testing.T) {
 		t.Parallel()
 
