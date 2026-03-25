@@ -45,7 +45,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 		t.Setenv("RABBITMQ_USER", "guest")
 		t.Setenv("RABBITMQ_PASSWORD", "guest")
 		t.Setenv("RABBITMQ_VHOST", "/")
-		t.Setenv("AUTH_ENABLED", "false")
+		t.Setenv("PLUGIN_AUTH_ENABLED", "false")
 		t.Setenv("ENABLE_TELEMETRY", "false")
 		t.Setenv("LOG_LEVEL", "debug")
 		t.Setenv("RATE_LIMIT_MAX", "1000")

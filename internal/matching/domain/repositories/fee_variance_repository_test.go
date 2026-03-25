@@ -4,6 +4,7 @@ package repositories
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
 	"time"
@@ -268,11 +269,11 @@ func TestMockFeeVarianceRepository_TransactionHandling(t *testing.T) {
 			},
 		}
 
-		mockTx := "mock-transaction"
+		mockTx := new(sql.Tx)
 		_, err := mock.CreateBatchWithTx(context.Background(), mockTx, []*entities.FeeVariance{})
 
 		require.NoError(t, err)
-		assert.Equal(t, "mock-transaction", receivedTx)
+		assert.Same(t, mockTx, receivedTx)
 	})
 
 	t.Run("handles nil transaction", func(t *testing.T) {

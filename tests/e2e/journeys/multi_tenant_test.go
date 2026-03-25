@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,16 +19,30 @@ import (
 	"github.com/LerianStudio/matcher/tests/e2e/factories"
 )
 
-// skipIfAuthDisabled skips the test when AUTH_ENABLED is not "true".
-// Multi-tenant isolation tests require authentication to be enabled because
-// the tenant extractor middleware ignores X-Tenant-ID headers when auth is
-// disabled, defaulting all requests to the same tenant.
+// skipIfAuthDisabled skips the test when auth is not enabled through either the
+// canonical or legacy bootstrap env var.
 func skipIfAuthDisabled(t *testing.T) {
 	t.Helper()
 
-	if os.Getenv("AUTH_ENABLED") != "true" {
-		t.Skip("Multi-tenant isolation tests require AUTH_ENABLED=true")
+	if !isAuthEnabledForE2E() {
+		t.Skip("Multi-tenant isolation tests require PLUGIN_AUTH_ENABLED=true or AUTH_ENABLED=true")
 	}
+}
+
+func isAuthEnabledForE2E() bool {
+	for _, envName := range []string{"PLUGIN_AUTH_ENABLED", "AUTH_ENABLED"} {
+		rawValue, isSet := os.LookupEnv(envName)
+		if !isSet {
+			continue
+		}
+
+		enabled, err := strconv.ParseBool(strings.TrimSpace(rawValue))
+		if err == nil {
+			return enabled
+		}
+	}
+
+	return false
 }
 
 // TestMultiTenant_Isolation verifies that tenant A cannot see tenant B's data.

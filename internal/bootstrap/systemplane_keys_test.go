@@ -22,16 +22,16 @@ import (
 const expectedTotalKeys = 123
 
 // expectedBootstrapOnlyCount is the count of keys with ApplyBootstrapOnly.
-const expectedBootstrapOnlyCount = 20
+const expectedBootstrapOnlyCount = 22
 
 // expectedLiveReadCount is the count of keys with ApplyLiveRead.
-const expectedLiveReadCount = 16
+const expectedLiveReadCount = 20
 
 // expectedWorkerReconcileCount is the count of keys with ApplyWorkerReconcile.
 const expectedWorkerReconcileCount = 13
 
 // expectedBundleRebuildCount is the count of keys with ApplyBundleRebuild.
-const expectedBundleRebuildCount = 67
+const expectedBundleRebuildCount = 61
 
 // expectedBundleRebuildAndReconcileCount is the count of keys with ApplyBundleRebuildAndReconcile.
 const expectedBundleRebuildAndReconcileCount = 7
@@ -134,12 +134,16 @@ func TestRegisterMatcherKeys_SelectedApplyBehaviors(t *testing.T) {
 		behavior domain.ApplyBehavior
 		mutable  bool
 	}{
+		{key: "app.log_level", behavior: domain.ApplyLiveRead, mutable: true},
+		{key: "cors.allowed_origins", behavior: domain.ApplyLiveRead, mutable: true},
 		{key: "postgres.query_timeout_sec", behavior: domain.ApplyLiveRead, mutable: true},
 		{key: "idempotency.retry_window_sec", behavior: domain.ApplyLiveRead, mutable: true},
 		{key: "idempotency.success_ttl_hours", behavior: domain.ApplyLiveRead, mutable: true},
 		{key: "webhook.timeout_sec", behavior: domain.ApplyLiveRead, mutable: true},
 		{key: "tenancy.default_tenant_id", behavior: domain.ApplyBootstrapOnly, mutable: false},
 		{key: "tenancy.default_tenant_slug", behavior: domain.ApplyBootstrapOnly, mutable: false},
+		{key: "server.body_limit_bytes", behavior: domain.ApplyBootstrapOnly, mutable: false},
+		{key: "postgres.migrations_path", behavior: domain.ApplyBootstrapOnly, mutable: false},
 		{key: "idempotency.hmac_secret", behavior: domain.ApplyBootstrapOnly, mutable: false},
 	}
 

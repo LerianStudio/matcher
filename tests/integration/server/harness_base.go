@@ -247,7 +247,7 @@ func (sh *serverHarnessBase) setEnvFromContainers(t *testing.T) error {
 		"RABBITMQ_ALLOW_INSECURE_HEALTH_CHECK": "true",
 
 		// Auth disabled for tests
-		"AUTH_ENABLED": "false",
+		"PLUGIN_AUTH_ENABLED": "false",
 
 		// Body limit: 110 MiB / 115343360 bytes to allow 100MB test files
 		// through Fiber, while the application handler enforces a 100MB limit

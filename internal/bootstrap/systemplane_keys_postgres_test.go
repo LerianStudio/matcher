@@ -184,8 +184,8 @@ func TestMatcherKeyDefsPostgresPooling_KeyProperties(t *testing.T) {
 	require.Len(t, defs, 6)
 
 	expectedKeys := []string{
-		"postgres.max_open_connections",
-		"postgres.max_idle_connections",
+		"postgres.max_open_conns",
+		"postgres.max_idle_conns",
 		"postgres.conn_max_lifetime_mins",
 		"postgres.conn_max_idle_time_mins",
 		"postgres.connect_timeout_sec",
@@ -252,8 +252,8 @@ func TestMatcherKeyDefsPostgresOperations_KeyProperties(t *testing.T) {
 	assert.Equal(t, domain.KindConfig, def.Kind)
 	assert.Equal(t, "postgres", def.Group)
 	assert.Equal(t, domain.ValueTypeString, def.ValueType)
-	assert.Equal(t, domain.ApplyBundleRebuild, def.ApplyBehavior)
-	assert.True(t, def.MutableAtRuntime)
+	assert.Equal(t, domain.ApplyBootstrapOnly, def.ApplyBehavior)
+	assert.False(t, def.MutableAtRuntime)
 	assert.NotEmpty(t, def.Description)
 }
 
@@ -303,7 +303,13 @@ func TestMatcherKeyDefsPostgres_AllKeysHavePostgresComponent(t *testing.T) {
 	defs := matcherKeyDefsPostgres()
 
 	for _, def := range defs {
-		assert.Equal(t, "postgres", def.Component,
-			"postgres key %q must have 'postgres' component", def.Key)
+		// Bootstrap-only keys (e.g., migrations_path) use ComponentNone.
+		if def.ApplyBehavior == domain.ApplyBootstrapOnly {
+			assert.Equal(t, domain.ComponentNone, def.Component,
+				"bootstrap-only postgres key %q must have ComponentNone", def.Key)
+		} else {
+			assert.Equal(t, "postgres", def.Component,
+				"postgres key %q must have 'postgres' component", def.Key)
+		}
 	}
 }

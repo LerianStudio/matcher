@@ -4,13 +4,14 @@ package testutil
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
 
+	"github.com/bxcodec/dbresolver/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
 	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
 
 	"github.com/LerianStudio/matcher/internal/shared/ports"
@@ -29,16 +30,16 @@ func TestMockInfrastructureProvider_ImplementsInterface(t *testing.T) {
 	var _ ports.InfrastructureProvider = (*MockInfrastructureProvider)(nil)
 }
 
-func TestMockInfrastructureProvider_GetPostgresConnection(t *testing.T) {
+func TestMockInfrastructureProvider_GetPrimaryDB(t *testing.T) {
 	t.Parallel()
 
-	// v2 postgres.Client has all unexported fields, so we use pointer identity checks.
-	testClient := &libPostgres.Client{}
+	testDB := &sql.DB{}
+	testClient := NewClientWithResolver(dbresolver.New(dbresolver.WithPrimaryDBs(testDB)))
 
 	tests := []struct {
 		name         string
 		provider     *MockInfrastructureProvider
-		wantConn     *libPostgres.Client
+		wantConn     *sql.DB
 		wantErr      error
 		wantNilConn  bool
 		wantNilError bool
@@ -48,7 +49,7 @@ func TestMockInfrastructureProvider_GetPostgresConnection(t *testing.T) {
 			provider: &MockInfrastructureProvider{
 				PostgresConn: testClient,
 			},
-			wantConn:     testClient,
+			wantConn:     testDB,
 			wantNilError: true,
 		},
 		{
@@ -69,10 +70,10 @@ func TestMockInfrastructureProvider_GetPostgresConnection(t *testing.T) {
 			wantNilConn: true,
 		},
 		{
-			name:         "returns nil connection without error when PostgresConn is nil",
-			provider:     &MockInfrastructureProvider{},
-			wantNilConn:  true,
-			wantNilError: true,
+			name:        "returns nil connection without error when PostgresConn is nil",
+			provider:    &MockInfrastructureProvider{},
+			wantErr:     ErrNoPostgresConnection,
+			wantNilConn: true,
 		},
 	}
 
@@ -81,7 +82,7 @@ func TestMockInfrastructureProvider_GetPostgresConnection(t *testing.T) {
 			t.Parallel()
 
 			ctx := context.Background()
-			conn, err := tt.provider.GetPostgresConnection(ctx)
+			conn, err := tt.provider.GetPrimaryDB(ctx)
 
 			if tt.wantNilError {
 				require.NoError(t, err)
@@ -94,7 +95,7 @@ func TestMockInfrastructureProvider_GetPostgresConnection(t *testing.T) {
 				assert.Nil(t, conn)
 			} else {
 				require.NotNil(t, conn)
-				assert.Same(t, tt.wantConn, conn.Connection())
+				assert.Same(t, tt.wantConn, conn.DB())
 			}
 		})
 	}
@@ -174,7 +175,8 @@ func TestMockInfrastructureProvider_GetRedisConnection(t *testing.T) {
 func TestMockInfrastructureProvider_ContextIsIgnored(t *testing.T) {
 	t.Parallel()
 
-	pgClient := &libPostgres.Client{}
+	pgDB := &sql.DB{}
+	pgClient := NewClientWithResolver(dbresolver.New(dbresolver.WithPrimaryDBs(pgDB)))
 	redisClient := NewRedisClientWithMock(nil)
 
 	provider := &MockInfrastructureProvider{
@@ -185,10 +187,10 @@ func TestMockInfrastructureProvider_ContextIsIgnored(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	pgConn, pgErr := provider.GetPostgresConnection(ctx)
+	pgConn, pgErr := provider.GetPrimaryDB(ctx)
 	require.NoError(t, pgErr)
 	assert.NotNil(t, pgConn)
-	assert.Same(t, pgClient, pgConn.Connection())
+	assert.Same(t, pgDB, pgConn.DB())
 
 	redisConn, redisErr := provider.GetRedisConnection(ctx)
 	require.NoError(t, redisErr)

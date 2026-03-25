@@ -56,7 +56,7 @@ This directory contains the private application code, organized by Bounded Conte
 
 ### Shared (`internal/shared`)
 - **Role:** Shared kernel (cross-cutting concerns).
-- **Features:** Canonical domain entities (Transaction, MatchRule, FieldMap, AuditLog, OutboxEvent), fee calculation engine (calculator, verifier, normalization, schedule/rate models), cross-context bridge adapters, common SQL utilities, RabbitMQ publisher with confirms and DLQ, idempotency middleware, tenant infrastructure (ConnectionManager, SingleTenantProvider), CSV formula injection prevention.
+- **Features:** Canonical domain entities (Transaction, MatchRule, FieldMap, AuditLog, OutboxEvent), fee calculation engine (calculator, verifier, normalization, schedule/rate models), cross-context bridge adapters, common SQL utilities, RabbitMQ publisher with confirms and DLQ, idempotency middleware, tenant-aware infrastructure ports and SQL helpers, CSV formula injection prevention.
 - [Documentation](shared/README.md)
 
 ### Testutil (`internal/testutil`)

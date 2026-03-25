@@ -14,9 +14,9 @@ import (
 
 	configAudit "github.com/LerianStudio/matcher/internal/configuration/adapters/audit"
 	configPorts "github.com/LerianStudio/matcher/internal/configuration/ports"
-	outboxRepo "github.com/LerianStudio/matcher/internal/outbox/adapters/postgres"
 	outboxEntities "github.com/LerianStudio/matcher/internal/outbox/domain/entities"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
+	outboxRepo "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/outbox"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
