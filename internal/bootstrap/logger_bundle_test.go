@@ -3,6 +3,7 @@
 package bootstrap
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -20,7 +21,7 @@ func TestSyncRuntimeLogger_UsesBundleLoggerWhenLevelMatches(t *testing.T) {
 	cfg := &Config{App: AppConfig{EnvName: "development", LogLevel: "debug"}}
 	bundle := &MatcherBundle{Logger: &LoggerBundle{Logger: second, Level: "debug"}}
 
-	require.NoError(t, syncRuntimeLogger(logger, cfg, bundle))
+	require.NoError(t, syncRuntimeLogger(context.Background(), logger, cfg, bundle))
 	assert.Same(t, second, logger.Current())
 }
 
@@ -33,7 +34,10 @@ func TestSyncRuntimeLogger_RebuildsLoggerWhenBundleLevelIsStale(t *testing.T) {
 	cfg := &Config{App: AppConfig{EnvName: "development", LogLevel: "debug"}}
 	bundle := &MatcherBundle{Logger: &LoggerBundle{Logger: stale, Level: "info"}}
 
-	require.NoError(t, syncRuntimeLogger(logger, cfg, bundle))
+	require.NoError(t, syncRuntimeLogger(context.Background(), logger, cfg, bundle))
 	assert.NotSame(t, stale, logger.Current())
+	assert.Same(t, logger.Current(), bundle.Logger.Logger)
+	assert.Equal(t, "debug", bundle.Logger.Level)
+	assert.True(t, bundle.ownsLogger)
 	assert.True(t, logger.Current().Enabled(libLog.LevelDebug))
 }

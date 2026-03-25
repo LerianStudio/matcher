@@ -694,7 +694,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 			runtimeCfg = configManager.Get()
 		}
 
-		if err := syncRuntimeLogger(logger, runtimeCfg, bundle); err != nil {
+		if err := syncRuntimeLogger(reloadLogCtx, logger, runtimeCfg, bundle); err != nil {
 			logger.Log(reloadLogCtx, libLog.LevelWarn, "systemplane logger sync failed",
 				libLog.String("error", err.Error()),
 				libLog.String("reason", event.Reason))
