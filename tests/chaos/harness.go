@@ -739,6 +739,7 @@ func (h *ChaosHarness) EnvVarsForBootstrap() (map[string]string, error) {
 		"RABBITMQ_URI":                         "amqp",
 		"RABBITMQ_HEALTH_URL":                  h.RabbitMQHealthURL,
 		"RABBITMQ_ALLOW_INSECURE_HEALTH_CHECK": "true",
+		"AUTH_ENABLED":                         "false",
 		"PLUGIN_AUTH_ENABLED":                  "false",
 		"HTTP_BODY_LIMIT_BYTES":                "115343360",
 		"DEFAULT_TENANT_ID":                    h.Seed.TenantID.String(),

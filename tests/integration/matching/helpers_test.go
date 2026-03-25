@@ -318,6 +318,7 @@ func countInt(
 type capturePublishers struct {
 	matchConfirmed int
 	last           *shared.MatchConfirmedEvent
+	tenantIDs      []uuid.UUID
 }
 
 func (c *capturePublishers) PublishIngestionCompleted(
@@ -340,6 +341,9 @@ func (c *capturePublishers) PublishMatchConfirmed(
 ) error {
 	c.matchConfirmed++
 	c.last = event
+	if event != nil {
+		c.tenantIDs = append(c.tenantIDs, event.TenantID)
+	}
 	return nil
 }
 

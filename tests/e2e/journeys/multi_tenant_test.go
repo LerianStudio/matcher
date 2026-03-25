@@ -5,6 +5,7 @@ package journeys
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -24,25 +25,56 @@ import (
 func skipIfAuthDisabled(t *testing.T) {
 	t.Helper()
 
-	if !isAuthEnabledForE2E() {
+	enabled, err := isAuthEnabledForE2E()
+	if err != nil {
+		t.Fatalf("invalid auth env configuration for E2E: %v", err)
+	}
+
+	if !enabled {
 		t.Skip("Multi-tenant isolation tests require PLUGIN_AUTH_ENABLED=true or AUTH_ENABLED=true")
 	}
 }
 
-func isAuthEnabledForE2E() bool {
-	for _, envName := range []string{"PLUGIN_AUTH_ENABLED", "AUTH_ENABLED"} {
-		rawValue, isSet := os.LookupEnv(envName)
-		if !isSet {
-			continue
-		}
+func isAuthEnabledForE2E() (bool, error) {
+	canonicalRaw, canonicalSet := os.LookupEnv("PLUGIN_AUTH_ENABLED")
+	legacyRaw, legacySet := os.LookupEnv("AUTH_ENABLED")
 
-		enabled, err := strconv.ParseBool(strings.TrimSpace(rawValue))
-		if err == nil {
-			return enabled
-		}
+	canonicalValue, canonicalParsed, err := parseOptionalBoolEnv(canonicalRaw, canonicalSet)
+	if err != nil {
+		return false, fmt.Errorf("PLUGIN_AUTH_ENABLED: %w", err)
 	}
 
-	return false
+	legacyValue, legacyParsed, err := parseOptionalBoolEnv(legacyRaw, legacySet)
+	if err != nil {
+		return false, fmt.Errorf("AUTH_ENABLED: %w", err)
+	}
+
+	if canonicalParsed && legacyParsed && canonicalValue != legacyValue {
+		return false, fmt.Errorf("conflicting values for PLUGIN_AUTH_ENABLED and AUTH_ENABLED")
+	}
+
+	if canonicalParsed {
+		return canonicalValue, nil
+	}
+
+	if legacyParsed {
+		return legacyValue, nil
+	}
+
+	return false, nil
+}
+
+func parseOptionalBoolEnv(raw string, isSet bool) (bool, bool, error) {
+	if !isSet {
+		return false, false, nil
+	}
+
+	value, err := strconv.ParseBool(strings.TrimSpace(raw))
+	if err != nil {
+		return false, false, err
+	}
+
+	return value, true, nil
 }
 
 // TestMultiTenant_Isolation verifies that tenant A cannot see tenant B's data.

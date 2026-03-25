@@ -171,6 +171,7 @@ func setSharedEnvFromContainers(t *testing.T, sh *SharedServerHarness) error {
 		"RABBITMQ_ALLOW_INSECURE_HEALTH_CHECK": "true",
 
 		// Auth disabled for tests
+		"AUTH_ENABLED":        "false",
 		"PLUGIN_AUTH_ENABLED": "false",
 
 		// Body limit: 110 MiB / 115343360 bytes
