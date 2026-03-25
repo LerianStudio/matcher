@@ -16,6 +16,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
+	"github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 func TestQueryExecutorInterface(t *testing.T) {
@@ -59,12 +60,44 @@ func TestWithTenantRead_NilProvider(t *testing.T) {
 	require.ErrorIs(t, err, ErrConnectionRequired)
 }
 
+func TestWithTenantRead_TypedNilProvider(t *testing.T) {
+	t.Parallel()
+
+	var typedNilProvider *testutil.MockInfrastructureProvider
+
+	_, err := WithTenantRead[string](
+		context.Background(),
+		ports.InfrastructureProvider(typedNilProvider),
+		func(_ *sql.Conn) (string, error) {
+			return "", nil
+		},
+	)
+
+	require.ErrorIs(t, err, ErrConnectionRequired)
+}
+
 func TestWithTenantReadQuery_NilProvider(t *testing.T) {
 	t.Parallel()
 
 	_, err := WithTenantReadQuery[string](
 		context.Background(),
 		nil,
+		func(_ QueryExecutor) (string, error) {
+			return "", nil
+		},
+	)
+
+	require.ErrorIs(t, err, ErrConnectionRequired)
+}
+
+func TestWithTenantReadQuery_TypedNilProvider(t *testing.T) {
+	t.Parallel()
+
+	var typedNilProvider *testutil.MockInfrastructureProvider
+
+	_, err := WithTenantReadQuery[string](
+		context.Background(),
+		ports.InfrastructureProvider(typedNilProvider),
 		func(_ QueryExecutor) (string, error) {
 			return "", nil
 		},

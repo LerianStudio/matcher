@@ -25,6 +25,8 @@ var (
 	ErrConnectionRequired = errors.New("postgres connection is required")
 	// ErrNoPrimaryDB indicates no primary database is configured.
 	ErrNoPrimaryDB = errors.New("no primary database configured for tenant transaction")
+	// ErrNilTxLease indicates the infrastructure provider returned a nil or unusable tx lease.
+	ErrNilTxLease = errors.New("tenant transaction lease is required")
 	// ErrNilCallback indicates a nil callback function was passed to a transaction wrapper.
 	ErrNilCallback = errors.New("pgcommon: callback function must not be nil")
 	// ErrInvalidTenantID indicates the tenant ID is not a valid UUID.
@@ -175,6 +177,10 @@ func WithTenantTxOrExistingProvider[Result any](
 		return zero, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 
+	if txLease == nil || txLease.SQLTx() == nil {
+		return zero, ErrNilTxLease
+	}
+
 	defer func() {
 		_ = txLease.Rollback()
 	}()
@@ -221,6 +227,11 @@ func BeginTenantTx(ctx context.Context, provider ports.InfrastructureProvider) (
 	if err != nil {
 		cancel()
 		return nil, noop, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
+	if txLease == nil || txLease.SQLTx() == nil {
+		cancel()
+		return nil, noop, ErrNilTxLease
 	}
 
 	return txLease.SQLTx(), func() {
