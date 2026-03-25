@@ -72,8 +72,10 @@ func TestUpdateFromSystemplane_PreservesBootstrapFields(t *testing.T) {
 	// Set distinctive bootstrap-only field values so we can verify they survive.
 	cfg.App.EnvName = "staging-test"
 	cfg.Server.Address = ":9999"
+	cfg.Server.BodyLimitBytes = 2048
 	cfg.Server.TLSCertFile = "/etc/tls/cert.pem"
 	cfg.Server.TLSKeyFile = "/etc/tls/key.pem"
+	cfg.Postgres.MigrationsPath = "db/migrations"
 	cfg.Auth = AuthConfig{
 		Enabled:     true,
 		Host:        "https://auth.example.com",
@@ -111,8 +113,10 @@ func TestUpdateFromSystemplane_PreservesBootstrapFields(t *testing.T) {
 	// Bootstrap-only fields preserved.
 	assert.Equal(t, "staging-test", updated.App.EnvName)
 	assert.Equal(t, ":9999", updated.Server.Address)
+	assert.Equal(t, 2048, updated.Server.BodyLimitBytes)
 	assert.Equal(t, "/etc/tls/cert.pem", updated.Server.TLSCertFile)
 	assert.Equal(t, "/etc/tls/key.pem", updated.Server.TLSKeyFile)
+	assert.Equal(t, "db/migrations", updated.Postgres.MigrationsPath)
 	assert.Equal(t, cfg.Auth, updated.Auth)
 	assert.Equal(t, cfg.Telemetry, updated.Telemetry)
 	assert.Equal(t, cfg.Logger, updated.Logger)
@@ -143,6 +147,60 @@ func TestSnapshotToFullConfig_RuntimeFields(t *testing.T) {
 	assert.Equal(t, "test-bucket", result.Archival.StorageBucket)
 	assert.Equal(t, 45, result.Webhook.TimeoutSec)
 	assert.Equal(t, 120, result.Scheduler.IntervalSec)
+}
+
+func TestConfigFromSnapshot_RenamedKeysHydrate(t *testing.T) {
+	t.Parallel()
+
+	snap := domain.Snapshot{
+		Configs: map[string]domain.EffectiveValue{
+			"cors.allowed_origins":    {Key: "cors.allowed_origins", Value: "https://app.example.com"},
+			"cors.allowed_methods":    {Key: "cors.allowed_methods", Value: "GET,POST"},
+			"cors.allowed_headers":    {Key: "cors.allowed_headers", Value: "Authorization"},
+			"postgres.max_open_conns": {Key: "postgres.max_open_conns", Value: 41},
+			"postgres.max_idle_conns": {Key: "postgres.max_idle_conns", Value: 9},
+			"redis.min_idle_conns":    {Key: "redis.min_idle_conns", Value: 4},
+			"rabbitmq.url":            {Key: "rabbitmq.url", Value: "amqps"},
+		},
+	}
+
+	result := configFromSnapshot(snap)
+
+	require.NotNil(t, result)
+	assert.Equal(t, "https://app.example.com", result.Server.CORSAllowedOrigins)
+	assert.Equal(t, "GET,POST", result.Server.CORSAllowedMethods)
+	assert.Equal(t, "Authorization", result.Server.CORSAllowedHeaders)
+	assert.Equal(t, 41, result.Postgres.MaxOpenConnections)
+	assert.Equal(t, 9, result.Postgres.MaxIdleConnections)
+	assert.Equal(t, 4, result.Redis.MinIdleConn)
+	assert.Equal(t, "amqps", result.RabbitMQ.URI)
+}
+
+func TestConfigFromSnapshot_LegacyRenamedKeysHydrate(t *testing.T) {
+	t.Parallel()
+
+	snap := domain.Snapshot{
+		Configs: map[string]domain.EffectiveValue{
+			"server.cors_allowed_origins":   {Key: "server.cors_allowed_origins", Value: "https://legacy.example.com"},
+			"server.cors_allowed_methods":   {Key: "server.cors_allowed_methods", Value: "GET,POST"},
+			"server.cors_allowed_headers":   {Key: "server.cors_allowed_headers", Value: "Authorization"},
+			"postgres.max_open_connections": {Key: "postgres.max_open_connections", Value: 41},
+			"postgres.max_idle_connections": {Key: "postgres.max_idle_connections", Value: 9},
+			"redis.min_idle_conn":           {Key: "redis.min_idle_conn", Value: 4},
+			"rabbitmq.uri":                  {Key: "rabbitmq.uri", Value: "amqps"},
+		},
+	}
+
+	result := configFromSnapshot(snap)
+
+	require.NotNil(t, result)
+	assert.Equal(t, "https://legacy.example.com", result.Server.CORSAllowedOrigins)
+	assert.Equal(t, "GET,POST", result.Server.CORSAllowedMethods)
+	assert.Equal(t, "Authorization", result.Server.CORSAllowedHeaders)
+	assert.Equal(t, 41, result.Postgres.MaxOpenConnections)
+	assert.Equal(t, 9, result.Postgres.MaxIdleConnections)
+	assert.Equal(t, 4, result.Redis.MinIdleConn)
+	assert.Equal(t, "amqps", result.RabbitMQ.URI)
 }
 
 func TestUpdateFromSystemplane_ValidationFailure_PreservesOldConfig(t *testing.T) {
@@ -221,6 +279,7 @@ func TestSnapshotToFullConfig_BootstrapFieldsPreserved(t *testing.T) {
 	oldCfg := defaultConfig()
 	oldCfg.App.EnvName = "production"
 	oldCfg.Server.Address = ":8080"
+	oldCfg.Server.BodyLimitBytes = 4096
 	oldCfg.Server.TLSCertFile = "/tls/cert.pem"
 	oldCfg.Server.TLSKeyFile = "/tls/key.pem"
 	oldCfg.Server.TLSTerminatedUpstream = true
@@ -241,6 +300,7 @@ func TestSnapshotToFullConfig_BootstrapFieldsPreserved(t *testing.T) {
 	}
 	oldCfg.Logger = &testLogger{}
 	oldCfg.ShutdownGracePeriod = 30 * time.Second
+	oldCfg.Postgres.MigrationsPath = "db/migrations"
 	oldCfg.Tenancy.DefaultTenantID = "22222222-2222-2222-2222-222222222222"
 	oldCfg.Tenancy.DefaultTenantSlug = "prod-default"
 	oldCfg.Idempotency.HMACSecret = "seed-secret"
@@ -256,11 +316,13 @@ func TestSnapshotToFullConfig_BootstrapFieldsPreserved(t *testing.T) {
 	// Bootstrap-only fields come from oldCfg, not from snapshot defaults.
 	assert.Equal(t, "production", result.App.EnvName)
 	assert.Equal(t, ":8080", result.Server.Address)
+	assert.Equal(t, 4096, result.Server.BodyLimitBytes)
 	assert.Equal(t, "/tls/cert.pem", result.Server.TLSCertFile)
 	assert.Equal(t, "/tls/key.pem", result.Server.TLSKeyFile)
 	assert.True(t, result.Server.TLSTerminatedUpstream)
 	assert.Equal(t, "10.0.0.0/8", result.Server.TrustedProxies)
 	assert.Equal(t, oldCfg.Auth, result.Auth)
+	assert.Equal(t, "db/migrations", result.Postgres.MigrationsPath)
 	assert.Equal(t, oldCfg.Tenancy.DefaultTenantID, result.Tenancy.DefaultTenantID)
 	assert.Equal(t, oldCfg.Tenancy.DefaultTenantSlug, result.Tenancy.DefaultTenantSlug)
 	assert.Equal(t, oldCfg.Telemetry, result.Telemetry)

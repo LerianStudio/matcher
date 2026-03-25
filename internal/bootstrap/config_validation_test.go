@@ -78,7 +78,7 @@ func TestValidateAuthConfig_EnabledButNoHost(t *testing.T) {
 
 	err := cfg.Validate()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "AUTH_SERVICE_ADDRESS")
+	assert.Contains(t, err.Error(), "PLUGIN_AUTH_ADDRESS")
 }
 
 func TestValidateAuthConfig_EnabledButNoSecret(t *testing.T) {

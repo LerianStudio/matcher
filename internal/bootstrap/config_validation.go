@@ -273,11 +273,11 @@ func (cfg *Config) validateAuthConfig(asserter *assert.Asserter) error {
 
 	ctx := context.Background()
 
-	if err := asserter.NotEmpty(ctx, strings.TrimSpace(cfg.Auth.Host), "AUTH_SERVICE_ADDRESS is required when AUTH_ENABLED=true"); err != nil {
+	if err := asserter.NotEmpty(ctx, strings.TrimSpace(cfg.Auth.Host), "PLUGIN_AUTH_ADDRESS is required when PLUGIN_AUTH_ENABLED=true"); err != nil {
 		return fmt.Errorf("config validation: %w", err)
 	}
 
-	if err := asserter.NotEmpty(ctx, strings.TrimSpace(cfg.Auth.TokenSecret), "AUTH_JWT_SECRET is required when AUTH_ENABLED=true"); err != nil {
+	if err := asserter.NotEmpty(ctx, strings.TrimSpace(cfg.Auth.TokenSecret), "AUTH_JWT_SECRET is required when PLUGIN_AUTH_ENABLED=true"); err != nil {
 		return fmt.Errorf("config validation: %w", err)
 	}
 

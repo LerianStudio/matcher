@@ -8,12 +8,56 @@ import (
 	"os"
 	"reflect"
 	"strings"
+
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
 )
 
 const (
 	maxRestoreDepth     = 10
 	envTagSplitPartsMax = 2
 )
+
+var configKeyAliases = map[string]string{
+	"cors.allowed_origins":    "server.cors_allowed_origins",
+	"cors.allowed_methods":    "server.cors_allowed_methods",
+	"cors.allowed_headers":    "server.cors_allowed_headers",
+	"postgres.max_open_conns": "postgres.max_open_connections",
+	"postgres.max_idle_conns": "postgres.max_idle_connections",
+	"redis.min_idle_conns":    "redis.min_idle_conn",
+	"rabbitmq.url":            "rabbitmq.uri",
+}
+
+func legacyConfigKey(key string) (string, bool) {
+	legacyKey, ok := configKeyAliases[key]
+
+	return legacyKey, ok
+}
+
+func resolveSnapshotConfigValue(snap domain.Snapshot, key string) (any, bool) {
+	if value, ok := snapshotConfigValueByKey(snap, key); ok {
+		return value, true
+	}
+
+	legacyKey, ok := legacyConfigKey(key)
+	if !ok {
+		return nil, false
+	}
+
+	return snapshotConfigValueByKey(snap, legacyKey)
+}
+
+func snapshotConfigValueByKey(snap domain.Snapshot, key string) (any, bool) {
+	if strings.TrimSpace(key) == "" || snap.Configs == nil {
+		return nil, false
+	}
+
+	effectiveValue, ok := snap.Configs[key]
+	if !ok {
+		return nil, false
+	}
+
+	return effectiveValue.Value, true
+}
 
 func restoreZeroedFields(dst, snapshot *Config) {
 	if dst == nil || snapshot == nil {
@@ -72,6 +116,10 @@ func hasExplicitEnvOverride(field reflect.StructField) bool {
 func resolveConfigValue(cfg *Config, key string) (any, bool) {
 	if cfg == nil || strings.TrimSpace(key) == "" {
 		return nil, false
+	}
+
+	if alias, ok := legacyConfigKey(key); ok {
+		key = alias
 	}
 
 	parts := strings.Split(key, ".")

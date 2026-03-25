@@ -124,8 +124,8 @@ type RabbitMQConfig struct {
 
 // AuthConfig configures authentication and authorization.
 type AuthConfig struct {
-	Enabled     bool   `env:"AUTH_ENABLED"         envDefault:"false" mapstructure:"enabled"`
-	Host        string `env:"AUTH_SERVICE_ADDRESS"                    mapstructure:"host"`
+	Enabled     bool   `env:"PLUGIN_AUTH_ENABLED"  envDefault:"false" mapstructure:"enabled"`
+	Host        string `env:"PLUGIN_AUTH_ADDRESS"                     mapstructure:"host"`
 	TokenSecret string `env:"AUTH_JWT_SECRET"                         mapstructure:"token_secret"`
 }
 

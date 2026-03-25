@@ -25,7 +25,7 @@ import (
 func clearConfigEnvVars(t *testing.T) {
 	t.Helper()
 
-	for _, key := range configEnvVarKeys {
+	for _, key := range append(configEnvVarKeys, legacyAuthEnvVarKeys()...) {
 		value, exists := os.LookupEnv(key)
 		requireNoError(t, os.Unsetenv(key))
 
@@ -38,6 +38,15 @@ func clearConfigEnvVars(t *testing.T) {
 			requireNoError(t, os.Unsetenv(key))
 		})
 	}
+}
+
+func legacyAuthEnvVarKeys() []string {
+	keys := make([]string, 0, len(legacyAuthEnvAliases))
+	for _, alias := range legacyAuthEnvAliases {
+		keys = append(keys, alias.legacy)
+	}
+
+	return keys
 }
 
 func requireNoError(t *testing.T, err error) {
@@ -123,8 +132,8 @@ var configEnvVarKeys = []string{
 	"RABBITMQ_ALLOW_INSECURE_HEALTH_CHECK",
 
 	// AuthConfig
-	"AUTH_ENABLED",
-	"AUTH_SERVICE_ADDRESS",
+	"PLUGIN_AUTH_ENABLED",
+	"PLUGIN_AUTH_ADDRESS",
 	"AUTH_JWT_SECRET",
 
 	// SwaggerConfig
