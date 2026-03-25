@@ -1891,6 +1891,26 @@ func TestDispatcherAuditPublisherNotConfiguredErrorType(t *testing.T) {
 	require.False(t, isNonRetryableError(err), "ErrAuditPublisherNotConfigured must be retryable")
 }
 
+func TestDispatcherTypedNilAuditPublisherTreatedAsNotConfigured(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	repo := mocks.NewMockOutboxRepository(ctrl)
+	publisher := &stubPublisher{}
+	var typedNilAuditPub *stubAuditPublisher
+
+	dispatcher, err := NewDispatcher(repo, publisher, publisher, nil, nil, WithAuditPublisher(typedNilAuditPub))
+	require.NoError(t, err)
+
+	err = dispatcher.publishEvent(context.Background(), &outboxEntities.OutboxEvent{
+		EventType: sharedDomain.EventTypeAuditLogCreated,
+		Payload:   []byte(`{}`),
+	})
+	require.ErrorIs(t, err, ErrAuditPublisherNotConfigured)
+}
+
 func TestDeduplicateEvents(t *testing.T) {
 	t.Parallel()
 
