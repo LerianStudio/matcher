@@ -619,12 +619,6 @@ func (r *runMatchAdjustmentRepo) ListByMatchGroupID(
 
 type runMatchInfraProvider struct{}
 
-func (r *runMatchInfraProvider) GetPostgresConnection(
-	_ context.Context,
-) (*sharedPorts.PostgresConnectionLease, error) {
-	return nil, nil
-}
-
 func (r *runMatchInfraProvider) GetRedisConnection(
 	_ context.Context,
 ) (*sharedPorts.RedisConnectionLease, error) {
@@ -635,7 +629,11 @@ func (r *runMatchInfraProvider) BeginTx(_ context.Context) (*sharedPorts.TxLease
 	return nil, nil
 }
 
-func (r *runMatchInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.ReplicaDBLease, error) {
+func (r *runMatchInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.DBLease, error) {
+	return nil, nil
+}
+
+func (r *runMatchInfraProvider) GetPrimaryDB(_ context.Context) (*sharedPorts.DBLease, error) {
 	return nil, nil
 }
 

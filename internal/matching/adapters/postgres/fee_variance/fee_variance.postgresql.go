@@ -40,12 +40,7 @@ func (repo *Repository) CreateBatchWithTx(
 		return nil, ErrInvalidTx
 	}
 
-	sqlTx, ok := tx.(*sql.Tx)
-	if !ok || sqlTx == nil {
-		return nil, ErrInvalidTx
-	}
-
-	return repo.createBatch(ctx, sqlTx, rows)
+	return repo.createBatch(ctx, tx, rows)
 }
 
 func (repo *Repository) createBatch(

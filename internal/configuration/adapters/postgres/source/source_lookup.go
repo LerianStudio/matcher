@@ -30,16 +30,9 @@ func (repo *Repository) FindByID(
 	ctx, span := tracer.Start(ctx, "repository.source.find_by_id")
 	defer span.End()
 
-	connection, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return nil, fmt.Errorf("get postgres connection: %w", err)
-	}
-	defer connection.Release()
-
-	result, err := common.WithTenantTx(
+	result, err := common.WithTenantTxProvider(
 		ctx,
-		connection.Connection(),
+		repo.provider,
 		func(tx *sql.Tx) (*entities.ReconciliationSource, error) {
 			row := tx.QueryRowContext(
 				ctx,
@@ -80,16 +73,9 @@ func (repo *Repository) GetContextIDBySourceID(
 	ctx, span := tracer.Start(ctx, "repository.source.find_context_id_by_source_id")
 	defer span.End()
 
-	connection, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return uuid.Nil, fmt.Errorf("get postgres connection: %w", err)
-	}
-	defer connection.Release()
-
-	result, err := common.WithTenantTx(
+	result, err := common.WithTenantTxProvider(
 		ctx,
-		connection.Connection(),
+		repo.provider,
 		func(tx *sql.Tx) (uuid.UUID, error) {
 			var contextIDStr string
 

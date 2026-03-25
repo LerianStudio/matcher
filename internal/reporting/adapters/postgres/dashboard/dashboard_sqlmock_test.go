@@ -27,12 +27,6 @@ var (
 
 type fakeDashboardInfraProvider struct{}
 
-func (f *fakeDashboardInfraProvider) GetPostgresConnection(
-	_ context.Context,
-) (*ports.PostgresConnectionLease, error) {
-	return nil, nil
-}
-
 func (f *fakeDashboardInfraProvider) GetRedisConnection(
 	_ context.Context,
 ) (*ports.RedisConnectionLease, error) {
@@ -43,7 +37,11 @@ func (f *fakeDashboardInfraProvider) BeginTx(_ context.Context) (*ports.TxLease,
 	return nil, errTestTransactionsUnsupported
 }
 
-func (f *fakeDashboardInfraProvider) GetReplicaDB(_ context.Context) (*ports.ReplicaDBLease, error) {
+func (f *fakeDashboardInfraProvider) GetReplicaDB(_ context.Context) (*ports.DBLease, error) {
+	return nil, nil
+}
+
+func (f *fakeDashboardInfraProvider) GetPrimaryDB(_ context.Context) (*ports.DBLease, error) {
 	return nil, nil
 }
 

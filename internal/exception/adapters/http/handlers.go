@@ -34,6 +34,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/exception/services/command"
 	"github.com/LerianStudio/matcher/internal/exception/services/query"
 	crossAdapters "github.com/LerianStudio/matcher/internal/shared/adapters/cross"
+	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
 
@@ -719,7 +720,7 @@ func (handler *Handlers) ListExceptions(fiberCtx *fiber.Ctx) error {
 
 	response := dto.ListExceptionsResponse{
 		Items: items,
-		CursorResponse: dto.CursorResponse{
+		CursorResponse: sharedhttp.CursorResponse{
 			NextCursor: pagination.Next,
 			PrevCursor: pagination.Prev,
 			Limit:      cursorFilter.Limit,
@@ -777,7 +778,7 @@ func (handler *Handlers) ListDisputes(fiberCtx *fiber.Ctx) error {
 
 	response := dto.ListDisputesResponse{
 		Items: items,
-		CursorResponse: dto.CursorResponse{
+		CursorResponse: sharedhttp.CursorResponse{
 			NextCursor: pagination.Next,
 			PrevCursor: pagination.Prev,
 			Limit:      cursorFilter.Limit,
@@ -1229,7 +1230,7 @@ func (handler *Handlers) GetHistory(fiberCtx *fiber.Ctx) error {
 
 	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.HistoryResponse{
 		Items: items,
-		CursorResponse: dto.CursorResponse{
+		CursorResponse: sharedhttp.CursorResponse{
 			NextCursor: nextCursor,
 			Limit:      limit,
 			HasMore:    nextCursor != "",

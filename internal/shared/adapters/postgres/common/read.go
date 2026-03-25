@@ -79,7 +79,7 @@ func WithTenantRead[T any](
 }
 
 // getReadDB returns the replica DB if available, otherwise falls back to primary.
-func getReadDB(ctx context.Context, provider ports.InfrastructureProvider) (*ports.ReplicaDBLease, error) {
+func getReadDB(ctx context.Context, provider ports.InfrastructureProvider) (*ports.DBLease, error) {
 	dbLease, err := provider.GetReplicaDB(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get replica db: %w", err)
@@ -100,34 +100,25 @@ func getReadDB(ctx context.Context, provider ports.InfrastructureProvider) (*por
 func getPrimaryDBFallback(
 	ctx context.Context,
 	provider ports.InfrastructureProvider,
-) (*ports.ReplicaDBLease, error) {
-	connLease, err := provider.GetPostgresConnection(ctx)
+) (*ports.DBLease, error) {
+	primaryLease, err := provider.GetPrimaryDB(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get primary connection as fallback: %w", err)
 	}
 
-	conn := connLease.Connection()
-	if conn == nil {
-		connLease.Release()
-
+	if primaryLease == nil {
 		return nil, ErrConnectionRequired
 	}
 
-	resolver, err := conn.Resolver(ctx)
-	if err != nil {
-		connLease.Release()
-
-		return nil, fmt.Errorf("get database from primary connection: %w", err)
-	}
-
-	primaryDBs := resolver.PrimaryDBs()
-	if len(primaryDBs) == 0 {
-		connLease.Release()
+	if primaryLease.DB() == nil {
+		if primaryLease != nil {
+			primaryLease.Release()
+		}
 
 		return nil, ErrNoPrimaryDB
 	}
 
-	return ports.NewReplicaDBLease(primaryDBs[0], connLease.Release), nil
+	return primaryLease, nil
 }
 
 // WithTenantReadQuery executes fn using a read replica connection with tenant schema isolation.

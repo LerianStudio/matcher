@@ -337,28 +337,6 @@ func TestRepository_CreateExceptionsWithTx_NilProvider(t *testing.T) {
 	require.ErrorIs(t, err, ErrRepoNotInitialized)
 }
 
-func TestRepository_CreateExceptionsWithTx_InvalidTxType(t *testing.T) {
-	t.Parallel()
-
-	provider := &testutil.MockInfrastructureProvider{}
-	repo := NewRepository(provider)
-
-	invalidTx := &invalidTxMock{}
-	inputs := []matchingPorts.ExceptionTransactionInput{
-		{TransactionID: uuid.New()},
-	}
-
-	err := repo.CreateExceptionsWithTx(
-		context.Background(),
-		invalidTx,
-		uuid.New(),
-		uuid.New(),
-		inputs,
-		nil,
-	)
-	require.ErrorIs(t, err, ErrInvalidTx)
-}
-
 func TestRepository_CreateExceptionsWithTx_NilTx(t *testing.T) {
 	t.Parallel()
 
@@ -645,8 +623,3 @@ func TestValidReasonsAllowlist_Complete(t *testing.T) {
 		assert.Equal(t, reason, result, "Reason %s should be in allowlist", reason)
 	}
 }
-
-type invalidTxMock struct{}
-
-func (m *invalidTxMock) Commit() error   { return nil }
-func (m *invalidTxMock) Rollback() error { return nil }

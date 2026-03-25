@@ -22,7 +22,6 @@ import (
 	"github.com/LerianStudio/matcher/internal/matching/ports"
 	"github.com/LerianStudio/matcher/internal/matching/services/command"
 	matchingQuery "github.com/LerianStudio/matcher/internal/matching/services/query"
-	sharedpagination "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 )
 
 // Pagination constants.
@@ -30,9 +29,6 @@ const (
 	sortOrderDesc                   = "desc"
 	minTransactionIDsForManualMatch = 2
 )
-
-// CursorResponse is an alias for the shared cursor pagination type.
-type CursorResponse = sharedpagination.CursorResponse
 
 // productionMode indicates whether the application is running in production.
 // Set once during handler construction via NewHandler; governs SafeError behavior

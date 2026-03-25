@@ -23,6 +23,7 @@ import (
 	governanceEntities "github.com/LerianStudio/matcher/internal/governance/domain/entities"
 	governanceErrors "github.com/LerianStudio/matcher/internal/governance/domain/errors"
 	"github.com/LerianStudio/matcher/internal/governance/domain/repositories"
+	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
 
@@ -299,7 +300,7 @@ func (handler *Handler) ListAuditLogsByEntity(
 
 	response := dto.ListAuditLogsResponse{
 		Items: dto.AuditLogsToResponse(logs),
-		CursorResponse: dto.CursorResponse{
+		CursorResponse: sharedhttp.CursorResponse{
 			Limit:      limit,
 			NextCursor: nextCursor,
 			HasMore:    nextCursor != "",
@@ -364,7 +365,7 @@ func (handler *Handler) ListAuditLogs(
 
 	response := dto.ListAuditLogsResponse{
 		Items: dto.AuditLogsToResponse(logs),
-		CursorResponse: dto.CursorResponse{
+		CursorResponse: sharedhttp.CursorResponse{
 			Limit:      limit,
 			NextCursor: nextCursor,
 			HasMore:    nextCursor != "",

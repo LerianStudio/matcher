@@ -4,9 +4,6 @@ import (
 	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 )
 
-// CursorResponse is an alias for the shared cursor pagination type.
-type CursorResponse = sharedhttp.CursorResponse
-
 // JobResponse represents an ingestion job in API responses.
 // @Description Ingestion job details
 type JobResponse struct {
@@ -66,7 +63,7 @@ type TransactionResponse struct {
 type ListJobsResponse struct {
 	// List of ingestion jobs
 	Items []JobResponse `json:"items" validate:"omitempty,max=200" maxItems:"200"`
-	CursorResponse
+	sharedhttp.CursorResponse
 }
 
 // ListTransactionsResponse represents a cursor-paginated list of transactions.
@@ -74,7 +71,7 @@ type ListJobsResponse struct {
 type ListTransactionsResponse struct {
 	// List of transactions
 	Items []TransactionResponse `json:"items" validate:"omitempty,max=200" maxItems:"200"`
-	CursorResponse
+	sharedhttp.CursorResponse
 }
 
 // IgnoreTransactionResponse represents the response for ignoring a transaction.

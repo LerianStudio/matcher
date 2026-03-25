@@ -55,14 +55,7 @@ func (repo *Repository) WithTx(ctx context.Context, fn func(*sql.Tx) error) erro
 
 	defer span.End()
 
-	connectionLease, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return fmt.Errorf("get postgres connection for job transaction: %w", err)
-	}
-	defer connectionLease.Release()
-
-	_, err = pgcommon.WithTenantTx(ctx, connectionLease.Connection(), func(tx *sql.Tx) (struct{}, error) {
+	_, err := pgcommon.WithTenantTxProvider(ctx, repo.provider, func(tx *sql.Tx) (struct{}, error) {
 		return struct{}{}, fn(tx)
 	})
 	if err != nil {
@@ -111,16 +104,9 @@ func (repo *Repository) create(
 
 	defer span.End()
 
-	connectionLease, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return nil, fmt.Errorf("get postgres connection for create job: %w", err)
-	}
-	defer connectionLease.Release()
-
-	result, err := pgcommon.WithTenantTxOrExisting(
+	result, err := pgcommon.WithTenantTxOrExistingProvider(
 		ctx,
-		connectionLease.Connection(),
+		repo.provider,
 		tx,
 		func(execTx *sql.Tx) (*entities.IngestionJob, error) {
 			model, err := NewJobPostgreSQLModel(job)
@@ -171,16 +157,9 @@ func (repo *Repository) FindByID(
 
 	defer span.End()
 
-	connectionLease, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return nil, fmt.Errorf("get postgres connection for find job: %w", err)
-	}
-	defer connectionLease.Release()
-
-	result, err := pgcommon.WithTenantTx(
+	result, err := pgcommon.WithTenantTxProvider(
 		ctx,
-		connectionLease.Connection(),
+		repo.provider,
 		func(tx *sql.Tx) (*entities.IngestionJob, error) {
 			row := tx.QueryRowContext(
 				ctx,
@@ -206,7 +185,7 @@ func (repo *Repository) FindByID(
 
 // FindByContextID retrieves jobs by context ID with cursor pagination.
 //
-//nolint:gocyclo,cyclop // pagination logic is inherently complex
+//nolint:cyclop // pagination logic is inherently complex
 func (repo *Repository) FindByContextID(
 	ctx context.Context,
 	contextID uuid.UUID,
@@ -221,18 +200,11 @@ func (repo *Repository) FindByContextID(
 
 	defer span.End()
 
-	connectionLease, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return nil, libHTTP.CursorPagination{}, fmt.Errorf("get postgres connection for list jobs: %w", err)
-	}
-	defer connectionLease.Release()
-
 	var pagination libHTTP.CursorPagination
 
-	result, err := pgcommon.WithTenantTx(
+	result, err := pgcommon.WithTenantTxProvider(
 		ctx,
-		connectionLease.Connection(),
+		repo.provider,
 		func(tx *sql.Tx) (jobs []*entities.IngestionJob, err error) {
 			orderDirection := libHTTP.ValidateSortDirection(filter.SortOrder)
 			limit := libHTTP.ValidateLimit(
@@ -359,16 +331,9 @@ func (repo *Repository) update(
 
 	defer span.End()
 
-	connectionLease, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return nil, fmt.Errorf("get postgres connection for update job: %w", err)
-	}
-	defer connectionLease.Release()
-
-	result, err := pgcommon.WithTenantTxOrExisting(
+	result, err := pgcommon.WithTenantTxOrExistingProvider(
 		ctx,
-		connectionLease.Connection(),
+		repo.provider,
 		tx,
 		func(execTx *sql.Tx) (*entities.IngestionJob, error) {
 			model, err := NewJobPostgreSQLModel(job)

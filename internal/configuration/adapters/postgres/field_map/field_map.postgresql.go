@@ -159,16 +159,9 @@ func (repo *Repository) FindByID(ctx stdctx.Context, id uuid.UUID) (*entities.Fi
 	ctx, span := tracer.Start(ctx, "postgres.find_field_map_by_id")
 	defer span.End()
 
-	connection, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return nil, fmt.Errorf("get postgres connection: %w", err)
-	}
-	defer connection.Release()
-
-	result, err := common.WithTenantTx(
+	result, err := common.WithTenantTxProvider(
 		ctx,
-		connection.Connection(),
+		repo.provider,
 		func(tx *sql.Tx) (*entities.FieldMap, error) {
 			row := tx.QueryRowContext(
 				ctx,
@@ -206,16 +199,9 @@ func (repo *Repository) FindBySourceID(
 	ctx, span := tracer.Start(ctx, "postgres.find_field_map_by_source")
 	defer span.End()
 
-	connection, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return nil, fmt.Errorf("get postgres connection: %w", err)
-	}
-	defer connection.Release()
-
-	result, err := common.WithTenantTx(
+	result, err := common.WithTenantTxProvider(
 		ctx,
-		connection.Connection(),
+		repo.provider,
 		func(tx *sql.Tx) (*entities.FieldMap, error) {
 			row := tx.QueryRowContext(
 				ctx,
@@ -492,16 +478,9 @@ func (repo *Repository) ExistsBySourceIDs(
 	ctx, span := tracer.Start(ctx, "postgres.exists_field_maps_by_source_ids")
 	defer span.End()
 
-	connection, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return nil, fmt.Errorf("get postgres connection: %w", err)
-	}
-	defer connection.Release()
-
-	result, err = common.WithTenantTx(
+	result, err := common.WithTenantTxProvider(
 		ctx,
-		connection.Connection(),
+		repo.provider,
 		func(tx *sql.Tx) (map[uuid.UUID]bool, error) {
 			existsMap := make(map[uuid.UUID]bool, len(deduped))
 

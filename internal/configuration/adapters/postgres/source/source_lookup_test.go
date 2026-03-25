@@ -23,7 +23,7 @@ import (
 // This file tests ONLY functions not covered there: GetContextIDBySourceID.
 
 // setupMockWithReplicaForLookup creates a repo backed by sqlmock with
-// primary+replica for functions that call GetPostgresConnection.
+// primary+replica for lookup paths that resolve tenant-scoped database access.
 func setupMockWithReplicaForLookup(t *testing.T) (*Repository, sqlmock.Sqlmock, func()) {
 	t.Helper()
 

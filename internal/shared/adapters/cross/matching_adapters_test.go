@@ -79,7 +79,7 @@ func TestNewMatchRuleProviderAdapter_ValidRepo(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, adapter)
-	assert.Equal(t, mockRepo, adapter.repo)
+	assert.Equal(t, mockRepo, adapter.provider.matchRuleRepo)
 }
 
 func TestMatchRuleProviderAdapter_ListByContextID_NilAdapter(t *testing.T) {
@@ -334,7 +334,7 @@ func TestNewSourceProviderAdapter_ValidRepo(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, adapter)
-	assert.Equal(t, mockRepo, adapter.repo)
+	assert.Equal(t, mockRepo, adapter.provider.sourceRepo)
 }
 
 func TestNewFeeRuleProviderAdapter_NilRepo(t *testing.T) {
@@ -668,7 +668,7 @@ func TestNewContextProviderAdapter_ValidRepo(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, adapter)
-	assert.Equal(t, mockRepo, adapter.repo)
+	assert.Equal(t, mockRepo, adapter.provider.contextRepo)
 }
 
 func TestMatchRuleProviderAdapter_ListByContextID_SkipsNilRules(t *testing.T) {

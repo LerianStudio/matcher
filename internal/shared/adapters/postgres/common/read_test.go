@@ -149,7 +149,7 @@ func TestWithTenantRead_FallbackToPrimary_NilConnection(t *testing.T) {
 	})
 
 	require.Error(t, err)
-	require.ErrorContains(t, err, "get replica db")
+	require.ErrorContains(t, err, "get primary connection as fallback")
 }
 
 func TestWithTenantRead_FallbackToPrimary_PostgresConnError(t *testing.T) {
@@ -168,7 +168,7 @@ func TestWithTenantRead_FallbackToPrimary_PostgresConnError(t *testing.T) {
 	})
 
 	require.Error(t, err)
-	require.ErrorContains(t, err, "get replica db")
+	require.ErrorContains(t, err, "get primary connection as fallback")
 }
 
 func TestWithTenantRead_WithReplicaDB(t *testing.T) {
@@ -564,11 +564,11 @@ func TestGetPrimaryDBFallback_NilConnection(t *testing.T) {
 	db, err := getPrimaryDBFallback(ctx, provider)
 
 	require.Error(t, err)
-	require.ErrorIs(t, err, ErrConnectionRequired)
+	require.ErrorContains(t, err, "get primary connection as fallback")
 	assert.Nil(t, db)
 }
 
-func TestGetPrimaryDBFallback_GetPostgresConnectionError(t *testing.T) {
+func TestGetPrimaryDBFallback_GetPrimaryDBError(t *testing.T) {
 	t.Parallel()
 
 	expectedErr := errors.New("postgres connection error")

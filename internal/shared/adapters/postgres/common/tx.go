@@ -162,7 +162,15 @@ func WithTenantTxOrExistingProvider[Result any](
 		return fn(tx)
 	}
 
-	txLease, err := provider.BeginTx(ctx)
+	txCtx := ctx
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		var cancel context.CancelFunc
+
+		txCtx, cancel = context.WithTimeout(ctx, defaultTxTimeout)
+		defer cancel()
+	}
+
+	txLease, err := provider.BeginTx(txCtx)
 	if err != nil {
 		return zero, fmt.Errorf("failed to begin transaction: %w", err)
 	}
@@ -202,13 +210,23 @@ func BeginTenantTx(ctx context.Context, provider ports.InfrastructureProvider) (
 		return nil, noop, ErrConnectionRequired
 	}
 
-	txLease, err := provider.BeginTx(ctx)
+	txCtx := ctx
+	cancel := noop
+
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		txCtx, cancel = context.WithTimeout(ctx, defaultTxTimeout)
+	}
+
+	txLease, err := provider.BeginTx(txCtx)
 	if err != nil {
+		cancel()
 		return nil, noop, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 
 	return txLease.SQLTx(), func() {
 		_ = txLease.Rollback()
+
+		cancel()
 	}, nil
 }
 

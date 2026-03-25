@@ -150,16 +150,14 @@ func TestCreateBatch_EmptySlice(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestCreateBatchWithTx_InvalidTxType(t *testing.T) {
+func TestCreateBatchWithTx_NilTx_LateCase(t *testing.T) {
 	t.Parallel()
 
 	provider := &testutil.MockInfrastructureProvider{}
 	repo := NewRepository(provider)
 	ctx := context.Background()
 
-	invalidTx := &mockInvalidTx{}
-
-	result, err := repo.CreateBatchWithTx(ctx, invalidTx, nil)
+	result, err := repo.CreateBatchWithTx(ctx, nil, nil)
 
 	assert.Nil(t, result)
 	require.ErrorIs(t, err, ErrInvalidTx)
@@ -321,16 +319,14 @@ func TestUpdateWithTx_NilTx(t *testing.T) {
 	require.ErrorIs(t, err, ErrMatchGroupEntityNeeded)
 }
 
-func TestUpdateWithTx_InvalidTxType(t *testing.T) {
+func TestUpdateWithTx_NilTx_WithoutGroup(t *testing.T) {
 	t.Parallel()
 
 	provider := &testutil.MockInfrastructureProvider{}
 	repo := NewRepository(provider)
 	ctx := context.Background()
 
-	invalidTx := &mockInvalidTx{}
-
-	result, err := repo.UpdateWithTx(ctx, invalidTx, nil)
+	result, err := repo.UpdateWithTx(ctx, nil, nil)
 
 	assert.Nil(t, result)
 	require.ErrorIs(t, err, ErrMatchGroupEntityNeeded)
@@ -371,11 +367,6 @@ func TestRepositoryImplementsInterface(t *testing.T) {
 
 	var _ matchingRepos.MatchGroupRepository = repo
 }
-
-type mockInvalidTx struct{}
-
-func (m *mockInvalidTx) Commit() error   { return nil }
-func (m *mockInvalidTx) Rollback() error { return nil }
 
 var (
 	errScanValueCountMismatch = errors.New("scan: value count mismatch")
@@ -1303,12 +1294,10 @@ func TestUpdateWithTx_InvalidTxWithValidEntity(t *testing.T) {
 	ctx := context.Background()
 	group := createTestMatchGroup(t)
 
-	invalidTx := &mockInvalidTx{}
-
-	result, err := repo.UpdateWithTx(ctx, invalidTx, group)
+	result, err := repo.UpdateWithTx(ctx, nil, group)
 
 	assert.Nil(t, result)
-	require.ErrorIs(t, err, ErrInvalidTx)
+	require.ErrorIs(t, err, ErrTransactionRequired)
 }
 
 func TestListByRunID_SuccessWithResults(t *testing.T) {

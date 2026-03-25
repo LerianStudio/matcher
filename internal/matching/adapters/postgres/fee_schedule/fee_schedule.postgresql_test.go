@@ -249,13 +249,13 @@ func TestRepository_CreateWithTx_NilProvider(t *testing.T) {
 	require.ErrorIs(t, err, ErrRepoNotInitialized)
 }
 
-func TestRepository_CreateWithTx_InvalidTxType(t *testing.T) {
+func TestRepository_CreateWithTx_NilTx(t *testing.T) {
 	t.Parallel()
 
 	provider := &testutil.MockInfrastructureProvider{}
 	repo := NewRepository(provider)
 
-	result, err := repo.CreateWithTx(context.Background(), "not-a-sql-tx", nil)
+	result, err := repo.CreateWithTx(context.Background(), nil, nil)
 
 	require.Nil(t, result)
 	require.ErrorIs(t, err, ErrInvalidTx)
@@ -283,13 +283,13 @@ func TestRepository_UpdateWithTx_NilProvider(t *testing.T) {
 	require.ErrorIs(t, err, ErrRepoNotInitialized)
 }
 
-func TestRepository_UpdateWithTx_InvalidTxType(t *testing.T) {
+func TestRepository_UpdateWithTx_NilTx(t *testing.T) {
 	t.Parallel()
 
 	provider := &testutil.MockInfrastructureProvider{}
 	repo := NewRepository(provider)
 
-	result, err := repo.UpdateWithTx(context.Background(), "not-a-sql-tx", nil)
+	result, err := repo.UpdateWithTx(context.Background(), nil, nil)
 
 	require.Nil(t, result)
 	require.ErrorIs(t, err, ErrInvalidTx)
@@ -315,13 +315,13 @@ func TestRepository_DeleteWithTx_NilProvider(t *testing.T) {
 	require.ErrorIs(t, err, ErrRepoNotInitialized)
 }
 
-func TestRepository_DeleteWithTx_InvalidTxType(t *testing.T) {
+func TestRepository_DeleteWithTx_NilTx(t *testing.T) {
 	t.Parallel()
 
 	provider := &testutil.MockInfrastructureProvider{}
 	repo := NewRepository(provider)
 
-	err := repo.DeleteWithTx(context.Background(), "not-a-sql-tx", uuid.New())
+	err := repo.DeleteWithTx(context.Background(), nil, uuid.New())
 
 	require.ErrorIs(t, err, ErrInvalidTx)
 }

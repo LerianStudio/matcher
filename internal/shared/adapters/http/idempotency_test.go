@@ -18,7 +18,6 @@ import (
 
 	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 	"github.com/LerianStudio/matcher/internal/auth"
-	vo "github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
 )
 
 var errRedisConnection = errors.New("redis connection failed")
@@ -464,43 +463,6 @@ func TestIdempotencyMiddleware_FailedRequest_ReacquireDeniedReturns409(t *testin
 	assert.True(t, repo.reacquireCalled)
 }
 
-func TestIdempotencyMiddleware_WithAdapter_ReplaysCachedResponse(t *testing.T) {
-	t.Parallel()
-
-	app := fiber.New()
-	exceptionRepo := &stubExceptionRepo{
-		acquireResult: false,
-		cachedResult: &vo.IdempotencyResult{
-			Status:     vo.IdempotencyStatusComplete,
-			Response:   []byte(`{"id":"cached-adapter"}`),
-			HTTPStatus: http.StatusAccepted,
-		},
-	}
-
-	adapter := NewIdempotencyRepositoryAdapter(exceptionRepo)
-
-	app.Use(NewIdempotencyMiddleware(IdempotencyMiddlewareConfig{Repository: adapter}))
-
-	app.Post("/adapter", func(_ *fiber.Ctx) error {
-		t.Fatal("handler should not be called for adapter replay")
-		return nil
-	})
-
-	req := httptest.NewRequest(http.MethodPost, "/adapter", strings.NewReader(`{"data":"test"}`))
-	req.Header.Set(HeaderXIdempotencyKey, "adapter-key")
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := app.Test(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	assert.Equal(t, http.StatusAccepted, resp.StatusCode)
-	assert.Equal(t, "true", resp.Header.Get(HeaderXIdempotencyReplayed))
-	body, readErr := io.ReadAll(resp.Body)
-	require.NoError(t, readErr)
-	assert.JSONEq(t, `{"id":"cached-adapter"}`, string(body))
-}
-
 func TestIdempotencyMiddleware_UsesAlternativeHeader(t *testing.T) {
 	t.Parallel()
 
@@ -715,6 +677,30 @@ func TestExtractIdempotencyKey_PrefersXHeader(t *testing.T) {
 	// Key format: tenantID:method:path:userKey (X-Idempotency-Key takes precedence)
 	expectedKey := auth.DefaultTenantID + ":POST:/test:x-header-key"
 	assert.Equal(t, expectedKey, extractedKey)
+}
+
+func TestExtractIdempotencyKey_NormalizesUserKeyWhitespace(t *testing.T) {
+	t.Parallel()
+
+	app := fiber.New()
+	var extractedKey string
+	app.Post("/test", func(fiberCtx *fiber.Ctx) error {
+		ctx := context.WithValue(fiberCtx.UserContext(), auth.TenantIDKey, auth.DefaultTenantID)
+		var err error
+		extractedKey, err = extractIdempotencyKey(ctx, fiberCtx, "matcher")
+		require.NoError(t, err)
+		return fiberCtx.SendStatus(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/test", strings.NewReader(`{"data":"test"}`))
+	req.Header.Set(HeaderXIdempotencyKey, "  spaced-key  ")
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, "matcher:"+auth.DefaultTenantID+":POST:/test:spaced-key", extractedKey)
 }
 
 func TestIdempotencyMiddleware_TenantIsolation(t *testing.T) {
@@ -942,7 +928,7 @@ func TestValidateIdempotencyKeyFormat(t *testing.T) {
 		{
 			name:    "129 chars exceeds max length",
 			key:     strings.Repeat("a", 129),
-			wantErr: ErrIdempotencyKeyTooLong,
+			wantErr: ErrInvalidIdempotencyKey,
 		},
 		{
 			name:    "valid alphanumeric",
@@ -987,7 +973,7 @@ func TestValidateIdempotencyKeyFormat(t *testing.T) {
 		{
 			name:    "whitespace only",
 			key:     "   ",
-			wantErr: ErrInvalidIdempotencyKey,
+			wantErr: ErrEmptyIdempotencyKey,
 		},
 	}
 
@@ -1004,36 +990,4 @@ func TestValidateIdempotencyKeyFormat(t *testing.T) {
 			}
 		})
 	}
-}
-
-// TestIdempotencyStatusConstants_MatchValueObjects verifies that the IdempotencyStatus
-// constants defined in the shared HTTP package are equivalent to those defined in the
-// exception domain value_objects package. Both packages define the same status strings
-// independently; this test catches any future drift between the two sets of constants.
-func TestIdempotencyStatusConstants_MatchValueObjects(t *testing.T) {
-	t.Parallel()
-
-	assert.Equal(t,
-		string(IdempotencyStatusUnknown),
-		string(vo.IdempotencyStatusUnknown),
-		"IdempotencyStatusUnknown must match between shared/http and exception/domain/value_objects",
-	)
-
-	assert.Equal(t,
-		string(IdempotencyStatusPending),
-		string(vo.IdempotencyStatusPending),
-		"IdempotencyStatusPending must match between shared/http and exception/domain/value_objects",
-	)
-
-	assert.Equal(t,
-		string(IdempotencyStatusComplete),
-		string(vo.IdempotencyStatusComplete),
-		"IdempotencyStatusComplete must match between shared/http and exception/domain/value_objects",
-	)
-
-	assert.Equal(t,
-		string(IdempotencyStatusFailed),
-		string(vo.IdempotencyStatusFailed),
-		"IdempotencyStatusFailed must match between shared/http and exception/domain/value_objects",
-	)
 }

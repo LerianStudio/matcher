@@ -66,12 +66,7 @@ func (repo *Repository) CreateBatchWithTx(
 		return nil, ErrInvalidTx
 	}
 
-	sqlTx, ok := tx.(*sql.Tx)
-	if !ok || sqlTx == nil {
-		return nil, ErrInvalidTx
-	}
-
-	return repo.createBatch(ctx, sqlTx, groups)
+	return repo.createBatch(ctx, tx, groups)
 }
 
 func (repo *Repository) createBatch(
@@ -543,11 +538,6 @@ func (repo *Repository) UpdateWithTx(
 		return nil, ErrTransactionRequired
 	}
 
-	sqlTx, ok := tx.(*sql.Tx)
-	if !ok || sqlTx == nil {
-		return nil, ErrInvalidTx
-	}
-
 	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
 	ctx, span := tracer.Start(ctx, "postgres.update_match_group_with_tx")
 
@@ -556,7 +546,7 @@ func (repo *Repository) UpdateWithTx(
 	result, err := pgcommon.WithTenantTxOrExistingProvider(
 		ctx,
 		repo.provider,
-		sqlTx,
+		tx,
 		func(innerTx *sql.Tx) (*matchingEntities.MatchGroup, error) {
 			return repo.executeUpdate(ctx, innerTx, group)
 		},

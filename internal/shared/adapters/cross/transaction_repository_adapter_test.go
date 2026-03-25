@@ -26,12 +26,6 @@ type mockInfraProvider struct {
 	beginTxFn  func(ctx context.Context) (*sql.Tx, error)
 }
 
-func (m *mockInfraProvider) GetPostgresConnection(
-	_ context.Context,
-) (*sharedPorts.PostgresConnectionLease, error) {
-	return nil, nil
-}
-
 func (m *mockInfraProvider) GetRedisConnection(
 	_ context.Context,
 ) (*sharedPorts.RedisConnectionLease, error) {
@@ -51,7 +45,11 @@ func (m *mockInfraProvider) BeginTx(ctx context.Context) (*sharedPorts.TxLease, 
 	return nil, m.beginTxErr
 }
 
-func (m *mockInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.ReplicaDBLease, error) {
+func (m *mockInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.DBLease, error) {
+	return nil, nil
+}
+
+func (m *mockInfraProvider) GetPrimaryDB(_ context.Context) (*sharedPorts.DBLease, error) {
 	return nil, nil
 }
 
@@ -111,8 +109,6 @@ func (m *mockBaseRepo) MarkUnmatchedWithTx(_ context.Context, _ *sql.Tx, _ uuid.
 
 var _ BaseTransactionRepository = (*mockBaseRepo)(nil)
 
-type invalidTx struct{}
-
 // mustNewAdapter creates an adapter with valid dependencies for tests.
 func mustNewAdapter(t *testing.T, provider *mockInfraProvider, baseRepo *mockBaseRepo) *TransactionRepositoryAdapter {
 	t.Helper()
@@ -168,7 +164,6 @@ func TestTransactionRepositoryAdapter_SentinelErrors(t *testing.T) {
 		ErrAdapterNotInitialized.Error(),
 	)
 	assert.Equal(t, "context id is required", ErrContextIDRequired.Error())
-	assert.Equal(t, "invalid transaction", ErrInvalidTransaction.Error())
 	assert.Equal(t, "infrastructure provider is required", ErrNilProvider.Error())
 	assert.Equal(t, "base transaction repository is required", ErrNilBaseRepo.Error())
 }
@@ -764,40 +759,6 @@ func TestTransactionRepositoryAdapter_FindByContextAndIDs_NilContextIDWithProvid
 	require.ErrorIs(t, err, ErrContextIDRequired)
 }
 
-// --- Invalid tx tests ---
-
-func TestTransactionRepositoryAdapter_MarkMatchedWithTx_InvalidTxWithProvider(t *testing.T) {
-	t.Parallel()
-
-	provider := &mockInfraProvider{}
-	baseRepo := &mockBaseRepo{}
-	adapter := mustNewAdapter(t, provider, baseRepo)
-	ctx := context.Background()
-	contextID := uuid.New()
-	transactionIDs := []uuid.UUID{uuid.New()}
-
-	err := adapter.MarkMatchedWithTx(ctx, &invalidTx{}, contextID, transactionIDs)
-
-	require.Error(t, err)
-	require.ErrorIs(t, err, ErrInvalidTransaction)
-}
-
-func TestTransactionRepositoryAdapter_MarkPendingReviewWithTx_InvalidTxWithProvider(t *testing.T) {
-	t.Parallel()
-
-	provider := &mockInfraProvider{}
-	baseRepo := &mockBaseRepo{}
-	adapter := mustNewAdapter(t, provider, baseRepo)
-	ctx := context.Background()
-	contextID := uuid.New()
-	transactionIDs := []uuid.UUID{uuid.New()}
-
-	err := adapter.MarkPendingReviewWithTx(ctx, &invalidTx{}, contextID, transactionIDs)
-
-	require.Error(t, err)
-	require.ErrorIs(t, err, ErrInvalidTransaction)
-}
-
 // --- MarkUnmatchedWithTx tests ---
 
 func TestTransactionRepositoryAdapter_MarkUnmatchedWithTx_NilAdapter(t *testing.T) {
@@ -859,20 +820,4 @@ func TestTransactionRepositoryAdapter_MarkUnmatchedWithTx_NilContextIDWithProvid
 
 	require.Error(t, err)
 	require.ErrorIs(t, err, ErrContextIDRequired)
-}
-
-func TestTransactionRepositoryAdapter_MarkUnmatchedWithTx_InvalidTxWithProvider(t *testing.T) {
-	t.Parallel()
-
-	provider := &mockInfraProvider{}
-	baseRepo := &mockBaseRepo{}
-	adapter := mustNewAdapter(t, provider, baseRepo)
-	ctx := context.Background()
-	contextID := uuid.New()
-	transactionIDs := []uuid.UUID{uuid.New()}
-
-	err := adapter.MarkUnmatchedWithTx(ctx, &invalidTx{}, contextID, transactionIDs)
-
-	require.Error(t, err)
-	require.ErrorIs(t, err, ErrInvalidTransaction)
 }

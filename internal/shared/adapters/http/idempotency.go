@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
@@ -19,6 +18,8 @@ import (
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/auth"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // HTTP header constants for idempotency key extraction.
@@ -32,67 +33,36 @@ const (
 // Context key for tracking idempotency middleware execution.
 const idempotencyProcessedKey = "idempotency_processed"
 
-// Idempotency key validation constraints.
-const (
-	idempotencyKeyMaxLength = 128
-)
-
-// idempotencyKeyPattern allows alphanumeric characters, colons, underscores, and hyphens.
-// This matches the validation in internal/exception/domain/value_objects/idempotency_key.go.
-var idempotencyKeyPattern = regexp.MustCompile(`^[A-Za-z0-9:_-]+$`)
-
-// Idempotency key validation errors.
 var (
-	ErrEmptyIdempotencyKey   = errors.New("idempotency key is required")
-	ErrIdempotencyKeyTooLong = errors.New(
-		"idempotency key exceeds maximum length of 128 characters",
-	)
-	ErrInvalidIdempotencyKey = errors.New(
-		"idempotency key contains invalid characters; allowed: alphanumeric, colons, underscores, hyphens",
-	)
+	// ErrEmptyIdempotencyKey is returned when the provided key is blank.
+	ErrEmptyIdempotencyKey = shared.ErrEmptyIdempotencyKey
+	// ErrInvalidIdempotencyKey is returned when the provided key format is invalid.
+	ErrInvalidIdempotencyKey = shared.ErrInvalidIdempotencyKey
+	// ErrMissingTenantID is returned when auth middleware did not populate tenant scope.
 	ErrMissingTenantID = errors.New(
 		"tenant ID is required for idempotency; ensure auth middleware runs before idempotency middleware",
 	)
 )
 
 // IdempotencyStatus represents the state of an idempotency key.
-type IdempotencyStatus string
+type IdempotencyStatus = shared.IdempotencyStatus
 
-// Idempotency status constants.
+// Re-exported idempotency statuses from the shared kernel.
 const (
-	IdempotencyStatusUnknown  IdempotencyStatus = "unknown"
-	IdempotencyStatusPending  IdempotencyStatus = "pending"
-	IdempotencyStatusComplete IdempotencyStatus = "complete"
-	IdempotencyStatusFailed   IdempotencyStatus = "failed"
+	IdempotencyStatusUnknown  = shared.IdempotencyStatusUnknown
+	IdempotencyStatusPending  = shared.IdempotencyStatusPending
+	IdempotencyStatusComplete = shared.IdempotencyStatusComplete
+	IdempotencyStatusFailed   = shared.IdempotencyStatusFailed
 )
 
-// IdempotencyResult holds the cached response for a completed idempotent request.
-type IdempotencyResult struct {
-	Status     IdempotencyStatus
-	Response   []byte
-	HTTPStatus int
-}
+// IdempotencyResult contains the cached response for an idempotent request.
+type IdempotencyResult = shared.IdempotencyResult
 
-// IdempotencyKey is the string identifier for an idempotent request.
-type IdempotencyKey string
+// IdempotencyKey is the canonical request de-duplication identifier.
+type IdempotencyKey = shared.IdempotencyKey
 
-// IdempotencyRepository defines the interface for idempotency storage operations.
-// This interface is implemented by the Redis adapter in the exception bounded context.
-//
-// TTL note: TryAcquire sets the initial pending marker with the same TTL as completed
-// entries (typically 7 days via DefaultSuccessTTL). If a request crashes between
-// TryAcquire and MarkComplete/MarkFailed, the pending marker blocks retries for
-// that full duration. MarkFailed resets the TTL to a shorter window (typically 5
-// minutes via DefaultFailedRetryWindow). Implementations should consider using a
-// shorter initial TTL for the pending state (e.g., 5 minutes) and only extending
-// to the full TTL on MarkComplete.
-type IdempotencyRepository interface {
-	TryAcquire(ctx context.Context, key IdempotencyKey) (acquired bool, err error)
-	TryReacquireFromFailed(ctx context.Context, key IdempotencyKey) (acquired bool, err error)
-	MarkComplete(ctx context.Context, key IdempotencyKey, response []byte, httpStatus int) error
-	MarkFailed(ctx context.Context, key IdempotencyKey) error
-	GetCachedResult(ctx context.Context, key IdempotencyKey) (*IdempotencyResult, error)
-}
+// IdempotencyRepository defines the persistence contract used by the middleware.
+type IdempotencyRepository = sharedPorts.IdempotencyRepository
 
 // IdempotencyMiddlewareConfig configures the idempotency middleware behavior.
 type IdempotencyMiddlewareConfig struct {
@@ -101,20 +71,10 @@ type IdempotencyMiddlewareConfig struct {
 	SkipPaths  []string
 }
 
-// validateIdempotencyKeyFormat validates the user-provided idempotency key format.
-// Returns nil if the key is valid, or a specific error describing the validation failure.
-// This validation is applied ONLY to user-provided keys, not to auto-generated hash keys.
+// validateIdempotencyKeyFormat validates a user-provided idempotency key.
 func validateIdempotencyKeyFormat(userKey string) error {
-	if userKey == "" {
-		return ErrEmptyIdempotencyKey
-	}
-
-	if len(userKey) > idempotencyKeyMaxLength {
-		return ErrIdempotencyKeyTooLong
-	}
-
-	if !idempotencyKeyPattern.MatchString(userKey) {
-		return ErrInvalidIdempotencyKey
+	if _, err := shared.ParseIdempotencyKey(userKey); err != nil {
+		return fmt.Errorf("parse idempotency key: %w", err)
 	}
 
 	return nil
@@ -191,7 +151,16 @@ func handleKeyValidationError(
 
 	logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("idempotency middleware: invalid key format: %v", validationErr))
 
-	return pkghttp.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_idempotency_key", validationErr.Error())
+	message := validationErr.Error()
+	if errors.Is(validationErr, ErrEmptyIdempotencyKey) {
+		message = ErrEmptyIdempotencyKey.Error()
+	}
+
+	if errors.Is(validationErr, ErrInvalidIdempotencyKey) {
+		message = ErrInvalidIdempotencyKey.Error()
+	}
+
+	return pkghttp.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_idempotency_key", message)
 }
 
 // executeIdempotencyLogic handles the core idempotency logic after initial checks pass.
@@ -276,6 +245,13 @@ func extractIdempotencyKey(
 		if err := validateIdempotencyKeyFormat(userKey); err != nil {
 			return "", err
 		}
+
+		parsedKey, err := shared.ParseIdempotencyKey(userKey)
+		if err != nil {
+			return "", fmt.Errorf("parse idempotency key: %w", err)
+		}
+
+		userKey = parsedKey.String()
 	}
 
 	// Extract tenant ID from context (set by auth middleware).

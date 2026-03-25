@@ -46,7 +46,7 @@ func (repo *Repository) CreateBatch(
 }
 
 // CreateBatchWithTx persists multiple match items using an existing transaction.
-// The tx must be a *sql.Tx or ErrInvalidTx is returned.
+// The tx must be non-nil.
 func (repo *Repository) CreateBatchWithTx(
 	ctx context.Context,
 	tx matchingRepos.Tx,
@@ -60,12 +60,7 @@ func (repo *Repository) CreateBatchWithTx(
 		return nil, ErrInvalidTx
 	}
 
-	sqlTx, ok := tx.(*sql.Tx)
-	if !ok || sqlTx == nil {
-		return nil, ErrInvalidTx
-	}
-
-	return repo.createBatch(ctx, sqlTx, items)
+	return repo.createBatch(ctx, tx, items)
 }
 
 func (repo *Repository) createBatch(

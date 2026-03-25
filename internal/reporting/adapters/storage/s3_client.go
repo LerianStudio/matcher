@@ -18,7 +18,7 @@ import (
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
-	"github.com/LerianStudio/matcher/internal/reporting/ports"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // S3Config contains configuration for S3-compatible storage.
@@ -146,7 +146,7 @@ func (client *S3Client) UploadWithOptions(
 	key string,
 	reader io.Reader,
 	contentType string,
-	opts ...ports.UploadOption,
+	opts ...sharedPorts.UploadOption,
 ) (string, error) {
 	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
 	ctx, span := tracer.Start(ctx, "s3.upload_with_options")
@@ -157,7 +157,7 @@ func (client *S3Client) UploadWithOptions(
 		return "", ErrKeyRequired
 	}
 
-	options := &ports.UploadOptions{}
+	options := &sharedPorts.UploadOptions{}
 	for _, opt := range opts {
 		opt(options)
 	}
@@ -324,4 +324,4 @@ func (client *S3Client) Exists(ctx context.Context, key string) (bool, error) {
 }
 
 // Compile-time interface check.
-var _ ports.ObjectStorageClient = (*S3Client)(nil)
+var _ sharedPorts.ObjectStorageClient = (*S3Client)(nil)

@@ -85,24 +85,17 @@ func TestCreateBatchWithTx_EmptyRows(t *testing.T) {
 	assert.Nil(t, result)
 }
 
-func TestCreateBatchWithTx_InvalidTxType(t *testing.T) {
+func TestCreateBatchWithTx_NilTx(t *testing.T) {
 	t.Parallel()
 
 	provider := &testutil.MockInfrastructureProvider{}
 	repo := NewRepository(provider)
 
-	invalidTx := &mockInvalidTx{}
-
-	result, err := repo.CreateBatchWithTx(context.Background(), invalidTx, nil)
+	result, err := repo.CreateBatchWithTx(context.Background(), nil, nil)
 
 	require.ErrorIs(t, err, ErrInvalidTx)
 	assert.Nil(t, result)
 }
-
-type mockInvalidTx struct{}
-
-func (m *mockInvalidTx) Commit() error   { return nil }
-func (m *mockInvalidTx) Rollback() error { return nil }
 
 func TestRepository_ImplementsInterface(t *testing.T) {
 	t.Parallel()

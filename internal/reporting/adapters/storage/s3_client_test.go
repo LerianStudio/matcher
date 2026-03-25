@@ -16,7 +16,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/LerianStudio/matcher/internal/reporting/ports"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+	"github.com/LerianStudio/matcher/pkg/storageopt"
 )
 
 // mockReadCloser provides a test double for io.ReadCloser.
@@ -145,7 +146,7 @@ func TestUploadWithOptions_EmptyKeyReturnsError(t *testing.T) {
 
 	url, err := client.UploadWithOptions(
 		context.Background(), "", nil, "application/gzip",
-		ports.WithStorageClass("GLACIER"),
+		storageopt.WithStorageClass("GLACIER"),
 	)
 
 	require.Error(t, err)
@@ -453,7 +454,7 @@ func TestEmptyKeyValidation_TableDriven(t *testing.T) {
 			name:   "UploadWithOptions_EmptyKey",
 			method: "UploadWithOptions",
 			action: func() error {
-				_, err := client.UploadWithOptions(context.Background(), "", nil, "text/plain", ports.WithStorageClass("GLACIER"))
+				_, err := client.UploadWithOptions(context.Background(), "", nil, "text/plain", storageopt.WithStorageClass("GLACIER"))
 				return err
 			},
 		},
@@ -957,7 +958,7 @@ func TestContextCancellation(t *testing.T) {
 		t.Parallel()
 
 		reader := bytes.NewReader([]byte("test"))
-		_, err := client.UploadWithOptions(ctx, "key", reader, "application/gzip", ports.WithStorageClass("GLACIER"))
+		_, err := client.UploadWithOptions(ctx, "key", reader, "application/gzip", storageopt.WithStorageClass("GLACIER"))
 
 		assert.Error(t, err)
 	})
@@ -1084,7 +1085,7 @@ func TestS3Client_InterfaceCompliance(t *testing.T) {
 
 	var _ interface {
 		Upload(ctx context.Context, key string, reader io.Reader, contentType string) (string, error)
-		UploadWithOptions(ctx context.Context, key string, reader io.Reader, contentType string, opts ...ports.UploadOption) (string, error)
+		UploadWithOptions(ctx context.Context, key string, reader io.Reader, contentType string, opts ...sharedPorts.UploadOption) (string, error)
 		Download(ctx context.Context, key string) (io.ReadCloser, error)
 		Delete(ctx context.Context, key string) error
 		GeneratePresignedURL(ctx context.Context, key string, expiry time.Duration) (string, error)
