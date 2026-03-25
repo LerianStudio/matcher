@@ -100,7 +100,7 @@ This project follows Lerian Studio Ring standards for Go services.
 - Model / domain conversion: separate PostgreSQL model structs from domain entities, with `NewPostgreSQLModel()` and `ToEntity()` methods.
 - Use `squirrel` for dynamic query building with `squirrel.Dollar` placeholder format.
 - Cursor-based pagination via `pgcommon.ApplyIDCursorPagination()` with limit+1 pattern.
-- `InfrastructureProvider` interface provides lease-based connection access (`GetPostgresConnection`, `BeginTx`, `GetReplicaDB`, `GetRedisConnection`). Callers MUST release leases when finished.
+- `InfrastructureProvider` interface provides tenant-aware transaction and database access (`BeginTx`, `GetPrimaryDB`, `GetReplicaDB`, `GetRedisConnection`). Callers MUST release DB and Redis leases when finished.
 
 ## 7. Data + Multi-tenancy
 

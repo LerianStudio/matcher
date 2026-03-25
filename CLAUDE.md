@@ -441,7 +441,7 @@ Split into `handlers_{feature}.go` when a context has 3+ distinct feature areas:
 - Avoid long-running operations inside transactions
 
 ### 7. Idempotency Keys
-- Use `sharedhttp.IdempotencyAdapter` for POST/PUT operations
+- Use `sharedhttp.NewIdempotencyMiddleware(...)` for POST/PUT operations
 - Keys stored in Redis with configurable TTL
 - Prevents duplicate mutations from client retries
 
@@ -495,7 +495,7 @@ Matcher uses **zero-config defaults** — all configuration has sensible default
 - **PostgreSQL Replica**: `POSTGRES_REPLICA_HOST`, `POSTGRES_REPLICA_PORT`, `POSTGRES_REPLICA_USER`, `POSTGRES_REPLICA_PASSWORD`, `POSTGRES_REPLICA_DB`, `POSTGRES_REPLICA_SSLMODE`
 - **Redis**: `REDIS_HOST`, `REDIS_MASTER_NAME`, `REDIS_PASSWORD`, `REDIS_DB`, `REDIS_PROTOCOL`, `REDIS_TLS`, `REDIS_CA_CERT`, `REDIS_POOL_SIZE`, `REDIS_MIN_IDLE_CONNS`, `REDIS_READ_TIMEOUT_MS`, `REDIS_WRITE_TIMEOUT_MS`, `REDIS_DIAL_TIMEOUT_MS`
 - **RabbitMQ**: `RABBITMQ_URI`, `RABBITMQ_HOST`, `RABBITMQ_PORT`, `RABBITMQ_USER`, `RABBITMQ_PASSWORD`, `RABBITMQ_VHOST`, `RABBITMQ_HEALTH_URL`, `RABBITMQ_ALLOW_INSECURE_HEALTH_CHECK`
-- **Auth**: `AUTH_ENABLED`, `AUTH_SERVICE_ADDRESS`, `AUTH_JWT_SECRET`
+- **Auth**: `PLUGIN_AUTH_ENABLED`, `PLUGIN_AUTH_ADDRESS`, `AUTH_JWT_SECRET`
 - **OpenTelemetry**: `ENABLE_TELEMETRY`, `OTEL_LIBRARY_NAME`, `OTEL_RESOURCE_SERVICE_NAME`, `OTEL_RESOURCE_SERVICE_VERSION`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_RESOURCE_DEPLOYMENT_ENVIRONMENT`
 
 ### Database Connection Patterns
