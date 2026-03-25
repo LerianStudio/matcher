@@ -22,7 +22,7 @@ import (
 const expectedTotalKeys = 123
 
 // expectedBootstrapOnlyCount is the count of keys with ApplyBootstrapOnly.
-const expectedBootstrapOnlyCount = 22
+const expectedBootstrapOnlyCount = 21
 
 // expectedLiveReadCount is the count of keys with ApplyLiveRead.
 const expectedLiveReadCount = 20
@@ -31,7 +31,7 @@ const expectedLiveReadCount = 20
 const expectedWorkerReconcileCount = 13
 
 // expectedBundleRebuildCount is the count of keys with ApplyBundleRebuild.
-const expectedBundleRebuildCount = 61
+const expectedBundleRebuildCount = 62
 
 // expectedBundleRebuildAndReconcileCount is the count of keys with ApplyBundleRebuildAndReconcile.
 const expectedBundleRebuildAndReconcileCount = 7
@@ -142,7 +142,7 @@ func TestRegisterMatcherKeys_SelectedApplyBehaviors(t *testing.T) {
 		{key: "webhook.timeout_sec", behavior: domain.ApplyLiveRead, mutable: true},
 		{key: "tenancy.default_tenant_id", behavior: domain.ApplyBootstrapOnly, mutable: false},
 		{key: "tenancy.default_tenant_slug", behavior: domain.ApplyBootstrapOnly, mutable: false},
-		{key: "server.body_limit_bytes", behavior: domain.ApplyBootstrapOnly, mutable: false},
+		{key: "server.body_limit_bytes", behavior: domain.ApplyBundleRebuild, mutable: true},
 		{key: "postgres.migrations_path", behavior: domain.ApplyBootstrapOnly, mutable: false},
 		{key: "idempotency.hmac_secret", behavior: domain.ApplyBootstrapOnly, mutable: false},
 	}

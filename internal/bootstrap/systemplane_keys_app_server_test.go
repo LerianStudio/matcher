@@ -115,7 +115,7 @@ func TestMatcherKeyDefsServerHTTP_KeyProperties(t *testing.T) {
 
 	expectedKeys := []expected{
 		{key: "server.address", group: "server", behavior: domain.ApplyBootstrapOnly, mutable: false},
-		{key: "server.body_limit_bytes", group: "server", behavior: domain.ApplyBootstrapOnly, mutable: false},
+		{key: "server.body_limit_bytes", group: "server", behavior: domain.ApplyBundleRebuild, mutable: true},
 		{key: "cors.allowed_origins", group: "cors", behavior: domain.ApplyLiveRead, mutable: true},
 		{key: "cors.allowed_methods", group: "cors", behavior: domain.ApplyLiveRead, mutable: true},
 		{key: "cors.allowed_headers", group: "cors", behavior: domain.ApplyLiveRead, mutable: true},

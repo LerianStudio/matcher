@@ -207,7 +207,6 @@ func snapshotToFullConfig(snap domain.Snapshot, oldCfg *Config) *Config {
 
 	cfg.App.EnvName = oldCfg.App.EnvName
 	cfg.Server.Address = oldCfg.Server.Address
-	cfg.Server.BodyLimitBytes = oldCfg.Server.BodyLimitBytes
 	cfg.Server.TLSCertFile = oldCfg.Server.TLSCertFile
 	cfg.Server.TLSKeyFile = oldCfg.Server.TLSKeyFile
 	cfg.Server.TLSTerminatedUpstream = oldCfg.Server.TLSTerminatedUpstream

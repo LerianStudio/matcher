@@ -113,7 +113,7 @@ func TestUpdateFromSystemplane_PreservesBootstrapFields(t *testing.T) {
 	// Bootstrap-only fields preserved.
 	assert.Equal(t, "staging-test", updated.App.EnvName)
 	assert.Equal(t, ":9999", updated.Server.Address)
-	assert.Equal(t, 2048, updated.Server.BodyLimitBytes)
+	assert.Equal(t, defaultKeyBodyLimitBytes, updated.Server.BodyLimitBytes)
 	assert.Equal(t, "/etc/tls/cert.pem", updated.Server.TLSCertFile)
 	assert.Equal(t, "/etc/tls/key.pem", updated.Server.TLSKeyFile)
 	assert.Equal(t, "db/migrations", updated.Postgres.MigrationsPath)
@@ -201,6 +201,31 @@ func TestConfigFromSnapshot_LegacyRenamedKeysHydrate(t *testing.T) {
 	assert.Equal(t, 9, result.Postgres.MaxIdleConnections)
 	assert.Equal(t, 4, result.Redis.MinIdleConn)
 	assert.Equal(t, "amqps", result.RabbitMQ.URI)
+}
+
+func TestConfigFromSnapshot_RenamedKeysPreferCanonicalWhenBothPresent(t *testing.T) {
+	t.Parallel()
+
+	snap := domain.Snapshot{
+		Configs: map[string]domain.EffectiveValue{
+			"cors.allowed_origins":          {Key: "cors.allowed_origins", Value: "https://canonical.example.com"},
+			"server.cors_allowed_origins":   {Key: "server.cors_allowed_origins", Value: "https://legacy.example.com"},
+			"postgres.max_open_conns":       {Key: "postgres.max_open_conns", Value: 41},
+			"postgres.max_open_connections": {Key: "postgres.max_open_connections", Value: 12},
+			"redis.min_idle_conns":          {Key: "redis.min_idle_conns", Value: 4},
+			"redis.min_idle_conn":           {Key: "redis.min_idle_conn", Value: 1},
+			"rabbitmq.url":                  {Key: "rabbitmq.url", Value: "amqps://canonical"},
+			"rabbitmq.uri":                  {Key: "rabbitmq.uri", Value: "amqp://legacy"},
+		},
+	}
+
+	result := configFromSnapshot(snap)
+
+	require.NotNil(t, result)
+	assert.Equal(t, "https://canonical.example.com", result.Server.CORSAllowedOrigins)
+	assert.Equal(t, 41, result.Postgres.MaxOpenConnections)
+	assert.Equal(t, 4, result.Redis.MinIdleConn)
+	assert.Equal(t, "amqps://canonical", result.RabbitMQ.URI)
 }
 
 func TestUpdateFromSystemplane_ValidationFailure_PreservesOldConfig(t *testing.T) {
@@ -316,7 +341,7 @@ func TestSnapshotToFullConfig_BootstrapFieldsPreserved(t *testing.T) {
 	// Bootstrap-only fields come from oldCfg, not from snapshot defaults.
 	assert.Equal(t, "production", result.App.EnvName)
 	assert.Equal(t, ":8080", result.Server.Address)
-	assert.Equal(t, 4096, result.Server.BodyLimitBytes)
+	assert.Equal(t, defaultKeyBodyLimitBytes, result.Server.BodyLimitBytes)
 	assert.Equal(t, "/tls/cert.pem", result.Server.TLSCertFile)
 	assert.Equal(t, "/tls/key.pem", result.Server.TLSKeyFile)
 	assert.True(t, result.Server.TLSTerminatedUpstream)

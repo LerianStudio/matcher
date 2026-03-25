@@ -197,7 +197,7 @@ func TestLoadSystemplaneBackendConfig_ExplicitPostgresDSN(t *testing.T) {
 	assert.Equal(t, "postgres://user:pass@sp-host:5432/spdb?sslmode=disable", result.Postgres.DSN)
 }
 
-func TestLoadSystemplaneBackendConfig_PostgresSchemaOverride(t *testing.T) {
+func TestLoadSystemplaneBackendConfig_PostgresSchemaOverrideRejected(t *testing.T) {
 	// Cannot use t.Parallel() due to t.Setenv.
 	t.Setenv("SYSTEMPLANE_BACKEND", "postgres")
 	t.Setenv("SYSTEMPLANE_POSTGRES_DSN", "postgres://u:p@h:5432/d?sslmode=disable")
@@ -210,13 +210,8 @@ func TestLoadSystemplaneBackendConfig_PostgresSchemaOverride(t *testing.T) {
 
 	result, err := LoadSystemplaneBackendConfig(&Config{})
 
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	assert.Equal(t, "custom_schema", result.Postgres.Schema)
-	assert.Equal(t, "custom_entries", result.Postgres.EntriesTable)
-	assert.Equal(t, "custom_history", result.Postgres.HistoryTable)
-	assert.Equal(t, "custom_revisions", result.Postgres.RevisionTable)
-	assert.Equal(t, "custom_channel", result.Postgres.NotifyChannel)
+	require.ErrorIs(t, err, errSystemplaneCustomPostgresStore)
+	assert.Nil(t, result)
 }
 
 func TestLoadSystemplaneBackendConfig_MongoBackend(t *testing.T) {

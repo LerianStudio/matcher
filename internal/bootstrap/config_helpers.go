@@ -33,6 +33,16 @@ func legacyConfigKey(key string) (string, bool) {
 	return legacyKey, ok
 }
 
+func canonicalConfigKey(key string) (string, bool) {
+	for canonicalKey, legacyKey := range configKeyAliases {
+		if legacyKey == key {
+			return canonicalKey, true
+		}
+	}
+
+	return "", false
+}
+
 func resolveSnapshotConfigValue(snap domain.Snapshot, key string) (any, bool) {
 	if value, ok := snapshotConfigValueByKey(snap, key); ok {
 		return value, true

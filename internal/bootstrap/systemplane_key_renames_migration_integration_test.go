@@ -115,6 +115,38 @@ func TestMigrations_020_SystemplaneKeyRenames_BlockOnCollision(t *testing.T) {
 	assert.Equal(t, 1, runtimeEntryCount(t, ctx, db, rename.newKey), "new key must remain untouched when collision blocks migration")
 }
 
+func TestMigrations_020_SystemplaneKeyRenames_RollbackBlocksOnCollision(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	db, dsn, cleanup := newSystemplaneRenameTestDB(t, ctx, "matcher_020_rollback_collision_test")
+	defer cleanup()
+
+	logger := &libLog.NopLogger{}
+	require.NoError(t, RunMigrations(ctx, dsn, "matcher_020_rollback_collision_test", "migrations", logger, false))
+
+	rename := systemplaneKeyRenames[0]
+	insertRuntimeEntry(t, ctx, db, rename.oldKey, "old-value")
+	insertRuntimeEntry(t, ctx, db, rename.newKey, "new-value")
+
+	migrator, err := newMigrator(db, "matcher_020_rollback_collision_test", "migrations")
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, closeMigrator(migrator))
+	}()
+
+	stepper, ok := migrator.(interface{ Steps(int) error })
+	require.True(t, ok, "migrator must support stepping for rollback verification")
+
+	err = stepper.Steps(-1)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "migration_000020_rollback_blocked_resolve_systemplane_key_rename_collisions_before_apply")
+	assert.Equal(t, 1, runtimeEntryCount(t, ctx, db, rename.oldKey), "old key must remain untouched when rollback collision blocks migration")
+	assert.Equal(t, 1, runtimeEntryCount(t, ctx, db, rename.newKey), "new key must remain untouched when rollback collision blocks migration")
+}
+
 func newSystemplaneRenameTestDB(t *testing.T, ctx context.Context, dbName string) (*sql.DB, string, func()) {
 	t.Helper()
 

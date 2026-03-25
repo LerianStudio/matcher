@@ -1128,7 +1128,7 @@ func TestDiffAffectedComponents_AllComponentsChanged(t *testing.T) {
 	assert.Contains(t, affected, "redis")
 	assert.Contains(t, affected, "rabbitmq")
 	assert.Contains(t, affected, "s3")
-	assert.NotContains(t, affected, "http")
+	assert.Contains(t, affected, "http")
 	assert.NotContains(t, affected, "logger")
 }
 

@@ -30,8 +30,8 @@ DEFAULT_TENANT_SLUG=default
 # HTTP listen address. Change requires server restart.
 SERVER_ADDRESS=:4018
 
-# Maximum HTTP request body size in bytes.
-HTTP_BODY_LIMIT_BYTES=33554432
+# Maximum HTTP request body size is runtime-managed via systemplane.
+# Configure `server.body_limit_bytes` through /v1/system/configs instead.
 
 # TLS — only needed when terminating TLS at the application level.
 # Most deployments terminate TLS at the ingress/load balancer.
