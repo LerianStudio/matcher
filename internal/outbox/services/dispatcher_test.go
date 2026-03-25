@@ -21,8 +21,8 @@ import (
 	"github.com/LerianStudio/matcher/internal/auth"
 	ingestionEntities "github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
 	outboxEntities "github.com/LerianStudio/matcher/internal/outbox/domain/entities"
-	"github.com/LerianStudio/matcher/internal/outbox/domain/repositories/mocks"
 	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
+	mocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
 )
 
 // errTestBoom is a sentinel error used for testing failure scenarios.

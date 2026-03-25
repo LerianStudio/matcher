@@ -2,7 +2,6 @@ package command
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -25,8 +24,7 @@ func (uc *UseCase) enqueueMatchConfirmedEvents(
 		return ErrOutboxRepoNotConfigured
 	}
 
-	sqlTx, ok := tx.(*sql.Tx)
-	if !ok || sqlTx == nil {
+	if tx == nil {
 		return ErrOutboxRequiresSQLTx
 	}
 
@@ -42,7 +40,7 @@ func (uc *UseCase) enqueueMatchConfirmedEvents(
 
 	tenantSlug := auth.GetTenantSlug(ctx)
 	for _, group := range groups {
-		if err := uc.enqueueGroupEvent(ctx, sqlTx, group, tenantUUID, tenantSlug); err != nil {
+		if err := uc.enqueueGroupEvent(ctx, tx, group, tenantUUID, tenantSlug); err != nil {
 			return err
 		}
 	}
@@ -52,7 +50,7 @@ func (uc *UseCase) enqueueMatchConfirmedEvents(
 
 func (uc *UseCase) enqueueGroupEvent(
 	ctx context.Context,
-	sqlTx *sql.Tx,
+	tx repositories.Tx,
 	group *matchingEntities.MatchGroup,
 	tenantUUID uuid.UUID,
 	tenantSlug string,
@@ -82,7 +80,7 @@ func (uc *UseCase) enqueueGroupEvent(
 		return fmt.Errorf("create outbox event: %w", err)
 	}
 
-	if _, err := uc.outboxRepoTx.CreateWithTx(ctx, sqlTx, outboxEvent); err != nil {
+	if _, err := uc.outboxRepoTx.CreateWithTx(ctx, tx, outboxEvent); err != nil {
 		return fmt.Errorf("create outbox entry: %w", err)
 	}
 

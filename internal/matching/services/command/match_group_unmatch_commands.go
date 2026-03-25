@@ -224,8 +224,7 @@ func (uc *UseCase) enqueueUnmatchEvent(
 		return ErrOutboxRepoNotConfigured
 	}
 
-	sqlTx, ok := tx.(*sql.Tx)
-	if !ok || sqlTx == nil {
+	if tx == nil {
 		return ErrOutboxRequiresSQLTx
 	}
 
@@ -272,7 +271,7 @@ func (uc *UseCase) enqueueUnmatchEvent(
 		return fmt.Errorf("create outbox event: %w", err)
 	}
 
-	if _, err := uc.outboxRepoTx.CreateWithTx(ctx, sqlTx, outboxEvent); err != nil {
+	if _, err := uc.outboxRepoTx.CreateWithTx(ctx, tx, outboxEvent); err != nil {
 		return fmt.Errorf("create outbox entry: %w", err)
 	}
 

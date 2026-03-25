@@ -498,12 +498,6 @@ type mockInfraProvider struct {
 	err error
 }
 
-func (m *mockInfraProvider) GetPostgresConnection(
-	_ context.Context,
-) (*sharedPorts.PostgresConnectionLease, error) {
-	return nil, nil
-}
-
 func (m *mockInfraProvider) GetRedisConnection(
 	_ context.Context,
 ) (*sharedPorts.RedisConnectionLease, error) {
@@ -518,7 +512,11 @@ func (m *mockInfraProvider) BeginTx(_ context.Context) (*sharedPorts.TxLease, er
 	return sharedPorts.NewTxLease(m.tx, nil), nil
 }
 
-func (m *mockInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.ReplicaDBLease, error) {
+func (m *mockInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.DBLease, error) {
+	return nil, nil
+}
+
+func (m *mockInfraProvider) GetPrimaryDB(_ context.Context) (*sharedPorts.DBLease, error) {
 	return nil, nil
 }
 

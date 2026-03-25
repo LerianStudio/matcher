@@ -1077,28 +1077,18 @@ func withArchivalProviderDBResult[T any](
 ) (T, error) {
 	var zero T
 
-	lease, err := infraProvider.GetPostgresConnection(ctx)
+	lease, err := infraProvider.GetPrimaryDB(ctx)
 	if err != nil {
-		return zero, fmt.Errorf("resolve postgres connection: %w", err)
+		return zero, fmt.Errorf("resolve primary postgres db: %w", err)
 	}
 	defer lease.Release()
 
-	client := lease.Connection()
-	if client == nil {
+	db := lease.DB()
+	if db == nil {
 		return zero, command.ErrNilDB
 	}
 
-	resolver, err := client.Resolver(ctx)
-	if err != nil {
-		return zero, fmt.Errorf("resolve postgres db: %w", err)
-	}
-
-	primaryDBs := resolver.PrimaryDBs()
-	if len(primaryDBs) == 0 || primaryDBs[0] == nil {
-		return zero, command.ErrNilDB
-	}
-
-	return fn(primaryDBs[0])
+	return fn(db)
 }
 
 func buildPartitionExportQuery(partitionName string) (string, error) {

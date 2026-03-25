@@ -800,7 +800,7 @@ func TestEnqueueMatchConfirmedEvents_NonSQLTx(t *testing.T) {
 
 	uc := &UseCase{outboxRepoTx: outboxmocks.NewMockOutboxRepository(ctrl)}
 
-	err := uc.enqueueMatchConfirmedEvents(context.Background(), &fakeTx{}, nil)
+	err := uc.enqueueMatchConfirmedEvents(context.Background(), nil, nil)
 	require.ErrorIs(t, err, ErrOutboxRequiresSQLTx)
 }
 

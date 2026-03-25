@@ -42,7 +42,7 @@ type ProcessCallbackCommand struct {
 
 // CallbackUseCase handles callback processing with idempotency and rate limiting.
 type CallbackUseCase struct {
-	idempotencyRepo repositories.CallbackIdempotencyRepository
+	idempotencyRepo sharedPorts.IdempotencyRepository
 	exceptionRepo   repositories.ExceptionRepository
 	auditPublisher  ports.AuditPublisher
 	infraProvider   sharedPorts.InfrastructureProvider
@@ -51,7 +51,7 @@ type CallbackUseCase struct {
 
 // NewCallbackUseCase creates a new CallbackUseCase with the required dependencies.
 func NewCallbackUseCase(
-	idempotencyRepo repositories.CallbackIdempotencyRepository,
+	idempotencyRepo sharedPorts.IdempotencyRepository,
 	exceptionRepo repositories.ExceptionRepository,
 	auditPublisher ports.AuditPublisher,
 	infraProvider sharedPorts.InfrastructureProvider,

@@ -40,6 +40,13 @@ func (repo *stubIdempotencyRepo) TryAcquire(
 	return repo.acquired, nil
 }
 
+func (repo *stubIdempotencyRepo) TryReacquireFromFailed(
+	_ context.Context,
+	_ value_objects.IdempotencyKey,
+) (bool, error) {
+	return false, nil
+}
+
 func (repo *stubIdempotencyRepo) MarkComplete(
 	_ context.Context,
 	_ value_objects.IdempotencyKey,

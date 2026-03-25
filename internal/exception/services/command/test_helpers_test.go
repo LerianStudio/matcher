@@ -239,16 +239,6 @@ type stubInfraProvider struct {
 	tx           *sql.Tx
 }
 
-func (provider *stubInfraProvider) GetPostgresConnection(
-	_ context.Context,
-) (*sharedPorts.PostgresConnectionLease, error) {
-	if provider.postgresErr != nil {
-		return nil, provider.postgresErr
-	}
-
-	return sharedPorts.NewPostgresConnectionLease(provider.postgresConn, nil), nil
-}
-
 func (provider *stubInfraProvider) GetRedisConnection(
 	_ context.Context,
 ) (*sharedPorts.RedisConnectionLease, error) {
@@ -279,7 +269,11 @@ func (provider *stubInfraProvider) BeginTx(ctx context.Context) (*sharedPorts.Tx
 }
 
 // GetReplicaDB returns nil for tests (read replica not used in these tests).
-func (provider *stubInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.ReplicaDBLease, error) {
+func (provider *stubInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.DBLease, error) {
+	return nil, nil
+}
+
+func (provider *stubInfraProvider) GetPrimaryDB(_ context.Context) (*sharedPorts.DBLease, error) {
 	return nil, nil
 }
 

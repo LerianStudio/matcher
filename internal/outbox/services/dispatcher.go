@@ -25,7 +25,6 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	outboxEntities "github.com/LerianStudio/matcher/internal/outbox/domain/entities"
-	"github.com/LerianStudio/matcher/internal/outbox/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
@@ -82,7 +81,7 @@ const (
 
 // Dispatcher handles publishing outbox events to message queues.
 type Dispatcher struct {
-	repo                        repositories.OutboxRepository
+	repo                        sharedPorts.OutboxRepository
 	ingestPub                   sharedPorts.IngestionEventPublisher
 	matchPub                    sharedDomain.MatchEventPublisher
 	auditPub                    sharedDomain.AuditEventPublisher
@@ -180,7 +179,7 @@ func WithDispatchInterval(interval time.Duration) DispatcherOption {
 
 // NewDispatcher creates a new Dispatcher with the given dependencies.
 func NewDispatcher(
-	repo repositories.OutboxRepository,
+	repo sharedPorts.OutboxRepository,
 	ingestPub sharedPorts.IngestionEventPublisher,
 	matchPub sharedDomain.MatchEventPublisher,
 	logger libLog.Logger,

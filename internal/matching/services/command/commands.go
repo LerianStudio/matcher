@@ -2,7 +2,6 @@ package command
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"time"
 
@@ -40,7 +39,7 @@ var (
 type outboxTxCreator interface {
 	CreateWithTx(
 		ctx context.Context,
-		tx *sql.Tx,
+		tx sharedPorts.Tx,
 		event *sharedDomain.OutboxEvent,
 	) (*sharedDomain.OutboxEvent, error)
 }

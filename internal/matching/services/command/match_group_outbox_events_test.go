@@ -27,7 +27,7 @@ func TestEnqueueMatchConfirmedEvents_NilOutboxRepoTx(t *testing.T) {
 	require.ErrorIs(t, err, ErrOutboxRepoNotConfigured)
 }
 
-func TestEnqueueMatchConfirmedEvents_NonSQLTx_Returns_Error(t *testing.T) {
+func TestEnqueueMatchConfirmedEvents_NilTx_Returns_Error(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
@@ -35,8 +35,7 @@ func TestEnqueueMatchConfirmedEvents_NonSQLTx_Returns_Error(t *testing.T) {
 
 	uc := &UseCase{outboxRepoTx: outboxmocks.NewMockOutboxRepository(ctrl)}
 
-	type nonSQLTx struct{}
-	err := uc.enqueueMatchConfirmedEvents(context.Background(), &nonSQLTx{}, nil)
+	err := uc.enqueueMatchConfirmedEvents(context.Background(), nil, nil)
 	require.ErrorIs(t, err, ErrOutboxRequiresSQLTx)
 }
 

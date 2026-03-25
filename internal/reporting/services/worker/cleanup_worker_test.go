@@ -18,7 +18,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	repomocks "github.com/LerianStudio/matcher/internal/reporting/domain/repositories/mocks"
-	portsmocks "github.com/LerianStudio/matcher/internal/reporting/ports/mocks"
+	portsmocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
 )
 
 var (
