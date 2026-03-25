@@ -1,6 +1,7 @@
 package value_objects
 
 import (
+	"errors"
 	"fmt"
 
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
@@ -24,6 +25,14 @@ func CompareSignedKey(signed string, clientKey IdempotencyKey, secret string) bo
 func ParseIdempotencyKey(value string) (IdempotencyKey, error) {
 	key, err := shared.ParseIdempotencyKey(value)
 	if err != nil {
+		if errors.Is(err, shared.ErrEmptyIdempotencyKey) {
+			return "", ErrEmptyIdempotencyKey
+		}
+
+		if errors.Is(err, shared.ErrInvalidIdempotencyKey) {
+			return "", ErrInvalidIdempotencyKey
+		}
+
 		return "", fmt.Errorf("parse idempotency key: %w", err)
 	}
 

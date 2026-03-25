@@ -22,6 +22,9 @@ var errTestIdempotency = errors.New("test: idempotency failed")
 type stubIdempotencyRepo struct {
 	acquired        bool
 	tryAcquireErr   error
+	reacquired      bool
+	reacquireErr    error
+	reacquireCalls  int
 	markCompleteErr error
 	markFailedErr   error
 	markFailedCalls int
@@ -44,7 +47,12 @@ func (repo *stubIdempotencyRepo) TryReacquireFromFailed(
 	_ context.Context,
 	_ value_objects.IdempotencyKey,
 ) (bool, error) {
-	return false, nil
+	repo.reacquireCalls++
+	if repo.reacquireErr != nil {
+		return false, repo.reacquireErr
+	}
+
+	return repo.reacquired, nil
 }
 
 func (repo *stubIdempotencyRepo) MarkComplete(
@@ -287,6 +295,7 @@ func TestCallbackIdempotency_InvalidKey_Rejected(t *testing.T) {
 		Status:          "OPEN",
 	})
 	require.ErrorIs(t, err, value_objects.ErrEmptyIdempotencyKey)
+	require.Equal(t, value_objects.ErrEmptyIdempotencyKey.Error(), err.Error())
 
 	err = uc.ProcessCallback(context.Background(), ProcessCallbackCommand{
 		IdempotencyKey:  "invalid key!",
@@ -297,6 +306,7 @@ func TestCallbackIdempotency_InvalidKey_Rejected(t *testing.T) {
 		Status:          "OPEN",
 	})
 	require.ErrorIs(t, err, value_objects.ErrInvalidIdempotencyKey)
+	require.Equal(t, value_objects.ErrInvalidIdempotencyKey.Error(), err.Error())
 }
 
 func TestCallbackIdempotency_ExceptionIDRequired(t *testing.T) {
@@ -398,7 +408,74 @@ func TestCallbackIdempotency_PreviousFailure_ReturnsRetryable(t *testing.T) {
 		ExternalIssueID: "PROJ-123",
 		Status:          "OPEN",
 	})
-	require.ErrorIs(t, err, ErrCallbackRetryable)
+	require.ErrorIs(t, err, ErrCallbackInProgress)
+	require.Equal(t, 1, idempotencyRepo.reacquireCalls)
+}
+
+func TestCallbackIdempotency_PreviousFailure_ReacquiresAndProcesses(t *testing.T) {
+	t.Parallel()
+
+	exception, err := entities.NewException(
+		context.Background(),
+		uuid.New(),
+		value_objects.ExceptionSeverityHigh,
+		nil,
+	)
+	require.NoError(t, err)
+
+	idempotencyRepo := &stubIdempotencyRepo{
+		acquired:   false,
+		reacquired: true,
+		cachedResult: &value_objects.IdempotencyResult{
+			Status: value_objects.IdempotencyStatusFailed,
+		},
+	}
+	exceptionRepo := &stubExceptionRepo{exception: exception}
+	audit := &stubAuditPublisher{}
+
+	uc, err := NewCallbackUseCase(idempotencyRepo, exceptionRepo, audit, &stubInfraProvider{}, &stubCallbackRateLimiter{allowed: true})
+	require.NoError(t, err)
+
+	err = uc.ProcessCallback(context.Background(), ProcessCallbackCommand{
+		IdempotencyKey:  "jira:MATCH-123:callback",
+		ExceptionID:     exception.ID,
+		CallbackType:    "jira",
+		ExternalSystem:  "JIRA",
+		ExternalIssueID: "PROJ-123",
+		Status:          "RESOLVED",
+		ResolutionNotes: "Resolved by retry",
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, idempotencyRepo.reacquireCalls)
+	require.Equal(t, value_objects.ExceptionStatusResolved, exception.Status)
+}
+
+func TestCallbackIdempotency_PreviousFailure_ReacquireError(t *testing.T) {
+	t.Parallel()
+
+	idempotencyRepo := &stubIdempotencyRepo{
+		acquired:     false,
+		reacquireErr: errTestIdempotency,
+		cachedResult: &value_objects.IdempotencyResult{
+			Status: value_objects.IdempotencyStatusFailed,
+		},
+	}
+	exceptionRepo := &stubExceptionRepo{}
+	audit := &stubAuditPublisher{}
+
+	uc, err := NewCallbackUseCase(idempotencyRepo, exceptionRepo, audit, &stubInfraProvider{}, &stubCallbackRateLimiter{allowed: true})
+	require.NoError(t, err)
+
+	err = uc.ProcessCallback(context.Background(), ProcessCallbackCommand{
+		IdempotencyKey:  "valid-key",
+		ExceptionID:     uuid.New(),
+		CallbackType:    "jira",
+		ExternalSystem:  "JIRA",
+		ExternalIssueID: "PROJ-123",
+		Status:          "OPEN",
+	})
+	require.ErrorIs(t, err, errTestIdempotency)
+	require.Equal(t, 1, idempotencyRepo.reacquireCalls)
 }
 
 func TestCallbackIdempotency_GetCachedResultError(t *testing.T) {

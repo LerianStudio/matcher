@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -239,7 +240,21 @@ func (uc *CallbackUseCase) handleExistingCallback(
 	case value_objects.IdempotencyStatusPending:
 		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "callback is still processing", ErrCallbackInProgress)
 		return ErrCallbackInProgress
-	case value_objects.IdempotencyStatusFailed, value_objects.IdempotencyStatusUnknown:
+	case value_objects.IdempotencyStatusFailed:
+		reacquired, err := uc.idempotencyRepo.TryReacquireFromFailed(ctx, params.dedupeKey)
+		if err != nil {
+			libOpentelemetry.HandleSpanError(span, "failed to reacquire failed idempotency key", err)
+			return fmt.Errorf("reacquire failed callback: %w", err)
+		}
+
+		if reacquired {
+			return uc.processCallback(ctx, cmd, params, logger, span)
+		}
+
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "callback is still processing", ErrCallbackInProgress)
+
+		return ErrCallbackInProgress
+	case value_objects.IdempotencyStatusUnknown:
 		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "callback requires retry", ErrCallbackRetryable)
 		return ErrCallbackRetryable
 	default:
@@ -382,14 +397,20 @@ func (uc *CallbackUseCase) validateDependencies() error {
 }
 
 func parseIdempotencyKey(key string) (value_objects.IdempotencyKey, error) {
-	var idempotencyKey value_objects.IdempotencyKey
-
-	idempotencyKey, err := value_objects.ParseIdempotencyKey(key)
+	parsedKey, err := value_objects.ParseIdempotencyKey(key)
 	if err != nil {
-		return idempotencyKey, fmt.Errorf("parse idempotency key: %w", err)
+		if errors.Is(err, value_objects.ErrEmptyIdempotencyKey) {
+			return "", value_objects.ErrEmptyIdempotencyKey
+		}
+
+		if errors.Is(err, value_objects.ErrInvalidIdempotencyKey) {
+			return "", value_objects.ErrInvalidIdempotencyKey
+		}
+
+		return "", fmt.Errorf("parse callback idempotency key: %w", err)
 	}
 
-	return idempotencyKey, nil
+	return parsedKey, nil
 }
 
 func resolveExternalSystem(cmd ProcessCallbackCommand) (string, error) {
