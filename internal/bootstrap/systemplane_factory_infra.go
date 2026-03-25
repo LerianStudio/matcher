@@ -251,13 +251,12 @@ func (factory *MatcherBundleFactory) extractPostgresConfig(snap domain.Snapshot)
 		ReplicaPassword:     snapString(snap, "postgres.replica_password", ""),
 		ReplicaDB:           snapString(snap, "postgres.replica_db", ""),
 		ReplicaSSLMode:      snapString(snap, "postgres.replica_ssl_mode", ""),
-		MaxOpenConnections:  snapInt(snap, "postgres.max_open_connections", defaultPGMaxOpenConns),
-		MaxIdleConnections:  snapInt(snap, "postgres.max_idle_connections", defaultPGMaxIdleConns),
+		MaxOpenConnections:  snapInt(snap, "postgres.max_open_conns", defaultPGMaxOpenConns),
+		MaxIdleConnections:  snapInt(snap, "postgres.max_idle_conns", defaultPGMaxIdleConns),
 		ConnMaxLifetimeMins: snapInt(snap, "postgres.conn_max_lifetime_mins", defaultPGConnMaxLifeMins),
 		ConnMaxIdleTimeMins: snapInt(snap, "postgres.conn_max_idle_time_mins", defaultPGConnMaxIdleMins),
 		ConnectTimeoutSec:   snapInt(snap, "postgres.connect_timeout_sec", defaultPGConnectTimeout),
 		QueryTimeoutSec:     snapInt(snap, "postgres.query_timeout_sec", defaultPGQueryTimeout),
-		MigrationsPath:      snapString(snap, "postgres.migrations_path", "migrations"),
 	}
 }
 
@@ -289,7 +288,7 @@ func (factory *MatcherBundleFactory) extractRedisConfig(snap domain.Snapshot) re
 		TLS:            snapBool(snap, "redis.tls", false),
 		CACert:         snapString(snap, "redis.ca_cert", ""),
 		PoolSize:       snapInt(snap, "redis.pool_size", defaultRedisPoolSize),
-		MinIdleConn:    snapInt(snap, "redis.min_idle_conn", defaultRedisMinIdleConn),
+		MinIdleConn:    snapInt(snap, "redis.min_idle_conns", defaultRedisMinIdleConn),
 		ReadTimeoutMs:  snapInt(snap, "redis.read_timeout_ms", defaultRedisReadTimeout),
 		WriteTimeoutMs: snapInt(snap, "redis.write_timeout_ms", defaultRedisWriteTimeout),
 		DialTimeoutMs:  snapInt(snap, "redis.dial_timeout_ms", defaultRedisDialTimeout),
@@ -311,7 +310,7 @@ type rabbitMQConfigSnapshot struct {
 // extractRabbitMQConfig reads all rabbitmq-related keys from the snapshot.
 func (factory *MatcherBundleFactory) extractRabbitMQConfig(snap domain.Snapshot) rabbitMQConfigSnapshot {
 	return rabbitMQConfigSnapshot{
-		URI:  snapString(snap, "rabbitmq.uri", "amqp"),
+		URI:  snapString(snap, "rabbitmq.url", "amqp"),
 		Host: snapString(snap, "rabbitmq.host", "localhost"),
 		Port: snapString(snap, "rabbitmq.port", "5672"),
 		// Default guest/guest credentials are standard for local development.
@@ -445,18 +444,25 @@ func buildRabbitMQDSN(cfg rabbitMQConfigSnapshot) string {
 
 // snapString extracts a string from the snapshot, or returns the fallback.
 func snapString(snap domain.Snapshot, key, fallback string) string {
-	v := snap.ConfigValue(key, fallback)
-	if s, ok := v.(string); ok {
+	value, ok := resolveSnapshotConfigValue(snap, key)
+	if !ok {
+		return fallback
+	}
+
+	if s, ok := value.(string); ok {
 		return s
 	}
 
-	return fmt.Sprintf("%v", v)
+	return fmt.Sprintf("%v", value)
 }
 
 // snapInt extracts an int from the snapshot, handling the type coercions that
 // can arise from JSON deserialization (float64, int64, string).
 func snapInt(snap domain.Snapshot, key string, fallback int) int {
-	v := snap.ConfigValue(key, fallback)
+	v, ok := resolveSnapshotConfigValue(snap, key)
+	if !ok {
+		return fallback
+	}
 
 	switch val := v.(type) {
 	case int:
@@ -479,7 +485,10 @@ func snapInt(snap domain.Snapshot, key string, fallback int) int {
 
 // snapBool extracts a bool from the snapshot, handling string representations.
 func snapBool(snap domain.Snapshot, key string, fallback bool) bool {
-	v := snap.ConfigValue(key, fallback)
+	v, ok := resolveSnapshotConfigValue(snap, key)
+	if !ok {
+		return fallback
+	}
 
 	switch val := v.(type) {
 	case bool:

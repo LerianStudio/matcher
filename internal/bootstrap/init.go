@@ -97,8 +97,6 @@ import (
 	matchLockManager "github.com/LerianStudio/matcher/internal/matching/adapters/redis"
 	matchingCommand "github.com/LerianStudio/matcher/internal/matching/services/command"
 	matchingQuery "github.com/LerianStudio/matcher/internal/matching/services/query"
-	outboxPgRepo "github.com/LerianStudio/matcher/internal/outbox/adapters/postgres"
-	outboxRepositories "github.com/LerianStudio/matcher/internal/outbox/domain/repositories"
 	outboxServices "github.com/LerianStudio/matcher/internal/outbox/services"
 	reportingHTTP "github.com/LerianStudio/matcher/internal/reporting/adapters/http"
 	reportDashboard "github.com/LerianStudio/matcher/internal/reporting/adapters/postgres/dashboard"
@@ -106,12 +104,11 @@ import (
 	reportRepo "github.com/LerianStudio/matcher/internal/reporting/adapters/postgres/report"
 	reportingRedis "github.com/LerianStudio/matcher/internal/reporting/adapters/redis"
 	reportingStorage "github.com/LerianStudio/matcher/internal/reporting/adapters/storage"
-	reportingPorts "github.com/LerianStudio/matcher/internal/reporting/ports"
 	reportingCommand "github.com/LerianStudio/matcher/internal/reporting/services/command"
 	reportingQuery "github.com/LerianStudio/matcher/internal/reporting/services/query"
 	reportingWorker "github.com/LerianStudio/matcher/internal/reporting/services/worker"
 	crossAdapters "github.com/LerianStudio/matcher/internal/shared/adapters/cross"
-	sharedHTTP "github.com/LerianStudio/matcher/internal/shared/adapters/http"
+	outboxPgRepo "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/outbox"
 	sharedRabbitmq "github.com/LerianStudio/matcher/internal/shared/adapters/rabbitmq"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
@@ -692,10 +689,15 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 			}
 		}
 
-		if swappable, ok := logger.(*SwappableLogger); ok && bundleOK {
-			if bundle.Logger != nil {
-				swappable.Swap(bundle.Logger.Logger)
-			}
+		var runtimeCfg *Config
+		if configManager != nil {
+			runtimeCfg = configManager.Get()
+		}
+
+		if err := syncRuntimeLogger(logger, runtimeCfg, bundle); err != nil {
+			logger.Log(reloadLogCtx, libLog.LevelWarn, "systemplane logger sync failed",
+				libLog.String("error", err.Error()),
+				libLog.String("reason", event.Reason))
 		}
 
 		if canSwapRuntimePublishers(bundleOK, modules) {
@@ -885,16 +887,12 @@ func initLogger(opts *Options) (libLog.Logger, error) {
 		return opts.Logger, nil
 	}
 
-	logger, err := libZap.New(libZap.Config{
-		Environment:     ResolveLoggerEnvironment(os.Getenv("ENV_NAME")),
-		Level:           ResolveLoggerLevel(os.Getenv("LOG_LEVEL")),
-		OTelLibraryName: constants.ApplicationName,
-	})
+	loggerBundle, err := buildLoggerBundle(os.Getenv("ENV_NAME"), os.Getenv("LOG_LEVEL"))
 	if err != nil {
 		return nil, fmt.Errorf("initialize logger: %w", err)
 	}
 
-	return logger, nil
+	return loggerBundle.Logger, nil
 }
 
 // checkClientConnected returns the connected state of a client that exposes IsConnected.
@@ -2412,7 +2410,7 @@ func createIdempotencyRepository(
 	configGetter func() *Config,
 	provider sharedPorts.InfrastructureProvider,
 	logger libLog.Logger,
-) sharedHTTP.IdempotencyRepository {
+) sharedPorts.IdempotencyRepository {
 	ctx := context.Background()
 
 	if provider == nil {
@@ -2456,7 +2454,7 @@ func createIdempotencyRepository(
 		)
 	}
 
-	return sharedHTTP.NewIdempotencyRepositoryAdapter(exceptionIdempotencyRepo)
+	return exceptionIdempotencyRepo
 }
 
 // createObjectStorage initialises the S3/MinIO client only when the reporting
@@ -2464,7 +2462,7 @@ func createIdempotencyRepository(
 func createObjectStorage(
 	ctx context.Context,
 	cfg *Config,
-) (reportingPorts.ObjectStorageClient, error) {
+) (sharedPorts.ObjectStorageClient, error) {
 	if !reportingStorageRequired(cfg) {
 		return nil, nil
 	}
@@ -2501,7 +2499,7 @@ func reportingStorageRequired(cfg *Config) bool {
 func initConfigurationModule(
 	routes *Routes,
 	provider sharedPorts.InfrastructureProvider,
-	outboxRepository outboxRepositories.OutboxRepository,
+	outboxRepository sharedPorts.OutboxRepository,
 	repos *sharedRepositories,
 	production bool,
 ) error {
@@ -2559,7 +2557,7 @@ func initIngestionModule(
 	configGetter func() *Config,
 	routes *Routes,
 	provider sharedPorts.InfrastructureProvider,
-	outboxRepository outboxRepositories.OutboxRepository,
+	outboxRepository sharedPorts.OutboxRepository,
 	publisher sharedPorts.IngestionEventPublisher,
 	matchingUseCase *matchingCommand.UseCase,
 	repos *sharedRepositories,
@@ -2582,7 +2580,7 @@ func initIngestionModule(
 		return fmt.Errorf("create source repository adapter: %w", err)
 	}
 
-	contextAdapter := crossAdapters.NewIngestionContextProviderAdapter(repos.configContext)
+	contextAdapter := crossAdapters.NewContextAccessProviderAdapter(repos.configContext)
 
 	// Auto-match on upload: create adapters to check context config and trigger matching
 	autoMatchContextProvider, err := crossAdapters.NewAutoMatchContextProviderAdapter(repos.configContext)
@@ -2654,23 +2652,23 @@ func initIngestionModule(
 func initMatchingModule(
 	routes *Routes,
 	provider sharedPorts.InfrastructureProvider,
-	outboxRepo outboxRepositories.OutboxRepository,
+	outboxRepo sharedPorts.OutboxRepository,
 	repos *sharedRepositories,
 	production bool,
 ) (*matchingCommand.UseCase, error) {
-	contextAdapter, err := crossAdapters.NewContextProviderAdapter(repos.configContext)
+	configProvider, err := crossAdapters.NewMatchingConfigurationProvider(
+		repos.configContext,
+		repos.configSource,
+		repos.configMatchRule,
+		repos.configFeeRule,
+	)
 	if err != nil {
-		return nil, fmt.Errorf("create context provider adapter for matching: %w", err)
+		return nil, fmt.Errorf("create matching configuration provider: %w", err)
 	}
 
 	sourceAdapter, err := crossAdapters.NewSourceProviderAdapter(repos.configSource)
 	if err != nil {
 		return nil, fmt.Errorf("create source provider adapter for matching: %w", err)
-	}
-
-	ruleAdapter, err := crossAdapters.NewMatchRuleProviderAdapter(repos.configMatchRule)
-	if err != nil {
-		return nil, fmt.Errorf("create match rule provider adapter for matching: %w", err)
 	}
 
 	feeRuleAdapter, err := crossAdapters.NewFeeRuleProviderAdapter(repos.configFeeRule)
@@ -2695,9 +2693,9 @@ func initMatchingModule(
 	feeVarianceRepository := matchFeeVarianceRepo.NewRepository(provider)
 
 	useCase, err := matchingCommand.New(matchingCommand.UseCaseDeps{
-		ContextProvider:  contextAdapter,
+		ContextProvider:  configProvider.ContextProvider(),
 		SourceProvider:   sourceAdapter,
-		RuleProvider:     ruleAdapter,
+		RuleProvider:     configProvider.MatchRuleProvider(),
 		TxRepo:           transactionAdapter,
 		LockManager:      lockManager,
 		MatchRunRepo:     matchRunRepository,
@@ -2725,7 +2723,7 @@ func initMatchingModule(
 	matchingHandler, err := matchingHTTP.NewHandler(
 		useCase,
 		matchingQueryUseCase,
-		contextAdapter,
+		configProvider.ContextProvider(),
 		production,
 	)
 	if err != nil {
@@ -2744,13 +2742,13 @@ func initReportingModule(
 	cfg *Config,
 	configGetter func() *Config,
 	provider sharedPorts.InfrastructureProvider,
-	storage reportingPorts.ObjectStorageClient,
+	storage sharedPorts.ObjectStorageClient,
 	rateLimiterGetter func() *ratelimit.RateLimiter,
 	logger libLog.Logger,
 	repos *sharedRepositories,
 	production bool,
 ) (*reportingWorker.ExportWorker, *reportingWorker.CleanupWorker, error) {
-	contextAdapter := crossAdapters.NewReportingContextProviderAdapter(repos.configContext)
+	contextAdapter := crossAdapters.NewContextAccessProviderAdapter(repos.configContext)
 
 	dashboardRepository := reportDashboard.NewRepository(provider)
 	reportRepository := reportRepo.NewRepository(provider)
@@ -2802,8 +2800,8 @@ func initExportWorkers(
 	configGetter func() *Config,
 	exportJobRepository *reportExportJob.Repository,
 	reportRepository *reportRepo.Repository,
-	storage reportingPorts.ObjectStorageClient,
-	contextAdapter *crossAdapters.ReportingContextProviderAdapter,
+	storage sharedPorts.ObjectStorageClient,
+	contextAdapter sharedPorts.ContextAccessProvider,
 	exportLimiter fiber.Handler,
 	logger libLog.Logger,
 ) (*reportingWorker.ExportWorker, *reportingWorker.CleanupWorker, error) {
@@ -2930,7 +2928,7 @@ func initExceptionModule(
 	configGetter func() *Config,
 	routes *Routes,
 	provider sharedPorts.InfrastructureProvider,
-	outboxRepository outboxRepositories.OutboxRepository,
+	outboxRepository sharedPorts.OutboxRepository,
 	dispatchLimiter fiber.Handler,
 	repos *sharedRepositories,
 	production bool,
@@ -2940,7 +2938,7 @@ func initExceptionModule(
 	disputeRepository := exceptionDisputeRepo.NewRepository(provider)
 	commentRepository := exceptionCommentRepo.NewRepository(provider)
 
-	deps, err := initExceptionDependencies(provider, outboxRepository, exceptionRepository, repos)
+	deps, err := initExceptionDependencies(outboxRepository, exceptionRepository, repos)
 	if err != nil {
 		return err
 	}
@@ -3006,21 +3004,12 @@ type exceptionUseCases struct {
 }
 
 // initExceptionDependencies creates the cross-cutting adapters for the exception module:
-// audit publisher, actor extractor, transaction context lookup, matching gateway, and resolution executor.
+// audit publisher, actor extractor, merged exception-matching bridge, and resolution executor.
 func initExceptionDependencies(
-	provider sharedPorts.InfrastructureProvider,
-	outboxRepository outboxRepositories.OutboxRepository,
+	outboxRepository sharedPorts.OutboxRepository,
 	exceptionRepository *exceptionExceptionRepo.Repository,
 	repos *sharedRepositories,
 ) (*exceptionModuleDeps, error) {
-	transactionAdapter, err := crossAdapters.NewTransactionRepositoryAdapterFromRepo(
-		provider,
-		repos.ingestionTx,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("create transaction adapter for exception: %w", err)
-	}
-
 	auditPublisher, err := exceptionAudit.NewOutboxPublisher(outboxRepository)
 	if err != nil {
 		return nil, fmt.Errorf("create audit publisher: %w", err)
@@ -3028,23 +3017,11 @@ func initExceptionDependencies(
 
 	actorExtractor := exceptionAdapters.NewAuthActorExtractor()
 
-	// TransactionContextLookup wraps the transaction and job repositories to look up context IDs.
-	// The source finder provides a fallback path: Transaction.SourceID -> context_id
-	// when the primary ingestion job lookup fails.
-	transactionContextLookup, err := crossAdapters.NewTransactionContextLookup(
-		repos.ingestionTx,
-		repos.ingestionJob,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("create transaction context lookup: %w", err)
-	}
-
-	transactionContextLookup.WithSourceFinder(repos.configSource)
-
 	matchingGateway, err := crossAdapters.NewExceptionMatchingGateway(
 		repos.adjustment,
-		transactionAdapter,
-		transactionContextLookup,
+		repos.ingestionTx,
+		repos.ingestionJob,
+		repos.configSource,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create matching gateway: %w", err)

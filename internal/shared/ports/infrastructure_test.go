@@ -15,12 +15,6 @@ var _ InfrastructureProvider = (*mockInfrastructureProvider)(nil)
 
 type mockInfrastructureProvider struct{}
 
-func (m *mockInfrastructureProvider) GetPostgresConnection(
-	_ context.Context,
-) (*PostgresConnectionLease, error) {
-	return nil, nil
-}
-
 func (m *mockInfrastructureProvider) GetRedisConnection(
 	_ context.Context,
 ) (*RedisConnectionLease, error) {
@@ -31,7 +25,11 @@ func (m *mockInfrastructureProvider) BeginTx(_ context.Context) (*TxLease, error
 	return nil, nil
 }
 
-func (m *mockInfrastructureProvider) GetReplicaDB(_ context.Context) (*ReplicaDBLease, error) {
+func (m *mockInfrastructureProvider) GetReplicaDB(_ context.Context) (*DBLease, error) {
+	return nil, nil
+}
+
+func (m *mockInfrastructureProvider) GetPrimaryDB(_ context.Context) (*DBLease, error) {
 	return nil, nil
 }
 
@@ -39,10 +37,6 @@ func TestInfrastructureProviderInterface(t *testing.T) {
 	t.Parallel()
 
 	var provider InfrastructureProvider = &mockInfrastructureProvider{}
-
-	pgConn, err := provider.GetPostgresConnection(context.Background())
-	require.NoError(t, err)
-	assert.Nil(t, pgConn)
 
 	redisConn, err := provider.GetRedisConnection(context.Background())
 	require.NoError(t, err)
@@ -55,34 +49,10 @@ func TestInfrastructureProviderInterface(t *testing.T) {
 	replicaDB, err := provider.GetReplicaDB(context.Background())
 	require.NoError(t, err)
 	assert.Nil(t, replicaDB)
-}
 
-// Section: PostgresConnectionLease edge cases.
-
-func TestNewPostgresConnectionLease_NilConn_ReturnsNil(t *testing.T) {
-	t.Parallel()
-
-	lease := NewPostgresConnectionLease(nil, func() {})
-	assert.Nil(t, lease, "NewPostgresConnectionLease with nil conn must return nil")
-}
-
-func TestPostgresConnectionLease_Release_CalledTwice_IsIdempotent(t *testing.T) {
-	t.Parallel()
-
-	callCount := 0
-	release := func() { callCount++ }
-
-	// Use a non-nil conn via the internal struct (we're in package ports)
-	lease := &PostgresConnectionLease{
-		conn:    nil,
-		release: release,
-	}
-
-	lease.releaseOnce.Do(lease.release)
-	// Second call via Release() — sync.Once should prevent a second invocation
-	lease.Release()
-
-	assert.Equal(t, 1, callCount, "release function must be called exactly once (sync.Once)")
+	primaryDB, err := provider.GetPrimaryDB(context.Background())
+	require.NoError(t, err)
+	assert.Nil(t, primaryDB)
 }
 
 // Section: TxLease edge cases.

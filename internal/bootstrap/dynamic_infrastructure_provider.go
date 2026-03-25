@@ -13,6 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bxcodec/dbresolver/v2"
+
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
 	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
@@ -96,25 +98,6 @@ func newDynamicInfrastructureProvider(
 	}
 }
 
-// GetPostgresConnection returns the active PostgreSQL connection lease.
-func (provider *dynamicInfrastructureProvider) GetPostgresConnection(ctx context.Context) (*sharedPorts.PostgresConnectionLease, error) {
-	if currentCfg := provider.currentConfig(); currentCfg != nil && multiTenantModeEnabled(currentCfg) {
-		pgConn, release, err := provider.resolveMultiTenantPostgres(ctx, currentCfg)
-		if err != nil {
-			return nil, fmt.Errorf("resolve tenant postgres connection: %w", err)
-		}
-
-		return sharedPorts.NewPostgresConnectionLease(pgConn, release), nil
-	}
-
-	postgres := provider.currentPostgres()
-	if postgres == nil {
-		return nil, ErrPostgresConnectionNotConfigured
-	}
-
-	return sharedPorts.NewPostgresConnectionLease(postgres, nil), nil
-}
-
 // GetRedisConnection returns the active Redis connection lease.
 //
 // TODO(multi-tenant): Add per-tenant Redis routing when lib-commons tenant-manager/redis is available.
@@ -172,57 +155,34 @@ func (provider *dynamicInfrastructureProvider) BeginTx(ctx context.Context) (*sh
 // transaction with tenant schema isolation. Extracted from BeginTx to reduce cognitive
 // complexity.
 func (provider *dynamicInfrastructureProvider) beginMultiTenantTx(ctx context.Context, cfg *Config) (*sharedPorts.TxLease, error) {
-	pgConn, release, err := provider.resolveMultiTenantPostgres(ctx, cfg)
+	lease, err := provider.resolveMultiTenantPrimaryDB(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("resolve tenant manager for transaction: %w", err)
 	}
 
-	resolver, err := pgConn.Resolver(ctx)
-	if err != nil {
-		safeRelease(release)
-
-		return nil, fmt.Errorf("resolve postgres connection: %w", err)
-	}
-
-	primaryDBs := resolver.PrimaryDBs()
-	if len(primaryDBs) == 0 || primaryDBs[0] == nil {
-		safeRelease(release)
-
+	if lease == nil || lease.DB() == nil {
 		return nil, ErrNoPrimaryDatabaseConfigured
 	}
 
-	tx, err := primaryDBs[0].BeginTx(ctx, nil)
+	tx, err := lease.DB().BeginTx(ctx, nil)
 	if err != nil {
-		safeRelease(release)
-
 		return nil, fmt.Errorf("begin postgres transaction: %w", err)
 	}
 
 	if err := auth.ApplyTenantSchema(ctx, tx); err != nil {
 		if rollbackErr := tx.Rollback(); rollbackErr != nil {
-			safeRelease(release)
-
 			return nil, fmt.Errorf("apply tenant schema: %w",
 				errors.Join(err, fmt.Errorf("rollback: %w", rollbackErr)))
 		}
 
-		safeRelease(release)
-
 		return nil, fmt.Errorf("apply tenant schema: %w", err)
 	}
 
-	return sharedPorts.NewTxLease(tx, release), nil
-}
-
-// safeRelease calls the release function if it is non-nil.
-func safeRelease(release func()) {
-	if release != nil {
-		release()
-	}
+	return sharedPorts.NewTxLease(tx, lease.Release), nil
 }
 
 // GetReplicaDB returns the active replica database lease when configured.
-func (provider *dynamicInfrastructureProvider) GetReplicaDB(ctx context.Context) (*sharedPorts.ReplicaDBLease, error) {
+func (provider *dynamicInfrastructureProvider) GetReplicaDB(ctx context.Context) (*sharedPorts.DBLease, error) {
 	if currentCfg := provider.currentConfig(); currentCfg != nil && multiTenantModeEnabled(currentCfg) {
 		return provider.resolveMultiTenantReplicaDB(ctx, currentCfg)
 	}
@@ -242,32 +202,103 @@ func (provider *dynamicInfrastructureProvider) GetReplicaDB(ctx context.Context)
 		return nil, nil
 	}
 
-	return sharedPorts.NewReplicaDBLease(replicas[0], nil), nil
+	return sharedPorts.NewDBLease(replicas[0], nil), nil
+}
+
+// GetPrimaryDB returns the active primary database lease.
+func (provider *dynamicInfrastructureProvider) GetPrimaryDB(ctx context.Context) (*sharedPorts.DBLease, error) {
+	if currentCfg := provider.currentConfig(); currentCfg != nil && multiTenantModeEnabled(currentCfg) {
+		return provider.resolveMultiTenantPrimaryDB(ctx, currentCfg)
+	}
+
+	postgres := provider.currentPostgres()
+	if postgres == nil {
+		return nil, ErrPostgresConnectionNotConfigured
+	}
+
+	resolver, err := postgres.Resolver(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("resolve postgres connection for primary db: %w", err)
+	}
+
+	primaryDBs := resolver.PrimaryDBs()
+	if len(primaryDBs) == 0 || primaryDBs[0] == nil {
+		return nil, ErrNoPrimaryDatabaseConfigured
+	}
+
+	return sharedPorts.NewDBLease(primaryDBs[0], nil), nil
 }
 
 // resolveMultiTenantReplicaDB resolves a tenant-specific replica database.
 // Extracted from GetReplicaDB to reduce nesting complexity.
-func (provider *dynamicInfrastructureProvider) resolveMultiTenantReplicaDB(ctx context.Context, cfg *Config) (*sharedPorts.ReplicaDBLease, error) {
-	pgConn, release, err := provider.resolveMultiTenantPostgres(ctx, cfg)
+func (provider *dynamicInfrastructureProvider) resolveMultiTenantReplicaDB(ctx context.Context, cfg *Config) (*sharedPorts.DBLease, error) {
+	resolver, tenantID, err := provider.resolveMultiTenantResolver(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("resolve tenant manager for replica db: %w", err)
 	}
 
-	resolver, err := pgConn.Resolver(ctx)
-	if err != nil {
-		safeRelease(release)
-
-		return nil, fmt.Errorf("resolve postgres connection for replica db: %w", err)
-	}
-
 	replicas := resolver.ReplicaDBs()
 	if len(replicas) == 0 || replicas[0] == nil {
-		safeRelease(release)
-
 		return nil, nil
 	}
 
-	return sharedPorts.NewReplicaDBLease(replicas[0], release), nil
+	provider.metrics.RecordConnection(ctx, tenantID, "success")
+
+	return sharedPorts.NewDBLease(replicas[0], nil), nil
+}
+
+func (provider *dynamicInfrastructureProvider) resolveMultiTenantPrimaryDB(ctx context.Context, cfg *Config) (*sharedPorts.DBLease, error) {
+	resolver, tenantID, err := provider.resolveMultiTenantResolver(ctx, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("resolve tenant manager for primary db: %w", err)
+	}
+
+	primaryDBs := resolver.PrimaryDBs()
+	if len(primaryDBs) == 0 || primaryDBs[0] == nil {
+		return nil, ErrNoPrimaryDatabaseConfigured
+	}
+
+	provider.metrics.RecordConnection(ctx, tenantID, "success")
+
+	return sharedPorts.NewDBLease(primaryDBs[0], nil), nil
+}
+
+func (provider *dynamicInfrastructureProvider) resolveMultiTenantResolver(
+	ctx context.Context,
+	cfg *Config,
+) (dbresolver.DB, string, error) {
+	manager, err := provider.currentPGManager(ctx, cfg)
+	if err != nil {
+		return nil, "", fmt.Errorf("resolve pg manager: %w", err)
+	}
+
+	tenantID := core.GetTenantID(ctx)
+	if tenantID == "" {
+		if explicit, ok := auth.LookupTenantID(ctx); ok {
+			tenantID = explicit
+		}
+	}
+
+	if tenantID == "" {
+		return nil, "", core.ErrTenantContextRequired
+	}
+
+	conn, err := manager.GetConnection(ctx, tenantID)
+	if err != nil {
+		provider.metrics.RecordConnectionError(ctx, tenantID, "connection_failed")
+		return nil, tenantID, fmt.Errorf("get tenant connection (tenant=%s): %w", tenantID, err)
+	}
+
+	resolver, err := conn.GetDB()
+	if err != nil {
+		return nil, tenantID, fmt.Errorf("get db resolver for tenant: %w", err)
+	}
+
+	if resolver == nil {
+		return nil, tenantID, fmt.Errorf("tenant=%s: %w", tenantID, ErrNilDBResolver)
+	}
+
+	return resolver, tenantID, nil
 }
 
 // Close releases the active multi-tenant manager, if present.
@@ -316,88 +347,6 @@ func (provider *dynamicInfrastructureProvider) Close() error {
 	provider.multiTenantKey = ""
 
 	return errors.Join(errs...)
-}
-
-// resolveMultiTenantPostgres extracts the tenant ID from context and returns the
-// tenant-specific libPostgres.Client from the canonical tmpostgres.Manager.
-//
-//nolint:unparam // cleanup func reserved for future use (e.g., connection pool release)
-func (provider *dynamicInfrastructureProvider) resolveMultiTenantPostgres(
-	ctx context.Context,
-	cfg *Config,
-) (*libPostgres.Client, func(), error) {
-	manager, err := provider.currentPGManager(ctx, cfg)
-	if err != nil {
-		return nil, nil, fmt.Errorf("resolve pg manager: %w", err)
-	}
-
-	tenantID := core.GetTenantID(ctx)
-	if tenantID == "" {
-		// Fall back to auth package tenant extraction for backward compatibility.
-		// Use LookupTenantID (not GetTenantID) to avoid silently resolving to the
-		// default tenant — multi-tenant mode must fail closed when tenant context
-		// is genuinely absent.
-		if explicit, ok := auth.LookupTenantID(ctx); ok {
-			tenantID = explicit
-		}
-	}
-
-	if tenantID == "" {
-		return nil, nil, core.ErrTenantContextRequired
-	}
-
-	conn, err := manager.GetConnection(ctx, tenantID)
-	if err != nil {
-		provider.metrics.RecordConnectionError(ctx, tenantID, "connection_failed")
-		return nil, nil, fmt.Errorf("get tenant connection (tenant=%s): %w", tenantID, err)
-	}
-
-	// The PostgresConnection from tmpostgres.Manager holds a .client field that is
-	// a *libPostgres.Client — but it's unexported. Instead, we use conn.GetDB() to
-	// get the dbresolver.DB, then wrap it in a synthetic libPostgres.Client that the
-	// lease system can use. However, the tmpostgres.PostgresConnection exposes a
-	// .client field only internally. We need to work with what we have.
-	//
-	// The PostgresConnection struct has an exported ConnectionDB field (*dbresolver.DB)
-	// and an unexported client field (*libPostgres.Client). Since we can't access the
-	// unexported field directly, we create a new libPostgres.Client from the connection's
-	// resolver. However, the manager already creates and caches a libPostgres.Client
-	// internally when PostgresConnection.Connect is called. We can get the resolver
-	// from the connection's GetDB() method.
-	//
-	// Since the InfrastructureProvider interface returns *PostgresConnectionLease which
-	// wraps *libPostgres.Client, and the tmpostgres.PostgresConnection doesn't expose
-	// its internal client, we need to create a wrapper. We use the
-	// infraTestutil.NewClientWithResolver pattern to wrap the dbresolver.DB.
-	//
-	// However, to avoid a dependency on testutil in production code, we'll use a
-	// different approach: we construct a libPostgres.Client using the connection
-	// information from the Manager's PostgresConnection.
-
-	// The tmpostgres.PostgresConnection stores its libPostgres.Client in an unexported
-	// field. We need the dbresolver.DB from GetDB() and must wrap it into what the
-	// lease system expects. Looking at the lease callers: they call
-	// lease.Resolver(ctx) which calls conn.Resolver(ctx). So we need a *libPostgres.Client
-	// that can return a dbresolver.DB.
-	//
-	// Since we cannot access the unexported client field, we create a synthetic
-	// client wrapper. This is a temporary bridge pattern that will be cleaned up
-	// when repositories are migrated to use core.ResolvePostgres directly (Gate 5+).
-
-	db, err := conn.GetDB()
-	if err != nil {
-		return nil, nil, fmt.Errorf("get db resolver for tenant: %w", err)
-	}
-
-	if db == nil {
-		return nil, nil, fmt.Errorf("tenant=%s: %w", tenantID, ErrNilDBResolver)
-	}
-
-	pgClient := newLibPostgresClientFromResolver(db)
-
-	provider.metrics.RecordConnection(ctx, tenantID, "success")
-
-	return pgClient, nil, nil
 }
 
 func (provider *dynamicInfrastructureProvider) currentConfig() *Config {
