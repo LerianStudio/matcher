@@ -25,6 +25,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/governance/domain/repositories/mocks"
 	"github.com/LerianStudio/matcher/internal/governance/services/command"
 	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
+	"github.com/LerianStudio/matcher/internal/shared/ports"
 	sharedPortMocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
 	sharedTestutil "github.com/LerianStudio/matcher/internal/shared/testutil"
 
@@ -55,6 +56,19 @@ type testDeps struct {
 	pmMock       sqlmock.Sqlmock
 	cfg          ArchivalWorkerConfig
 	logger       *sharedTestutil.TestLogger
+}
+
+type nilPrimaryDBProvider struct {
+	*infraTestutil.MockInfrastructureProvider
+	nilLease bool
+}
+
+func (provider *nilPrimaryDBProvider) GetPrimaryDB(context.Context) (*ports.DBLease, error) {
+	if provider.nilLease {
+		return nil, nil
+	}
+
+	return provider.MockInfrastructureProvider.GetPrimaryDB(context.Background())
 }
 
 func setupTestDeps(t *testing.T) *testDeps {
@@ -164,6 +178,20 @@ func TestNewArchivalWorker_NilStorageClient(t *testing.T) {
 	defer deps.ctrl.Finish()
 
 	w, err := NewArchivalWorker(deps.archiveRepo, deps.partitionMgr, nil, deps.db, deps.provider, deps.cfg, deps.logger)
+
+	assert.ErrorIs(t, err, ErrNilStorageClient)
+	assert.Nil(t, w)
+}
+
+func TestNewArchivalWorker_TypedNilStorageClient(t *testing.T) {
+	t.Parallel()
+
+	deps := setupTestDeps(t)
+	defer deps.ctrl.Finish()
+
+	var typedNilStorage *sharedPortMocks.MockObjectStorageClient
+
+	w, err := NewArchivalWorker(deps.archiveRepo, deps.partitionMgr, typedNilStorage, deps.db, deps.provider, deps.cfg, deps.logger)
 
 	assert.ErrorIs(t, err, ErrNilStorageClient)
 	assert.Nil(t, w)
@@ -343,6 +371,29 @@ func TestArchivalWorker_UpdateRuntimeStorage_WhileStopped_SwapsClient(t *testing
 
 	require.NoError(t, w.UpdateRuntimeStorage(replacement))
 	assert.Same(t, replacement, w.storage)
+}
+
+func TestArchivalWorker_UpdateRuntimeStorage_TypedNilRejected(t *testing.T) {
+	t.Parallel()
+
+	deps := setupTestDeps(t)
+	defer deps.ctrl.Finish()
+
+	w, err := NewArchivalWorker(
+		deps.archiveRepo,
+		deps.partitionMgr,
+		deps.storage,
+		deps.db,
+		deps.provider,
+		deps.cfg,
+		deps.logger,
+	)
+	require.NoError(t, err)
+
+	var typedNilStorage *sharedPortMocks.MockObjectStorageClient
+
+	err = w.UpdateRuntimeStorage(typedNilStorage)
+	require.ErrorIs(t, err, ErrNilStorageClient)
 }
 
 func TestArchivalWorker_StopWithoutStart(t *testing.T) {
@@ -1056,6 +1107,61 @@ func TestListTenants_DBError(t *testing.T) {
 
 	tenants, err := w.listTenants(context.Background())
 	assert.Error(t, err)
+	assert.Nil(t, tenants)
+}
+
+func TestListTenants_UsesGlobalDBWithoutTenantContext(t *testing.T) {
+	t.Parallel()
+
+	deps := setupTestDeps(t)
+	defer deps.ctrl.Finish()
+
+	deps.provider.PostgresErr = errors.New("tenant resolver should not be used")
+
+	w, err := NewArchivalWorker(
+		deps.archiveRepo,
+		deps.partitionMgr,
+		deps.storage,
+		deps.db,
+		deps.provider,
+		deps.cfg,
+		deps.logger,
+	)
+	require.NoError(t, err)
+
+	deps.sqlMock.ExpectQuery("SELECT nspname FROM pg_namespace").
+		WillReturnRows(
+			sqlmock.NewRows([]string{"nspname"}).
+				AddRow("550e8400-e29b-41d4-a716-446655440000"),
+		)
+
+	tenants, err := w.listTenants(context.Background())
+	assert.NoError(t, err)
+	assert.Contains(t, tenants, "550e8400-e29b-41d4-a716-446655440000")
+	assert.Contains(t, tenants, auth.DefaultTenantID)
+}
+
+func TestListTenants_ExplicitTenantNilPrimaryLease(t *testing.T) {
+	t.Parallel()
+
+	deps := setupTestDeps(t)
+	defer deps.ctrl.Finish()
+
+	provider := &nilPrimaryDBProvider{MockInfrastructureProvider: deps.provider, nilLease: true}
+	w, err := NewArchivalWorker(
+		deps.archiveRepo,
+		deps.partitionMgr,
+		deps.storage,
+		deps.db,
+		provider,
+		deps.cfg,
+		deps.logger,
+	)
+	require.NoError(t, err)
+
+	ctx := context.WithValue(context.Background(), auth.TenantIDKey, uuid.NewString())
+	tenants, err := w.listTenants(ctx)
+	require.ErrorIs(t, err, command.ErrNilDB)
 	assert.Nil(t, tenants)
 }
 

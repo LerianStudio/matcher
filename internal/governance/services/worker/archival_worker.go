@@ -122,7 +122,7 @@ func (aw *ArchivalWorker) UpdateRuntimeStorage(storage sharedPorts.ObjectStorage
 		return ErrRuntimeConfigUpdateWhileRunning
 	}
 
-	if storage == nil {
+	if sharedPorts.IsNilValue(storage) {
 		return ErrNilStorageClient
 	}
 
@@ -185,7 +185,7 @@ func NewArchivalWorker(
 		return nil, ErrNilPartitionManager
 	}
 
-	if storage == nil {
+	if sharedPorts.IsNilValue(storage) {
 		return nil, ErrNilStorageClient
 	}
 
@@ -1059,6 +1059,14 @@ func withArchivalCurrentDBResult[T any](ctx context.Context, aw *ArchivalWorker,
 		return zero, command.ErrNilDB
 	}
 
+	if _, hasExplicitTenant := auth.LookupTenantID(ctx); !hasExplicitTenant {
+		if aw.db == nil {
+			return zero, command.ErrNilDB
+		}
+
+		return fn(aw.db)
+	}
+
 	if aw.infraProvider != nil {
 		return withArchivalProviderDBResult(ctx, aw.infraProvider, fn)
 	}
@@ -1080,6 +1088,10 @@ func withArchivalProviderDBResult[T any](
 	lease, err := infraProvider.GetPrimaryDB(ctx)
 	if err != nil {
 		return zero, fmt.Errorf("resolve primary postgres db: %w", err)
+	}
+
+	if lease == nil {
+		return zero, command.ErrNilDB
 	}
 	defer lease.Release()
 
