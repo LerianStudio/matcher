@@ -3,28 +3,60 @@
 package ports
 
 import (
-	"reflect"
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
-func TestIdempotencyRepositoryInterfaceShape(t *testing.T) {
+type stubIdempotencyRepository struct {
+	acquired   bool
+	reacquired bool
+	result     *shared.IdempotencyResult
+}
+
+func (stub stubIdempotencyRepository) TryAcquire(context.Context, shared.IdempotencyKey) (bool, error) {
+	return stub.acquired, nil
+}
+
+func (stub stubIdempotencyRepository) TryReacquireFromFailed(context.Context, shared.IdempotencyKey) (bool, error) {
+	return stub.reacquired, nil
+}
+
+func (stub stubIdempotencyRepository) MarkComplete(context.Context, shared.IdempotencyKey, []byte, int) error {
+	return nil
+}
+
+func (stub stubIdempotencyRepository) MarkFailed(context.Context, shared.IdempotencyKey) error {
+	return nil
+}
+
+func (stub stubIdempotencyRepository) GetCachedResult(context.Context, shared.IdempotencyKey) (*shared.IdempotencyResult, error) {
+	return stub.result, nil
+}
+
+var _ IdempotencyRepository = (*stubIdempotencyRepository)(nil)
+
+func TestIdempotencyRepository_StubBehavior(t *testing.T) {
 	t.Parallel()
 
-	repoType := reflect.TypeOf((*IdempotencyRepository)(nil)).Elem()
-	assert.Equal(t, reflect.Interface, repoType.Kind())
-	assert.Equal(t, 5, repoType.NumMethod())
+	ctx := context.Background()
+	key := shared.IdempotencyKey("test-key")
+	want := &shared.IdempotencyResult{Status: shared.IdempotencyStatusFailed}
+	repo := stubIdempotencyRepository{acquired: true, reacquired: true, result: want}
 
-	_, hasTryAcquire := repoType.MethodByName("TryAcquire")
-	_, hasTryReacquire := repoType.MethodByName("TryReacquireFromFailed")
-	_, hasMarkComplete := repoType.MethodByName("MarkComplete")
-	_, hasMarkFailed := repoType.MethodByName("MarkFailed")
-	_, hasGetCachedResult := repoType.MethodByName("GetCachedResult")
+	acquired, err := repo.TryAcquire(ctx, key)
+	require.NoError(t, err)
+	assert.True(t, acquired)
 
-	assert.True(t, hasTryAcquire)
-	assert.True(t, hasTryReacquire)
-	assert.True(t, hasMarkComplete)
-	assert.True(t, hasMarkFailed)
-	assert.True(t, hasGetCachedResult)
+	reacquired, err := repo.TryReacquireFromFailed(ctx, key)
+	require.NoError(t, err)
+	assert.True(t, reacquired)
+
+	result, err := repo.GetCachedResult(ctx, key)
+	require.NoError(t, err)
+	assert.Equal(t, want, result)
 }

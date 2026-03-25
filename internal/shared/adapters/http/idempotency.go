@@ -7,6 +7,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/url"
+	"sort"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
@@ -28,6 +30,7 @@ const (
 	HeaderIdempotencyKey       = "Idempotency-Key"
 	HeaderXIdempotencyReplayed = "X-Idempotency-Replayed"
 	httpErrorStatusThreshold   = 400
+	anonymousPrincipalScope    = "_anonymous"
 )
 
 // Context key for tracking idempotency middleware execution.
@@ -198,10 +201,10 @@ func executeIdempotencyLogic(
 	return handleDuplicateRequest(ctx, fiberCtx, cfg.Repository, idempotencyKey, logger, span)
 }
 
-// extractIdempotencyKey extracts and constructs a tenant-scoped idempotency key.
-// The key format is: prefix:tenantID:method:path:userKey
-// This ensures tenant isolation - different tenants cannot share idempotency keys,
-// and the same key on different endpoints/methods is treated as distinct.
+// extractIdempotencyKey extracts and constructs a tenant- and principal-scoped idempotency key.
+// The key format is: prefix:tenantID:principalID:method:requestTarget:userKey
+// This ensures tenant isolation, separates same-tenant callers when user identity is available,
+// and scopes keys to the full request target rather than path alone.
 //
 // Returns:
 //   - key: the constructed idempotency key (empty if no key should be used)
@@ -263,18 +266,53 @@ func extractIdempotencyKey(
 		return "", ErrMissingTenantID
 	}
 
-	// Include method and path for complete request scoping
-	method := fiberCtx.Method()
-	path := fiberCtx.Path()
-
-	// Build the scoped key: prefix:tenantID:method:path:userKey
-	// This prevents cross-tenant data leakage and ensures the same
-	// idempotency key used on different endpoints is treated as distinct
-	if prefix != "" {
-		return fmt.Sprintf("%s:%s:%s:%s:%s", prefix, tenantID, method, path, userKey), nil
+	principalID := strings.TrimSpace(auth.GetUserID(ctx))
+	if principalID == "" {
+		principalID = anonymousPrincipalScope
 	}
 
-	return fmt.Sprintf("%s:%s:%s:%s", tenantID, method, path, userKey), nil
+	// Include method and canonical request target for complete request scoping.
+	method := fiberCtx.Method()
+	requestTarget := canonicalRequestTarget(fiberCtx)
+
+	// Build the scoped key: prefix:tenantID:principalID:method:requestTarget:userKey.
+	// This prevents cross-tenant data leakage, reduces same-tenant caller collisions,
+	// and ensures the same idempotency key used on different request targets is distinct.
+	if prefix != "" {
+		return fmt.Sprintf("%s:%s:%s:%s:%s:%s", prefix, tenantID, principalID, method, requestTarget, userKey), nil
+	}
+
+	return fmt.Sprintf("%s:%s:%s:%s:%s", tenantID, principalID, method, requestTarget, userKey), nil
+}
+
+func canonicalRequestTarget(fiberCtx *fiber.Ctx) string {
+	if fiberCtx == nil {
+		return ""
+	}
+
+	path := fiberCtx.Path()
+
+	args := fiberCtx.Context().QueryArgs()
+	if args.Len() == 0 {
+		return path
+	}
+
+	query := url.Values{}
+
+	args.VisitAll(func(key, value []byte) {
+		query.Add(string(key), string(value))
+	})
+
+	for key := range query {
+		sort.Strings(query[key])
+	}
+
+	encoded := query.Encode()
+	if encoded == "" {
+		return path
+	}
+
+	return path + "?" + encoded
 }
 
 type idempotencyLogger = libLog.Logger

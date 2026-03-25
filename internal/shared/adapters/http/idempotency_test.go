@@ -204,8 +204,8 @@ func TestIdempotencyMiddleware_NewRequest_AcquiresLock(t *testing.T) {
 
 	assert.Equal(t, http.StatusCreated, resp.StatusCode)
 	assert.True(t, repo.acquireCalled)
-	// Key format: tenantID:method:path:userKey (no prefix in this test)
-	expectedKey := IdempotencyKey(auth.DefaultTenantID + ":POST:/test:unique-key-123")
+	// Key format: tenantID:principalID:method:path:userKey (no prefix in this test)
+	expectedKey := IdempotencyKey(auth.DefaultTenantID + ":_anonymous:POST:/test:unique-key-123")
 	assert.Equal(t, expectedKey, repo.lastKey)
 	assert.True(t, repo.markCompleteCalled)
 }
@@ -487,8 +487,8 @@ func TestIdempotencyMiddleware_UsesAlternativeHeader(t *testing.T) {
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	// Key format: tenantID:method:path:userKey
-	expectedKey := IdempotencyKey(auth.DefaultTenantID + ":POST:/test:alternative-key")
+	// Key format: tenantID:principalID:method:path:userKey
+	expectedKey := IdempotencyKey(auth.DefaultTenantID + ":_anonymous:POST:/test:alternative-key")
 	assert.Equal(t, expectedKey, repo.lastKey)
 }
 
@@ -516,11 +516,11 @@ func TestIdempotencyMiddleware_GeneratesHashForImplicitKey(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.True(t, repo.acquireCalled)
-	// Key format: tenantID:method:path:hash:xxxx
+	// Key format: tenantID:principalID:method:path:hash:xxxx
 	assert.Contains(t, string(repo.lastKey), ":hash:", "should generate hash key")
 	assert.True(
 		t,
-		strings.HasPrefix(string(repo.lastKey), auth.DefaultTenantID+":POST:/test:hash:"),
+		strings.HasPrefix(string(repo.lastKey), auth.DefaultTenantID+":_anonymous:POST:/test:hash:"),
 		"should have proper scoping prefix",
 	)
 }
@@ -550,8 +550,8 @@ func TestIdempotencyMiddleware_AppliesKeyPrefix(t *testing.T) {
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	// Key format with prefix: prefix:tenantID:method:path:userKey
-	expectedKey := IdempotencyKey("matcher:" + auth.DefaultTenantID + ":POST:/test:my-key")
+	// Key format with prefix: prefix:tenantID:principalID:method:path:userKey
+	expectedKey := IdempotencyKey("matcher:" + auth.DefaultTenantID + ":_anonymous:POST:/test:my-key")
 	assert.Equal(t, expectedKey, repo.lastKey)
 }
 
@@ -674,8 +674,8 @@ func TestExtractIdempotencyKey_PrefersXHeader(t *testing.T) {
 
 	resp.Body.Close()
 
-	// Key format: tenantID:method:path:userKey (X-Idempotency-Key takes precedence)
-	expectedKey := auth.DefaultTenantID + ":POST:/test:x-header-key"
+	// Key format: tenantID:principalID:method:path:userKey (X-Idempotency-Key takes precedence)
+	expectedKey := auth.DefaultTenantID + ":_anonymous:POST:/test:x-header-key"
 	assert.Equal(t, expectedKey, extractedKey)
 }
 
@@ -700,7 +700,7 @@ func TestExtractIdempotencyKey_NormalizesUserKeyWhitespace(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	assert.Equal(t, "matcher:"+auth.DefaultTenantID+":POST:/test:spaced-key", extractedKey)
+	assert.Equal(t, "matcher:"+auth.DefaultTenantID+":_anonymous:POST:/test:spaced-key", extractedKey)
 }
 
 func TestIdempotencyMiddleware_TenantIsolation(t *testing.T) {
@@ -711,7 +711,7 @@ func TestIdempotencyMiddleware_TenantIsolation(t *testing.T) {
 
 	// Middleware that sets tenant in context (simulating auth middleware)
 	// In the real application, tenant extraction happens BEFORE idempotency middleware
-	tenantMiddleware := func(tenantID string) fiber.Handler {
+	tenantMiddleware := func(tenantID, userID string) fiber.Handler {
 		return func(fiberCtx *fiber.Ctx) error {
 			ctx := fiberCtx.UserContext()
 			if ctx == nil {
@@ -719,6 +719,7 @@ func TestIdempotencyMiddleware_TenantIsolation(t *testing.T) {
 			}
 
 			ctx = context.WithValue(ctx, auth.TenantIDKey, tenantID)
+			ctx = context.WithValue(ctx, auth.UserIDKey, userID)
 			fiberCtx.SetUserContext(ctx)
 
 			return fiberCtx.Next()
@@ -728,7 +729,7 @@ func TestIdempotencyMiddleware_TenantIsolation(t *testing.T) {
 	// Create separate apps to simulate different tenants
 	// In production, tenant middleware runs BEFORE idempotency middleware
 	appA := fiber.New()
-	appA.Use(tenantMiddleware("tenant-a-id")) // Tenant extraction first
+	appA.Use(tenantMiddleware("tenant-a-id", "user-a")) // Tenant extraction first
 	appA.Use(NewIdempotencyMiddleware(IdempotencyMiddlewareConfig{
 		Repository: repoA,
 		KeyPrefix:  "matcher",
@@ -738,7 +739,7 @@ func TestIdempotencyMiddleware_TenantIsolation(t *testing.T) {
 	})
 
 	appB := fiber.New()
-	appB.Use(tenantMiddleware("tenant-b-id")) // Tenant extraction first
+	appB.Use(tenantMiddleware("tenant-b-id", "user-b")) // Tenant extraction first
 	appB.Use(NewIdempotencyMiddleware(IdempotencyMiddlewareConfig{
 		Repository: repoB,
 		KeyPrefix:  "matcher",
@@ -783,9 +784,98 @@ func TestIdempotencyMiddleware_TenantIsolation(t *testing.T) {
 	assert.Contains(t, string(keyA), "tenant-a-id", "key A should contain tenant A ID")
 	assert.Contains(t, string(keyB), "tenant-b-id", "key B should contain tenant B ID")
 
-	// Verify the complete key format: prefix:tenantID:method:path:userKey
-	assert.Equal(t, IdempotencyKey("matcher:tenant-a-id:POST:/test:same-key"), keyA)
-	assert.Equal(t, IdempotencyKey("matcher:tenant-b-id:POST:/test:same-key"), keyB)
+	// Verify the complete key format: prefix:tenantID:principalID:method:path:userKey
+	assert.Equal(t, IdempotencyKey("matcher:tenant-a-id:user-a:POST:/test:same-key"), keyA)
+	assert.Equal(t, IdempotencyKey("matcher:tenant-b-id:user-b:POST:/test:same-key"), keyB)
+}
+
+func TestIdempotencyMiddleware_UserIsolationWithinTenant(t *testing.T) {
+	t.Parallel()
+
+	repoA := &stubIdempotencyRepo{acquireResult: true}
+	repoB := &stubIdempotencyRepo{acquireResult: true}
+
+	userMiddleware := func(userID string) fiber.Handler {
+		return func(fiberCtx *fiber.Ctx) error {
+			ctx := fiberCtx.UserContext()
+			if ctx == nil {
+				ctx = context.Background()
+			}
+
+			ctx = context.WithValue(ctx, auth.TenantIDKey, auth.DefaultTenantID)
+			ctx = context.WithValue(ctx, auth.UserIDKey, userID)
+			fiberCtx.SetUserContext(ctx)
+
+			return fiberCtx.Next()
+		}
+	}
+
+	appA := fiber.New()
+	appA.Use(userMiddleware("user-a"))
+	appA.Use(NewIdempotencyMiddleware(IdempotencyMiddlewareConfig{Repository: repoA, KeyPrefix: "matcher"}))
+	appA.Post("/test", func(c *fiber.Ctx) error { return c.SendString("ok") })
+
+	appB := fiber.New()
+	appB.Use(userMiddleware("user-b"))
+	appB.Use(NewIdempotencyMiddleware(IdempotencyMiddlewareConfig{Repository: repoB, KeyPrefix: "matcher"}))
+	appB.Post("/test", func(c *fiber.Ctx) error { return c.SendString("ok") })
+
+	reqA := httptest.NewRequest(http.MethodPost, "/test", strings.NewReader(`{"data":"test"}`))
+	reqA.Header.Set(HeaderXIdempotencyKey, "same-key")
+	reqA.Header.Set("Content-Type", "application/json")
+	respA, err := appA.Test(reqA)
+	require.NoError(t, err)
+	defer respA.Body.Close()
+
+	reqB := httptest.NewRequest(http.MethodPost, "/test", strings.NewReader(`{"data":"test"}`))
+	reqB.Header.Set(HeaderXIdempotencyKey, "same-key")
+	reqB.Header.Set("Content-Type", "application/json")
+	respB, err := appB.Test(reqB)
+	require.NoError(t, err)
+	defer respB.Body.Close()
+
+	assert.NotEqual(t, repoA.lastKey, repoB.lastKey)
+	assert.Equal(t, IdempotencyKey("matcher:"+auth.DefaultTenantID+":user-a:POST:/test:same-key"), repoA.lastKey)
+	assert.Equal(t, IdempotencyKey("matcher:"+auth.DefaultTenantID+":user-b:POST:/test:same-key"), repoB.lastKey)
+}
+
+func TestExtractIdempotencyKey_CanonicalizesQueryString(t *testing.T) {
+	t.Parallel()
+
+	app := fiber.New()
+	var extractedA string
+	var extractedB string
+
+	app.Post("/test", func(fiberCtx *fiber.Ctx) error {
+		ctx := context.WithValue(fiberCtx.UserContext(), auth.TenantIDKey, auth.DefaultTenantID)
+		ctx = context.WithValue(ctx, auth.UserIDKey, "user-a")
+
+		var err error
+		if extractedA == "" {
+			extractedA, err = extractIdempotencyKey(ctx, fiberCtx, "matcher")
+		} else {
+			extractedB, err = extractIdempotencyKey(ctx, fiberCtx, "matcher")
+		}
+		require.NoError(t, err)
+		return fiberCtx.SendStatus(http.StatusOK)
+	})
+
+	reqA := httptest.NewRequest(http.MethodPost, "/test?b=2&a=1", strings.NewReader(`{"data":"test"}`))
+	reqA.Header.Set(HeaderXIdempotencyKey, "query-key")
+	reqA.Header.Set("Content-Type", "application/json")
+	respA, err := app.Test(reqA)
+	require.NoError(t, err)
+	defer respA.Body.Close()
+
+	reqB := httptest.NewRequest(http.MethodPost, "/test?a=1&b=2", strings.NewReader(`{"data":"test"}`))
+	reqB.Header.Set(HeaderXIdempotencyKey, "query-key")
+	reqB.Header.Set("Content-Type", "application/json")
+	respB, err := app.Test(reqB)
+	require.NoError(t, err)
+	defer respB.Body.Close()
+
+	assert.Equal(t, extractedA, extractedB)
+	assert.Equal(t, "matcher:"+auth.DefaultTenantID+":user-a:POST:/test?a=1&b=2:query-key", extractedA)
 }
 
 func TestIdempotencyMiddleware_MethodPathIsolation(t *testing.T) {

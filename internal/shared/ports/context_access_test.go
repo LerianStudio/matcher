@@ -18,7 +18,7 @@ type stubContextAccessProvider struct {
 
 func (stub stubContextAccessProvider) FindByID(
 	_ context.Context,
-	_, _ uuid.UUID,
+	_ uuid.UUID,
 ) (*ContextAccessInfo, error) {
 	return stub.result, stub.err
 }
@@ -42,7 +42,7 @@ func TestContextAccessProvider_FindByID_ReturnsContextAccessInfo(t *testing.T) {
 	want := &ContextAccessInfo{ID: uuid.New(), Active: true}
 	provider := stubContextAccessProvider{result: want}
 
-	got, err := provider.FindByID(context.Background(), uuid.New(), uuid.New())
+	got, err := provider.FindByID(context.Background(), uuid.New())
 
 	require.NoError(t, err)
 	require.NotNil(t, got)

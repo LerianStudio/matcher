@@ -16,7 +16,7 @@ type ContextAccessInfo struct {
 // ContextAccessProvider provides reconciliation-context access checks for HTTP
 // ownership verification without leaking configuration entities into other
 // contexts. Tenant scoping is expected to come from the ambient request context
-// and repository-layer isolation, not from explicit tenantID matching here.
+// and repository-layer isolation.
 type ContextAccessProvider interface {
-	FindByID(ctx context.Context, tenantID, contextID uuid.UUID) (*ContextAccessInfo, error)
+	FindByID(ctx context.Context, contextID uuid.UUID) (*ContextAccessInfo, error)
 }
