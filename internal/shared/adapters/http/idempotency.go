@@ -306,9 +306,9 @@ func canonicalRequestTarget(fiberCtx *fiber.Ctx) string {
 
 	query := url.Values{}
 
-	args.VisitAll(func(key, value []byte) {
+	for key, value := range args.All() {
 		query.Add(string(key), string(value))
-	})
+	}
 
 	for key := range query {
 		sort.Strings(query[key])
