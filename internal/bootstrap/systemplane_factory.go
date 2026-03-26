@@ -264,7 +264,10 @@ func (factory *MatcherBundleFactory) buildIncrementalRabbitMQ(
 	rmqConn := factory.buildRabbitMQConnection(ctx, snap, logger)
 	newBundle.Infra.RabbitMQ = rmqConn
 	newBundle.ownsRabbitMQ = rmqConn != nil
-	appendFreshCloser(freshClosers, rmqConn, closeRabbitMQ)
+
+	if rmqConn != nil {
+		appendFreshCloser(freshClosers, rmqConn, closeRabbitMQ)
+	}
 }
 
 func (factory *MatcherBundleFactory) buildIncrementalObjectStorage(
