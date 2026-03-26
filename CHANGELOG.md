@@ -1,3 +1,32 @@
+## [1.3.0-beta.2](https://github.com/LerianStudio/matcher/compare/v1.3.0-beta.1...v1.3.0-beta.2) (2026-03-26)
+
+
+### Features
+
+* **bootstrap:** add alias-aware systemplane manager ([6923821](https://github.com/LerianStudio/matcher/commit/6923821d186c4ead3bcadc9a8d8c727a68c5930b))
+* **bootstrap:** add AllowInsecure option to object storage endpoint ([bf3025e](https://github.com/LerianStudio/matcher/commit/bf3025e6b00da27f4b7600ce6dba6147e57c695f))
+* **shared/ports:** add IsNilValue nil safety utility ([8f6d52a](https://github.com/LerianStudio/matcher/commit/8f6d52a8f92a57a5e548167c8879f61dec88e4f8))
+* **bootstrap:** add logger bundle for structured logging ([ee0dfb6](https://github.com/LerianStudio/matcher/commit/ee0dfb6e6f8bfce3c02e55b9f29204c46f3da6d7))
+* **shared/postgres:** add read-only query executor and tx helpers ([3497708](https://github.com/LerianStudio/matcher/commit/34977088332ae9f5c9871ded8cccfe6b86db7ffd))
+* **migrations:** add systemplane config key renames migration ([6896b19](https://github.com/LerianStudio/matcher/commit/6896b195f836417bbaa8aeffb3ae20cac6ac5042))
+* **bootstrap:** implement systemplane config with legacy key aliases ([d58d6bb](https://github.com/LerianStudio/matcher/commit/d58d6bbfcb37b1040aaa7fda2379d8d827a86625))
+* **shared/http:** scope idempotency keys by principal and query string ([e6d7c91](https://github.com/LerianStudio/matcher/commit/e6d7c91d5429a3a9edd83d4dbd39dce8060fada8))
+
+
+### Bug Fixes
+
+* **bootstrap:** add defensive guards for RabbitMQ lifecycle ([46bde95](https://github.com/LerianStudio/matcher/commit/46bde95cca7d6a3f94b149d794d0ed10174bad14))
+* address CodeRabbit review findings across codebase ([59453ec](https://github.com/LerianStudio/matcher/commit/59453ec2637e1bc9d1661a1de26a2466961e92cc))
+* **shared/http:** harden idempotency middleware safety ([d06f0f1](https://github.com/LerianStudio/matcher/commit/d06f0f1903a6c4e206cfedc753a65230b1897d78))
+* **bootstrap:** hash secret in cache key and tighten insecure env guard ([3750f24](https://github.com/LerianStudio/matcher/commit/3750f245c2e23d2ec0226447e9b9959acf1808df))
+* **governance:** improve archival worker resilience ([50c501c](https://github.com/LerianStudio/matcher/commit/50c501c50d5a3af99422a53dab5f507c4be31ea3))
+* **bootstrap:** propagate context through logger sync ([cf3e909](https://github.com/LerianStudio/matcher/commit/cf3e90906b6cd7e42a78454df7d80c9956650b39))
+* **exception:** reacquire failed idempotency keys and propagate sentinel errors ([0e0e46f](https://github.com/LerianStudio/matcher/commit/0e0e46f9293d204ae459192a5444ce100d91bf30))
+* **shared/postgres:** remove redundant nil check and add reverse config map ([cdbb2d9](https://github.com/LerianStudio/matcher/commit/cdbb2d9522c58f028f8b56df5d49bd969e5080c0))
+* **shared:** replace deprecated fasthttp Args.VisitAll with All iterator ([9f4c967](https://github.com/LerianStudio/matcher/commit/9f4c967fc7b6faa65d476c599a6a03480bf20637))
+* **shared:** skip body-hash idempotency fallback for PATCH requests ([5cbc2f7](https://github.com/LerianStudio/matcher/commit/5cbc2f76d6faea5394008fb156384ec60dd95450))
+* **discovery:** suppress false-positive gosec G704 on validated fetcher URL ([3401209](https://github.com/LerianStudio/matcher/commit/34012096399521377cadacc55318bce95a596e11))
+
 ## [1.3.0-beta.1](https://github.com/LerianStudio/matcher/compare/v1.2.1...v1.3.0-beta.1) (2026-03-23)
 
 
