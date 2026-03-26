@@ -34,7 +34,7 @@ func validateAbsoluteHTTPURL(value any) error {
 	return nil
 }
 
-// validateHTTPSEndpoint rejects non-empty values that do not use the https scheme.
+// validateHTTPSEndpoint validates non-empty values as absolute HTTP(S) URLs.
 // Empty values pass validation to allow unconfigured (disabled) endpoints.
 func validateHTTPSEndpoint(value any) error {
 	rawValue, ok := value.(string)
@@ -56,8 +56,8 @@ func validateHTTPSEndpoint(value any) error {
 		return fmt.Errorf("endpoint must be an absolute URL with scheme and host: %w", domain.ErrValueInvalid)
 	}
 
-	if !strings.EqualFold(parsed.Scheme, "https") {
-		return fmt.Errorf("endpoint must use https scheme, got %q: %w", parsed.Scheme, domain.ErrValueInvalid)
+	if !strings.EqualFold(parsed.Scheme, "https") && !strings.EqualFold(parsed.Scheme, "http") {
+		return fmt.Errorf("endpoint must use http or https scheme, got %q: %w", parsed.Scheme, domain.ErrValueInvalid)
 	}
 
 	return nil

@@ -110,6 +110,7 @@ func configFromSnapshot(snap domain.Snapshot) *Config {
 	cfg.ObjectStorage.AccessKeyID = snapString(snap, "object_storage.access_key_id", "")
 	cfg.ObjectStorage.SecretAccessKey = snapString(snap, "object_storage.secret_access_key", "")
 	cfg.ObjectStorage.UsePathStyle = snapBool(snap, "object_storage.use_path_style", defaultObjStoragePathStyle)
+	cfg.ObjectStorage.AllowInsecure = snapBool(snap, "object_storage.allow_insecure_endpoint", defaultObjStorageAllowInsecure)
 
 	// Swagger.
 	cfg.Swagger.Enabled = snapBool(snap, "swagger.enabled", defaultSwaggerEnabled)

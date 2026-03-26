@@ -133,6 +133,13 @@ func (cfg *Config) enforceProductionSecurityDefaults(logger libLog.Logger) {
 
 		cfg.RateLimit.Enabled = true
 	}
+
+	if cfg.ObjectStorage.AllowInsecure {
+		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("SECURITY: OBJECT_STORAGE_ALLOW_INSECURE_ENDPOINT=true is not allowed in production. "+
+			"Forcing insecure object storage endpoint support to disabled. env=%s", cfg.App.EnvName))
+
+		cfg.ObjectStorage.AllowInsecure = false
+	}
 }
 
 // sanitizeEnvVarsForConfig trims trailing whitespace from all environment variables

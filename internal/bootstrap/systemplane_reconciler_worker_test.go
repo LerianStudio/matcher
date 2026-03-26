@@ -193,6 +193,7 @@ func TestSnapshotToWorkerConfig_Defaults(t *testing.T) {
 	assert.Equal(t, "", cfg.ObjectStorage.AccessKeyID)
 	assert.Equal(t, "", cfg.ObjectStorage.SecretAccessKey)
 	assert.True(t, cfg.ObjectStorage.UsePathStyle)
+	assert.False(t, cfg.ObjectStorage.AllowInsecure)
 }
 
 func TestSnapshotToWorkerConfig_Overrides(t *testing.T) {

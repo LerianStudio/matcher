@@ -312,6 +312,7 @@ func createArchivalStorage(ctx context.Context, cfg *Config) (sharedPorts.Object
 		AccessKeyID:     cfg.ObjectStorage.AccessKeyID,
 		SecretAccessKey: cfg.ObjectStorage.SecretAccessKey,
 		UsePathStyle:    cfg.ObjectStorage.UsePathStyle,
+		AllowInsecure:   allowInsecureObjectStorageEndpoint(cfg),
 	}
 
 	client, err := newS3ClientFn(detachedContext(ctx), s3Cfg)
@@ -371,5 +372,5 @@ func archivalStorageCacheKey(cfg *Config) string {
 		return ""
 	}
 
-	return fmt.Sprintf("%s|%s|%s|%s|%s|%t", cfg.ObjectStorage.Endpoint, cfg.ObjectStorage.Region, cfg.Archival.StorageBucket, cfg.ObjectStorage.AccessKeyID, cfg.ObjectStorage.SecretAccessKey, cfg.ObjectStorage.UsePathStyle)
+	return fmt.Sprintf("%s|%s|%s|%s|%s|%t|%t", cfg.ObjectStorage.Endpoint, cfg.ObjectStorage.Region, cfg.Archival.StorageBucket, cfg.ObjectStorage.AccessKeyID, cfg.ObjectStorage.SecretAccessKey, cfg.ObjectStorage.UsePathStyle, allowInsecureObjectStorageEndpoint(cfg))
 }

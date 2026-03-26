@@ -1376,6 +1376,7 @@ func createObjectStorageForHealth(
 		AccessKeyID:     cfg.ObjectStorage.AccessKeyID,
 		SecretAccessKey: cfg.ObjectStorage.SecretAccessKey,
 		UsePathStyle:    cfg.ObjectStorage.UsePathStyle,
+		AllowInsecure:   allowInsecureObjectStorageEndpoint(cfg),
 	}
 
 	client, err := newS3ClientFn(detachedContext(ctx), s3Cfg)
@@ -1886,7 +1887,7 @@ func connectInfrastructure(
 
 func shouldAllowDirtyMigrationRecovery(env string) bool {
 	switch strings.ToLower(strings.TrimSpace(env)) {
-	case "development", "local", "test":
+	case defaultEnvName, envLocalName, envTestName:
 		return true
 	default:
 		return false
@@ -2478,6 +2479,7 @@ func createObjectStorage(
 		AccessKeyID:     cfg.ObjectStorage.AccessKeyID,
 		SecretAccessKey: cfg.ObjectStorage.SecretAccessKey,
 		UsePathStyle:    cfg.ObjectStorage.UsePathStyle,
+		AllowInsecure:   allowInsecureObjectStorageEndpoint(cfg),
 	}
 
 	client, err := newS3ClientFn(detachedContext(ctx), s3Cfg)

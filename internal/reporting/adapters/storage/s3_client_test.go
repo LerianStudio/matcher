@@ -710,22 +710,24 @@ func TestValidateEndpointSecurity(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name        string
-		endpoint    string
-		expectError error
+		name          string
+		endpoint      string
+		allowInsecure bool
+		expectError   error
 	}{
 		{name: "empty", endpoint: ""},
 		{name: "localhost http", endpoint: "http://localhost:8333"},
 		{name: "loopback ip", endpoint: "http://127.0.0.1:9000"},
 		{name: "https remote", endpoint: "https://storage.example.com"},
 		{name: "remote http", endpoint: "http://storage.example.com", expectError: ErrInsecureEndpoint},
+		{name: "remote http allowed", endpoint: "http://storage.example.com", allowInsecure: true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := validateEndpointSecurity(tt.endpoint)
+			err := validateEndpointSecurity(tt.endpoint, tt.allowInsecure)
 			if tt.expectError != nil {
 				require.ErrorIs(t, err, tt.expectError)
 				return
@@ -734,6 +736,21 @@ func TestValidateEndpointSecurity(t *testing.T) {
 			require.NoError(t, err)
 		})
 	}
+}
+
+func TestNewS3Client_AllowInsecureEndpoint(t *testing.T) {
+	t.Parallel()
+
+	cfg := S3Config{
+		Bucket:        "test-bucket",
+		Endpoint:      "http://storage.internal:8333",
+		AllowInsecure: true,
+	}
+
+	client, err := NewS3Client(context.Background(), cfg)
+
+	require.NoError(t, err)
+	require.NotNil(t, client)
 }
 
 func TestNewS3Client_CredentialCombinations(t *testing.T) {

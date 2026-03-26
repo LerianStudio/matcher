@@ -108,6 +108,8 @@ func TestValidateHTTPSEndpoint_ValidHTTPS(t *testing.T) {
 		{name: "https_host", value: "https://example.com"},
 		{name: "https_with_port", value: "https://example.com:443"},
 		{name: "https_with_path", value: "https://example.com/api/v1"},
+		{name: "http_host", value: "http://example.com"},
+		{name: "http_with_port", value: "http://example.com:9000"},
 		{name: "empty_allowed", value: ""},
 		{name: "whitespace_allowed", value: "  "},
 	}
@@ -130,7 +132,6 @@ func TestValidateHTTPSEndpoint_InvalidEndpoints(t *testing.T) {
 		name  string
 		value any
 	}{
-		{name: "http_not_https", value: "http://example.com"},
 		{name: "ftp_scheme", value: "ftp://example.com"},
 		{name: "no_scheme", value: "example.com"},
 		{name: "relative_path", value: "/api/v1"},
@@ -157,13 +158,12 @@ func TestValidateHTTPSEndpoint_NonStringReturnsErrValueInvalid(t *testing.T) {
 	assert.ErrorIs(t, err, domain.ErrValueInvalid)
 }
 
-func TestValidateHTTPSEndpoint_HTTPSchemeReturnsErrValueInvalid(t *testing.T) {
+func TestValidateHTTPSEndpoint_HTTPAllowed(t *testing.T) {
 	t.Parallel()
 
 	err := validateHTTPSEndpoint("http://example.com")
 
-	require.Error(t, err)
-	assert.ErrorIs(t, err, domain.ErrValueInvalid)
+	assert.NoError(t, err)
 }
 
 // --- toInt ---

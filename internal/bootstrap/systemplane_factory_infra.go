@@ -226,6 +226,7 @@ func (factory *MatcherBundleFactory) buildObjectStorageClient(
 		AccessKeyID:     snapString(snap, "object_storage.access_key_id", ""),
 		SecretAccessKey: snapString(snap, "object_storage.secret_access_key", ""),
 		UsePathStyle:    snapBool(snap, "object_storage.use_path_style", true),
+		AllowInsecure:   snapBool(snap, "object_storage.allow_insecure_endpoint", false) && isAllowedInsecureObjectStorageEnvironment(factory.bootstrapCfg.EnvName),
 	}
 
 	client, err := storage.NewS3Client(ctx, s3Cfg)

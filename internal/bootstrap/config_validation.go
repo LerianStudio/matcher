@@ -79,6 +79,10 @@ func (cfg *Config) Validate() error {
 		return err
 	}
 
+	if err := cfg.validateInsecureObjectStoragePolicy(asserter); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -425,6 +429,30 @@ func (cfg *Config) validateProductionSecurityConfig(asserter *assert.Asserter) e
 
 	if err := asserter.That(ctx, !cfg.RabbitMQ.AllowInsecureHealthCheck, "RABBITMQ_ALLOW_INSECURE_HEALTH_CHECK must be false in production"); err != nil {
 		return fmt.Errorf("production config validation: %w", err)
+	}
+
+	if err := asserter.That(ctx, !cfg.ObjectStorage.AllowInsecure, "OBJECT_STORAGE_ALLOW_INSECURE_ENDPOINT must be false in production"); err != nil {
+		return fmt.Errorf("production config validation: %w", err)
+	}
+
+	return nil
+}
+
+func (cfg *Config) validateInsecureObjectStoragePolicy(asserter *assert.Asserter) error {
+	if cfg == nil || !cfg.ObjectStorage.AllowInsecure {
+		return nil
+	}
+
+	ctx := context.Background()
+
+	if err := asserter.That(
+		ctx,
+		isAllowedInsecureObjectStorageEnvironment(cfg.App.EnvName),
+		"OBJECT_STORAGE_ALLOW_INSECURE_ENDPOINT is restricted to local/development/test environments",
+		"env_name",
+		cfg.App.EnvName,
+	); err != nil {
+		return fmt.Errorf("config validation: %w", err)
 	}
 
 	return nil

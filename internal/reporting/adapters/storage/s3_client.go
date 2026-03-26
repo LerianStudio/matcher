@@ -34,6 +34,7 @@ type S3Config struct {
 	SecretAccessKey string
 	UsePathStyle    bool // Required for SeaweedFS/MinIO
 	DisableSSL      bool
+	AllowInsecure   bool // Allows non-loopback HTTP endpoints for local development.
 }
 
 // DefaultSeaweedConfig returns a configuration suitable for local SeaweedFS development.
@@ -76,7 +77,7 @@ func NewS3Client(ctx context.Context, cfg S3Config) (*S3Client, error) {
 		return nil, ErrBucketRequired
 	}
 
-	if err := validateEndpointSecurity(cfg.Endpoint); err != nil {
+	if err := validateEndpointSecurity(cfg.Endpoint, cfg.AllowInsecure); err != nil {
 		return nil, err
 	}
 
@@ -127,7 +128,7 @@ func (client *S3Client) ensureReady() error {
 	return nil
 }
 
-func validateEndpointSecurity(endpoint string) error {
+func validateEndpointSecurity(endpoint string, allowInsecure bool) error {
 	trimmed := strings.TrimSpace(endpoint)
 	if trimmed == "" {
 		return nil
@@ -148,6 +149,10 @@ func validateEndpointSecurity(endpoint string) error {
 
 	if !strings.EqualFold(parsed.Scheme, "http") {
 		return fmt.Errorf("%w: %s", ErrObjectStorageEndpointUnsupportedScheme, parsed.Scheme)
+	}
+
+	if allowInsecure {
+		return nil
 	}
 
 	host := parsed.Hostname()

@@ -247,6 +247,7 @@ func TestDefaultConfig_ObjectStorage(t *testing.T) {
 	assert.Equal(t, "us-east-1", cfg.ObjectStorage.Region)
 	assert.Equal(t, "matcher-exports", cfg.ObjectStorage.Bucket)
 	assert.True(t, cfg.ObjectStorage.UsePathStyle)
+	assert.False(t, cfg.ObjectStorage.AllowInsecure)
 	assert.Empty(t, cfg.ObjectStorage.AccessKeyID, "credentials must not have defaults")
 	assert.Empty(t, cfg.ObjectStorage.SecretAccessKey, "credentials must not have defaults")
 }

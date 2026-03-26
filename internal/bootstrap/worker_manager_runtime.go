@@ -31,20 +31,21 @@ type cleanupWorkerComparableConfig struct {
 }
 
 type archivalWorkerComparableConfig struct {
-	IntervalHours       int
-	HotRetentionDays    int
-	WarmRetentionMonths int
-	ColdRetentionMonths int
-	BatchSize           int
-	StorageBucket       string
-	StoragePrefix       string
-	StorageClass        string
-	PartitionLookahead  int
-	StorageEndpoint     string
-	StorageRegion       string
-	StorageAccessKeyID  string
-	StorageSecretKey    string
-	StorageUsePathStyle bool
+	IntervalHours        int
+	HotRetentionDays     int
+	WarmRetentionMonths  int
+	ColdRetentionMonths  int
+	BatchSize            int
+	StorageBucket        string
+	StoragePrefix        string
+	StorageClass         string
+	PartitionLookahead   int
+	StorageEndpoint      string
+	StorageRegion        string
+	StorageAccessKeyID   string
+	StorageSecretKey     string
+	StorageUsePathStyle  bool
+	StorageAllowInsecure bool
 }
 
 type schedulerWorkerComparableConfig struct {
@@ -464,20 +465,21 @@ func extractWorkerConfig(name string, cfg *Config) any {
 		}
 	case workerNameArchival:
 		return archivalWorkerComparableConfig{
-			IntervalHours:       cfg.Archival.IntervalHours,
-			HotRetentionDays:    cfg.Archival.HotRetentionDays,
-			WarmRetentionMonths: cfg.Archival.WarmRetentionMonths,
-			ColdRetentionMonths: cfg.Archival.ColdRetentionMonths,
-			BatchSize:           cfg.Archival.BatchSize,
-			StorageBucket:       cfg.Archival.StorageBucket,
-			StoragePrefix:       cfg.Archival.StoragePrefix,
-			StorageClass:        cfg.Archival.StorageClass,
-			PartitionLookahead:  cfg.Archival.PartitionLookahead,
-			StorageEndpoint:     cfg.ObjectStorage.Endpoint,
-			StorageRegion:       cfg.ObjectStorage.Region,
-			StorageAccessKeyID:  cfg.ObjectStorage.AccessKeyID,
-			StorageSecretKey:    cfg.ObjectStorage.SecretAccessKey,
-			StorageUsePathStyle: cfg.ObjectStorage.UsePathStyle,
+			IntervalHours:        cfg.Archival.IntervalHours,
+			HotRetentionDays:     cfg.Archival.HotRetentionDays,
+			WarmRetentionMonths:  cfg.Archival.WarmRetentionMonths,
+			ColdRetentionMonths:  cfg.Archival.ColdRetentionMonths,
+			BatchSize:            cfg.Archival.BatchSize,
+			StorageBucket:        cfg.Archival.StorageBucket,
+			StoragePrefix:        cfg.Archival.StoragePrefix,
+			StorageClass:         cfg.Archival.StorageClass,
+			PartitionLookahead:   cfg.Archival.PartitionLookahead,
+			StorageEndpoint:      cfg.ObjectStorage.Endpoint,
+			StorageRegion:        cfg.ObjectStorage.Region,
+			StorageAccessKeyID:   cfg.ObjectStorage.AccessKeyID,
+			StorageSecretKey:     cfg.ObjectStorage.SecretAccessKey,
+			StorageUsePathStyle:  cfg.ObjectStorage.UsePathStyle,
+			StorageAllowInsecure: cfg.ObjectStorage.AllowInsecure,
 		}
 	case workerNameScheduler:
 		return schedulerWorkerComparableConfig{

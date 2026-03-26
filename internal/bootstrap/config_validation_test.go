@@ -382,3 +382,45 @@ func TestValidateRateLimitConfig_RejectsExcessiveDispatchLimits(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "DISPATCH_RATE_LIMIT_EXPIRY_SEC")
 }
+
+func TestValidateInsecureObjectStoragePolicy_AllowsLocalDevelopment(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cfg.App.EnvName = "local"
+	cfg.ObjectStorage.AllowInsecure = true
+
+	assert.NoError(t, cfg.Validate())
+}
+
+func TestValidateInsecureObjectStoragePolicy_RejectsStaging(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cfg.App.EnvName = "staging"
+	cfg.ObjectStorage.AllowInsecure = true
+
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "OBJECT_STORAGE_ALLOW_INSECURE_ENDPOINT is restricted")
+}
+
+func TestValidateInsecureObjectStoragePolicy_RejectsProduction(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cfg.App.EnvName = "production"
+	cfg.Postgres.PrimaryPassword = "xK9!mPq2@vR7wL4z"
+	cfg.Server.CORSAllowedOrigins = "https://app.example.com"
+	cfg.RabbitMQ.User = "matcher_prod"
+	cfg.RabbitMQ.Password = "rQ3$nT8&jF5yB2mX"
+	cfg.RabbitMQ.AllowInsecureHealthCheck = false
+	cfg.Redis.Password = "redis-prod-pass"
+	cfg.ObjectStorage.Endpoint = "https://s3.example.com"
+	cfg.Fetcher.URL = ""
+	cfg.ObjectStorage.AllowInsecure = true
+
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "OBJECT_STORAGE_ALLOW_INSECURE_ENDPOINT must be false in production")
+}
