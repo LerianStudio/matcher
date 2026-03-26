@@ -128,7 +128,7 @@ func (client *dynamicObjectStorageClient) current() (sharedPorts.ObjectStorageCl
 	}
 
 	if client.getter != nil {
-		if delegate := client.getter(); !isNilInterface(delegate) {
+		if delegate := client.getter(); !sharedPorts.IsNilValue(delegate) {
 			client.mu.Lock()
 			client.runtimeObserved = true
 			client.mu.Unlock()
@@ -145,7 +145,7 @@ func (client *dynamicObjectStorageClient) current() (sharedPorts.ObjectStorageCl
 		}
 	}
 
-	if !isNilInterface(client.fallback) {
+	if !sharedPorts.IsNilValue(client.fallback) {
 		return client.fallback, nil
 	}
 

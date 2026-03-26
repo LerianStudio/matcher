@@ -1053,7 +1053,7 @@ func currentBundleObjectStorageClient(bundleState *activeMatcherBundleState) (sh
 		return nil, nil
 	}
 
-	if bundle.Infra == nil || isNilInterface(bundle.Infra.ObjectStorage) {
+	if bundle.Infra == nil || sharedPorts.IsNilValue(bundle.Infra.ObjectStorage) {
 		return nil, sharedPorts.ErrObjectStorageUnavailable
 	}
 
@@ -2073,7 +2073,7 @@ func initModulesAndMessaging(
 	if bundleState != nil {
 		storage = newDynamicObjectStorageClient(func() sharedPorts.ObjectStorageClient {
 			bundle := bundleState.Current()
-			if bundle == nil || bundle.Infra == nil || isNilInterface(bundle.Infra.ObjectStorage) {
+			if bundle == nil || bundle.Infra == nil || sharedPorts.IsNilValue(bundle.Infra.ObjectStorage) {
 				return nil
 			}
 

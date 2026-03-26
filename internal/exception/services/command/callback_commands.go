@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"reflect"
 	"strings"
 	"time"
 
@@ -58,23 +57,23 @@ func NewCallbackUseCase(
 	infraProvider sharedPorts.InfrastructureProvider,
 	rateLimiter ports.CallbackRateLimiter,
 ) (*CallbackUseCase, error) {
-	if isNilInterface(idempotencyRepo) {
+	if sharedPorts.IsNilValue(idempotencyRepo) {
 		return nil, ErrNilIdempotencyRepository
 	}
 
-	if isNilInterface(exceptionRepo) {
+	if sharedPorts.IsNilValue(exceptionRepo) {
 		return nil, ErrNilExceptionRepository
 	}
 
-	if isNilInterface(auditPublisher) {
+	if sharedPorts.IsNilValue(auditPublisher) {
 		return nil, ErrNilAuditPublisher
 	}
 
-	if isNilInterface(infraProvider) {
+	if sharedPorts.IsNilValue(infraProvider) {
 		return nil, ErrNilInfraProvider
 	}
 
-	if isNilInterface(rateLimiter) {
+	if sharedPorts.IsNilValue(rateLimiter) {
 		return nil, ErrNilCallbackRateLimiter
 	}
 
@@ -373,23 +372,23 @@ func (uc *CallbackUseCase) markIdempotencyFailed(
 }
 
 func (uc *CallbackUseCase) validateDependencies() error {
-	if uc == nil || isNilInterface(uc.idempotencyRepo) {
+	if uc == nil || sharedPorts.IsNilValue(uc.idempotencyRepo) {
 		return ErrNilIdempotencyRepository
 	}
 
-	if isNilInterface(uc.exceptionRepo) {
+	if sharedPorts.IsNilValue(uc.exceptionRepo) {
 		return ErrNilExceptionRepository
 	}
 
-	if isNilInterface(uc.auditPublisher) {
+	if sharedPorts.IsNilValue(uc.auditPublisher) {
 		return ErrNilAuditPublisher
 	}
 
-	if isNilInterface(uc.infraProvider) {
+	if sharedPorts.IsNilValue(uc.infraProvider) {
 		return ErrNilInfraProvider
 	}
 
-	if isNilInterface(uc.rateLimiter) {
+	if sharedPorts.IsNilValue(uc.rateLimiter) {
 		return ErrNilCallbackRateLimiter
 	}
 
@@ -666,21 +665,6 @@ func (uc *CallbackUseCase) publishCallbackAudit(
 
 func normalizeCallbackString(value string) string {
 	return strings.TrimSpace(value)
-}
-
-func isNilInterface(value any) bool {
-	if value == nil {
-		return true
-	}
-
-	v := reflect.ValueOf(value)
-
-	switch v.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
-		return v.IsNil()
-	default:
-		return false
-	}
 }
 
 func normalizeOptionalString(value string) *string {

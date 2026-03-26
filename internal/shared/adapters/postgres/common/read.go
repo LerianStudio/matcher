@@ -34,7 +34,7 @@ func WithTenantRead[T any](
 ) (T, error) {
 	var zero T
 
-	if provider == nil || isNilInterface(provider) {
+	if provider == nil || ports.IsNilValue(provider) {
 		return zero, ErrConnectionRequired
 	}
 
@@ -111,9 +111,7 @@ func getPrimaryDBFallback(
 	}
 
 	if primaryLease.DB() == nil {
-		if primaryLease != nil {
-			primaryLease.Release()
-		}
+		primaryLease.Release()
 
 		return nil, ErrNoPrimaryDB
 	}
@@ -132,7 +130,7 @@ func WithTenantReadQuery[T any](
 ) (T, error) {
 	var zero T
 
-	if provider == nil || isNilInterface(provider) {
+	if provider == nil || ports.IsNilValue(provider) {
 		return zero, ErrConnectionRequired
 	}
 

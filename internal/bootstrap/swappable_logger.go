@@ -10,6 +10,8 @@ import (
 	"sync"
 
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // SwappableLogger is a stable logger handle whose underlying implementation can
@@ -123,7 +125,7 @@ func (state *swappableLoggerState) swap(next libLog.Logger) {
 	state.mu.Lock()
 	defer state.mu.Unlock()
 
-	if isNilInterface(next) {
+	if sharedPorts.IsNilValue(next) {
 		state.current = &libLog.NopLogger{}
 		return
 	}
@@ -135,7 +137,7 @@ func (state *swappableLoggerState) currentLogger() libLog.Logger {
 	state.mu.RLock()
 	defer state.mu.RUnlock()
 
-	if isNilInterface(state.current) {
+	if sharedPorts.IsNilValue(state.current) {
 		return &libLog.NopLogger{}
 	}
 

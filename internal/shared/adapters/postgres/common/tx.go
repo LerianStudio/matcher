@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"reflect"
 	"time"
 
 	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
@@ -152,7 +151,7 @@ func WithTenantTxOrExistingProvider[Result any](
 		return zero, ErrNilCallback
 	}
 
-	if isNilInterface(provider) {
+	if ports.IsNilValue(provider) {
 		return zero, ErrConnectionRequired
 	}
 
@@ -212,7 +211,7 @@ func BeginTenantTx(ctx context.Context, provider ports.InfrastructureProvider) (
 		return nil, noop, ErrConnectionRequired
 	}
 
-	if isNilInterface(provider) {
+	if ports.IsNilValue(provider) {
 		return nil, noop, ErrConnectionRequired
 	}
 
@@ -239,19 +238,4 @@ func BeginTenantTx(ctx context.Context, provider ports.InfrastructureProvider) (
 
 		cancel()
 	}, nil
-}
-
-func isNilInterface(value any) bool {
-	if value == nil {
-		return true
-	}
-
-	v := reflect.ValueOf(value)
-
-	switch v.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
-		return v.IsNil()
-	default:
-		return false
-	}
 }

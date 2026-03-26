@@ -37,7 +37,7 @@ func newDynamicPartitionManager(
 	logger libLog.Logger,
 	tracer trace.Tracer,
 ) (governanceWorker.PartitionManager, error) {
-	if provider == nil || isNilInterface(logger) || tracer == nil {
+	if provider == nil || sharedPorts.IsNilValue(logger) || tracer == nil {
 		return nil, errPartitionManagerNilDependency
 	}
 

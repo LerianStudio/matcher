@@ -16,6 +16,8 @@ import (
 	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	libZap "github.com/LerianStudio/lib-commons/v4/commons/zap"
+
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 type envAliasKind string
@@ -69,7 +71,7 @@ func LoadConfigWithLogger(logger libLog.Logger) (*Config, error) {
 	}
 
 	// Store logger for runtime warnings (e.g., capping invalid config values)
-	if isNilInterface(logger) {
+	if sharedPorts.IsNilValue(logger) {
 		var logErr error
 
 		logger, logErr = buildLoggerFromConfig(cfg)
