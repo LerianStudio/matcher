@@ -18,7 +18,7 @@ func allowInsecureObjectStorageEndpoint(cfg *Config) bool {
 
 func isAllowedInsecureObjectStorageEnvironment(envName string) bool {
 	switch strings.ToLower(strings.TrimSpace(envName)) {
-	case "", defaultEnvName, envDevShortName, envLocalName, envTestName:
+	case defaultEnvName, envDevShortName, envLocalName, envTestName:
 		return true
 	default:
 		return false

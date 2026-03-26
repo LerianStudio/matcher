@@ -6,6 +6,7 @@ package bootstrap
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"fmt"
 	"sync"
@@ -372,5 +373,7 @@ func archivalStorageCacheKey(cfg *Config) string {
 		return ""
 	}
 
-	return fmt.Sprintf("%s|%s|%s|%s|%s|%t|%t", cfg.ObjectStorage.Endpoint, cfg.ObjectStorage.Region, cfg.Archival.StorageBucket, cfg.ObjectStorage.AccessKeyID, cfg.ObjectStorage.SecretAccessKey, cfg.ObjectStorage.UsePathStyle, allowInsecureObjectStorageEndpoint(cfg))
+	secretHash := sha256.Sum256([]byte(cfg.ObjectStorage.SecretAccessKey))
+
+	return fmt.Sprintf("%s|%s|%s|%s|%x|%t|%t", cfg.ObjectStorage.Endpoint, cfg.ObjectStorage.Region, cfg.Archival.StorageBucket, cfg.ObjectStorage.AccessKeyID, secretHash[:8], cfg.ObjectStorage.UsePathStyle, allowInsecureObjectStorageEndpoint(cfg))
 }
