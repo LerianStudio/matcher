@@ -121,7 +121,7 @@ func (client *HTTPFetcherClient) IsHealthy(ctx context.Context) bool {
 		return false
 	}
 
-	resp, err := client.httpClient.Do(req)
+	resp, err := client.httpClient.Do(req) // #nosec G704 -- URL comes from validated fetcher config, not user input
 	if err != nil {
 		return false
 	}
