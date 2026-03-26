@@ -1245,3 +1245,107 @@ func TestKeySpecialCharacters(t *testing.T) {
 		})
 	}
 }
+
+// ---------- Error-path tests: nil inner S3 SDK client ----------
+//
+// These verify that an S3Client whose underlying AWS SDK client is nil
+// (struct exists, but s3 field is zero-value) returns a proper error
+// through ensureReady() instead of panicking with a nil-pointer deref.
+// The nil-*S3Client-pointer case is covered by
+// TestS3Client_UnavailableClientReturnsSharedError above; these target
+// the complementary "constructed-but-unconfigured" scenario.
+
+func TestS3Client_Upload_NilInnerClient(t *testing.T) {
+	t.Parallel()
+
+	client := &S3Client{
+		bucket: "test-bucket",
+		// s3 field is nil — simulates a partially constructed client
+	}
+
+	url, err := client.Upload(
+		context.Background(),
+		"reports/2024/export.csv",
+		bytes.NewReader([]byte("col1,col2\na,b\n")),
+		"text/csv",
+	)
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, sharedPorts.ErrObjectStorageUnavailable)
+	assert.Empty(t, url)
+}
+
+func TestS3Client_Download_NilInnerClient(t *testing.T) {
+	t.Parallel()
+
+	client := &S3Client{
+		bucket: "test-bucket",
+	}
+
+	reader, err := client.Download(
+		context.Background(),
+		"reports/2024/export.csv",
+	)
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, sharedPorts.ErrObjectStorageUnavailable)
+	assert.Nil(t, reader)
+}
+
+func TestS3Client_Delete_NilInnerClient(t *testing.T) {
+	t.Parallel()
+
+	client := &S3Client{
+		bucket: "test-bucket",
+	}
+
+	err := client.Delete(
+		context.Background(),
+		"reports/2024/export.csv",
+	)
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, sharedPorts.ErrObjectStorageUnavailable)
+}
+
+// TestS3Client_NilInnerClient_Idempotent verifies that repeatedly calling
+// operations on a client with a nil SDK handle is safe and deterministic:
+// every call returns the same sentinel error, no panic, no state mutation.
+// S3Client has no Close() method (the ObjectStorageClient interface doesn't
+// define one), so "idempotent teardown" means "safe to abandon or re-call."
+func TestS3Client_NilInnerClient_Idempotent(t *testing.T) {
+	t.Parallel()
+
+	client := &S3Client{
+		bucket: "test-bucket",
+	}
+
+	const iterations = 3
+
+	for i := range iterations {
+		_, err := client.Upload(
+			context.Background(),
+			"key",
+			bytes.NewReader([]byte("data")),
+			"text/plain",
+		)
+		require.ErrorIs(t, err, sharedPorts.ErrObjectStorageUnavailable,
+			"Upload iteration %d should return unavailable", i)
+
+		_, err = client.Download(context.Background(), "key")
+		require.ErrorIs(t, err, sharedPorts.ErrObjectStorageUnavailable,
+			"Download iteration %d should return unavailable", i)
+
+		err = client.Delete(context.Background(), "key")
+		require.ErrorIs(t, err, sharedPorts.ErrObjectStorageUnavailable,
+			"Delete iteration %d should return unavailable", i)
+
+		_, err = client.GeneratePresignedURL(context.Background(), "key", time.Hour)
+		require.ErrorIs(t, err, sharedPorts.ErrObjectStorageUnavailable,
+			"GeneratePresignedURL iteration %d should return unavailable", i)
+
+		_, err = client.Exists(context.Background(), "key")
+		require.ErrorIs(t, err, sharedPorts.ErrObjectStorageUnavailable,
+			"Exists iteration %d should return unavailable", i)
+	}
+}

@@ -454,6 +454,11 @@ func (aw *ArchivalWorker) getOrCreateMetadata(
 // before proceeding. On error, the metadata is marked with the error and the
 // function returns so the next cycle can retry.
 //
+// DESIGN CONSTRAINT: handlePartitionError always returns non-nil error.
+// All callers MUST return immediately after handlePartitionError to ensure
+// local variables (exportBuf, checksum) are not reused with stale data
+// after metadata has been reloaded from the database.
+//
 //nolint:cyclop,gocyclo // state machine requires sequential checks for each state
 func (aw *ArchivalWorker) archivePartition(ctx context.Context, metadata *entities.ArchiveMetadata) error {
 	_, tracer := aw.tracking(ctx)

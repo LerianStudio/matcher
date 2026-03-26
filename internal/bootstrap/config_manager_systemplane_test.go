@@ -360,3 +360,69 @@ func TestSnapshotToFullConfig_BootstrapFieldsPreserved(t *testing.T) {
 	assert.Equal(t, 100, result.RateLimit.Max, "runtime field should get default, not zero")
 	assert.True(t, result.RateLimit.Enabled, "runtime field should get default")
 }
+
+func TestUpdateFromSystemplane_TypeMismatchValue_HandledGracefully(t *testing.T) {
+	t.Parallel()
+
+	t.Run("string_where_int_expected_uses_default", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := defaultConfig()
+		cm, err := NewConfigManager(cfg, nil)
+		require.NoError(t, err)
+
+		cm.enterSeedMode()
+
+		// Pre-condition: capture the default rate_limit.max so we can verify
+		// it survives the type mismatch.
+		initialMax := cm.Get().RateLimit.Max
+		require.Equal(t, defaultRateLimitMax, initialMax, "sanity: initial max should be the default")
+
+		// Provide a string where snapInt expects a numeric type.
+		// snapInt's strconv.Atoi branch fails on "not-a-number" → falls back
+		// to the default (100), so the resulting Config is valid and the update
+		// succeeds without crashing.
+		snap := domain.Snapshot{
+			Configs: map[string]domain.EffectiveValue{
+				"rate_limit.max": {Value: "not-a-number"},
+			},
+		}
+
+		err = cm.UpdateFromSystemplane(snap)
+		require.NoError(t, err, "type mismatch must not crash — snapInt falls back to default")
+
+		updated := cm.Get()
+		require.NotNil(t, updated)
+		assert.Equal(t, defaultRateLimitMax, updated.RateLimit.Max,
+			"snapInt should fall back to default when value is an unparseable string")
+	})
+
+	t.Run("negative_where_positive_expected_rejected_by_validation", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := defaultConfig()
+		cm, err := NewConfigManager(cfg, nil)
+		require.NoError(t, err)
+
+		cm.enterSeedMode()
+
+		initialMax := cm.Get().RateLimit.Max
+
+		// snapInt happily coerces -1 into an int, but Validate() enforces
+		// "RATE_LIMIT_MAX must be positive" → the update is rejected and
+		// the old config is preserved.
+		snap := domain.Snapshot{
+			Configs: map[string]domain.EffectiveValue{
+				"rate_limit.max": {Value: -1},
+			},
+		}
+
+		err = cm.UpdateFromSystemplane(snap)
+		require.Error(t, err, "negative rate_limit.max should fail validation")
+		assert.Contains(t, err.Error(), "validation")
+
+		// Old config must be preserved — the failed update was discarded.
+		assert.Equal(t, initialMax, cm.Get().RateLimit.Max,
+			"config must not change when validation rejects the snapshot")
+	})
+}

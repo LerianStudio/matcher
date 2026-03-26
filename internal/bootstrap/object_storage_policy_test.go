@@ -2,7 +2,11 @@
 
 package bootstrap
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
 
 func TestAllowInsecureObjectStorageEndpoint(t *testing.T) {
 	t.Parallel()
@@ -54,9 +58,7 @@ func TestAllowInsecureObjectStorageEndpoint(t *testing.T) {
 			t.Parallel()
 
 			got := allowInsecureObjectStorageEndpoint(tt.cfg)
-			if got != tt.want {
-				t.Fatalf("allowInsecureObjectStorageEndpoint() = %v, want %v", got, tt.want)
-			}
+			require.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -69,7 +71,7 @@ func TestIsAllowedInsecureObjectStorageEnvironment(t *testing.T) {
 		env  string
 		want bool
 	}{
-		{name: "empty", env: "", want: true},
+		{name: "empty", env: "", want: false},
 		{name: "development", env: defaultEnvName, want: true},
 		{name: "dev", env: envDevShortName, want: true},
 		{name: "local", env: envLocalName, want: true},
@@ -83,9 +85,7 @@ func TestIsAllowedInsecureObjectStorageEnvironment(t *testing.T) {
 			t.Parallel()
 
 			got := isAllowedInsecureObjectStorageEnvironment(tt.env)
-			if got != tt.want {
-				t.Fatalf("isAllowedInsecureObjectStorageEnvironment() = %v, want %v", got, tt.want)
-			}
+			require.Equal(t, tt.want, got)
 		})
 	}
 }
