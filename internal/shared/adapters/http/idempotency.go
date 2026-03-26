@@ -30,7 +30,8 @@ const (
 	HeaderIdempotencyKey       = "Idempotency-Key"
 	HeaderXIdempotencyReplayed = "X-Idempotency-Replayed"
 	httpErrorStatusThreshold   = 400
-	anonymousPrincipalScope    = "_anonymous"
+	principalPrefixUser        = "user:"
+	principalPrefixAnonymous   = "anon:"
 )
 
 // Context key for tracking idempotency middleware execution.
@@ -45,6 +46,8 @@ var (
 	ErrMissingTenantID = errors.New(
 		"tenant ID is required for idempotency; ensure auth middleware runs before idempotency middleware",
 	)
+	// ErrUnknownIdempotencyStatus is returned when a cached result has an unrecognized status.
+	ErrUnknownIdempotencyStatus = errors.New("unknown idempotency status")
 )
 
 // IdempotencyStatus represents the state of an idempotency key.
@@ -266,9 +269,13 @@ func extractIdempotencyKey(
 		return "", ErrMissingTenantID
 	}
 
-	principalID := strings.TrimSpace(auth.GetUserID(ctx))
-	if principalID == "" {
-		principalID = anonymousPrincipalScope
+	rawPrincipalID := strings.TrimSpace(auth.GetUserID(ctx))
+
+	var principalID string
+	if rawPrincipalID == "" {
+		principalID = principalPrefixAnonymous
+	} else {
+		principalID = principalPrefixUser + rawPrincipalID
 	}
 
 	// Include method and canonical request target for complete request scoping.
@@ -312,7 +319,17 @@ func canonicalRequestTarget(fiberCtx *fiber.Ctx) string {
 		return path
 	}
 
-	return path + "?" + encoded
+	target := path + "?" + encoded
+
+	// Limit Redis key size: hash the request target if it exceeds a safe threshold.
+	const maxRequestTargetLen = 256
+	if len(target) > maxRequestTargetLen {
+		h := sha256.Sum256([]byte(target))
+
+		return path + "?_hash=" + hex.EncodeToString(h[:])
+	}
+
+	return target
 }
 
 type idempotencyLogger = libLog.Logger
@@ -454,6 +471,13 @@ func handleDuplicateRequest(
 		return processNewRequest(ctx, fiberCtx, repo, key, logger, span)
 
 	default:
-		return fiberCtx.Next()
+		libOpentelemetry.HandleSpanError(span, "idempotency: unknown status", fmt.Errorf("status %q: %w", result.Status, ErrUnknownIdempotencyStatus))
+
+		return pkghttp.RespondError(
+			fiberCtx,
+			fiber.StatusInternalServerError,
+			"idempotency_error",
+			"Unexpected idempotency state encountered",
+		)
 	}
 }

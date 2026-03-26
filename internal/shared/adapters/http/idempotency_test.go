@@ -205,7 +205,7 @@ func TestIdempotencyMiddleware_NewRequest_AcquiresLock(t *testing.T) {
 	assert.Equal(t, http.StatusCreated, resp.StatusCode)
 	assert.True(t, repo.acquireCalled)
 	// Key format: tenantID:principalID:method:path:userKey (no prefix in this test)
-	expectedKey := IdempotencyKey(auth.DefaultTenantID + ":_anonymous:POST:/test:unique-key-123")
+	expectedKey := IdempotencyKey(auth.DefaultTenantID + ":anon::POST:/test:unique-key-123")
 	assert.Equal(t, expectedKey, repo.lastKey)
 	assert.True(t, repo.markCompleteCalled)
 }
@@ -488,7 +488,7 @@ func TestIdempotencyMiddleware_UsesAlternativeHeader(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	// Key format: tenantID:principalID:method:path:userKey
-	expectedKey := IdempotencyKey(auth.DefaultTenantID + ":_anonymous:POST:/test:alternative-key")
+	expectedKey := IdempotencyKey(auth.DefaultTenantID + ":anon::POST:/test:alternative-key")
 	assert.Equal(t, expectedKey, repo.lastKey)
 }
 
@@ -520,7 +520,7 @@ func TestIdempotencyMiddleware_GeneratesHashForImplicitKey(t *testing.T) {
 	assert.Contains(t, string(repo.lastKey), ":hash:", "should generate hash key")
 	assert.True(
 		t,
-		strings.HasPrefix(string(repo.lastKey), auth.DefaultTenantID+":_anonymous:POST:/test:hash:"),
+		strings.HasPrefix(string(repo.lastKey), auth.DefaultTenantID+":anon::POST:/test:hash:"),
 		"should have proper scoping prefix",
 	)
 }
@@ -551,7 +551,7 @@ func TestIdempotencyMiddleware_AppliesKeyPrefix(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	// Key format with prefix: prefix:tenantID:principalID:method:path:userKey
-	expectedKey := IdempotencyKey("matcher:" + auth.DefaultTenantID + ":_anonymous:POST:/test:my-key")
+	expectedKey := IdempotencyKey("matcher:" + auth.DefaultTenantID + ":anon::POST:/test:my-key")
 	assert.Equal(t, expectedKey, repo.lastKey)
 }
 
@@ -675,7 +675,7 @@ func TestExtractIdempotencyKey_PrefersXHeader(t *testing.T) {
 	resp.Body.Close()
 
 	// Key format: tenantID:principalID:method:path:userKey (X-Idempotency-Key takes precedence)
-	expectedKey := auth.DefaultTenantID + ":_anonymous:POST:/test:x-header-key"
+	expectedKey := auth.DefaultTenantID + ":anon::POST:/test:x-header-key"
 	assert.Equal(t, expectedKey, extractedKey)
 }
 
@@ -700,7 +700,7 @@ func TestExtractIdempotencyKey_NormalizesUserKeyWhitespace(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	assert.Equal(t, "matcher:"+auth.DefaultTenantID+":_anonymous:POST:/test:spaced-key", extractedKey)
+	assert.Equal(t, "matcher:"+auth.DefaultTenantID+":anon::POST:/test:spaced-key", extractedKey)
 }
 
 func TestIdempotencyMiddleware_TenantIsolation(t *testing.T) {
@@ -785,8 +785,8 @@ func TestIdempotencyMiddleware_TenantIsolation(t *testing.T) {
 	assert.Contains(t, string(keyB), "tenant-b-id", "key B should contain tenant B ID")
 
 	// Verify the complete key format: prefix:tenantID:principalID:method:path:userKey
-	assert.Equal(t, IdempotencyKey("matcher:tenant-a-id:user-a:POST:/test:same-key"), keyA)
-	assert.Equal(t, IdempotencyKey("matcher:tenant-b-id:user-b:POST:/test:same-key"), keyB)
+	assert.Equal(t, IdempotencyKey("matcher:tenant-a-id:user:user-a:POST:/test:same-key"), keyA)
+	assert.Equal(t, IdempotencyKey("matcher:tenant-b-id:user:user-b:POST:/test:same-key"), keyB)
 }
 
 func TestIdempotencyMiddleware_UserIsolationWithinTenant(t *testing.T) {
@@ -835,8 +835,8 @@ func TestIdempotencyMiddleware_UserIsolationWithinTenant(t *testing.T) {
 	defer respB.Body.Close()
 
 	assert.NotEqual(t, repoA.lastKey, repoB.lastKey)
-	assert.Equal(t, IdempotencyKey("matcher:"+auth.DefaultTenantID+":user-a:POST:/test:same-key"), repoA.lastKey)
-	assert.Equal(t, IdempotencyKey("matcher:"+auth.DefaultTenantID+":user-b:POST:/test:same-key"), repoB.lastKey)
+	assert.Equal(t, IdempotencyKey("matcher:"+auth.DefaultTenantID+":user:user-a:POST:/test:same-key"), repoA.lastKey)
+	assert.Equal(t, IdempotencyKey("matcher:"+auth.DefaultTenantID+":user:user-b:POST:/test:same-key"), repoB.lastKey)
 }
 
 func TestExtractIdempotencyKey_CanonicalizesQueryString(t *testing.T) {
@@ -875,7 +875,7 @@ func TestExtractIdempotencyKey_CanonicalizesQueryString(t *testing.T) {
 	defer respB.Body.Close()
 
 	assert.Equal(t, extractedA, extractedB)
-	assert.Equal(t, "matcher:"+auth.DefaultTenantID+":user-a:POST:/test?a=1&b=2:query-key", extractedA)
+	assert.Equal(t, "matcher:"+auth.DefaultTenantID+":user:user-a:POST:/test?a=1&b=2:query-key", extractedA)
 }
 
 func TestIdempotencyMiddleware_MethodPathIsolation(t *testing.T) {
