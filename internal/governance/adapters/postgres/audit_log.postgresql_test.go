@@ -46,12 +46,6 @@ func defaultHashChainValues() (int64, []byte, []byte, int16) {
 
 type fakeInfrastructureProvider struct{}
 
-func (f *fakeInfrastructureProvider) GetPostgresConnection(
-	_ context.Context,
-) (*ports.PostgresConnectionLease, error) {
-	return nil, nil
-}
-
 func (f *fakeInfrastructureProvider) GetRedisConnection(
 	_ context.Context,
 ) (*ports.RedisConnectionLease, error) {
@@ -74,7 +68,11 @@ func (f *fakeInfrastructureProvider) BeginTx(ctx context.Context) (*ports.TxLeas
 	return ports.NewTxLease(tx, nil), nil
 }
 
-func (f *fakeInfrastructureProvider) GetReplicaDB(_ context.Context) (*ports.ReplicaDBLease, error) {
+func (f *fakeInfrastructureProvider) GetReplicaDB(_ context.Context) (*ports.DBLease, error) {
+	return nil, nil
+}
+
+func (f *fakeInfrastructureProvider) GetPrimaryDB(_ context.Context) (*ports.DBLease, error) {
 	return nil, nil
 }
 

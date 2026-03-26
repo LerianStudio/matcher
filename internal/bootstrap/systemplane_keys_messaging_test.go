@@ -139,7 +139,7 @@ func TestMatcherKeyDefsRedisRuntime_KeyProperties(t *testing.T) {
 
 	expectedKeys := []string{
 		"redis.pool_size",
-		"redis.min_idle_conn",
+		"redis.min_idle_conns",
 		"redis.read_timeout_ms",
 		"redis.write_timeout_ms",
 		"redis.dial_timeout_ms",
@@ -185,7 +185,7 @@ func TestMatcherKeyDefsRabbitMQConnection_KeyProperties(t *testing.T) {
 	defs := matcherKeyDefsRabbitMQConnection()
 
 	expectedKeys := []string{
-		"rabbitmq.uri",
+		"rabbitmq.url",
 		"rabbitmq.host",
 		"rabbitmq.port",
 		"rabbitmq.user",

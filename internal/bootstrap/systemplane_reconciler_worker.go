@@ -84,6 +84,9 @@ func (r *WorkerReconciler) Reconcile(_ context.Context, _, _ domain.RuntimeBundl
 // more robust type coercion (e.g., string→bool, string→int from JSON).
 func snapshotToWorkerConfig(snap domain.Snapshot) *Config {
 	return &Config{
+		App: AppConfig{
+			EnvName: snapString(snap, "app.env_name", ""),
+		},
 		Fetcher: FetcherConfig{
 			Enabled:              snapBool(snap, "fetcher.enabled", defaultFetcherEnabled),
 			URL:                  snapString(snap, "fetcher.url", defaultFetcherURL),
@@ -127,6 +130,7 @@ func snapshotToWorkerConfig(snap domain.Snapshot) *Config {
 			AccessKeyID:     snapString(snap, "object_storage.access_key_id", ""),
 			SecretAccessKey: snapString(snap, "object_storage.secret_access_key", ""),
 			UsePathStyle:    snapBool(snap, "object_storage.use_path_style", true),
+			AllowInsecure:   snapBool(snap, "object_storage.allow_insecure_endpoint", false),
 		},
 	}
 }

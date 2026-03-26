@@ -6,9 +6,6 @@ import (
 	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 )
 
-// CursorResponse is an alias for the shared cursor pagination type.
-type CursorResponse = sharedhttp.CursorResponse
-
 // AuditLogResponse represents an audit log entry in API responses.
 // @Description Immutable audit log entry for governance tracking
 type AuditLogResponse struct {
@@ -35,5 +32,5 @@ type AuditLogResponse struct {
 type ListAuditLogsResponse struct {
 	// List of audit log entries
 	Items []AuditLogResponse `json:"items" validate:"omitempty,max=200" maxItems:"200"`
-	CursorResponse
+	sharedhttp.CursorResponse
 }

@@ -21,7 +21,7 @@ import (
 var (
 	errPartitionManagerProviderUnavailable = errors.New("partition manager: infrastructure provider not available")
 	errPartitionManagerNilDependency       = errors.New("partition manager: nil dependency provided at construction")
-	errPartitionManagerNilLease            = errors.New("partition manager: postgres connection returned nil lease")
+	errPartitionManagerNilLease            = errors.New("partition manager: primary database returned nil lease")
 )
 
 type dynamicPartitionManager struct {
@@ -37,7 +37,7 @@ func newDynamicPartitionManager(
 	logger libLog.Logger,
 	tracer trace.Tracer,
 ) (governanceWorker.PartitionManager, error) {
-	if provider == nil || isNilInterface(logger) || tracer == nil {
+	if provider == nil || sharedPorts.IsNilValue(logger) || tracer == nil {
 		return nil, errPartitionManagerNilDependency
 	}
 
@@ -110,34 +110,22 @@ func (manager *dynamicPartitionManager) current(ctx context.Context) (*governanc
 		return nil, nil, errPartitionManagerProviderUnavailable
 	}
 
-	lease, err := manager.provider.GetPostgresConnection(ctx)
+	lease, err := manager.provider.GetPrimaryDB(ctx)
 	if err != nil {
-		return nil, nil, fmt.Errorf("get postgres connection for partition manager: %w", err)
+		return nil, nil, fmt.Errorf("get primary db for partition manager: %w", err)
 	}
 
 	if lease == nil {
 		return nil, nil, errPartitionManagerNilLease
 	}
 
-	client := lease.Connection()
-	if client == nil {
+	db := lease.DB()
+	if db == nil {
 		lease.Release()
 		return nil, nil, governanceCommand.ErrNilDB
 	}
 
-	resolver, err := client.Resolver(ctx)
-	if err != nil {
-		lease.Release()
-		return nil, nil, fmt.Errorf("resolve postgres connection for partition manager: %w", err)
-	}
-
-	primaryDBs := resolver.PrimaryDBs()
-	if len(primaryDBs) == 0 || primaryDBs[0] == nil {
-		lease.Release()
-		return nil, nil, governanceCommand.ErrNilDB
-	}
-
-	delegate, err := governanceCommand.NewPartitionManager(primaryDBs[0], manager.logger, manager.tracer)
+	delegate, err := governanceCommand.NewPartitionManager(db, manager.logger, manager.tracer)
 	if err != nil {
 		lease.Release()
 		return nil, nil, fmt.Errorf("create partition manager: %w", err)

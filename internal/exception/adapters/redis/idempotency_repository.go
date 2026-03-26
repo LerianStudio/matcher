@@ -16,7 +16,6 @@ import (
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/auth"
-	"github.com/LerianStudio/matcher/internal/exception/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 )
@@ -503,4 +502,4 @@ func (repo *IdempotencyRepository) GetCachedResult(
 	}, nil
 }
 
-var _ repositories.CallbackIdempotencyRepository = (*IdempotencyRepository)(nil)
+var _ ports.IdempotencyRepository = (*IdempotencyRepository)(nil)

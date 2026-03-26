@@ -30,6 +30,9 @@ DEFAULT_TENANT_SLUG=default
 # HTTP listen address. Change requires server restart.
 SERVER_ADDRESS=:4018
 
+# Maximum HTTP request body size is runtime-managed via systemplane.
+# Configure `server.body_limit_bytes` through /v1/system/configs instead.
+
 # TLS — only needed when terminating TLS at the application level.
 # Most deployments terminate TLS at the ingress/load balancer.
 # SERVER_TLS_CERT_FILE=
@@ -44,12 +47,12 @@ TLS_TERMINATED_UPSTREAM=false
 # ── Authentication ───────────────────────────────────────────────────────────
 # Enable lib-auth JWT middleware.
 # REQUIRED for production. Only set to false for isolated local development.
-AUTH_ENABLED=true
+PLUGIN_AUTH_ENABLED=true
 
 # Auth service address for token validation.
-# AUTH_SERVICE_ADDRESS=http://localhost:8081
+# PLUGIN_AUTH_ADDRESS=http://localhost:8081
 
-# JWT signing secret. REQUIRED when AUTH_ENABLED=true.
+# JWT signing secret. REQUIRED when PLUGIN_AUTH_ENABLED=true.
 # SECURITY: Use a strong random secret (minimum 32 bytes) in production.
 # AUTH_JWT_SECRET=
 
@@ -64,6 +67,10 @@ OTEL_EXPORTER_OTLP_ENDPOINT=localhost:4317
 
 # Database metrics scrape interval (seconds).
 DB_METRICS_INTERVAL_SEC=15
+
+# ── Database ─────────────────────────────────────────────────────────────────
+# Filesystem path to SQL migrations used during startup.
+MIGRATIONS_PATH=migrations
 
 # ── Infrastructure ───────────────────────────────────────────────────────────
 # Startup timeout for connecting to Postgres, Redis, RabbitMQ, and S3.

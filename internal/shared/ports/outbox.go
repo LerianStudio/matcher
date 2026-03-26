@@ -13,7 +13,7 @@ import (
 
 // OutboxRepository defines persistence operations for outbox events.
 // This is the shared kernel interface used by all bounded contexts that interact
-// with the outbox pattern, avoiding direct imports into outbox/domain/repositories.
+// with the outbox pattern.
 type OutboxRepository interface {
 	Create(ctx context.Context, event *sharedDomain.OutboxEvent) (*sharedDomain.OutboxEvent, error)
 	CreateWithTx(

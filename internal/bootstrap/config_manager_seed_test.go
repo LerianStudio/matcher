@@ -137,6 +137,36 @@ func TestExtractConfigValue_PostgresHost(t *testing.T) {
 	assert.Equal(t, "db.prod.example.com", val)
 }
 
+func TestExtractConfigValue_RenamedKeys(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cfg.Server.CORSAllowedOrigins = "https://app.example.com"
+	cfg.Postgres.MaxOpenConnections = 41
+	cfg.Postgres.MaxIdleConnections = 9
+	cfg.Redis.MinIdleConn = 4
+	cfg.RabbitMQ.URI = "amqps"
+
+	tests := []struct {
+		name string
+		key  string
+		want any
+	}{
+		{name: "cors origins", key: "cors.allowed_origins", want: "https://app.example.com"},
+		{name: "postgres max open conns", key: "postgres.max_open_conns", want: 41},
+		{name: "postgres max idle conns", key: "postgres.max_idle_conns", want: 9},
+		{name: "redis min idle conns", key: "redis.min_idle_conns", want: 4},
+		{name: "rabbitmq url", key: "rabbitmq.url", want: "amqps"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, extractConfigValue(cfg, tt.key))
+		})
+	}
+}
+
 func TestExtractConfigValue_BoolValue(t *testing.T) {
 	t.Parallel()
 
@@ -301,6 +331,62 @@ func TestBuildSeedOps_NonDefaultValues(t *testing.T) {
 
 	assert.Equal(t, "rate_limit.max", ops[1].Key)
 	assert.Equal(t, 500, ops[1].Value)
+}
+
+func TestBuildSeedOps_RenamedKeys(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cfg.Server.CORSAllowedOrigins = "https://app.example.com"
+	cfg.Postgres.MaxOpenConnections = 41
+	cfg.Redis.MinIdleConn = 4
+	cfg.RabbitMQ.URI = "amqps"
+
+	defs := []domain.KeyDef{
+		{
+			Key:              "cors.allowed_origins",
+			Kind:             domain.KindConfig,
+			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+			DefaultValue:     defaultCORSAllowedOrigins,
+			ValueType:        domain.ValueTypeString,
+			MutableAtRuntime: true,
+		},
+		{
+			Key:              "postgres.max_open_conns",
+			Kind:             domain.KindConfig,
+			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+			DefaultValue:     defaultPGMaxOpenConns,
+			ValueType:        domain.ValueTypeInt,
+			MutableAtRuntime: true,
+		},
+		{
+			Key:              "redis.min_idle_conns",
+			Kind:             domain.KindConfig,
+			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+			DefaultValue:     defaultRedisMinIdleConn,
+			ValueType:        domain.ValueTypeInt,
+			MutableAtRuntime: true,
+		},
+		{
+			Key:              "rabbitmq.url",
+			Kind:             domain.KindConfig,
+			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+			DefaultValue:     defaultRabbitURI,
+			ValueType:        domain.ValueTypeString,
+			MutableAtRuntime: true,
+		},
+	}
+
+	ops := buildSeedOps(cfg, defs)
+	require.Len(t, ops, 4)
+	assert.Equal(t, "cors.allowed_origins", ops[0].Key)
+	assert.Equal(t, "https://app.example.com", ops[0].Value)
+	assert.Equal(t, "postgres.max_open_conns", ops[1].Key)
+	assert.Equal(t, 41, ops[1].Value)
+	assert.Equal(t, "redis.min_idle_conns", ops[2].Key)
+	assert.Equal(t, 4, ops[2].Value)
+	assert.Equal(t, "rabbitmq.url", ops[3].Key)
+	assert.Equal(t, "amqps", ops[3].Value)
 }
 
 func TestBuildSeedOps_IncludesBootstrapOnlyWhenNonDefault(t *testing.T) {

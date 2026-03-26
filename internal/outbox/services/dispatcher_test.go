@@ -21,8 +21,8 @@ import (
 	"github.com/LerianStudio/matcher/internal/auth"
 	ingestionEntities "github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
 	outboxEntities "github.com/LerianStudio/matcher/internal/outbox/domain/entities"
-	"github.com/LerianStudio/matcher/internal/outbox/domain/repositories/mocks"
 	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
+	mocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
 )
 
 // errTestBoom is a sentinel error used for testing failure scenarios.
@@ -1889,6 +1889,26 @@ func TestDispatcherAuditPublisherNotConfiguredErrorType(t *testing.T) {
 	})
 	require.ErrorIs(t, err, ErrAuditPublisherNotConfigured)
 	require.False(t, isNonRetryableError(err), "ErrAuditPublisherNotConfigured must be retryable")
+}
+
+func TestDispatcherTypedNilAuditPublisherTreatedAsNotConfigured(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	repo := mocks.NewMockOutboxRepository(ctrl)
+	publisher := &stubPublisher{}
+	var typedNilAuditPub *stubAuditPublisher
+
+	dispatcher, err := NewDispatcher(repo, publisher, publisher, nil, nil, WithAuditPublisher(typedNilAuditPub))
+	require.NoError(t, err)
+
+	err = dispatcher.publishEvent(context.Background(), &outboxEntities.OutboxEvent{
+		EventType: sharedDomain.EventTypeAuditLogCreated,
+		Payload:   []byte(`{}`),
+	})
+	require.ErrorIs(t, err, ErrAuditPublisherNotConfigured)
 }
 
 func TestDeduplicateEvents(t *testing.T) {

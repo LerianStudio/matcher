@@ -28,9 +28,9 @@ func configFromSnapshot(snap domain.Snapshot) *Config {
 	cfg.Server.TLSTerminatedUpstream = snapBool(snap, "server.tls_terminated_upstream", false)
 	cfg.Server.TrustedProxies = snapString(snap, "server.trusted_proxies", "")
 	cfg.Server.BodyLimitBytes = snapInt(snap, "server.body_limit_bytes", defaultKeyBodyLimitBytes)
-	cfg.Server.CORSAllowedOrigins = snapString(snap, "server.cors_allowed_origins", defaultCORSAllowedOrigins)
-	cfg.Server.CORSAllowedMethods = snapString(snap, "server.cors_allowed_methods", defaultCORSAllowedMethods)
-	cfg.Server.CORSAllowedHeaders = snapString(snap, "server.cors_allowed_headers", defaultCORSAllowedHeaders)
+	cfg.Server.CORSAllowedOrigins = snapString(snap, "cors.allowed_origins", defaultCORSAllowedOrigins)
+	cfg.Server.CORSAllowedMethods = snapString(snap, "cors.allowed_methods", defaultCORSAllowedMethods)
+	cfg.Server.CORSAllowedHeaders = snapString(snap, "cors.allowed_headers", defaultCORSAllowedHeaders)
 
 	// Auth (bootstrap-only in practice, but hydrated from snapshot for defaults).
 	cfg.Auth.Enabled = snapBool(snap, "auth.enabled", false)
@@ -71,8 +71,8 @@ func configFromSnapshot(snap domain.Snapshot) *Config {
 	cfg.Postgres.ReplicaPassword = snapString(snap, "postgres.replica_password", "")
 	cfg.Postgres.ReplicaDB = snapString(snap, "postgres.replica_db", "")
 	cfg.Postgres.ReplicaSSLMode = snapString(snap, "postgres.replica_ssl_mode", "")
-	cfg.Postgres.MaxOpenConnections = snapInt(snap, "postgres.max_open_connections", defaultPGMaxOpenConns)
-	cfg.Postgres.MaxIdleConnections = snapInt(snap, "postgres.max_idle_connections", defaultPGMaxIdleConns)
+	cfg.Postgres.MaxOpenConnections = snapInt(snap, "postgres.max_open_conns", defaultPGMaxOpenConns)
+	cfg.Postgres.MaxIdleConnections = snapInt(snap, "postgres.max_idle_conns", defaultPGMaxIdleConns)
 	cfg.Postgres.ConnMaxLifetimeMins = snapInt(snap, "postgres.conn_max_lifetime_mins", defaultPGConnMaxLifeMins)
 	cfg.Postgres.ConnMaxIdleTimeMins = snapInt(snap, "postgres.conn_max_idle_time_mins", defaultPGConnMaxIdleMins)
 	cfg.Postgres.ConnectTimeoutSec = snapInt(snap, "postgres.connect_timeout_sec", defaultPGConnectTimeout)
@@ -88,13 +88,13 @@ func configFromSnapshot(snap domain.Snapshot) *Config {
 	cfg.Redis.TLS = snapBool(snap, "redis.tls", defaultRedisTLS)
 	cfg.Redis.CACert = snapString(snap, "redis.ca_cert", "")
 	cfg.Redis.PoolSize = snapInt(snap, "redis.pool_size", defaultRedisPoolSize)
-	cfg.Redis.MinIdleConn = snapInt(snap, "redis.min_idle_conn", defaultRedisMinIdleConn)
+	cfg.Redis.MinIdleConn = snapInt(snap, "redis.min_idle_conns", defaultRedisMinIdleConn)
 	cfg.Redis.ReadTimeoutMs = snapInt(snap, "redis.read_timeout_ms", defaultRedisReadTimeout)
 	cfg.Redis.WriteTimeoutMs = snapInt(snap, "redis.write_timeout_ms", defaultRedisWriteTimeout)
 	cfg.Redis.DialTimeoutMs = snapInt(snap, "redis.dial_timeout_ms", defaultRedisDialTimeout)
 
 	// RabbitMQ.
-	cfg.RabbitMQ.URI = snapString(snap, "rabbitmq.uri", defaultRabbitURI)
+	cfg.RabbitMQ.URI = snapString(snap, "rabbitmq.url", defaultRabbitURI)
 	cfg.RabbitMQ.Host = snapString(snap, "rabbitmq.host", defaultRabbitHost)
 	cfg.RabbitMQ.Port = snapString(snap, "rabbitmq.port", defaultRabbitPort)
 	cfg.RabbitMQ.User = snapString(snap, "rabbitmq.user", defaultRabbitUser)
@@ -110,6 +110,7 @@ func configFromSnapshot(snap domain.Snapshot) *Config {
 	cfg.ObjectStorage.AccessKeyID = snapString(snap, "object_storage.access_key_id", "")
 	cfg.ObjectStorage.SecretAccessKey = snapString(snap, "object_storage.secret_access_key", "")
 	cfg.ObjectStorage.UsePathStyle = snapBool(snap, "object_storage.use_path_style", defaultObjStoragePathStyle)
+	cfg.ObjectStorage.AllowInsecure = snapBool(snap, "object_storage.allow_insecure_endpoint", defaultObjStorageAllowInsecure)
 
 	// Swagger.
 	cfg.Swagger.Enabled = snapBool(snap, "swagger.enabled", defaultSwaggerEnabled)
@@ -214,6 +215,7 @@ func snapshotToFullConfig(snap domain.Snapshot, oldCfg *Config) *Config {
 	cfg.Auth = oldCfg.Auth
 	cfg.Tenancy.DefaultTenantID = oldCfg.Tenancy.DefaultTenantID
 	cfg.Tenancy.DefaultTenantSlug = oldCfg.Tenancy.DefaultTenantSlug
+	cfg.Postgres.MigrationsPath = oldCfg.Postgres.MigrationsPath
 	cfg.Telemetry = oldCfg.Telemetry
 	cfg.Idempotency.HMACSecret = oldCfg.Idempotency.HMACSecret
 	cfg.Logger = oldCfg.Logger

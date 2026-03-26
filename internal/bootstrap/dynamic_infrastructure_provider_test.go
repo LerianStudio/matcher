@@ -83,9 +83,11 @@ func TestDynamicInfrastructureProvider_SingleTenantUsesActiveBundleConnections(t
 
 	bundleState.Update(&MatcherBundle{Infra: &InfraBundle{Postgres: testPostgresClient(t), Redis: testRedisClient(t)}})
 
-	pgLease, err := provider.GetPostgresConnection(context.Background())
+	pgLease, err := provider.GetPrimaryDB(context.Background())
 	require.NoError(t, err)
-	assert.Same(t, bundleState.Current().DB(), pgLease.Connection())
+	primaryDB, resolveErr := resolvePrimaryDB(context.Background(), bundleState.Current().DB())
+	require.NoError(t, resolveErr)
+	assert.Same(t, primaryDB, pgLease.DB())
 
 	redisLease, err := provider.GetRedisConnection(context.Background())
 	require.NoError(t, err)
@@ -158,7 +160,7 @@ func TestDynamicInfrastructureProvider_SingleTenantPostgresNotConfigured(t *test
 	bootstrapCfg := defaultConfig()
 	provider := newDynamicInfrastructureProvider(bootstrapCfg, nil, nil, nil, nil, &libLog.NopLogger{}, nil)
 
-	_, err := provider.GetPostgresConnection(context.Background())
+	_, err := provider.GetPrimaryDB(context.Background())
 	require.ErrorIs(t, err, ErrPostgresConnectionNotConfigured)
 }
 

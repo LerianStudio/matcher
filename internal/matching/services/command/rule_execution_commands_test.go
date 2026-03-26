@@ -14,8 +14,8 @@ import (
 	"go.uber.org/mock/gomock"
 
 	matching "github.com/LerianStudio/matcher/internal/matching/domain/services"
-	outboxmocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	outboxmocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
 )
 
 func TestExecuteRules_Success(t *testing.T) {

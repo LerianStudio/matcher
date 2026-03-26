@@ -15,9 +15,6 @@ import (
 	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
 	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
 	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/ports"
-	libZap "github.com/LerianStudio/lib-commons/v4/commons/zap"
-
-	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
 
 // Compile-time interface checks.
@@ -127,7 +124,6 @@ var allComponents = map[string]struct{}{
 	"rabbitmq":           {},
 	"s3":                 {},
 	"http":               {},
-	"logger":             {},
 	domain.ComponentNone: {},
 }
 
@@ -183,39 +179,6 @@ func appendFreshCloser[T any](freshClosers *[]func() error, component T, closeFn
 	*freshClosers = append(*freshClosers, func() error {
 		return closeFn(component)
 	})
-}
-
-func (factory *MatcherBundleFactory) buildIncrementalLogger(
-	ctx context.Context,
-	snap domain.Snapshot,
-	affected map[string]struct{},
-	prev *MatcherBundle,
-	newBundle *MatcherBundle,
-	freshClosers *[]func() error,
-	rollback func(),
-) error {
-	if _, changed := affected["logger"]; !changed {
-		newBundle.Logger = prev.Logger
-		return nil
-	}
-
-	loggerBundle, err := factory.buildLogger(snap)
-	if err != nil {
-		rollback()
-		return fmt.Errorf("incremental build logger: %w", err)
-	}
-
-	newBundle.Logger = loggerBundle
-	newBundle.ownsLogger = loggerBundle != nil
-	appendFreshCloser(freshClosers, loggerBundle, func(bundle *LoggerBundle) error {
-		if bundle == nil || bundle.Logger == nil {
-			return nil
-		}
-
-		return bundle.Logger.Sync(ctx)
-	})
-
-	return nil
 }
 
 func (factory *MatcherBundleFactory) buildIncrementalPostgres(
@@ -301,7 +264,10 @@ func (factory *MatcherBundleFactory) buildIncrementalRabbitMQ(
 	rmqConn := factory.buildRabbitMQConnection(ctx, snap, logger)
 	newBundle.Infra.RabbitMQ = rmqConn
 	newBundle.ownsRabbitMQ = rmqConn != nil
-	appendFreshCloser(freshClosers, rmqConn, closeRabbitMQ)
+
+	if rmqConn != nil {
+		appendFreshCloser(freshClosers, rmqConn, closeRabbitMQ)
+	}
 }
 
 func (factory *MatcherBundleFactory) buildIncrementalObjectStorage(
@@ -381,9 +347,8 @@ func (factory *MatcherBundleFactory) BuildIncremental(
 		}
 	}
 
-	if err := factory.buildIncrementalLogger(ctx, snap, affected, prev, newBundle, &freshClosers, rollback); err != nil {
-		return nil, err
-	}
+	newBundle.Logger = prev.Logger
+	newBundle.ownsLogger = false
 
 	logger := incrementalLogger(newBundle)
 	if err := factory.buildIncrementalPostgres(ctx, snap, affected, logger, prev, newBundle, &freshClosers, rollback); err != nil {
@@ -499,9 +464,9 @@ func managedComponentCount() int {
 func (factory *MatcherBundleFactory) buildHTTPPolicy(snap domain.Snapshot) *HTTPPolicyBundle {
 	return &HTTPPolicyBundle{
 		BodyLimitBytes:     snapInt(snap, "server.body_limit_bytes", defaultHTTPBodyLimitBytes),
-		CORSAllowedOrigins: snapString(snap, "server.cors_allowed_origins", "http://localhost:3000"),
-		CORSAllowedMethods: snapString(snap, "server.cors_allowed_methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS"),
-		CORSAllowedHeaders: snapString(snap, "server.cors_allowed_headers", "Origin,Content-Type,Accept,Authorization,X-Request-ID"),
+		CORSAllowedOrigins: snapString(snap, "cors.allowed_origins", "http://localhost:3000"),
+		CORSAllowedMethods: snapString(snap, "cors.allowed_methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS"),
+		CORSAllowedHeaders: snapString(snap, "cors.allowed_headers", "Origin,Content-Type,Accept,Authorization,X-Request-ID"),
 		SwaggerEnabled:     snapBool(snap, "swagger.enabled", false),
 		SwaggerHost:        snapString(snap, "swagger.host", ""),
 		SwaggerSchemes:     snapString(snap, "swagger.schemes", "https"),
@@ -511,23 +476,7 @@ func (factory *MatcherBundleFactory) buildHTTPPolicy(snap domain.Snapshot) *HTTP
 // buildLogger constructs a new logger from the snapshot's log level and the
 // bootstrap environment name.
 func (factory *MatcherBundleFactory) buildLogger(snap domain.Snapshot) (*LoggerBundle, error) {
-	level := snapString(snap, "app.log_level", defaultLoggerLevel)
-	resolvedLevel := ResolveLoggerLevel(level)
-	env := ResolveLoggerEnvironment(factory.bootstrapCfg.EnvName)
-
-	logger, err := libZap.New(libZap.Config{
-		Environment:     env,
-		Level:           resolvedLevel,
-		OTelLibraryName: constants.ApplicationName,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create logger: %w", err)
-	}
-
-	return &LoggerBundle{
-		Logger: logger,
-		Level:  resolvedLevel,
-	}, nil
+	return buildLoggerBundle(factory.bootstrapCfg.EnvName, snapString(snap, "app.log_level", defaultLoggerLevel))
 }
 
 // buildInfra constructs all infrastructure clients from the snapshot.

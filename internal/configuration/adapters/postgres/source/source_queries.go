@@ -13,12 +13,12 @@ import (
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
 
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/common"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
+	"github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // FindByContextID retrieves all reconciliation sources for a context using cursor-based pagination.
@@ -37,13 +37,6 @@ func (repo *Repository) FindByContextID(
 	ctx, span := tracer.Start(ctx, "repository.source.list")
 	defer span.End()
 
-	connection, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return nil, libHTTP.CursorPagination{}, fmt.Errorf("get postgres connection: %w", err)
-	}
-	defer connection.Release()
-
 	limit = libHTTP.ValidateLimit(limit, constants.DefaultPaginationLimit, constants.MaximumPaginationLimit)
 
 	decodedCursor, err := parseCursor(cursor)
@@ -56,7 +49,7 @@ func (repo *Repository) FindByContextID(
 		Where(squirrel.Eq{"context_id": contextID.String()}).
 		PlaceholderFormat(squirrel.Dollar)
 
-	sources, pagination, err := executeSourceQuery(ctx, connection.Connection(), baseQuery, cursor, decodedCursor, limit)
+	sources, pagination, err := executeSourceQuery(ctx, repo.provider, baseQuery, cursor, decodedCursor, limit)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to list reconciliation sources", err)
 
@@ -85,13 +78,6 @@ func (repo *Repository) FindByContextIDAndType(
 	ctx, span := tracer.Start(ctx, "repository.source.list_by_type")
 	defer span.End()
 
-	connection, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return nil, libHTTP.CursorPagination{}, fmt.Errorf("get postgres connection: %w", err)
-	}
-	defer connection.Release()
-
 	limit = libHTTP.ValidateLimit(limit, constants.DefaultPaginationLimit, constants.MaximumPaginationLimit)
 
 	decodedCursor, err := parseCursor(cursor)
@@ -105,7 +91,7 @@ func (repo *Repository) FindByContextIDAndType(
 		Where(squirrel.Eq{"type": sourceType.String()}).
 		PlaceholderFormat(squirrel.Dollar)
 
-	sources, pagination, err := executeSourceQuery(ctx, connection.Connection(), baseQuery, cursor, decodedCursor, limit)
+	sources, pagination, err := executeSourceQuery(ctx, repo.provider, baseQuery, cursor, decodedCursor, limit)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to list reconciliation sources", err)
 
@@ -167,7 +153,7 @@ func (repo *Repository) FindByContextIDWithTx(
 // executeSourceQuery executes a paginated source query within a tenant transaction.
 func executeSourceQuery(
 	ctx stdctx.Context,
-	connection *libPostgres.Client,
+	provider ports.InfrastructureProvider,
 	baseQuery squirrel.SelectBuilder,
 	cursor string,
 	decodedCursor libHTTP.Cursor,
@@ -175,15 +161,15 @@ func executeSourceQuery(
 ) ([]*entities.ReconciliationSource, libHTTP.CursorPagination, error) {
 	var pagination libHTTP.CursorPagination
 
-	result, err := common.WithTenantTx(
+	result, err := common.WithTenantReadQuery(
 		ctx,
-		connection,
-		func(tx *sql.Tx) ([]*entities.ReconciliationSource, error) {
-			return fetchPaginatedSources(ctx, tx, baseQuery, cursor, decodedCursor, limit, &pagination)
+		provider,
+		func(qe common.QueryExecutor) ([]*entities.ReconciliationSource, error) {
+			return fetchPaginatedSources(ctx, qe, baseQuery, cursor, decodedCursor, limit, &pagination)
 		},
 	)
 	if err != nil {
-		return nil, libHTTP.CursorPagination{}, fmt.Errorf("execute tenant tx for source query: %w", err)
+		return nil, libHTTP.CursorPagination{}, fmt.Errorf("execute tenant read query for source query: %w", err)
 	}
 
 	return result, pagination, nil
@@ -211,7 +197,7 @@ func executeSourceQueryWithTx(
 // fetchPaginatedSources applies pagination and fetches sources from the database.
 func fetchPaginatedSources(
 	ctx stdctx.Context,
-	tx *sql.Tx,
+	qe common.QueryExecutor,
 	baseQuery squirrel.SelectBuilder,
 	cursor string,
 	decodedCursor libHTTP.Cursor,
@@ -223,7 +209,7 @@ func fetchPaginatedSources(
 		return nil, err
 	}
 
-	sources, err = executeSourceRows(ctx, tx, paginatedQuery, limit)
+	sources, err = executeSourceRows(ctx, qe, paginatedQuery, limit)
 	if err != nil {
 		return nil, err
 	}

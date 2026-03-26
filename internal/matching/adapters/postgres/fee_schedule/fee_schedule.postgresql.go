@@ -50,12 +50,7 @@ func (repo *Repository) CreateWithTx(ctx context.Context, tx matchingRepos.Tx, s
 		return nil, ErrInvalidTx
 	}
 
-	sqlTx, ok := tx.(*sql.Tx)
-	if !ok || sqlTx == nil {
-		return nil, ErrInvalidTx
-	}
-
-	return repo.createInternal(ctx, sqlTx, schedule)
+	return repo.createInternal(ctx, tx, schedule)
 }
 
 // createInternal is the shared implementation for Create and CreateWithTx.
@@ -195,12 +190,7 @@ func (repo *Repository) UpdateWithTx(ctx context.Context, tx matchingRepos.Tx, s
 		return nil, ErrInvalidTx
 	}
 
-	sqlTx, ok := tx.(*sql.Tx)
-	if !ok || sqlTx == nil {
-		return nil, ErrInvalidTx
-	}
-
-	return repo.updateInternal(ctx, sqlTx, schedule)
+	return repo.updateInternal(ctx, tx, schedule)
 }
 
 // updateInternal is the shared implementation for Update and UpdateWithTx.
@@ -313,12 +303,7 @@ func (repo *Repository) DeleteWithTx(ctx context.Context, tx matchingRepos.Tx, i
 		return ErrInvalidTx
 	}
 
-	sqlTx, ok := tx.(*sql.Tx)
-	if !ok || sqlTx == nil {
-		return ErrInvalidTx
-	}
-
-	return repo.deleteInternal(ctx, sqlTx, id)
+	return repo.deleteInternal(ctx, tx, id)
 }
 
 // deleteInternal is the shared implementation for Delete and DeleteWithTx.

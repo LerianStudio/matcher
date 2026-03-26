@@ -30,8 +30,6 @@ internal/shared/
 │   ├── field_map.go     # Canonical FieldMap definition
 │   ├── match_rule.go    # Canonical MatchRule definition
 │   └── transaction.go   # Canonical Transaction entity
-├── infrastructure/
-│   └── tenant/          # Tenant infrastructure (ConnectionManager, SingleTenantProvider)
 ├── ports/               # InfrastructureProvider, MatchTrigger, TransactionProvider interfaces
 ├── testutil/            # Shared test helpers (decimal, logger, uuid, helpers)
 └── utils/               # Text utilities
@@ -89,8 +87,7 @@ Shared event type constants used across bounded contexts for outbox event public
 
 ### Infrastructure
 
-- **ConnectionManager**: Manages PostgreSQL and Redis connections, including primary/replica splitting.
-- **SingleTenantProvider**: Default tenant provider for single-tenant deployments.
+- **InfrastructureProvider**: Tenant-aware access to transactions, primary DBs, replica DBs, and Redis.
 - **Common SQL Utilities**: Cursor pagination, nullable type helpers, transaction wrappers, and read helpers.
 
 ### Sanitization
@@ -99,7 +96,7 @@ Shared event type constants used across bounded contexts for outbox event public
 
 ### Ports
 
-- **InfrastructureProvider**: Interface for accessing database connections and tenant-aware transaction providers.
+- **InfrastructureProvider**: Interface for tenant-aware transactions, primary/replica DB access, and Redis access.
 - **MatchTrigger**: Interface for triggering auto-matching after ingestion completes.
 - **ObjectStorage**: Interface for S3-compatible object storage operations.
 - **Fetcher**: Interface for external fetcher service communication.

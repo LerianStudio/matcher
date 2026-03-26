@@ -25,7 +25,6 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	outboxEntities "github.com/LerianStudio/matcher/internal/outbox/domain/entities"
-	"github.com/LerianStudio/matcher/internal/outbox/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
@@ -82,7 +81,7 @@ const (
 
 // Dispatcher handles publishing outbox events to message queues.
 type Dispatcher struct {
-	repo                        repositories.OutboxRepository
+	repo                        sharedPorts.OutboxRepository
 	ingestPub                   sharedPorts.IngestionEventPublisher
 	matchPub                    sharedDomain.MatchEventPublisher
 	auditPub                    sharedDomain.AuditEventPublisher
@@ -147,16 +146,21 @@ type DispatcherOption func(*Dispatcher)
 
 // WithAuditPublisher sets the audit event publisher for the dispatcher.
 func WithAuditPublisher(pub sharedDomain.AuditEventPublisher) DispatcherOption {
-	return func(d *Dispatcher) {
-		d.auditPub = pub
+	return func(dispatcher *Dispatcher) {
+		if sharedPorts.IsNilValue(pub) {
+			dispatcher.auditPub = nil
+			return
+		}
+
+		dispatcher.auditPub = pub
 	}
 }
 
 // WithBatchSize configures the maximum number of events processed per dispatch cycle.
 func WithBatchSize(size int) DispatcherOption {
-	return func(d *Dispatcher) {
+	return func(dispatcher *Dispatcher) {
 		if size > 0 {
-			d.batchSize = size
+			dispatcher.batchSize = size
 		}
 	}
 }
@@ -164,23 +168,23 @@ func WithBatchSize(size int) DispatcherOption {
 // WithProduction sets whether the dispatcher runs in production mode.
 // When true, SafeError suppresses internal error details from logs.
 func WithProduction(production bool) DispatcherOption {
-	return func(d *Dispatcher) {
-		d.production = production
+	return func(dispatcher *Dispatcher) {
+		dispatcher.production = production
 	}
 }
 
 // WithDispatchInterval configures how often the dispatcher polls for new events.
 func WithDispatchInterval(interval time.Duration) DispatcherOption {
-	return func(d *Dispatcher) {
+	return func(dispatcher *Dispatcher) {
 		if interval > 0 {
-			d.interval = interval
+			dispatcher.interval = interval
 		}
 	}
 }
 
 // NewDispatcher creates a new Dispatcher with the given dependencies.
 func NewDispatcher(
-	repo repositories.OutboxRepository,
+	repo sharedPorts.OutboxRepository,
 	ingestPub sharedPorts.IngestionEventPublisher,
 	matchPub sharedDomain.MatchEventPublisher,
 	logger libLog.Logger,
@@ -843,7 +847,7 @@ func (dispatcher *Dispatcher) publishMatchUnmatched(ctx context.Context, payload
 }
 
 func (dispatcher *Dispatcher) publishAuditLogCreated(ctx context.Context, payload []byte) error {
-	if dispatcher.auditPub == nil {
+	if sharedPorts.IsNilValue(dispatcher.auditPub) {
 		return ErrAuditPublisherNotConfigured
 	}
 

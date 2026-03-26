@@ -6,15 +6,17 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	outboxRepo "github.com/LerianStudio/matcher/internal/outbox/adapters/postgres"
+	"github.com/LerianStudio/matcher/internal/auth"
 	outboxEntities "github.com/LerianStudio/matcher/internal/outbox/domain/entities"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
+	outboxRepo "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/outbox"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
@@ -203,6 +205,50 @@ func TestOutboxDispatcher_SkipsRecentlyFailedEvents(t *testing.T) {
 	})
 }
 
+func TestOutboxDispatcher_DispatchOnce_MultiTenantDBBacked(t *testing.T) {
+	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
+		repo := outboxRepo.NewRepository(h.Provider())
+
+		tenantA := uuid.New()
+		tenantB := uuid.New()
+		require.NoError(t, ensureTenantOutboxSchema(t, h, tenantA.String()))
+		require.NoError(t, ensureTenantOutboxSchema(t, h, tenantB.String()))
+
+		ctxA := context.WithValue(context.Background(), auth.TenantIDKey, tenantA.String())
+		ctxB := context.WithValue(context.Background(), auth.TenantIDKey, tenantB.String())
+
+		payloadA := validMatchConfirmedPayload(tenantA)
+		eventA, err := outboxEntities.NewOutboxEvent(ctxA, shared.EventTypeMatchConfirmed, payloadA.MatchID, mustJSON(t, payloadA))
+		require.NoError(t, err)
+		createdA, err := repo.Create(ctxA, eventA)
+		require.NoError(t, err)
+
+		payloadB := validMatchConfirmedPayload(tenantB)
+		eventB, err := outboxEntities.NewOutboxEvent(ctxB, shared.EventTypeMatchConfirmed, payloadB.MatchID, mustJSON(t, payloadB))
+		require.NoError(t, err)
+		createdB, err := repo.Create(ctxB, eventB)
+		require.NoError(t, err)
+
+		cap := &capturePublishers{}
+		dispatcher := newDispatcher(t, h, cap)
+
+		processedA := dispatcher.DispatchOnce(ctxA)
+		processedB := dispatcher.DispatchOnce(ctxB)
+		require.Equal(t, 1, processedA)
+		require.Equal(t, 1, processedB)
+		require.Equal(t, 2, cap.matchConfirmed)
+		require.ElementsMatch(t, []uuid.UUID{tenantA, tenantB}, cap.tenantIDs)
+
+		fetchedA, err := repo.GetByID(ctxA, createdA.ID)
+		require.NoError(t, err)
+		require.Equal(t, outboxEntities.OutboxStatusPublished, fetchedA.Status)
+
+		fetchedB, err := repo.GetByID(ctxB, createdB.ID)
+		require.NoError(t, err)
+		require.Equal(t, outboxEntities.OutboxStatusPublished, fetchedB.Status)
+	})
+}
+
 // --- Helpers ---
 
 func validMatchConfirmedPayload(tenantID uuid.UUID) shared.MatchConfirmedEvent {
@@ -249,4 +295,27 @@ func backdateOutboxEvent(
 		return struct{}{}, execErr
 	})
 	require.NoError(t, err)
+}
+
+func ensureTenantOutboxSchema(t *testing.T, h *integration.TestHarness, tenantID string) error {
+	t.Helper()
+
+	resolver, err := h.Connection.Resolver(context.Background())
+	if err != nil {
+		return err
+	}
+
+	quotedID := auth.QuoteIdentifier(tenantID)
+	queries := []string{
+		"CREATE SCHEMA IF NOT EXISTS " + quotedID,
+		fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s.outbox_events (LIKE public.outbox_events INCLUDING ALL)", quotedID),
+	}
+
+	for _, query := range queries {
+		if _, err := resolver.ExecContext(context.Background(), query); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

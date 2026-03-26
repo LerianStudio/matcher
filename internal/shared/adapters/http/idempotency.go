@@ -7,7 +7,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"regexp"
+	"net/url"
+	"sort"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
@@ -19,6 +20,8 @@ import (
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/auth"
+	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // HTTP header constants for idempotency key extraction.
@@ -27,72 +30,45 @@ const (
 	HeaderIdempotencyKey       = "Idempotency-Key"
 	HeaderXIdempotencyReplayed = "X-Idempotency-Replayed"
 	httpErrorStatusThreshold   = 400
+	principalPrefixUser        = "user:"
+	principalPrefixAnonymous   = "anon:"
 )
 
 // Context key for tracking idempotency middleware execution.
 const idempotencyProcessedKey = "idempotency_processed"
 
-// Idempotency key validation constraints.
-const (
-	idempotencyKeyMaxLength = 128
-)
-
-// idempotencyKeyPattern allows alphanumeric characters, colons, underscores, and hyphens.
-// This matches the validation in internal/exception/domain/value_objects/idempotency_key.go.
-var idempotencyKeyPattern = regexp.MustCompile(`^[A-Za-z0-9:_-]+$`)
-
-// Idempotency key validation errors.
 var (
-	ErrEmptyIdempotencyKey   = errors.New("idempotency key is required")
-	ErrIdempotencyKeyTooLong = errors.New(
-		"idempotency key exceeds maximum length of 128 characters",
-	)
-	ErrInvalidIdempotencyKey = errors.New(
-		"idempotency key contains invalid characters; allowed: alphanumeric, colons, underscores, hyphens",
-	)
+	// ErrEmptyIdempotencyKey is returned when the provided key is blank.
+	ErrEmptyIdempotencyKey = shared.ErrEmptyIdempotencyKey
+	// ErrInvalidIdempotencyKey is returned when the provided key format is invalid.
+	ErrInvalidIdempotencyKey = shared.ErrInvalidIdempotencyKey
+	// ErrMissingTenantID is returned when auth middleware did not populate tenant scope.
 	ErrMissingTenantID = errors.New(
 		"tenant ID is required for idempotency; ensure auth middleware runs before idempotency middleware",
 	)
+	// ErrUnknownIdempotencyStatus is returned when a cached result has an unrecognized status.
+	ErrUnknownIdempotencyStatus = errors.New("unknown idempotency status")
 )
 
 // IdempotencyStatus represents the state of an idempotency key.
-type IdempotencyStatus string
+type IdempotencyStatus = shared.IdempotencyStatus
 
-// Idempotency status constants.
+// Re-exported idempotency statuses from the shared kernel.
 const (
-	IdempotencyStatusUnknown  IdempotencyStatus = "unknown"
-	IdempotencyStatusPending  IdempotencyStatus = "pending"
-	IdempotencyStatusComplete IdempotencyStatus = "complete"
-	IdempotencyStatusFailed   IdempotencyStatus = "failed"
+	IdempotencyStatusUnknown  = shared.IdempotencyStatusUnknown
+	IdempotencyStatusPending  = shared.IdempotencyStatusPending
+	IdempotencyStatusComplete = shared.IdempotencyStatusComplete
+	IdempotencyStatusFailed   = shared.IdempotencyStatusFailed
 )
 
-// IdempotencyResult holds the cached response for a completed idempotent request.
-type IdempotencyResult struct {
-	Status     IdempotencyStatus
-	Response   []byte
-	HTTPStatus int
-}
+// IdempotencyResult contains the cached response for an idempotent request.
+type IdempotencyResult = shared.IdempotencyResult
 
-// IdempotencyKey is the string identifier for an idempotent request.
-type IdempotencyKey string
+// IdempotencyKey is the canonical request de-duplication identifier.
+type IdempotencyKey = shared.IdempotencyKey
 
-// IdempotencyRepository defines the interface for idempotency storage operations.
-// This interface is implemented by the Redis adapter in the exception bounded context.
-//
-// TTL note: TryAcquire sets the initial pending marker with the same TTL as completed
-// entries (typically 7 days via DefaultSuccessTTL). If a request crashes between
-// TryAcquire and MarkComplete/MarkFailed, the pending marker blocks retries for
-// that full duration. MarkFailed resets the TTL to a shorter window (typically 5
-// minutes via DefaultFailedRetryWindow). Implementations should consider using a
-// shorter initial TTL for the pending state (e.g., 5 minutes) and only extending
-// to the full TTL on MarkComplete.
-type IdempotencyRepository interface {
-	TryAcquire(ctx context.Context, key IdempotencyKey) (acquired bool, err error)
-	TryReacquireFromFailed(ctx context.Context, key IdempotencyKey) (acquired bool, err error)
-	MarkComplete(ctx context.Context, key IdempotencyKey, response []byte, httpStatus int) error
-	MarkFailed(ctx context.Context, key IdempotencyKey) error
-	GetCachedResult(ctx context.Context, key IdempotencyKey) (*IdempotencyResult, error)
-}
+// IdempotencyRepository defines the persistence contract used by the middleware.
+type IdempotencyRepository = sharedPorts.IdempotencyRepository
 
 // IdempotencyMiddlewareConfig configures the idempotency middleware behavior.
 type IdempotencyMiddlewareConfig struct {
@@ -101,20 +77,10 @@ type IdempotencyMiddlewareConfig struct {
 	SkipPaths  []string
 }
 
-// validateIdempotencyKeyFormat validates the user-provided idempotency key format.
-// Returns nil if the key is valid, or a specific error describing the validation failure.
-// This validation is applied ONLY to user-provided keys, not to auto-generated hash keys.
+// validateIdempotencyKeyFormat validates a user-provided idempotency key.
 func validateIdempotencyKeyFormat(userKey string) error {
-	if userKey == "" {
-		return ErrEmptyIdempotencyKey
-	}
-
-	if len(userKey) > idempotencyKeyMaxLength {
-		return ErrIdempotencyKeyTooLong
-	}
-
-	if !idempotencyKeyPattern.MatchString(userKey) {
-		return ErrInvalidIdempotencyKey
+	if _, err := shared.ParseIdempotencyKey(userKey); err != nil {
+		return fmt.Errorf("parse idempotency key: %w", err)
 	}
 
 	return nil
@@ -191,7 +157,16 @@ func handleKeyValidationError(
 
 	logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("idempotency middleware: invalid key format: %v", validationErr))
 
-	return pkghttp.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_idempotency_key", validationErr.Error())
+	message := validationErr.Error()
+	if errors.Is(validationErr, ErrEmptyIdempotencyKey) {
+		message = ErrEmptyIdempotencyKey.Error()
+	}
+
+	if errors.Is(validationErr, ErrInvalidIdempotencyKey) {
+		message = ErrInvalidIdempotencyKey.Error()
+	}
+
+	return pkghttp.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_idempotency_key", message)
 }
 
 // executeIdempotencyLogic handles the core idempotency logic after initial checks pass.
@@ -229,10 +204,10 @@ func executeIdempotencyLogic(
 	return handleDuplicateRequest(ctx, fiberCtx, cfg.Repository, idempotencyKey, logger, span)
 }
 
-// extractIdempotencyKey extracts and constructs a tenant-scoped idempotency key.
-// The key format is: prefix:tenantID:method:path:userKey
-// This ensures tenant isolation - different tenants cannot share idempotency keys,
-// and the same key on different endpoints/methods is treated as distinct.
+// extractIdempotencyKey extracts and constructs a tenant- and principal-scoped idempotency key.
+// The key format is: prefix:tenantID:principalID:method:requestTarget:userKey
+// This ensures tenant isolation, separates same-tenant callers when user identity is available,
+// and scopes keys to the full request target rather than path alone.
 //
 // Returns:
 //   - key: the constructed idempotency key (empty if no key should be used)
@@ -252,11 +227,23 @@ func extractIdempotencyKey(
 	userProvidedKey := userKey != ""
 
 	if userKey == "" {
-		// Body hash fallback: when no Idempotency-Key header is provided, a SHA-256
-		// hash of the request body is used as the key. This means identical payloads
-		// sent to the same tenant+method+path will be deduplicated within the TTL window.
-		// If this behavior is undesirable, clients should always provide an explicit
-		// Idempotency-Key header.
+		// Body-hash fallback is only safe for POST and PUT. PATCH requests are
+		// state-dependent: the same body (e.g. {"status":"ACTIVE"}) represents
+		// different logical operations depending on the resource's current state.
+		// Using a body hash for PATCH causes false-positive replay when a resource
+		// transitions through states and returns to a previous body shape (e.g.
+		// DRAFT→ACTIVE, then ACTIVE→PAUSED, then PAUSED→ACTIVE: the third PATCH
+		// has the same body hash as the first, but is a distinct operation).
+		// For PATCH, only enforce idempotency when an explicit key header is provided.
+		if fiberCtx.Method() == fiber.MethodPatch {
+			return "", nil
+		}
+
+		// Body hash fallback for POST/PUT: when no Idempotency-Key header is
+		// provided, a SHA-256 hash of the request body is used as the key. This
+		// means identical payloads sent to the same tenant+method+path will be
+		// deduplicated within the TTL window. If this behavior is undesirable,
+		// clients should always provide an explicit Idempotency-Key header.
 		body := fiberCtx.Body()
 		if len(body) == 0 {
 			return "", nil
@@ -276,6 +263,13 @@ func extractIdempotencyKey(
 		if err := validateIdempotencyKeyFormat(userKey); err != nil {
 			return "", err
 		}
+
+		parsedKey, err := shared.ParseIdempotencyKey(userKey)
+		if err != nil {
+			return "", fmt.Errorf("parse idempotency key: %w", err)
+		}
+
+		userKey = parsedKey.String()
 	}
 
 	// Extract tenant ID from context (set by auth middleware).
@@ -287,18 +281,67 @@ func extractIdempotencyKey(
 		return "", ErrMissingTenantID
 	}
 
-	// Include method and path for complete request scoping
-	method := fiberCtx.Method()
-	path := fiberCtx.Path()
+	rawPrincipalID := strings.TrimSpace(auth.GetUserID(ctx))
 
-	// Build the scoped key: prefix:tenantID:method:path:userKey
-	// This prevents cross-tenant data leakage and ensures the same
-	// idempotency key used on different endpoints is treated as distinct
-	if prefix != "" {
-		return fmt.Sprintf("%s:%s:%s:%s:%s", prefix, tenantID, method, path, userKey), nil
+	var principalID string
+	if rawPrincipalID == "" {
+		principalID = principalPrefixAnonymous
+	} else {
+		principalID = principalPrefixUser + rawPrincipalID
 	}
 
-	return fmt.Sprintf("%s:%s:%s:%s", tenantID, method, path, userKey), nil
+	// Include method and canonical request target for complete request scoping.
+	method := fiberCtx.Method()
+	requestTarget := canonicalRequestTarget(fiberCtx)
+
+	// Build the scoped key: prefix:tenantID:principalID:method:requestTarget:userKey.
+	// This prevents cross-tenant data leakage, reduces same-tenant caller collisions,
+	// and ensures the same idempotency key used on different request targets is distinct.
+	if prefix != "" {
+		return fmt.Sprintf("%s:%s:%s:%s:%s:%s", prefix, tenantID, principalID, method, requestTarget, userKey), nil
+	}
+
+	return fmt.Sprintf("%s:%s:%s:%s:%s", tenantID, principalID, method, requestTarget, userKey), nil
+}
+
+func canonicalRequestTarget(fiberCtx *fiber.Ctx) string {
+	if fiberCtx == nil {
+		return ""
+	}
+
+	path := fiberCtx.Path()
+
+	args := fiberCtx.Context().QueryArgs()
+	if args.Len() == 0 {
+		return path
+	}
+
+	query := url.Values{}
+
+	for key, value := range args.All() {
+		query.Add(string(key), string(value))
+	}
+
+	for key := range query {
+		sort.Strings(query[key])
+	}
+
+	encoded := query.Encode()
+	if encoded == "" {
+		return path
+	}
+
+	target := path + "?" + encoded
+
+	// Limit Redis key size: hash the request target if it exceeds a safe threshold.
+	const maxRequestTargetLen = 256
+	if len(target) > maxRequestTargetLen {
+		h := sha256.Sum256([]byte(target))
+
+		return path + "?_hash=" + hex.EncodeToString(h[:])
+	}
+
+	return target
 }
 
 type idempotencyLogger = libLog.Logger
@@ -440,6 +483,13 @@ func handleDuplicateRequest(
 		return processNewRequest(ctx, fiberCtx, repo, key, logger, span)
 
 	default:
-		return fiberCtx.Next()
+		libOpentelemetry.HandleSpanError(span, "idempotency: unknown status", fmt.Errorf("status %q: %w", result.Status, ErrUnknownIdempotencyStatus))
+
+		return pkghttp.RespondError(
+			fiberCtx,
+			fiber.StatusInternalServerError,
+			"idempotency_error",
+			"Unexpected idempotency state encountered",
+		)
 	}
 }

@@ -192,9 +192,11 @@ func TestProviderIsolation_SingleTenant_AlwaysSameConnection(t *testing.T) {
 
 	// Multiple calls should always return the same underlying connection.
 	for i := 0; i < 5; i++ {
-		pgLease, err := provider.GetPostgresConnection(context.Background())
+		pgLease, err := provider.GetPrimaryDB(context.Background())
 		require.NoError(t, err)
-		assert.Same(t, pg, pgLease.Connection(),
+		primaryDB, resolveErr := resolvePrimaryDB(context.Background(), pg)
+		require.NoError(t, resolveErr)
+		assert.Same(t, primaryDB, pgLease.DB(),
 			"single-tenant mode must always return the same postgres connection")
 
 		redisLease, err := provider.GetRedisConnection(context.Background())
@@ -229,9 +231,11 @@ func TestProviderIsolation_SingleTenant_ContextDoesNotAffectConnection(t *testin
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			pgLease, err := provider.GetPostgresConnection(tc.ctx)
+			pgLease, err := provider.GetPrimaryDB(tc.ctx)
 			require.NoError(t, err)
-			assert.Same(t, pg, pgLease.Connection(),
+			primaryDB, resolveErr := resolvePrimaryDB(tc.ctx, pg)
+			require.NoError(t, resolveErr)
+			assert.Same(t, primaryDB, pgLease.DB(),
 				"single-tenant mode: %s should still resolve to same connection", tc.name)
 
 			redisLease, err := provider.GetRedisConnection(tc.ctx)
@@ -288,8 +292,8 @@ func TestProviderIsolation_MultiTenant_TwoTenantsCallTenantManager(t *testing.T)
 	ctxB := core.ContextWithTenantID(context.Background(), "tenant-beta")
 
 	// Both will fail with connection errors (no real DB), but should reach tenant manager.
-	_, _ = provider.GetPostgresConnection(ctxA)
-	_, _ = provider.GetPostgresConnection(ctxB)
+	_, _ = provider.GetPrimaryDB(ctxA)
+	_, _ = provider.GetPrimaryDB(ctxB)
 
 	assert.Positive(t, tenantsRequested["tenant-alpha"],
 		"tenant-alpha should have been resolved through tenant manager")

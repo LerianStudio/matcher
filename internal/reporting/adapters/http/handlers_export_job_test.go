@@ -24,10 +24,10 @@ import (
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	repomocks "github.com/LerianStudio/matcher/internal/reporting/domain/repositories/mocks"
-	portsmocks "github.com/LerianStudio/matcher/internal/reporting/ports/mocks"
 	"github.com/LerianStudio/matcher/internal/reporting/services/command"
 	"github.com/LerianStudio/matcher/internal/reporting/services/query"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
+	portsmocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
 )
 
 // testTenantID is the tenant ID used in test middleware (setupExportJobTestApp).
@@ -165,6 +165,18 @@ func TestNewExportJobHandlers(t *testing.T) {
 		t.Parallel()
 
 		handlers, err := NewExportJobHandlers(uc, querySvc, nil, ctxProvider, time.Hour)
+
+		require.Error(t, err)
+		assert.Nil(t, handlers)
+		require.ErrorIs(t, err, ErrNilStorageClientHandler)
+	})
+
+	t.Run("returns error with typed-nil storage", func(t *testing.T) {
+		t.Parallel()
+
+		var typedNilStorage *portsmocks.MockObjectStorageClient
+
+		handlers, err := NewExportJobHandlers(uc, querySvc, typedNilStorage, ctxProvider, time.Hour)
 
 		require.Error(t, err)
 		assert.Nil(t, handlers)

@@ -22,6 +22,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/auth"
 	sharedHTTP "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // Routes holds the configured API route groups.
@@ -74,7 +75,7 @@ func RegisterRoutes(
 	authClient *authMiddleware.AuthClient,
 	tenantExtractor *auth.TenantExtractor,
 	rateLimiterGetter func() *ratelimit.RateLimiter,
-	idempotencyRepo sharedHTTP.IdempotencyRepository,
+	idempotencyRepo sharedPorts.IdempotencyRepository,
 	tenantDBHandler fiber.Handler,
 ) (*Routes, error) {
 	asserter := assert.New(

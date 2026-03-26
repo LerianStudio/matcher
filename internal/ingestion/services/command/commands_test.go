@@ -20,10 +20,12 @@ import (
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
+	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/ingestion/ports"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // errOutbox is a sentinel error for outbox failures.
@@ -345,6 +347,27 @@ func (f *fakeSourceRepo) FindByID(
 	return f.source, f.err
 }
 
+type fakeContextProvider struct {
+	enabled bool
+	err     error
+}
+
+func (f fakeContextProvider) IsAutoMatchEnabled(_ context.Context, _ uuid.UUID) (bool, error) {
+	return f.enabled, f.err
+}
+
+type fakeMatchTrigger struct {
+	called    bool
+	tenantID  uuid.UUID
+	contextID uuid.UUID
+}
+
+func (f *fakeMatchTrigger) TriggerMatchForContext(_ context.Context, tenantID, contextID uuid.UUID) {
+	f.called = true
+	f.tenantID = tenantID
+	f.contextID = contextID
+}
+
 func newTestDeps() UseCaseDeps {
 	return UseCaseDeps{
 		JobRepo:         &fakeJobRepo{},
@@ -402,6 +425,59 @@ func TestNewUseCaseRequiresDependencies(t *testing.T) {
 	testDeps.SourceRepo = nil
 	_, err = NewUseCase(testDeps)
 	require.ErrorIs(t, err, ErrNilSourceRepository)
+}
+
+func TestNewUseCase_NormalizesTypedNilOptionalDeps(t *testing.T) {
+	t.Parallel()
+
+	deps := newTestDeps()
+
+	var typedNilTrigger *fakeMatchTrigger
+	var typedNilProvider *fakeContextProvider
+
+	deps.MatchTrigger = sharedPorts.MatchTrigger(typedNilTrigger)
+	deps.ContextProvider = sharedPorts.ContextProvider(typedNilProvider)
+
+	uc, err := NewUseCase(deps)
+	require.NoError(t, err)
+	require.Nil(t, uc.matchTrigger)
+	require.Nil(t, uc.contextProvider)
+}
+
+func TestTriggerAutoMatchIfEnabled_IgnoresTypedNilMatchTrigger(t *testing.T) {
+	t.Parallel()
+
+	contextID := uuid.New()
+	ctx := context.WithValue(context.Background(), auth.TenantIDKey, uuid.NewString())
+
+	var typedNilTrigger *fakeMatchTrigger
+	uc := &UseCase{
+		contextProvider: fakeContextProvider{enabled: true},
+		matchTrigger:    sharedPorts.MatchTrigger(typedNilTrigger),
+	}
+
+	require.NotPanics(t, func() {
+		uc.triggerAutoMatchIfEnabled(ctx, contextID)
+	})
+}
+
+func TestTriggerAutoMatchIfEnabled_IgnoresTypedNilContextProvider(t *testing.T) {
+	t.Parallel()
+
+	contextID := uuid.New()
+	ctx := context.WithValue(context.Background(), auth.TenantIDKey, uuid.NewString())
+	trigger := &fakeMatchTrigger{}
+
+	var typedNilProvider *fakeContextProvider
+	uc := &UseCase{
+		contextProvider: sharedPorts.ContextProvider(typedNilProvider),
+		matchTrigger:    trigger,
+	}
+
+	require.NotPanics(t, func() {
+		uc.triggerAutoMatchIfEnabled(ctx, contextID)
+	})
+	require.False(t, trigger.called)
 }
 
 type noTxJobRepo struct{}

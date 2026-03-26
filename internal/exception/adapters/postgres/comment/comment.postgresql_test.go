@@ -19,10 +19,6 @@ import (
 // so that the nil-comment guard (which sits behind the provider check) can be reached.
 type stubProvider struct{}
 
-func (p *stubProvider) GetPostgresConnection(_ context.Context) (*ports.PostgresConnectionLease, error) {
-	return nil, nil
-}
-
 func (p *stubProvider) GetRedisConnection(_ context.Context) (*ports.RedisConnectionLease, error) {
 	return nil, nil
 }
@@ -31,7 +27,11 @@ func (p *stubProvider) BeginTx(_ context.Context) (*ports.TxLease, error) {
 	return nil, nil
 }
 
-func (p *stubProvider) GetReplicaDB(_ context.Context) (*ports.ReplicaDBLease, error) {
+func (p *stubProvider) GetReplicaDB(_ context.Context) (*ports.DBLease, error) {
+	return nil, nil
+}
+
+func (p *stubProvider) GetPrimaryDB(_ context.Context) (*ports.DBLease, error) {
 	return nil, nil
 }
 

@@ -18,7 +18,7 @@ var _ ports.Authorizer = (*MatcherAuthorizer)(nil)
 
 // MatcherAuthorizer bridges the systemplane Authorizer port to Matcher's
 // lib-auth-based authorization mechanism. When auth is disabled it permits
-// all operations, matching the codebase convention where AUTH_ENABLED=false
+// all operations, matching the codebase convention where PLUGIN_AUTH_ENABLED=false
 // bypasses all authorization checks.
 //
 // Permission strings follow the systemplane convention:

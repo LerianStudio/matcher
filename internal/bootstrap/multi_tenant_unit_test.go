@@ -65,9 +65,9 @@ func TestDynamicInfrastructureProvider_MultiTenant_MissingTenantInContext(t *tes
 	defer func() { _ = provider.Close() }()
 
 	// Bare context: no tenant set => fail closed with ErrTenantContextRequired.
-	_, err := provider.GetPostgresConnection(context.Background())
+	_, err := provider.GetPrimaryDB(context.Background())
 	require.Error(t, err, "expected error because no tenant context is set")
-	require.ErrorContains(t, err, "resolve tenant postgres connection")
+	require.ErrorContains(t, err, "tenant context required")
 	require.ErrorIs(t, err, core.ErrTenantContextRequired,
 		"multi-tenant mode must fail closed when tenant context is genuinely absent")
 }
@@ -113,9 +113,9 @@ func TestDynamicInfrastructureProvider_MultiTenant_FallbackToAuthGetTenantID(t *
 	// The connection will fail (can't connect to localhost:5432 in unit test) but
 	// the key point is that the fallback to auth.GetTenantID works: the request
 	// reaches the mock server with the correct tenant ID.
-	_, err := provider.GetPostgresConnection(ctx)
+	_, err := provider.GetPrimaryDB(ctx)
 	require.Error(t, err, "expected connection failure in unit test, but fallback path should have been taken")
-	require.ErrorContains(t, err, "resolve tenant postgres connection")
+	require.ErrorContains(t, err, "get tenant connection")
 }
 
 func TestDynamicInfrastructureProvider_MultiTenant_EmptyTenantIDInContext(t *testing.T) {
@@ -142,12 +142,10 @@ func TestDynamicInfrastructureProvider_MultiTenant_EmptyTenantIDInContext(t *tes
 	ctx := core.ContextWithTenantID(context.Background(), "")
 	ctx = context.WithValue(ctx, auth.TenantIDKey, "")
 
-	_, err := provider.GetPostgresConnection(ctx)
+	_, err := provider.GetPrimaryDB(ctx)
 	require.Error(t, err, "expected error for empty tenant fallback chain")
-	require.ErrorContains(t, err, "resolve tenant postgres connection")
-	// auth.GetTenantID falls back to DefaultTenantID when empty, so core path
-	// sees empty => fallback to auth => gets DefaultTenantID => proceeds.
-	// This verifies the fallback chain works end-to-end.
+	require.ErrorContains(t, err, "tenant context required")
+	// Empty tenant context now fails closed for primary DB resolution.
 }
 
 // Section 2: Dynamic Infrastructure Provider — BeginTx Multi-Tenant Error Paths.
@@ -155,7 +153,7 @@ func TestDynamicInfrastructureProvider_MultiTenant_EmptyTenantIDInContext(t *tes
 func TestDynamicInfrastructureProvider_BeginTx_MissingTenantContext(t *testing.T) {
 	t.Parallel()
 
-	// Same fallback chain as GetPostgresConnection: bare context => default tenant ID.
+	// Same fallback chain as primary DB resolution: bare context => explicit tenant required.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		if err := json.NewEncoder(w).Encode(core.TenantConfig{

@@ -4,9 +4,6 @@ import (
 	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 )
 
-// CursorResponse is an alias for the shared cursor pagination type.
-type CursorResponse = sharedhttp.CursorResponse
-
 // ExceptionResponse represents an exception in API responses.
 // @Description Exception details
 type ExceptionResponse struct {
@@ -89,7 +86,7 @@ type DisputeResponse struct {
 type ListExceptionsResponse struct {
 	// List of exceptions
 	Items []ExceptionResponse `json:"items" validate:"omitempty,max=200" maxItems:"200"`
-	CursorResponse
+	sharedhttp.CursorResponse
 }
 
 // ListDisputesResponse represents a paginated list of disputes.
@@ -97,7 +94,7 @@ type ListExceptionsResponse struct {
 type ListDisputesResponse struct {
 	// List of disputes
 	Items []DisputeResponse `json:"items" validate:"omitempty,max=200" maxItems:"200"`
-	CursorResponse
+	sharedhttp.CursorResponse
 }
 
 // DispatchResponse represents the result of dispatching an exception.
@@ -135,5 +132,5 @@ type HistoryEntryResponse struct {
 type HistoryResponse struct {
 	// List of history entries
 	Items []HistoryEntryResponse `json:"items" validate:"omitempty,max=200" maxItems:"200"`
-	CursorResponse
+	sharedhttp.CursorResponse
 }

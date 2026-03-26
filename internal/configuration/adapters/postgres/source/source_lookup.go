@@ -30,18 +30,11 @@ func (repo *Repository) FindByID(
 	ctx, span := tracer.Start(ctx, "repository.source.find_by_id")
 	defer span.End()
 
-	connection, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return nil, fmt.Errorf("get postgres connection: %w", err)
-	}
-	defer connection.Release()
-
-	result, err := common.WithTenantTx(
+	result, err := common.WithTenantReadQuery(
 		ctx,
-		connection.Connection(),
-		func(tx *sql.Tx) (*entities.ReconciliationSource, error) {
-			row := tx.QueryRowContext(
+		repo.provider,
+		func(qe common.QueryExecutor) (*entities.ReconciliationSource, error) {
+			row := qe.QueryRowContext(
 				ctx,
 				"SELECT "+sourceColumns+" FROM reconciliation_sources WHERE context_id = $1 AND id = $2",
 				contextID.String(),
@@ -80,20 +73,13 @@ func (repo *Repository) GetContextIDBySourceID(
 	ctx, span := tracer.Start(ctx, "repository.source.find_context_id_by_source_id")
 	defer span.End()
 
-	connection, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return uuid.Nil, fmt.Errorf("get postgres connection: %w", err)
-	}
-	defer connection.Release()
-
-	result, err := common.WithTenantTx(
+	result, err := common.WithTenantReadQuery(
 		ctx,
-		connection.Connection(),
-		func(tx *sql.Tx) (uuid.UUID, error) {
+		repo.provider,
+		func(qe common.QueryExecutor) (uuid.UUID, error) {
 			var contextIDStr string
 
-			row := tx.QueryRowContext(
+			row := qe.QueryRowContext(
 				ctx,
 				"SELECT context_id FROM reconciliation_sources WHERE id = $1",
 				sourceID.String(),

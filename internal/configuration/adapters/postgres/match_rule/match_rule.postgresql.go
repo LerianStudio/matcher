@@ -169,16 +169,9 @@ func (repo *Repository) FindByID(
 	ctx, span := tracer.Start(ctx, "postgres.find_match_rule_by_id")
 	defer span.End()
 
-	connection, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return nil, fmt.Errorf("get postgres connection: %w", err)
-	}
-	defer connection.Release()
-
-	result, err := common.WithTenantTx(
+	result, err := common.WithTenantTxProvider(
 		ctx,
-		connection.Connection(),
+		repo.provider,
 		func(tx *sql.Tx) (*entities.MatchRule, error) {
 			row := tx.QueryRowContext(
 				ctx,
@@ -223,13 +216,6 @@ func (repo *Repository) FindByContextID(
 	ctx, span := tracer.Start(ctx, "postgres.find_match_rules_by_context")
 	defer span.End()
 
-	connection, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return nil, libHTTP.CursorPagination{}, fmt.Errorf("get postgres connection: %w", err)
-	}
-	defer connection.Release()
-
 	limit = libHTTP.ValidateLimit(limit, constants.DefaultPaginationLimit, constants.MaximumPaginationLimit)
 
 	decodedCursor, cursorID, err := parseCursor(cursor)
@@ -239,9 +225,9 @@ func (repo *Repository) FindByContextID(
 
 	var pagination libHTTP.CursorPagination
 
-	result, err := common.WithTenantTx(
+	result, err := common.WithTenantTxProvider(
 		ctx,
-		connection.Connection(),
+		repo.provider,
 		func(tx *sql.Tx) (rules entities.MatchRules, err error) {
 			builder := squirrel.Select(strings.Split(matchRuleColumns, ", ")...).
 				From("match_rules").
@@ -411,13 +397,6 @@ func (repo *Repository) FindByContextIDAndType(
 	ctx, span := tracer.Start(ctx, "postgres.find_match_rules_by_context_and_type")
 	defer span.End()
 
-	connection, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return nil, libHTTP.CursorPagination{}, fmt.Errorf("get postgres connection: %w", err)
-	}
-	defer connection.Release()
-
 	limit = libHTTP.ValidateLimit(limit, constants.DefaultPaginationLimit, constants.MaximumPaginationLimit)
 
 	decodedCursor, cursorID, err := parseCursor(cursor)
@@ -427,9 +406,9 @@ func (repo *Repository) FindByContextIDAndType(
 
 	var pagination libHTTP.CursorPagination
 
-	result, err := common.WithTenantTx(
+	result, err := common.WithTenantTxProvider(
 		ctx,
-		connection.Connection(),
+		repo.provider,
 		func(tx *sql.Tx) (rules entities.MatchRules, err error) {
 			builder := squirrel.Select(strings.Split(matchRuleColumns, ", ")...).
 				From("match_rules").
@@ -505,16 +484,9 @@ func (repo *Repository) FindByPriority(
 	ctx, span := tracer.Start(ctx, "postgres.find_match_rule_by_priority")
 	defer span.End()
 
-	connection, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return nil, fmt.Errorf("get postgres connection: %w", err)
-	}
-	defer connection.Release()
-
-	result, err := common.WithTenantTx(
+	result, err := common.WithTenantTxProvider(
 		ctx,
-		connection.Connection(),
+		repo.provider,
 		func(tx *sql.Tx) (*entities.MatchRule, error) {
 			row := tx.QueryRowContext(
 				ctx,
@@ -795,14 +767,7 @@ func (repo *Repository) ReorderPriorities(
 	ctx, span := tracer.Start(ctx, "postgres.reorder_match_rule_priorities")
 	defer span.End()
 
-	connection, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return fmt.Errorf("get postgres connection: %w", err)
-	}
-	defer connection.Release()
-
-	_, err = common.WithTenantTx(ctx, connection.Connection(), func(tx *sql.Tx) (bool, error) {
+	_, err := common.WithTenantTxProvider(ctx, repo.provider, func(tx *sql.Tx) (bool, error) {
 		// Offset priorities to avoid unique constraint collisions during reorder.
 		offset := len(ruleIDs) + reorderPriorityOffset
 

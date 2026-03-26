@@ -62,12 +62,7 @@ func (repo *Repository) CreateWithTx(
 		return nil, ErrInvalidTx
 	}
 
-	sqlTx, ok := tx.(*sql.Tx)
-	if !ok || sqlTx == nil {
-		return nil, ErrInvalidTx
-	}
-
-	return repo.create(ctx, sqlTx, entity)
+	return repo.create(ctx, tx, entity)
 }
 
 func (repo *Repository) create(
@@ -165,12 +160,7 @@ func (repo *Repository) UpdateWithTx(
 		return nil, ErrInvalidTx
 	}
 
-	sqlTx, ok := tx.(*sql.Tx)
-	if !ok || sqlTx == nil {
-		return nil, ErrInvalidTx
-	}
-
-	return repo.update(ctx, sqlTx, entity)
+	return repo.update(ctx, tx, entity)
 }
 
 func (repo *Repository) update(

@@ -119,7 +119,7 @@ type UseCase struct {
 	dedupe          ports.DedupeService
 	dedupeTTL       time.Duration
 	dedupeTTLGetter func() time.Duration
-	publisher       ports.EventPublisher
+	publisher       sharedPorts.IngestionEventPublisher
 	outboxRepo      sharedPorts.OutboxRepository
 	jobTxRunner     jobTxRunner
 	jobRepoTx       jobTxUpdater
@@ -128,8 +128,8 @@ type UseCase struct {
 	parsers         ports.ParserRegistry
 	fieldMapRepo    ports.FieldMapRepository
 	sourceRepo      ports.SourceRepository
-	matchTrigger    ports.MatchTrigger
-	contextProvider ports.ContextProvider
+	matchTrigger    sharedPorts.MatchTrigger
+	contextProvider sharedPorts.ContextProvider
 }
 
 // UseCaseDeps groups all dependencies required by the ingestion UseCase.
@@ -137,15 +137,15 @@ type UseCaseDeps struct {
 	JobRepo         ingestionRepositories.JobRepository
 	TransactionRepo ingestionRepositories.TransactionRepository
 	Dedupe          ports.DedupeService
-	Publisher       ports.EventPublisher
+	Publisher       sharedPorts.IngestionEventPublisher
 	OutboxRepo      sharedPorts.OutboxRepository
 	Parsers         ports.ParserRegistry
 	FieldMapRepo    ports.FieldMapRepository
 	SourceRepo      ports.SourceRepository
 	DedupeTTL       time.Duration
 	DedupeTTLGetter func() time.Duration
-	MatchTrigger    ports.MatchTrigger
-	ContextProvider ports.ContextProvider
+	MatchTrigger    sharedPorts.MatchTrigger
+	ContextProvider sharedPorts.ContextProvider
 }
 
 func (deps *UseCaseDeps) validate() error {
@@ -177,6 +177,14 @@ func (deps *UseCaseDeps) validate() error {
 func NewUseCase(deps UseCaseDeps) (*UseCase, error) {
 	if err := deps.validate(); err != nil {
 		return nil, err
+	}
+
+	if sharedPorts.IsNilValue(deps.MatchTrigger) {
+		deps.MatchTrigger = nil
+	}
+
+	if sharedPorts.IsNilValue(deps.ContextProvider) {
+		deps.ContextProvider = nil
 	}
 
 	if deps.DedupeTTL == 0 {
@@ -896,7 +904,7 @@ func (uc *UseCase) cleanupPartialTransactionsBestEffort(ctx context.Context, job
 // for the context and triggers an asynchronous match run if so.
 // This is fire-and-forget; errors are logged but do not affect ingestion.
 func (uc *UseCase) triggerAutoMatchIfEnabled(ctx context.Context, contextID uuid.UUID) {
-	if uc.contextProvider == nil || uc.matchTrigger == nil {
+	if sharedPorts.IsNilValue(uc.contextProvider) || sharedPorts.IsNilValue(uc.matchTrigger) {
 		return
 	}
 

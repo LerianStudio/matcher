@@ -12,6 +12,8 @@ import (
 
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
+
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // errConfigNilAtomicLoad is returned when the atomic config pointer unexpectedly
@@ -55,7 +57,7 @@ func NewConfigManager(cfg *Config, logger libLog.Logger) (*ConfigManager, error)
 		return nil, ErrConfigNil
 	}
 
-	if isNilInterface(logger) {
+	if sharedPorts.IsNilValue(logger) {
 		logger = &libLog.NopLogger{}
 	}
 

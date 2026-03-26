@@ -28,8 +28,8 @@ import (
 	matchingRepositories "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
 	matchingVO "github.com/LerianStudio/matcher/internal/matching/domain/value_objects"
 	matchingPorts "github.com/LerianStudio/matcher/internal/matching/ports"
-	outboxRepo "github.com/LerianStudio/matcher/internal/outbox/adapters/postgres"
 	outboxEntities "github.com/LerianStudio/matcher/internal/outbox/domain/entities"
+	outboxRepo "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/outbox"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )

@@ -27,7 +27,10 @@ import (
 )
 
 type mockManagerForMount struct {
-	getConfigsFn func(context.Context) (service.ResolvedSet, error)
+	getConfigsFn      func(context.Context) (service.ResolvedSet, error)
+	patchConfigsFn    func(context.Context, service.PatchRequest) (service.WriteResult, error)
+	getConfigSchemaFn func(context.Context) ([]service.SchemaEntry, error)
+	getHistoryFn      func(context.Context, ports.HistoryFilter) ([]ports.HistoryEntry, error)
 }
 
 // mockManagerForMount implements service.Manager with no-op methods,
@@ -45,7 +48,11 @@ func (m *mockManagerForMount) GetSettings(_ context.Context, _ service.Subject) 
 	return service.ResolvedSet{}, nil
 }
 
-func (m *mockManagerForMount) PatchConfigs(_ context.Context, _ service.PatchRequest) (service.WriteResult, error) {
+func (m *mockManagerForMount) PatchConfigs(ctx context.Context, req service.PatchRequest) (service.WriteResult, error) {
+	if m.patchConfigsFn != nil {
+		return m.patchConfigsFn(ctx, req)
+	}
+
 	return service.WriteResult{}, nil
 }
 
@@ -53,7 +60,11 @@ func (m *mockManagerForMount) PatchSettings(_ context.Context, _ service.Subject
 	return service.WriteResult{}, nil
 }
 
-func (m *mockManagerForMount) GetConfigSchema(_ context.Context) ([]service.SchemaEntry, error) {
+func (m *mockManagerForMount) GetConfigSchema(ctx context.Context) ([]service.SchemaEntry, error) {
+	if m.getConfigSchemaFn != nil {
+		return m.getConfigSchemaFn(ctx)
+	}
+
 	return nil, nil
 }
 
@@ -61,7 +72,11 @@ func (m *mockManagerForMount) GetSettingSchema(_ context.Context) ([]service.Sch
 	return nil, nil
 }
 
-func (m *mockManagerForMount) GetConfigHistory(_ context.Context, _ ports.HistoryFilter) ([]ports.HistoryEntry, error) {
+func (m *mockManagerForMount) GetConfigHistory(ctx context.Context, filter ports.HistoryFilter) ([]ports.HistoryEntry, error) {
+	if m.getHistoryFn != nil {
+		return m.getHistoryFn(ctx, filter)
+	}
+
 	return nil, nil
 }
 

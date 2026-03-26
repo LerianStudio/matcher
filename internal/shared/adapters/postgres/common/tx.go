@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"reflect"
 	"time"
 
 	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
@@ -25,6 +24,8 @@ var (
 	ErrConnectionRequired = errors.New("postgres connection is required")
 	// ErrNoPrimaryDB indicates no primary database is configured.
 	ErrNoPrimaryDB = errors.New("no primary database configured for tenant transaction")
+	// ErrNilTxLease indicates the infrastructure provider returned a nil or unusable tx lease.
+	ErrNilTxLease = errors.New("tenant transaction lease is required")
 	// ErrNilCallback indicates a nil callback function was passed to a transaction wrapper.
 	ErrNilCallback = errors.New("pgcommon: callback function must not be nil")
 	// ErrInvalidTenantID indicates the tenant ID is not a valid UUID.
@@ -150,7 +151,7 @@ func WithTenantTxOrExistingProvider[Result any](
 		return zero, ErrNilCallback
 	}
 
-	if isNilInterface(provider) {
+	if ports.IsNilValue(provider) {
 		return zero, ErrConnectionRequired
 	}
 
@@ -162,9 +163,21 @@ func WithTenantTxOrExistingProvider[Result any](
 		return fn(tx)
 	}
 
-	txLease, err := provider.BeginTx(ctx)
+	txCtx := ctx
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		var cancel context.CancelFunc
+
+		txCtx, cancel = context.WithTimeout(ctx, defaultTxTimeout)
+		defer cancel()
+	}
+
+	txLease, err := provider.BeginTx(txCtx)
 	if err != nil {
 		return zero, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
+	if txLease == nil || txLease.SQLTx() == nil {
+		return zero, ErrNilTxLease
 	}
 
 	defer func() {
@@ -198,31 +211,31 @@ func BeginTenantTx(ctx context.Context, provider ports.InfrastructureProvider) (
 		return nil, noop, ErrConnectionRequired
 	}
 
-	if isNilInterface(provider) {
+	if ports.IsNilValue(provider) {
 		return nil, noop, ErrConnectionRequired
 	}
 
-	txLease, err := provider.BeginTx(ctx)
+	txCtx := ctx
+	cancel := noop
+
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		txCtx, cancel = context.WithTimeout(ctx, defaultTxTimeout)
+	}
+
+	txLease, err := provider.BeginTx(txCtx)
 	if err != nil {
+		cancel()
 		return nil, noop, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
+	if txLease == nil || txLease.SQLTx() == nil {
+		cancel()
+		return nil, noop, ErrNilTxLease
 	}
 
 	return txLease.SQLTx(), func() {
 		_ = txLease.Rollback()
+
+		cancel()
 	}, nil
-}
-
-func isNilInterface(value any) bool {
-	if value == nil {
-		return true
-	}
-
-	v := reflect.ValueOf(value)
-
-	switch v.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
-		return v.IsNil()
-	default:
-		return false
-	}
 }

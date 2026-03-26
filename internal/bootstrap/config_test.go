@@ -442,7 +442,7 @@ func testConfigAuthValidations(t *testing.T) {
 				BodyLimitBytes:  1024,
 				LogLevel:        "info",
 			}),
-			errMsg: "AUTH_SERVICE_ADDRESS is required when AUTH_ENABLED=true",
+			errMsg: "PLUGIN_AUTH_ADDRESS is required when PLUGIN_AUTH_ENABLED=true",
 		},
 		{
 			name: "auth enabled requires token secret",
@@ -454,7 +454,7 @@ func testConfigAuthValidations(t *testing.T) {
 				BodyLimitBytes:  1024,
 				LogLevel:        "info",
 			}),
-			errMsg: "AUTH_JWT_SECRET is required when AUTH_ENABLED=true",
+			errMsg: "AUTH_JWT_SECRET is required when PLUGIN_AUTH_ENABLED=true",
 		},
 	}
 
@@ -2190,7 +2190,7 @@ func TestConfig_AuthHostAndSecretValidation(t *testing.T) {
 
 		err := cfg.Validate()
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "AUTH_SERVICE_ADDRESS is required when AUTH_ENABLED=true")
+		assert.Contains(t, err.Error(), "PLUGIN_AUTH_ADDRESS is required when PLUGIN_AUTH_ENABLED=true")
 	})
 
 	t.Run("fails when auth enabled but secret missing", func(t *testing.T) {
@@ -2213,7 +2213,7 @@ func TestConfig_AuthHostAndSecretValidation(t *testing.T) {
 
 		err := cfg.Validate()
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "AUTH_JWT_SECRET is required when AUTH_ENABLED=true")
+		assert.Contains(t, err.Error(), "AUTH_JWT_SECRET is required when PLUGIN_AUTH_ENABLED=true")
 	})
 
 	t.Run("fails when auth enabled but host is whitespace only", func(t *testing.T) {
@@ -2236,7 +2236,7 @@ func TestConfig_AuthHostAndSecretValidation(t *testing.T) {
 
 		err := cfg.Validate()
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "AUTH_SERVICE_ADDRESS is required when AUTH_ENABLED=true")
+		assert.Contains(t, err.Error(), "PLUGIN_AUTH_ADDRESS is required when PLUGIN_AUTH_ENABLED=true")
 	})
 }
 

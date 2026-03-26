@@ -204,12 +204,6 @@ func TestScanVarianceRow_Error(t *testing.T) {
 
 type mockInfrastructureProvider struct{}
 
-func (m *mockInfrastructureProvider) GetPostgresConnection(
-	_ context.Context,
-) (*ports.PostgresConnectionLease, error) {
-	return nil, nil
-}
-
 func (m *mockInfrastructureProvider) GetRedisConnection(
 	_ context.Context,
 ) (*ports.RedisConnectionLease, error) {
@@ -220,7 +214,11 @@ func (m *mockInfrastructureProvider) BeginTx(_ context.Context) (*ports.TxLease,
 	return nil, nil
 }
 
-func (m *mockInfrastructureProvider) GetReplicaDB(_ context.Context) (*ports.ReplicaDBLease, error) {
+func (m *mockInfrastructureProvider) GetReplicaDB(_ context.Context) (*ports.DBLease, error) {
+	return nil, nil
+}
+
+func (m *mockInfrastructureProvider) GetPrimaryDB(_ context.Context) (*ports.DBLease, error) {
 	return nil, nil
 }
 

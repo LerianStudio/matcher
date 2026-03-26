@@ -262,7 +262,7 @@ linters:
               desc: "Hexagonal violation: HTTP handlers must use services, not postgres adapters directly (exception)"
             - pkg: "github.com/LerianStudio/matcher/internal/reporting/adapters/postgres"
               desc: "Hexagonal violation: HTTP handlers must use services, not postgres adapters directly (reporting)"
-            - pkg: "github.com/LerianStudio/matcher/internal/outbox/adapters/postgres"
+            - pkg: "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/outbox"
               desc: "Hexagonal violation: HTTP handlers must use services, not postgres adapters directly (outbox)"
             - pkg: "github.com/LerianStudio/matcher/internal/discovery/adapters/postgres"
               desc: "Hexagonal violation: HTTP handlers must use services, not postgres adapters directly (discovery)"
@@ -564,7 +564,7 @@ linters:
               desc: "Worker must not import postgres adapters directly. Use service use cases or port interfaces."
             - pkg: "github.com/LerianStudio/matcher/internal/reporting/adapters/postgres"
               desc: "Worker must not import postgres adapters directly. Use service use cases or port interfaces."
-            - pkg: "github.com/LerianStudio/matcher/internal/outbox/adapters/postgres"
+            - pkg: "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/outbox"
               desc: "Worker must not import postgres adapters directly. Use service use cases or port interfaces."
             - pkg: "github.com/LerianStudio/matcher/internal/discovery/adapters/postgres"
               desc: "Worker must not import postgres adapters directly. Use service use cases or port interfaces."
@@ -848,10 +848,7 @@ linters:
         - "func (*database/sql.Rows).Scan(dest ...any) error"
         - "func (*database/sql.Rows).Err() error"
         - "func (database/sql.Result).RowsAffected() (int64, error)"
-        # Internal WithTenantTx helper - already handles tenant context and error wrapping
-        - "func github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/common.WithTenantTx[T any](ctx context.Context, conn *github.com/LerianStudio/lib-commons/v4/commons/postgres.Client, fn func(*database/sql.Tx) (T, error)) (T, error)"
         # InfrastructureProvider interface methods - thin wrapper for tenant-aware connection resolution
-        - "func (github.com/LerianStudio/matcher/internal/shared/ports.InfrastructureProvider).GetPostgresConnection(ctx context.Context) (*github.com/LerianStudio/lib-commons/v4/commons/postgres.Client, error)"
         - "func (github.com/LerianStudio/matcher/internal/shared/ports.InfrastructureProvider).GetRedisConnection(ctx context.Context) (*github.com/LerianStudio/lib-commons/v4/commons/redis.Client, error)"
         # Interface Scan method
         - "func (interface).Scan(dest ...any) error"

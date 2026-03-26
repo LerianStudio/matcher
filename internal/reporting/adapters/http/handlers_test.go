@@ -39,7 +39,7 @@ type mockContextProvider struct {
 
 func (m *mockContextProvider) FindByID(
 	_ context.Context,
-	_, _ uuid.UUID,
+	_ uuid.UUID,
 ) (*ReconciliationContextInfo, error) {
 	return m.info, m.err
 }

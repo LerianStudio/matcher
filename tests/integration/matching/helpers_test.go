@@ -52,11 +52,11 @@ import (
 	matchingPorts "github.com/LerianStudio/matcher/internal/matching/ports"
 	matchingCommand "github.com/LerianStudio/matcher/internal/matching/services/command"
 
-	outboxRepo "github.com/LerianStudio/matcher/internal/outbox/adapters/postgres"
 	outboxEntities "github.com/LerianStudio/matcher/internal/outbox/domain/entities"
 	outboxServices "github.com/LerianStudio/matcher/internal/outbox/services"
 	sharedCross "github.com/LerianStudio/matcher/internal/shared/adapters/cross"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
+	outboxRepo "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/outbox"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 
 	"github.com/LerianStudio/matcher/tests/integration"
@@ -239,13 +239,14 @@ func wireE4T9UseCases(t *testing.T, h *integration.TestHarness) e4t9Wired {
 	})
 	require.NoError(t, err)
 
-	ctxProvider, err := sharedCross.NewContextProviderAdapter(configContextRepo.NewRepository(provider))
+	configProvider, err := sharedCross.NewMatchingConfigurationProvider(
+		configContextRepo.NewRepository(provider),
+		cfgSourceRepo,
+		configMatchRuleRepo.NewRepository(provider),
+		configFeeRuleRepo.NewRepository(provider),
+	)
 	require.NoError(t, err)
 	srcProvider, err := sharedCross.NewSourceProviderAdapter(cfgSourceRepo)
-	require.NoError(t, err)
-	ruleProvider, err := sharedCross.NewMatchRuleProviderAdapter(
-		configMatchRuleRepo.NewRepository(provider),
-	)
 	require.NoError(t, err)
 
 	txAdapter, err := sharedCross.NewTransactionRepositoryAdapterFromRepo(provider, txRepo)
@@ -262,15 +263,13 @@ func wireE4T9UseCases(t *testing.T, h *integration.TestHarness) e4t9Wired {
 	adjustment := adjustmentRepo.NewRepository(provider, auditLogRepo)
 	feeSchedule := feeScheduleRepo.NewRepository(provider)
 
-	feeRuleProvider, err := sharedCross.NewFeeRuleProviderAdapter(
-		configFeeRuleRepo.NewRepository(provider),
-	)
+	feeRuleProvider, err := sharedCross.NewFeeRuleProviderAdapter(configFeeRuleRepo.NewRepository(provider))
 	require.NoError(t, err)
 
 	matchingUC, err := matchingCommand.New(matchingCommand.UseCaseDeps{
-		ContextProvider:  ctxProvider,
+		ContextProvider:  configProvider.ContextProvider(),
 		SourceProvider:   srcProvider,
-		RuleProvider:     ruleProvider,
+		RuleProvider:     configProvider.MatchRuleProvider(),
 		TxRepo:           txAdapter,
 		LockManager:      lockManager,
 		MatchRunRepo:     matchRun,
@@ -319,6 +318,7 @@ func countInt(
 type capturePublishers struct {
 	matchConfirmed int
 	last           *shared.MatchConfirmedEvent
+	tenantIDs      []uuid.UUID
 }
 
 func (c *capturePublishers) PublishIngestionCompleted(
@@ -341,6 +341,9 @@ func (c *capturePublishers) PublishMatchConfirmed(
 ) error {
 	c.matchConfirmed++
 	c.last = event
+	if event != nil {
+		c.tenantIDs = append(c.tenantIDs, event.TenantID)
+	}
 	return nil
 }
 

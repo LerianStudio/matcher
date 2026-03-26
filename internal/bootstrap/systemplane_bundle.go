@@ -177,6 +177,10 @@ func (bundle *MatcherBundle) closeInfra() error {
 // Both are attempted even if the channel close fails, matching the
 // existing cleanupRabbitMQ pattern in init.go.
 func closeRabbitMQ(conn *libRabbitmq.RabbitMQConnection) error {
+	if conn == nil {
+		return nil
+	}
+
 	var errs []error
 
 	if conn.Channel != nil {

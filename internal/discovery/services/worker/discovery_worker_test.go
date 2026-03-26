@@ -207,10 +207,6 @@ type stubInfraProvider struct{}
 
 var _ sharedPorts.InfrastructureProvider = (*stubInfraProvider)(nil)
 
-func (m *stubInfraProvider) GetPostgresConnection(_ context.Context) (*sharedPorts.PostgresConnectionLease, error) {
-	return nil, nil
-}
-
 func (m *stubInfraProvider) GetRedisConnection(_ context.Context) (*sharedPorts.RedisConnectionLease, error) {
 	return nil, nil
 }
@@ -219,7 +215,11 @@ func (m *stubInfraProvider) BeginTx(_ context.Context) (*sharedPorts.TxLease, er
 	return nil, nil
 }
 
-func (m *stubInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.ReplicaDBLease, error) {
+func (m *stubInfraProvider) GetReplicaDB(_ context.Context) (*sharedPorts.DBLease, error) {
+	return nil, nil
+}
+
+func (m *stubInfraProvider) GetPrimaryDB(_ context.Context) (*sharedPorts.DBLease, error) {
 	return nil, nil
 }
 

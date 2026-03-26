@@ -15,6 +15,15 @@ import (
 	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
 )
 
+func defsByKey(defs []domain.KeyDef) map[string]domain.KeyDef {
+	result := make(map[string]domain.KeyDef, len(defs))
+	for _, def := range defs {
+		result[def.Key] = def
+	}
+
+	return result
+}
+
 func TestMatcherKeyDefsAppServer_ReturnsNonEmpty(t *testing.T) {
 	t.Parallel()
 
@@ -64,16 +73,19 @@ func TestMatcherKeyDefsApp_KeyProperties(t *testing.T) {
 			key:       "app.log_level",
 			group:     "app",
 			valueType: domain.ValueTypeString,
-			behavior:  domain.ApplyBundleRebuild,
+			behavior:  domain.ApplyLiveRead,
 			mutable:   true,
 		},
 	}
 
-	for i, tt := range tests {
+	defsMap := defsByKey(defs)
+
+	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			def := defs[i]
+			def, ok := defsMap[tt.key]
+			require.True(t, ok)
 			assert.Equal(t, tt.key, def.Key)
 			assert.Equal(t, domain.KindConfig, def.Kind)
 			assert.Equal(t, tt.group, def.Group)
@@ -94,24 +106,35 @@ func TestMatcherKeyDefsServerHTTP_KeyProperties(t *testing.T) {
 
 	require.NotEmpty(t, defs, "matcherKeyDefsServerHTTP must return key definitions")
 
-	expectedKeys := []string{
-		"server.address",
-		"server.body_limit_bytes",
-		"server.cors_allowed_origins",
-		"server.cors_allowed_methods",
-		"server.cors_allowed_headers",
+	type expected struct {
+		key      string
+		group    string
+		behavior domain.ApplyBehavior
+		mutable  bool
+	}
+
+	expectedKeys := []expected{
+		{key: "server.address", group: "server", behavior: domain.ApplyBootstrapOnly, mutable: false},
+		{key: "server.body_limit_bytes", group: "server", behavior: domain.ApplyBundleRebuild, mutable: true},
+		{key: "cors.allowed_origins", group: "cors", behavior: domain.ApplyLiveRead, mutable: true},
+		{key: "cors.allowed_methods", group: "cors", behavior: domain.ApplyLiveRead, mutable: true},
+		{key: "cors.allowed_headers", group: "cors", behavior: domain.ApplyLiveRead, mutable: true},
 	}
 
 	require.Len(t, defs, len(expectedKeys))
+	defsMap := defsByKey(defs)
 
-	for i, expKey := range expectedKeys {
-		t.Run(expKey, func(t *testing.T) {
+	for _, exp := range expectedKeys {
+		t.Run(exp.key, func(t *testing.T) {
 			t.Parallel()
 
-			def := defs[i]
-			assert.Equal(t, expKey, def.Key)
+			def, ok := defsMap[exp.key]
+			require.True(t, ok)
+			assert.Equal(t, exp.key, def.Key)
 			assert.Equal(t, domain.KindConfig, def.Kind)
-			assert.Equal(t, "server", def.Group)
+			assert.Equal(t, exp.group, def.Group)
+			assert.Equal(t, exp.behavior, def.ApplyBehavior)
+			assert.Equal(t, exp.mutable, def.MutableAtRuntime)
 			assert.NotEmpty(t, def.Description)
 			require.Len(t, def.AllowedScopes, 1)
 			assert.Equal(t, domain.ScopeGlobal, def.AllowedScopes[0])
@@ -125,18 +148,20 @@ func TestMatcherKeyDefsServerHTTP_AddressIsBootstrapOnly(t *testing.T) {
 	defs := matcherKeyDefsServerHTTP()
 	require.NotEmpty(t, defs)
 
-	// First key is server.address
-	assert.Equal(t, domain.ApplyBootstrapOnly, defs[0].ApplyBehavior)
-	assert.False(t, defs[0].MutableAtRuntime)
+	def, ok := defsByKey(defs)["server.address"]
+	require.True(t, ok)
+	assert.Equal(t, domain.ApplyBootstrapOnly, def.ApplyBehavior)
+	assert.False(t, def.MutableAtRuntime)
 }
 
 func TestMatcherKeyDefsServerHTTP_BodyLimitHasValidator(t *testing.T) {
 	t.Parallel()
 
 	defs := matcherKeyDefsServerHTTP()
-	require.True(t, len(defs) >= 2, "need at least 2 server HTTP key defs")
+	require.NotEmpty(t, defs)
 
-	bodyLimitDef := defs[1]
+	bodyLimitDef, ok := defsByKey(defs)["server.body_limit_bytes"]
+	require.True(t, ok)
 	assert.Equal(t, "server.body_limit_bytes", bodyLimitDef.Key)
 	assert.NotNil(t, bodyLimitDef.Validator, "body_limit_bytes must have a validator")
 }
@@ -155,11 +180,14 @@ func TestMatcherKeyDefsServerTLS_KeyProperties(t *testing.T) {
 
 	require.Len(t, defs, len(expectedKeys))
 
-	for i, expKey := range expectedKeys {
+	defsMap := defsByKey(defs)
+
+	for _, expKey := range expectedKeys {
 		t.Run(expKey, func(t *testing.T) {
 			t.Parallel()
 
-			def := defs[i]
+			def, ok := defsMap[expKey]
+			require.True(t, ok)
 			assert.Equal(t, expKey, def.Key)
 			assert.Equal(t, domain.KindConfig, def.Kind)
 			assert.Equal(t, "server", def.Group)
@@ -189,17 +217,19 @@ func TestMatcherKeyDefsApp_LogLevelHasValidator(t *testing.T) {
 	defs := matcherKeyDefsApp()
 	require.True(t, len(defs) >= 2)
 
-	logLevelDef := defs[1]
+	logLevelDef, ok := defsByKey(defs)["app.log_level"]
+	require.True(t, ok)
 	assert.Equal(t, "app.log_level", logLevelDef.Key)
 	assert.NotNil(t, logLevelDef.Validator, "log_level must have a validator")
 }
 
-func TestMatcherKeyDefsApp_LogLevelHasComponentLogger(t *testing.T) {
+func TestMatcherKeyDefsApp_LogLevelHasComponentNone(t *testing.T) {
 	t.Parallel()
 
 	defs := matcherKeyDefsApp()
 	require.True(t, len(defs) >= 2)
 
-	logLevelDef := defs[1]
-	assert.Equal(t, "logger", logLevelDef.Component)
+	logLevelDef, ok := defsByKey(defs)["app.log_level"]
+	require.True(t, ok)
+	assert.Equal(t, domain.ComponentNone, logLevelDef.Component)
 }

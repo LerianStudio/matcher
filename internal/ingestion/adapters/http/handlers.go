@@ -31,6 +31,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/ingestion/services/command"
 	"github.com/LerianStudio/matcher/internal/ingestion/services/query"
 	sharedpagination "github.com/LerianStudio/matcher/internal/shared/adapters/http"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // maxUploadSize is the handler-level file size limit (100MB).
@@ -93,14 +94,9 @@ func parseSortOrder(fiberCtx *fiber.Ctx) (string, error) {
 }
 
 // ReconciliationContextInfo contains the context information needed by ingestion.
-type ReconciliationContextInfo struct {
-	ID     uuid.UUID
-	Active bool
-}
+type ReconciliationContextInfo = sharedPorts.ContextAccessInfo
 
-type contextProvider interface {
-	FindByID(ctx context.Context, tenantID, contextID uuid.UUID) (*ReconciliationContextInfo, error)
-}
+type contextProvider = sharedPorts.ContextAccessProvider
 
 // productionMode indicates whether the application is running in production.
 // Set once during handler construction via NewHandler; governs SafeError behavior

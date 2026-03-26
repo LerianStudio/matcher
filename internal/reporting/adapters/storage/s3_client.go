@@ -6,6 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -18,7 +21,7 @@ import (
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
-	"github.com/LerianStudio/matcher/internal/reporting/ports"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // S3Config contains configuration for S3-compatible storage.
@@ -31,6 +34,7 @@ type S3Config struct {
 	SecretAccessKey string
 	UsePathStyle    bool // Required for SeaweedFS/MinIO
 	DisableSSL      bool
+	AllowInsecure   bool // Allows non-loopback HTTP endpoints for local development.
 }
 
 // DefaultSeaweedConfig returns a configuration suitable for local SeaweedFS development.
@@ -53,16 +57,28 @@ type S3Client struct {
 var (
 	// ErrBucketRequired indicates bucket name is missing.
 	ErrBucketRequired = errors.New("bucket name is required")
+	// ErrInsecureEndpoint indicates a non-local object storage endpoint is using cleartext HTTP.
+	ErrInsecureEndpoint = errors.New("object storage endpoint must use https unless explicitly local")
 	// ErrKeyRequired indicates object key is missing.
 	ErrKeyRequired = errors.New("object key is required")
 	// ErrObjectNotFound indicates the object does not exist.
 	ErrObjectNotFound = errors.New("object not found")
+	// ErrObjectStorageEndpointMissingSchemeOrHost indicates endpoint is not a valid URL target.
+	ErrObjectStorageEndpointMissingSchemeOrHost = errors.New("parse object storage endpoint: missing scheme or host")
+	// ErrObjectStorageEndpointUnsupportedScheme indicates endpoint uses a non HTTP(S) scheme.
+	ErrObjectStorageEndpointUnsupportedScheme = errors.New("parse object storage endpoint: unsupported scheme")
 )
+
+const defaultServerSideEncryption = "AES256"
 
 // NewS3Client creates a new S3 client with the given configuration.
 func NewS3Client(ctx context.Context, cfg S3Config) (*S3Client, error) {
 	if cfg.Bucket == "" {
 		return nil, ErrBucketRequired
+	}
+
+	if err := validateEndpointSecurity(cfg.Endpoint, cfg.AllowInsecure); err != nil {
+		return nil, err
 	}
 
 	var opts []func(*config.LoadOptions) error
@@ -104,6 +120,53 @@ func NewS3Client(ctx context.Context, cfg S3Config) (*S3Client, error) {
 	}, nil
 }
 
+func (client *S3Client) ensureReady() error {
+	if client == nil || client.s3 == nil || client.bucket == "" {
+		return sharedPorts.ErrObjectStorageUnavailable
+	}
+
+	return nil
+}
+
+func validateEndpointSecurity(endpoint string, allowInsecure bool) error {
+	trimmed := strings.TrimSpace(endpoint)
+	if trimmed == "" {
+		return nil
+	}
+
+	parsed, err := url.Parse(trimmed)
+	if err != nil {
+		return fmt.Errorf("parse object storage endpoint: %w", err)
+	}
+
+	if parsed.Scheme == "" || parsed.Host == "" {
+		return ErrObjectStorageEndpointMissingSchemeOrHost
+	}
+
+	if strings.EqualFold(parsed.Scheme, "https") {
+		return nil
+	}
+
+	if !strings.EqualFold(parsed.Scheme, "http") {
+		return fmt.Errorf("%w: %s", ErrObjectStorageEndpointUnsupportedScheme, parsed.Scheme)
+	}
+
+	if allowInsecure {
+		return nil
+	}
+
+	host := parsed.Hostname()
+	if host == "localhost" || host == "127.0.0.1" || host == "::1" {
+		return nil
+	}
+
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		return nil
+	}
+
+	return ErrInsecureEndpoint
+}
+
 // Upload stores content from a reader at the given key.
 func (client *S3Client) Upload(
 	ctx context.Context,
@@ -120,11 +183,16 @@ func (client *S3Client) Upload(
 		return "", ErrKeyRequired
 	}
 
+	if err := client.ensureReady(); err != nil {
+		return "", err
+	}
+
 	input := &s3.PutObjectInput{
-		Bucket:      aws.String(client.bucket),
-		Key:         aws.String(key),
-		Body:        reader,
-		ContentType: aws.String(contentType),
+		Bucket:               aws.String(client.bucket),
+		Key:                  aws.String(key),
+		Body:                 reader,
+		ContentType:          aws.String(contentType),
+		ServerSideEncryption: types.ServerSideEncryption(defaultServerSideEncryption),
 	}
 
 	if _, err := client.s3.PutObject(ctx, input); err != nil {
@@ -146,7 +214,7 @@ func (client *S3Client) UploadWithOptions(
 	key string,
 	reader io.Reader,
 	contentType string,
-	opts ...ports.UploadOption,
+	opts ...sharedPorts.UploadOption,
 ) (string, error) {
 	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
 	ctx, span := tracer.Start(ctx, "s3.upload_with_options")
@@ -157,7 +225,11 @@ func (client *S3Client) UploadWithOptions(
 		return "", ErrKeyRequired
 	}
 
-	options := &ports.UploadOptions{}
+	if err := client.ensureReady(); err != nil {
+		return "", err
+	}
+
+	options := &sharedPorts.UploadOptions{}
 	for _, opt := range opts {
 		opt(options)
 	}
@@ -175,6 +247,8 @@ func (client *S3Client) UploadWithOptions(
 
 	if options.ServerSideEncryption != "" {
 		input.ServerSideEncryption = types.ServerSideEncryption(options.ServerSideEncryption)
+	} else {
+		input.ServerSideEncryption = types.ServerSideEncryption(defaultServerSideEncryption)
 	}
 
 	if _, err := client.s3.PutObject(ctx, input); err != nil {
@@ -199,6 +273,10 @@ func (client *S3Client) Download(ctx context.Context, key string) (io.ReadCloser
 
 	if key == "" {
 		return nil, ErrKeyRequired
+	}
+
+	if err := client.ensureReady(); err != nil {
+		return nil, err
 	}
 
 	input := &s3.GetObjectInput{
@@ -234,6 +312,10 @@ func (client *S3Client) Delete(ctx context.Context, key string) error {
 		return ErrKeyRequired
 	}
 
+	if err := client.ensureReady(); err != nil {
+		return err
+	}
+
 	input := &s3.DeleteObjectInput{
 		Bucket: aws.String(client.bucket),
 		Key:    aws.String(key),
@@ -267,6 +349,10 @@ func (client *S3Client) GeneratePresignedURL(
 		return "", ErrKeyRequired
 	}
 
+	if err := client.ensureReady(); err != nil {
+		return "", err
+	}
+
 	presigner := s3.NewPresignClient(client.s3)
 
 	input := &s3.GetObjectInput{
@@ -297,6 +383,10 @@ func (client *S3Client) Exists(ctx context.Context, key string) (bool, error) {
 		return false, ErrKeyRequired
 	}
 
+	if err := client.ensureReady(); err != nil {
+		return false, err
+	}
+
 	input := &s3.HeadObjectInput{
 		Bucket: aws.String(client.bucket),
 		Key:    aws.String(key),
@@ -324,4 +414,4 @@ func (client *S3Client) Exists(ctx context.Context, key string) (bool, error) {
 }
 
 // Compile-time interface check.
-var _ ports.ObjectStorageClient = (*S3Client)(nil)
+var _ sharedPorts.ObjectStorageClient = (*S3Client)(nil)

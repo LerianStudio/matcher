@@ -21,7 +21,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
 	repomocks "github.com/LerianStudio/matcher/internal/reporting/domain/repositories/mocks"
-	portsmocks "github.com/LerianStudio/matcher/internal/reporting/ports/mocks"
+	portsmocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
 )
 
 var (
@@ -138,6 +138,24 @@ func TestNewExportWorker(t *testing.T) {
 		logger := &libLog.NopLogger{}
 
 		worker, err := NewExportWorker(jobRepo, reportRepo, nil, cfg, logger)
+
+		require.Error(t, err)
+		assert.Nil(t, worker)
+		require.ErrorIs(t, err, ErrNilStorageClient)
+	})
+
+	t.Run("returns error with typed-nil storage", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		jobRepo := repomocks.NewMockExportJobRepository(ctrl)
+		reportRepo := &mockReportRepoForWorker{}
+		cfg := ExportWorkerConfig{}
+		logger := &libLog.NopLogger{}
+
+		var typedNilStorage *portsmocks.MockObjectStorageClient
+
+		worker, err := NewExportWorker(jobRepo, reportRepo, typedNilStorage, cfg, logger)
 
 		require.Error(t, err)
 		assert.Nil(t, worker)

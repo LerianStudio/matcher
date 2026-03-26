@@ -132,7 +132,7 @@ func matcherKeyDefsRedisRuntime() []domain.KeyDef {
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
-			Key:              "redis.min_idle_conn",
+			Key:              "redis.min_idle_conns",
 			Kind:             domain.KindConfig,
 			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
 			DefaultValue:     defaultRedisMinIdleConn,
@@ -194,14 +194,14 @@ func matcherKeyDefsRabbitMQConnection() []domain.KeyDef {
 	return []domain.KeyDef{
 		// --- RabbitMQ. ---
 		{
-			Key:              "rabbitmq.uri",
+			Key:              "rabbitmq.url",
 			Kind:             domain.KindConfig,
 			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
 			DefaultValue:     defaultRabbitURI,
 			ValueType:        domain.ValueTypeString,
 			ApplyBehavior:    domain.ApplyBundleRebuild,
 			MutableAtRuntime: true,
-			Description:      "RabbitMQ connection URI scheme",
+			Description:      "RabbitMQ connection URL scheme",
 			Group:            "rabbitmq",
 			Component:        "rabbitmq",
 			RedactPolicy:     domain.RedactNone,

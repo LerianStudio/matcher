@@ -192,7 +192,7 @@ func matcherKeyDefsPostgresReplica() []domain.KeyDef {
 func matcherKeyDefsPostgresPooling() []domain.KeyDef {
 	return []domain.KeyDef{
 		{
-			Key:              "postgres.max_open_connections",
+			Key:              "postgres.max_open_conns",
 			Kind:             domain.KindConfig,
 			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
 			DefaultValue:     defaultPGMaxOpenConns,
@@ -206,7 +206,7 @@ func matcherKeyDefsPostgresPooling() []domain.KeyDef {
 			RedactPolicy:     domain.RedactNone,
 		},
 		{
-			Key:              "postgres.max_idle_connections",
+			Key:              "postgres.max_idle_conns",
 			Kind:             domain.KindConfig,
 			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
 			DefaultValue:     defaultPGMaxIdleConns,
@@ -286,11 +286,11 @@ func matcherKeyDefsPostgresOperations() []domain.KeyDef {
 			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
 			DefaultValue:     defaultPGMigrationsPath,
 			ValueType:        domain.ValueTypeString,
-			ApplyBehavior:    domain.ApplyBundleRebuild,
-			MutableAtRuntime: true,
+			ApplyBehavior:    domain.ApplyBootstrapOnly,
+			MutableAtRuntime: false,
 			Description:      "Path to database migration files",
 			Group:            "postgres",
-			Component:        "postgres",
+			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
 	}

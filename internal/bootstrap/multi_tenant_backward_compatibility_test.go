@@ -20,13 +20,12 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	sharedTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
-	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 func TestMultiTenant_BackwardCompatibility(t *testing.T) {
 	t.Parallel()
 
-	postgresConn := sharedTestutil.NewClientWithResolver(nil)
+	postgresConn := testPostgresClient(t)
 	redisConn := sharedTestutil.NewRedisClientWithMock(nil)
 	cfg := defaultConfig()
 	cfg.Tenancy.MultiTenantEnabled = false
@@ -35,10 +34,12 @@ func TestMultiTenant_BackwardCompatibility(t *testing.T) {
 	require.NotNil(t, manager)
 	assert.Nil(t, tenantDBHandler, "single-tenant mode should not create tenant DB middleware")
 
-	resolvedPostgres, err := provider.GetPostgresConnection(context.Background())
+	resolvedPostgres, err := provider.GetPrimaryDB(context.Background())
 	require.NoError(t, err)
 	require.NotNil(t, resolvedPostgres)
-	assert.Same(t, postgresConn, resolvedPostgres.Connection())
+	primaryDB, resolveErr := resolvePrimaryDB(context.Background(), postgresConn)
+	require.NoError(t, resolveErr)
+	assert.Same(t, primaryDB, resolvedPostgres.DB())
 
 	resolvedRedis, err := provider.GetRedisConnection(context.Background())
 	require.NoError(t, err)
@@ -46,12 +47,9 @@ func TestMultiTenant_BackwardCompatibility(t *testing.T) {
 	assert.Same(t, redisConn, resolvedRedis.Connection())
 
 	ctx := context.WithValue(context.Background(), auth.TenantIDKey, auth.DefaultTenantID)
-	txProvider, ok := provider.(sharedPorts.InfrastructureProvider)
-	require.True(t, ok)
-
-	_, err = txProvider.GetPostgresConnection(ctx)
+	_, err = provider.GetPrimaryDB(ctx)
 	require.NoError(t, err)
-	_, err = txProvider.GetRedisConnection(ctx)
+	_, err = provider.GetRedisConnection(ctx)
 	require.NoError(t, err)
 }
 
@@ -74,7 +72,7 @@ func TestMultiTenant_BackwardCompatibility_ConfigLoadsWithoutMultiTenantVars(t *
 func TestMultiTenant_BackwardCompatibility_NoTenantManagerRequired(t *testing.T) {
 	t.Parallel()
 
-	postgresConn := sharedTestutil.NewClientWithResolver(nil)
+	postgresConn := testPostgresClient(t)
 	redisConn := sharedTestutil.NewRedisClientWithMock(nil)
 	cfg := defaultConfig()
 	cfg.Tenancy.MultiTenantEnabled = false
@@ -85,7 +83,7 @@ func TestMultiTenant_BackwardCompatibility_NoTenantManagerRequired(t *testing.T)
 
 	ctx := context.WithValue(context.Background(), auth.TenantIDKey, auth.DefaultTenantID)
 
-	resolvedPG, err := provider.GetPostgresConnection(ctx)
+	resolvedPG, err := provider.GetPrimaryDB(ctx)
 	require.NoError(t, err)
 	require.NotNil(t, resolvedPG, "postgres should resolve without tenant manager")
 
@@ -97,7 +95,7 @@ func TestMultiTenant_BackwardCompatibility_NoTenantManagerRequired(t *testing.T)
 func TestMultiTenant_BackwardCompatibility_ConnectionResolutionWithoutTenantContext(t *testing.T) {
 	t.Parallel()
 
-	postgresConn := sharedTestutil.NewClientWithResolver(nil)
+	postgresConn := testPostgresClient(t)
 	redisConn := sharedTestutil.NewRedisClientWithMock(nil)
 	cfg := defaultConfig()
 	cfg.Tenancy.MultiTenantEnabled = false
@@ -122,7 +120,7 @@ func TestMultiTenant_BackwardCompatibility_ConnectionResolutionWithoutTenantCont
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			pg, err := provider.GetPostgresConnection(tt.ctx)
+			pg, err := provider.GetPrimaryDB(tt.ctx)
 			require.NoError(t, err, "postgres should work %s", tt.name)
 			require.NotNil(t, pg)
 
@@ -198,7 +196,7 @@ func TestCreateInfraProvider_MultiTenantEnabled_CreatesCanonicalManager(t *testi
 
 	// Use the core context key for tenant ID (canonical approach)
 	ctx := core.ContextWithTenantID(context.Background(), "tenant-a")
-	_, err := provider.GetPostgresConnection(ctx)
+	_, err := provider.GetPrimaryDB(ctx)
 	// The connection will fail because we can't actually connect to "localhost:5432"
 	// in a unit test, but the request to the tenant manager should have been made.
 	require.Error(t, err)

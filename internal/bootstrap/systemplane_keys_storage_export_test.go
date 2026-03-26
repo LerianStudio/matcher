@@ -82,6 +82,7 @@ func TestMatcherKeyDefsObjectStorage_KeyProperties(t *testing.T) {
 		"object_storage.access_key_id",
 		"object_storage.secret_access_key",
 		"object_storage.use_path_style",
+		"object_storage.allow_insecure_endpoint",
 	}
 
 	require.Len(t, defs, len(expectedKeys))

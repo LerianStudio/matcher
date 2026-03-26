@@ -133,10 +133,11 @@ const (
 	defaultDedupeTTLSec = 3600
 
 	// Object storage defaults.
-	defaultObjStorageEndpoint  = "http://localhost:8333"
-	defaultObjStorageRegion    = "us-east-1"
-	defaultObjStorageBucket    = "matcher-exports"
-	defaultObjStoragePathStyle = true
+	defaultObjStorageEndpoint      = "http://localhost:8333"
+	defaultObjStorageRegion        = "us-east-1"
+	defaultObjStorageBucket        = "matcher-exports"
+	defaultObjStoragePathStyle     = true
+	defaultObjStorageAllowInsecure = false
 
 	// Export worker defaults.
 	defaultExportEnabled    = true

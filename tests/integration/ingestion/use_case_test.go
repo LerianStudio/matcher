@@ -21,9 +21,10 @@ import (
 	ingestionVO "github.com/LerianStudio/matcher/internal/ingestion/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/ingestion/ports"
 	ingestionCommand "github.com/LerianStudio/matcher/internal/ingestion/services/command"
-	outboxPostgres "github.com/LerianStudio/matcher/internal/outbox/adapters/postgres"
 	outboxServices "github.com/LerianStudio/matcher/internal/outbox/services"
+	outboxPostgres "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/outbox"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
@@ -246,11 +247,11 @@ func (n *noopMatchPublisher) PublishMatchUnmatched(
 }
 
 var (
-	_ ports.DedupeService        = (*noopDedupe)(nil)
-	_ ports.EventPublisher       = (*noopPublisher)(nil)
-	_ ports.FieldMapRepository   = (*fieldMapStub)(nil)
-	_ ports.SourceRepository     = (*sourceStub)(nil)
-	_ shared.MatchEventPublisher = (*noopMatchPublisher)(nil)
+	_ ports.DedupeService                 = (*noopDedupe)(nil)
+	_ sharedPorts.IngestionEventPublisher = (*noopPublisher)(nil)
+	_ ports.FieldMapRepository            = (*fieldMapStub)(nil)
+	_ ports.SourceRepository              = (*sourceStub)(nil)
+	_ shared.MatchEventPublisher          = (*noopMatchPublisher)(nil)
 )
 
 func TestIntegrationDedupeJobState(t *testing.T) {

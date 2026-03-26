@@ -122,7 +122,7 @@ func (aw *ArchivalWorker) UpdateRuntimeStorage(storage sharedPorts.ObjectStorage
 		return ErrRuntimeConfigUpdateWhileRunning
 	}
 
-	if storage == nil {
+	if sharedPorts.IsNilValue(storage) {
 		return ErrNilStorageClient
 	}
 
@@ -185,7 +185,7 @@ func NewArchivalWorker(
 		return nil, ErrNilPartitionManager
 	}
 
-	if storage == nil {
+	if sharedPorts.IsNilValue(storage) {
 		return nil, ErrNilStorageClient
 	}
 
@@ -453,6 +453,11 @@ func (aw *ArchivalWorker) getOrCreateMetadata(
 // advancing from the current state forward. Each state transition is persisted
 // before proceeding. On error, the metadata is marked with the error and the
 // function returns so the next cycle can retry.
+//
+// DESIGN CONSTRAINT: handlePartitionError always returns non-nil error.
+// All callers MUST return immediately after handlePartitionError to ensure
+// local variables (exportBuf, checksum) are not reused with stale data
+// after metadata has been reloaded from the database.
 //
 //nolint:cyclop,gocyclo // state machine requires sequential checks for each state
 func (aw *ArchivalWorker) archivePartition(ctx context.Context, metadata *entities.ArchiveMetadata) error {
@@ -1059,6 +1064,14 @@ func withArchivalCurrentDBResult[T any](ctx context.Context, aw *ArchivalWorker,
 		return zero, command.ErrNilDB
 	}
 
+	if _, hasExplicitTenant := auth.LookupTenantID(ctx); !hasExplicitTenant {
+		if aw.db == nil {
+			return zero, command.ErrNilDB
+		}
+
+		return fn(aw.db)
+	}
+
 	if aw.infraProvider != nil {
 		return withArchivalProviderDBResult(ctx, aw.infraProvider, fn)
 	}
@@ -1077,28 +1090,22 @@ func withArchivalProviderDBResult[T any](
 ) (T, error) {
 	var zero T
 
-	lease, err := infraProvider.GetPostgresConnection(ctx)
+	lease, err := infraProvider.GetPrimaryDB(ctx)
 	if err != nil {
-		return zero, fmt.Errorf("resolve postgres connection: %w", err)
+		return zero, fmt.Errorf("resolve primary postgres db: %w", err)
+	}
+
+	if lease == nil {
+		return zero, command.ErrNilDB
 	}
 	defer lease.Release()
 
-	client := lease.Connection()
-	if client == nil {
+	db := lease.DB()
+	if db == nil {
 		return zero, command.ErrNilDB
 	}
 
-	resolver, err := client.Resolver(ctx)
-	if err != nil {
-		return zero, fmt.Errorf("resolve postgres db: %w", err)
-	}
-
-	primaryDBs := resolver.PrimaryDBs()
-	if len(primaryDBs) == 0 || primaryDBs[0] == nil {
-		return zero, command.ErrNilDB
-	}
-
-	return fn(primaryDBs[0])
+	return fn(db)
 }
 
 func buildPartitionExportQuery(partitionName string) (string, error) {

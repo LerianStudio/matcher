@@ -143,7 +143,7 @@ func TestCreateWithTx_NilEntity(t *testing.T) {
 	require.ErrorIs(t, err, ErrMatchRunEntityNeeded)
 }
 
-func TestCreateWithTx_InvalidTxType(t *testing.T) {
+func TestCreateWithTx_NilTx(t *testing.T) {
 	t.Parallel()
 
 	provider := &testutil.MockInfrastructureProvider{}
@@ -151,9 +151,7 @@ func TestCreateWithTx_InvalidTxType(t *testing.T) {
 	ctx := context.Background()
 	run := createTestMatchRun(t)
 
-	invalidTx := &mockInvalidTx{}
-
-	result, err := repo.CreateWithTx(ctx, invalidTx, run)
+	result, err := repo.CreateWithTx(ctx, nil, run)
 
 	assert.Nil(t, result)
 	require.ErrorIs(t, err, ErrInvalidTx)
@@ -224,7 +222,7 @@ func TestUpdateWithTx_NilEntity(t *testing.T) {
 	require.ErrorIs(t, err, ErrMatchRunEntityNeeded)
 }
 
-func TestUpdateWithTx_InvalidTxType(t *testing.T) {
+func TestUpdateWithTx_NilTx(t *testing.T) {
 	t.Parallel()
 
 	provider := &testutil.MockInfrastructureProvider{}
@@ -232,9 +230,7 @@ func TestUpdateWithTx_InvalidTxType(t *testing.T) {
 	ctx := context.Background()
 	run := createTestMatchRun(t)
 
-	invalidTx := &mockInvalidTx{}
-
-	result, err := repo.UpdateWithTx(ctx, invalidTx, run)
+	result, err := repo.UpdateWithTx(ctx, nil, run)
 
 	assert.Nil(t, result)
 	require.ErrorIs(t, err, ErrInvalidTx)
@@ -372,34 +368,6 @@ func TestWithTx_NilFunction(t *testing.T) {
 	err := repo.WithTx(ctx, nil)
 
 	require.NoError(t, err)
-}
-
-func TestCreateWithTx_NilTxPassthrough(t *testing.T) {
-	t.Parallel()
-
-	provider := &testutil.MockInfrastructureProvider{}
-	repo := NewRepository(provider)
-	ctx := context.Background()
-	run := createTestMatchRun(t)
-
-	result, err := repo.CreateWithTx(ctx, nil, run)
-
-	assert.Nil(t, result)
-	require.ErrorIs(t, err, ErrInvalidTx)
-}
-
-func TestUpdateWithTx_NilTxPassthrough(t *testing.T) {
-	t.Parallel()
-
-	provider := &testutil.MockInfrastructureProvider{}
-	repo := NewRepository(provider)
-	ctx := context.Background()
-	run := createTestMatchRun(t)
-
-	result, err := repo.UpdateWithTx(ctx, nil, run)
-
-	assert.Nil(t, result)
-	require.ErrorIs(t, err, ErrInvalidTx)
 }
 
 func TestScan_InvalidData(t *testing.T) {
@@ -659,11 +627,6 @@ func TestRepository_ImplementsInterface(t *testing.T) {
 
 	assert.NotNil(t, repo)
 }
-
-type mockInvalidTx struct{}
-
-func (m *mockInvalidTx) Commit() error   { return nil }
-func (m *mockInvalidTx) Rollback() error { return nil }
 
 func TestListByContextID_NilProvider_WithNegativeLimit(t *testing.T) {
 	t.Parallel()

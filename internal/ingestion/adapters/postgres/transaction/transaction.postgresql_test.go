@@ -1598,7 +1598,7 @@ func TestRepository_FindByJobID_CursorPaginationWithNonIDSort(t *testing.T) {
 
 	defer db.Close()
 
-	resolver := dbresolver.New(dbresolver.WithPrimaryDBs(db), dbresolver.WithReplicaDBs(db))
+	resolver := dbresolver.New(dbresolver.WithPrimaryDBs(db))
 	conn := testutil.NewClientWithResolver(resolver)
 	provider := &testutil.MockInfrastructureProvider{PostgresConn: conn}
 	repo := NewRepository(provider)
@@ -1625,7 +1625,7 @@ func TestRepository_FindByJobAndContextID_InvalidSortCursor(t *testing.T) {
 
 	defer db.Close()
 
-	resolver := dbresolver.New(dbresolver.WithPrimaryDBs(db), dbresolver.WithReplicaDBs(db))
+	resolver := dbresolver.New(dbresolver.WithPrimaryDBs(db))
 	conn := testutil.NewClientWithResolver(resolver)
 	provider := &testutil.MockInfrastructureProvider{PostgresConn: conn}
 	repo := NewRepository(provider)
@@ -1718,7 +1718,7 @@ func setupRepositoryWithMock(t *testing.T) (*Repository, sqlmock.Sqlmock, func()
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 
-	resolver := dbresolver.New(dbresolver.WithPrimaryDBs(db), dbresolver.WithReplicaDBs(db))
+	resolver := dbresolver.New(dbresolver.WithPrimaryDBs(db))
 	conn := testutil.NewClientWithResolver(resolver)
 	provider := &testutil.MockInfrastructureProvider{PostgresConn: conn}
 	repo := NewRepository(provider)

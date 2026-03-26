@@ -22,12 +22,6 @@ import (
 
 type fakeInfraProvider struct{}
 
-func (f *fakeInfraProvider) GetPostgresConnection(
-	_ context.Context,
-) (*ports.PostgresConnectionLease, error) {
-	return nil, nil
-}
-
 func (f *fakeInfraProvider) GetRedisConnection(
 	_ context.Context,
 ) (*ports.RedisConnectionLease, error) {
@@ -38,7 +32,11 @@ func (f *fakeInfraProvider) BeginTx(_ context.Context) (*ports.TxLease, error) {
 	return nil, nil
 }
 
-func (f *fakeInfraProvider) GetReplicaDB(_ context.Context) (*ports.ReplicaDBLease, error) {
+func (f *fakeInfraProvider) GetReplicaDB(_ context.Context) (*ports.DBLease, error) {
+	return nil, nil
+}
+
+func (f *fakeInfraProvider) GetPrimaryDB(_ context.Context) (*ports.DBLease, error) {
 	return nil, nil
 }
 

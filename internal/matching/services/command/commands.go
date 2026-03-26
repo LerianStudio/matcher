@@ -2,7 +2,6 @@ package command
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"time"
 
@@ -40,7 +39,7 @@ var (
 type outboxTxCreator interface {
 	CreateWithTx(
 		ctx context.Context,
-		tx *sql.Tx,
+		tx sharedPorts.Tx,
 		event *sharedDomain.OutboxEvent,
 	) (*sharedDomain.OutboxEvent, error)
 }
@@ -97,23 +96,23 @@ func (deps *UseCaseDeps) validate() error {
 		cond bool
 		err  error
 	}{
-		{deps.ContextProvider == nil, ErrNilContextRepository},
-		{deps.SourceProvider == nil, ErrNilSourceRepository},
-		{deps.RuleProvider == nil, ErrNilMatchRuleProvider},
-		{deps.TxRepo == nil, ErrNilTransactionRepository},
-		{deps.LockManager == nil, ErrNilLockManager},
-		{deps.MatchRunRepo == nil, ErrNilMatchRunRepository},
-		{deps.MatchGroupRepo == nil, ErrNilMatchGroupRepository},
-		{deps.MatchItemRepo == nil, ErrNilMatchItemRepository},
-		{deps.ExceptionCreator == nil, ErrNilExceptionCreator},
-		{deps.OutboxRepo == nil, ErrNilOutboxRepository},
-		{deps.RateRepo == nil, ErrNilRateRepository},
-		{deps.FeeVarianceRepo == nil, ErrNilFeeVarianceRepository},
-		{deps.AdjustmentRepo == nil, ErrNilAdjustmentRepository},
-		{deps.InfraProvider == nil, ErrNilInfrastructureProvider},
-		{deps.AuditLogRepo == nil, ErrNilAuditLogRepository},
-		{deps.FeeScheduleRepo == nil, ErrNilFeeScheduleRepository},
-		{deps.FeeRuleProvider == nil, ErrNilFeeRuleProvider},
+		{sharedPorts.IsNilValue(deps.ContextProvider), ErrNilContextRepository},
+		{sharedPorts.IsNilValue(deps.SourceProvider), ErrNilSourceRepository},
+		{sharedPorts.IsNilValue(deps.RuleProvider), ErrNilMatchRuleProvider},
+		{sharedPorts.IsNilValue(deps.TxRepo), ErrNilTransactionRepository},
+		{sharedPorts.IsNilValue(deps.LockManager), ErrNilLockManager},
+		{sharedPorts.IsNilValue(deps.MatchRunRepo), ErrNilMatchRunRepository},
+		{sharedPorts.IsNilValue(deps.MatchGroupRepo), ErrNilMatchGroupRepository},
+		{sharedPorts.IsNilValue(deps.MatchItemRepo), ErrNilMatchItemRepository},
+		{sharedPorts.IsNilValue(deps.ExceptionCreator), ErrNilExceptionCreator},
+		{sharedPorts.IsNilValue(deps.OutboxRepo), ErrNilOutboxRepository},
+		{sharedPorts.IsNilValue(deps.RateRepo), ErrNilRateRepository},
+		{sharedPorts.IsNilValue(deps.FeeVarianceRepo), ErrNilFeeVarianceRepository},
+		{sharedPorts.IsNilValue(deps.AdjustmentRepo), ErrNilAdjustmentRepository},
+		{sharedPorts.IsNilValue(deps.InfraProvider), ErrNilInfrastructureProvider},
+		{sharedPorts.IsNilValue(deps.AuditLogRepo), ErrNilAuditLogRepository},
+		{sharedPorts.IsNilValue(deps.FeeScheduleRepo), ErrNilFeeScheduleRepository},
+		{sharedPorts.IsNilValue(deps.FeeRuleProvider), ErrNilFeeRuleProvider},
 	}
 
 	for _, check := range checks {

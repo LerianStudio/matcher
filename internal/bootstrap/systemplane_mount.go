@@ -51,7 +51,7 @@ func MountSystemplaneAPI(
 	identity := &MatcherIdentityResolver{}
 	authorizer := NewMatcherAuthorizer(authEnabled)
 
-	handler, err := fiberhttp.NewHandler(manager, identity, authorizer)
+	handler, err := fiberhttp.NewHandler(newAliasAwareSystemplaneManager(manager), identity, authorizer)
 	if err != nil {
 		return fmt.Errorf("mount systemplane api: create handler: %w", err)
 	}

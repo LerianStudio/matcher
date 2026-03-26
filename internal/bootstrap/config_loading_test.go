@@ -154,6 +154,87 @@ func TestLoadConfigFromEnvForStartup_TrimsWhitespaceBeforeParsing(t *testing.T) 
 	assert.Equal(t, "100", os.Getenv("RATE_LIMIT_MAX"))
 }
 
+func TestLoadConfigFromEnvForStartup_LegacyAuthEnvVarsPopulatePluginAliases(t *testing.T) {
+	// Not parallel: modifies env vars.
+	clearConfigEnvVars(t)
+	t.Setenv("AUTH_ENABLED", "true")
+	t.Setenv("AUTH_SERVICE_ADDRESS", "http://legacy-auth:8081")
+	t.Setenv("AUTH_JWT_SECRET", "legacy-secret")
+
+	cfg := defaultConfig()
+	err := loadConfigFromEnvForStartup(cfg)
+	require.NoError(t, err)
+	assert.True(t, cfg.Auth.Enabled)
+	assert.Equal(t, "http://legacy-auth:8081", cfg.Auth.Host)
+	assert.Equal(t, "legacy-secret", cfg.Auth.TokenSecret)
+	assert.Equal(t, "true", os.Getenv("PLUGIN_AUTH_ENABLED"))
+	assert.Equal(t, "http://legacy-auth:8081", os.Getenv("PLUGIN_AUTH_ADDRESS"))
+}
+
+func TestLoadConfigFromEnvForStartup_CanonicalAuthEnvVarsLoadDirectly(t *testing.T) {
+	// Not parallel: modifies env vars.
+	clearConfigEnvVars(t)
+	t.Setenv("PLUGIN_AUTH_ENABLED", "true")
+	t.Setenv("PLUGIN_AUTH_ADDRESS", "http://canonical-auth:8081")
+	t.Setenv("AUTH_JWT_SECRET", "canonical-secret")
+
+	cfg := defaultConfig()
+	err := loadConfigFromEnvForStartup(cfg)
+	require.NoError(t, err)
+	assert.True(t, cfg.Auth.Enabled)
+	assert.Equal(t, "http://canonical-auth:8081", cfg.Auth.Host)
+	assert.Equal(t, "canonical-secret", cfg.Auth.TokenSecret)
+}
+
+func TestLoadConfigFromEnvForStartup_SemanticallyEquivalentAuthEnabledAliasesPass(t *testing.T) {
+	// Not parallel: modifies env vars.
+	clearConfigEnvVars(t)
+	t.Setenv("AUTH_ENABLED", "1")
+	t.Setenv("PLUGIN_AUTH_ENABLED", "true")
+
+	cfg := defaultConfig()
+	err := loadConfigFromEnvForStartup(cfg)
+	require.NoError(t, err)
+	assert.True(t, cfg.Auth.Enabled)
+}
+
+func TestLoadConfigFromEnvForStartup_ConflictingAuthEnvVarsFail(t *testing.T) {
+	// Not parallel: modifies env vars.
+	clearConfigEnvVars(t)
+	t.Setenv("AUTH_ENABLED", "true")
+	t.Setenv("PLUGIN_AUTH_ENABLED", "false")
+
+	cfg := defaultConfig()
+	err := loadConfigFromEnvForStartup(cfg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "conflicting values for AUTH_ENABLED and PLUGIN_AUTH_ENABLED")
+}
+
+func TestLoadConfigFromEnvForStartup_ConflictingAuthAddressAliasesFail(t *testing.T) {
+	// Not parallel: modifies env vars.
+	clearConfigEnvVars(t)
+	t.Setenv("AUTH_SERVICE_ADDRESS", "http://legacy-auth:8081")
+	t.Setenv("PLUGIN_AUTH_ADDRESS", "http://canonical-auth:8081")
+
+	cfg := defaultConfig()
+	err := loadConfigFromEnvForStartup(cfg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "conflicting values for AUTH_SERVICE_ADDRESS and PLUGIN_AUTH_ADDRESS")
+}
+
+func TestClearConfigEnvVars_UnsetsLegacyAuthAliases(t *testing.T) {
+	// Not parallel: modifies env vars.
+	t.Setenv("AUTH_ENABLED", "true")
+	t.Setenv("AUTH_SERVICE_ADDRESS", "http://legacy-auth:8081")
+
+	clearConfigEnvVars(t)
+
+	_, authEnabledSet := os.LookupEnv("AUTH_ENABLED")
+	_, authServiceAddressSet := os.LookupEnv("AUTH_SERVICE_ADDRESS")
+	assert.False(t, authEnabledSet)
+	assert.False(t, authServiceAddressSet)
+}
+
 func TestLoadConfigFromEnv_DoesNotMutateProcessEnvironment(t *testing.T) {
 	// Not parallel: modifies env vars.
 	clearConfigEnvVars(t)

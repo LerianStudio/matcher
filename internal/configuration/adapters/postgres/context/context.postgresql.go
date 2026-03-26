@@ -177,18 +177,11 @@ func (repo *Repository) FindByID(
 
 	tenantID := auth.GetTenantID(ctx)
 
-	connection, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return nil, fmt.Errorf("get postgres connection: %w", err)
-	}
-	defer connection.Release()
-
-	result, err := common.WithTenantTx(
+	result, err := common.WithTenantReadQuery(
 		ctx,
-		connection.Connection(),
-		func(tx *sql.Tx) (*entities.ReconciliationContext, error) {
-			row := tx.QueryRowContext(
+		repo.provider,
+		func(qe common.QueryExecutor) (*entities.ReconciliationContext, error) {
+			row := qe.QueryRowContext(
 				ctx,
 				"SELECT "+contextColumns+" FROM reconciliation_contexts WHERE tenant_id = $1 AND id = $2",
 				tenantID,
@@ -227,18 +220,11 @@ func (repo *Repository) FindByName(
 
 	tenantID := auth.GetTenantID(ctx)
 
-	connection, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return nil, fmt.Errorf("get postgres connection: %w", err)
-	}
-	defer connection.Release()
-
-	result, err := common.WithTenantTx(
+	result, err := common.WithTenantReadQuery(
 		ctx,
-		connection.Connection(),
-		func(tx *sql.Tx) (*entities.ReconciliationContext, error) {
-			row := tx.QueryRowContext(
+		repo.provider,
+		func(qe common.QueryExecutor) (*entities.ReconciliationContext, error) {
+			row := qe.QueryRowContext(
 				ctx,
 				"SELECT "+contextColumns+" FROM reconciliation_contexts WHERE tenant_id = $1 AND name = $2",
 				tenantID,
@@ -286,13 +272,6 @@ func (repo *Repository) FindAll(
 
 	tenantID := auth.GetTenantID(ctx)
 
-	connection, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return nil, libHTTP.CursorPagination{}, fmt.Errorf("get postgres connection: %w", err)
-	}
-	defer connection.Release()
-
 	limit = libHTTP.ValidateLimit(limit, constants.DefaultPaginationLimit, constants.MaximumPaginationLimit)
 
 	decodedCursor, err := decodeCursorParam(cursor)
@@ -302,9 +281,9 @@ func (repo *Repository) FindAll(
 
 	var pagination libHTTP.CursorPagination
 
-	result, err := common.WithTenantTx(
+	result, err := common.WithTenantTxProvider(
 		ctx,
-		connection.Connection(),
+		repo.provider,
 		func(tx *sql.Tx) (contexts []*entities.ReconciliationContext, err error) {
 			findAll := buildContextQuery(tenantID, contextType, status)
 
@@ -607,14 +586,7 @@ func (repo *Repository) Count(ctx stdctx.Context) (int64, error) {
 
 	tenantID := auth.GetTenantID(ctx)
 
-	connection, err := repo.provider.GetPostgresConnection(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to get postgres connection", err)
-		return 0, fmt.Errorf("get postgres connection: %w", err)
-	}
-	defer connection.Release()
-
-	result, err := common.WithTenantTx(ctx, connection.Connection(), func(tx *sql.Tx) (int64, error) {
+	result, err := common.WithTenantTxProvider(ctx, repo.provider, func(tx *sql.Tx) (int64, error) {
 		row := tx.QueryRowContext(
 			ctx,
 			"SELECT COUNT(1) FROM reconciliation_contexts WHERE tenant_id = $1",

@@ -17,7 +17,7 @@ func NewTenantOwnershipVerifier(provider contextProvider) sharedhttp.TenantOwner
 			return fmt.Errorf("%w: verifier not initialized", sharedhttp.ErrContextAccessDenied)
 		}
 
-		info, err := provider.FindByID(ctx, tenantID, contextID)
+		info, err := provider.FindByID(ctx, contextID)
 		if err != nil {
 			if errors.Is(err, sharedhttp.ErrContextNotOwned) {
 				return sharedhttp.ErrContextNotOwned

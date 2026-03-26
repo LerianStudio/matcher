@@ -769,12 +769,6 @@ type stubInfraProviderForRun struct {
 	err error
 }
 
-func (s *stubInfraProviderForRun) GetPostgresConnection(
-	_ context.Context,
-) (*sharedPorts.PostgresConnectionLease, error) {
-	return nil, nil
-}
-
 func (s *stubInfraProviderForRun) GetRedisConnection(
 	_ context.Context,
 ) (*sharedPorts.RedisConnectionLease, error) {
@@ -789,7 +783,11 @@ func (s *stubInfraProviderForRun) BeginTx(_ context.Context) (*sharedPorts.TxLea
 	return sharedPorts.NewTxLease(s.tx, nil), nil
 }
 
-func (s *stubInfraProviderForRun) GetReplicaDB(_ context.Context) (*sharedPorts.ReplicaDBLease, error) {
+func (s *stubInfraProviderForRun) GetReplicaDB(_ context.Context) (*sharedPorts.DBLease, error) {
+	return nil, nil
+}
+
+func (s *stubInfraProviderForRun) GetPrimaryDB(_ context.Context) (*sharedPorts.DBLease, error) {
 	return nil, nil
 }
 

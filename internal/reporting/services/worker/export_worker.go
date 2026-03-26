@@ -26,8 +26,8 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/repositories"
-	"github.com/LerianStudio/matcher/internal/reporting/ports"
 	"github.com/LerianStudio/matcher/internal/reporting/services/query/exports"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 	"github.com/LerianStudio/matcher/pkg/chanutil"
 )
 
@@ -77,7 +77,7 @@ type ExportWorker struct {
 	mu         sync.Mutex
 	jobRepo    repositories.ExportJobRepository
 	reportRepo repositories.ReportRepository
-	storage    ports.ObjectStorageClient
+	storage    sharedPorts.ObjectStorageClient
 	cfg        ExportWorkerConfig
 	logger     libLog.Logger
 	tracer     trace.Tracer
@@ -125,7 +125,7 @@ func normalizeExportWorkerConfig(cfg ExportWorkerConfig) ExportWorkerConfig {
 func NewExportWorker(
 	jobRepo repositories.ExportJobRepository,
 	reportRepo repositories.ReportRepository,
-	storage ports.ObjectStorageClient,
+	storage sharedPorts.ObjectStorageClient,
 	cfg ExportWorkerConfig,
 	logger libLog.Logger,
 ) (*ExportWorker, error) {
@@ -137,7 +137,7 @@ func NewExportWorker(
 		return nil, ErrNilReportRepository
 	}
 
-	if storage == nil {
+	if sharedPorts.IsNilValue(storage) {
 		return nil, ErrNilStorageClient
 	}
 

@@ -28,6 +28,32 @@ import (
 // errTestRepo is a sentinel error used for testing repository failure scenarios.
 var errTestRepo = errors.New("database error")
 
+func newTestMatchRuleProviderAdapter(repo configRepositories.MatchRuleRepository) (*MatchRuleProviderAdapter, error) {
+	if repo == nil {
+		return nil, ErrMatchRuleRepositoryRequired
+	}
+
+	provider, err := NewMatchingConfigurationProvider(nil, nil, repo, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return provider.MatchRuleProvider(), nil
+}
+
+func newTestContextProviderAdapter(repo configRepositories.ContextRepository) (*ContextProviderAdapter, error) {
+	if repo == nil {
+		return nil, ErrContextRepositoryRequired
+	}
+
+	provider, err := NewMatchingConfigurationProvider(repo, nil, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return provider.ContextProvider(), nil
+}
+
 type feeRuleRepositoryStub struct {
 	rules []*fee.FeeRule
 	err   error
@@ -63,7 +89,7 @@ func (stub *feeRuleRepositoryStub) DeleteWithTx(context.Context, *sql.Tx, uuid.U
 func TestNewMatchRuleProviderAdapter_NilRepo(t *testing.T) {
 	t.Parallel()
 
-	adapter, err := NewMatchRuleProviderAdapter(nil)
+	adapter, err := newTestMatchRuleProviderAdapter(nil)
 	require.ErrorIs(t, err, ErrMatchRuleRepositoryRequired)
 	assert.Nil(t, adapter)
 }
@@ -75,11 +101,11 @@ func TestNewMatchRuleProviderAdapter_ValidRepo(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockMatchRuleRepository(ctrl)
-	adapter, err := NewMatchRuleProviderAdapter(mockRepo)
+	adapter, err := newTestMatchRuleProviderAdapter(mockRepo)
 
 	require.NoError(t, err)
 	require.NotNil(t, adapter)
-	assert.Equal(t, mockRepo, adapter.repo)
+	assert.Equal(t, mockRepo, adapter.provider.matchRuleRepo)
 }
 
 func TestMatchRuleProviderAdapter_ListByContextID_NilAdapter(t *testing.T) {
@@ -104,7 +130,7 @@ func TestMatchRuleProviderAdapter_ListByContextID_Success(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockMatchRuleRepository(ctrl)
-	adapter, err := NewMatchRuleProviderAdapter(mockRepo)
+	adapter, err := newTestMatchRuleProviderAdapter(mockRepo)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -151,7 +177,7 @@ func TestMatchRuleProviderAdapter_ListByContextID_EmptyRules(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockMatchRuleRepository(ctrl)
-	adapter, err := NewMatchRuleProviderAdapter(mockRepo)
+	adapter, err := newTestMatchRuleProviderAdapter(mockRepo)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -174,7 +200,7 @@ func TestMatchRuleProviderAdapter_ListByContextID_PaginatesAllRules(t *testing.T
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockMatchRuleRepository(ctrl)
-	adapter, err := NewMatchRuleProviderAdapter(mockRepo)
+	adapter, err := newTestMatchRuleProviderAdapter(mockRepo)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -210,7 +236,7 @@ func TestMatchRuleProviderAdapter_ListByContextID_Error(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockMatchRuleRepository(ctrl)
-	adapter, err := NewMatchRuleProviderAdapter(mockRepo)
+	adapter, err := newTestMatchRuleProviderAdapter(mockRepo)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -231,7 +257,7 @@ func TestMatchRuleProviderAdapter_ListByContextID_Error(t *testing.T) {
 func TestNewContextProviderAdapter_NilRepo(t *testing.T) {
 	t.Parallel()
 
-	adapter, err := NewContextProviderAdapter(nil)
+	adapter, err := newTestContextProviderAdapter(nil)
 	require.ErrorIs(t, err, ErrContextRepositoryRequired)
 	assert.Nil(t, adapter)
 }
@@ -259,7 +285,7 @@ func TestContextProviderAdapter_FindByID_Success(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockContextRepository(ctrl)
-	adapter, err := NewContextProviderAdapter(mockRepo)
+	adapter, err := newTestContextProviderAdapter(mockRepo)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -298,7 +324,7 @@ func TestContextProviderAdapter_FindByID_NilResult(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockContextRepository(ctrl)
-	adapter, err := NewContextProviderAdapter(mockRepo)
+	adapter, err := newTestContextProviderAdapter(mockRepo)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -334,7 +360,7 @@ func TestNewSourceProviderAdapter_ValidRepo(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, adapter)
-	assert.Equal(t, mockRepo, adapter.repo)
+	assert.Equal(t, mockRepo, adapter.provider.sourceRepo)
 }
 
 func TestNewFeeRuleProviderAdapter_NilRepo(t *testing.T) {
@@ -614,7 +640,7 @@ func TestContextProviderAdapter_FindByID_Error(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockContextRepository(ctrl)
-	adapter, err := NewContextProviderAdapter(mockRepo)
+	adapter, err := newTestContextProviderAdapter(mockRepo)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -640,7 +666,7 @@ func TestContextProviderAdapter_FindByID_ErrNoRows(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockContextRepository(ctrl)
-	adapter, err := NewContextProviderAdapter(mockRepo)
+	adapter, err := newTestContextProviderAdapter(mockRepo)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -664,11 +690,11 @@ func TestNewContextProviderAdapter_ValidRepo(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockContextRepository(ctrl)
-	adapter, err := NewContextProviderAdapter(mockRepo)
+	adapter, err := newTestContextProviderAdapter(mockRepo)
 
 	require.NoError(t, err)
 	require.NotNil(t, adapter)
-	assert.Equal(t, mockRepo, adapter.repo)
+	assert.Equal(t, mockRepo, adapter.provider.contextRepo)
 }
 
 func TestMatchRuleProviderAdapter_ListByContextID_SkipsNilRules(t *testing.T) {
@@ -678,7 +704,7 @@ func TestMatchRuleProviderAdapter_ListByContextID_SkipsNilRules(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockMatchRuleRepository(ctrl)
-	adapter, err := NewMatchRuleProviderAdapter(mockRepo)
+	adapter, err := newTestMatchRuleProviderAdapter(mockRepo)
 	require.NoError(t, err)
 
 	ctx := context.Background()

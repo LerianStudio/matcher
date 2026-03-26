@@ -24,9 +24,9 @@ import (
 	exceptionRepositories "github.com/LerianStudio/matcher/internal/exception/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/exception/services/command"
 	"github.com/LerianStudio/matcher/internal/exception/services/query"
+	crossAdapters "github.com/LerianStudio/matcher/internal/shared/adapters/cross"
 	govEntities "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
-	crossAdapters "github.com/LerianStudio/matcher/internal/shared/adapters/cross"
 )
 
 // ---------------------------------------------------------------------------

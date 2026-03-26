@@ -60,12 +60,7 @@ func (repo *Repository) CreateExceptionsWithTx(
 		return ErrInvalidTx
 	}
 
-	sqlTx, ok := tx.(*sql.Tx)
-	if !ok || sqlTx == nil {
-		return ErrInvalidTx
-	}
-
-	return repo.createExceptions(ctx, sqlTx, contextID, runID, inputs, regulatorySourceTypes)
+	return repo.createExceptions(ctx, tx, contextID, runID, inputs, regulatorySourceTypes)
 }
 
 func (repo *Repository) createExceptions(

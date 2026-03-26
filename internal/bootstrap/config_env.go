@@ -13,6 +13,8 @@ import (
 	"time"
 
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 const (
@@ -26,7 +28,7 @@ const (
 // logConfigWarn logs a warning if the config logger is available.
 // Safe to call even when cfg.Logger is nil (e.g., during early bootstrap).
 func (cfg *Config) logConfigWarn(ctx context.Context, msg string) {
-	if cfg != nil && !isNilInterface(cfg.Logger) {
+	if cfg != nil && !sharedPorts.IsNilValue(cfg.Logger) {
 		cfg.Logger.Log(ctx, libLog.LevelWarn, msg)
 	}
 }

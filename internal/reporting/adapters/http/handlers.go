@@ -23,6 +23,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/reporting/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	"github.com/LerianStudio/matcher/internal/reporting/services/query"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 const (
@@ -62,14 +63,9 @@ var (
 )
 
 // ReconciliationContextInfo contains the context information needed by reporting.
-type ReconciliationContextInfo struct {
-	ID     uuid.UUID
-	Active bool
-}
+type ReconciliationContextInfo = sharedPorts.ContextAccessInfo
 
-type contextProvider interface {
-	FindByID(ctx context.Context, tenantID, contextID uuid.UUID) (*ReconciliationContextInfo, error)
-}
+type contextProvider = sharedPorts.ContextAccessProvider
 
 // productionMode indicates whether the application is running in production.
 // Set once during handler construction via NewHandler; governs SafeError behavior

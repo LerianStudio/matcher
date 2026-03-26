@@ -100,13 +100,13 @@ func TestMatcherBundleFactory_BuildHTTPPolicy(t *testing.T) {
 	factory := &MatcherBundleFactory{bootstrapCfg: testBootstrapConfig()}
 
 	snap := testSnapshot(map[string]any{
-		"server.body_limit_bytes":     52428800,
-		"server.cors_allowed_origins": "https://app.example.com",
-		"server.cors_allowed_methods": "GET,POST",
-		"server.cors_allowed_headers": "Authorization",
-		"swagger.enabled":             true,
-		"swagger.host":                "api.example.com",
-		"swagger.schemes":             "http,https",
+		"server.body_limit_bytes": 52428800,
+		"cors.allowed_origins":    "https://app.example.com",
+		"cors.allowed_methods":    "GET,POST",
+		"cors.allowed_headers":    "Authorization",
+		"swagger.enabled":         true,
+		"swagger.host":            "api.example.com",
+		"swagger.schemes":         "http,https",
 	})
 
 	policy := factory.buildHTTPPolicy(snap)
@@ -141,6 +141,25 @@ func TestMatcherBundleFactory_BuildHTTPPolicy_Defaults(t *testing.T) {
 	assert.Equal(t, "https", policy.SwaggerSchemes)
 }
 
+func TestMatcherBundleFactory_BuildHTTPPolicy_LegacyKeysFallback(t *testing.T) {
+	t.Parallel()
+
+	factory := &MatcherBundleFactory{bootstrapCfg: testBootstrapConfig()}
+
+	snap := testSnapshot(map[string]any{
+		"server.cors_allowed_origins": "https://legacy.example.com",
+		"server.cors_allowed_methods": "GET,PUT",
+		"server.cors_allowed_headers": "Authorization,X-Request-ID",
+	})
+
+	policy := factory.buildHTTPPolicy(snap)
+
+	require.NotNil(t, policy)
+	assert.Equal(t, "https://legacy.example.com", policy.CORSAllowedOrigins)
+	assert.Equal(t, "GET,PUT", policy.CORSAllowedMethods)
+	assert.Equal(t, "Authorization,X-Request-ID", policy.CORSAllowedHeaders)
+}
+
 // ---------------------------------------------------------------------------
 // Postgres config extraction tests
 // ---------------------------------------------------------------------------
@@ -159,8 +178,8 @@ func TestMatcherBundleFactory_ExtractPostgresConfig(t *testing.T) {
 		"postgres.primary_ssl_mode":       "require",
 		"postgres.replica_host":           "replica.example.com",
 		"postgres.replica_port":           "5434",
-		"postgres.max_open_connections":   50,
-		"postgres.max_idle_connections":   10,
+		"postgres.max_open_conns":         50,
+		"postgres.max_idle_conns":         10,
 		"postgres.conn_max_lifetime_mins": 60,
 		"postgres.connect_timeout_sec":    20,
 	})
@@ -201,7 +220,22 @@ func TestMatcherBundleFactory_ExtractPostgresConfig_Defaults(t *testing.T) {
 	assert.Equal(t, 30, cfg.ConnMaxLifetimeMins)
 	assert.Equal(t, 10, cfg.ConnectTimeoutSec)
 	assert.Equal(t, 30, cfg.QueryTimeoutSec)
-	assert.Equal(t, "migrations", cfg.MigrationsPath)
+}
+
+func TestMatcherBundleFactory_ExtractPostgresConfig_LegacyKeysFallback(t *testing.T) {
+	t.Parallel()
+
+	factory := &MatcherBundleFactory{bootstrapCfg: testBootstrapConfig()}
+
+	snap := testSnapshot(map[string]any{
+		"postgres.max_open_connections": 41,
+		"postgres.max_idle_connections": 9,
+	})
+
+	cfg := factory.extractPostgresConfig(snap)
+
+	assert.Equal(t, 41, cfg.MaxOpenConnections)
+	assert.Equal(t, 9, cfg.MaxIdleConnections)
 }
 
 // ---------------------------------------------------------------------------
@@ -222,7 +256,7 @@ func TestMatcherBundleFactory_ExtractRedisConfig(t *testing.T) {
 		"redis.tls":             true,
 		"redis.ca_cert":         "base64cert",
 		"redis.pool_size":       20,
-		"redis.min_idle_conn":   5,
+		"redis.min_idle_conns":  5,
 		"redis.read_timeout_ms": 5000,
 	})
 
@@ -261,6 +295,20 @@ func TestMatcherBundleFactory_ExtractRedisConfig_Defaults(t *testing.T) {
 	assert.Equal(t, 5000, cfg.DialTimeoutMs)
 }
 
+func TestMatcherBundleFactory_ExtractRedisConfig_LegacyKeyFallback(t *testing.T) {
+	t.Parallel()
+
+	factory := &MatcherBundleFactory{bootstrapCfg: testBootstrapConfig()}
+
+	snap := testSnapshot(map[string]any{
+		"redis.min_idle_conn": 7,
+	})
+
+	cfg := factory.extractRedisConfig(snap)
+
+	assert.Equal(t, 7, cfg.MinIdleConn)
+}
+
 // ---------------------------------------------------------------------------
 // RabbitMQ config extraction tests
 // ---------------------------------------------------------------------------
@@ -271,7 +319,7 @@ func TestMatcherBundleFactory_ExtractRabbitMQConfig(t *testing.T) {
 	factory := &MatcherBundleFactory{bootstrapCfg: testBootstrapConfig()}
 
 	snap := testSnapshot(map[string]any{
-		"rabbitmq.uri":                         "amqps",
+		"rabbitmq.url":                         "amqps",
 		"rabbitmq.host":                        "mq.example.com",
 		"rabbitmq.port":                        "5671",
 		"rabbitmq.user":                        "producer",
@@ -309,6 +357,20 @@ func TestMatcherBundleFactory_ExtractRabbitMQConfig_Defaults(t *testing.T) {
 	assert.Equal(t, "/", cfg.VHost)
 	assert.Equal(t, "http://localhost:15672", cfg.HealthURL)
 	assert.False(t, cfg.AllowInsecureHealthCheck)
+}
+
+func TestMatcherBundleFactory_ExtractRabbitMQConfig_LegacyKeyFallback(t *testing.T) {
+	t.Parallel()
+
+	factory := &MatcherBundleFactory{bootstrapCfg: testBootstrapConfig()}
+
+	snap := testSnapshot(map[string]any{
+		"rabbitmq.uri": "amqps",
+	})
+
+	cfg := factory.extractRabbitMQConfig(snap)
+
+	assert.Equal(t, "amqps", cfg.URI)
 }
 
 // ---------------------------------------------------------------------------
@@ -1067,7 +1129,7 @@ func TestDiffAffectedComponents_AllComponentsChanged(t *testing.T) {
 	assert.Contains(t, affected, "rabbitmq")
 	assert.Contains(t, affected, "s3")
 	assert.Contains(t, affected, "http")
-	assert.Contains(t, affected, "logger")
+	assert.NotContains(t, affected, "logger")
 }
 
 func TestDiffAffectedComponents_NilSnapshots(t *testing.T) {

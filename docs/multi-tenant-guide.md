@@ -115,7 +115,7 @@ If the Tenant Manager becomes unreachable, the circuit breaker opens after `MULT
 | `MULTI_TENANT_SERVICE_API_KEY is required` | API key not configured. | Set `MULTI_TENANT_SERVICE_API_KEY` with the key from the Tenant Manager. |
 | `tenant connection returned nil db resolver` | Tenant not provisioned in Tenant Manager. | Provision the tenant via the Tenant Manager API before sending requests. |
 | `circuit breaker open` | Tenant Manager unreachable after threshold failures. | Check Tenant Manager health. Requests resume automatically after the timeout. |
-| `errTenantIDRequired` | RabbitMQ publish attempted without tenant context. | Ensure the JWT contains a `tenantId` claim and the Auth Middleware is active (`AUTH_ENABLED=true`). |
+| `errTenantIDRequired` | RabbitMQ publish attempted without tenant context. | Ensure the JWT contains a `tenantId` claim and the Auth Middleware is active (`PLUGIN_AUTH_ENABLED=true`). |
 | `context deadline exceeded` (on startup) | Tenant Manager URL is wrong or network unreachable. | Verify `MULTI_TENANT_URL` is correct and the service is reachable. Check `INFRA_CONNECT_TIMEOUT_SEC` (default: 30s). |
 
 ## 9. Architecture Diagram

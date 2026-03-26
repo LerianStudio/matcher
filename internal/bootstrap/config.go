@@ -124,8 +124,8 @@ type RabbitMQConfig struct {
 
 // AuthConfig configures authentication and authorization.
 type AuthConfig struct {
-	Enabled     bool   `env:"AUTH_ENABLED"         envDefault:"false" mapstructure:"enabled"`
-	Host        string `env:"AUTH_SERVICE_ADDRESS"                    mapstructure:"host"`
+	Enabled     bool   `env:"PLUGIN_AUTH_ENABLED"  envDefault:"false" mapstructure:"enabled"`
+	Host        string `env:"PLUGIN_AUTH_ADDRESS"                     mapstructure:"host"`
 	TokenSecret string `env:"AUTH_JWT_SECRET"                         mapstructure:"token_secret"`
 }
 
@@ -229,6 +229,7 @@ type ObjectStorageConfig struct {
 	AccessKeyID     string `env:"OBJECT_STORAGE_ACCESS_KEY_ID"                                       mapstructure:"access_key_id"`
 	SecretAccessKey string `env:"OBJECT_STORAGE_SECRET_ACCESS_KEY"                                   mapstructure:"secret_access_key"`
 	UsePathStyle    bool   `env:"OBJECT_STORAGE_USE_PATH_STYLE"    envDefault:"true"                 mapstructure:"use_path_style"`
+	AllowInsecure   bool   `env:"OBJECT_STORAGE_ALLOW_INSECURE_ENDPOINT" envDefault:"false"          mapstructure:"allow_insecure_endpoint"`
 }
 
 // ExportWorkerConfig configures reporting export workers.

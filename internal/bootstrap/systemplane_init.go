@@ -41,12 +41,13 @@ const wellKnownDevMasterKey = "+PnwgNy8bL3HGT1rOXp47PqyGcPywXH/epgmSVwPkL0="
 
 // Sentinel errors for systemplane initialization and bundle extraction.
 var (
-	errChangeFeedSupervisorRequired  = errors.New("start change feed: supervisor is required")
-	errSystemplaneSecretMasterKey    = errors.New("validate systemplane config: SYSTEMPLANE_SECRET_MASTER_KEY is required")
-	errSystemplaneDevMasterKeyInProd = errors.New("validate systemplane config: SYSTEMPLANE_SECRET_MASTER_KEY must not use the well-known development default in production")
-	errRateLimitRequiredProduction   = errors.New("RATE_LIMIT_ENABLED must remain true in production")
-	errFetcherPrivateIPsProduction   = errors.New("FETCHER_ALLOW_PRIVATE_IPS must remain false in production")
-	errArchivalEndpointRequired      = errors.New("OBJECT_STORAGE_ENDPOINT is required when ARCHIVAL_WORKER_ENABLED=true")
+	errChangeFeedSupervisorRequired   = errors.New("start change feed: supervisor is required")
+	errSystemplaneSecretMasterKey     = errors.New("validate systemplane config: SYSTEMPLANE_SECRET_MASTER_KEY is required")
+	errSystemplaneDevMasterKeyInProd  = errors.New("validate systemplane config: SYSTEMPLANE_SECRET_MASTER_KEY must not use the well-known development default in production")
+	errSystemplaneCustomPostgresStore = errors.New("validate systemplane config: custom postgres systemplane schema/table overrides are not supported for the legacy key migration rollout")
+	errRateLimitRequiredProduction    = errors.New("RATE_LIMIT_ENABLED must remain true in production")
+	errFetcherPrivateIPsProduction    = errors.New("FETCHER_ALLOW_PRIVATE_IPS must remain false in production")
+	errArchivalEndpointRequired       = errors.New("OBJECT_STORAGE_ENDPOINT is required when ARCHIVAL_WORKER_ENABLED=true")
 )
 
 // SystemplaneComponents holds all systemplane components created during
@@ -119,17 +120,40 @@ func LoadSystemplaneBackendConfig(appCfg *Config) (*spBootstrap.BootstrapConfig,
 		return nil, fmt.Errorf("validate systemplane config: %w", err)
 	}
 
+	if err := validateLoadedSystemplaneBackendConfig(cfg, appCfg); err != nil {
+		return nil, err
+	}
+
+	return cfg, nil
+}
+
+func validateLoadedSystemplaneBackendConfig(cfg *spBootstrap.BootstrapConfig, appCfg *Config) error {
 	if cfg.Secrets != nil && cfg.Secrets.MasterKey == "" {
-		return nil, errSystemplaneSecretMasterKey
+		return errSystemplaneSecretMasterKey
 	}
 
 	if cfg.Secrets != nil && appCfg != nil &&
 		IsProductionEnvironment(appCfg.App.EnvName) &&
 		cfg.Secrets.MasterKey == wellKnownDevMasterKey {
-		return nil, errSystemplaneDevMasterKeyInProd
+		return errSystemplaneDevMasterKeyInProd
 	}
 
-	return cfg, nil
+	if cfg.Backend == domain.BackendPostgres && hasCustomSystemplanePostgresStore(cfg.Postgres) {
+		return errSystemplaneCustomPostgresStore
+	}
+
+	return nil
+}
+
+func hasCustomSystemplanePostgresStore(cfg *spBootstrap.PostgresBootstrapConfig) bool {
+	if cfg == nil {
+		return false
+	}
+
+	return cfg.Schema != spBootstrap.DefaultPostgresSchema ||
+		cfg.EntriesTable != spBootstrap.DefaultPostgresEntriesTable ||
+		cfg.HistoryTable != spBootstrap.DefaultPostgresHistoryTable ||
+		cfg.RevisionTable != spBootstrap.DefaultPostgresRevisionTable
 }
 
 func loadSystemplaneSecretMasterKey() string {

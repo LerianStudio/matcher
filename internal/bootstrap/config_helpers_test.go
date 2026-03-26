@@ -184,6 +184,52 @@ func TestResolveConfigValue_BodyLimitBytes(t *testing.T) {
 	assert.Equal(t, 4096, val)
 }
 
+func TestResolveConfigValue_RenamedCorsKeyAlias(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{Server: ServerConfig{CORSAllowedOrigins: "https://app.example.com"}}
+
+	val, ok := resolveConfigValue(cfg, "cors.allowed_origins")
+
+	require.True(t, ok)
+	assert.Equal(t, "https://app.example.com", val)
+}
+
+func TestResolveConfigValue_RenamedRuntimeKeyAliases(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		Postgres: PostgresConfig{
+			MaxOpenConnections: 41,
+			MaxIdleConnections: 9,
+		},
+		Redis:    RedisConfig{MinIdleConn: 4},
+		RabbitMQ: RabbitMQConfig{URI: "amqps"},
+	}
+
+	tests := []struct {
+		name string
+		key  string
+		want any
+	}{
+		{name: "postgres max open conns", key: "postgres.max_open_conns", want: 41},
+		{name: "postgres max idle conns", key: "postgres.max_idle_conns", want: 9},
+		{name: "redis min idle conns", key: "redis.min_idle_conns", want: 4},
+		{name: "rabbitmq url", key: "rabbitmq.url", want: "amqps"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			val, ok := resolveConfigValue(cfg, tt.key)
+
+			require.True(t, ok)
+			assert.Equal(t, tt.want, val)
+		})
+	}
+}
+
 // --- derefPointerValue ---
 
 func TestDerefPointerValue_NonPointer(t *testing.T) {

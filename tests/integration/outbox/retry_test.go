@@ -9,8 +9,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	outboxRepo "github.com/LerianStudio/matcher/internal/outbox/adapters/postgres"
 	"github.com/LerianStudio/matcher/internal/outbox/domain/entities"
+	outboxRepo "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/outbox"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 

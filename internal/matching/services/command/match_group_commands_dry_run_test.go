@@ -15,9 +15,9 @@ import (
 	"github.com/LerianStudio/matcher/internal/auth"
 	matchingVO "github.com/LerianStudio/matcher/internal/matching/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/matching/ports"
-	outboxmocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
+	outboxmocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
 )
 
 func TestRunMatch_DryRun_DoesNotPersistOrMarkTransactions(t *testing.T) {

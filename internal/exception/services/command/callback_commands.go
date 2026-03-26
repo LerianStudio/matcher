@@ -5,8 +5,8 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
-	"reflect"
 	"strings"
 	"time"
 
@@ -42,7 +42,7 @@ type ProcessCallbackCommand struct {
 
 // CallbackUseCase handles callback processing with idempotency and rate limiting.
 type CallbackUseCase struct {
-	idempotencyRepo repositories.CallbackIdempotencyRepository
+	idempotencyRepo sharedPorts.IdempotencyRepository
 	exceptionRepo   repositories.ExceptionRepository
 	auditPublisher  ports.AuditPublisher
 	infraProvider   sharedPorts.InfrastructureProvider
@@ -51,29 +51,29 @@ type CallbackUseCase struct {
 
 // NewCallbackUseCase creates a new CallbackUseCase with the required dependencies.
 func NewCallbackUseCase(
-	idempotencyRepo repositories.CallbackIdempotencyRepository,
+	idempotencyRepo sharedPorts.IdempotencyRepository,
 	exceptionRepo repositories.ExceptionRepository,
 	auditPublisher ports.AuditPublisher,
 	infraProvider sharedPorts.InfrastructureProvider,
 	rateLimiter ports.CallbackRateLimiter,
 ) (*CallbackUseCase, error) {
-	if isNilInterface(idempotencyRepo) {
+	if sharedPorts.IsNilValue(idempotencyRepo) {
 		return nil, ErrNilIdempotencyRepository
 	}
 
-	if isNilInterface(exceptionRepo) {
+	if sharedPorts.IsNilValue(exceptionRepo) {
 		return nil, ErrNilExceptionRepository
 	}
 
-	if isNilInterface(auditPublisher) {
+	if sharedPorts.IsNilValue(auditPublisher) {
 		return nil, ErrNilAuditPublisher
 	}
 
-	if isNilInterface(infraProvider) {
+	if sharedPorts.IsNilValue(infraProvider) {
 		return nil, ErrNilInfraProvider
 	}
 
-	if isNilInterface(rateLimiter) {
+	if sharedPorts.IsNilValue(rateLimiter) {
 		return nil, ErrNilCallbackRateLimiter
 	}
 
@@ -239,7 +239,21 @@ func (uc *CallbackUseCase) handleExistingCallback(
 	case value_objects.IdempotencyStatusPending:
 		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "callback is still processing", ErrCallbackInProgress)
 		return ErrCallbackInProgress
-	case value_objects.IdempotencyStatusFailed, value_objects.IdempotencyStatusUnknown:
+	case value_objects.IdempotencyStatusFailed:
+		reacquired, err := uc.idempotencyRepo.TryReacquireFromFailed(ctx, params.dedupeKey)
+		if err != nil {
+			libOpentelemetry.HandleSpanError(span, "failed to reacquire failed idempotency key", err)
+			return fmt.Errorf("reacquire failed callback: %w", err)
+		}
+
+		if reacquired {
+			return uc.processCallback(ctx, cmd, params, logger, span)
+		}
+
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "callback is still processing", ErrCallbackInProgress)
+
+		return ErrCallbackInProgress
+	case value_objects.IdempotencyStatusUnknown:
 		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "callback requires retry", ErrCallbackRetryable)
 		return ErrCallbackRetryable
 	default:
@@ -358,23 +372,23 @@ func (uc *CallbackUseCase) markIdempotencyFailed(
 }
 
 func (uc *CallbackUseCase) validateDependencies() error {
-	if uc == nil || isNilInterface(uc.idempotencyRepo) {
+	if uc == nil || sharedPorts.IsNilValue(uc.idempotencyRepo) {
 		return ErrNilIdempotencyRepository
 	}
 
-	if isNilInterface(uc.exceptionRepo) {
+	if sharedPorts.IsNilValue(uc.exceptionRepo) {
 		return ErrNilExceptionRepository
 	}
 
-	if isNilInterface(uc.auditPublisher) {
+	if sharedPorts.IsNilValue(uc.auditPublisher) {
 		return ErrNilAuditPublisher
 	}
 
-	if isNilInterface(uc.infraProvider) {
+	if sharedPorts.IsNilValue(uc.infraProvider) {
 		return ErrNilInfraProvider
 	}
 
-	if isNilInterface(uc.rateLimiter) {
+	if sharedPorts.IsNilValue(uc.rateLimiter) {
 		return ErrNilCallbackRateLimiter
 	}
 
@@ -382,14 +396,20 @@ func (uc *CallbackUseCase) validateDependencies() error {
 }
 
 func parseIdempotencyKey(key string) (value_objects.IdempotencyKey, error) {
-	var idempotencyKey value_objects.IdempotencyKey
-
-	idempotencyKey, err := value_objects.ParseIdempotencyKey(key)
+	parsedKey, err := value_objects.ParseIdempotencyKey(key)
 	if err != nil {
-		return idempotencyKey, fmt.Errorf("parse idempotency key: %w", err)
+		if errors.Is(err, value_objects.ErrEmptyIdempotencyKey) {
+			return "", value_objects.ErrEmptyIdempotencyKey
+		}
+
+		if errors.Is(err, value_objects.ErrInvalidIdempotencyKey) {
+			return "", value_objects.ErrInvalidIdempotencyKey
+		}
+
+		return "", fmt.Errorf("parse callback idempotency key: %w", err)
 	}
 
-	return idempotencyKey, nil
+	return parsedKey, nil
 }
 
 func resolveExternalSystem(cmd ProcessCallbackCommand) (string, error) {
@@ -645,21 +665,6 @@ func (uc *CallbackUseCase) publishCallbackAudit(
 
 func normalizeCallbackString(value string) string {
 	return strings.TrimSpace(value)
-}
-
-func isNilInterface(value any) bool {
-	if value == nil {
-		return true
-	}
-
-	v := reflect.ValueOf(value)
-
-	switch v.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
-		return v.IsNil()
-	default:
-		return false
-	}
 }
 
 func normalizeOptionalString(value string) *string {
