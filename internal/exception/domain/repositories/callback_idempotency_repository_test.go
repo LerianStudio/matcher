@@ -7,19 +7,20 @@ import (
 	"testing"
 
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
-type callbackIdempotencyRepositoryStub struct{}
+type idempotencyRepositoryStub struct{}
 
-func (callbackIdempotencyRepositoryStub) TryAcquire(_ context.Context, _ shared.IdempotencyKey) (bool, error) {
+func (idempotencyRepositoryStub) TryAcquire(_ context.Context, _ shared.IdempotencyKey) (bool, error) {
 	return true, nil
 }
 
-func (callbackIdempotencyRepositoryStub) TryReacquireFromFailed(_ context.Context, _ shared.IdempotencyKey) (bool, error) {
+func (idempotencyRepositoryStub) TryReacquireFromFailed(_ context.Context, _ shared.IdempotencyKey) (bool, error) {
 	return true, nil
 }
 
-func (callbackIdempotencyRepositoryStub) MarkComplete(
+func (idempotencyRepositoryStub) MarkComplete(
 	_ context.Context,
 	_ shared.IdempotencyKey,
 	_ []byte,
@@ -28,22 +29,22 @@ func (callbackIdempotencyRepositoryStub) MarkComplete(
 	return nil
 }
 
-func (callbackIdempotencyRepositoryStub) MarkFailed(_ context.Context, _ shared.IdempotencyKey) error {
+func (idempotencyRepositoryStub) MarkFailed(_ context.Context, _ shared.IdempotencyKey) error {
 	return nil
 }
 
-func (callbackIdempotencyRepositoryStub) GetCachedResult(
+func (idempotencyRepositoryStub) GetCachedResult(
 	_ context.Context,
 	_ shared.IdempotencyKey,
 ) (*shared.IdempotencyResult, error) {
 	return nil, nil
 }
 
-func TestCallbackIdempotencyRepository_TypeAlias(t *testing.T) {
+func TestIdempotencyRepository_Interface(t *testing.T) {
 	t.Parallel()
 
-	var repo CallbackIdempotencyRepository = callbackIdempotencyRepositoryStub{}
+	var repo sharedPorts.IdempotencyRepository = idempotencyRepositoryStub{}
 	if repo == nil {
-		t.Fatal("expected callback idempotency repository alias to be assignable")
+		t.Fatal("expected idempotency repository interface to be assignable")
 	}
 }

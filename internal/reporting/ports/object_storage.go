@@ -6,6 +6,7 @@ import (
 )
 
 // ObjectStorageClient is deprecated; use internal/shared/ports.ObjectStorageClient directly.
+// TODO(review): Remove this file once all callers have migrated to shared/ports.
 type ObjectStorageClient = sharedPorts.ObjectStorageClient
 
 // UploadOption is deprecated; use pkg/storageopt.UploadOption or internal/shared/ports.UploadOption directly.

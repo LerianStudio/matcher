@@ -92,7 +92,7 @@ func NewDBLease(db *sql.DB, release func()) *DBLease {
 	return &DBLease{db: db, release: release}
 }
 
-// DB returns the leased replica database.
+// DB returns the leased database handle.
 func (lease *DBLease) DB() *sql.DB {
 	if lease == nil {
 		return nil
