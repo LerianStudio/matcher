@@ -370,34 +370,6 @@ func TestWithTx_NilFunction(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestCreateWithTx_NilTxPassthrough(t *testing.T) {
-	t.Parallel()
-
-	provider := &testutil.MockInfrastructureProvider{}
-	repo := NewRepository(provider)
-	ctx := context.Background()
-	run := createTestMatchRun(t)
-
-	result, err := repo.CreateWithTx(ctx, nil, run)
-
-	assert.Nil(t, result)
-	require.ErrorIs(t, err, ErrInvalidTx)
-}
-
-func TestUpdateWithTx_NilTxPassthrough(t *testing.T) {
-	t.Parallel()
-
-	provider := &testutil.MockInfrastructureProvider{}
-	repo := NewRepository(provider)
-	ctx := context.Background()
-	run := createTestMatchRun(t)
-
-	result, err := repo.UpdateWithTx(ctx, nil, run)
-
-	assert.Nil(t, result)
-	require.ErrorIs(t, err, ErrInvalidTx)
-}
-
 func TestScan_InvalidData(t *testing.T) {
 	t.Parallel()
 

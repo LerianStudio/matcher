@@ -793,12 +793,10 @@ func TestRepository_FindByID_Success(t *testing.T) {
 	sourceID := uuid.New()
 	mappingJSON := []byte(`{"external_id":"transaction_id"}`)
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, context_id, source_id, mapping, version, created_at, updated_at FROM field_maps WHERE id = $1")).
 		WithArgs(id.String()).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "context_id", "source_id", "mapping", "version", "created_at", "updated_at"}).
 			AddRow(id.String(), contextID.String(), sourceID.String(), mappingJSON, 1, now, now))
-	mock.ExpectCommit()
 
 	result, err := repo.FindByID(context.Background(), id)
 
@@ -818,11 +816,9 @@ func TestRepository_FindByID_NotFound(t *testing.T) {
 
 	id := uuid.New()
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, context_id, source_id, mapping, version, created_at, updated_at FROM field_maps WHERE id = $1")).
 		WithArgs(id.String()).
 		WillReturnError(sql.ErrNoRows)
-	mock.ExpectRollback()
 
 	result, err := repo.FindByID(context.Background(), id)
 
@@ -839,11 +835,9 @@ func TestRepository_FindByID_QueryError(t *testing.T) {
 
 	id := uuid.New()
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, context_id, source_id, mapping, version, created_at, updated_at FROM field_maps WHERE id = $1")).
 		WithArgs(id.String()).
 		WillReturnError(errTestQuery)
-	mock.ExpectRollback()
 
 	result, err := repo.FindByID(context.Background(), id)
 
@@ -863,12 +857,10 @@ func TestRepository_FindBySourceID_Success(t *testing.T) {
 	sourceID := uuid.New()
 	mappingJSON := []byte(`{"field":"value"}`)
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, context_id, source_id, mapping, version, created_at, updated_at FROM field_maps WHERE source_id = $1 ORDER BY version DESC LIMIT 1")).
 		WithArgs(sourceID.String()).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "context_id", "source_id", "mapping", "version", "created_at", "updated_at"}).
 			AddRow(id.String(), contextID.String(), sourceID.String(), mappingJSON, 2, now, now))
-	mock.ExpectCommit()
 
 	result, err := repo.FindBySourceID(context.Background(), sourceID)
 
@@ -886,11 +878,9 @@ func TestRepository_FindBySourceID_NotFound(t *testing.T) {
 
 	sourceID := uuid.New()
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, context_id, source_id, mapping, version, created_at, updated_at FROM field_maps WHERE source_id = $1 ORDER BY version DESC LIMIT 1")).
 		WithArgs(sourceID.String()).
 		WillReturnError(sql.ErrNoRows)
-	mock.ExpectRollback()
 
 	result, err := repo.FindBySourceID(context.Background(), sourceID)
 
@@ -907,11 +897,9 @@ func TestRepository_FindBySourceID_QueryError(t *testing.T) {
 
 	sourceID := uuid.New()
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, context_id, source_id, mapping, version, created_at, updated_at FROM field_maps WHERE source_id = $1 ORDER BY version DESC LIMIT 1")).
 		WithArgs(sourceID.String()).
 		WillReturnError(errTestQuery)
-	mock.ExpectRollback()
 
 	result, err := repo.FindBySourceID(context.Background(), sourceID)
 
@@ -1066,13 +1054,11 @@ func TestRepository_ExistsBySourceIDs_Success(t *testing.T) {
 	sourceID2 := uuid.New()
 	sourceID3 := uuid.New()
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT DISTINCT source_id FROM field_maps WHERE source_id IN")).
 		WithArgs(sourceID1.String(), sourceID2.String(), sourceID3.String()).
 		WillReturnRows(sqlmock.NewRows([]string{"source_id"}).
 			AddRow(sourceID1.String()).
 			AddRow(sourceID3.String()))
-	mock.ExpectCommit()
 
 	result, err := repo.ExistsBySourceIDs(
 		context.Background(),
@@ -1094,11 +1080,9 @@ func TestRepository_ExistsBySourceIDs_QueryError(t *testing.T) {
 
 	sourceID := uuid.New()
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT DISTINCT source_id FROM field_maps WHERE source_id IN")).
 		WithArgs(sourceID.String()).
 		WillReturnError(errTestQuery)
-	mock.ExpectRollback()
 
 	result, err := repo.ExistsBySourceIDs(context.Background(), []uuid.UUID{sourceID})
 
@@ -1114,12 +1098,10 @@ func TestRepository_ExistsBySourceIDs_DeduplicatesInput(t *testing.T) {
 
 	sourceID := uuid.New()
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT DISTINCT source_id FROM field_maps WHERE source_id IN")).
 		WithArgs(sourceID.String()).
 		WillReturnRows(sqlmock.NewRows([]string{"source_id"}).
 			AddRow(sourceID.String()))
-	mock.ExpectCommit()
 
 	result, err := repo.ExistsBySourceIDs(
 		context.Background(),
@@ -1392,12 +1374,10 @@ func TestExistsBySourceIDsBatch_ScanError(t *testing.T) {
 
 	sourceID := uuid.New()
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT DISTINCT source_id FROM field_maps WHERE source_id IN")).
 		WithArgs(sourceID.String()).
 		WillReturnRows(sqlmock.NewRows([]string{"source_id"}).
 			AddRow("not-a-valid-uuid"))
-	mock.ExpectRollback()
 
 	result, err := repo.ExistsBySourceIDs(context.Background(), []uuid.UUID{sourceID})
 

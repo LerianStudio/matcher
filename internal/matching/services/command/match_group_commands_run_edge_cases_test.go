@@ -792,7 +792,7 @@ func TestEnqueueMatchConfirmedEvents_NilOutboxRepo(t *testing.T) {
 	require.ErrorIs(t, err, ErrOutboxRepoNotConfigured)
 }
 
-func TestEnqueueMatchConfirmedEvents_NonSQLTx(t *testing.T) {
+func TestEnqueueMatchConfirmedEvents_NilTx(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)

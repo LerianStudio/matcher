@@ -81,7 +81,7 @@ func TestAliasAwareSystemplaneManager_GetConfigHistorySupportsLegacyFilter(t *te
 	manager := newAliasAwareSystemplaneManager(&mockManagerForMount{
 		getHistoryFn: func(_ context.Context, filter spports.HistoryFilter) ([]spports.HistoryEntry, error) {
 			assert.Equal(t, "cors.allowed_origins", filter.Key)
-			return []spports.HistoryEntry{{Key: "cors.allowed_origins", ChangedAt: time.Now()}}, nil
+			return []spports.HistoryEntry{{Key: "cors.allowed_origins", ChangedAt: time.Now().UTC()}}, nil
 		},
 	})
 

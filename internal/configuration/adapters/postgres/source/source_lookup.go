@@ -30,11 +30,11 @@ func (repo *Repository) FindByID(
 	ctx, span := tracer.Start(ctx, "repository.source.find_by_id")
 	defer span.End()
 
-	result, err := common.WithTenantTxProvider(
+	result, err := common.WithTenantReadQuery(
 		ctx,
 		repo.provider,
-		func(tx *sql.Tx) (*entities.ReconciliationSource, error) {
-			row := tx.QueryRowContext(
+		func(qe common.QueryExecutor) (*entities.ReconciliationSource, error) {
+			row := qe.QueryRowContext(
 				ctx,
 				"SELECT "+sourceColumns+" FROM reconciliation_sources WHERE context_id = $1 AND id = $2",
 				contextID.String(),
@@ -73,13 +73,13 @@ func (repo *Repository) GetContextIDBySourceID(
 	ctx, span := tracer.Start(ctx, "repository.source.find_context_id_by_source_id")
 	defer span.End()
 
-	result, err := common.WithTenantTxProvider(
+	result, err := common.WithTenantReadQuery(
 		ctx,
 		repo.provider,
-		func(tx *sql.Tx) (uuid.UUID, error) {
+		func(qe common.QueryExecutor) (uuid.UUID, error) {
 			var contextIDStr string
 
-			row := tx.QueryRowContext(
+			row := qe.QueryRowContext(
 				ctx,
 				"SELECT context_id FROM reconciliation_sources WHERE id = $1",
 				sourceID.String(),

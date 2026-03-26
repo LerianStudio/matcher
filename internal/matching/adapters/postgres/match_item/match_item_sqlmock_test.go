@@ -266,8 +266,8 @@ func TestCreateBatchWithTx_NilTx(t *testing.T) {
 	require.ErrorIs(t, err, ErrInvalidTx)
 }
 
-// TestCreateBatchWithTx_ValidTx tests CreateBatchWithTx with valid tx handling.
-func TestCreateBatchWithTx_ValidTx(t *testing.T) {
+// TestCreateBatchWithTx_NilTx_WithMockProvider tests CreateBatchWithTx with nil tx using a mock provider.
+func TestCreateBatchWithTx_NilTx_WithMockProvider(t *testing.T) {
 	t.Parallel()
 
 	provider := &testutil.MockInfrastructureProvider{}

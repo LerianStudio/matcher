@@ -69,7 +69,12 @@ func parseOptionalBoolEnv(raw string, isSet bool) (bool, bool, error) {
 		return false, false, nil
 	}
 
-	value, err := strconv.ParseBool(strings.TrimSpace(raw))
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return false, false, nil
+	}
+
+	value, err := strconv.ParseBool(trimmed)
 	if err != nil {
 		return false, false, err
 	}

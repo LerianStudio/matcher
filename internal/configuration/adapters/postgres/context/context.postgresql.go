@@ -220,11 +220,11 @@ func (repo *Repository) FindByName(
 
 	tenantID := auth.GetTenantID(ctx)
 
-	result, err := common.WithTenantTxProvider(
+	result, err := common.WithTenantReadQuery(
 		ctx,
 		repo.provider,
-		func(tx *sql.Tx) (*entities.ReconciliationContext, error) {
-			row := tx.QueryRowContext(
+		func(qe common.QueryExecutor) (*entities.ReconciliationContext, error) {
+			row := qe.QueryRowContext(
 				ctx,
 				"SELECT "+contextColumns+" FROM reconciliation_contexts WHERE tenant_id = $1 AND name = $2",
 				tenantID,

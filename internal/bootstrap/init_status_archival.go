@@ -358,7 +358,7 @@ func newRuntimeArchivalStorageClient(
 
 		client, err := createArchivalStorage(context.TODO(), cfg)
 		if err != nil || client == nil {
-			return nil
+			return activeClient
 		}
 
 		activeClient = client

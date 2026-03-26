@@ -77,7 +77,7 @@ func NewCleanupWorker(
 		return nil, ErrNilJobRepository
 	}
 
-	if storage == nil {
+	if sharedPorts.IsNilValue(storage) {
 		return nil, ErrNilStorageClient
 	}
 

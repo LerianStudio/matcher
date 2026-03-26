@@ -159,11 +159,11 @@ func (repo *Repository) FindByID(ctx stdctx.Context, id uuid.UUID) (*entities.Fi
 	ctx, span := tracer.Start(ctx, "postgres.find_field_map_by_id")
 	defer span.End()
 
-	result, err := common.WithTenantTxProvider(
+	result, err := common.WithTenantReadQuery(
 		ctx,
 		repo.provider,
-		func(tx *sql.Tx) (*entities.FieldMap, error) {
-			row := tx.QueryRowContext(
+		func(qe common.QueryExecutor) (*entities.FieldMap, error) {
+			row := qe.QueryRowContext(
 				ctx,
 				"SELECT "+fieldMapColumns+" FROM field_maps WHERE id = $1",
 				id.String(),
@@ -199,11 +199,11 @@ func (repo *Repository) FindBySourceID(
 	ctx, span := tracer.Start(ctx, "postgres.find_field_map_by_source")
 	defer span.End()
 
-	result, err := common.WithTenantTxProvider(
+	result, err := common.WithTenantReadQuery(
 		ctx,
 		repo.provider,
-		func(tx *sql.Tx) (*entities.FieldMap, error) {
-			row := tx.QueryRowContext(
+		func(qe common.QueryExecutor) (*entities.FieldMap, error) {
+			row := qe.QueryRowContext(
 				ctx,
 				"SELECT "+fieldMapColumns+" FROM field_maps WHERE source_id = $1 ORDER BY version DESC LIMIT 1",
 				sourceID.String(),
@@ -478,10 +478,10 @@ func (repo *Repository) ExistsBySourceIDs(
 	ctx, span := tracer.Start(ctx, "postgres.exists_field_maps_by_source_ids")
 	defer span.End()
 
-	result, err := common.WithTenantTxProvider(
+	result, err := common.WithTenantReadQuery(
 		ctx,
 		repo.provider,
-		func(tx *sql.Tx) (map[uuid.UUID]bool, error) {
+		func(qe common.QueryExecutor) (map[uuid.UUID]bool, error) {
 			existsMap := make(map[uuid.UUID]bool, len(deduped))
 
 			for start := 0; start < len(deduped); start += existsBySourceIDsBatchSize {
@@ -489,7 +489,7 @@ func (repo *Repository) ExistsBySourceIDs(
 
 				batch := deduped[start:end]
 
-				if err := repo.existsBySourceIDsBatch(ctx, tx, batch, existsMap); err != nil {
+				if err := repo.existsBySourceIDsBatch(ctx, qe, batch, existsMap); err != nil {
 					return nil, err
 				}
 			}
@@ -526,7 +526,7 @@ func dedupeSourceIDs(sourceIDs []uuid.UUID) []uuid.UUID {
 // existsBySourceIDsBatch executes a single batch query for ExistsBySourceIDs.
 func (repo *Repository) existsBySourceIDsBatch(
 	ctx stdctx.Context,
-	tx *sql.Tx,
+	qe common.QueryExecutor,
 	batch []uuid.UUID,
 	existsMap map[uuid.UUID]bool,
 ) (err error) {
@@ -539,9 +539,9 @@ func (repo *Repository) existsBySourceIDsBatch(
 		len(batch),
 	) + ")" // #nosec G202 -- placeholders are generated safely
 
-	rows, err := tx.QueryContext(ctx, query, args...)
+	rows, err := qe.QueryContext(ctx, query, args...)
 	if err != nil {
-		return err
+		return fmt.Errorf("query existing source ids: %w", err)
 	}
 
 	defer func() {

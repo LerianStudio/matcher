@@ -319,19 +319,6 @@ func TestUpdateWithTx_NilTx(t *testing.T) {
 	require.ErrorIs(t, err, ErrMatchGroupEntityNeeded)
 }
 
-func TestUpdateWithTx_NilTx_WithoutGroup(t *testing.T) {
-	t.Parallel()
-
-	provider := &testutil.MockInfrastructureProvider{}
-	repo := NewRepository(provider)
-	ctx := context.Background()
-
-	result, err := repo.UpdateWithTx(ctx, nil, nil)
-
-	assert.Nil(t, result)
-	require.ErrorIs(t, err, ErrMatchGroupEntityNeeded)
-}
-
 func TestNormalizeSortColumn(t *testing.T) {
 	t.Parallel()
 
