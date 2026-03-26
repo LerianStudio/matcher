@@ -227,11 +227,23 @@ func extractIdempotencyKey(
 	userProvidedKey := userKey != ""
 
 	if userKey == "" {
-		// Body hash fallback: when no Idempotency-Key header is provided, a SHA-256
-		// hash of the request body is used as the key. This means identical payloads
-		// sent to the same tenant+method+path will be deduplicated within the TTL window.
-		// If this behavior is undesirable, clients should always provide an explicit
-		// Idempotency-Key header.
+		// Body-hash fallback is only safe for POST and PUT. PATCH requests are
+		// state-dependent: the same body (e.g. {"status":"ACTIVE"}) represents
+		// different logical operations depending on the resource's current state.
+		// Using a body hash for PATCH causes false-positive replay when a resource
+		// transitions through states and returns to a previous body shape (e.g.
+		// DRAFT→ACTIVE, then ACTIVE→PAUSED, then PAUSED→ACTIVE: the third PATCH
+		// has the same body hash as the first, but is a distinct operation).
+		// For PATCH, only enforce idempotency when an explicit key header is provided.
+		if fiberCtx.Method() == fiber.MethodPatch {
+			return "", nil
+		}
+
+		// Body hash fallback for POST/PUT: when no Idempotency-Key header is
+		// provided, a SHA-256 hash of the request body is used as the key. This
+		// means identical payloads sent to the same tenant+method+path will be
+		// deduplicated within the TTL window. If this behavior is undesirable,
+		// clients should always provide an explicit Idempotency-Key header.
 		body := fiberCtx.Body()
 		if len(body) == 0 {
 			return "", nil

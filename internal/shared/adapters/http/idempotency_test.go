@@ -644,6 +644,83 @@ func TestIdempotencyMiddleware_SkipsWithoutKeyAndBody(t *testing.T) {
 	assert.False(t, repo.acquireCalled, "should skip when no key and no body")
 }
 
+func TestIdempotencyMiddleware_PatchWithoutExplicitKey_SkipsBodyHash(t *testing.T) {
+	t.Parallel()
+
+	app := fiber.New()
+	repo := &stubIdempotencyRepo{acquireResult: true}
+
+	app.Use(NewIdempotencyMiddleware(IdempotencyMiddlewareConfig{
+		Repository: repo,
+	}))
+
+	handlerCalls := 0
+
+	app.Patch("/v1/contexts/abc123", func(c *fiber.Ctx) error {
+		handlerCalls++
+		return c.Status(fiber.StatusOK).JSON(fiber.Map{"status": "ACTIVE"})
+	})
+
+	// First PATCH: {"status":"ACTIVE"} — should execute handler (no body-hash key generated)
+	req1 := httptest.NewRequest(http.MethodPatch, "/v1/contexts/abc123", strings.NewReader(`{"status":"ACTIVE"}`))
+	req1.Header.Set("Content-Type", "application/json")
+
+	resp1, err := app.Test(req1)
+	require.NoError(t, err)
+	defer resp1.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp1.StatusCode)
+	assert.False(t, repo.acquireCalled, "PATCH without explicit key should not attempt idempotency lock")
+	assert.Equal(t, 1, handlerCalls, "handler should be called on first PATCH")
+
+	// Second PATCH: same body {"status":"ACTIVE"} — should ALSO execute handler (not replayed)
+	req2 := httptest.NewRequest(http.MethodPatch, "/v1/contexts/abc123", strings.NewReader(`{"status":"ACTIVE"}`))
+	req2.Header.Set("Content-Type", "application/json")
+
+	resp2, err := app.Test(req2)
+	require.NoError(t, err)
+	defer resp2.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp2.StatusCode)
+	assert.Equal(t, "", resp2.Header.Get(HeaderXIdempotencyReplayed), "should not be replayed")
+	assert.Equal(t, 2, handlerCalls, "handler should be called again for same PATCH body")
+}
+
+func TestIdempotencyMiddleware_PatchWithExplicitKey_EnforcesIdempotency(t *testing.T) {
+	t.Parallel()
+
+	app := fiber.New()
+	repo := &stubIdempotencyRepo{
+		acquireResult: false,
+		cachedResult: &IdempotencyResult{
+			Status:     IdempotencyStatusComplete,
+			Response:   []byte(`{"status":"ACTIVE"}`),
+			HTTPStatus: http.StatusOK,
+		},
+	}
+
+	app.Use(NewIdempotencyMiddleware(IdempotencyMiddlewareConfig{
+		Repository: repo,
+	}))
+
+	app.Patch("/v1/contexts/abc123", func(_ *fiber.Ctx) error {
+		t.Fatal("handler should not be called when PATCH has explicit key and cached result")
+		return nil
+	})
+
+	req := httptest.NewRequest(http.MethodPatch, "/v1/contexts/abc123", strings.NewReader(`{"status":"ACTIVE"}`))
+	req.Header.Set(HeaderXIdempotencyKey, "explicit-patch-key")
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "true", resp.Header.Get(HeaderXIdempotencyReplayed))
+	assert.True(t, repo.acquireCalled, "PATCH with explicit key should enforce idempotency")
+}
+
 func TestExtractIdempotencyKey_PrefersXHeader(t *testing.T) {
 	t.Parallel()
 
