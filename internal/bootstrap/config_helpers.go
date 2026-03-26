@@ -27,6 +27,16 @@ var configKeyAliases = map[string]string{
 	"rabbitmq.url":            "rabbitmq.uri",
 }
 
+// reverseConfigKeyAliases maps legacy keys to canonical keys (built from configKeyAliases at init).
+var reverseConfigKeyAliases = func() map[string]string {
+	m := make(map[string]string, len(configKeyAliases))
+	for canonical, legacy := range configKeyAliases {
+		m[legacy] = canonical
+	}
+
+	return m
+}()
+
 func legacyConfigKey(key string) (string, bool) {
 	legacyKey, ok := configKeyAliases[key]
 
@@ -34,13 +44,9 @@ func legacyConfigKey(key string) (string, bool) {
 }
 
 func canonicalConfigKey(key string) (string, bool) {
-	for canonicalKey, legacyKey := range configKeyAliases {
-		if legacyKey == key {
-			return canonicalKey, true
-		}
-	}
+	canonicalKey, ok := reverseConfigKeyAliases[key]
 
-	return "", false
+	return canonicalKey, ok
 }
 
 func resolveSnapshotConfigValue(snap domain.Snapshot, key string) (any, bool) {
