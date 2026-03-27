@@ -250,6 +250,10 @@ func (publisher *EventPublisher) publishMultiTenant(
 		return fmt.Errorf("get tenant channel: %w", chErr)
 	}
 
+	if ch == nil {
+		return fmt.Errorf("get tenant channel: nil channel returned for tenant %s", tenantID)
+	}
+
 	defer func() {
 		if closeErr := ch.Close(); closeErr != nil && err == nil {
 			err = fmt.Errorf("close tenant channel: %w", closeErr)

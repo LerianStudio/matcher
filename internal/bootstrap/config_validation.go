@@ -211,7 +211,7 @@ func (cfg *Config) validateTenancyConfig(asserter *assert.Asserter) error {
 		return fmt.Errorf("config validation: %w", err)
 	}
 
-	if err := asserter.NotEmpty(ctx, cfg.effectiveMultiTenantEnvironment(), "MULTI_TENANT_ENVIRONMENT is required when multi-tenant mode is enabled"); err != nil {
+	if err := asserter.That(ctx, cfg.Auth.Enabled, "AUTH_ENABLED must be true when MULTI_TENANT_ENABLED=true — without authentication, tenant isolation is bypassed"); err != nil {
 		return fmt.Errorf("config validation: %w", err)
 	}
 

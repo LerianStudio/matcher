@@ -21,7 +21,7 @@ This package handles:
 
 ### Configuration (`Config`)
 
-`Config` is loaded via `LoadConfig()` and validated with `Validate()`:
+`Config` is loaded via `LoadConfigWithLogger(logger)` and validated with `Validate()`:
 
 - **Validation**: enforces production constraints (TLS, auth enabled, non-default credentials).
 - **DSN generation**: `PrimaryDSN()`, `ReplicaDSN()`, `RabbitMQDSN()` construct connection strings.
@@ -45,11 +45,11 @@ This package handles:
 
 Readiness uses `HealthDependencies`. Redis is optional by default; dependencies can be marked optional via `HealthDependencies.{Postgres,Redis,RabbitMQ}Optional`.
 
-### Infrastructure Wiring (`InitServers` / `InitServersWithOptions`)
+### Infrastructure Wiring (`InitServersWithOptions`)
 
 `InitServersWithOptions` is the composition root:
 
-1. Load config (`LoadConfig()`).
+1. Load config (`LoadConfigWithLogger(logger)`).
 2. Initialize logger + telemetry.
 3. Create Postgres/Redis/RabbitMQ connections.
 4. Connect infrastructure and build health dependencies.
@@ -121,16 +121,16 @@ Workers can be started, stopped, and reconfigured at runtime through systemplane
 
 ```go
 func main() {
-    service, err := bootstrap.InitServers()
+    service, err := bootstrap.InitServersWithOptions(&bootstrap.Options{})
     if err != nil {
-        log.Fatalf("Failed to initialize: %v", err)
+        // handle error
     }
 
     service.Run()
 }
 ```
 
-Use `InitServersWithOptions(&bootstrap.Options{Logger: ...})` when you need a custom logger.
+Use `InitServersWithOptions(&bootstrap.Options{Logger: logger})` to provide a custom logger.
 
 ### Adding a New Domain
 
