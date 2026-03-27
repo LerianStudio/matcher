@@ -426,6 +426,10 @@ func (publisher *EventPublisher) publishMultiTenant(
 		return fmt.Errorf("get tenant channel: %w", err)
 	}
 
+	if ch == nil {
+		return fmt.Errorf("get tenant channel: nil channel returned for tenant %s", tenantID)
+	}
+
 	// Declare exchange on tenant's vhost (idempotent operation)
 	if err := ch.ExchangeDeclare(
 		sharedRabbitmq.ExchangeName,

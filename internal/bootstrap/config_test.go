@@ -2932,6 +2932,29 @@ func TestConfig_ValidateMultiTenantConfig(t *testing.T) {
 
 	validTenantID := "11111111-1111-1111-1111-111111111111"
 
+	t.Run("requires AUTH_ENABLED when MULTI_TENANT_ENABLED is true", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := buildConfig(flatConfig{
+			EnvName:                  "development",
+			DefaultTenantID:          validTenantID,
+			BodyLimitBytes:           1024,
+			LogLevel:                 "info",
+			RateLimitMax:             100,
+			RateLimitExpirySec:       60,
+			ExportRateLimitMax:       10,
+			ExportRateLimitExpirySec: 60,
+			InfraConnectTimeoutSec:   30,
+			MultiTenantEnabled:       true,
+			AuthEnabled:              false,
+		})
+		cfg.Tenancy.MultiTenantURL = "http://tenant-manager:8080"
+
+		err := cfg.Validate()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "AUTH_ENABLED must be true when MULTI_TENANT_ENABLED=true")
+	})
+
 	t.Run("requires MULTI_TENANT_URL when MULTI_TENANT_ENABLED is true", func(t *testing.T) {
 		t.Parallel()
 
@@ -2946,6 +2969,9 @@ func TestConfig_ValidateMultiTenantConfig(t *testing.T) {
 			ExportRateLimitExpirySec: 60,
 			InfraConnectTimeoutSec:   30,
 			MultiTenantEnabled:       true,
+			AuthEnabled:              true,
+			AuthHost:                 "http://auth:8080",
+			AuthTokenSecret:          "secret",
 		})
 		cfg.Tenancy.MultiTenantURL = ""
 
@@ -2968,6 +2994,9 @@ func TestConfig_ValidateMultiTenantConfig(t *testing.T) {
 			ExportRateLimitExpirySec: 60,
 			InfraConnectTimeoutSec:   30,
 			MultiTenantEnabled:       true,
+			AuthEnabled:              true,
+			AuthHost:                 "http://auth:8080",
+			AuthTokenSecret:          "secret",
 		})
 		cfg.Tenancy.MultiTenantURL = "   "
 
@@ -2990,6 +3019,9 @@ func TestConfig_ValidateMultiTenantConfig(t *testing.T) {
 			ExportRateLimitExpirySec: 60,
 			InfraConnectTimeoutSec:   30,
 			MultiTenantEnabled:       true,
+			AuthEnabled:              true,
+			AuthHost:                 "http://auth:8080",
+			AuthTokenSecret:          "secret",
 		})
 		cfg.Tenancy.MultiTenantURL = "http://tenant-manager:8080"
 

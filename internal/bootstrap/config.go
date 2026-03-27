@@ -332,13 +332,17 @@ func (cfg *Config) Validate() error {
 }
 
 // validateMultiTenantConfig validates multi-tenant configuration.
-// When multi-tenant mode is enabled, the tenant manager URL is required.
+// When multi-tenant mode is enabled, auth and the tenant manager URL are required.
 func (cfg *Config) validateMultiTenantConfig(asserter *assert.Asserter) error {
 	if !cfg.Tenancy.MultiTenantEnabled {
 		return nil
 	}
 
 	ctx := context.Background()
+
+	if err := asserter.That(ctx, cfg.Auth.Enabled, "AUTH_ENABLED must be true when MULTI_TENANT_ENABLED=true: without authentication all requests route to the default tenant, defeating tenant isolation"); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
 
 	if err := asserter.NotEmpty(ctx, strings.TrimSpace(cfg.Tenancy.MultiTenantURL), "MULTI_TENANT_URL is required when MULTI_TENANT_ENABLED=true"); err != nil {
 		return fmt.Errorf("config validation: %w", err)
