@@ -61,7 +61,12 @@ type S3Client struct {
 // In single-tenant mode (no tenant in context): "{key}" unchanged
 // Leading slashes are always stripped from the key for clean path construction.
 func getTenantPrefixedKey(ctx context.Context, key string) (string, error) {
-	return tms3.GetS3KeyStorageContext(ctx, key)
+	prefixed, err := tms3.GetS3KeyStorageContext(ctx, key)
+	if err != nil {
+		return "", fmt.Errorf("tenant-prefixed key: %w", err)
+	}
+
+	return prefixed, nil
 }
 
 var (

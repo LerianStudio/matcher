@@ -117,6 +117,7 @@ var (
 	errConfirmableSetupFailed  = errors.New("failed to setup confirmable publisher")
 	errTenantIDRequired        = errors.New("tenant ID is required in multi-tenant mode")
 	errBrokerNacked            = errors.New("broker nacked publish")
+	errNilTenantChannel        = errors.New("nil channel returned for tenant")
 )
 
 const (
@@ -251,7 +252,7 @@ func (publisher *EventPublisher) publishMultiTenant(
 	}
 
 	if ch == nil {
-		return fmt.Errorf("get tenant channel: nil channel returned for tenant %s", tenantID)
+		return fmt.Errorf("get tenant channel: %w: %s", errNilTenantChannel, tenantID)
 	}
 
 	defer func() {

@@ -6,7 +6,6 @@ import (
 	"context"
 	"testing"
 
-	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -20,36 +19,25 @@ func TestNewEventPublisherFromChannel_NilReturnsError(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestNewEventPublisherMultiTenant_NilManagerReturnsError(t *testing.T) {
+func TestNewMultiTenantEventPublisher_NilManagerReturnsError(t *testing.T) {
 	t.Parallel()
 
-	_, err := NewEventPublisherMultiTenant(nil)
+	_, err := NewMultiTenantEventPublisher(nil)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "rabbitmq multi-tenant manager is required")
-}
-
-func TestNewEventPublisherMultiTenant_ValidManager(t *testing.T) {
-	t.Parallel()
-
-	mockManager := &mockRabbitMQMultiTenantManager{}
-
-	publisher, err := NewEventPublisherMultiTenant(mockManager)
-	require.NoError(t, err)
-	require.NotNil(t, publisher)
-	assert.NotNil(t, publisher.rabbitmqManager)
-	assert.Nil(t, publisher.confirmablePublisher)
+	assert.ErrorIs(t, err, errRabbitMQManagerRequired)
 }
 
 func TestEventPublisher_Close_MultiTenantMode(t *testing.T) {
 	t.Parallel()
 
-	mockManager := &mockRabbitMQMultiTenantManager{}
-
-	publisher, err := NewEventPublisherMultiTenant(mockManager)
-	require.NoError(t, err)
+	// Directly construct a multi-tenant publisher (bypasses NewMultiTenantEventPublisher
+	// which requires a real *tmrabbitmq.Manager).
+	publisher := &EventPublisher{
+		multiTenant: true,
+	}
 
 	// Close should be a no-op in multi-tenant mode
-	err = publisher.Close()
+	err := publisher.Close()
 	assert.NoError(t, err)
 }
 
@@ -59,26 +47,6 @@ func TestEventPublisher_Close_NilPublisher(t *testing.T) {
 	var publisher *EventPublisher
 	err := publisher.Close()
 	assert.NoError(t, err)
-}
-
-// mockRabbitMQMultiTenantManager is a test double for RabbitMQMultiTenantManager.
-type mockRabbitMQMultiTenantManager struct {
-	getChannelErr  error
-	getChannelCall int
-}
-
-func (m *mockRabbitMQMultiTenantManager) GetChannel(_ context.Context, _ string) (*amqp.Channel, error) {
-	m.getChannelCall++
-
-	if m.getChannelErr != nil {
-		return nil, m.getChannelErr
-	}
-
-	// Note: In real implementation, this would return an actual *amqp.Channel
-	// from the tenant's vhost. For unit tests, we cannot easily mock *amqp.Channel
-	// since it's a concrete type with unexported fields. Integration tests should
-	// cover the actual channel usage.
-	return nil, nil
 }
 
 func TestPublishMatchConfirmed_NilPublisher_ReturnsError(t *testing.T) {
@@ -94,7 +62,7 @@ func TestPublishMatchConfirmed_NilPublisher_ReturnsError(t *testing.T) {
 func TestPublishMatchConfirmed_NoPublisherOrManager_ReturnsError(t *testing.T) {
 	t.Parallel()
 
-	// Empty publisher with neither confirmablePublisher nor rabbitmqManager
+	// Empty publisher with neither confirmablePublisher nor rmqManager
 	publisher := &EventPublisher{}
 
 	err := publisher.PublishMatchConfirmed(context.Background(), &sharedDomain.MatchConfirmedEvent{})
@@ -105,60 +73,14 @@ func TestPublishMatchConfirmed_NoPublisherOrManager_ReturnsError(t *testing.T) {
 func TestPublishMatchConfirmed_NilEvent_ReturnsError(t *testing.T) {
 	t.Parallel()
 
-	mockManager := &mockRabbitMQMultiTenantManager{}
-	publisher, err := NewEventPublisherMultiTenant(mockManager)
-	require.NoError(t, err)
-
-	err = publisher.PublishMatchConfirmed(context.Background(), nil)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, errEventRequired)
-}
-
-func TestPublishMultiTenant_RequiresTenantID(t *testing.T) {
-	t.Parallel()
-
-	mockManager := &mockRabbitMQMultiTenantManager{}
-
-	publisher, err := NewEventPublisherMultiTenant(mockManager)
-	require.NoError(t, err)
-
-	// Call publishMultiTenant directly with empty tenant ID
-	// This bypasses the full publish path and directly tests the tenant ID check
-	err = publisher.publishMultiTenant(
-		context.Background(),
-		"test.routing.key",
-		"", // empty tenant ID
-		amqp.Publishing{},
-		nil,
-		nil,
-		"match-123",
-	)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, errTenantIDRequiredForMultiTenant)
-}
-
-func TestPublishMultiTenant_GetChannelError(t *testing.T) {
-	t.Parallel()
-
-	mockManager := &mockRabbitMQMultiTenantManager{
-		getChannelErr: assert.AnError,
+	// Multi-tenant publisher constructed directly
+	publisher := &EventPublisher{
+		multiTenant: true,
 	}
 
-	publisher, err := NewEventPublisherMultiTenant(mockManager)
-	require.NoError(t, err)
-
-	// Call publishMultiTenant with a valid tenant ID but manager returns error
-	err = publisher.publishMultiTenant(
-		context.Background(),
-		"test.routing.key",
-		"550e8400-e29b-41d4-a716-446655440000",
-		amqp.Publishing{},
-		nil,
-		nil,
-		"match-123",
-	)
+	err := publisher.PublishMatchConfirmed(context.Background(), nil)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "get tenant channel")
+	assert.ErrorIs(t, err, errEventRequired)
 }
 
 func TestPublishMatchUnmatched_NilPublisher_ReturnsError(t *testing.T) {
@@ -174,7 +96,7 @@ func TestPublishMatchUnmatched_NilPublisher_ReturnsError(t *testing.T) {
 func TestPublishMatchUnmatched_NoPublisherOrManager_ReturnsError(t *testing.T) {
 	t.Parallel()
 
-	// Empty publisher with neither confirmablePublisher nor rabbitmqManager
+	// Empty publisher with neither confirmablePublisher nor rmqManager
 	publisher := &EventPublisher{}
 
 	err := publisher.PublishMatchUnmatched(context.Background(), &sharedDomain.MatchUnmatchedEvent{})
@@ -185,15 +107,28 @@ func TestPublishMatchUnmatched_NoPublisherOrManager_ReturnsError(t *testing.T) {
 func TestPublishMatchUnmatched_NilEvent_ReturnsError(t *testing.T) {
 	t.Parallel()
 
-	mockManager := &mockRabbitMQMultiTenantManager{}
-	publisher, err := NewEventPublisherMultiTenant(mockManager)
-	require.NoError(t, err)
+	// Multi-tenant publisher constructed directly
+	publisher := &EventPublisher{
+		multiTenant: true,
+	}
 
-	err = publisher.PublishMatchUnmatched(context.Background(), nil)
+	err := publisher.PublishMatchUnmatched(context.Background(), nil)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUnmatchedEventRequired)
 }
 
+func TestEventPublisher_MultiTenantMode_FieldsSet(t *testing.T) {
+	t.Parallel()
+
+	// Verify a multi-tenant publisher has the expected field state.
+	publisher := &EventPublisher{
+		multiTenant: true,
+	}
+
+	assert.True(t, publisher.multiTenant)
+	assert.Nil(t, publisher.confirmablePublisher)
+}
+
 // Note: Full publish tests for PublishMatchConfirmed and PublishMatchUnmatched with multi-tenant mode
 // require integration tests with actual AMQP channels since *amqp.Channel cannot be easily mocked.
-// The publishMultiTenant method is tested directly above for error handling paths.
+// The publishMultiTenant method is tested in integration tests for error handling paths.

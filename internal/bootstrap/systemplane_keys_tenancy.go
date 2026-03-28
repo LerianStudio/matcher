@@ -10,6 +10,7 @@ func matcherKeyDefsTenancy() []domain.KeyDef {
 	return concatKeyDefs(
 		matcherKeyDefsTenancyDefaults(),
 		matcherKeyDefsTenancyConnectivity(),
+		matcherKeyDefsTenancyConnectivityRedis(),
 		matcherKeyDefsTenancyResilience(),
 	)
 }
@@ -115,6 +116,11 @@ func matcherKeyDefsTenancyConnectivity() []domain.KeyDef {
 			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
+	}
+}
+
+func matcherKeyDefsTenancyConnectivityRedis() []domain.KeyDef {
+	return []domain.KeyDef{
 		{
 			Key:              "tenancy.multi_tenant_redis_host",
 			Kind:             domain.KindConfig,

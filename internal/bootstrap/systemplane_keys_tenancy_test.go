@@ -30,12 +30,13 @@ func TestMatcherKeyDefsTenancy_CombinesSubGroups(t *testing.T) {
 
 	defaults := matcherKeyDefsTenancyDefaults()
 	connectivity := matcherKeyDefsTenancyConnectivity()
+	connectivityRedis := matcherKeyDefsTenancyConnectivityRedis()
 	resilience := matcherKeyDefsTenancyResilience()
 
 	combined := matcherKeyDefsTenancy()
 
-	assert.Len(t, combined, len(defaults)+len(connectivity)+len(resilience),
-		"matcherKeyDefsTenancy must combine defaults + connectivity + resilience")
+	assert.Len(t, combined, len(defaults)+len(connectivity)+len(connectivityRedis)+len(resilience),
+		"matcherKeyDefsTenancy must combine defaults + connectivity + connectivityRedis + resilience")
 }
 
 // --- matcherKeyDefsTenancyDefaults ---
@@ -101,10 +102,6 @@ func TestMatcherKeyDefsTenancyConnectivity_KeyProperties(t *testing.T) {
 		"tenancy.multi_tenant_environment",
 		"tenancy.multi_tenant_max_tenant_pools",
 		"tenancy.multi_tenant_idle_timeout_sec",
-		"tenancy.multi_tenant_redis_host",
-		"tenancy.multi_tenant_redis_port",
-		"tenancy.multi_tenant_redis_password",
-		"tenancy.multi_tenant_redis_tls",
 	}
 
 	require.Len(t, defs, len(expectedKeys))
@@ -149,6 +146,47 @@ func TestMatcherKeyDefsTenancyConnectivity_IntFieldsHaveValidators(t *testing.T)
 				assert.NotNil(t, def.Validator, "%s must have a validator", def.Key)
 			})
 		}
+	}
+}
+
+// --- matcherKeyDefsTenancyConnectivityRedis ---
+
+func TestMatcherKeyDefsTenancyConnectivityRedis_ReturnsNonEmpty(t *testing.T) {
+	t.Parallel()
+
+	defs := matcherKeyDefsTenancyConnectivityRedis()
+
+	require.NotEmpty(t, defs)
+}
+
+func TestMatcherKeyDefsTenancyConnectivityRedis_KeyProperties(t *testing.T) {
+	t.Parallel()
+
+	defs := matcherKeyDefsTenancyConnectivityRedis()
+
+	expectedKeys := []string{
+		"tenancy.multi_tenant_redis_host",
+		"tenancy.multi_tenant_redis_port",
+		"tenancy.multi_tenant_redis_password",
+		"tenancy.multi_tenant_redis_tls",
+	}
+
+	require.Len(t, defs, len(expectedKeys))
+
+	for i, expKey := range expectedKeys {
+		t.Run(expKey, func(t *testing.T) {
+			t.Parallel()
+
+			def := defs[i]
+			assert.Equal(t, expKey, def.Key)
+			assert.Equal(t, domain.KindConfig, def.Kind)
+			assert.Equal(t, "tenancy", def.Group)
+			assert.Equal(t, domain.ApplyBundleRebuild, def.ApplyBehavior)
+			assert.True(t, def.MutableAtRuntime)
+			assert.NotEmpty(t, def.Description)
+			require.Len(t, def.AllowedScopes, 1)
+			assert.Equal(t, domain.ScopeGlobal, def.AllowedScopes[0])
+		})
 	}
 }
 

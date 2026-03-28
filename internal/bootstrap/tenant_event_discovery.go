@@ -8,12 +8,13 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/redis/go-redis/v9"
+
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	tmevent "github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/event"
 	tmpostgres "github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/postgres"
 	tmredis "github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/redis"
 	"github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/tenantcache"
-	"github.com/redis/go-redis/v9"
 
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
@@ -87,32 +88,9 @@ func initTenantEventDiscovery(
 
 	dispatcher := tmevent.NewEventDispatcher(cache, nil, constants.ApplicationName, dispatcherOpts...)
 
-	// 4. Create TenantEventListener that subscribes to Redis Pub/Sub
-	//    and dispatches parsed events to the dispatcher.
-	listener, err := tmevent.NewTenantEventListener(
-		pubsubClient,
-		dispatcher.HandleEvent,
-		tmevent.WithListenerLogger(logger),
-		tmevent.WithService(constants.ApplicationName),
-	)
+	// 4-5. Create and start the TenantEventListener.
+	listener, err := createAndStartListener(pubsubClient, dispatcher, logger)
 	if err != nil {
-		if logger != nil {
-			logger.Log(context.Background(), libLog.LevelWarn,
-				fmt.Sprintf("tenant event discovery: failed to create listener: %v", err))
-		}
-
-		closeRedisClient(pubsubClient, logger)
-
-		return nil, cache, noop
-	}
-
-	// 5. Start the listener (spawns a background goroutine for Pub/Sub reads).
-	if startErr := listener.Start(context.Background()); startErr != nil {
-		if logger != nil {
-			logger.Log(context.Background(), libLog.LevelWarn,
-				fmt.Sprintf("tenant event discovery: failed to start listener: %v", startErr))
-		}
-
 		closeRedisClient(pubsubClient, logger)
 
 		return nil, cache, noop
@@ -135,6 +113,42 @@ func initTenantEventDiscovery(
 	}
 
 	return listener, cache, cleanup
+}
+
+// createAndStartListener creates and starts a TenantEventListener that subscribes
+// to Redis Pub/Sub and dispatches parsed events to the dispatcher. On failure it
+// logs a warning and returns the error; the caller is responsible for closing the
+// Pub/Sub client.
+func createAndStartListener(
+	pubsubClient redis.UniversalClient,
+	dispatcher *tmevent.EventDispatcher,
+	logger libLog.Logger,
+) (*tmevent.TenantEventListener, error) {
+	listener, err := tmevent.NewTenantEventListener(
+		pubsubClient,
+		dispatcher.HandleEvent,
+		tmevent.WithListenerLogger(logger),
+		tmevent.WithService(constants.ApplicationName),
+	)
+	if err != nil {
+		if logger != nil {
+			logger.Log(context.Background(), libLog.LevelWarn,
+				fmt.Sprintf("tenant event discovery: failed to create listener: %v", err))
+		}
+
+		return nil, fmt.Errorf("create listener: %w", err)
+	}
+
+	if startErr := listener.Start(context.Background()); startErr != nil {
+		if logger != nil {
+			logger.Log(context.Background(), libLog.LevelWarn,
+				fmt.Sprintf("tenant event discovery: failed to start listener: %v", startErr))
+		}
+
+		return nil, fmt.Errorf("start listener: %w", startErr)
+	}
+
+	return listener, nil
 }
 
 // closeRedisClient closes a Redis Pub/Sub client, logging any errors.
