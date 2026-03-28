@@ -19,6 +19,7 @@ import (
 	"github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/core"
 	tmpostgres "github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/postgres"
 	tmrabbitmq "github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/rabbitmq"
+	"github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/tenantcache"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
@@ -66,6 +67,14 @@ type dynamicInfrastructureProvider struct {
 	// Stored here so provider.Close() can release them on shutdown.
 	rmqManager  *tmrabbitmq.Manager
 	rmqTmClient *client.Client
+
+	// Tenant event discovery cleanup function (stops listener + closes Pub/Sub Redis client).
+	// Set by initTenantEventDiscovery when event-driven tenant discovery is enabled.
+	eventDiscoveryCleanup func()
+
+	// Shared tenant cache populated by event-driven tenant discovery.
+	// Used by TenantMiddleware for cache-first tenant resolution.
+	tenantCache *tenantcache.TenantCache
 }
 
 var _ sharedPorts.InfrastructureProvider = (*dynamicInfrastructureProvider)(nil)
@@ -340,6 +349,12 @@ func (provider *dynamicInfrastructureProvider) Close() error {
 		provider.rmqTmClient = nil
 	}
 
+	if provider.eventDiscoveryCleanup != nil {
+		provider.eventDiscoveryCleanup()
+		provider.eventDiscoveryCleanup = nil
+	}
+
+	provider.tenantCache = nil
 	provider.multiTenantKey = ""
 
 	return errors.Join(errs...)

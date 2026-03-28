@@ -56,7 +56,7 @@ type S3Client struct {
 }
 
 // getTenantPrefixedKey returns a tenant-prefixed object key using canonical lib-commons v4
-// s3.GetObjectStorageKeyForTenant.
+// tms3.GetS3KeyStorageContext.
 // In multi-tenant mode (tenantID in context): "{tenantID}/{key}"
 // In single-tenant mode (no tenant in context): "{key}" unchanged
 // Leading slashes are always stripped from the key for clean path construction.

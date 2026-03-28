@@ -225,7 +225,7 @@ func TestGetTenantPrefixedKey_AddsTenantPrefix(t *testing.T) {
 	key := "exports/report.csv"
 
 	// Use canonical lib-commons v4 context setter for tenant ID
-	ctx := core.SetTenantIDInContext(context.Background(), tenantID)
+	ctx := core.ContextWithTenantID(context.Background(), tenantID)
 
 	prefixedKey, err := getTenantPrefixedKey(ctx, key)
 	require.NoError(t, err)
@@ -243,8 +243,8 @@ func TestGetTenantPrefixedKey_EmptyTenantNoPrefix(t *testing.T) {
 	key := "exports/report.csv"
 
 	// Set empty tenant ID -- core.GetTenantIDFromContext returns empty,
-	// so s3.GetObjectStorageKeyForTenant returns key unchanged.
-	ctx := core.SetTenantIDInContext(context.Background(), "")
+	// so tms3.GetS3KeyStorageContext returns key unchanged.
+	ctx := core.ContextWithTenantID(context.Background(), "")
 
 	prefixedKey, err := getTenantPrefixedKey(ctx, key)
 	require.NoError(t, err)
@@ -295,7 +295,7 @@ func TestGetTenantPrefixedKey_StripsLeadingSlashes(t *testing.T) {
 			t.Parallel()
 
 			// Use canonical lib-commons v4 context setter for tenant ID
-			ctx := core.SetTenantIDInContext(context.Background(), tt.tenantID)
+			ctx := core.ContextWithTenantID(context.Background(), tt.tenantID)
 
 			result, err := getTenantPrefixedKey(ctx, tt.key)
 			require.NoError(t, err)
@@ -315,8 +315,8 @@ func TestGetTenantPrefixedKey_DifferentTenants_ProduceDifferentPaths(t *testing.
 	tenant2 := "550e8400-e29b-41d4-a716-446655440002"
 
 	// Use canonical lib-commons v4 context setter for tenant ID
-	ctx1 := core.SetTenantIDInContext(context.Background(), tenant1)
-	ctx2 := core.SetTenantIDInContext(context.Background(), tenant2)
+	ctx1 := core.ContextWithTenantID(context.Background(), tenant1)
+	ctx2 := core.ContextWithTenantID(context.Background(), tenant2)
 
 	path1, err := getTenantPrefixedKey(ctx1, key)
 	require.NoError(t, err)
@@ -361,7 +361,7 @@ func TestGetTenantPrefixedKey_ExplicitTenantPrefix(t *testing.T) {
 	key := "exports/report.csv"
 	tenantID := "550e8400-e29b-41d4-a716-446655440000"
 
-	ctx := core.SetTenantIDInContext(context.Background(), tenantID)
+	ctx := core.ContextWithTenantID(context.Background(), tenantID)
 
 	prefixedKey, err := getTenantPrefixedKey(ctx, key)
 	require.NoError(t, err)

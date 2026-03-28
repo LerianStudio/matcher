@@ -8,7 +8,7 @@ Operational guide for enabling multi-tenant mode in the Matcher service.
 |-----------|---------------|--------------|-----------|------------------|
 | Ingestion | `matcher` | `ingestion` | Redis dedupe, RabbitMQ publisher | Redis key prefixing via `valkey.GetKeyFromContext`, RabbitMQ per-tenant vhosts via `tmrabbitmq.Manager`, X-Tenant-ID headers |
 | Matching | `matcher` | `matching` | RabbitMQ publisher | RabbitMQ per-tenant vhosts via `tmrabbitmq.Manager`, X-Tenant-ID headers |
-| Reporting | `matcher` | `reporting` | Redis cache, S3 storage | Redis key prefixing via `valkey.GetKeyFromContext`, S3 key prefixing via `tms3.GetObjectStorageKeyForTenant` |
+| Reporting | `matcher` | `reporting` | Redis cache, S3 storage | Redis key prefixing via `valkey.GetKeyFromContext`, S3 key prefixing via `tms3.GetS3KeyStorageContext` |
 | Configuration | `matcher` | `configuration` | PostgreSQL (via middleware) | Tenant middleware resolves DB connections |
 | Governance | `matcher` | `governance` | PostgreSQL (via middleware) | Tenant middleware resolves DB connections |
 | Bootstrap | `matcher` | N/A | TenantMiddleware, PostgresManager, RabbitMQManager | lib-commons v3 tenant-manager components |

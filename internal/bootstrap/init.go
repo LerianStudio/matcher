@@ -1440,6 +1440,17 @@ func initMultiTenantDBHandler(
 		provider.mu.Unlock()
 	}
 
+	// Wire event-driven tenant discovery (TenantCache + Pub/Sub listener).
+	// When MULTI_TENANT_REDIS_HOST is configured, tenant lifecycle events from
+	// tenant-manager are received via Redis Pub/Sub and update the shared cache.
+	// The cache is passed to the TenantMiddleware for cache-first resolution.
+	_, tenantCache, eventCleanup := initTenantEventDiscovery(cfg, pgManager, cfg.Logger)
+
+	provider.mu.Lock()
+	provider.tenantCache = tenantCache
+	provider.eventDiscoveryCleanup = eventCleanup
+	provider.mu.Unlock()
+
 	// Create a dynamic tenant DB handler that resolves the current PG manager
 	// on each request. This ensures the middleware always uses the latest manager
 	// after a runtime config rebuild (e.g., systemplane reload), instead of
@@ -1450,9 +1461,21 @@ func initMultiTenantDBHandler(
 			return fmt.Errorf("resolve tenant postgres manager: %w", mgrErr)
 		}
 
-		mid := tmmiddleware.NewTenantMiddleware(
+		midOpts := []tmmiddleware.TenantMiddlewareOption{
 			tmmiddleware.WithPG(mgr),
-		)
+		}
+
+		// If event-driven tenant discovery is active, pass the shared cache
+		// to the middleware for cache-first tenant resolution.
+		provider.mu.Lock()
+		cache := provider.tenantCache
+		provider.mu.Unlock()
+
+		if cache != nil {
+			midOpts = append(midOpts, tmmiddleware.WithTenantCache(cache))
+		}
+
+		mid := tmmiddleware.NewTenantMiddleware(midOpts...)
 
 		return mid.WithTenantDB(fiberCtx)
 	}

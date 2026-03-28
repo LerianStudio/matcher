@@ -19,7 +19,7 @@ import (
 // expectedTotalKeys is the total number of configuration keys registered by
 // RegisterMatcherKeys. This constant MUST be updated when keys are added or
 // removed from matcherKeyDefs.
-const expectedTotalKeys = 124
+const expectedTotalKeys = 128
 
 // expectedBootstrapOnlyCount is the count of keys with ApplyBootstrapOnly.
 const expectedBootstrapOnlyCount = 21
@@ -31,13 +31,13 @@ const expectedLiveReadCount = 20
 const expectedWorkerReconcileCount = 13
 
 // expectedBundleRebuildCount is the count of keys with ApplyBundleRebuild.
-const expectedBundleRebuildCount = 63
+const expectedBundleRebuildCount = 67
 
 // expectedBundleRebuildAndReconcileCount is the count of keys with ApplyBundleRebuildAndReconcile.
 const expectedBundleRebuildAndReconcileCount = 7
 
 // expectedSecretKeyCount is the number of keys marked Secret=true.
-const expectedSecretKeyCount = 10
+const expectedSecretKeyCount = 11
 
 func TestRegisterMatcherKeys_Success(t *testing.T) {
 	t.Parallel()

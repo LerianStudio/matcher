@@ -33,6 +33,9 @@ func TestConfigValidate_MultiTenantRequiresTenantManagerSettings(t *testing.T) {
 
 	cfg := defaultConfig()
 	cfg.Tenancy.MultiTenantEnabled = true
+	cfg.Auth.Enabled = true
+	cfg.Auth.Host = "http://auth:4002"
+	cfg.Auth.TokenSecret = "test-jwt-secret-that-is-at-least-32-bytes"
 
 	err := cfg.Validate()
 	require.Error(t, err)
@@ -67,6 +70,9 @@ func TestConfigValidate_MultiTenantFieldConstraints(t *testing.T) {
 
 	cfg := defaultConfig()
 	cfg.Tenancy.MultiTenantEnabled = true
+	cfg.Auth.Enabled = true
+	cfg.Auth.Host = "http://auth:4002"
+	cfg.Auth.TokenSecret = "test-jwt-secret-that-is-at-least-32-bytes"
 	cfg.Tenancy.MultiTenantURL = "http://tenant-manager:4003"
 	cfg.Tenancy.MultiTenantServiceAPIKey = "service-api-key"
 

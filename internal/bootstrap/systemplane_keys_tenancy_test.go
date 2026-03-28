@@ -101,6 +101,10 @@ func TestMatcherKeyDefsTenancyConnectivity_KeyProperties(t *testing.T) {
 		"tenancy.multi_tenant_environment",
 		"tenancy.multi_tenant_max_tenant_pools",
 		"tenancy.multi_tenant_idle_timeout_sec",
+		"tenancy.multi_tenant_redis_host",
+		"tenancy.multi_tenant_redis_port",
+		"tenancy.multi_tenant_redis_password",
+		"tenancy.multi_tenant_redis_tls",
 	}
 
 	require.Len(t, defs, len(expectedKeys))

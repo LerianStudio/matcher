@@ -67,6 +67,10 @@ type TenancyConfig struct {
 	MultiTenantCircuitBreakerThreshold  int    `env:"MULTI_TENANT_CIRCUIT_BREAKER_THRESHOLD"       envDefault:"5"       mapstructure:"multi_tenant_circuit_breaker_threshold"`
 	MultiTenantCircuitBreakerTimeoutSec int    `env:"MULTI_TENANT_CIRCUIT_BREAKER_TIMEOUT_SEC"     envDefault:"30"      mapstructure:"multi_tenant_circuit_breaker_timeout_sec"`
 	MultiTenantServiceAPIKey            string `env:"MULTI_TENANT_SERVICE_API_KEY"                    json:"-"             mapstructure:"multi_tenant_service_api_key"`
+	MultiTenantRedisHost                string `env:"MULTI_TENANT_REDIS_HOST"                                              mapstructure:"multi_tenant_redis_host"`
+	MultiTenantRedisPort                string `env:"MULTI_TENANT_REDIS_PORT"                      envDefault:"6379"    mapstructure:"multi_tenant_redis_port"`
+	MultiTenantRedisPassword            string `env:"MULTI_TENANT_REDIS_PASSWORD"                     json:"-"             mapstructure:"multi_tenant_redis_password"`
+	MultiTenantRedisTLS                 bool   `env:"MULTI_TENANT_REDIS_TLS"                       envDefault:"false"   mapstructure:"multi_tenant_redis_tls"`
 }
 
 // PostgresConfig configures primary/replica connections and pooling.
