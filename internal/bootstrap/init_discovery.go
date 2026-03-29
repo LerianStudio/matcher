@@ -48,6 +48,7 @@ type discoveryModuleInitFunc func(
 	provider sharedPorts.InfrastructureProvider,
 	tenantLister sharedPorts.TenantLister,
 	logger libLog.Logger,
+	m2mProvider ...sharedPorts.M2MProvider,
 ) (*discoveryWorker.DiscoveryWorker, error)
 
 func initOptionalDiscoveryWorker(
@@ -85,8 +86,14 @@ func initDiscoveryModule(
 	provider sharedPorts.InfrastructureProvider,
 	tenantLister sharedPorts.TenantLister,
 	logger libLog.Logger,
+	m2mProvider ...sharedPorts.M2MProvider,
 ) (*discoveryWorker.DiscoveryWorker, error) {
-	fetcherClient := newDynamicFetcherClient(cfg, configGetter, logger)
+	var m2m sharedPorts.M2MProvider
+	if len(m2mProvider) > 0 {
+		m2m = m2mProvider[0]
+	}
+
+	fetcherClient := newDynamicFetcherClient(cfg, configGetter, logger, m2m)
 
 	connRepo := discoveryConnRepo.NewRepository(provider)
 	schemaRepo := discoverySchemaRepo.NewRepository(provider)
