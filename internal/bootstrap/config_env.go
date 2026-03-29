@@ -55,6 +55,47 @@ func (cfg *Config) effectiveMultiTenantEnvironment() string {
 	return strings.TrimSpace(cfg.App.EnvName)
 }
 
+// MultiTenantTimeoutDuration returns the tenant-manager API timeout as a time.Duration.
+// Returns a minimum of 1 second if configured value is non-positive.
+func (cfg *Config) MultiTenantTimeoutDuration() time.Duration {
+	if cfg.Tenancy.MultiTenantTimeout <= 0 {
+		return time.Second
+	}
+
+	return time.Duration(cfg.Tenancy.MultiTenantTimeout) * time.Second
+}
+
+// MultiTenantCacheTTL returns the tenant config cache TTL as a time.Duration.
+// Returns a minimum of 1 second if configured value is non-positive.
+func (cfg *Config) MultiTenantCacheTTL() time.Duration {
+	if cfg.Tenancy.MultiTenantCacheTTLSec <= 0 {
+		return time.Second
+	}
+
+	return time.Duration(cfg.Tenancy.MultiTenantCacheTTLSec) * time.Second
+}
+
+// MultiTenantConnectionsCheckInterval returns the pgManager settings revalidation
+// interval as a time.Duration.
+// Returns a minimum of 1 second if configured value is non-positive.
+func (cfg *Config) MultiTenantConnectionsCheckInterval() time.Duration {
+	if cfg.Tenancy.MultiTenantConnectionsCheckIntervalSec <= 0 {
+		return time.Second
+	}
+
+	return time.Duration(cfg.Tenancy.MultiTenantConnectionsCheckIntervalSec) * time.Second
+}
+
+// MultiTenantIdleTimeout returns the tenant pool idle timeout as a time.Duration.
+// Returns a minimum of 1 second if configured value is non-positive.
+func (cfg *Config) MultiTenantIdleTimeout() time.Duration {
+	if cfg.Tenancy.MultiTenantIdleTimeoutSec <= 0 {
+		return time.Second
+	}
+
+	return time.Duration(cfg.Tenancy.MultiTenantIdleTimeoutSec) * time.Second
+}
+
 // PrimaryDSN returns the PostgreSQL connection string for the primary database.
 func (cfg *Config) PrimaryDSN() string {
 	return fmt.Sprintf(
@@ -485,6 +526,18 @@ func (cfg *Config) DedupeTTL() time.Duration {
 	}
 
 	return time.Duration(cfg.Dedupe.TTLSec) * time.Second
+}
+
+// M2MCredentialCacheTTL returns the M2M credential L2 cache TTL as a time.Duration.
+// Returns a default of 5 minutes if configured value is non-positive.
+func (cfg *Config) M2MCredentialCacheTTL() time.Duration {
+	const defaultM2MCacheTTLSec = 300 // 5 minutes
+
+	if cfg.M2M.M2MCredentialCacheTTLSec <= 0 {
+		return time.Duration(defaultM2MCacheTTLSec) * time.Second
+	}
+
+	return time.Duration(cfg.M2M.M2MCredentialCacheTTLSec) * time.Second
 }
 
 // SchedulerInterval returns the scheduler worker poll interval as a time.Duration.

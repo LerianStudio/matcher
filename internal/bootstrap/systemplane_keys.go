@@ -38,13 +38,18 @@ const (
 	defaultServerTLSKeyFile      = ""
 
 	// Tenancy defaults.
-	defaultTenantID                        = "11111111-1111-1111-1111-111111111111"
-	defaultTenantSlug                      = "default"
-	defaultMultiTenantEnabled              = false
-	defaultMultiTenantMaxTenantPools       = 100
-	defaultMultiTenantIdleTimeoutSec       = 300
-	defaultMultiTenantCircuitBreakerThresh = 5
-	defaultMultiTenantCircuitBreakerSec    = 30
+	defaultTenantID                         = "11111111-1111-1111-1111-111111111111"
+	defaultTenantSlug                       = "default"
+	defaultMultiTenantEnabled               = false
+	defaultMultiTenantRedisPort             = "6379"
+	defaultMultiTenantRedisTLS              = false
+	defaultMultiTenantMaxTenantPools        = 100
+	defaultMultiTenantIdleTimeoutSec        = 300
+	defaultMultiTenantTimeout               = 30
+	defaultMultiTenantCircuitBreakerThresh  = 5
+	defaultMultiTenantCircuitBreakerSec     = 30
+	defaultMultiTenantCacheTTLSec           = 120
+	defaultMultiTenantConnsCheckIntervalSec = 30
 
 	// PostgreSQL defaults.
 	defaultPGHost            = "localhost"
@@ -128,6 +133,10 @@ const (
 	defaultKeyFetcherSchemaCacheTTL = 300
 	defaultFetcherExtractionPoll    = 5
 	defaultFetcherExtractionTO      = 600
+
+	// M2M defaults.
+	defaultM2MTargetService      = "fetcher"
+	defaultM2MCredentialCacheTTL = 300
 
 	// Deduplication defaults.
 	defaultDedupeTTLSec = 3600

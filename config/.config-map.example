@@ -81,6 +81,15 @@ INFRA_CONNECT_TIMEOUT_SEC=30
 # SECURITY: Use a strong random secret (minimum 32 bytes) in production.
 # IDEMPOTENCY_HMAC_SECRET=
 
+# ── M2M (Machine-to-Machine) ─────────────────────────────────────────────────
+# Target service name for Secrets Manager M2M credential path.
+# Path: tenants/{env}/{tenantOrgID}/{applicationName}/m2m/{targetService}/credentials
+M2M_TARGET_SERVICE=fetcher
+
+# AWS region for Secrets Manager API calls. When empty, the AWS SDK uses its
+# default chain (env, config file, instance metadata).
+# AWS_REGION=
+
 # ── Systemplane ──────────────────────────────────────────────────────────────
 # Backend store for runtime configuration. Default: postgres (reuses the
 # application Postgres DSN). Set to "mongodb" for a Mongo-backed store.

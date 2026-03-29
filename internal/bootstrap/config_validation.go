@@ -203,11 +203,23 @@ func (cfg *Config) validateTenancyConfig(asserter *assert.Asserter) error {
 		return fmt.Errorf("config validation: %w", err)
 	}
 
+	if err := asserter.That(ctx, cfg.Tenancy.MultiTenantTimeout > 0, "MULTI_TENANT_TIMEOUT must be positive", "multi_tenant_timeout", cfg.Tenancy.MultiTenantTimeout); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+
 	if err := asserter.That(ctx, cfg.Tenancy.MultiTenantCircuitBreakerThreshold > 0, "MULTI_TENANT_CIRCUIT_BREAKER_THRESHOLD must be positive", "multi_tenant_circuit_breaker_threshold", cfg.Tenancy.MultiTenantCircuitBreakerThreshold); err != nil {
 		return fmt.Errorf("config validation: %w", err)
 	}
 
 	if err := asserter.That(ctx, cfg.Tenancy.MultiTenantCircuitBreakerTimeoutSec > 0, "MULTI_TENANT_CIRCUIT_BREAKER_TIMEOUT_SEC must be positive", "multi_tenant_circuit_breaker_timeout_sec", cfg.Tenancy.MultiTenantCircuitBreakerTimeoutSec); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+
+	if err := asserter.That(ctx, cfg.Tenancy.MultiTenantCacheTTLSec > 0, "MULTI_TENANT_CACHE_TTL_SEC must be positive", "multi_tenant_cache_ttl_sec", cfg.Tenancy.MultiTenantCacheTTLSec); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+
+	if err := asserter.That(ctx, cfg.Tenancy.MultiTenantConnectionsCheckIntervalSec > 0, "MULTI_TENANT_CONNECTIONS_CHECK_INTERVAL_SEC must be positive", "multi_tenant_connections_check_interval_sec", cfg.Tenancy.MultiTenantConnectionsCheckIntervalSec); err != nil {
 		return fmt.Errorf("config validation: %w", err)
 	}
 

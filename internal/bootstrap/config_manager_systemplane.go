@@ -52,11 +52,18 @@ func configFromSnapshot(snap domain.Snapshot) *Config {
 	cfg.Tenancy.MultiTenantEnabled = snapBool(snap, "tenancy.multi_tenant_enabled", defaultMultiTenantEnabled)
 	cfg.Tenancy.MultiTenantURL = snapString(snap, "tenancy.multi_tenant_url", "")
 	cfg.Tenancy.MultiTenantEnvironment = snapString(snap, "tenancy.multi_tenant_environment", "")
+	cfg.Tenancy.MultiTenantRedisHost = snapString(snap, "tenancy.multi_tenant_redis_host", "")
+	cfg.Tenancy.MultiTenantRedisPort = snapString(snap, "tenancy.multi_tenant_redis_port", defaultMultiTenantRedisPort)
+	cfg.Tenancy.MultiTenantRedisPassword = snapString(snap, "tenancy.multi_tenant_redis_password", "")
+	cfg.Tenancy.MultiTenantRedisTLS = snapBool(snap, "tenancy.multi_tenant_redis_tls", defaultMultiTenantRedisTLS)
 	cfg.Tenancy.MultiTenantMaxTenantPools = snapInt(snap, "tenancy.multi_tenant_max_tenant_pools", defaultMultiTenantMaxTenantPools)
 	cfg.Tenancy.MultiTenantIdleTimeoutSec = snapInt(snap, "tenancy.multi_tenant_idle_timeout_sec", defaultMultiTenantIdleTimeoutSec)
+	cfg.Tenancy.MultiTenantTimeout = snapInt(snap, "tenancy.multi_tenant_timeout", defaultMultiTenantTimeout)
 	cfg.Tenancy.MultiTenantCircuitBreakerThreshold = snapInt(snap, "tenancy.multi_tenant_circuit_breaker_threshold", defaultMultiTenantCircuitBreakerThresh)
 	cfg.Tenancy.MultiTenantCircuitBreakerTimeoutSec = snapInt(snap, "tenancy.multi_tenant_circuit_breaker_timeout_sec", defaultMultiTenantCircuitBreakerSec)
 	cfg.Tenancy.MultiTenantServiceAPIKey = snapString(snap, "tenancy.multi_tenant_service_api_key", "")
+	cfg.Tenancy.MultiTenantCacheTTLSec = snapInt(snap, "tenancy.multi_tenant_cache_ttl_sec", defaultMultiTenantCacheTTLSec)
+	cfg.Tenancy.MultiTenantConnectionsCheckIntervalSec = snapInt(snap, "tenancy.multi_tenant_connections_check_interval_sec", defaultMultiTenantConnsCheckIntervalSec)
 
 	// Postgres.
 	cfg.Postgres.PrimaryHost = snapString(snap, "postgres.primary_host", defaultPGHost)
@@ -154,6 +161,11 @@ func configFromSnapshot(snap domain.Snapshot) *Config {
 	cfg.Fetcher.SchemaCacheTTLSec = snapInt(snap, "fetcher.schema_cache_ttl_sec", defaultKeyFetcherSchemaCacheTTL)
 	cfg.Fetcher.ExtractionPollSec = snapInt(snap, "fetcher.extraction_poll_sec", defaultFetcherExtractionPoll)
 	cfg.Fetcher.ExtractionTimeoutSec = snapInt(snap, "fetcher.extraction_timeout_sec", defaultFetcherExtractionTO)
+
+	// M2M.
+	cfg.M2M.M2MTargetService = snapString(snap, "m2m.m2m_target_service", defaultM2MTargetService)
+	cfg.M2M.M2MCredentialCacheTTLSec = snapInt(snap, "m2m.m2m_credential_cache_ttl_sec", defaultM2MCredentialCacheTTL)
+	cfg.M2M.AWSRegion = snapString(snap, "m2m.aws_region", "")
 
 	// Export Worker.
 	cfg.ExportWorker.Enabled = snapBool(snap, "export_worker.enabled", defaultExportEnabled)
