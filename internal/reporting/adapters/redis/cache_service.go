@@ -79,7 +79,7 @@ func (svc *CacheService) buildKey(
 		sourceKey,
 	}, ":")
 
-	result, err := valkey.GetKeyFromContext(ctx, rawKey)
+	result, err := valkey.GetKeyContext(ctx, rawKey)
 	if err != nil {
 		return "", fmt.Errorf("build dashboard cache redis key: %w", err)
 	}

@@ -51,7 +51,7 @@ func (svc *DedupeService) CalculateHash(sourceID uuid.UUID, externalID string) s
 func (svc *DedupeService) buildKey(ctx context.Context, contextID uuid.UUID, hash string) (string, error) {
 	rawKey := dedupeKeyPrefix + ":" + contextID.String() + ":" + hash
 
-	result, err := valkey.GetKeyFromContext(ctx, rawKey)
+	result, err := valkey.GetKeyContext(ctx, rawKey)
 	if err != nil {
 		return "", fmt.Errorf("build dedupe redis key: %w", err)
 	}

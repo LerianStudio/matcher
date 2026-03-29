@@ -107,8 +107,8 @@ func TestCallbackRateLimiter_SameExternalKeyDifferentTenants(t *testing.T) {
 	provider := &testutil.MockInfrastructureProvider{RedisConn: conn}
 	limiter := newTestRateLimiter(t, provider, 1, time.Minute)
 
-	tenantA := core.SetTenantIDInContext(context.Background(), "tenant-a")
-	tenantB := core.SetTenantIDInContext(context.Background(), "tenant-b")
+	tenantA := core.ContextWithTenantID(context.Background(), "tenant-a")
+	tenantB := core.ContextWithTenantID(context.Background(), "tenant-b")
 
 	allowed, err := limiter.Allow(tenantA, "JIRA")
 	require.NoError(t, err)
@@ -141,7 +141,7 @@ func TestScopedRateLimitRedisKey(t *testing.T) {
 	t.Run("tenant in context returns tenant-prefixed key", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := core.SetTenantIDInContext(context.Background(), "tenant-a")
+		ctx := core.ContextWithTenantID(context.Background(), "tenant-a")
 		key, err := scopedRateLimitRedisKey(ctx, "JIRA")
 		require.NoError(t, err)
 		assert.Equal(t, "tenant:tenant-a:matcher:callback:ratelimit:JIRA", key)
@@ -150,7 +150,7 @@ func TestScopedRateLimitRedisKey(t *testing.T) {
 	t.Run("default tenant in context returns tenant-prefixed key", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := core.SetTenantIDInContext(context.Background(), "11111111-1111-1111-1111-111111111111")
+		ctx := core.ContextWithTenantID(context.Background(), "11111111-1111-1111-1111-111111111111")
 		key, err := scopedRateLimitRedisKey(ctx, "JIRA")
 		require.NoError(t, err)
 		assert.Equal(t, "tenant:11111111-1111-1111-1111-111111111111:matcher:callback:ratelimit:JIRA", key)

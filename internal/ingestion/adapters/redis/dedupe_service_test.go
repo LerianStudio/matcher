@@ -116,7 +116,7 @@ func TestDedupeServiceBuildKey_TenantAwareWhenTenantPresent(t *testing.T) {
 	service := NewDedupeService(nil)
 	contextID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 	hash := "hash"
-	ctx := core.SetTenantIDInContext(context.Background(), "tenant-a")
+	ctx := core.ContextWithTenantID(context.Background(), "tenant-a")
 
 	tenantKey, err := service.buildKey(ctx, contextID, hash)
 	require.NoError(t, err)
@@ -139,8 +139,8 @@ func TestDedupeService_TenantAwareOperationsStayIsolated(t *testing.T) {
 	sourceID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
 	hash := service.CalculateHash(sourceID, "tenant-aware")
 
-	tenantACtx := core.SetTenantIDInContext(context.Background(), "tenant-a")
-	tenantBCtx := core.SetTenantIDInContext(context.Background(), "tenant-b")
+	tenantACtx := core.ContextWithTenantID(context.Background(), "tenant-a")
+	tenantBCtx := core.ContextWithTenantID(context.Background(), "tenant-b")
 
 	require.NoError(t, service.MarkSeen(tenantACtx, contextID, hash, time.Minute))
 

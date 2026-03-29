@@ -193,7 +193,7 @@ var _ ports.CallbackRateLimiter = (*CallbackRateLimiter)(nil)
 func scopedRateLimitRedisKey(ctx context.Context, key string) (string, error) {
 	rawKey := callbackRateLimitKeyPrefix + ":" + key
 
-	result, err := valkey.GetKeyFromContext(ctx, rawKey)
+	result, err := valkey.GetKeyContext(ctx, rawKey)
 	if err != nil {
 		return "", fmt.Errorf("scoped rate limit redis key: %w", err)
 	}
