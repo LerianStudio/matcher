@@ -29,7 +29,7 @@ func TestDynamicInfrastructureProvider_MultiTenant_MissingTenantInContext(t *tes
 	t.Parallel()
 
 	// When no tenant is in context, multi-tenant mode fails closed:
-	// 1. core.GetTenantID(ctx) => "" (empty)
+	// 1. core.GetTenantIDContext(ctx) => "" (empty)
 	// 2. auth.LookupTenantID(ctx) => ("", false) — no explicit tenant set
 	// 3. tenantID remains "" => returns core.ErrTenantContextRequired
 	//
@@ -480,7 +480,7 @@ func TestMultiTenantMetrics_AllMethods_WithVariousTenantIDs(t *testing.T) {
 
 			ctx := context.Background()
 			if tid != "" {
-				ctx = core.SetTenantIDInContext(ctx, tid)
+				ctx = core.ContextWithTenantID(ctx, tid)
 			}
 
 			assert.NotPanics(t, func() {
@@ -522,7 +522,7 @@ func TestMultiTenantMetrics_EnabledAndDisabled_SameAPI(t *testing.T) {
 			assert.NotNil(t, m.consumersActive)
 			assert.NotNil(t, m.messagesProcessed)
 
-			ctx := core.SetTenantIDInContext(context.Background(), "tenant-x")
+			ctx := core.ContextWithTenantID(context.Background(), "tenant-x")
 
 			assert.NotPanics(t, func() {
 				m.RecordConnection(ctx, "tenant-x", "success")

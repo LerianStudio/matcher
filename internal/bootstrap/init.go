@@ -41,8 +41,11 @@ import (
 	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/adapters/changefeed"
 	systemplaneDomain "github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
 	systemplaneService "github.com/LerianStudio/lib-commons/v4/commons/systemplane/service"
+	tmclient "github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/client"
 	tmmiddleware "github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/middleware"
+	tmpostgres "github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/postgres"
 	tmrabbitmq "github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/rabbitmq"
+	"github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/tenantcache"
 	libZap "github.com/LerianStudio/lib-commons/v4/commons/zap"
 
 	"github.com/LerianStudio/matcher/internal/auth"
@@ -1415,6 +1418,11 @@ func createInfraProviderWithBundleState(
 
 // initMultiTenantDBHandler creates a Fiber middleware handler for multi-tenant database
 // resolution when multi-tenant mode is enabled. Returns nil in single-tenant mode.
+//
+// The middleware is built once at startup (or lazily on first request) with TenantCache
+// and TenantLoader for cache-first tenant resolution. It is rebuilt only when the
+// underlying pgManager changes (e.g., systemplane config reload), not on every request.
+// This avoids per-request heap allocation while preserving dynamic manager swapping.
 func initMultiTenantDBHandler(
 	cfg *Config,
 	configGetter func() *Config,
@@ -1424,6 +1432,46 @@ func initMultiTenantDBHandler(
 		return nil
 	}
 
+	logMultiTenantRedisStatus(cfg)
+
+	tmClient, pgManager := initTenantManagerAtStartup(cfg, provider)
+
+	tCache, tLoader := buildTenantCacheAndLoader(cfg, tmClient)
+
+	// buildMiddleware constructs a TenantMiddleware with PG manager + cache/loader.
+	// Called once at startup and again only when the pgManager changes.
+	buildMiddleware := func(mgr *tmpostgres.Manager) *tmmiddleware.TenantMiddleware {
+		opts := []tmmiddleware.TenantMiddlewareOption{
+			tmmiddleware.WithPG(mgr),
+			tmmiddleware.WithTenantCache(tCache),
+		}
+
+		if tLoader != nil {
+			opts = append(opts, tmmiddleware.WithTenantLoader(tLoader))
+		}
+
+		return tmmiddleware.NewTenantMiddleware(opts...)
+	}
+
+	return newCachedTenantDBHandler(provider, configGetter, pgManager, buildMiddleware)
+}
+
+// logMultiTenantRedisStatus logs a warning when the multi-tenant Redis host is not
+// configured, indicating that event-driven tenant discovery is inactive.
+func logMultiTenantRedisStatus(cfg *Config) {
+	if cfg.Tenancy.MultiTenantRedisHost == "" && cfg.Logger != nil {
+		cfg.Logger.Log(context.Background(), libLog.LevelInfo,
+			"MULTI_TENANT_REDIS_HOST not configured; event-driven tenant discovery not active (TTL-based cache only)")
+	}
+}
+
+// initTenantManagerAtStartup builds the canonical tenant manager and shares it with
+// the dynamic infrastructure provider. Returns (tmClient, pgManager); either may be
+// nil if the tenant manager is not available at startup (will retry lazily).
+func initTenantManagerAtStartup(
+	cfg *Config,
+	provider *dynamicInfrastructureProvider,
+) (*tmclient.Client, *tmpostgres.Manager) {
 	tmClient, pgManager, err := buildCanonicalTenantManager(cfg, cfg.Logger)
 	if err != nil && cfg.Logger != nil {
 		cfg.Logger.Log(context.Background(), libLog.LevelWarn,
@@ -1431,8 +1479,6 @@ func initMultiTenantDBHandler(
 	}
 
 	if pgManager != nil {
-		// Share the pgManager and tmClient with the provider so it doesn't create
-		// a duplicate and so tmClient is cleaned up on provider.Close().
 		provider.mu.Lock()
 		provider.pgManager = pgManager
 		provider.tmClient = tmClient
@@ -1440,19 +1486,82 @@ func initMultiTenantDBHandler(
 		provider.mu.Unlock()
 	}
 
-	// Create a dynamic tenant DB handler that resolves the current PG manager
-	// on each request. This ensures the middleware always uses the latest manager
-	// after a runtime config rebuild (e.g., systemplane reload), instead of
-	// capturing a stale pgManager from startup.
+	return tmClient, pgManager
+}
+
+// buildTenantCacheAndLoader creates the TenantCache and optional TenantLoader for
+// cache-first tenant resolution. On cache hit the middleware skips the Tenant Manager
+// API call; on miss or expiry the loader fetches fresh config and caches it.
+func buildTenantCacheAndLoader(
+	cfg *Config,
+	tmClient *tmclient.Client,
+) (*tenantcache.TenantCache, *tenantcache.TenantLoader) {
+	tCache := tenantcache.NewTenantCache()
+
+	var tLoader *tenantcache.TenantLoader
+	if tmClient != nil {
+		tLoader = tenantcache.NewTenantLoader(
+			tmClient, tCache, constants.ApplicationName,
+			cfg.MultiTenantCacheTTL(), cfg.Logger,
+		)
+	}
+
+	return tCache, tLoader
+}
+
+// newCachedTenantDBHandler returns a Fiber handler that caches the TenantMiddleware
+// and rebuilds it only when the pgManager pointer changes (runtime config reload).
+// RWMutex allows concurrent reads on the hot path (steady state) while serialising
+// writes on the cold path (pgManager swap after config reload).
+func newCachedTenantDBHandler(
+	provider *dynamicInfrastructureProvider,
+	configGetter func() *Config,
+	pgManager *tmpostgres.Manager,
+	buildMiddleware func(*tmpostgres.Manager) *tmmiddleware.TenantMiddleware,
+) fiber.Handler {
+	var (
+		mu      sync.RWMutex
+		lastMgr *tmpostgres.Manager
+		lastMid *tmmiddleware.TenantMiddleware
+	)
+
+	if pgManager != nil {
+		lastMgr = pgManager
+		lastMid = buildMiddleware(pgManager)
+	}
+
 	return func(fiberCtx *fiber.Ctx) error {
 		mgr, mgrErr := provider.currentPGManager(fiberCtx.UserContext(), configGetter())
 		if mgrErr != nil {
 			return fmt.Errorf("resolve tenant postgres manager: %w", mgrErr)
 		}
 
-		mid := tmmiddleware.NewTenantMiddleware(
-			tmmiddleware.WithPostgresManager(mgr),
-		)
+		// Fast path: read lock (hot path, no contention under normal operation).
+		mu.RLock()
+
+		if mgr == lastMgr && lastMid != nil {
+			mid := lastMid
+
+			mu.RUnlock()
+
+			return mid.WithTenantDB(fiberCtx)
+		}
+
+		mu.RUnlock()
+
+		// Slow path: write lock (cold path, only on pgManager change).
+		mu.Lock()
+
+		// Double-check after acquiring write lock — another goroutine may
+		// have already completed the rebuild between RUnlock and Lock.
+		if mgr != lastMgr || lastMid == nil {
+			lastMgr = mgr
+			lastMid = buildMiddleware(mgr)
+		}
+
+		mid := lastMid
+
+		mu.Unlock()
 
 		return mid.WithTenantDB(fiberCtx)
 	}

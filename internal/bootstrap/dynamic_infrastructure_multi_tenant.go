@@ -12,6 +12,7 @@ import (
 	"time"
 
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	tmcache "github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/cache"
 	"github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/client"
 	tmpostgres "github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/postgres"
 	tmrabbitmq "github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/rabbitmq"
@@ -35,7 +36,7 @@ func dynamicMultiTenantKey(cfg *Config) string {
 	apiKeyHash := sha256.Sum256([]byte(cfg.Tenancy.MultiTenantServiceAPIKey))
 	apiKeyFingerprint := hex.EncodeToString(apiKeyHash[:8])
 
-	return fmt.Sprintf("%t|%s|%s|%s|%s|%d|%d|%d|%d|%d|%d",
+	return fmt.Sprintf("%t|%s|%s|%s|%s|%d|%d|%d|%d|%d|%d|%d|%d|%d",
 		cfg.Tenancy.MultiTenantEnabled,
 		cfg.Tenancy.MultiTenantURL,
 		apiKeyFingerprint,
@@ -46,7 +47,10 @@ func dynamicMultiTenantKey(cfg *Config) string {
 		cfg.Tenancy.MultiTenantMaxTenantPools,
 		cfg.Tenancy.MultiTenantIdleTimeoutSec,
 		cfg.Tenancy.MultiTenantCircuitBreakerThreshold,
-		cfg.Tenancy.MultiTenantCircuitBreakerTimeoutSec)
+		cfg.Tenancy.MultiTenantCircuitBreakerTimeoutSec,
+		cfg.Tenancy.MultiTenantCacheTTLSec,
+		cfg.Tenancy.MultiTenantConnectionsCheckIntervalSec,
+		cfg.Tenancy.MultiTenantTimeout)
 }
 
 func multiTenantModeEnabled(cfg *Config) bool {
@@ -56,13 +60,19 @@ func multiTenantModeEnabled(cfg *Config) bool {
 // buildCanonicalTenantManager creates the canonical lib-commons tenant-manager
 // client and tmpostgres.Manager from the service config.
 func buildCanonicalTenantManager(cfg *Config, logger libLog.Logger) (*client.Client, *tmpostgres.Manager, error) {
-	// Build client options
+	// Build client options with cache + timeout for HTTP response caching.
+	// The InMemoryCache reduces redundant HTTP calls to the Tenant Manager API;
+	// WithCacheTTL controls how long responses are cached before refetching;
+	// WithTimeout sets the HTTP client deadline for tenant-manager API calls.
 	clientOpts := []client.ClientOption{
 		client.WithServiceAPIKey(cfg.Tenancy.MultiTenantServiceAPIKey),
 		client.WithCircuitBreaker(
 			cfg.Tenancy.MultiTenantCircuitBreakerThreshold,
 			time.Duration(cfg.Tenancy.MultiTenantCircuitBreakerTimeoutSec)*time.Second,
 		),
+		client.WithCache(tmcache.NewInMemoryCache()),
+		client.WithCacheTTL(cfg.MultiTenantCacheTTL()),
+		client.WithTimeout(cfg.MultiTenantTimeoutDuration()),
 	}
 
 	// Allow insecure HTTP only for local development (http:// URLs).
@@ -77,12 +87,17 @@ func buildCanonicalTenantManager(cfg *Config, logger libLog.Logger) (*client.Cli
 		return nil, nil, fmt.Errorf("create tenant manager client: %w", err)
 	}
 
-	// Build postgres manager options
+	// Build postgres manager options.
+	// WithConnectionsCheckInterval enables async settings revalidation: the pgManager
+	// periodically fetches fresh config from the Tenant Manager and applies updated
+	// pool settings (maxOpenConns, maxIdleConns, statementTimeout) without recreating
+	// the connection. If the interval is zero, revalidation is disabled.
 	pgOpts := []tmpostgres.Option{
 		tmpostgres.WithLogger(logger),
 		tmpostgres.WithMaxTenantPools(cfg.Tenancy.MultiTenantMaxTenantPools),
-		tmpostgres.WithIdleTimeout(time.Duration(cfg.Tenancy.MultiTenantIdleTimeoutSec) * time.Second),
+		tmpostgres.WithIdleTimeout(cfg.MultiTenantIdleTimeout()),
 		tmpostgres.WithConnectionLimits(cfg.Postgres.MaxOpenConnections, cfg.Postgres.MaxIdleConnections),
+		tmpostgres.WithConnectionsCheckInterval(cfg.MultiTenantConnectionsCheckInterval()),
 	}
 
 	pgManager := tmpostgres.NewManager(tmClient, constants.ApplicationName, pgOpts...)
@@ -115,6 +130,9 @@ func buildRabbitMQTenantManagerWithClient(ctx context.Context, cfg *Config, logg
 			cfg.Tenancy.MultiTenantCircuitBreakerThreshold,
 			time.Duration(cfg.Tenancy.MultiTenantCircuitBreakerTimeoutSec)*time.Second,
 		),
+		client.WithCache(tmcache.NewInMemoryCache()),
+		client.WithCacheTTL(cfg.MultiTenantCacheTTL()),
+		client.WithTimeout(cfg.MultiTenantTimeoutDuration()),
 	}
 
 	// Allow insecure HTTP only for local development — see buildCanonicalTenantManager.
@@ -131,7 +149,7 @@ func buildRabbitMQTenantManagerWithClient(ctx context.Context, cfg *Config, logg
 	opts := []tmrabbitmq.Option{
 		tmrabbitmq.WithLogger(logger),
 		tmrabbitmq.WithMaxTenantPools(cfg.Tenancy.MultiTenantMaxTenantPools),
-		tmrabbitmq.WithIdleTimeout(time.Duration(cfg.Tenancy.MultiTenantIdleTimeoutSec) * time.Second),
+		tmrabbitmq.WithIdleTimeout(cfg.MultiTenantIdleTimeout()),
 	}
 
 	return tmClient, tmrabbitmq.NewManager(tmClient, constants.ApplicationName, opts...)

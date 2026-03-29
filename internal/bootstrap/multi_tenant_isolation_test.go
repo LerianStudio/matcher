@@ -24,20 +24,20 @@ import (
 	"github.com/LerianStudio/matcher/internal/auth"
 )
 
-// Section 1: Redis Key Isolation — valkey.GetKeyFromContext produces distinct keys.
+// Section 1: Redis Key Isolation — valkey.GetKeyContext produces distinct keys.
 
 func TestRedisKeyIsolation_DifferentTenants_DifferentKeys(t *testing.T) {
 	t.Parallel()
 
-	ctxA := core.SetTenantIDInContext(context.Background(), "tenant-a-uuid")
-	ctxB := core.SetTenantIDInContext(context.Background(), "tenant-b-uuid")
+	ctxA := core.ContextWithTenantID(context.Background(), "tenant-a-uuid")
+	ctxB := core.ContextWithTenantID(context.Background(), "tenant-b-uuid")
 	ctxNone := context.Background()
 
 	logicalKey := "matcher:dashboard:550e8400:volume:2024-01-01:2024-01-31:all"
 
-	keyA, errA := valkey.GetKeyFromContext(ctxA, logicalKey)
-	keyB, errB := valkey.GetKeyFromContext(ctxB, logicalKey)
-	keyNone, errNone := valkey.GetKeyFromContext(ctxNone, logicalKey)
+	keyA, errA := valkey.GetKeyContext(ctxA, logicalKey)
+	keyB, errB := valkey.GetKeyContext(ctxB, logicalKey)
+	keyNone, errNone := valkey.GetKeyContext(ctxNone, logicalKey)
 
 	require.NoError(t, errA)
 	require.NoError(t, errB)
@@ -64,13 +64,13 @@ func TestRedisKeyIsolation_DifferentTenants_DifferentKeys(t *testing.T) {
 func TestRedisKeyIsolation_SameTenant_SameKey(t *testing.T) {
 	t.Parallel()
 
-	ctxA1 := core.SetTenantIDInContext(context.Background(), "tenant-x")
-	ctxA2 := core.SetTenantIDInContext(context.Background(), "tenant-x")
+	ctxA1 := core.ContextWithTenantID(context.Background(), "tenant-x")
+	ctxA2 := core.ContextWithTenantID(context.Background(), "tenant-x")
 
 	logicalKey := "matcher:dedupe:ctx-id:hash"
 
-	key1, err1 := valkey.GetKeyFromContext(ctxA1, logicalKey)
-	key2, err2 := valkey.GetKeyFromContext(ctxA2, logicalKey)
+	key1, err1 := valkey.GetKeyContext(ctxA1, logicalKey)
+	key2, err2 := valkey.GetKeyContext(ctxA2, logicalKey)
 
 	require.NoError(t, err1)
 	require.NoError(t, err2)
@@ -83,11 +83,11 @@ func TestRedisKeyIsolation_DefaultTenant_GetsPrefixed(t *testing.T) {
 	t.Parallel()
 
 	defaultTID := "11111111-1111-1111-1111-111111111111"
-	ctxDefault := core.SetTenantIDInContext(context.Background(), defaultTID)
+	ctxDefault := core.ContextWithTenantID(context.Background(), defaultTID)
 
 	logicalKey := "matcher:callback:ratelimit:JIRA"
 
-	key, err := valkey.GetKeyFromContext(ctxDefault, logicalKey)
+	key, err := valkey.GetKeyContext(ctxDefault, logicalKey)
 	require.NoError(t, err)
 
 	// Even the default tenant should get a prefixed key when set explicitly.
@@ -103,7 +103,7 @@ func TestRedisKeyIsolation_CrossDomainPrefixes(t *testing.T) {
 	t.Parallel()
 
 	tenantID := "tenant-cross-domain"
-	ctx := core.SetTenantIDInContext(context.Background(), tenantID)
+	ctx := core.ContextWithTenantID(context.Background(), tenantID)
 
 	domainKeys := []struct {
 		name string
@@ -120,7 +120,7 @@ func TestRedisKeyIsolation_CrossDomainPrefixes(t *testing.T) {
 		t.Run(dk.name, func(t *testing.T) {
 			t.Parallel()
 
-			key, err := valkey.GetKeyFromContext(ctx, dk.key)
+			key, err := valkey.GetKeyContext(ctx, dk.key)
 			require.NoError(t, err)
 			assert.Contains(t, key, tenantID,
 				"tenant-prefixed key for %s must contain tenant ID", dk.name)
@@ -131,8 +131,8 @@ func TestRedisKeyIsolation_CrossDomainPrefixes(t *testing.T) {
 func TestRedisKeyIsolation_TwoTenants_AllDomainKeys_FullyIsolated(t *testing.T) {
 	t.Parallel()
 
-	ctxA := core.SetTenantIDInContext(context.Background(), "tenant-a")
-	ctxB := core.SetTenantIDInContext(context.Background(), "tenant-b")
+	ctxA := core.ContextWithTenantID(context.Background(), "tenant-a")
+	ctxB := core.ContextWithTenantID(context.Background(), "tenant-b")
 
 	logicalKeys := []string{
 		"matcher:dashboard:ctx:volume:2024-01-01:2024-01-31:all",
@@ -141,8 +141,8 @@ func TestRedisKeyIsolation_TwoTenants_AllDomainKeys_FullyIsolated(t *testing.T) 
 	}
 
 	for _, lk := range logicalKeys {
-		keyA, errA := valkey.GetKeyFromContext(ctxA, lk)
-		keyB, errB := valkey.GetKeyFromContext(ctxB, lk)
+		keyA, errA := valkey.GetKeyContext(ctxA, lk)
+		keyB, errB := valkey.GetKeyContext(ctxB, lk)
 
 		require.NoError(t, errA)
 		require.NoError(t, errB)
@@ -157,9 +157,9 @@ func TestRedisKeyIsolation_TwoTenants_AllDomainKeys_FullyIsolated(t *testing.T) 
 func TestRedisKeyIsolation_EmptyLogicalKey(t *testing.T) {
 	t.Parallel()
 
-	ctx := core.SetTenantIDInContext(context.Background(), "tenant-empty")
+	ctx := core.ContextWithTenantID(context.Background(), "tenant-empty")
 
-	key, err := valkey.GetKeyFromContext(ctx, "")
+	key, err := valkey.GetKeyContext(ctx, "")
 	require.NoError(t, err)
 
 	// Even with empty logical key, the tenant prefix should be applied.
@@ -171,9 +171,9 @@ func TestRedisKeyIsolation_SpecialCharactersInTenantID(t *testing.T) {
 
 	// UUID-format tenant IDs (the normal case).
 	uuidTenant := "550e8400-e29b-41d4-a716-446655440000"
-	ctx := core.SetTenantIDInContext(context.Background(), uuidTenant)
+	ctx := core.ContextWithTenantID(context.Background(), uuidTenant)
 
-	key, err := valkey.GetKeyFromContext(ctx, "matcher:test:key")
+	key, err := valkey.GetKeyContext(ctx, "matcher:test:key")
 	require.NoError(t, err)
 	assert.Contains(t, key, uuidTenant)
 }
@@ -222,8 +222,8 @@ func TestProviderIsolation_SingleTenant_ContextDoesNotAffectConnection(t *testin
 		ctx  context.Context
 	}{
 		{"bare context", context.Background()},
-		{"with core tenant-a", core.SetTenantIDInContext(context.Background(), "tenant-a")},
-		{"with core tenant-b", core.SetTenantIDInContext(context.Background(), "tenant-b")},
+		{"with core tenant-a", core.ContextWithTenantID(context.Background(), "tenant-a")},
+		{"with core tenant-b", core.ContextWithTenantID(context.Background(), "tenant-b")},
 		{"with auth tenant-x", context.WithValue(context.Background(), auth.TenantIDKey, "tenant-x")},
 	}
 
