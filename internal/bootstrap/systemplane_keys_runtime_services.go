@@ -263,6 +263,7 @@ func matcherKeyDefsM2M() []domain.KeyDef {
 			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
 			DefaultValue:     defaultM2MTargetService,
 			ValueType:        domain.ValueTypeString,
+			Validator:        validateNonEmptyString,
 			ApplyBehavior:    domain.ApplyBootstrapOnly,
 			MutableAtRuntime: false,
 			Description:      "Target service name for M2M credential path in Secrets Manager",

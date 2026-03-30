@@ -4,6 +4,7 @@ package fetcher
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -29,10 +30,12 @@ type mockM2MProvider struct {
 	err             error
 	getCalls        atomic.Int64
 	invalidateCalls atomic.Int64
+	lastTenant      atomic.Value
 }
 
-func (m *mockM2MProvider) GetCredentials(_ context.Context, _ string) (*sharedPorts.M2MCredentials, error) {
+func (m *mockM2MProvider) GetCredentials(_ context.Context, tenantOrgID string) (*sharedPorts.M2MCredentials, error) {
 	m.getCalls.Add(1)
+	m.lastTenant.Store(tenantOrgID)
 
 	if m.err != nil {
 		return nil, m.err
@@ -41,8 +44,10 @@ func (m *mockM2MProvider) GetCredentials(_ context.Context, _ string) (*sharedPo
 	return m.creds, nil
 }
 
-func (m *mockM2MProvider) InvalidateCredentials(_ context.Context, _ string) {
+func (m *mockM2MProvider) InvalidateCredentials(_ context.Context, _ string) error {
 	m.invalidateCalls.Add(1)
+
+	return nil
 }
 
 func TestHTTPFetcherClient_WithM2MProvider_InjectsBasicAuth(t *testing.T) {
@@ -71,10 +76,11 @@ func TestHTTPFetcherClient_WithM2MProvider_InjectsBasicAuth(t *testing.T) {
 	// Set tenant ID in context (mimics auth middleware)
 	ctx := tenantContext("tenant-org-123")
 
-	_, _ = client.ListConnections(ctx, "org-1")
+	_, err := client.ListConnections(ctx, "org-1")
+	require.NoError(t, err)
 
-	assert.NotEmpty(t, capturedAuth, "Authorization header should be set")
-	assert.Contains(t, capturedAuth, "Basic ", "Should use Basic auth scheme")
+	expectedAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte("my-client-id:my-client-secret"))
+	assert.Equal(t, expectedAuth, capturedAuth, "Should inject exact Basic auth header")
 	assert.Equal(t, int64(1), m2m.getCalls.Load(), "GetCredentials should be called once")
 }
 
@@ -134,6 +140,10 @@ func TestHTTPFetcherClient_M2M_NoTenantInContext_UsesDefaultTenant(t *testing.T)
 
 	assert.NotEmpty(t, capturedAuth, "Should inject auth with default tenant credentials")
 	assert.Equal(t, int64(1), m2m.getCalls.Load(), "GetCredentials should be called with default tenant")
+
+	// Verify the provider received the default tenant ID (not empty string)
+	expectedTenant := auth.GetTenantID(context.Background())
+	assert.Equal(t, expectedTenant, m2m.lastTenant.Load(), "M2M provider should receive the default tenant ID")
 }
 
 func TestHTTPFetcherClient_M2M_CredentialError_PropagatesError(t *testing.T) {

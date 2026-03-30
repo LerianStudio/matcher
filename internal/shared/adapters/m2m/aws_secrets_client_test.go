@@ -20,13 +20,16 @@ import (
 type mockAWSSecretsManager struct {
 	output *awssm.GetSecretValueOutput
 	err    error
+	input  *awssm.GetSecretValueInput
 }
 
 func (m *mockAWSSecretsManager) GetSecretValue(
 	_ context.Context,
-	_ *awssm.GetSecretValueInput,
+	input *awssm.GetSecretValueInput,
 	_ ...func(*awssm.Options),
 ) (*awssm.GetSecretValueOutput, error) {
+	m.input = input
+
 	return m.output, m.err
 }
 
@@ -41,12 +44,18 @@ func TestAWSSecretsClient_GetM2MCredentials_Success(t *testing.T) {
 		},
 	}
 
-	client := m2m.NewAWSSecretsClient(mock)
+	client, clientErr := m2m.NewAWSSecretsClient(mock)
+	require.NoError(t, clientErr)
 
 	creds, err := client.GetM2MCredentials(context.Background(), "staging", "org-1", "matcher", "fetcher")
 	require.NoError(t, err)
 	assert.Equal(t, "cid-123", creds.ClientID)
 	assert.Equal(t, "csecret-456", creds.ClientSecret)
+
+	// Verify the secret path matches the canonical pattern
+	require.NotNil(t, mock.input, "GetSecretValue input should be captured")
+	assert.Equal(t, "tenants/staging/org-1/matcher/m2m/fetcher/credentials",
+		aws.ToString(mock.input.SecretId), "secret path should follow canonical pattern")
 }
 
 func TestAWSSecretsClient_GetM2MCredentials_NotFound(t *testing.T) {
@@ -58,7 +67,8 @@ func TestAWSSecretsClient_GetM2MCredentials_NotFound(t *testing.T) {
 		},
 	}
 
-	client := m2m.NewAWSSecretsClient(mock)
+	client, clientErr := m2m.NewAWSSecretsClient(mock)
+	require.NoError(t, clientErr)
 
 	creds, err := client.GetM2MCredentials(context.Background(), "staging", "org-1", "matcher", "fetcher")
 	assert.Nil(t, creds)
@@ -78,7 +88,8 @@ func TestAWSSecretsClient_GetM2MCredentials_MissingFields(t *testing.T) {
 		},
 	}
 
-	client := m2m.NewAWSSecretsClient(mock)
+	client, clientErr := m2m.NewAWSSecretsClient(mock)
+	require.NoError(t, clientErr)
 
 	creds, err := client.GetM2MCredentials(context.Background(), "staging", "org-1", "matcher", "fetcher")
 	assert.Nil(t, creds)
@@ -95,7 +106,8 @@ func TestAWSSecretsClient_GetM2MCredentials_NilSecretString(t *testing.T) {
 		},
 	}
 
-	client := m2m.NewAWSSecretsClient(mock)
+	client, clientErr := m2m.NewAWSSecretsClient(mock)
+	require.NoError(t, clientErr)
 
 	creds, err := client.GetM2MCredentials(context.Background(), "staging", "org-1", "matcher", "fetcher")
 	assert.Nil(t, creds)
@@ -112,7 +124,8 @@ func TestAWSSecretsClient_GetM2MCredentials_InvalidJSON(t *testing.T) {
 		},
 	}
 
-	client := m2m.NewAWSSecretsClient(mock)
+	client, clientErr := m2m.NewAWSSecretsClient(mock)
+	require.NoError(t, clientErr)
 
 	creds, err := client.GetM2MCredentials(context.Background(), "staging", "org-1", "matcher", "fetcher")
 	assert.Nil(t, creds)
@@ -127,11 +140,21 @@ func TestAWSSecretsClient_GetM2MCredentials_GenericError(t *testing.T) {
 		err: errors.New("network timeout"),
 	}
 
-	client := m2m.NewAWSSecretsClient(mock)
+	client, clientErr := m2m.NewAWSSecretsClient(mock)
+	require.NoError(t, clientErr)
 
 	creds, err := client.GetM2MCredentials(context.Background(), "staging", "org-1", "matcher", "fetcher")
 	assert.Nil(t, creds)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "network timeout")
 	assert.False(t, errors.Is(err, m2m.ErrM2MCredentialsNotFound))
+}
+
+func TestNewAWSSecretsClient_NilClient_ReturnsError(t *testing.T) {
+	t.Parallel()
+
+	client, err := m2m.NewAWSSecretsClient(nil)
+	assert.Nil(t, client)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, m2m.ErrAWSSecretsClientNil)
 }

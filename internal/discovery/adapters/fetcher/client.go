@@ -21,6 +21,7 @@ import (
 	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
 	libBackoff "github.com/LerianStudio/lib-commons/v4/commons/backoff"
 	"github.com/LerianStudio/lib-commons/v4/commons/circuitbreaker"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/auth"
@@ -491,6 +492,8 @@ func (client *HTTPFetcherClient) injectM2MCredentials(ctx context.Context, req *
 
 // invalidateM2MOnUnauthorized invalidates cached credentials when a 401 response
 // is received, forcing re-fetch from the secret store on the next request.
+// Redis eviction errors are logged but not propagated — the 401 itself is the
+// primary error returned to the caller via classifyResponse.
 func (client *HTTPFetcherClient) invalidateM2MOnUnauthorized(ctx context.Context, statusCode int) {
 	if statusCode != http.StatusUnauthorized || client.m2mProvider == nil {
 		return
@@ -501,7 +504,11 @@ func (client *HTTPFetcherClient) invalidateM2MOnUnauthorized(ctx context.Context
 		return
 	}
 
-	client.m2mProvider.InvalidateCredentials(ctx, tenantOrgID)
+	if err := client.m2mProvider.InvalidateCredentials(ctx, tenantOrgID); err != nil {
+		logger, _, _, _ := libCommons.NewTrackingFromContext(ctx)
+		logger.Log(ctx, libLog.LevelWarn,
+			fmt.Sprintf("m2m credential invalidation failed on 401 recovery for tenant %s: %v", tenantOrgID, err))
+	}
 }
 
 // doGet performs a GET request with retry logic.

@@ -88,9 +88,10 @@ func NewM2MCredentialProvider(
 
 // m2mRedisKey returns the tenant-prefixed Redis key for M2M credentials.
 // Uses valkey.GetKeyContext to apply tenant prefix consistently with all other
-// Redis operations in the codebase.
-func (provider *M2MCredentialProvider) m2mRedisKey(ctx context.Context) (string, error) {
-	baseKey := fmt.Sprintf("m2m:%s:credentials", provider.targetService)
+// Redis operations in the codebase. The tenantOrgID is included in the base key
+// to prevent cross-tenant cache collisions at the L2 (Redis) layer.
+func (provider *M2MCredentialProvider) m2mRedisKey(ctx context.Context, tenantOrgID string) (string, error) {
+	baseKey := fmt.Sprintf("m2m:%s:%s:credentials", provider.targetService, tenantOrgID)
 
 	key, err := valkey.GetKeyContext(ctx, baseKey)
 	if err != nil {
@@ -145,26 +146,34 @@ func (provider *M2MCredentialProvider) GetCredentials(ctx context.Context, tenan
 
 // InvalidateCredentials removes cached credentials for a tenant from both cache levels.
 // Call this when a 401 is received during token exchange (credential revocation).
-func (provider *M2MCredentialProvider) InvalidateCredentials(ctx context.Context, tenantOrgID string) {
+func (provider *M2MCredentialProvider) InvalidateCredentials(ctx context.Context, tenantOrgID string) error {
 	// Delete from L1 (local — immediate effect)
 	provider.credCache.Delete(tenantOrgID)
 
 	// Delete from L2 (distributed — propagates to all pods via lib-commons)
 	if provider.redisClient == nil {
-		return
+		return nil
 	}
 
 	rds, err := provider.redisClient.GetClient(ctx)
-	if err != nil || rds == nil {
-		return
+	if err != nil {
+		return fmt.Errorf("get Redis client for credential invalidation: %w", err)
 	}
 
-	key, keyErr := provider.m2mRedisKey(ctx)
+	if rds == nil {
+		return nil
+	}
+
+	key, keyErr := provider.m2mRedisKey(ctx, tenantOrgID)
 	if keyErr != nil {
-		return
+		return fmt.Errorf("build Redis key for credential invalidation: %w", keyErr)
 	}
 
-	_ = rds.Del(ctx, key).Err()
+	if delErr := rds.Del(ctx, key).Err(); delErr != nil {
+		return fmt.Errorf("delete M2M credentials from Redis for tenant %s: %w", tenantOrgID, delErr)
+	}
+
+	return nil
 }
 
 // storeInL1 stores credentials in the in-memory L1 cache with fixed TTL.
@@ -183,7 +192,7 @@ func (provider *M2MCredentialProvider) getFromRedis(ctx context.Context, tenantO
 		return nil, false
 	}
 
-	key, keyErr := provider.m2mRedisKey(ctx)
+	key, keyErr := provider.m2mRedisKey(ctx, tenantOrgID)
 	if keyErr != nil {
 		return nil, false
 	}
@@ -206,7 +215,7 @@ func (provider *M2MCredentialProvider) getFromRedis(ctx context.Context, tenantO
 
 // storeInRedis stores credentials in the Redis L2 cache.
 // Errors are silently ignored (Redis is best-effort for caching).
-func (provider *M2MCredentialProvider) storeInRedis(ctx context.Context, _ string, creds *ports.M2MCredentials) {
+func (provider *M2MCredentialProvider) storeInRedis(ctx context.Context, tenantOrgID string, creds *ports.M2MCredentials) {
 	if provider.redisClient == nil {
 		return
 	}
@@ -216,7 +225,7 @@ func (provider *M2MCredentialProvider) storeInRedis(ctx context.Context, _ strin
 		return
 	}
 
-	key, keyErr := provider.m2mRedisKey(ctx)
+	key, keyErr := provider.m2mRedisKey(ctx, tenantOrgID)
 	if keyErr != nil {
 		return
 	}

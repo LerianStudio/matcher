@@ -18,6 +18,7 @@ var (
 	ErrM2MCredentialsNotFound = errors.New("M2M credentials not found in secret store")
 	ErrM2MVaultAccessDenied   = errors.New("access denied to M2M credentials vault")
 	ErrM2MInvalidCredentials  = errors.New("M2M secret value missing required fields (clientId, clientSecret)")
+	ErrAWSSecretsClientNil    = errors.New("AWS Secrets Manager client is nil")
 )
 
 // AWSSecretsManagerAPI is the subset of the AWS Secrets Manager client interface
@@ -36,14 +37,19 @@ type AWSSecretsClient struct {
 }
 
 // NewAWSSecretsClient creates a new AWS Secrets Manager client adapter.
-func NewAWSSecretsClient(client AWSSecretsManagerAPI) *AWSSecretsClient {
-	return &AWSSecretsClient{client: client}
+// Returns ErrAWSSecretsClientNil if client is nil to prevent nil-pointer panics on first use.
+func NewAWSSecretsClient(client AWSSecretsManagerAPI) (*AWSSecretsClient, error) {
+	if client == nil {
+		return nil, ErrAWSSecretsClientNil
+	}
+
+	return &AWSSecretsClient{client: client}, nil
 }
 
 // secretPayload is the expected JSON structure of the secret value.
 type secretPayload struct {
 	ClientID     string `json:"clientId"`
-	ClientSecret string `json:"clientSecret"`
+	ClientSecret string `json:"clientSecret"` //nolint:nolintlint,gosec // G117: internal deserialization struct for AWS Secrets Manager, not exposed in API
 }
 
 // GetM2MCredentials retrieves M2M credentials from AWS Secrets Manager.

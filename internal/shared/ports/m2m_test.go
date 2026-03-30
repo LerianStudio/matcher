@@ -3,21 +3,34 @@
 package ports_test
 
 import (
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
-func TestM2MCredentials_JSONTagsRedact(t *testing.T) {
+func TestM2MCredentials_StructTags(t *testing.T) {
 	t.Parallel()
 
-	creds := &ports.M2MCredentials{
-		ClientID:     "test-id",
-		ClientSecret: "test-secret",
-	}
+	typ := reflect.TypeOf(ports.M2MCredentials{})
 
-	assert.Equal(t, "test-id", creds.ClientID)
-	assert.Equal(t, "test-secret", creds.ClientSecret)
+	// Verify ClientID field has json:"-" tag (redacted from serialization)
+	clientIDField, ok := typ.FieldByName("ClientID")
+	require.True(t, ok, "M2MCredentials should have a ClientID field")
+
+	clientIDTag := clientIDField.Tag.Get("json")
+	assert.Equal(t, "-", clientIDTag,
+		"ClientID should have json:\"-\" tag to prevent serialization")
+
+	// Verify ClientSecret field has json:"-" tag (redacted from serialization)
+	clientSecretField, ok := typ.FieldByName("ClientSecret")
+	require.True(t, ok, "M2MCredentials should have a ClientSecret field")
+
+	clientSecretTag := clientSecretField.Tag.Get("json")
+	assert.True(t, strings.HasPrefix(clientSecretTag, "-"),
+		"ClientSecret should have json:\"-\" tag to prevent serialization")
 }

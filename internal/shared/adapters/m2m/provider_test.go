@@ -94,17 +94,12 @@ func TestM2MCredentialProvider_L1CacheHit(t *testing.T) {
 func TestM2MCredentialProvider_DifferentTenants(t *testing.T) {
 	t.Parallel()
 
-	callCount := atomic.Int64{}
-
 	mock := &mockSecretsClient{
 		creds: &ports.M2MCredentials{
 			ClientID:     "shared-id",
 			ClientSecret: "shared-secret",
 		},
 	}
-
-	// Override callCount tracking inside the mock
-	mock.callCount = callCount
 
 	provider := m2m.NewM2MCredentialProvider(
 		mock, "staging", "matcher", "fetcher",
@@ -146,7 +141,8 @@ func TestM2MCredentialProvider_InvalidateCredentials(t *testing.T) {
 	assert.Equal(t, int64(1), mock.callCount.Load())
 
 	// Invalidate
-	provider.InvalidateCredentials(ctx, "tenant-1")
+	err = provider.InvalidateCredentials(ctx, "tenant-1")
+	require.NoError(t, err)
 
 	// Next call must re-fetch
 	_, err = provider.GetCredentials(ctx, "tenant-1")

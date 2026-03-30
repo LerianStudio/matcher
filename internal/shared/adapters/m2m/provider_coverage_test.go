@@ -12,7 +12,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
-func TestNewM2MCredentialProvider_Fields(t *testing.T) {
+func TestNewM2MCredentialProvider_Construction(t *testing.T) {
 	t.Parallel()
 
 	mock := &mockSecretsClient{

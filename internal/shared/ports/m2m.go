@@ -25,5 +25,6 @@ type M2MProvider interface {
 	// InvalidateCredentials removes cached credentials for a tenant from all
 	// cache levels. Call this when a 401 is received during token exchange
 	// to force re-fetch from the secret store on the next request.
-	InvalidateCredentials(ctx context.Context, tenantOrgID string)
+	// Returns an error if the Redis L2 eviction fails (L1 is always cleared first).
+	InvalidateCredentials(ctx context.Context, tenantOrgID string) error
 }

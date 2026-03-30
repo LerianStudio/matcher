@@ -88,7 +88,7 @@ When the matcher calls Fetcher in multi-tenant mode, per-tenant M2M credentials 
    export M2M_TARGET_SERVICE=fetcher  # default
    export M2M_CREDENTIAL_CACHE_TTL_SEC=300  # 5 min L2 cache
    ```
-   Ensure the service's IAM role has `secretsmanager:GetSecretValue` permission for path `tenants/*/matcher/m2m/fetcher/credentials-*`.
+   Ensure the service's IAM role has `secretsmanager:GetSecretValue` permission for path `tenants/*/*/matcher/m2m/fetcher/credentials`.
 
 7. **Verify logs** show multi-tenant initialization messages (see next section).
 

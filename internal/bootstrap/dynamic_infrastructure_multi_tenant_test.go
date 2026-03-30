@@ -7,7 +7,6 @@
 package bootstrap
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -161,9 +160,9 @@ func TestDynamicMultiTenantKey_IncludesNewConfigFields(t *testing.T) {
 		"different cache TTL should produce different cache keys")
 
 	// Also verify the key contains the new fields as pipe-separated values
-	assert.True(t, strings.Contains(keyA, "|120|"),
+	assert.Contains(t, keyA, "|120|",
 		"cache key should contain the cache TTL value")
-	assert.True(t, strings.Contains(keyA, "|30|"),
+	assert.Contains(t, keyA, "|30|",
 		"cache key should contain the connections check interval value")
 }
 
