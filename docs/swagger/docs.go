@@ -3904,11 +3904,6 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
-                        "enum": [
-                            "JIRA",
-                            "SERVICENOW",
-                            "WEBHOOK"
-                        ],
                         "type": "string",
                         "description": "Filter by external system",
                         "name": "external_system",
@@ -4789,7 +4784,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "Unprocessable entity: invalid state transition",
+                        "description": "Unprocessable entity: invalid state transition or connector not configured",
                         "schema": {
                             "$ref": "#/definitions/internal_exception_adapters_http.ErrorResponse"
                         }

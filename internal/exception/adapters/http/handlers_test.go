@@ -1127,6 +1127,22 @@ func TestHandleExceptionError_AllMappings(t *testing.T) {
 			expectedMessage: command.ErrZeroAdjustmentAmount.Error(),
 		},
 		{
+			name:            "negative adjustment amount returns bad request",
+			err:             command.ErrNegativeAdjustmentAmount,
+			expectedStatus:  fiber.StatusBadRequest,
+			expectedCode:    400,
+			expectedTitle:   "invalid_request",
+			expectedMessage: command.ErrNegativeAdjustmentAmount.Error(),
+		},
+		{
+			name:            "invalid override reason returns bad request",
+			err:             value_objects.ErrInvalidOverrideReason,
+			expectedStatus:  fiber.StatusBadRequest,
+			expectedCode:    400,
+			expectedTitle:   "invalid_request",
+			expectedMessage: value_objects.ErrInvalidOverrideReason.Error(),
+		},
+		{
 			name:            "invalid currency returns bad request",
 			err:             command.ErrInvalidCurrency,
 			expectedStatus:  fiber.StatusBadRequest,
@@ -1997,6 +2013,70 @@ func TestHandleDispatchError_ActorRequired(t *testing.T) {
 		400,
 		"invalid_request",
 		command.ErrActorRequired.Error(),
+	)
+}
+
+func TestHandleDispatchError_ConnectorNotConfigured(t *testing.T) {
+	t.Parallel()
+
+	wrappedErr := fmt.Errorf("dispatch to jira: %w: JIRA", command.ErrDispatchConnectorNotConfigured)
+
+	resp := executeErrorHandler(t, handleDispatchError, wrappedErr)
+
+	requireErrorResponse(
+		t,
+		resp,
+		fiber.StatusUnprocessableEntity,
+		422,
+		"unprocessable_entity",
+		"connector not configured for target system",
+	)
+}
+
+func TestHandleDispatchError_ExceptionNotFound(t *testing.T) {
+	t.Parallel()
+
+	wrappedErr := fmt.Errorf("find exception: %w", entities.ErrExceptionNotFound)
+
+	resp := executeErrorHandler(t, handleDispatchError, wrappedErr)
+
+	requireErrorResponse(
+		t,
+		resp,
+		fiber.StatusNotFound,
+		404,
+		"not_found",
+		"exception not found",
+	)
+}
+
+func TestHandleExceptionError_InvalidOverrideReason(t *testing.T) {
+	t.Parallel()
+
+	resp := executeErrorHandler(t, handleExceptionError, value_objects.ErrInvalidOverrideReason)
+
+	requireErrorResponse(
+		t,
+		resp,
+		fiber.StatusBadRequest,
+		400,
+		"invalid_request",
+		value_objects.ErrInvalidOverrideReason.Error(),
+	)
+}
+
+func TestHandleExceptionError_NegativeAdjustmentAmount(t *testing.T) {
+	t.Parallel()
+
+	resp := executeErrorHandler(t, handleExceptionError, command.ErrNegativeAdjustmentAmount)
+
+	requireErrorResponse(
+		t,
+		resp,
+		fiber.StatusBadRequest,
+		400,
+		"invalid_request",
+		command.ErrNegativeAdjustmentAmount.Error(),
 	)
 }
 

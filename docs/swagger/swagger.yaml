@@ -5866,10 +5866,6 @@ paths:
         name: assigned_to
         type: string
       - description: Filter by external system
-        enum:
-        - JIRA
-        - SERVICENOW
-        - WEBHOOK
         in: query
         name: external_system
         type: string
@@ -6321,7 +6317,8 @@ paths:
           schema:
             $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "422":
-          description: 'Unprocessable entity: invalid state transition'
+          description: 'Unprocessable entity: invalid state transition or connector
+            not configured'
           schema:
             $ref: '#/definitions/internal_exception_adapters_http.ErrorResponse'
         "500":

@@ -36,7 +36,7 @@ var (
 	ErrNonRetryableStatus             = errors.New("non-retryable HTTP status")
 	ErrMaxRetriesExceeded             = errors.New("max retries exceeded")
 	ErrUnsupportedTarget              = errors.New("unsupported routing target")
-	ErrConnectorNotConfigured         = errors.New("connector not configured for target")
+	ErrConnectorNotConfigured         = ports.ErrConnectorNotConfigured
 	ErrRetryableHTTPStatus            = errors.New("retryable HTTP status")
 	ErrCircuitBreakerOpen             = errors.New("circuit breaker is open for target")
 	ErrServerError                    = errors.New("server error")

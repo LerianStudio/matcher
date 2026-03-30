@@ -23,9 +23,10 @@ import (
 
 // Dispatch errors.
 var (
-	ErrNilExternalConnector    = errors.New("external connector is required")
-	ErrTargetSystemRequired    = errors.New("target system is required")
-	ErrUnsupportedTargetSystem = errors.New("unsupported target system")
+	ErrNilExternalConnector           = errors.New("external connector is required")
+	ErrTargetSystemRequired           = errors.New("target system is required")
+	ErrUnsupportedTargetSystem        = errors.New("unsupported target system")
+	ErrDispatchConnectorNotConfigured = errors.New("dispatch connector not configured")
 )
 
 // DispatchCommand contains parameters for dispatching an exception to an external system.
@@ -181,6 +182,10 @@ func (uc *DispatchUseCase) processDispatch(
 		libOpentelemetry.HandleSpanError(span, "dispatch failed", err)
 
 		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("dispatch to %s failed: %v", params.target, err))
+
+		if errors.Is(err, ports.ErrConnectorNotConfigured) {
+			return nil, fmt.Errorf("dispatch to %s: %w", params.target, ErrDispatchConnectorNotConfigured)
+		}
 
 		return nil, fmt.Errorf("dispatch to %s: %w", params.target, err)
 	}
