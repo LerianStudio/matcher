@@ -108,8 +108,11 @@ func (s *MockFetcherServer) StartOnPort(port int) (string, error) {
 		return "", fmt.Errorf("mock fetcher listen: %w", err)
 	}
 
-	tcpAddr, _ := s.listener.Addr().(*net.TCPAddr)
-	s.baseURL = fmt.Sprintf("http://127.0.0.1:%d", tcpAddr.Port)
+	if tcpAddr, ok := s.listener.Addr().(*net.TCPAddr); ok {
+		s.baseURL = fmt.Sprintf("http://127.0.0.1:%d", tcpAddr.Port)
+	} else {
+		s.baseURL = fmt.Sprintf("http://%s", s.listener.Addr().String())
+	}
 
 	s.server = &http.Server{
 		Handler:      mux,
