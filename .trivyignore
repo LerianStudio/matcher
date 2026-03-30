@@ -2,5 +2,9 @@
 # published to the Go module proxy.  Pulled transitively by testcontainers-go
 # and lib-commons; affects only test infrastructure, not the production binary.
 # Remove these entries once github.com/docker/docker v29+ is available.
+#
+# Severity: HIGH (CVE-2026-34040), MEDIUM (CVE-2026-33997)
+# Review by: 2026-06-30
+# Tracking: https://github.com/moby/moby/releases (watch for v29 Go module)
 CVE-2026-34040
 CVE-2026-33997

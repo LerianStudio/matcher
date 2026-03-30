@@ -54,6 +54,10 @@ func readSystemplaneConfig(appBaseURL string) (*systemplaneConfigResponse, error
 		return nil, fmt.Errorf("read systemplane config body: %w", readErr)
 	}
 
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("systemplane config returned %d: %s", resp.StatusCode, string(body))
+	}
+
 	var current systemplaneConfigResponse
 	if err := json.Unmarshal(body, &current); err != nil {
 		return nil, fmt.Errorf("parse systemplane config: %w", err)

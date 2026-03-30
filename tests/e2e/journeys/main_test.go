@@ -42,6 +42,7 @@ func TestMain(m *testing.M) {
 		}
 		fmt.Printf("   Discovery E2E tests will be skipped.\n")
 
+		_ = mockFetcher.Stop()
 		mockFetcher = nil
 	} else {
 		fmt.Printf("✓ Mock Fetcher server listening at %s\n", fetcherURL)
@@ -108,6 +109,7 @@ func TestMain(m *testing.M) {
 			}
 			fmt.Printf("   Discovery E2E tests may fail.\n")
 
+			_ = mockFetcher.Stop()
 			mockFetcher = nil
 		} else {
 			restoreFetcherConfig = restore

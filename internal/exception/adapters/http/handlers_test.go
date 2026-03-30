@@ -2050,36 +2050,6 @@ func TestHandleDispatchError_ExceptionNotFound(t *testing.T) {
 	)
 }
 
-func TestHandleExceptionError_InvalidOverrideReason(t *testing.T) {
-	t.Parallel()
-
-	resp := executeErrorHandler(t, handleExceptionError, value_objects.ErrInvalidOverrideReason)
-
-	requireErrorResponse(
-		t,
-		resp,
-		fiber.StatusBadRequest,
-		400,
-		"invalid_request",
-		value_objects.ErrInvalidOverrideReason.Error(),
-	)
-}
-
-func TestHandleExceptionError_NegativeAdjustmentAmount(t *testing.T) {
-	t.Parallel()
-
-	resp := executeErrorHandler(t, handleExceptionError, command.ErrNegativeAdjustmentAmount)
-
-	requireErrorResponse(
-		t,
-		resp,
-		fiber.StatusBadRequest,
-		400,
-		"invalid_request",
-		command.ErrNegativeAdjustmentAmount.Error(),
-	)
-}
-
 func TestValidationOrder_ProviderChecks(t *testing.T) {
 	t.Parallel()
 

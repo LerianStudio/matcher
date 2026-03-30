@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -107,7 +108,8 @@ func (s *MockFetcherServer) StartOnPort(port int) (string, error) {
 		return "", fmt.Errorf("mock fetcher listen: %w", err)
 	}
 
-	s.baseURL = fmt.Sprintf("http://%s", s.listener.Addr().String())
+	tcpAddr, _ := s.listener.Addr().(*net.TCPAddr)
+	s.baseURL = fmt.Sprintf("http://127.0.0.1:%d", tcpAddr.Port)
 
 	s.server = &http.Server{
 		Handler:      mux,
@@ -412,6 +414,15 @@ func (s *MockFetcherServer) handleSubmitExtraction(w http.ResponseWriter, r *htt
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		writeJSON(w, map[string]string{"error": "invalid request body"})
+
+		return
+	}
+
+	reqBody.ConnectionID = strings.TrimSpace(reqBody.ConnectionID)
+	if reqBody.ConnectionID == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		writeJSON(w, map[string]string{"error": "invalid connectionId"})
 
 		return
 	}
