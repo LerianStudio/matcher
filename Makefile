@@ -140,6 +140,7 @@ help:
 	@echo "  make test-e2e                    - Run e2e tests (requires local stack)"
 	@echo "  make test-e2e-fast               - Run e2e tests in quick mode"
 	@echo "  make test-e2e-journeys           - Run only e2e journey tests"
+	@echo "  make test-e2e-discovery          - Run discovery E2E tests with mock Fetcher"
 	@echo "  make test-e2e-dashboard          - Run 5k tx dashboard stresser (data preserved)"
 	@echo "  make test-all                    - Run all tests (unit + int + e2e) with merged coverage"
 	@echo "  make test-chaos                  - Run chaos/resilience tests"
@@ -320,7 +321,7 @@ check-coverage: test
 # Test Commands
 #-------------------------------------------------------
 
-.PHONY: test test-unit coverage-unit test-int test-e2e test-e2e-dashboard test-chaos test-all cover
+.PHONY: test test-unit coverage-unit test-int test-e2e test-e2e-discovery test-e2e-dashboard test-chaos test-all cover
 
 test: test-unit
 
@@ -345,7 +346,6 @@ test-int:
 test-e2e:
 	$(call print_title,Running e2e tests against local stack)
 	@echo "Requires: $(DOCKER_CMD) up -d (ensure full stack is running)"
-	@echo "Checking stack health..."
 	@$(TEST_RUNNER) -tags=e2e -timeout=10m -v -p 1 -coverprofile=$(COVER_PROFILE_E2E) -race -cover ./tests/e2e/...
 	$(call show_coverage,$(COVER_PROFILE_E2E))
 	@echo "[ok] E2E tests passed"
@@ -361,6 +361,11 @@ test-e2e-journeys:
 	@$(TEST_RUNNER) -tags=e2e -timeout=10m -v -coverprofile=$(COVER_PROFILE_E2E) -race -cover ./tests/e2e/journeys/...
 	$(call show_coverage,$(COVER_PROFILE_E2E))
 	@echo "[ok] Journey tests passed"
+
+test-e2e-discovery:
+	$(call print_title,Running Discovery E2E tests with mock Fetcher)
+	@E2E_REQUIRE_FETCHER_MOCK=1 $(TEST_RUNNER) -tags=e2e -timeout=5m -v -p 1 -coverprofile=$(COVER_PROFILE_E2E) -race -cover -run TestDiscovery ./tests/e2e/journeys/...
+	@echo "[ok] Discovery E2E tests passed"
 
 test-e2e-dashboard:
 	$(call print_title,Running dashboard stresser - data will be PRESERVED)
