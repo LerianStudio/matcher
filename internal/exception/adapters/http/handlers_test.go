@@ -2450,7 +2450,7 @@ func TestListExceptions_ExternalSystemExceedsMaxLength(t *testing.T) {
 	handlers := newExceptionHandlers(t, &stubExceptionRepo{})
 	app.Get("/v1/exceptions", handlers.ListExceptions)
 
-	longExtSystem := strings.Repeat("x", 256)
+	longExtSystem := strings.Repeat("x", libHTTP.MaxQueryParamLengthLong+1)
 	request := httptest.NewRequest(
 		http.MethodGet,
 		"/v1/exceptions?external_system="+longExtSystem,
@@ -2506,7 +2506,7 @@ func TestParseExceptionFilter_ExternalSystemExceedsMaxLength(t *testing.T) {
 		return c.SendStatus(fiber.StatusOK)
 	})
 
-	longExtSystem := strings.Repeat("x", 256)
+	longExtSystem := strings.Repeat("x", libHTTP.MaxQueryParamLengthLong+1)
 	request := httptest.NewRequest(http.MethodGet, "/test?external_system="+longExtSystem, http.NoBody)
 	resp, err := app.Test(request)
 	require.NoError(t, err)
@@ -2558,7 +2558,7 @@ func TestParseExceptionFilter_ExternalSystemAtExactLimit(t *testing.T) {
 		return c.SendStatus(fiber.StatusOK)
 	})
 
-	exactExtSystem := strings.Repeat("x", 50)
+	exactExtSystem := strings.Repeat("x", libHTTP.MaxQueryParamLengthLong)
 	request := httptest.NewRequest(http.MethodGet, "/test?external_system="+exactExtSystem, http.NoBody)
 	resp, err := app.Test(request)
 	require.NoError(t, err)

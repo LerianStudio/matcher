@@ -172,6 +172,7 @@ func (s *MockFetcherServer) AddConnection(conn MockConnection) {
 }
 
 // SetSchema sets the schema response for a given connection ID.
+// A defensive copy is made so callers cannot mutate server state after the call.
 func (s *MockFetcherServer) SetSchema(connectionID string, schema *MockSchema) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -181,10 +182,18 @@ func (s *MockFetcherServer) SetSchema(connectionID string, schema *MockSchema) {
 		return
 	}
 
-	s.schemas[connectionID] = schema
+	cp := &MockSchema{ConnectionID: schema.ConnectionID}
+	for _, tbl := range schema.Tables {
+		cols := make([]MockColumn, len(tbl.Columns))
+		copy(cols, tbl.Columns)
+		cp.Tables = append(cp.Tables, MockTable{TableName: tbl.TableName, Columns: cols})
+	}
+
+	s.schemas[connectionID] = cp
 }
 
 // SetTestResult sets the test-connection response for a given connection ID.
+// A defensive copy is made so callers cannot mutate server state after the call.
 func (s *MockFetcherServer) SetTestResult(connectionID string, result *MockTestResult) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -194,7 +203,12 @@ func (s *MockFetcherServer) SetTestResult(connectionID string, result *MockTestR
 		return
 	}
 
-	s.testResults[connectionID] = result
+	cp := &MockTestResult{
+		Healthy:      result.Healthy,
+		LatencyMs:    result.LatencyMs,
+		ErrorMessage: result.ErrorMessage,
+	}
+	s.testResults[connectionID] = cp
 }
 
 // AddJob adds an extraction job that can be polled by its JobID.
