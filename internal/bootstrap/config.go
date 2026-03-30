@@ -59,14 +59,21 @@ type TenancyConfig struct {
 	DefaultTenantID   string `env:"DEFAULT_TENANT_ID"   envDefault:"11111111-1111-1111-1111-111111111111" mapstructure:"default_tenant_id"`
 	DefaultTenantSlug string `env:"DEFAULT_TENANT_SLUG" envDefault:"default"                             mapstructure:"default_tenant_slug"`
 
-	MultiTenantEnabled                  bool   `env:"MULTI_TENANT_ENABLED"                         envDefault:"false"   mapstructure:"multi_tenant_enabled"`
-	MultiTenantURL                      string `env:"MULTI_TENANT_URL"                                                     mapstructure:"multi_tenant_url"`
-	MultiTenantEnvironment              string `env:"MULTI_TENANT_ENVIRONMENT"                                             mapstructure:"multi_tenant_environment"`
-	MultiTenantMaxTenantPools           int    `env:"MULTI_TENANT_MAX_TENANT_POOLS"                envDefault:"100"     mapstructure:"multi_tenant_max_tenant_pools"`
-	MultiTenantIdleTimeoutSec           int    `env:"MULTI_TENANT_IDLE_TIMEOUT_SEC"                envDefault:"300"     mapstructure:"multi_tenant_idle_timeout_sec"`
-	MultiTenantCircuitBreakerThreshold  int    `env:"MULTI_TENANT_CIRCUIT_BREAKER_THRESHOLD"       envDefault:"5"       mapstructure:"multi_tenant_circuit_breaker_threshold"`
-	MultiTenantCircuitBreakerTimeoutSec int    `env:"MULTI_TENANT_CIRCUIT_BREAKER_TIMEOUT_SEC"     envDefault:"30"      mapstructure:"multi_tenant_circuit_breaker_timeout_sec"`
-	MultiTenantServiceAPIKey            string `env:"MULTI_TENANT_SERVICE_API_KEY"                    json:"-"             mapstructure:"multi_tenant_service_api_key"`
+	MultiTenantEnabled                     bool   `env:"MULTI_TENANT_ENABLED"                             envDefault:"false"   mapstructure:"multi_tenant_enabled"`
+	MultiTenantURL                         string `env:"MULTI_TENANT_URL"                                                     mapstructure:"multi_tenant_url"`
+	MultiTenantEnvironment                 string `env:"MULTI_TENANT_ENVIRONMENT"                                             mapstructure:"multi_tenant_environment"`
+	MultiTenantRedisHost                   string `env:"MULTI_TENANT_REDIS_HOST"                                              mapstructure:"multi_tenant_redis_host"`
+	MultiTenantRedisPort                   string `env:"MULTI_TENANT_REDIS_PORT"                       envDefault:"6379"    mapstructure:"multi_tenant_redis_port"`
+	MultiTenantRedisPassword               string `env:"MULTI_TENANT_REDIS_PASSWORD"                   json:"-"             mapstructure:"multi_tenant_redis_password"`
+	MultiTenantRedisTLS                    bool   `env:"MULTI_TENANT_REDIS_TLS"                        envDefault:"false"   mapstructure:"multi_tenant_redis_tls"`
+	MultiTenantMaxTenantPools              int    `env:"MULTI_TENANT_MAX_TENANT_POOLS"                 envDefault:"100"     mapstructure:"multi_tenant_max_tenant_pools"`
+	MultiTenantIdleTimeoutSec              int    `env:"MULTI_TENANT_IDLE_TIMEOUT_SEC"                 envDefault:"300"     mapstructure:"multi_tenant_idle_timeout_sec"`
+	MultiTenantTimeout                     int    `env:"MULTI_TENANT_TIMEOUT"                          envDefault:"30"      mapstructure:"multi_tenant_timeout"`
+	MultiTenantCircuitBreakerThreshold     int    `env:"MULTI_TENANT_CIRCUIT_BREAKER_THRESHOLD"        envDefault:"5"       mapstructure:"multi_tenant_circuit_breaker_threshold"`
+	MultiTenantCircuitBreakerTimeoutSec    int    `env:"MULTI_TENANT_CIRCUIT_BREAKER_TIMEOUT_SEC"      envDefault:"30"      mapstructure:"multi_tenant_circuit_breaker_timeout_sec"`
+	MultiTenantServiceAPIKey               string `env:"MULTI_TENANT_SERVICE_API_KEY"                  json:"-"             mapstructure:"multi_tenant_service_api_key"`
+	MultiTenantCacheTTLSec                 int    `env:"MULTI_TENANT_CACHE_TTL_SEC"                    envDefault:"120"     mapstructure:"multi_tenant_cache_ttl_sec"`
+	MultiTenantConnectionsCheckIntervalSec int    `env:"MULTI_TENANT_CONNECTIONS_CHECK_INTERVAL_SEC"   envDefault:"30"      mapstructure:"multi_tenant_connections_check_interval_sec"`
 }
 
 // PostgresConfig configures primary/replica connections and pooling.
@@ -215,6 +222,23 @@ type FetcherConfig struct {
 	ExtractionTimeoutSec int    `env:"FETCHER_EXTRACTION_TIMEOUT_SEC" envDefault:"600"                   mapstructure:"extraction_timeout_sec"`
 }
 
+// M2MConfig configures machine-to-machine credential retrieval from AWS Secrets Manager.
+// Used when multi-tenant mode is enabled and the service needs to authenticate
+// with target service APIs (e.g., Fetcher) per tenant.
+type M2MConfig struct {
+	// M2MTargetService is the target service name used to build the Secrets Manager path.
+	// Path: tenants/{env}/{tenantOrgID}/{applicationName}/m2m/{targetService}/credentials
+	M2MTargetService string `env:"M2M_TARGET_SERVICE" envDefault:"fetcher" mapstructure:"m2m_target_service"`
+
+	// M2MCredentialCacheTTLSec configures the L2 (Redis) cache TTL for M2M credentials.
+	// Default: 300 seconds (5 minutes).
+	M2MCredentialCacheTTLSec int `env:"M2M_CREDENTIAL_CACHE_TTL_SEC" envDefault:"300" mapstructure:"m2m_credential_cache_ttl_sec"`
+
+	// AWSRegion is the AWS region for Secrets Manager API calls.
+	// When empty, the AWS SDK uses its default chain (env, config file, instance metadata).
+	AWSRegion string `env:"AWS_REGION" mapstructure:"aws_region"`
+}
+
 // DedupeConfig configures deduplication behavior.
 type DedupeConfig struct {
 	// TTLSec configures the TTL for deduplication keys in Redis. Default: 3600 seconds.
@@ -300,6 +324,7 @@ type Config struct {
 	Webhook           WebhookConfig           `mapstructure:"webhook"`
 	CallbackRateLimit CallbackRateLimitConfig `mapstructure:"callback_rate_limit"`
 	Fetcher           FetcherConfig           `mapstructure:"fetcher"`
+	M2M               M2MConfig               `mapstructure:"m2m"`
 
 	// ShutdownGracePeriod is the time to wait for background workers to finish
 	// after requesting stop, before closing infrastructure connections.

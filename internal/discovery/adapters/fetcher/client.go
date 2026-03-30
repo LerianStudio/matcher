@@ -21,8 +21,10 @@ import (
 	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
 	libBackoff "github.com/LerianStudio/lib-commons/v4/commons/backoff"
 	"github.com/LerianStudio/lib-commons/v4/commons/circuitbreaker"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
+	"github.com/LerianStudio/matcher/internal/auth"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -54,10 +56,19 @@ const fetcherCircuitBreakerName = "fetcher"
 
 // HTTPFetcherClient communicates with the Fetcher REST API over HTTP.
 type HTTPFetcherClient struct {
-	httpClient *http.Client
-	baseURL    string
-	cfg        HTTPClientConfig
-	breaker    circuitbreaker.Manager
+	httpClient  *http.Client
+	baseURL     string
+	cfg         HTTPClientConfig
+	breaker     circuitbreaker.Manager
+	m2mProvider sharedPorts.M2MProvider // nil in single-tenant mode
+}
+
+// SetM2MProvider sets the M2M credential provider for multi-tenant authentication.
+// This is safe to call after construction to wire in the provider from bootstrap.
+func (client *HTTPFetcherClient) SetM2MProvider(p sharedPorts.M2MProvider) {
+	if client != nil {
+		client.m2mProvider = p
+	}
 }
 
 func (client *HTTPFetcherClient) ensureReady() error {
@@ -66,6 +77,20 @@ func (client *HTTPFetcherClient) ensureReady() error {
 	}
 
 	return nil
+}
+
+// ClientOption configures optional HTTPFetcherClient behavior.
+type ClientOption func(*HTTPFetcherClient)
+
+// WithM2MProvider sets the M2M credential provider for multi-tenant authentication.
+// When set, the client injects per-tenant BasicAuth credentials into outbound requests.
+// When nil (single-tenant mode), no authentication is injected.
+func WithM2MProvider(p sharedPorts.M2MProvider) ClientOption {
+	return func(c *HTTPFetcherClient) {
+		if p != nil {
+			c.m2mProvider = p
+		}
+	}
 }
 
 // NewHTTPFetcherClient creates a new Fetcher HTTP client.
@@ -442,6 +467,50 @@ func validateFetcherResultPath(resultPath string) error {
 	return nil
 }
 
+// injectM2MCredentials adds per-tenant BasicAuth to the request when an M2M provider is available.
+// In single-tenant mode (m2mProvider is nil), this is a no-op.
+func (client *HTTPFetcherClient) injectM2MCredentials(ctx context.Context, req *http.Request) error {
+	if client.m2mProvider == nil {
+		return nil
+	}
+
+	tenantOrgID := auth.GetTenantID(ctx)
+	if tenantOrgID == "" {
+		// No tenant in context — skip credential injection (may be health check or single-tenant request).
+		return nil
+	}
+
+	creds, err := client.m2mProvider.GetCredentials(ctx, tenantOrgID)
+	if err != nil {
+		return fmt.Errorf("fetching M2M credentials for tenant %s: %w", tenantOrgID, err)
+	}
+
+	req.SetBasicAuth(creds.ClientID, creds.ClientSecret)
+
+	return nil
+}
+
+// invalidateM2MOnUnauthorized invalidates cached credentials when a 401 response
+// is received, forcing re-fetch from the secret store on the next request.
+// Redis eviction errors are logged but not propagated — the 401 itself is the
+// primary error returned to the caller via classifyResponse.
+func (client *HTTPFetcherClient) invalidateM2MOnUnauthorized(ctx context.Context, statusCode int) {
+	if statusCode != http.StatusUnauthorized || client.m2mProvider == nil {
+		return
+	}
+
+	tenantOrgID := auth.GetTenantID(ctx)
+	if tenantOrgID == "" {
+		return
+	}
+
+	if err := client.m2mProvider.InvalidateCredentials(ctx, tenantOrgID); err != nil {
+		logger, _, _, _ := libCommons.NewTrackingFromContext(ctx)
+		logger.Log(ctx, libLog.LevelWarn,
+			fmt.Sprintf("m2m credential invalidation failed on 401 recovery for tenant %s: %v", tenantOrgID, err))
+	}
+}
+
 // doGet performs a GET request with retry logic.
 func (client *HTTPFetcherClient) doGet(ctx context.Context, requestURL string) ([]byte, error) {
 	return client.doRequest(ctx, http.MethodGet, requestURL, nil, true)
@@ -535,6 +604,13 @@ func (client *HTTPFetcherClient) doRequest(ctx context.Context, method, requestU
 			req.Header.Set("Content-Type", "application/json")
 		}
 
+		// Inject per-tenant M2M credentials when provider is available.
+		// In single-tenant mode, m2mProvider is nil and no auth is injected.
+		if err := client.injectM2MCredentials(ctx, req); err != nil {
+			libOpentelemetry.HandleSpanError(span, "fetcher m2m credential injection failed", err)
+			return nil, err
+		}
+
 		respBody, statusCode, err := client.doHTTPAttempt(req)
 		if err != nil {
 			// Circuit breaker open/half-open: fail fast without retrying.
@@ -556,6 +632,9 @@ func (client *HTTPFetcherClient) doRequest(ctx context.Context, method, requestU
 
 			continue
 		}
+
+		// Invalidate M2M credentials on 401 to force re-fetch from secret store.
+		client.invalidateM2MOnUnauthorized(ctx, statusCode)
 
 		result, statusErr := classifyResponse(statusCode, respBody)
 		if statusErr == nil {

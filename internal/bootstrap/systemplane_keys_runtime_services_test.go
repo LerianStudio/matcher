@@ -31,10 +31,11 @@ func TestMatcherKeyDefsInfrastructure_CombinesAllSubGroups(t *testing.T) {
 	callbackRL := matcherKeyDefsCallbackRateLimit()
 	fetcherCore := matcherKeyDefsFetcherCore()
 	fetcherRuntime := matcherKeyDefsFetcherRuntime()
+	m2m := matcherKeyDefsM2M()
 
 	combined := matcherKeyDefsInfrastructure()
 
-	expected := len(runtime) + len(idempotency) + len(callbackRL) + len(fetcherCore) + len(fetcherRuntime)
+	expected := len(runtime) + len(idempotency) + len(callbackRL) + len(fetcherCore) + len(fetcherRuntime) + len(m2m)
 	assert.Len(t, combined, expected,
 		"matcherKeyDefsInfrastructure must combine all sub-group key defs")
 }

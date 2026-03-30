@@ -47,6 +47,14 @@ func matcherKeyDefsTenancyDefaults() []domain.KeyDef {
 }
 
 func matcherKeyDefsTenancyConnectivity() []domain.KeyDef {
+	return concatKeyDefs(
+		matcherKeyDefsTenancyConnEndpoints(),
+		matcherKeyDefsTenancyConnRedis(),
+		matcherKeyDefsTenancyConnPools(),
+	)
+}
+
+func matcherKeyDefsTenancyConnEndpoints() []domain.KeyDef {
 	return []domain.KeyDef{
 		{
 			Key:              "tenancy.multi_tenant_enabled",
@@ -87,6 +95,69 @@ func matcherKeyDefsTenancyConnectivity() []domain.KeyDef {
 			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
+	}
+}
+
+func matcherKeyDefsTenancyConnRedis() []domain.KeyDef {
+	return []domain.KeyDef{
+		{
+			Key:              "tenancy.multi_tenant_redis_host",
+			Kind:             domain.KindConfig,
+			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+			DefaultValue:     "",
+			ValueType:        domain.ValueTypeString,
+			ApplyBehavior:    domain.ApplyBundleRebuild,
+			MutableAtRuntime: true,
+			Description:      "Redis host for Pub/Sub event-driven tenant discovery",
+			Group:            "tenancy",
+			Component:        domain.ComponentNone,
+			RedactPolicy:     domain.RedactNone,
+		},
+		{
+			Key:              "tenancy.multi_tenant_redis_port",
+			Kind:             domain.KindConfig,
+			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+			DefaultValue:     defaultMultiTenantRedisPort,
+			ValueType:        domain.ValueTypeString,
+			ApplyBehavior:    domain.ApplyBundleRebuild,
+			MutableAtRuntime: true,
+			Description:      "Redis port for Pub/Sub event-driven tenant discovery",
+			Group:            "tenancy",
+			Component:        domain.ComponentNone,
+			RedactPolicy:     domain.RedactNone,
+		},
+		{
+			Key:              "tenancy.multi_tenant_redis_password",
+			Kind:             domain.KindConfig,
+			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+			DefaultValue:     "",
+			ValueType:        domain.ValueTypeString,
+			ApplyBehavior:    domain.ApplyBundleRebuild,
+			MutableAtRuntime: true,
+			Secret:           true,
+			Description:      "Redis password for Pub/Sub event-driven tenant discovery",
+			Group:            "tenancy",
+			Component:        domain.ComponentNone,
+			RedactPolicy:     domain.RedactFull,
+		},
+		{
+			Key:              "tenancy.multi_tenant_redis_tls",
+			Kind:             domain.KindConfig,
+			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+			DefaultValue:     defaultMultiTenantRedisTLS,
+			ValueType:        domain.ValueTypeBool,
+			ApplyBehavior:    domain.ApplyBundleRebuild,
+			MutableAtRuntime: true,
+			Description:      "Enable TLS for Pub/Sub Redis connection (AWS ElastiCache/Valkey)",
+			Group:            "tenancy",
+			Component:        domain.ComponentNone,
+			RedactPolicy:     domain.RedactNone,
+		},
+	}
+}
+
+func matcherKeyDefsTenancyConnPools() []domain.KeyDef {
+	return []domain.KeyDef{
 		{
 			Key:              "tenancy.multi_tenant_max_tenant_pools",
 			Kind:             domain.KindConfig,
@@ -111,6 +182,20 @@ func matcherKeyDefsTenancyConnectivity() []domain.KeyDef {
 			ApplyBehavior:    domain.ApplyBundleRebuild,
 			MutableAtRuntime: true,
 			Description:      "Idle timeout (seconds) before evicting a tenant connection pool",
+			Group:            "tenancy",
+			Component:        domain.ComponentNone,
+			RedactPolicy:     domain.RedactNone,
+		},
+		{
+			Key:              "tenancy.multi_tenant_timeout",
+			Kind:             domain.KindConfig,
+			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+			DefaultValue:     defaultMultiTenantTimeout,
+			ValueType:        domain.ValueTypeInt,
+			Validator:        validatePositiveInt,
+			ApplyBehavior:    domain.ApplyBundleRebuild,
+			MutableAtRuntime: true,
+			Description:      "HTTP client timeout (seconds) for tenant-manager API calls",
 			Group:            "tenancy",
 			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
@@ -161,6 +246,34 @@ func matcherKeyDefsTenancyResilience() []domain.KeyDef {
 			Group:            "tenancy",
 			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactFull,
+		},
+		{
+			Key:              "tenancy.multi_tenant_cache_ttl_sec",
+			Kind:             domain.KindConfig,
+			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+			DefaultValue:     defaultMultiTenantCacheTTLSec,
+			ValueType:        domain.ValueTypeInt,
+			Validator:        validatePositiveInt,
+			ApplyBehavior:    domain.ApplyBundleRebuild,
+			MutableAtRuntime: true,
+			Description:      "In-memory cache TTL (seconds) for tenant configuration",
+			Group:            "tenancy",
+			Component:        domain.ComponentNone,
+			RedactPolicy:     domain.RedactNone,
+		},
+		{
+			Key:              "tenancy.multi_tenant_connections_check_interval_sec",
+			Kind:             domain.KindConfig,
+			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+			DefaultValue:     defaultMultiTenantConnsCheckIntervalSec,
+			ValueType:        domain.ValueTypeInt,
+			Validator:        validatePositiveInt,
+			ApplyBehavior:    domain.ApplyBundleRebuild,
+			MutableAtRuntime: true,
+			Description:      "Async settings revalidation interval (seconds) for PostgreSQL tenant pools",
+			Group:            "tenancy",
+			Component:        domain.ComponentNone,
+			RedactPolicy:     domain.RedactNone,
 		},
 	}
 }

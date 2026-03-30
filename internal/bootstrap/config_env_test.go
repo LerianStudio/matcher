@@ -738,3 +738,37 @@ func TestConnMaxIdleTime(t *testing.T) {
 	cfg := &Config{Postgres: PostgresConfig{ConnMaxIdleTimeMins: 5}}
 	assert.Equal(t, 5*time.Minute, cfg.ConnMaxIdleTime())
 }
+
+func TestM2MCredentialCacheTTL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		cfg      Config
+		expected time.Duration
+	}{
+		{
+			name:     "defaults_to_5_minutes_when_zero",
+			cfg:      Config{M2M: M2MConfig{M2MCredentialCacheTTLSec: 0}},
+			expected: 5 * time.Minute,
+		},
+		{
+			name:     "defaults_to_5_minutes_when_negative",
+			cfg:      Config{M2M: M2MConfig{M2MCredentialCacheTTLSec: -1}},
+			expected: 5 * time.Minute,
+		},
+		{
+			name:     "uses_configured_value",
+			cfg:      Config{M2M: M2MConfig{M2MCredentialCacheTTLSec: 600}},
+			expected: 600 * time.Second,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.expected, tt.cfg.M2MCredentialCacheTTL())
+		})
+	}
+}

@@ -79,7 +79,7 @@ func TestCacheService_BuildKey(t *testing.T) {
 	t.Run("builds tenant-aware key when tenant is present", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := core.SetTenantIDInContext(context.Background(), "tenant-a")
+		ctx := core.ContextWithTenantID(context.Background(), "tenant-a")
 		key, err := svc.buildKey(ctx, contextID, volumeKeyType, dateFrom, dateTo, nil)
 		require.NoError(t, err)
 
@@ -1577,8 +1577,8 @@ func TestCacheService_InvalidateContext_OnlyDeletesExplicitTenantKeys(t *testing
 		DateTo:    time.Now().UTC(),
 	}
 
-	tenantACtx := core.SetTenantIDInContext(context.Background(), "tenant-a")
-	tenantBCtx := core.SetTenantIDInContext(context.Background(), "tenant-b")
+	tenantACtx := core.ContextWithTenantID(context.Background(), "tenant-a")
+	tenantBCtx := core.ContextWithTenantID(context.Background(), "tenant-b")
 
 	require.NoError(t, svc.SetVolumeStats(tenantACtx, filter, &entities.VolumeStats{TotalTransactions: 100}))
 	require.NoError(t, svc.SetVolumeStats(tenantBCtx, filter, &entities.VolumeStats{TotalTransactions: 200}))

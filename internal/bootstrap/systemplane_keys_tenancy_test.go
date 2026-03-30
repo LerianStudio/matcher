@@ -99,8 +99,13 @@ func TestMatcherKeyDefsTenancyConnectivity_KeyProperties(t *testing.T) {
 		"tenancy.multi_tenant_enabled",
 		"tenancy.multi_tenant_url",
 		"tenancy.multi_tenant_environment",
+		"tenancy.multi_tenant_redis_host",
+		"tenancy.multi_tenant_redis_port",
+		"tenancy.multi_tenant_redis_password",
+		"tenancy.multi_tenant_redis_tls",
 		"tenancy.multi_tenant_max_tenant_pools",
 		"tenancy.multi_tenant_idle_timeout_sec",
+		"tenancy.multi_tenant_timeout",
 	}
 
 	require.Len(t, defs, len(expectedKeys))
@@ -120,6 +125,24 @@ func TestMatcherKeyDefsTenancyConnectivity_KeyProperties(t *testing.T) {
 			assert.Equal(t, domain.ScopeGlobal, def.AllowedScopes[0])
 		})
 	}
+}
+
+func TestMatcherKeyDefsTenancyConnectivity_RedisPasswordIsSecret(t *testing.T) {
+	t.Parallel()
+
+	defs := matcherKeyDefsTenancyConnectivity()
+
+	var found bool
+
+	for _, def := range defs {
+		if def.Key == "tenancy.multi_tenant_redis_password" {
+			found = true
+			assert.True(t, def.Secret, "Redis password must be marked as secret")
+			assert.Equal(t, domain.RedactFull, def.RedactPolicy, "Redis password must use full redaction")
+		}
+	}
+
+	assert.True(t, found, "tenancy.multi_tenant_redis_password must exist")
 }
 
 func TestMatcherKeyDefsTenancyConnectivity_EnabledIsBool(t *testing.T) {
@@ -167,6 +190,8 @@ func TestMatcherKeyDefsTenancyResilience_KeyProperties(t *testing.T) {
 		"tenancy.multi_tenant_circuit_breaker_threshold",
 		"tenancy.multi_tenant_circuit_breaker_timeout_sec",
 		"tenancy.multi_tenant_service_api_key",
+		"tenancy.multi_tenant_cache_ttl_sec",
+		"tenancy.multi_tenant_connections_check_interval_sec",
 	}
 
 	require.Len(t, defs, len(expectedKeys))

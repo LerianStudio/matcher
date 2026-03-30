@@ -13,6 +13,7 @@ func matcherKeyDefsInfrastructure() []domain.KeyDef {
 		matcherKeyDefsCallbackRateLimit(),
 		matcherKeyDefsFetcherCore(),
 		matcherKeyDefsFetcherRuntime(),
+		matcherKeyDefsM2M(),
 	)
 }
 
@@ -247,6 +248,53 @@ func matcherKeyDefsFetcherRuntime() []domain.KeyDef {
 			MutableAtRuntime: true,
 			Description:      "Fetcher extraction job timeout in seconds",
 			Group:            "fetcher",
+			Component:        domain.ComponentNone,
+			RedactPolicy:     domain.RedactNone,
+		},
+	}
+}
+
+func matcherKeyDefsM2M() []domain.KeyDef {
+	return []domain.KeyDef{
+		// --- M2M (Machine-to-Machine). ---
+		{
+			Key:              "m2m.m2m_target_service",
+			Kind:             domain.KindConfig,
+			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+			DefaultValue:     defaultM2MTargetService,
+			ValueType:        domain.ValueTypeString,
+			Validator:        validateNonEmptyString,
+			ApplyBehavior:    domain.ApplyBootstrapOnly,
+			MutableAtRuntime: false,
+			Description:      "Target service name for M2M credential path in Secrets Manager",
+			Group:            "m2m",
+			Component:        domain.ComponentNone,
+			RedactPolicy:     domain.RedactNone,
+		},
+		{
+			Key:              "m2m.m2m_credential_cache_ttl_sec",
+			Kind:             domain.KindConfig,
+			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+			DefaultValue:     defaultM2MCredentialCacheTTL,
+			ValueType:        domain.ValueTypeInt,
+			Validator:        validatePositiveInt,
+			ApplyBehavior:    domain.ApplyLiveRead,
+			MutableAtRuntime: true,
+			Description:      "M2M credential L2 (Redis) cache TTL in seconds",
+			Group:            "m2m",
+			Component:        domain.ComponentNone,
+			RedactPolicy:     domain.RedactNone,
+		},
+		{
+			Key:              "m2m.aws_region",
+			Kind:             domain.KindConfig,
+			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+			DefaultValue:     "",
+			ValueType:        domain.ValueTypeString,
+			ApplyBehavior:    domain.ApplyBootstrapOnly,
+			MutableAtRuntime: false,
+			Description:      "AWS region for Secrets Manager API calls (empty uses SDK default chain)",
+			Group:            "m2m",
 			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
