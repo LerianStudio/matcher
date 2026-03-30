@@ -8,9 +8,14 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/LerianStudio/matcher/tests/e2e/mock"
 )
+
+// systemplaneHTTPClient is a shared HTTP client with a timeout for systemplane
+// operations, preventing test hangs when the endpoint is unresponsive.
+var systemplaneHTTPClient = &http.Client{Timeout: 30 * time.Second}
 
 // mockFetcher is the package-level mock Fetcher server instance.
 // It is started in TestMain and stopped after all journey tests complete.
@@ -38,7 +43,7 @@ type systemplaneConfigResponse struct {
 }
 
 func readSystemplaneConfig(appBaseURL string) (*systemplaneConfigResponse, error) {
-	resp, err := http.Get(appBaseURL + "/v1/system/configs") //nolint:noctx // test helper
+	resp, err := systemplaneHTTPClient.Get(appBaseURL + "/v1/system/configs") //nolint:noctx // test helper
 	if err != nil {
 		return nil, fmt.Errorf("get systemplane config: %w", err)
 	}
@@ -124,7 +129,7 @@ func patchSystemplaneConfigValues(appBaseURL string, values map[string]any) erro
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("If-Match", fmt.Sprintf("%d", current.Revision))
 
-	patchResp, err := http.DefaultClient.Do(req)
+	patchResp, err := systemplaneHTTPClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("patch systemplane: %w", err)
 	}

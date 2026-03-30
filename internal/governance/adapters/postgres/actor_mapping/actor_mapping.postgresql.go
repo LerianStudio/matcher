@@ -69,7 +69,10 @@ func (repo *Repository) upsertInternal(ctx context.Context, tx *sql.Tx, mapping 
 				Insert(tableName).
 				Columns("actor_id", "display_name", "email", "created_at", "updated_at").
 				Values(mapping.ActorID, mapping.DisplayName, mapping.Email, mapping.CreatedAt, mapping.UpdatedAt).
-				Suffix("ON CONFLICT (actor_id) DO UPDATE SET display_name = COALESCE(EXCLUDED.display_name, actor_mapping.display_name), email = COALESCE(EXCLUDED.email, actor_mapping.email), updated_at = EXCLUDED.updated_at RETURNING actor_id, display_name, email, created_at, updated_at").
+				Suffix(fmt.Sprintf(
+					"ON CONFLICT (actor_id) DO UPDATE SET display_name = COALESCE(EXCLUDED.display_name, %s.display_name), email = COALESCE(EXCLUDED.email, %s.email), updated_at = EXCLUDED.updated_at RETURNING actor_id, display_name, email, created_at, updated_at",
+					tableName, tableName,
+				)).
 				ToSql()
 			if err != nil {
 				return nil, fmt.Errorf("building upsert query: %w", err)

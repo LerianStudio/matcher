@@ -299,16 +299,18 @@ func TestReporting_GetMatchedReport_Pagination(t *testing.T) {
 			tc.Logf("Page 2: %d items, next cursor: %q", len(page2.Items), page2.Pagination.Next)
 
 			// Pages should not overlap.
-			page1IDs := make(map[string]bool)
+			page1IDs := make(map[string]struct{})
 			for _, item := range page1.Items {
-				page1IDs[item.TransactionID] = true
+				page1IDs[item.SourceID+"|"+item.TransactionID] = struct{}{}
 			}
 			for _, item := range page2.Items {
+				key := item.SourceID + "|" + item.TransactionID
+				_, exists := page1IDs[key]
 				require.False(
 					t,
-					page1IDs[item.TransactionID],
+					exists,
 					"page 2 should not contain items from page 1 (duplicate: %s)",
-					item.TransactionID,
+					key,
 				)
 			}
 		},
@@ -350,10 +352,14 @@ func TestReporting_GetMatchedReport_InvalidCursor(t *testing.T) {
 		1*time.Minute,
 		func(t *testing.T, tc *e2e.TestContext, apiClient *e2e.Client) {
 			ctx := context.Background()
-			contextID := setupMatchedPipeline(t, ctx, tc, apiClient, "rpt-invalid-cursor", 2, 1)
+			f := factories.New(tc, apiClient)
+
+			emptyCtx := f.Context.NewContext().
+				WithName("rpt-invalid-cursor").
+				MustCreate(ctx)
 
 			dateFrom, dateTo := reportDateRange()
-			_, err := apiClient.Reporting.GetMatchedReport(ctx, contextID, map[string]string{
+			_, err := apiClient.Reporting.GetMatchedReport(ctx, emptyCtx.ID, map[string]string{
 				"date_from": dateFrom,
 				"date_to":   dateTo,
 				"cursor":    "not-a-valid-cursor",

@@ -36,7 +36,7 @@ func TestDiscoveryClient_GetStatus(t *testing.T) {
 			FetcherHealthy:  true,
 			ConnectionCount: 3,
 		})
-		require.NoError(t, err)
+		assert.NoError(t, err)
 	}))
 	defer server.Close()
 
@@ -64,7 +64,7 @@ func TestDiscoveryClient_ListConnections(t *testing.T) {
 				{ID: "conn-2", ConfigName: "mysql-aux", DatabaseType: "mysql", Status: "active", SchemaDiscovered: false, LastSeenAt: now},
 			},
 		})
-		require.NoError(t, err)
+		assert.NoError(t, err)
 	}))
 	defer server.Close()
 
@@ -96,7 +96,7 @@ func TestDiscoveryClient_GetConnection(t *testing.T) {
 			SchemaDiscovered: true,
 			LastSeenAt:       now,
 		})
-		require.NoError(t, err)
+		assert.NoError(t, err)
 	}))
 	defer server.Close()
 
@@ -129,7 +129,7 @@ func TestDiscoveryClient_GetConnectionSchema(t *testing.T) {
 				},
 			},
 		})
-		require.NoError(t, err)
+		assert.NoError(t, err)
 	}))
 	defer server.Close()
 
@@ -159,7 +159,7 @@ func TestDiscoveryClient_TestConnection(t *testing.T) {
 			Healthy:      true,
 			LatencyMs:    42,
 		})
-		require.NoError(t, err)
+		assert.NoError(t, err)
 	}))
 	defer server.Close()
 
@@ -184,7 +184,7 @@ func TestDiscoveryClient_TestConnection_Unhealthy(t *testing.T) {
 			LatencyMs:    0,
 			ErrorMessage: "connection refused",
 		})
-		require.NoError(t, err)
+		assert.NoError(t, err)
 	}))
 	defer server.Close()
 
@@ -207,7 +207,7 @@ func TestDiscoveryClient_StartExtraction(t *testing.T) {
 
 		var reqBody DiscoveryStartExtractionRequest
 		err := json.NewDecoder(r.Body).Decode(&reqBody)
-		require.NoError(t, err)
+		assert.NoError(t, err)
 		assert.Contains(t, reqBody.Tables, "payments")
 
 		w.Header().Set("Content-Type", "application/json")
@@ -220,7 +220,7 @@ func TestDiscoveryClient_StartExtraction(t *testing.T) {
 			CreatedAt:    now,
 			UpdatedAt:    now,
 		})
-		require.NoError(t, err)
+		assert.NoError(t, err)
 	}))
 	defer server.Close()
 
@@ -254,7 +254,7 @@ func TestDiscoveryClient_GetExtraction(t *testing.T) {
 			CreatedAt:    now,
 			UpdatedAt:    now,
 		})
-		require.NoError(t, err)
+		assert.NoError(t, err)
 	}))
 	defer server.Close()
 
@@ -283,7 +283,7 @@ func TestDiscoveryClient_PollExtraction(t *testing.T) {
 			CreatedAt:    now,
 			UpdatedAt:    now,
 		})
-		require.NoError(t, err)
+		assert.NoError(t, err)
 	}))
 	defer server.Close()
 
@@ -306,7 +306,7 @@ func TestDiscoveryClient_RefreshDiscovery(t *testing.T) {
 		err := json.NewEncoder(w).Encode(DiscoveryRefreshResponse{
 			ConnectionsSynced: 5,
 		})
-		require.NoError(t, err)
+		assert.NoError(t, err)
 	}))
 	defer server.Close()
 

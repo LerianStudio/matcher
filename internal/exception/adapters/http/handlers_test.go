@@ -2480,7 +2480,7 @@ func TestListExceptions_ExternalSystemExceedsMaxLength(t *testing.T) {
 	handlers := newExceptionHandlers(t, &stubExceptionRepo{})
 	app.Get("/v1/exceptions", handlers.ListExceptions)
 
-	longExtSystem := strings.Repeat("x", 51)
+	longExtSystem := strings.Repeat("x", 256)
 	request := httptest.NewRequest(
 		http.MethodGet,
 		"/v1/exceptions?external_system="+longExtSystem,
@@ -2536,7 +2536,7 @@ func TestParseExceptionFilter_ExternalSystemExceedsMaxLength(t *testing.T) {
 		return c.SendStatus(fiber.StatusOK)
 	})
 
-	longExtSystem := strings.Repeat("x", 51)
+	longExtSystem := strings.Repeat("x", 256)
 	request := httptest.NewRequest(http.MethodGet, "/test?external_system="+longExtSystem, http.NoBody)
 	resp, err := app.Test(request)
 	require.NoError(t, err)

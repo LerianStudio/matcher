@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
 )
@@ -109,7 +110,9 @@ func (s *MockFetcherServer) StartOnPort(port int) (string, error) {
 	s.baseURL = fmt.Sprintf("http://%s", s.listener.Addr().String())
 
 	s.server = &http.Server{
-		Handler: mux,
+		Handler:      mux,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 30 * time.Second,
 	}
 
 	runtime.SafeGoWithContextAndComponent(
@@ -416,20 +419,16 @@ func (s *MockFetcherServer) handleSubmitExtraction(w http.ResponseWriter, r *htt
 	// Generate a deterministic job ID so tests can AddJob before the call.
 	jobID := "job-" + reqBody.ConnectionID
 
-	s.mu.RLock()
+	s.mu.Lock()
 	_, exists := s.jobs[jobID]
-	s.mu.RUnlock()
-
-	// If no pre-registered job exists, auto-create one in PENDING state.
 	if !exists {
-		s.mu.Lock()
 		s.jobs[jobID] = &MockExtractionJob{
 			JobID:    jobID,
 			Status:   "PENDING",
 			Progress: 0,
 		}
-		s.mu.Unlock()
 	}
+	s.mu.Unlock()
 
 	type submitJSON struct {
 		JobID string `json:"jobId"`

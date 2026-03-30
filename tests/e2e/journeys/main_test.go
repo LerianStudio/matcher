@@ -107,6 +107,8 @@ func TestMain(m *testing.M) {
 				os.Exit(1)
 			}
 			fmt.Printf("   Discovery E2E tests may fail.\n")
+
+			mockFetcher = nil
 		} else {
 			restoreFetcherConfig = restore
 			fmt.Printf("✓ Systemplane configured: fetcher → mock at port %d\n", mockFetcherPort)

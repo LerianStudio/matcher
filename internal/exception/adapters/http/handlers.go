@@ -944,7 +944,7 @@ func parseExceptionFilter(fiberCtx *fiber.Ctx) (repositories.ExceptionFilter, er
 	}
 
 	if externalSystem := fiberCtx.Query("external_system"); externalSystem != "" {
-		if err := libHTTP.ValidateQueryParamLength(externalSystem, "external_system", libHTTP.MaxQueryParamLengthShort); err != nil {
+		if err := libHTTP.ValidateQueryParamLength(externalSystem, "external_system", libHTTP.MaxQueryParamLengthLong); err != nil {
 			return filter, fmt.Errorf("invalid external_system: %w", err)
 		}
 

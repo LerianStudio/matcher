@@ -58,7 +58,16 @@ func TestUpsertActorMapping(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		repo := mocks.NewMockActorMappingRepository(ctrl)
-		repo.EXPECT().Upsert(gomock.Any(), gomock.Any()).Return(&entities.ActorMapping{ActorID: "actor-123"}, nil)
+		repo.EXPECT().Upsert(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, m *entities.ActorMapping) (*entities.ActorMapping, error) {
+				require.Equal(t, "actor-123", m.ActorID)
+				require.NotNil(t, m.DisplayName)
+				require.Equal(t, "John Doe", *m.DisplayName)
+				require.NotNil(t, m.Email)
+				require.Equal(t, "john@example.com", *m.Email)
+				return &entities.ActorMapping{ActorID: m.ActorID}, nil
+			},
+		)
 
 		uc, err := NewActorMappingUseCase(repo)
 		require.NoError(t, err)
@@ -76,7 +85,14 @@ func TestUpsertActorMapping(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		repo := mocks.NewMockActorMappingRepository(ctrl)
-		repo.EXPECT().Upsert(gomock.Any(), gomock.Any()).Return(&entities.ActorMapping{ActorID: "actor-123"}, nil)
+		repo.EXPECT().Upsert(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, m *entities.ActorMapping) (*entities.ActorMapping, error) {
+				require.Equal(t, "actor-123", m.ActorID)
+				require.Nil(t, m.DisplayName)
+				require.Nil(t, m.Email)
+				return &entities.ActorMapping{ActorID: m.ActorID}, nil
+			},
+		)
 
 		uc, err := NewActorMappingUseCase(repo)
 		require.NoError(t, err)

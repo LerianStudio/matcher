@@ -751,6 +751,20 @@ func TestExportJobs_ListByContext(t *testing.T) {
 			require.NotEqual(t, foreignJob.JobID, pageJobID, "foreign-context job must never appear in the page")
 			require.Contains(t, []string{exportJob.JobID, secondJob.JobID}, pageJobID)
 
+			// Follow the cursor to verify pagination works end-to-end.
+			require.NotEmpty(t, page.NextCursor, "first page with hasMore=true must provide a cursor")
+			page2, err := apiClient.Reporting.ListExportJobsByContext(ctx, reconciliationContext.ID, map[string]string{
+				"limit":  "10",
+				"cursor": page.NextCursor,
+			})
+			require.NoError(t, err)
+			require.NotNil(t, page2)
+			require.False(t, page2.HasMore, "second page should have no more items")
+			require.NotEmpty(t, page2.Items, "second page should contain the remaining same-context job")
+			for _, job := range page2.Items {
+				require.NotEqual(t, foreignJob.JobID, job.ID, "foreign-context job must never appear")
+			}
+
 			fullPage, err := apiClient.Reporting.ListExportJobsByContext(ctx, reconciliationContext.ID, map[string]string{"limit": "10"})
 			require.NoError(t, err)
 			require.NotNil(t, fullPage)
