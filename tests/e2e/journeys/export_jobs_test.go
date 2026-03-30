@@ -623,6 +623,198 @@ func TestExportJobs_UnmatchedTransactionsType(t *testing.T) {
 }
 
 // =============================================================================
+// Export Jobs By Context Tests
+// =============================================================================
+
+// TestExportJobs_ListByContext tests listing export jobs filtered by context.
+func TestExportJobs_ListByContext(t *testing.T) {
+	e2e.RunE2EWithTimeout(
+		t,
+		3*time.Minute,
+		func(t *testing.T, tc *e2e.TestContext, apiClient *e2e.Client) {
+			ctx := context.Background()
+			f := factories.New(tc, apiClient)
+
+			reconciliationContext := f.Context.NewContext().
+				WithName("export-list-ctx").
+				MustCreate(ctx)
+			ledgerSource := f.Source.NewSource(reconciliationContext.ID).
+				WithName("ledger").
+				AsLedger().
+				MustCreate(ctx)
+			f.Source.NewFieldMap(reconciliationContext.ID, ledgerSource.ID).
+				WithStandardMapping().
+				MustCreate(ctx)
+
+			ledgerCSV := factories.NewCSVBuilder(tc.NamePrefix()).
+				AddRow("LISTCTX-001", "100.00", "USD", "2026-01-15", "list by context test").
+				Build()
+
+			ledgerJob, err := apiClient.Ingestion.UploadCSV(
+				ctx,
+				reconciliationContext.ID,
+				ledgerSource.ID,
+				"data.csv",
+				ledgerCSV,
+			)
+			require.NoError(t, err)
+			require.NoError(
+				t,
+				e2e.WaitForJobComplete(ctx, tc, apiClient, reconciliationContext.ID, ledgerJob.ID),
+			)
+
+			// Create an export job for this context
+			exportJob, err := apiClient.Reporting.CreateExportJob(
+				ctx,
+				reconciliationContext.ID,
+				client.CreateExportJobRequest{
+					ReportType: "MATCHED",
+					Format:     "CSV",
+					DateFrom:   "2026-01-01",
+					DateTo:     "2026-12-31",
+				},
+			)
+			require.NoError(t, err)
+			require.NoError(
+				t,
+				e2e.WaitForExportJobComplete(ctx, tc, apiClient, exportJob.JobID),
+			)
+
+			secondJob, err := apiClient.Reporting.CreateExportJob(
+				ctx,
+				reconciliationContext.ID,
+				client.CreateExportJobRequest{
+					ReportType: "MATCHED",
+					Format:     "CSV",
+					DateFrom:   "2026-01-01",
+					DateTo:     "2026-12-31",
+				},
+			)
+			require.NoError(t, err)
+			require.NoError(
+				t,
+				e2e.WaitForExportJobComplete(ctx, tc, apiClient, secondJob.JobID),
+			)
+
+			otherContext := f.Context.NewContext().
+				WithName("export-list-other-ctx").
+				MustCreate(ctx)
+			otherSource := f.Source.NewSource(otherContext.ID).
+				WithName("ledger-other").
+				AsLedger().
+				MustCreate(ctx)
+			f.Source.NewFieldMap(otherContext.ID, otherSource.ID).
+				WithStandardMapping().
+				MustCreate(ctx)
+
+			otherCSV := factories.NewCSVBuilder(tc.NamePrefix()).
+				AddRow("LISTCTX-OTHER-001", "200.00", "USD", "2026-01-15", "other context export job").
+				Build()
+
+			otherJobUpload, err := apiClient.Ingestion.UploadCSV(
+				ctx,
+				otherContext.ID,
+				otherSource.ID,
+				"other.csv",
+				otherCSV,
+			)
+			require.NoError(t, err)
+			require.NoError(
+				t,
+				e2e.WaitForJobComplete(ctx, tc, apiClient, otherContext.ID, otherJobUpload.ID),
+			)
+
+			foreignJob, err := apiClient.Reporting.CreateExportJob(
+				ctx,
+				otherContext.ID,
+				client.CreateExportJobRequest{
+					ReportType: "MATCHED",
+					Format:     "CSV",
+					DateFrom:   "2026-01-01",
+					DateTo:     "2026-12-31",
+				},
+			)
+			require.NoError(t, err)
+			require.NoError(
+				t,
+				e2e.WaitForExportJobComplete(ctx, tc, apiClient, foreignJob.JobID),
+			)
+
+			page, err := apiClient.Reporting.ListExportJobsByContext(ctx, reconciliationContext.ID, map[string]string{"limit": "1"})
+			require.NoError(t, err)
+			require.NotNil(t, page)
+			require.Len(t, page.Items, 1, "limit should constrain the first page")
+			require.Equal(t, 1, page.Limit)
+			require.True(t, page.HasMore, "same-context second job should force hasMore=true")
+
+			pageJobID := page.Items[0].ID
+			require.NotEqual(t, foreignJob.JobID, pageJobID, "foreign-context job must never appear in the page")
+			require.Contains(t, []string{exportJob.JobID, secondJob.JobID}, pageJobID)
+
+			fullPage, err := apiClient.Reporting.ListExportJobsByContext(ctx, reconciliationContext.ID, map[string]string{"limit": "10"})
+			require.NoError(t, err)
+			require.NotNil(t, fullPage)
+			require.False(t, fullPage.HasMore)
+
+			seen := make(map[string]bool, len(fullPage.Items))
+			for _, job := range fullPage.Items {
+				seen[job.ID] = true
+				tc.Logf("Export job: %s, type=%s, status=%s", job.ID, job.ReportType, job.Status)
+			}
+
+			require.True(t, seen[exportJob.JobID], "expected primary context job to be present")
+			require.True(t, seen[secondJob.JobID], "expected second primary-context job to be present")
+			require.False(t, seen[foreignJob.JobID], "foreign-context job must not be returned")
+
+			tc.Logf("✓ Listed %d export jobs for context %s", len(fullPage.Items), reconciliationContext.ID)
+		},
+	)
+}
+
+// TestExportJobs_ListByContext_Empty tests listing export jobs for a context with no jobs.
+func TestExportJobs_ListByContext_Empty(t *testing.T) {
+	e2e.RunE2EWithTimeout(
+		t,
+		1*time.Minute,
+		func(t *testing.T, tc *e2e.TestContext, apiClient *e2e.Client) {
+			ctx := context.Background()
+			f := factories.New(tc, apiClient)
+
+			// Create a fresh context with no data and no export jobs
+			reconciliationContext := f.Context.NewContext().
+				WithName("export-list-empty").
+				MustCreate(ctx)
+
+			// List export jobs by context — expect empty
+			jobs, err := apiClient.Reporting.ListExportJobsByContext(ctx, reconciliationContext.ID, nil)
+			require.NoError(t, err)
+			require.NotNil(t, jobs)
+			require.Len(t, jobs.Items, 0, "new context should have no export jobs")
+
+			tc.Logf("✓ Empty export job list for context %s", reconciliationContext.ID)
+		},
+	)
+}
+
+// TestExportJobs_ListByContext_NonExistentContext verifies the endpoint returns 404 for an unknown context.
+func TestExportJobs_ListByContext_NonExistentContext(t *testing.T) {
+	e2e.RunE2EWithTimeout(
+		t,
+		1*time.Minute,
+		func(t *testing.T, tc *e2e.TestContext, apiClient *e2e.Client) {
+			ctx := context.Background()
+
+			_, err := apiClient.Reporting.ListExportJobsByContext(ctx, "00000000-0000-0000-0000-000000000111", nil)
+			require.Error(t, err)
+
+			var apiErr *client.APIError
+			require.ErrorAs(t, err, &apiErr)
+			require.True(t, apiErr.IsNotFound(), "non-existent context should return 404, got %d", apiErr.StatusCode)
+		},
+	)
+}
+
+// =============================================================================
 // Export Error Handling Tests
 // =============================================================================
 

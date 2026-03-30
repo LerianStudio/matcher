@@ -20,6 +20,7 @@ type Client struct {
 	Reporting     *client.ReportingClient
 	Governance    *client.GovernanceClient
 	Exception     *client.ExceptionClient
+	Discovery     *client.DiscoveryClient
 }
 
 // NewClient creates a new unified API client.
@@ -48,6 +49,7 @@ func NewClient(cfg *E2EConfig) (*Client, error) {
 		Reporting:     client.NewReportingClient(base),
 		Governance:    client.NewGovernanceClient(base),
 		Exception:     client.NewExceptionClient(base),
+		Discovery:     client.NewDiscoveryClient(base),
 	}, nil
 }
 

@@ -350,6 +350,32 @@ func TestReportingClient_ListExportJobs(t *testing.T) {
 	assert.Len(t, result, 2)
 }
 
+func TestReportingClient_ListExportJobsByContext(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/contexts/ctx-123/export-jobs", r.URL.Path)
+		assert.Equal(t, "1", r.URL.Query().Get("limit"))
+
+		resp := ExportJobListPage{
+			Items:   []ExportJob{{ID: "job-1", Status: "QUEUED"}},
+			Limit:   1,
+			HasMore: true,
+		}
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
+	}))
+	defer server.Close()
+
+	client := NewReportingClient(NewClient(server.URL, "tenant-123", 5*time.Second))
+	result, err := client.ListExportJobsByContext(context.Background(), "ctx-123", map[string]string{"limit": "1"})
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Len(t, result.Items, 1)
+	assert.Equal(t, 1, result.Limit)
+	assert.True(t, result.HasMore)
+}
+
 func TestReportingClient_CancelExportJob(t *testing.T) {
 	t.Parallel()
 

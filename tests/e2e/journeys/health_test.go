@@ -4,6 +4,7 @@ package journeys
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"testing"
@@ -49,6 +50,29 @@ func TestHealth_Endpoints(t *testing.T) {
 			require.NoError(t, err)
 			require.Contains(t, string(body), "swagger")
 		})
+	})
+}
+
+// TestHealth_VersionEndpoint verifies the version endpoint returns build info.
+func TestHealth_VersionEndpoint(t *testing.T) {
+	e2e.RunE2E(t, func(t *testing.T, tc *e2e.TestContext, _ *e2e.Client) {
+		cfg := tc.Config()
+		httpClient := &http.Client{Timeout: 10 * time.Second}
+
+		resp, err := httpClient.Get(cfg.AppBaseURL + "/version")
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+
+		var result map[string]interface{}
+		require.NoError(t, json.Unmarshal(body, &result))
+		require.Contains(t, result, "version")
+		require.Contains(t, result, "requestDate")
+
+		tc.Logf("Service version: %s", result["version"])
 	})
 }
 

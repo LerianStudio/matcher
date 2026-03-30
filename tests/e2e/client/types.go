@@ -337,6 +337,15 @@ type ExportJob struct {
 	DownloadURL    *string `json:"downloadUrl,omitempty"`
 }
 
+// ExportJobListPage represents a context-scoped export-job list response.
+type ExportJobListPage struct {
+	Items      []ExportJob `json:"items"`
+	NextCursor string      `json:"nextCursor,omitempty"`
+	PrevCursor string      `json:"prevCursor,omitempty"`
+	Limit      int         `json:"limit"`
+	HasMore    bool        `json:"hasMore"`
+}
+
 // CreateExportJobRequest is the payload for creating an export job.
 type CreateExportJobRequest struct {
 	ReportType string  `json:"reportType"`
@@ -737,4 +746,195 @@ type ListDisputesResponse struct {
 	Items      []DisputeResponse `json:"items"`
 	NextCursor string            `json:"nextCursor,omitempty"`
 	HasMore    bool              `json:"hasMore"`
+}
+
+// CursorPagination carries encoded next and previous cursors.
+type CursorPagination struct {
+	Next string `json:"next"`
+	Prev string `json:"prev"`
+}
+
+// MatchedItemResponse represents a matched transaction in a report.
+type MatchedItemResponse struct {
+	TransactionID string `json:"transaction_id"`
+	MatchGroupID  string `json:"match_group_id"`
+	SourceID      string `json:"source_id"`
+	Amount        string `json:"amount"`
+	Currency      string `json:"currency"`
+	Date          string `json:"date"`
+}
+
+// UnmatchedItemResponse represents an unmatched transaction in a report.
+type UnmatchedItemResponse struct {
+	TransactionID string  `json:"transaction_id"`
+	SourceID      string  `json:"source_id"`
+	Amount        string  `json:"amount"`
+	Currency      string  `json:"currency"`
+	Status        string  `json:"status"`
+	ExceptionID   *string `json:"exception_id,omitempty"`
+	DueAt         *string `json:"due_at,omitempty"`
+	Date          string  `json:"date"`
+}
+
+// SummaryReportResponse represents an aggregated summary report.
+type SummaryReportResponse struct {
+	MatchedCount    int    `json:"matched_count"`
+	UnmatchedCount  int    `json:"unmatched_count"`
+	TotalAmount     string `json:"total_amount"`
+	MatchedAmount   string `json:"matched_amount"`
+	UnmatchedAmount string `json:"unmatched_amount"`
+}
+
+// VarianceReportRowResponse represents a row in the variance report.
+type VarianceReportRowResponse struct {
+	SourceID      string  `json:"source_id"`
+	Currency      string  `json:"currency"`
+	FeeType       string  `json:"fee_type"`
+	TotalExpected string  `json:"total_expected"`
+	TotalActual   string  `json:"total_actual"`
+	NetVariance   string  `json:"net_variance"`
+	VariancePct   *string `json:"variance_pct,omitempty"`
+}
+
+// PaginatedMatchedReport wraps a paginated list of matched items.
+type PaginatedMatchedReport struct {
+	Items      []MatchedItemResponse `json:"items"`
+	Pagination CursorPagination      `json:"pagination"`
+}
+
+// PaginatedUnmatchedReport wraps a paginated list of unmatched items.
+type PaginatedUnmatchedReport struct {
+	Items      []UnmatchedItemResponse `json:"items"`
+	Pagination CursorPagination        `json:"pagination"`
+}
+
+// PaginatedVarianceReport wraps a paginated list of variance report rows.
+type PaginatedVarianceReport struct {
+	Items      []VarianceReportRowResponse `json:"items"`
+	Pagination CursorPagination            `json:"pagination"`
+}
+
+// ActorMappingResponse represents an actor mapping in API responses.
+type ActorMappingResponse struct {
+	ActorID     string  `json:"actor_id"`
+	DisplayName *string `json:"display_name,omitempty"`
+	Email       *string `json:"email,omitempty"`
+	CreatedAt   string  `json:"created_at"`
+	UpdatedAt   string  `json:"updated_at"`
+}
+
+// UpsertActorMappingRequest is the payload for creating/updating an actor mapping.
+type UpsertActorMappingRequest struct {
+	DisplayName *string `json:"display_name"`
+	Email       *string `json:"email"`
+}
+
+// ProcessCallbackRequest represents a webhook callback from an external system.
+type ProcessCallbackRequest struct {
+	CallbackType    string         `json:"callbackType"`
+	ExternalSystem  string         `json:"externalSystem"`
+	ExternalIssueID string         `json:"externalIssueId"`
+	Status          string         `json:"status"`
+	ResolutionNotes string         `json:"resolutionNotes"`
+	Assignee        string         `json:"assignee"`
+	DueAt           *string        `json:"dueAt"`
+	UpdatedAt       *string        `json:"updatedAt"`
+	Payload         map[string]any `json:"payload"`
+}
+
+// ProcessCallbackResponse represents the response for a processed callback.
+type ProcessCallbackResponse struct {
+	Status string `json:"status"`
+}
+
+// DiscoveryStatusResponse represents the discovery service status.
+type DiscoveryStatusResponse struct {
+	FetcherHealthy  bool       `json:"fetcherHealthy"`
+	ConnectionCount int        `json:"connectionCount"`
+	LastSyncAt      *time.Time `json:"lastSyncAt,omitempty"`
+}
+
+// DiscoveryConnectionResponse represents a single discovered Fetcher connection.
+type DiscoveryConnectionResponse struct {
+	ID               string    `json:"id"`
+	ConfigName       string    `json:"configName"`
+	DatabaseType     string    `json:"databaseType"`
+	Status           string    `json:"status"`
+	SchemaDiscovered bool      `json:"schemaDiscovered"`
+	LastSeenAt       time.Time `json:"lastSeenAt"`
+}
+
+// DiscoveryConnectionListResponse wraps a list of discovered connections.
+type DiscoveryConnectionListResponse struct {
+	Connections []DiscoveryConnectionResponse `json:"connections"`
+}
+
+// DiscoverySchemaColumnResponse represents a column in a discovered table schema.
+type DiscoverySchemaColumnResponse struct {
+	Name     string `json:"name"`
+	Type     string `json:"type"`
+	Nullable bool   `json:"nullable"`
+}
+
+// DiscoverySchemaTableResponse represents a table in a discovered schema.
+type DiscoverySchemaTableResponse struct {
+	TableName string                          `json:"tableName"`
+	Columns   []DiscoverySchemaColumnResponse `json:"columns"`
+}
+
+// DiscoveryConnectionSchemaResponse wraps the schema for a connection.
+type DiscoveryConnectionSchemaResponse struct {
+	ConnectionID string                         `json:"connectionId"`
+	Tables       []DiscoverySchemaTableResponse `json:"tables"`
+}
+
+// DiscoveryTestConnectionResponse represents the result of testing a connection.
+type DiscoveryTestConnectionResponse struct {
+	ConnectionID string `json:"connectionId"`
+	Healthy      bool   `json:"healthy"`
+	LatencyMs    int64  `json:"latencyMs"`
+	ErrorMessage string `json:"errorMessage,omitempty"`
+}
+
+// DiscoveryRefreshResponse represents the result of a discovery refresh.
+type DiscoveryRefreshResponse struct {
+	ConnectionsSynced int `json:"connectionsSynced"`
+}
+
+// DiscoveryExtractionTableRequest is the per-table extraction config accepted by the API.
+type DiscoveryExtractionTableRequest struct {
+	Columns []string `json:"columns,omitempty"`
+}
+
+// DiscoveryExtractionFilters represents filters for an extraction request.
+type DiscoveryExtractionFilters struct {
+	Equals map[string]string `json:"equals,omitempty"`
+}
+
+// DiscoveryStartExtractionRequest is the request body for starting an extraction.
+type DiscoveryStartExtractionRequest struct {
+	Tables    map[string]DiscoveryExtractionTableRequest `json:"tables"`
+	StartDate string                                     `json:"startDate,omitempty"`
+	EndDate   string                                     `json:"endDate,omitempty"`
+	Filters   *DiscoveryExtractionFilters                `json:"filters,omitempty"`
+}
+
+// DiscoveryExtractionTableResponse is the per-table extraction config in responses.
+type DiscoveryExtractionTableResponse struct {
+	Columns []string `json:"columns,omitempty"`
+}
+
+// DiscoveryExtractionResponse represents an extraction request in API responses.
+type DiscoveryExtractionResponse struct {
+	ID             string                                      `json:"id"`
+	ConnectionID   string                                      `json:"connectionId"`
+	IngestionJobID *string                                     `json:"ingestionJobId,omitempty"`
+	Tables         map[string]DiscoveryExtractionTableResponse `json:"tables"`
+	StartDate      string                                      `json:"startDate,omitempty"`
+	EndDate        string                                      `json:"endDate,omitempty"`
+	Filters        *DiscoveryExtractionFilters                 `json:"filters,omitempty"`
+	Status         string                                      `json:"status"`
+	ErrorMessage   string                                      `json:"errorMessage,omitempty"`
+	CreatedAt      time.Time                                   `json:"createdAt"`
+	UpdatedAt      time.Time                                   `json:"updatedAt"`
 }

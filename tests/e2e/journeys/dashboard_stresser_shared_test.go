@@ -180,7 +180,6 @@ func seededRand(seed int64) *rand.Rand {
 // Entries prefixed with "bug:" are tracked backend issues to fix.
 // When a known failure starts passing, the test will remind you to remove it.
 var knownFailures = map[string]string{
-	"ForceMatch":         "bug: MatchingGateway/ResolutionExecutor nil in bootstrap",
 	"BulkDispatch":       "bug: UUID validation issue",
 	"DispatchToExternal": "env: no external dispatch target configured",
 }

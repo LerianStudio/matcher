@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 )
 
 // ReportingClient handles reporting API endpoints.
@@ -14,7 +15,12 @@ type ReportingClient struct {
 }
 
 // NewReportingClient creates a new reporting client.
+// Panics if client is nil (test infrastructure — fail fast on misconfiguration).
 func NewReportingClient(client *Client) *ReportingClient {
+	if client == nil {
+		panic("nil client passed to NewReportingClient")
+	}
+
 	return &ReportingClient{client: client}
 }
 
@@ -326,4 +332,120 @@ func (c *ReportingClient) CountExceptions(
 		return nil, fmt.Errorf("count exceptions: %w", err)
 	}
 	return &resp, nil
+}
+
+// GetMatchedReport retrieves a paginated matched transactions report.
+func (c *ReportingClient) GetMatchedReport(
+	ctx context.Context,
+	contextID string,
+	params map[string]string,
+) (*PaginatedMatchedReport, error) {
+	var resp PaginatedMatchedReport
+	path := fmt.Sprintf("/v1/reports/contexts/%s/matched", contextID)
+	path = appendQueryParams(path, params)
+	err := c.client.DoJSON(ctx, http.MethodGet, path, nil, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("get matched report: %w", err)
+	}
+	return &resp, nil
+}
+
+// GetUnmatchedReport retrieves a paginated unmatched transactions report.
+func (c *ReportingClient) GetUnmatchedReport(
+	ctx context.Context,
+	contextID string,
+	params map[string]string,
+) (*PaginatedUnmatchedReport, error) {
+	var resp PaginatedUnmatchedReport
+	path := fmt.Sprintf("/v1/reports/contexts/%s/unmatched", contextID)
+	path = appendQueryParams(path, params)
+	err := c.client.DoJSON(ctx, http.MethodGet, path, nil, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("get unmatched report: %w", err)
+	}
+	return &resp, nil
+}
+
+// GetSummaryReport retrieves the summary report for a reconciliation context.
+func (c *ReportingClient) GetSummaryReport(
+	ctx context.Context,
+	contextID string,
+	params map[string]string,
+) (*SummaryReportResponse, error) {
+	var resp SummaryReportResponse
+	path := fmt.Sprintf("/v1/reports/contexts/%s/summary", contextID)
+	path = appendQueryParams(path, params)
+	err := c.client.DoJSON(ctx, http.MethodGet, path, nil, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("get summary report: %w", err)
+	}
+	return &resp, nil
+}
+
+// GetVarianceReport retrieves a paginated variance report.
+func (c *ReportingClient) GetVarianceReport(
+	ctx context.Context,
+	contextID string,
+	params map[string]string,
+) (*PaginatedVarianceReport, error) {
+	var resp PaginatedVarianceReport
+	path := fmt.Sprintf("/v1/reports/contexts/%s/variance", contextID)
+	path = appendQueryParams(path, params)
+	err := c.client.DoJSON(ctx, http.MethodGet, path, nil, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("get variance report: %w", err)
+	}
+	return &resp, nil
+}
+
+// CountUnmatched retrieves the unmatched transaction count for export sizing.
+func (c *ReportingClient) CountUnmatched(
+	ctx context.Context,
+	contextID, dateFrom, dateTo string,
+) (*ExportCountResponse, error) {
+	var resp ExportCountResponse
+	path := appendQueryParams(
+		fmt.Sprintf("/v1/reports/contexts/%s/unmatched/count", contextID),
+		map[string]string{
+			"date_from": dateFrom,
+			"date_to":   dateTo,
+		},
+	)
+	err := c.client.DoJSON(ctx, http.MethodGet, path, nil, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("count unmatched: %w", err)
+	}
+	return &resp, nil
+}
+
+// ListExportJobsByContext retrieves export jobs for a specific context.
+func (c *ReportingClient) ListExportJobsByContext(
+	ctx context.Context,
+	contextID string,
+	params map[string]string,
+) (*ExportJobListPage, error) {
+	var resp ExportJobListPage
+	path := appendQueryParams(
+		fmt.Sprintf("/v1/contexts/%s/export-jobs", contextID),
+		params,
+	)
+	err := c.client.DoJSON(ctx, http.MethodGet, path, nil, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("list export jobs by context: %w", err)
+	}
+	return &resp, nil
+}
+
+// appendQueryParams appends URL-encoded query parameters from a map to a URL path.
+func appendQueryParams(path string, params map[string]string) string {
+	if len(params) == 0 {
+		return path
+	}
+
+	qp := url.Values{}
+	for k, v := range params {
+		qp.Set(k, v)
+	}
+
+	return path + "?" + qp.Encode()
 }
