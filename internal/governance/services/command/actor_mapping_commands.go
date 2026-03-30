@@ -2,6 +2,7 @@ package command
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
@@ -17,8 +18,11 @@ import (
 // HandleSpanBusinessErrorEvent and create business-aware variants for 400/404 responses.
 // See reporting/adapters/http/handlers_export_job.go for the reference implementation.
 
-// ErrNilActorMappingRepository is an alias for the domain sentinel error.
-var ErrNilActorMappingRepository = entities.ErrNilActorMappingRepository
+// Sentinel errors for actor-mapping command operations.
+var (
+	ErrNilActorMappingRepository = entities.ErrNilActorMappingRepository
+	ErrNilPersistedActorMapping  = errors.New("actor mapping repository returned nil mapping")
+)
 
 // ActorMappingUseCase handles command operations for actor mappings.
 type ActorMappingUseCase struct {
@@ -35,7 +39,9 @@ func NewActorMappingUseCase(repo repositories.ActorMappingRepository) (*ActorMap
 }
 
 // UpsertActorMapping creates or updates an actor mapping.
-func (uc *ActorMappingUseCase) UpsertActorMapping(ctx context.Context, actorID string, displayName, email *string) error {
+// Returns the persisted entity (including DB-generated timestamps) so the handler
+// can respond without a separate read query, avoiding read-replica lag issues.
+func (uc *ActorMappingUseCase) UpsertActorMapping(ctx context.Context, actorID string, displayName, email *string) (*entities.ActorMapping, error) {
 	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
 	ctx, span := tracer.Start(ctx, "service.governance.upsert_actor_mapping")
 
@@ -47,18 +53,27 @@ func (uc *ActorMappingUseCase) UpsertActorMapping(ctx context.Context, actorID s
 
 		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("invalid actor mapping input: %v", err))
 
-		return fmt.Errorf("create actor mapping entity: %w", err)
+		return nil, fmt.Errorf("create actor mapping entity: %w", err)
 	}
 
-	if err := uc.repo.Upsert(ctx, mapping); err != nil {
+	result, err := uc.repo.Upsert(ctx, mapping)
+	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to upsert actor mapping", err)
 
 		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to upsert actor mapping: %v", err))
 
-		return fmt.Errorf("upsert actor mapping: %w", err)
+		return nil, fmt.Errorf("upsert actor mapping: %w", err)
 	}
 
-	return nil
+	if result == nil {
+		libOpentelemetry.HandleSpanError(span, "actor mapping repository returned nil mapping", ErrNilPersistedActorMapping)
+
+		logger.Log(ctx, libLog.LevelError, ErrNilPersistedActorMapping.Error())
+
+		return nil, ErrNilPersistedActorMapping
+	}
+
+	return result, nil
 }
 
 // PseudonymizeActor replaces PII fields with [REDACTED] for GDPR compliance.

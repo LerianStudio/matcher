@@ -13,8 +13,10 @@ import (
 // This is a mutable repository (unlike AuditLogRepository) to support GDPR compliance.
 type ActorMappingRepository interface {
 	// Upsert creates or updates an actor mapping.
-	// Uses INSERT ... ON CONFLICT (actor_id) DO UPDATE for idempotency.
-	Upsert(ctx context.Context, mapping *entities.ActorMapping) error
+	// Uses INSERT ... ON CONFLICT (actor_id) DO UPDATE ... RETURNING for idempotency.
+	// Returns the persisted entity (including DB-generated timestamps) so callers
+	// do not need a separate read, avoiding read-replica lag issues.
+	Upsert(ctx context.Context, mapping *entities.ActorMapping) (*entities.ActorMapping, error)
 
 	// GetByActorID retrieves an actor mapping by its actor ID.
 	// Returns ErrActorMappingNotFound if no mapping exists.

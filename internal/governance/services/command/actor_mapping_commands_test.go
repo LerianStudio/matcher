@@ -58,15 +58,17 @@ func TestUpsertActorMapping(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		repo := mocks.NewMockActorMappingRepository(ctrl)
-		repo.EXPECT().Upsert(gomock.Any(), gomock.Any()).Return(nil)
+		repo.EXPECT().Upsert(gomock.Any(), gomock.Any()).Return(&entities.ActorMapping{ActorID: "actor-123"}, nil)
 
 		uc, err := NewActorMappingUseCase(repo)
 		require.NoError(t, err)
 
 		displayName := "John Doe"
 		email := "john@example.com"
-		err = uc.UpsertActorMapping(testContext(), "actor-123", &displayName, &email)
+		result, err := uc.UpsertActorMapping(testContext(), "actor-123", &displayName, &email)
 		assert.NoError(t, err)
+		assert.NotNil(t, result)
+		assert.Equal(t, "actor-123", result.ActorID)
 	})
 
 	t.Run("success with nil optional fields", func(t *testing.T) {
@@ -74,13 +76,14 @@ func TestUpsertActorMapping(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		repo := mocks.NewMockActorMappingRepository(ctrl)
-		repo.EXPECT().Upsert(gomock.Any(), gomock.Any()).Return(nil)
+		repo.EXPECT().Upsert(gomock.Any(), gomock.Any()).Return(&entities.ActorMapping{ActorID: "actor-123"}, nil)
 
 		uc, err := NewActorMappingUseCase(repo)
 		require.NoError(t, err)
 
-		err = uc.UpsertActorMapping(testContext(), "actor-123", nil, nil)
+		result, err := uc.UpsertActorMapping(testContext(), "actor-123", nil, nil)
 		assert.NoError(t, err)
+		assert.NotNil(t, result)
 	})
 
 	t.Run("empty actor id returns entity validation error", func(t *testing.T) {
@@ -92,9 +95,10 @@ func TestUpsertActorMapping(t *testing.T) {
 		uc, err := NewActorMappingUseCase(repo)
 		require.NoError(t, err)
 
-		err = uc.UpsertActorMapping(testContext(), "", nil, nil)
+		result, err := uc.UpsertActorMapping(testContext(), "", nil, nil)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, entities.ErrActorIDRequired)
+		assert.Nil(t, result)
 	})
 
 	t.Run("repository error", func(t *testing.T) {
@@ -102,15 +106,32 @@ func TestUpsertActorMapping(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		repo := mocks.NewMockActorMappingRepository(ctrl)
-		repo.EXPECT().Upsert(gomock.Any(), gomock.Any()).Return(errTestRepoFailure)
+		repo.EXPECT().Upsert(gomock.Any(), gomock.Any()).Return(nil, errTestRepoFailure)
 
 		uc, err := NewActorMappingUseCase(repo)
 		require.NoError(t, err)
 
 		displayName := "Jane"
-		err = uc.UpsertActorMapping(testContext(), "actor-456", &displayName, nil)
+		result, err := uc.UpsertActorMapping(testContext(), "actor-456", &displayName, nil)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, errTestRepoFailure)
+		assert.Nil(t, result)
+	})
+
+	t.Run("nil persisted mapping returns sentinel error", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		repo := mocks.NewMockActorMappingRepository(ctrl)
+		repo.EXPECT().Upsert(gomock.Any(), gomock.Any()).Return(nil, nil)
+
+		uc, err := NewActorMappingUseCase(repo)
+		require.NoError(t, err)
+
+		displayName := "Jane"
+		result, err := uc.UpsertActorMapping(testContext(), "actor-789", &displayName, nil)
+		require.ErrorIs(t, err, ErrNilPersistedActorMapping)
+		assert.Nil(t, result)
 	})
 }
 

@@ -3,6 +3,7 @@ package http
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 
@@ -21,6 +22,7 @@ var (
 	ErrActorMappingQueryUCRequired   = errors.New("actor mapping query use case is required")
 	ErrMissingActorID                = errors.New("actor id path parameter is required")
 	ErrAtLeastOneFieldRequired       = errors.New("at least one of display_name or email must be provided")
+	ErrNilActorMappingResponse       = errors.New("nil mapping after successful upsert")
 )
 
 // ActorMappingHandler handles HTTP requests for actor mapping operations.
@@ -69,7 +71,7 @@ func (ha *ActorMappingHandler) UpsertActorMapping(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.governance.upsert_actor_mapping")
 	defer span.End()
 
-	actorID := fiberCtx.Params("actorId")
+	actorID := strings.TrimSpace(fiberCtx.Params("actorId"))
 	if actorID == "" {
 		return badRequest(ctx, fiberCtx, span, logger, "actor id is required", ErrMissingActorID)
 	}
@@ -84,7 +86,12 @@ func (ha *ActorMappingHandler) UpsertActorMapping(fiberCtx *fiber.Ctx) error {
 		return badRequest(ctx, fiberCtx, span, logger, ErrAtLeastOneFieldRequired.Error(), ErrAtLeastOneFieldRequired)
 	}
 
-	if err := ha.commandUC.UpsertActorMapping(ctx, actorID, req.DisplayName, req.Email); err != nil {
+	if len(actorID) > entities.MaxActorMappingActorIDLength {
+		return badRequest(ctx, fiberCtx, span, logger, "actor id exceeds maximum length", entities.ErrActorIDExceedsMaxLen)
+	}
+
+	mapping, err := ha.commandUC.UpsertActorMapping(ctx, actorID, req.DisplayName, req.Email)
+	if err != nil {
 		if errors.Is(err, entities.ErrActorIDRequired) || errors.Is(err, entities.ErrActorIDExceedsMaxLen) {
 			return badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
 		}
@@ -92,10 +99,8 @@ func (ha *ActorMappingHandler) UpsertActorMapping(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(ctx, fiberCtx, span, logger, "failed to upsert actor mapping", err)
 	}
 
-	// Retrieve the upserted mapping to return a complete response.
-	mapping, err := ha.queryUC.GetActorMapping(ctx, actorID)
-	if err != nil {
-		return writeServiceError(ctx, fiberCtx, span, logger, "failed to retrieve actor mapping after upsert", err)
+	if mapping == nil {
+		return writeServiceError(ctx, fiberCtx, span, logger, "upsert returned nil mapping", ErrNilActorMappingResponse)
 	}
 
 	if writeErr := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ActorMappingToResponse(mapping)); writeErr != nil {

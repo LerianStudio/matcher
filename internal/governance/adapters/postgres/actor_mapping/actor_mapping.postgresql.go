@@ -34,24 +34,25 @@ func NewRepository(provider ports.InfrastructureProvider) *Repository {
 	return &Repository{provider: provider}
 }
 
-// Upsert creates or updates an actor mapping using INSERT ... ON CONFLICT DO UPDATE.
-func (repo *Repository) Upsert(ctx context.Context, mapping *entities.ActorMapping) error {
+// Upsert creates or updates an actor mapping using INSERT ... ON CONFLICT DO UPDATE ... RETURNING.
+// Returns the persisted entity so callers can use it directly without a separate read.
+func (repo *Repository) Upsert(ctx context.Context, mapping *entities.ActorMapping) (*entities.ActorMapping, error) {
 	return repo.upsertInternal(ctx, nil, mapping)
 }
 
 // UpsertWithTx creates or updates an actor mapping within an existing transaction.
-func (repo *Repository) UpsertWithTx(ctx context.Context, tx *sql.Tx, mapping *entities.ActorMapping) error {
+func (repo *Repository) UpsertWithTx(ctx context.Context, tx *sql.Tx, mapping *entities.ActorMapping) (*entities.ActorMapping, error) {
 	return repo.upsertInternal(ctx, tx, mapping)
 }
 
 // upsertInternal contains the core upsert logic, optionally reusing an external transaction.
-func (repo *Repository) upsertInternal(ctx context.Context, tx *sql.Tx, mapping *entities.ActorMapping) error {
+func (repo *Repository) upsertInternal(ctx context.Context, tx *sql.Tx, mapping *entities.ActorMapping) (*entities.ActorMapping, error) {
 	if repo == nil || repo.provider == nil {
-		return ErrRepositoryNotInitialized
+		return nil, ErrRepositoryNotInitialized
 	}
 
 	if mapping == nil {
-		return ErrActorMappingRequired
+		return nil, ErrActorMappingRequired
 	}
 
 	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
@@ -59,26 +60,24 @@ func (repo *Repository) upsertInternal(ctx context.Context, tx *sql.Tx, mapping 
 
 	defer span.End()
 
-	_, err := pgcommon.WithTenantTxOrExistingProvider(
+	result, err := pgcommon.WithTenantTxOrExistingProvider(
 		ctx,
 		repo.provider,
 		tx,
-		func(innerTx *sql.Tx) (struct{}, error) {
+		func(innerTx *sql.Tx) (*entities.ActorMapping, error) {
 			query, args, err := psql.
 				Insert(tableName).
 				Columns("actor_id", "display_name", "email", "created_at", "updated_at").
 				Values(mapping.ActorID, mapping.DisplayName, mapping.Email, mapping.CreatedAt, mapping.UpdatedAt).
-				Suffix("ON CONFLICT (actor_id) DO UPDATE SET display_name = EXCLUDED.display_name, email = EXCLUDED.email, updated_at = EXCLUDED.updated_at").
+				Suffix("ON CONFLICT (actor_id) DO UPDATE SET display_name = COALESCE(EXCLUDED.display_name, actor_mapping.display_name), email = COALESCE(EXCLUDED.email, actor_mapping.email), updated_at = EXCLUDED.updated_at RETURNING actor_id, display_name, email, created_at, updated_at").
 				ToSql()
 			if err != nil {
-				return struct{}{}, fmt.Errorf("building upsert query: %w", err)
+				return nil, fmt.Errorf("building upsert query: %w", err)
 			}
 
-			if _, err := innerTx.ExecContext(ctx, query, args...); err != nil {
-				return struct{}{}, fmt.Errorf("executing upsert: %w", err)
-			}
+			row := innerTx.QueryRowContext(ctx, query, args...)
 
-			return struct{}{}, nil
+			return scanActorMapping(row)
 		},
 	)
 	if err != nil {
@@ -87,10 +86,10 @@ func (repo *Repository) upsertInternal(ctx context.Context, tx *sql.Tx, mapping 
 
 		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to upsert actor mapping: %v", wrappedErr))
 
-		return wrappedErr
+		return nil, wrappedErr
 	}
 
-	return nil
+	return result, nil
 }
 
 // GetByActorID retrieves an actor mapping by its actor ID.
