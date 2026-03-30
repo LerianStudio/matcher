@@ -1,3 +1,18 @@
+## [1.3.0-beta.3](https://github.com/LerianStudio/matcher/compare/v1.3.0-beta.2...v1.3.0-beta.3) (2026-03-30)
+
+
+### Features
+
+* **m2m:** add M2M credential provider with AWS Secrets Manager ([d658c86](https://github.com/LerianStudio/matcher/commit/d658c860016b61c599ed0dff4dfe323abc70582e))
+* **multi-tenant:** cache tenant middleware with TenantCache and RWMutex ([cac4412](https://github.com/LerianStudio/matcher/commit/cac4412de5c44c768a7e3c3320872892454083f2))
+* **multi-tenant:** expand tenancy config with Redis, caching, timeout, and M2M settings ([4c02f5e](https://github.com/LerianStudio/matcher/commit/4c02f5e0f074059aebc583690cb782e26ac38f5a))
+* **discovery:** integrate M2M credentials into Fetcher client ([623a01d](https://github.com/LerianStudio/matcher/commit/623a01df2b4f21e52c2c21c18dbb318dd8041322))
+
+
+### Bug Fixes
+
+* **shared:** address CI lint and CodeRabbit review findings ([f1b3cb4](https://github.com/LerianStudio/matcher/commit/f1b3cb400a7b8e3fad0d8c1d66a71045a46379ce))
+
 ## [1.3.0-beta.2](https://github.com/LerianStudio/matcher/compare/v1.3.0-beta.1...v1.3.0-beta.2) (2026-03-26)
 
 
