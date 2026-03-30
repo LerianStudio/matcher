@@ -29,10 +29,15 @@ func getMockFetcher() *mock.MockFetcherServer {
 	return mockFetcher
 }
 
-type systemplaneFetcherSnapshot struct {
-	Enabled         bool
-	URL             string
-	AllowPrivateIPs bool
+// fetcherConfigKeys are the systemplane keys that patchSystemplaneFetcherConfig
+// modifies. The snapshot captures only keys that were actually present so the
+// restore PATCH doesn't create absent keys with zero values (which would shadow
+// the registry defaults — e.g. fetcher.url default is http://localhost:4006,
+// not "").
+var fetcherConfigKeys = []string{
+	"fetcher.enabled",
+	"fetcher.url",
+	"fetcher.allow_private_ips",
 }
 
 type systemplaneConfigResponse struct {
@@ -66,51 +71,23 @@ func readSystemplaneConfig(appBaseURL string) (*systemplaneConfigResponse, error
 	return &current, nil
 }
 
-func readFetcherSnapshot(appBaseURL string) (*systemplaneFetcherSnapshot, error) {
+// readFetcherSnapshot captures the current values of fetcher config keys.
+// Only keys that are actually present in the systemplane response are included;
+// absent keys are omitted so the restore PATCH won't create them.
+func readFetcherSnapshot(appBaseURL string) (map[string]any, error) {
 	current, err := readSystemplaneConfig(appBaseURL)
 	if err != nil {
 		return nil, err
 	}
 
-	return &systemplaneFetcherSnapshot{
-		Enabled:         lookupBoolConfigValue(current.Values, "fetcher.enabled"),
-		URL:             lookupStringConfigValue(current.Values, "fetcher.url"),
-		AllowPrivateIPs: lookupBoolConfigValue(current.Values, "fetcher.allow_private_ips"),
-	}, nil
-}
-
-func lookupBoolConfigValue(values map[string]struct {
-	Value any `json:"value"`
-}, key string,
-) bool {
-	entry, ok := values[key]
-	if !ok {
-		return false
+	snap := make(map[string]any, len(fetcherConfigKeys))
+	for _, key := range fetcherConfigKeys {
+		if entry, ok := current.Values[key]; ok {
+			snap[key] = entry.Value
+		}
 	}
 
-	value, ok := entry.Value.(bool)
-	if !ok {
-		return false
-	}
-
-	return value
-}
-
-func lookupStringConfigValue(values map[string]struct {
-	Value any `json:"value"`
-}, key string,
-) string {
-	entry, ok := values[key]
-	if !ok {
-		return ""
-	}
-
-	value, ok := entry.Value.(string)
-	if !ok {
-		return ""
-	}
-
-	return value
+	return snap, nil
 }
 
 func patchSystemplaneConfigValues(appBaseURL string, values map[string]any) error {
@@ -164,11 +141,12 @@ func patchSystemplaneFetcherConfig(appBaseURL string, port int) (func() error, e
 		return nil, err
 	}
 
+	// Restore only keys that were originally present. Absent keys stay as-is
+	// (the test value persists, but fetcher.enabled=false disables the client).
 	return func() error {
-		return patchSystemplaneConfigValues(appBaseURL, map[string]any{
-			"fetcher.enabled":           snapshot.Enabled,
-			"fetcher.url":               snapshot.URL,
-			"fetcher.allow_private_ips": snapshot.AllowPrivateIPs,
-		})
+		if len(snapshot) == 0 {
+			return nil
+		}
+		return patchSystemplaneConfigValues(appBaseURL, snapshot)
 	}, nil
 }
