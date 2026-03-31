@@ -156,6 +156,12 @@ services:
       CLEANUP_WORKER_ENABLED: "true"
       # Rate limiting - disabled for development/e2e testing
       RATE_LIMIT_ENABLED: "false"
+      # Discovery / Fetcher — disabled by default; E2E discovery tests enable
+      # these via env vars before starting the stack (see make test-e2e-discovery).
+      FETCHER_ENABLED: "${FETCHER_ENABLED:-false}"
+      FETCHER_URL: "${FETCHER_URL:-http://host.docker.internal:14006}"
+      FETCHER_ALLOW_PRIVATE_IPS: "${FETCHER_ALLOW_PRIVATE_IPS:-false}"
+      FETCHER_DISCOVERY_INTERVAL_SEC: "${FETCHER_DISCOVERY_INTERVAL_SEC:-3600}"
       # Systemplane
       SYSTEMPLANE_SECRET_MASTER_KEY: ${SYSTEMPLANE_SECRET_MASTER_KEY:-+PnwgNy8bL3HGT1rOXp47PqyGcPywXH/epgmSVwPkL0=}
       # Build settings
@@ -163,6 +169,12 @@ services:
       GOFLAGS: "-mod=mod"
     ports:
       - "4018:4018"
+    extra_hosts:
+      # Allows the container to reach services on the Docker host (e.g., the
+      # mock Fetcher server started by E2E tests).  On Docker Desktop (macOS /
+      # Windows) `host.docker.internal` is resolved automatically; the
+      # host-gateway mapping ensures it also works on Linux.
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./:/app
       - go_build_cache:/root/.cache/go-build

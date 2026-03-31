@@ -1127,6 +1127,22 @@ func TestHandleExceptionError_AllMappings(t *testing.T) {
 			expectedMessage: command.ErrZeroAdjustmentAmount.Error(),
 		},
 		{
+			name:            "negative adjustment amount returns bad request",
+			err:             command.ErrNegativeAdjustmentAmount,
+			expectedStatus:  fiber.StatusBadRequest,
+			expectedCode:    400,
+			expectedTitle:   "invalid_request",
+			expectedMessage: command.ErrNegativeAdjustmentAmount.Error(),
+		},
+		{
+			name:            "invalid override reason returns bad request",
+			err:             value_objects.ErrInvalidOverrideReason,
+			expectedStatus:  fiber.StatusBadRequest,
+			expectedCode:    400,
+			expectedTitle:   "invalid_request",
+			expectedMessage: value_objects.ErrInvalidOverrideReason.Error(),
+		},
+		{
 			name:            "invalid currency returns bad request",
 			err:             command.ErrInvalidCurrency,
 			expectedStatus:  fiber.StatusBadRequest,
@@ -2000,6 +2016,40 @@ func TestHandleDispatchError_ActorRequired(t *testing.T) {
 	)
 }
 
+func TestHandleDispatchError_ConnectorNotConfigured(t *testing.T) {
+	t.Parallel()
+
+	wrappedErr := fmt.Errorf("dispatch to jira: %w: JIRA", command.ErrDispatchConnectorNotConfigured)
+
+	resp := executeErrorHandler(t, handleDispatchError, wrappedErr)
+
+	requireErrorResponse(
+		t,
+		resp,
+		fiber.StatusUnprocessableEntity,
+		422,
+		"unprocessable_entity",
+		"connector not configured for target system",
+	)
+}
+
+func TestHandleDispatchError_ExceptionNotFound(t *testing.T) {
+	t.Parallel()
+
+	wrappedErr := fmt.Errorf("find exception: %w", entities.ErrExceptionNotFound)
+
+	resp := executeErrorHandler(t, handleDispatchError, wrappedErr)
+
+	requireErrorResponse(
+		t,
+		resp,
+		fiber.StatusNotFound,
+		404,
+		"not_found",
+		"exception not found",
+	)
+}
+
 func TestValidationOrder_ProviderChecks(t *testing.T) {
 	t.Parallel()
 
@@ -2400,7 +2450,7 @@ func TestListExceptions_ExternalSystemExceedsMaxLength(t *testing.T) {
 	handlers := newExceptionHandlers(t, &stubExceptionRepo{})
 	app.Get("/v1/exceptions", handlers.ListExceptions)
 
-	longExtSystem := strings.Repeat("x", 51)
+	longExtSystem := strings.Repeat("x", libHTTP.MaxQueryParamLengthLong+1)
 	request := httptest.NewRequest(
 		http.MethodGet,
 		"/v1/exceptions?external_system="+longExtSystem,
@@ -2456,7 +2506,7 @@ func TestParseExceptionFilter_ExternalSystemExceedsMaxLength(t *testing.T) {
 		return c.SendStatus(fiber.StatusOK)
 	})
 
-	longExtSystem := strings.Repeat("x", 51)
+	longExtSystem := strings.Repeat("x", libHTTP.MaxQueryParamLengthLong+1)
 	request := httptest.NewRequest(http.MethodGet, "/test?external_system="+longExtSystem, http.NoBody)
 	resp, err := app.Test(request)
 	require.NoError(t, err)
@@ -2508,7 +2558,7 @@ func TestParseExceptionFilter_ExternalSystemAtExactLimit(t *testing.T) {
 		return c.SendStatus(fiber.StatusOK)
 	})
 
-	exactExtSystem := strings.Repeat("x", 50)
+	exactExtSystem := strings.Repeat("x", libHTTP.MaxQueryParamLengthLong)
 	request := httptest.NewRequest(http.MethodGet, "/test?external_system="+exactExtSystem, http.NoBody)
 	resp, err := app.Test(request)
 	require.NoError(t, err)

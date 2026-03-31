@@ -23,6 +23,12 @@ type Client struct {
 	userID     string
 }
 
+// RequestOptions customize outgoing test requests.
+type RequestOptions struct {
+	Headers        map[string]string
+	IdempotencyKey string
+}
+
 // DefaultUserID is the default user ID for e2e tests when auth is disabled.
 const DefaultUserID = "e2e-test-user@example.com"
 
@@ -54,6 +60,17 @@ func (c *Client) Do(
 	body io.Reader,
 	contentType string,
 ) (*http.Response, error) {
+	return c.DoWithOptions(ctx, method, path, body, contentType, RequestOptions{})
+}
+
+// DoWithOptions performs an HTTP request with tenant headers and optional overrides.
+func (c *Client) DoWithOptions(
+	ctx context.Context,
+	method, path string,
+	body io.Reader,
+	contentType string,
+	opts RequestOptions,
+) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -68,7 +85,15 @@ func (c *Client) Do(
 
 	// Add unique idempotency key for write operations to prevent caching between tests
 	if method == http.MethodPost || method == http.MethodPut || method == http.MethodPatch {
-		req.Header.Set("X-Idempotency-Key", uuid.New().String())
+		idempotencyKey := opts.IdempotencyKey
+		if idempotencyKey == "" {
+			idempotencyKey = uuid.New().String()
+		}
+		req.Header.Set("X-Idempotency-Key", idempotencyKey)
+	}
+
+	for key, value := range opts.Headers {
+		req.Header.Set(key, value)
 	}
 
 	return c.httpClient.Do(req)
@@ -77,6 +102,16 @@ func (c *Client) Do(
 // DoJSON performs a JSON request and decodes the response.
 // The response body is read and closed internally.
 func (c *Client) DoJSON(ctx context.Context, method, path string, reqBody, respBody any) error {
+	return c.DoJSONWithOptions(ctx, method, path, reqBody, respBody, RequestOptions{})
+}
+
+// DoJSONWithOptions performs a JSON request and decodes the response with request options.
+func (c *Client) DoJSONWithOptions(
+	ctx context.Context,
+	method, path string,
+	reqBody, respBody any,
+	opts RequestOptions,
+) error {
 	var body io.Reader
 	if reqBody != nil {
 		data, err := json.Marshal(reqBody)
@@ -86,7 +121,7 @@ func (c *Client) DoJSON(ctx context.Context, method, path string, reqBody, respB
 		body = bytes.NewReader(data)
 	}
 
-	resp, err := c.Do(ctx, method, path, body, "application/json")
+	resp, err := c.DoWithOptions(ctx, method, path, body, "application/json", opts)
 	if err != nil {
 		return err
 	}

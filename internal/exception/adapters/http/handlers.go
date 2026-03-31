@@ -301,9 +301,11 @@ var exceptionErrorMappings = []errorMapping{
 	{command.ErrExceptionIDRequired, badRequest, ""},
 	{command.ErrActorRequired, badRequest, ""},
 	{command.ErrZeroAdjustmentAmount, badRequest, ""},
+	{command.ErrNegativeAdjustmentAmount, badRequest, ""},
 	{command.ErrInvalidCurrency, badRequest, ""},
 	{value_objects.ErrInvalidCurrencyCode, badRequest, ""},
 	{value_objects.ErrInvalidAdjustmentReason, badRequest, ""},
+	{value_objects.ErrInvalidOverrideReason, badRequest, ""},
 	{entities.ErrResolutionNotesRequired, badRequest, ""},
 
 	// State transition errors -> 422
@@ -682,7 +684,7 @@ func (handler *Handlers) SubmitEvidence(fiberCtx *fiber.Ctx) error {
 // @Param status query string false "Filter by status" Enums(OPEN,ASSIGNED,RESOLVED)
 // @Param severity query string false "Filter by severity" Enums(LOW,MEDIUM,HIGH,CRITICAL)
 // @Param assigned_to query string false "Filter by assigned user"
-// @Param external_system query string false "Filter by external system" Enums(JIRA,SERVICENOW,WEBHOOK)
+// @Param external_system query string false "Filter by external system"
 // @Param date_from query string false "Filter from date (RFC3339)"
 // @Param date_to query string false "Filter to date (RFC3339)"
 // @Param cursor query string false "Cursor for pagination (opaque)"
@@ -942,7 +944,7 @@ func parseExceptionFilter(fiberCtx *fiber.Ctx) (repositories.ExceptionFilter, er
 	}
 
 	if externalSystem := fiberCtx.Query("external_system"); externalSystem != "" {
-		if err := libHTTP.ValidateQueryParamLength(externalSystem, "external_system", libHTTP.MaxQueryParamLengthShort); err != nil {
+		if err := libHTTP.ValidateQueryParamLength(externalSystem, "external_system", libHTTP.MaxQueryParamLengthLong); err != nil {
 			return filter, fmt.Errorf("invalid external_system: %w", err)
 		}
 
@@ -1066,7 +1068,7 @@ func (handler *Handlers) GetException(fiberCtx *fiber.Ctx) error {
 // @Failure 401 {object} ErrorResponse "Unauthorized"
 // @Failure 403 {object} ErrorResponse "Forbidden"
 // @Failure 404 {object} ErrorResponse "Exception not found"
-// @Failure 422 {object} ErrorResponse "Unprocessable entity: invalid state transition"
+// @Failure 422 {object} ErrorResponse "Unprocessable entity: invalid state transition or connector not configured"
 // @Failure 500 {object} ErrorResponse "Internal server error"
 // @Router /v1/exceptions/{exceptionId}/dispatch [post]
 func (handler *Handlers) DispatchToExternal(fiberCtx *fiber.Ctx) error {
@@ -1122,7 +1124,9 @@ func handleDispatchError(
 	logger libLog.Logger,
 	err error,
 ) error {
-	if errors.Is(err, sql.ErrNoRows) {
+	// Not-found: raw sql.ErrNoRows is a defensive fallback for edge cases where
+	// the repository does not convert to the domain error.
+	if errors.Is(err, sql.ErrNoRows) || errors.Is(err, entities.ErrExceptionNotFound) {
 		return notFound(ctx, fiberCtx, span, logger, "exception not found", err)
 	}
 
@@ -1134,6 +1138,10 @@ func handleDispatchError(
 
 	if errors.Is(err, command.ErrUnsupportedTargetSystem) {
 		return unprocessable(ctx, fiberCtx, span, logger, err.Error(), err)
+	}
+
+	if errors.Is(err, command.ErrDispatchConnectorNotConfigured) {
+		return unprocessable(ctx, fiberCtx, span, logger, "connector not configured for target system", err)
 	}
 
 	return internalError(ctx, fiberCtx, span, logger, "failed to dispatch exception", err)

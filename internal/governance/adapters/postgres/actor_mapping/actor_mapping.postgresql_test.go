@@ -55,7 +55,7 @@ func TestRepository_NilProvider(t *testing.T) {
 	repo := NewRepository(nil)
 	ctx := context.Background()
 
-	err := repo.Upsert(ctx, &entities.ActorMapping{})
+	_, err := repo.Upsert(ctx, &entities.ActorMapping{})
 	require.ErrorIs(t, err, ErrRepositoryNotInitialized)
 
 	_, err = repo.GetByActorID(ctx, "actor-1")
@@ -74,7 +74,7 @@ func TestUpsert_NilMapping(t *testing.T) {
 	repo := NewRepository(&testutil.MockInfrastructureProvider{})
 	ctx := contextWithTenant()
 
-	err := repo.Upsert(ctx, nil)
+	_, err := repo.Upsert(ctx, nil)
 	require.ErrorIs(t, err, ErrActorMappingRequired)
 }
 
@@ -98,15 +98,24 @@ func TestUpsert_Success(t *testing.T) {
 	}
 
 	mock.ExpectBegin()
-	mock.ExpectExec(regexp.QuoteMeta(
-		`INSERT INTO actor_mapping (actor_id,display_name,email,created_at,updated_at) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (actor_id) DO UPDATE SET display_name = EXCLUDED.display_name, email = EXCLUDED.email, updated_at = EXCLUDED.updated_at`,
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`INSERT INTO actor_mapping (actor_id,display_name,email,created_at,updated_at) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (actor_id) DO UPDATE SET display_name = COALESCE(EXCLUDED.display_name, actor_mapping.display_name), email = COALESCE(EXCLUDED.email, actor_mapping.email), updated_at = EXCLUDED.updated_at RETURNING actor_id, display_name, email, created_at, updated_at`,
 	)).
 		WithArgs("actor-123", &displayName, &email, now, now).
-		WillReturnResult(sqlmock.NewResult(0, 1))
+		WillReturnRows(sqlmock.NewRows(actorMappingTestColumns).
+			AddRow("actor-123", &displayName, &email, now, now))
 	mock.ExpectCommit()
 
-	err := repo.Upsert(ctx, mapping)
+	result, err := repo.Upsert(ctx, mapping)
 	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "actor-123", result.ActorID)
+	require.NotNil(t, result.DisplayName)
+	require.Equal(t, "John Doe", *result.DisplayName)
+	require.NotNil(t, result.Email)
+	require.Equal(t, "john@example.com", *result.Email)
+	require.Equal(t, now, result.CreatedAt)
+	require.Equal(t, now, result.UpdatedAt)
 }
 
 func TestUpsert_NilOptionalFields(t *testing.T) {
@@ -125,15 +134,20 @@ func TestUpsert_NilOptionalFields(t *testing.T) {
 	}
 
 	mock.ExpectBegin()
-	mock.ExpectExec(regexp.QuoteMeta(
-		`INSERT INTO actor_mapping (actor_id,display_name,email,created_at,updated_at) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (actor_id) DO UPDATE SET display_name = EXCLUDED.display_name, email = EXCLUDED.email, updated_at = EXCLUDED.updated_at`,
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`INSERT INTO actor_mapping (actor_id,display_name,email,created_at,updated_at) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (actor_id) DO UPDATE SET display_name = COALESCE(EXCLUDED.display_name, actor_mapping.display_name), email = COALESCE(EXCLUDED.email, actor_mapping.email), updated_at = EXCLUDED.updated_at RETURNING actor_id, display_name, email, created_at, updated_at`,
 	)).
 		WithArgs("actor-456", nil, nil, now, now).
-		WillReturnResult(sqlmock.NewResult(0, 1))
+		WillReturnRows(sqlmock.NewRows(actorMappingTestColumns).
+			AddRow("actor-456", nil, nil, now, now))
 	mock.ExpectCommit()
 
-	err := repo.Upsert(ctx, mapping)
+	result, err := repo.Upsert(ctx, mapping)
 	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "actor-456", result.ActorID)
+	require.Nil(t, result.DisplayName)
+	require.Nil(t, result.Email)
 }
 
 func TestUpsert_DatabaseError(t *testing.T) {
@@ -152,14 +166,15 @@ func TestUpsert_DatabaseError(t *testing.T) {
 	}
 
 	mock.ExpectBegin()
-	mock.ExpectExec(regexp.QuoteMeta(
-		`INSERT INTO actor_mapping (actor_id,display_name,email,created_at,updated_at) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (actor_id) DO UPDATE SET display_name = EXCLUDED.display_name, email = EXCLUDED.email, updated_at = EXCLUDED.updated_at`,
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`INSERT INTO actor_mapping (actor_id,display_name,email,created_at,updated_at) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (actor_id) DO UPDATE SET display_name = COALESCE(EXCLUDED.display_name, actor_mapping.display_name), email = COALESCE(EXCLUDED.email, actor_mapping.email), updated_at = EXCLUDED.updated_at RETURNING actor_id, display_name, email, created_at, updated_at`,
 	)).
 		WillReturnError(errTestDatabaseError)
 	mock.ExpectRollback()
 
-	err := repo.Upsert(ctx, mapping)
+	result, err := repo.Upsert(ctx, mapping)
 	require.Error(t, err)
+	require.Nil(t, result)
 	require.Contains(t, err.Error(), "upsert actor mapping")
 }
 
@@ -170,7 +185,7 @@ func TestUpsertWithTx_NilRepository(t *testing.T) {
 
 	ctx := contextWithTenant()
 
-	err := repo.UpsertWithTx(ctx, nil, &entities.ActorMapping{})
+	_, err := repo.UpsertWithTx(ctx, nil, &entities.ActorMapping{})
 	require.ErrorIs(t, err, ErrRepositoryNotInitialized)
 }
 
@@ -180,7 +195,7 @@ func TestUpsertWithTx_NilProvider(t *testing.T) {
 	repo := NewRepository(nil)
 	ctx := contextWithTenant()
 
-	err := repo.UpsertWithTx(ctx, nil, &entities.ActorMapping{})
+	_, err := repo.UpsertWithTx(ctx, nil, &entities.ActorMapping{})
 	require.ErrorIs(t, err, ErrRepositoryNotInitialized)
 }
 
@@ -190,7 +205,7 @@ func TestUpsertWithTx_NilMapping(t *testing.T) {
 	repo := NewRepository(&testutil.MockInfrastructureProvider{})
 	ctx := contextWithTenant()
 
-	err := repo.UpsertWithTx(ctx, nil, nil)
+	_, err := repo.UpsertWithTx(ctx, nil, nil)
 	require.ErrorIs(t, err, ErrActorMappingRequired)
 }
 
@@ -214,16 +229,62 @@ func TestUpsertWithTx_Success(t *testing.T) {
 	}
 
 	mock.ExpectBegin()
-	mock.ExpectExec(regexp.QuoteMeta(
-		`INSERT INTO actor_mapping (actor_id,display_name,email,created_at,updated_at) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (actor_id) DO UPDATE SET display_name = EXCLUDED.display_name, email = EXCLUDED.email, updated_at = EXCLUDED.updated_at`,
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`INSERT INTO actor_mapping (actor_id,display_name,email,created_at,updated_at) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (actor_id) DO UPDATE SET display_name = COALESCE(EXCLUDED.display_name, actor_mapping.display_name), email = COALESCE(EXCLUDED.email, actor_mapping.email), updated_at = EXCLUDED.updated_at RETURNING actor_id, display_name, email, created_at, updated_at`,
 	)).
 		WithArgs("actor-tx-123", &displayName, &email, now, now).
-		WillReturnResult(sqlmock.NewResult(0, 1))
+		WillReturnRows(sqlmock.NewRows(actorMappingTestColumns).
+			AddRow("actor-tx-123", &displayName, &email, now, now))
 	mock.ExpectCommit()
 
 	// Pass nil tx so internal method creates its own transaction.
-	err := repo.UpsertWithTx(ctx, nil, mapping)
+	result, err := repo.UpsertWithTx(ctx, nil, mapping)
 	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "actor-tx-123", result.ActorID)
+	require.NotNil(t, result.DisplayName)
+	require.Equal(t, "John Doe", *result.DisplayName)
+	require.NotNil(t, result.Email)
+	require.Equal(t, "john@example.com", *result.Email)
+	require.Equal(t, now, result.CreatedAt)
+	require.Equal(t, now, result.UpdatedAt)
+}
+
+func TestUpsert_PreservesExistingFieldsWhenInputIsNil(t *testing.T) {
+	t.Parallel()
+
+	repo, mock, finish := setupMockRepository(t)
+	defer finish()
+
+	ctx := contextWithTenant()
+	now := time.Now().UTC()
+	updatedAt := now.Add(time.Minute)
+	updatedName := "Updated Name"
+	existingEmail := "existing@example.com"
+
+	mapping := &entities.ActorMapping{
+		ActorID:     "actor-partial",
+		DisplayName: &updatedName,
+		CreatedAt:   now,
+		UpdatedAt:   updatedAt,
+	}
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`INSERT INTO actor_mapping (actor_id,display_name,email,created_at,updated_at) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (actor_id) DO UPDATE SET display_name = COALESCE(EXCLUDED.display_name, actor_mapping.display_name), email = COALESCE(EXCLUDED.email, actor_mapping.email), updated_at = EXCLUDED.updated_at RETURNING actor_id, display_name, email, created_at, updated_at`,
+	)).
+		WithArgs("actor-partial", &updatedName, nil, now, updatedAt).
+		WillReturnRows(sqlmock.NewRows(actorMappingTestColumns).
+			AddRow("actor-partial", &updatedName, &existingEmail, now, updatedAt))
+	mock.ExpectCommit()
+
+	result, err := repo.Upsert(ctx, mapping)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.DisplayName)
+	require.Equal(t, updatedName, *result.DisplayName)
+	require.NotNil(t, result.Email)
+	require.Equal(t, existingEmail, *result.Email)
 }
 
 func TestGetByActorID_Success(t *testing.T) {

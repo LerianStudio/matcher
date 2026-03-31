@@ -340,6 +340,36 @@ func TestExceptionClient_ErrorHandling(t *testing.T) {
 	assert.Contains(t, err.Error(), "get exception")
 }
 
+func TestExceptionClient_ProcessCallbackWithOptions(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/exceptions/exc-123/callback", r.URL.Path)
+		assert.Equal(t, http.MethodPost, r.Method)
+		assert.Equal(t, "callback-key", r.Header.Get("X-Idempotency-Key"))
+
+		var req ProcessCallbackRequest
+		err := json.NewDecoder(r.Body).Decode(&req)
+		require.NoError(t, err)
+		assert.Equal(t, "MANUAL", req.ExternalSystem)
+
+		require.NoError(t, json.NewEncoder(w).Encode(ProcessCallbackResponse{Status: "accepted"}))
+	}))
+	defer server.Close()
+
+	client := NewExceptionClient(NewClient(server.URL, "tenant-123", 5*time.Second))
+	result, err := client.ProcessCallbackWithOptions(context.Background(), "exc-123", ProcessCallbackRequest{
+		CallbackType:    "STATUS_UPDATE",
+		ExternalSystem:  "MANUAL",
+		ExternalIssueID: "MANUAL-1",
+		Status:          "RESOLVED",
+	}, RequestOptions{IdempotencyKey: "callback-key"})
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "accepted", result.Status)
+}
+
 func TestExceptionClient_UnprocessableEntity(t *testing.T) {
 	t.Parallel()
 

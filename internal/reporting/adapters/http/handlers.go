@@ -1115,6 +1115,10 @@ func (handler *Handlers) GetMatchedReport(fiberCtx *fiber.Ctx) error {
 
 	items, pagination, err := handler.exportUC.GetMatchedReport(ctx, filter)
 	if err != nil {
+		if errors.Is(err, libHTTP.ErrInvalidCursor) {
+			return badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
+		}
+
 		logSpanError(ctx, span, logger, "failed to get matched report", err)
 
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
@@ -1175,6 +1179,10 @@ func (handler *Handlers) GetUnmatchedReport(fiberCtx *fiber.Ctx) error {
 
 	items, pagination, err := handler.exportUC.GetUnmatchedReport(ctx, filter)
 	if err != nil {
+		if errors.Is(err, libHTTP.ErrInvalidCursor) {
+			return badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
+		}
+
 		logSpanError(ctx, span, logger, "failed to get unmatched report", err)
 
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
@@ -1289,6 +1297,10 @@ func (handler *Handlers) GetVarianceReport(fiberCtx *fiber.Ctx) error {
 
 	rows, pagination, err := handler.exportUC.GetVarianceReport(ctx, filter)
 	if err != nil {
+		if errors.Is(err, libHTTP.ErrInvalidCursor) {
+			return badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
+		}
+
 		logSpanError(ctx, span, logger, "failed to get variance report", err)
 
 		return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")

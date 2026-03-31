@@ -170,6 +170,28 @@ func TestClient_DoJSON_NilResponse(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestClient_DoJSONWithOptions_UsesExplicitIdempotencyKey(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "fixed-key", r.Header.Get("X-Idempotency-Key"))
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "tenant-123", 5*time.Second)
+	err := client.DoJSONWithOptions(
+		context.Background(),
+		http.MethodPost,
+		"/test",
+		nil,
+		nil,
+		RequestOptions{IdempotencyKey: "fixed-key"},
+	)
+
+	require.NoError(t, err)
+}
+
 func TestClient_DoMultipart_Success(t *testing.T) {
 	t.Parallel()
 

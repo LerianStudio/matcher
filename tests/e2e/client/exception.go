@@ -19,7 +19,12 @@ type ExceptionClient struct {
 }
 
 // NewExceptionClient creates a new exception client.
+// Panics if client is nil (test infrastructure — fail fast on misconfiguration).
 func NewExceptionClient(client *Client) *ExceptionClient {
+	if client == nil {
+		panic("nil client passed to NewExceptionClient")
+	}
+
 	return &ExceptionClient{client: client}
 }
 
@@ -399,6 +404,31 @@ func (c *ExceptionClient) GetDispute(
 	err := c.client.DoJSON(ctx, http.MethodGet, path, nil, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("get dispute: %w", err)
+	}
+	return &resp, nil
+}
+
+// ProcessCallback sends a webhook callback from an external system to update an exception.
+func (c *ExceptionClient) ProcessCallback(
+	ctx context.Context,
+	exceptionID string,
+	req ProcessCallbackRequest,
+) (*ProcessCallbackResponse, error) {
+	return c.ProcessCallbackWithOptions(ctx, exceptionID, req, RequestOptions{})
+}
+
+// ProcessCallbackWithOptions sends a webhook callback with explicit request options.
+func (c *ExceptionClient) ProcessCallbackWithOptions(
+	ctx context.Context,
+	exceptionID string,
+	req ProcessCallbackRequest,
+	opts RequestOptions,
+) (*ProcessCallbackResponse, error) {
+	var resp ProcessCallbackResponse
+	path := fmt.Sprintf("/v1/exceptions/%s/callback", exceptionID)
+	err := c.client.DoJSONWithOptions(ctx, http.MethodPost, path, req, &resp, opts)
+	if err != nil {
+		return nil, fmt.Errorf("process callback: %w", err)
 	}
 	return &resp, nil
 }

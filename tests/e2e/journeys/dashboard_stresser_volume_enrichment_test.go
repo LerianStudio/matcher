@@ -391,7 +391,7 @@ func runDashboardStresserHighVolumeEnrichment(
 	// Force match the first exception
 	if len(exceptionIDs) > 0 {
 		if _, err := apiClient.Exception.ForceMatch(ctx, exceptionIDs[0], client.ForceMatchRequest{
-			OverrideReason: "stresser test",
+			OverrideReason: "POLICY_EXCEPTION",
 			Notes:          "Force matching for API coverage",
 		}); err != nil {
 			endpointFailures["ForceMatch"] = err.Error()
