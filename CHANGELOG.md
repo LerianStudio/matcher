@@ -1,3 +1,21 @@
+## [1.3.0-beta.4](https://github.com/LerianStudio/matcher/compare/v1.3.0-beta.3...v1.3.0-beta.4) (2026-03-31)
+
+
+### Features
+
+* **exception:** improve dispatch error handling and migrate external_system to varchar ([fe15a8a](https://github.com/LerianStudio/matcher/commit/fe15a8af0cf788c963dda965de513a2f158e4d1d))
+* **governance:** return persisted entity from actor mapping upsert ([294d3c5](https://github.com/LerianStudio/matcher/commit/294d3c5091a9a22336b2bc3678799d4a93aad245))
+
+
+### Bug Fixes
+
+* apply CodeRabbit review fixes ([ac337ac](https://github.com/LerianStudio/matcher/commit/ac337acac89168acd8f3e860310221023bdfa382))
+* apply CodeRabbit review fixes (round 2) ([9c44cf7](https://github.com/LerianStudio/matcher/commit/9c44cf7620b0c14cd27fc66b03c2f65f4836f1e0))
+* apply CodeRabbit review fixes (round 3) ([ef8c4c7](https://github.com/LerianStudio/matcher/commit/ef8c4c7a29cfb4eefaea2ffbb0bbad43b6afea17))
+* **e2e:** preserve key absence in fetcher config snapshot/restore ([a51d5f1](https://github.com/LerianStudio/matcher/commit/a51d5f1fd542ea094e9531bb92226e0862e0b14a))
+* **reporting:** return 400 for invalid pagination cursors ([09ad599](https://github.com/LerianStudio/matcher/commit/09ad5994b59e35d2337c5a0b8026e0b64951851b))
+* **e2e:** use safe type assertion for listener address in mock Fetcher ([1618f62](https://github.com/LerianStudio/matcher/commit/1618f626bdc06d2fceface0609eaba7efc14e6eb))
+
 ## [1.3.0-beta.3](https://github.com/LerianStudio/matcher/compare/v1.3.0-beta.2...v1.3.0-beta.3) (2026-03-30)
 
 
