@@ -31,7 +31,7 @@ Architectural constraints and design decisions for the Matcher codebase. This pr
 - **Interface location convention**:
   - `domain/repositories/` for a context's own aggregate store interfaces.
   - `ports/` for external dependency abstractions (EventPublisher, ObjectStorage, CacheProvider).
-  - `internal/shared/ports/` for cross-context abstractions (OutboxRepository, AuditRepository, InfrastructureProvider, MatchTrigger, TenantLister, FetcherClient, M2M, IdempotencyService).
+  - `internal/shared/ports/` for cross-context abstractions (OutboxRepository, AuditLogRepository, InfrastructureProvider, MatchTrigger, TenantLister, FetcherClient, M2MProvider, IdempotencyRepository).
 - **Domain subdirectory variations**: `domain/value_objects/` (configuration, exception, ingestion, matching), `domain/enums/` (matching), `domain/errors/` (governance only).
 - **Type-alias pattern**: When a type migrates to `shared/domain/`, the original package re-exports via type alias for backward compatibility.
 - **Worker directories**: `services/worker/` for background jobs (configuration scheduler, governance archival, reporting export/cleanup, discovery poller/worker).
@@ -370,10 +370,8 @@ All CI uses shared workflows from `LerianStudio/github-actions-shared-workflows`
 
 ### PDF Generation: `codeberg.org/go-pdf/fpdf`
 
-- **Decision**: Migrated from archived `github.com/go-pdf/fpdf` v0.9.0 to `codeberg.org/go-pdf/fpdf` v0.11.1 (Feb 2026).
-- **Rationale**: The GitHub repository was archived on March 4, 2025. Active development continued on Codeberg by the same maintainers with an identical API. Direct import path swap, no code changes.
-- **Scope**: Used only in `internal/reporting/services/query/exports/pdf.go` for report PDF generation.
-- **Risk**: Low. Same library, same maintainers, MIT license, zero transitive dependencies.
+- **Migration**: `github.com/go-pdf/fpdf` v0.9.0 → `codeberg.org/go-pdf/fpdf` v0.11.1 (Feb 2026). GitHub repo archived March 2025; same maintainers, identical API on Codeberg.
+- **Scope**: `internal/reporting/services/query/exports/pdf.go` only.
 
 ### Core Runtime Dependency Refresh Policy
 

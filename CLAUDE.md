@@ -159,7 +159,7 @@ internal/{context}/
 |----------|----------|
 | `{context}/domain/repositories/` | Repository interfaces for that context's own aggregates |
 | `{context}/ports/` | External dependency abstractions (EventPublisher, ObjectStorage, CacheProvider) |
-| `internal/shared/ports/` | Cross-context abstractions (OutboxRepository, AuditRepository, InfrastructureProvider) |
+| `internal/shared/ports/` | Cross-context abstractions (OutboxRepository, AuditLogRepository, InfrastructureProvider, MatchTrigger, TenantLister, FetcherClient, M2MProvider, IdempotencyRepository) |
 
 ### Shared Kernel (`internal/shared/`)
 
