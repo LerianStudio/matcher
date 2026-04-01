@@ -19,7 +19,7 @@ Health check: `GET http://localhost:4018/health`
 | Attribute | Value |
 |-----------|-------|
 | **Project** | Transaction reconciliation engine for Lerian Studio |
-| **Language** | Go (module: `go 1.26.0`, toolchain: `1.26.1`) |
+| **Language** | Go (module: `go 1.26.0`) |
 | **Architecture** | Modular monolith: DDD + Hexagonal + CQRS-light |
 | **Database** | PostgreSQL 17, schema-per-tenant isolation |
 | **Cache/Locking** | Valkey (Redis-compatible) 8 |
@@ -589,5 +589,5 @@ All CI uses shared workflows from `LerianStudio/github-actions-shared-workflows`
 ---
 
 **Last Updated**: April 2026
-**Go Version**: module `go 1.26.0`, toolchain `1.26.1`
+**Go Version**: module `go 1.26.0`
 **Migrations**: 21 (000001 through 000021)

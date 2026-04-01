@@ -96,7 +96,7 @@ curl http://localhost:4018/health
 # {"status":"ok"}
 ```
 
-The API is available at `http://localhost:4018`. Swagger UI is accessible in development mode.
+The API is available at `http://localhost:4018`. Swagger UI is accessible at `http://localhost:4018/swagger/index.html` when running in non-production mode.
 
 ### Configuration
 
