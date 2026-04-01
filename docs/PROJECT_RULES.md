@@ -1,6 +1,6 @@
 # Project Rules
 
-This project follows Lerian Studio Ring standards for Go services.
+Architectural constraints and design decisions for the Matcher codebase. This project follows Lerian Studio Ring standards for Go services.
 
 ## 1. Architecture
 
@@ -9,7 +9,7 @@ This project follows Lerian Studio Ring standards for Go services.
   - `adapters/`: infrastructure and transports (HTTP, DB, MQ).
   - `domain/`: pure business logic and entities.
   - `ports/`: interfaces for external dependencies.
-  - `services/`: application use cases (command/query).
+  - `services/`: application use cases (command/query/worker).
 - CQRS separation: write in `services/command/`, read in `services/query/`.
 - Command use-case files end with `_commands.go`; query files end with `_queries.go`. Helper files with private methods may use descriptive names without the suffix.
 - Domain entities remain pure logic (no logging/tracing). Enforced by `domain-no-logging` depguard rule.
@@ -31,17 +31,18 @@ This project follows Lerian Studio Ring standards for Go services.
 - **Interface location convention**:
   - `domain/repositories/` for a context's own aggregate store interfaces.
   - `ports/` for external dependency abstractions (EventPublisher, ObjectStorage, CacheProvider).
-  - `internal/shared/ports/` for cross-context abstractions (OutboxRepository, AuditRepository, InfrastructureProvider, MatchTrigger).
+  - `internal/shared/ports/` for cross-context abstractions (OutboxRepository, AuditRepository, InfrastructureProvider, MatchTrigger, TenantLister, FetcherClient, M2M, IdempotencyService).
 - **Domain subdirectory variations**: `domain/value_objects/` (configuration, exception, ingestion, matching), `domain/enums/` (matching), `domain/errors/` (governance only).
 - **Type-alias pattern**: When a type migrates to `shared/domain/`, the original package re-exports via type alias for backward compatibility.
 - **Worker directories**: `services/worker/` for background jobs (configuration scheduler, governance archival, reporting export/cleanup, discovery poller/worker).
+- **Syncer directories**: `services/syncer/` for data synchronization (discovery syncer).
 - **Outbox dispatcher exception**: Lives at `outbox/services/dispatcher.go` (services root, not in command/query/worker) because it is pure infrastructure.
-- **Cross-context communication**: Via shared ports, outbox events, and cross adapters in `internal/shared/adapters/cross/`.
+- **Cross-context communication**: Via shared ports, outbox events, and cross adapters in `internal/shared/adapters/cross/`. Current cross adapters: auto_match, configuration, exception_context_lookup, exception_matching_gateway, ingestion, matching, transaction_repository.
 
 ## 2. Required Libraries
 
-- **AuthN/AuthZ**: `github.com/LerianStudio/lib-auth/v2` only.
-- **Commons/Telemetry**: `github.com/LerianStudio/lib-commons/v4`.
+- **AuthN/AuthZ**: `github.com/LerianStudio/lib-auth/v2` only (v2.5.0).
+- **Commons/Telemetry**: `github.com/LerianStudio/lib-commons/v4` (v4.6.0-beta.5).
 - **Assertions**: `github.com/LerianStudio/lib-commons/v4/commons/assert` (no panics; referred to as `pkg/assert` in shorthand).
 - **lib-commons submodules**:
   - Tracking/logging: `commons/log` (`libLog`), `commons/commons` (`libCommons.NewTrackingFromContext`).
@@ -51,7 +52,8 @@ This project follows Lerian Studio Ring standards for Go services.
   - Messaging: `commons/rabbitmq` (`libRabbitmq`).
   - Panic recovery: `commons/runtime` (`runtime.RecoverAndLogWithContext`, `runtime.SafeGoWithContextAndComponent`).
   - Runtime config: `commons/systemplane` (sole runtime configuration authority after bootstrap).
-- **Key third-party**: `gofiber/fiber/v2` (HTTP), `Masterminds/squirrel` (SQL builder), `shopspring/decimal` (amounts), `google/uuid` (IDs).
+  - HTTP utilities: `commons/http` (`libHTTP` — ParseBodyAndValidate, Respond, CursorPagination, idempotency).
+- **Key third-party**: `gofiber/fiber/v2` (HTTP), `Masterminds/squirrel` (SQL builder), `shopspring/decimal` (amounts), `google/uuid` (IDs), `go-playground/validator/v10` (DTO validation), `codeberg.org/go-pdf/fpdf` (PDF generation).
 - Do not introduce custom DB/Redis/MQ clients outside lib-commons wrappers.
 
 ## 3. Context + Observability
@@ -60,7 +62,7 @@ This project follows Lerian Studio Ring standards for Go services.
 - Start a span per service method: `ctx, span := tracer.Start(ctx, "{context}.{operation}")` and `defer span.End()`.
 - Service span naming: `{context}.{operation}` (e.g., `matching.run_match`, `configuration.create_context`).
 - Handler span pattern: `ctx, span, logger := startHandlerSpan(fiberCtx, "handler.{context}.{operation}")` + `defer span.End()`.
-- Error reporting: `libOpentelemetry.HandleSpanError(span, "message", err)` -- takes **value** not pointer.
+- Error reporting: `libOpentelemetry.HandleSpanError(span, "message", err)` — takes **value** not pointer.
 - Business error events: `libOpentelemetry.HandleSpanBusinessErrorEvent(span, "message")` for non-critical domain errors.
 - Error sanitization: `libLog.SafeError(logger, ctx, "msg", err, productionMode.Load())`.
 - Structured logging: `logger.With(libLog.String("key", "val")).Log(ctx, level, "msg")`.
@@ -117,15 +119,15 @@ This project follows Lerian Studio Ring standards for Go services.
 ## 8. Error Handling Patterns
 
 - Sentinel errors defined at 5 locations:
-  - `services/command/commands.go` -- use case sentinels.
-  - `domain/entities/*.go` -- state transition errors.
-  - `adapters/postgres/{name}/errors.go` -- repository sentinels.
-  - `adapters/http/errors.go` or `handlers.go` -- HTTP-level errors.
-  - `domain/errors/errors.go` -- governance only.
+  - `services/command/commands.go` — use case sentinels.
+  - `domain/entities/*.go` — state transition errors.
+  - `adapters/postgres/{name}/errors.go` — repository sentinels.
+  - `adapters/http/errors.go` or `handlers.go` — HTTP-level errors.
+  - `domain/errors/errors.go` — governance only.
 - All sentinels follow `Err[Category][Specific]` naming (e.g., `ErrMatchGroupMustBeProposedToConfirm`).
-- Error wrapping: `fmt.Errorf("context: %w", err)` -- always `%w`, never `%v`. Enforced by forbidigo.
+- Error wrapping: `fmt.Errorf("context: %w", err)` — always `%w`, never `%v`. Enforced by forbidigo.
 - Cross-context error re-export via type alias: `ErrTenantIDRequired = sharedDomain.ErrAuditTenantIDRequired`.
-- No structured error types -- all `errors.New()` sentinels.
+- No structured error types — all `errors.New()` sentinels.
 
 ## 9. Worker Patterns
 
@@ -150,6 +152,7 @@ This project follows Lerian Studio Ring standards for Go services.
 - Distributed locking: `matcher:matchrun:lock:{contextID}` with Lua-verified release.
 - Transaction deduplication: hash of `sourceID:externalID`, Redis SETNX with TTL (via `ingestion/adapters/redis/dedupe_service.go`).
 - Idempotency cache: response caching for duplicate request detection.
+- Dashboard caching: Redis-backed cache for reporting dashboard metrics.
 - All keys tenant-scoped via `valkey.GetKeyFromContext()` (lib-commons tenant-manager).
 
 ## 12. RabbitMQ + Outbox Pattern
@@ -172,6 +175,7 @@ This project follows Lerian Studio Ring standards for Go services.
 - Prefer read replicas for query services via `GetReplicaDB`.
 - Migration validation: `make check-migrations` verifies pairs (up/down) and sequential numbering via `scripts/check-migrations.sh`.
 - Migration naming: `000001_descriptive_name.up.sql` / `000001_descriptive_name.down.sql`.
+- Currently 21 migrations (000001 through 000021).
 
 ## 14. Testing
 
@@ -192,7 +196,7 @@ Build tags are the **authoritative** test type discriminator (required at top of
 - **SQL mocking**: `DATA-DOG/go-sqlmock`.
 - **Containers**: `testcontainers-go` with `wait.ForAll(ForLog, ForListeningPort)` for health.
 - **Interface mocking**: `go.uber.org/mock` (gomock) for complex contracts; manual mocks for simple interfaces (5 or fewer methods).
-- **Chaos**: Toxiproxy for fault injection (latency, reset, timeout, packet loss).
+- **Chaos**: `Shopify/toxiproxy/v2` for fault injection (latency, reset, timeout, packet loss).
 - **Test helpers**: `testutil.NewMockProviderFromDB()`, `testutil.NewClientWithResolver()`, `testutil.NewRedisClientWithMock()`.
 
 ### Patterns
@@ -238,7 +242,7 @@ Every aggregate-based postgres adapter directory uses Pattern A:
 - Use plural suffix: `*_commands.go`, `*_queries.go`.
 - Entity-grouped: each `*_commands.go` contains ALL write operations for an aggregate/entity group.
 - Entry point: `commands.go` or `queries.go` (UseCase struct, constructor, shared errors/sentinels).
-- Helper files: private methods may use descriptive names without suffix (e.g., `match_group_persistence.go`, `rule_execution_support.go`). The suffix is required for files exposing public use-case methods.
+- Helper files: private methods may use descriptive names without suffix (e.g., `match_group_persistence.go`, `rule_execution_support.go`, `match_group_lock_commands.go`). The suffix is required for files exposing public use-case methods.
 
 ### Handler Splitting
 
@@ -256,8 +260,8 @@ Split into `handlers_{feature}.go` when a context has 3+ distinct feature areas 
 |----------|---------|
 | Core | `dev`, `build`, `tidy`, `clean` |
 | Quality | `lint`, `lint-fix`, `lint-custom`, `lint-custom-strict`, `format`, `sec`, `vet`, `vulncheck` |
-| Testing | `test`, `test-unit`, `test-int`, `test-e2e`, `test-e2e-fast`, `test-e2e-journeys`, `test-e2e-dashboard`, `test-chaos`, `test-all` |
-| Coverage | `cover`, `check-coverage` |
+| Testing | `test`, `test-unit`, `test-int`, `test-e2e`, `test-e2e-fast`, `test-e2e-journeys`, `test-e2e-discovery`, `test-e2e-dashboard`, `test-chaos`, `test-all` |
+| Coverage | `cover`, `coverage-unit`, `check-coverage` |
 | Checks | `check-tests`, `check-test-tags`, `check-migrations`, `check-generated-artifacts` |
 | Generation | `generate`, `generate-docs` |
 | Docker | `docker-build`, `up`, `down`, `start`, `stop`, `restart`, `rebuild-up`, `clean-docker`, `logs` |
@@ -335,7 +339,7 @@ All CI uses shared workflows from `LerianStudio/github-actions-shared-workflows`
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
-| `go-combined-analysis.yml` | PRs to develop/release-candidate/main | Lint, security scan, unit tests, coverage (70% threshold) |
+| `go-combined-analysis.yml` | PRs to develop/release-candidate/main | Lint, security scan, unit tests, coverage (70% threshold), migration integrity |
 | `pr-security-scan.yml` | PRs to develop/release-candidate/main | PR-specific security scanning |
 | `pr-validation.yml` | PRs to develop/release-candidate/main | Conventional commit format in PR title, 50-char min description, changelog check, auto-labeling |
 | `build.yml` | Tag push | Docker build (DockerHub + GHCR) + GitOps value updates |
@@ -348,6 +352,7 @@ All CI uses shared workflows from `LerianStudio/github-actions-shared-workflows`
 
 - **Dockerfile**: Multi-stage build. `golang:1.26.1-alpine` (builder) -> `gcr.io/distroless/static-debian12:nonroot` (runtime).
 - Separate `/health-probe` binary for distroless healthchecks (30s interval, 5s timeout, 3 retries).
+- Migrations copied to both `/migrations` and `/components/matcher/migrations` for lib-commons PostgresConnection.
 - **docker-compose services**:
 
 | Service | Image | Port |
@@ -366,9 +371,9 @@ All CI uses shared workflows from `LerianStudio/github-actions-shared-workflows`
 ### PDF Generation: `codeberg.org/go-pdf/fpdf`
 
 - **Decision**: Migrated from archived `github.com/go-pdf/fpdf` v0.9.0 to `codeberg.org/go-pdf/fpdf` v0.11.1 (Feb 2026).
-- **Rationale**: The GitHub repository was archived on March 4, 2025. Active development continued on Codeberg by the same maintainers with an identical API. This is a direct import path swap with no code changes required.
-- **Scope**: Used only in `internal/reporting/services/query/exports/pdf.go` for report PDF generation (matched, unmatched, summary, variance reports).
-- **Risk**: Low. Same library, same maintainers, MIT license, no external dependencies beyond Go stdlib. If Codeberg hosting becomes unavailable, the library is pure Go with zero transitive dependencies and could be vendored trivially.
+- **Rationale**: The GitHub repository was archived on March 4, 2025. Active development continued on Codeberg by the same maintainers with an identical API. Direct import path swap, no code changes.
+- **Scope**: Used only in `internal/reporting/services/query/exports/pdf.go` for report PDF generation.
+- **Risk**: Low. Same library, same maintainers, MIT license, zero transitive dependencies.
 
 ### Core Runtime Dependency Refresh Policy
 
@@ -377,7 +382,25 @@ All CI uses shared workflows from `LerianStudio/github-actions-shared-workflows`
 - **Rollback plan**: Keep a tested rollback path (revert dependency bump or pin previous known-good versions in `go.mod`), run `go mod tidy`, then re-run `make test` + `make test-int` before redeploy.
 - **Owner**: Platform/Runtime maintainers must sign off rollout and rollback readiness during review.
 
-## 21. Misc
+## 21. Object Storage
+
+- S3-compatible object storage for exports (CSV/PDF) and governance archives.
+- SeaweedFS used in development (`docker-compose.yml`).
+- Exports use presigned URLs for secure download.
+- Archive integrity verified with checksums during archival and retrieval.
+- Configuration via `OBJECT_STORAGE_*` and `ARCHIVAL_STORAGE_*` env vars.
+- Functional options pattern via `pkg/storageopt` for operation customization.
+
+## 22. Systemplane (Runtime Configuration)
+
+- Bootstrap-only keys (require restart): See `config/.config-map.example`.
+- Runtime keys: hot-reloadable via API, no restart needed.
+- API endpoints: `GET /v1/system/configs` (view), `PATCH /v1/system/configs` (update), `GET /v1/system/configs/schema` (metadata), `GET /v1/system/configs/history` (audit trail).
+- Key definitions in `internal/bootstrap/systemplane_keys_*.go`.
+- Reconcilers in `internal/bootstrap/systemplane_reconciler_*.go` apply changes to running components.
+- Never read Viper directly at runtime — use `configManager.Get()` which returns systemplane-backed config.
+
+## 23. Misc
 
 - Avoid one-letter variable names unless required.
 - Do not add inline comments unless requested.
@@ -385,3 +408,4 @@ All CI uses shared workflows from `LerianStudio/github-actions-shared-workflows`
 - Lease pattern for all DB/Redis connections (automatic cleanup via `Release()`).
 - Avoid duplicating domain concepts between shared kernel and contexts; pick a single source of truth and map explicitly.
 - Put logic in entities when it only needs entity fields; use domain services for multi-aggregate or external dependency coordination.
+- Import order: stdlib -> third-party -> Lerian libs (`lib-auth`, `lib-commons`) -> project (`internal/`, `pkg/`).

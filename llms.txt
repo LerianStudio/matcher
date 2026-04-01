@@ -1,0 +1,62 @@
+# Lerian Matcher
+
+> Transaction reconciliation engine that automates matching between a ledger and external systems (banks, payment processors, ERPs), applying configurable rules, managing exceptions, and maintaining an immutable audit trail.
+
+Matcher is a Go service built as a modular monolith using DDD, hexagonal architecture, and CQRS-light. It provides eight bounded contexts (configuration, discovery, ingestion, matching, exception, governance, reporting, outbox) with PostgreSQL schema-per-tenant isolation, Redis/Valkey for caching and locking, RabbitMQ for async messaging via transactional outbox, and S3-compatible object storage for exports and archival. Part of the Lerian Studio ecosystem alongside Midaz (ledger).
+
+## Documentation
+
+- [README](README.md): Project overview, getting started, project structure
+- [License](LICENSE.md): Elastic License 2.0
+- [Changelog](CHANGELOG.md): Release history and version changes
+- [Multi-Tenant Guide](docs/multi-tenant-guide.md): Schema-per-tenant isolation implementation
+- [Project Rules](docs/PROJECT_RULES.md): Architectural constraints and design decisions
+
+## AI Agent Guides
+
+- [AGENTS.md](AGENTS.md): Universal AI agent entry point — quick start, architecture, conventions, what not to do
+- [CLAUDE.md](CLAUDE.md): Deep reference for AI agents — code patterns, linting, CI/CD, debugging, configuration
+- [Internal Architecture](internal/README.md): Bounded context descriptions and hexagonal structure
+
+## Architecture
+
+- [Bootstrap](internal/bootstrap/README.md): Composition root — config, dependency injection, server lifecycle, systemplane
+- [Configuration](internal/configuration/README.md): Reconciliation contexts, sources, match rules, fee schedules, scheduling
+- [Discovery](internal/discovery/README.md): External data source discovery, schema detection, extraction
+- [Ingestion](internal/ingestion/README.md): File parsing, normalization, deduplication
+- [Matching](internal/matching/README.md): Match engine, rule execution, confidence scoring, fee verification
+- [Exception](internal/exception/README.md): Exception lifecycle, disputes, evidence, resolutions
+- [Governance](internal/governance/README.md): Immutable audit logs, hash chains, archival
+- [Reporting](internal/reporting/README.md): Dashboard analytics, export jobs (CSV/PDF)
+- [Outbox](internal/outbox/README.md): Transactional outbox for reliable event publication
+- [Shared Kernel](internal/shared/README.md): Cross-context domain types, fee engine, bridge adapters
+- [Auth](internal/auth/README.md): JWT extraction, RBAC, tenant schema isolation
+- [Test Utilities](internal/testutil/README.md): Shared test helpers
+
+## API
+
+- [OpenAPI Spec (JSON)](docs/swagger/swagger.json): Full API specification
+- [OpenAPI Spec (YAML)](docs/swagger/swagger.yaml): Full API specification (YAML format)
+
+## Configuration
+
+- [Bootstrap Config Reference](config/.config-map.example): All bootstrap-only environment variables
+- [Docker Compose](docker-compose.yml): Infrastructure services (Postgres, Redis, RabbitMQ, SeaweedFS)
+- [Dockerfile](Dockerfile): Multi-stage build (golang:1.26.1-alpine -> distroless)
+- [Air Config](.air.toml): Live reload configuration for development
+
+## Development
+
+- [Makefile](Makefile): All build, test, lint, migration, and Docker commands
+- [Linter Config](.golangci.yml): 75+ linters with architectural boundary enforcement
+- [Custom Linters](tools/README.md): Entity constructor, observability, and repository transaction linters
+- [Custom Linter Source](tools/linters/README.md): Linter implementation details
+- [Migrations](migrations/README.md): Database schema migrations (21 migrations)
+- [Scripts](scripts/README.md): CI and development utility scripts
+- [Tests](tests/README.md): Integration, E2E, chaos, and static analysis tests
+
+## Optional
+
+- [Config Directory](config/README.md): Environment templates and storage configuration
+- [CLI Entry Points](cmd/README.md): Application binaries (matcher, health-probe)
+- [Storage Options](pkg/storageopt/README.md): Functional options for object storage

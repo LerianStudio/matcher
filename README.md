@@ -1,188 +1,237 @@
-![banner](image/README/matcher-banner.png)
+![Lerian Matcher Banner](image/README/matcher-banner.png)
 
 <div align="center">
 
 [![Latest Release](https://img.shields.io/github/v/release/LerianStudio/matcher?include_prereleases)](https://github.com/LerianStudio/matcher/releases)
-[![License](https://img.shields.io/badge/license-Elastic%20License%202.0-4c1.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-Elastic%20License%202.0-4c1.svg)](LICENSE.md)
 [![Go Report](https://goreportcard.com/badge/github.com/lerianstudio/matcher)](https://goreportcard.com/report/github.com/lerianstudio/matcher)
 [![Discord](https://img.shields.io/badge/Discord-Lerian%20Studio-%237289da.svg?logo=discord)](https://discord.gg/DnhqKwkGv3)
 
 </div>
 
-# Lerian Matcher: Reconciliation Engine
+# Lerian Matcher
 
-Matcher is Lerian Studio's reconciliation engine that automates transaction matching between Midaz (Lerian's ledger) and external systems like banks, payment processors, and ERPs. It applies configurable matching rules, identifies exceptions, routes unresolved items to workflow tools, and maintains a complete audit trail for compliance.
+**Matcher** is Lerian Studio's reconciliation engine. It automates transaction matching between [Midaz](https://github.com/LerianStudio/midaz) (Lerian's ledger) and external systems — banks, payment processors, ERPs — applying configurable matching rules, managing exceptions through workflow integrations, and maintaining a complete audit trail for compliance.
 
 ## Why Matcher?
 
-- **Operations-Ready**: Reduce manual reconciliation time with automated matching and confidence scoring
-- **Configurable Rules**: Define exact and tolerance-based rules, date windows, and multi-source matches
-- **Workflow Integration**: Route exceptions to JIRA, ServiceNow, or webhooks where teams already work
-- **Audit-First**: Append-only audit logging for SOX-ready traceability
+| | |
+|---|---|
+| **Automated Matching** | Reduce manual reconciliation with deterministic rules, tolerance-based matching, and confidence scoring |
+| **Configurable Rules** | Define exact and tolerance-based rules, date windows, fee verification, and multi-source matches |
+| **Exception Workflows** | Route unresolved items to JIRA, ServiceNow, or webhooks where teams already work |
+| **Audit-First** | Append-only audit logging with hash chains for SOX-ready traceability |
+| **Multi-Tenant** | Schema-per-tenant isolation in PostgreSQL with JWT-based tenant resolution |
+| **Runtime Configurable** | Hot-reloadable settings via systemplane API — no restarts for tuning |
 
-## Core Reconciliation
+## Reconciliation Pipeline
 
-At Lerian, reconciliation is a full pipeline that spans configuration, ingestion, matching, and governance:
+Matcher implements a complete reconciliation pipeline:
 
-1. **Configuration**: Define reconciliation contexts, sources, field maps, and match rules.
-2. **Ingestion**: Import external data (CSV, JSON, XML, or integrations), normalize fields, and deduplicate.
-3. **Matching**: Run deterministic and tolerance-based matching to produce match groups and confidence scores.
-4. **Exception Management**: Classify unmatched items, route them to teams, and record manual resolutions.
-5. **Governance**: Maintain an immutable audit log and reporting views for compliance.
-6. **Reporting**: Dashboard analytics, export jobs, and variance analysis.
+1. **Configure** — Define reconciliation contexts, sources, field maps, match rules, and fee schedules
+2. **Ingest** — Import external data (CSV, JSON, XML, ISO 20022), normalize fields, deduplicate
+3. **Match** — Execute deterministic and tolerance-based matching, produce match groups with confidence scores
+4. **Handle Exceptions** — Classify unmatched items, route to teams, record manual resolutions
+5. **Govern** — Maintain immutable audit log, verify hash chain integrity, archive for compliance
+6. **Report** — Dashboard analytics, variance analysis, export to CSV/PDF
 
-Matcher integrates with Midaz and third-party systems through inbound APIs, outbound webhooks, and message-driven workflows.
+## Architecture
 
-## Core Architecture
+Matcher is a **modular monolith** built with Domain-Driven Design (DDD), hexagonal architecture, and CQRS-light separation.
 
-Matcher is built as a modular monolith with DDD, hexagonal architecture, and CQRS-light separation of command and query use cases.
+### Bounded Contexts
 
-### Domains
-
-- **Configuration**: Reconciliation contexts, sources, field maps, match rules, fee schedules/rules, scheduling, clone operations
-- **Ingestion**: Import jobs, file parsing (CSV/JSON/XML/ISO 20022), normalization, deduplication, auto-match trigger
-- **Matching**: Match orchestration, rule execution, fee verification, confidence scoring, manual match/unmatch, adjustments, currency conversion
-- **Exception**: Exception lifecycle, disputes with evidence tracking, resolution workflows, force-match, bulk operations, external dispatch (JIRA/webhooks)
-- **Governance**: Immutable audit logs, hash chain verification, actor mapping, archive management
-- **Reporting**: Dashboard analytics, export jobs (CSV/PDF), streaming reports, Redis caching, variance analysis
-- **Discovery**: External data source discovery, schema detection, extraction management
-- **Outbox**: Reliable event publication via transactional outbox pattern
-
-### Services
-
-1. **Configuration and Ingestion**: REST APIs for setup, fee schedule/rule management, scheduling, clone operations, and data onboarding with PostgreSQL persistence.
-2. **Matching Engine**: Rule execution, confidence scoring, fee verification, manual matching, adjustments, currency conversion, and dry-run previews.
-3. **Exception and Dispute Management**: Exception classification, dispute lifecycle, evidence collection, force-match, adjust-entry, bulk operations, and external dispatch (JIRA/webhooks).
-4. **Discovery**: External data source connection management, schema detection, and extraction orchestration.
-5. **Governance, Reporting, and Exports**: Immutable audit trail with hash chains, dashboard analytics with Redis caching, async export jobs (CSV/PDF), streaming reports, and audit log archival.
-6. **Infrastructure Layer**: PostgreSQL (with replica support), Redis (dedupe/locks/idempotency/caching), RabbitMQ (async workflows), S3-compatible object storage (exports/archives), OpenTelemetry, Systemplane (runtime configuration).
-
-### Reconciliation Processing
-
-- **Upload or fetch data** into ingestion jobs
-- **Normalize and map fields** based on configured sources
-- **Deduplicate** records using Redis-based hashing
-- **Persist** jobs and transactions with outbox events
-- **Execute matching jobs** and emit match results
-- **Route exceptions** and capture audit events
+| Context | Purpose |
+|---------|---------|
+| **Configuration** | Reconciliation contexts, sources, field maps, match rules, fee schedules/rules, scheduling |
+| **Discovery** | External data source connection management, schema detection, extraction orchestration |
+| **Ingestion** | File parsing (CSV/JSON/XML/ISO 20022), normalization, BOM handling, Redis-based dedup |
+| **Matching** | Rule execution, confidence scoring (0-100), fee verification, manual match/unmatch, adjustments, cross-currency |
+| **Exception** | Exception lifecycle, disputes with evidence tracking, bulk operations, external dispatch |
+| **Governance** | Immutable audit logs, cryptographic hash chain verification, S3 archival |
+| **Reporting** | Dashboard metrics, async export jobs (CSV/PDF), streaming reports, Redis caching |
+| **Outbox** | Reliable event publication via transactional outbox pattern |
 
 ### Technical Highlights
 
-- **Hexagonal Architecture**: Ports and adapters per bounded context
-- **CQRS-Light**: Separate command and query use cases for clarity and performance
-- **Schema-Per-Tenant**: PostgreSQL search_path isolation per tenant
-- **Outbox Pattern**: Reliable event publication for ingestion and matching workflows
-- **OpenTelemetry**: Standard tracing and metrics via lib-commons
-- **Systemplane**: Runtime configuration authority with hot-reloadable settings, history, and schema
-- **Fee Schedule Engine**: Net-to-gross normalization with parallel and cascading fee application
-- **Export Pipeline**: Async export jobs (CSV/PDF) with S3-compatible object storage and presigned URLs
-- **Rate Limiting**: Configurable rate limits per operation type
-- **Idempotency**: Redis-backed idempotency keys for safe client retries
-- **Distributed Locking**: Redis-based locks for concurrent match run prevention
-- **Cross-Currency Matching**: FX rate lookups and base-currency normalization
-- **Chaos Testing**: Toxiproxy-based fault injection for resilience validation
-
-## Project Structure
-
-```
-matcher/
-├── cmd/                  # Application entry points (matcher, health-probe)
-├── config/               # Environment templates and storage config
-├── docs/                 # Design documents, PRD, TRD, API specs
-├── internal/             # Core application code (bounded contexts)
-│   ├── auth/             # Authentication, authorization, multi-tenancy
-│   ├── bootstrap/        # Service initialization, dependency wiring, systemplane
-│   ├── configuration/    # Reconciliation contexts, sources, rules, fees, scheduling
-│   ├── discovery/        # External data source discovery and schema detection
-│   ├── ingestion/        # File parsing, normalization, deduplication
-│   ├── matching/         # Match engine, rule execution, scoring, adjustments
-│   ├── exception/        # Disputes, evidence, resolution workflows, bulk ops
-│   ├── governance/       # Immutable audit logs, hash chains, archival
-│   ├── reporting/        # Analytics, exports (CSV/PDF), dashboard caching
-│   ├── outbox/           # Transactional outbox pattern
-│   ├── shared/           # Cross-context domain objects, fee engine, adapters
-│   └── testutil/         # Shared test helpers
-├── migrations/           # PostgreSQL schema migrations (19 migrations)
-├── pkg/                  # Reusable library packages
-│   ├── chanutil/         # Safe channel utilities
-│   ├── storageopt/       # Object storage functional options
-│   └── systemplane/      # Runtime configuration authority (control plane)
-├── scripts/              # Dev and CI utility scripts
-├── tests/                # Integration, E2E, chaos, and static analysis tests
-└── tools/                # Custom linters and dev tooling
-```
-
-Each directory contains a README with detailed documentation.
+- **Hexagonal Architecture** — Ports and adapters per bounded context with strict import boundaries
+- **Schema-Per-Tenant** — PostgreSQL `search_path` isolation with JWT-derived tenant identity
+- **Transactional Outbox** — Reliable event publication for ingestion and matching workflows
+- **Fee Schedule Engine** — Net-to-gross normalization with parallel and cascading fee application
+- **Distributed Locking** — Redis-based locks preventing concurrent match runs
+- **Cross-Currency Matching** — FX rate lookups and base-currency normalization
+- **Idempotency** — Redis-backed idempotency keys for safe client retries
+- **Systemplane** — Runtime configuration authority with hot-reloadable settings, history, and schema API
+- **Chaos Testing** — Toxiproxy-based fault injection for resilience validation
+- **OpenTelemetry** — Distributed tracing and metrics via lib-commons
 
 ## Getting Started
 
-### 1) Configure (Optional)
+### Prerequisites
 
-No configuration files needed — all defaults are baked into the binary and match the docker-compose setup.
+- [Go 1.26+](https://go.dev/dl/)
+- [Docker](https://docs.docker.com/get-docker/) and Docker Compose
+- [golang-migrate](https://github.com/golang-migrate/migrate) (for database migrations)
 
-For production, override via env vars. See `config/.config-map.example` for bootstrap-only keys (require restart). All other settings are hot-reloadable via the systemplane API (`/v1/system/configs`).
-
-### 2) Start Infrastructure
-
-```bash
-docker-compose up -d postgres redis rabbitmq
-```
-
-Optional object storage for exports and archival:
+### 1. Clone and Start Infrastructure
 
 ```bash
-docker-compose --profile storage up -d seaweedfs
+git clone https://github.com/LerianStudio/matcher.git
+cd matcher
+make up
 ```
 
-Optional observability stack (requires OpenTelemetry Collector configured via `OTEL_EXPORTER_OTLP_ENDPOINT`).
+This starts PostgreSQL (primary + replica), Valkey (Redis-compatible), RabbitMQ, SeaweedFS (S3), and the app with live reload.
 
-### 3) Run Migrations
+### 2. Apply Migrations
 
 ```bash
 make migrate-up
 ```
 
-For production rollout and rollback procedures, see `docs/migrations/PRODUCTION_MIGRATIONS.md`.
-
-### 4) Run the Service
+### 3. Verify
 
 ```bash
-make dev
+curl http://localhost:4018/health
+# {"status":"ok"}
 ```
 
-Health endpoints:
+The API is available at `http://localhost:4018`. Swagger UI is accessible in development mode.
 
-- `GET /health`
-- `GET /ready`
+### Configuration
+
+No configuration files needed — all defaults are baked into the binary and match the docker-compose setup.
+
+For production, override via environment variables. See [`config/.config-map.example`](config/.config-map.example) for bootstrap-only keys (require restart). All other settings are hot-reloadable via the systemplane API (`GET /v1/system/configs`).
+
+## Project Structure
+
+```
+matcher/
+├── cmd/                  # Application entry points
+│   ├── matcher/          # Main service binary
+│   └── health-probe/     # Health check binary for distroless containers
+├── config/               # Environment templates and storage config
+├── docs/                 # Design documents and API specs
+│   ├── swagger/          # Generated OpenAPI spec (JSON + YAML)
+│   ├── multi-tenant-guide.md
+│   └── PROJECT_RULES.md
+├── internal/             # Core application code (bounded contexts)
+│   ├── auth/             # JWT extraction, RBAC, tenant resolution
+│   ├── bootstrap/        # Composition root (config, DI, server, systemplane)
+│   ├── configuration/    # Reconciliation setup and scheduling
+│   ├── discovery/        # External data source discovery
+│   ├── ingestion/        # File parsing and normalization
+│   ├── matching/         # Core matching engine
+│   ├── exception/        # Exception and dispute management
+│   ├── governance/       # Audit logs and archival
+│   ├── reporting/        # Analytics and exports
+│   ├── outbox/           # Transactional outbox
+│   ├── shared/           # Shared kernel (cross-context types and ports)
+│   └── testutil/         # Shared test helpers
+├── migrations/           # PostgreSQL schema migrations (21 migrations)
+├── pkg/                  # Reusable library packages
+│   ├── chanutil/         # Safe channel utilities
+│   └── storageopt/       # Object storage functional options
+├── scripts/              # Dev and CI utility scripts
+├── tests/                # Integration, E2E, chaos, and static analysis tests
+└── tools/                # Custom linters and dev tooling
+```
+
+## Development
 
 ### Common Commands
 
-- `make test` — Unit tests
-- `make test-int` — Integration tests (requires Docker)
-- `make test-e2e` — End-to-end tests (requires full stack)
-- `make test-e2e-journeys` — Journey-based E2E tests
-- `make test-chaos` — Chaos/fault-injection tests (requires Toxiproxy)
-- `make test-all` — All tests with merged coverage
-- `make lint` — Linting (75+ linters)
-- `make lint-custom` — Custom architectural linters
-- `make sec` — Security scanning
-- `make build` — Build binary
+| Command | Purpose |
+|---------|---------|
+| `make dev` | Live reload with [air](https://github.com/air-verse/air) |
+| `make build` | Build binary to `bin/matcher` |
+| `make test` | Run unit tests |
+| `make test-int` | Integration tests (requires Docker) |
+| `make test-e2e` | End-to-end tests (requires full stack) |
+| `make test-chaos` | Fault injection tests (Toxiproxy) |
+| `make lint` | Linting (75+ linters via golangci-lint) |
+| `make lint-custom` | Custom architectural linters |
+| `make sec` | Security scanning (gosec) |
+| `make ci` | Full local CI pipeline |
+
+### Infrastructure
+
+| Service | Image | Port |
+|---------|-------|------|
+| PostgreSQL (primary) | `postgres:17` | 5432 |
+| PostgreSQL (replica) | `postgres:17` | 5433 |
+| Valkey (Redis) | `valkey/valkey:8` | 6379 |
+| RabbitMQ | `rabbitmq:4.1.3-management-alpine` | 5672 (AMQP), 15672 (UI) |
+| SeaweedFS (S3) | `chrislusf/seaweedfs:3.80` | 8333 (S3), 9333 (Master) |
+| Matcher App | `golang:1.26.1-alpine` | 4018 |
+
+### Testing
+
+Matcher uses TDD (Test-Driven Development) with four test tiers:
+
+- **Unit** (`make test`): Pure logic tests with mocks — no external dependencies
+- **Integration** (`make test-int`): Real containers via testcontainers
+- **E2E** (`make test-e2e`): Full stack journey tests against running services
+- **Chaos** (`make test-chaos`): Fault injection with Toxiproxy (latency, connection loss, partitions)
+
+Coverage threshold: **70%**, enforced in CI.
+
+## API Documentation
+
+The full OpenAPI specification is available at [`docs/swagger/swagger.json`](docs/swagger/swagger.json).
+
+When running in development mode, Swagger UI is accessible at the service root.
+
+Key API areas:
+- **Reconciliation Contexts** — Create and manage reconciliation configurations
+- **Sources & Field Maps** — Define data sources and normalization rules
+- **Match Rules & Fee Schedules** — Configure matching logic and fee verification
+- **Ingestion** — Upload and parse external transaction data
+- **Matching** — Execute match runs, manage match groups, handle adjustments
+- **Exceptions & Disputes** — Manage exceptions, create disputes, collect evidence
+- **Governance** — Query audit logs, verify hash chains, manage archives
+- **Reporting** — Dashboard metrics, export jobs, variance analysis
+- **System** — Health checks, runtime configuration (systemplane)
+
+## Contributing
+
+We welcome contributions from the community! Here's how to get started:
+
+1. **Fork** the repository
+2. **Create a branch** from `develop` (e.g., `feat/my-feature`)
+3. **Follow conventions**: Run `make lint && make test && make check-tests` before pushing
+4. **Submit a PR** to `develop` with a conventional commit title and a description of at least 50 characters
+
+### PR Requirements
+
+- Conventional commit format in PR titles (e.g., `feat: add batch matching endpoint`)
+- Every `.go` file must have a corresponding `_test.go`
+- Test build tags required (`//go:build unit`, etc.)
+- Run `make generate-docs` if you changed any API endpoint
+
+### Code Standards
+
+- Go 1.26 with 75+ linters enforced
+- Hexagonal architecture: adapters, ports, domain, services
+- CQRS separation: `*_commands.go` for writes, `*_queries.go` for reads
+- Multi-tenancy via JWT context — never accept tenant IDs from request parameters
+- Error wrapping with `%w`, UTC timestamps, parameterized SQL queries
+
+For detailed conventions, see [`docs/PROJECT_RULES.md`](docs/PROJECT_RULES.md).
 
 ## Community & Support
 
-- Join our [Discord community](https://discord.gg/DnhqKwkGv3) for discussions, support, and updates.
-- For bug reports and feature requests, please use our [GitHub Issues](https://github.com/LerianStudio/matcher/issues).
-- If you want to raise anything to the attention of the community, open a Discussion in our [GitHub](https://github.com/LerianStudio/matcher/discussions).
-- Follow us on [Twitter](https://twitter.com/LerianStudio) for the latest news and announcements.
+- **Discord**: [Join our community](https://discord.gg/DnhqKwkGv3) for discussions, support, and updates
+- **GitHub Issues**: [Bug reports & feature requests](https://github.com/LerianStudio/matcher/issues)
+- **GitHub Discussions**: [Community Q&A](https://github.com/LerianStudio/matcher/discussions)
+- **Twitter/X**: [@LerianStudio](https://twitter.com/LerianStudio)
+- **Email**: [contact@lerian.studio](mailto:contact@lerian.studio)
 
-## Repo Activity
+## License
 
-Repobeats badge coming soon.
-
-## Contributing & License
-
-We welcome contributions from the community. Contributing guidelines and license information will be published in this repository. If `CONTRIBUTING.md` and `LICENSE` are added, link them here.
+Matcher is licensed under the [Elastic License 2.0](LICENSE.md).
 
 ## About Lerian
 
-Matcher is developed by Lerian, a tech company founded in 2024, led by a team with a track record in developing ledger and core banking solutions. For any inquiries or support, please reach out to us at [contact@lerian.studio](mailto:contact@lerian.studio) or open a Discussion in our GitHub repository.
+Matcher is developed by [Lerian](https://lerian.studio), a technology company founded in 2024, led by a team with deep experience in ledger and core banking systems. Matcher is part of the Lerian Studio ecosystem alongside [Midaz](https://github.com/LerianStudio/midaz) (open-source ledger).
