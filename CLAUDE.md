@@ -588,6 +588,6 @@ All CI uses shared workflows from `LerianStudio/github-actions-shared-workflows`
 
 ---
 
-**Last Updated**: March 2026
+**Last Updated**: April 2026
 **Go Version**: module `go 1.26.0`, toolchain `1.26.1`
 **Migrations**: 21 (000001 through 000021)

@@ -172,7 +172,7 @@ Matcher uses TDD (Test-Driven Development) with four test tiers:
 
 - **Unit** (`make test`): Pure logic tests with mocks — no external dependencies
 - **Integration** (`make test-int`): Real containers via testcontainers
-- **E2E** (`make test-e2e`): Full stack journey tests against running services
+- **E2E** (`make test-e2e`): Full-stack journey tests against running services
 - **Chaos** (`make test-chaos`): Fault injection with Toxiproxy (latency, connection loss, partitions)
 
 Coverage threshold: **70%**, enforced in CI.
