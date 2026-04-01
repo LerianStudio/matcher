@@ -436,8 +436,8 @@ See [`config/.config-map.example`](config/.config-map.example) for all bootstrap
   - Database: `libPostgres.New()` / `libPostgres.NewPrimaryReplica()`
   - Redis: `libRedis.New()`
   - Messaging: `libRabbitmq.New()`
-  - Assertions: `commons/assert` (referred to as `pkg/assert`)
-  - Panic recovery: `commons/runtime` (referred to as `pkg/runtime`)
+  - Assertions: `commons/assert` (imported as `pkg/assert` by convention, but lives in lib-commons)
+  - Panic recovery: `commons/runtime` (imported as `pkg/runtime` by convention, but lives in lib-commons)
   - Runtime config: `commons/systemplane`
 
 ### Key Third-Party

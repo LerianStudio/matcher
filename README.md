@@ -69,7 +69,7 @@ Matcher is a **modular monolith** built with Domain-Driven Design (DDD), hexagon
 
 ### Prerequisites
 
-- [Go 1.26+](https://go.dev/dl/)
+- [Go 1.26.0+](https://go.dev/dl/)
 - [Docker](https://docs.docker.com/get-docker/) and Docker Compose
 - [golang-migrate](https://github.com/golang-migrate/migrate) (for database migrations)
 
@@ -181,7 +181,7 @@ Coverage threshold: **70%**, enforced in CI.
 
 The full OpenAPI specification is available at [`docs/swagger/swagger.json`](docs/swagger/swagger.json).
 
-When running in development mode, Swagger UI is accessible at the service root.
+When running in development mode, Swagger UI is accessible at `/swagger/index.html`.
 
 Key API areas:
 - **Reconciliation Contexts** — Create and manage reconciliation configurations
