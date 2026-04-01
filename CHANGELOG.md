@@ -1,3 +1,5 @@
+## [1.3.0-beta.5](https://github.com/LerianStudio/matcher/compare/v1.3.0-beta.4...v1.3.0-beta.5) (2026-04-01)
+
 ## [1.3.0-beta.4](https://github.com/LerianStudio/matcher/compare/v1.3.0-beta.3...v1.3.0-beta.4) (2026-03-31)
 
 
