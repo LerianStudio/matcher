@@ -15,7 +15,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/configuration/services/command"
-	sharedpagination "github.com/LerianStudio/matcher/internal/shared/adapters/http"
+	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 )
 
 // CreateContext creates a reconciliation context.
@@ -30,11 +30,11 @@ import (
 // @Param X-Request-Id header string false "Request ID for tracing"
 // @Param context body dto.CreateContextRequest true "Context creation payload"
 // @Success 201 {object} dto.ReconciliationContextResponse "Successfully created context"
-// @Failure 400 {object} ErrorResponse "Invalid request payload"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 409 {object} ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 409 {object} sharedhttp.ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/config/contexts [post]
 func (handler *Handler) CreateContext(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.context.create")
@@ -62,11 +62,11 @@ func (handler *Handler) CreateContext(fiberCtx *fiber.Ctx) error {
 		logSpanError(ctx, span, logger, "failed to create context", err)
 
 		if errors.Is(err, command.ErrContextNameAlreadyExists) {
-			return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "duplicate_name", err.Error())
+			return respondError(fiberCtx, fiber.StatusConflict, "duplicate_name", err.Error())
 		}
 
 		if errors.Is(err, entities.ErrRulePriorityConflict) {
-			return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "priority_conflict", err.Error())
+			return respondError(fiberCtx, fiber.StatusConflict, "priority_conflict", err.Error())
 		}
 
 		return writeServiceError(fiberCtx, err)
@@ -89,10 +89,10 @@ func (handler *Handler) CreateContext(fiberCtx *fiber.Ctx) error {
 // @Param type query string false "Filter by context type" Enums(1:1,1:N,N:M)
 // @Param status query string false "Filter by context status" Enums(DRAFT,ACTIVE,PAUSED,ARCHIVED)
 // @Success 200 {object} ListContextsResponse "List of contexts with cursor pagination"
-// @Failure 400 {object} ErrorResponse "Invalid query parameters"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid query parameters"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/config/contexts [get]
 func (handler *Handler) ListContexts(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.context.list")
@@ -149,7 +149,7 @@ func (handler *Handler) ListContexts(fiberCtx *fiber.Ctx) error {
 
 	response := ListContextsResponse{
 		Items: toContextValues(result),
-		CursorResponse: sharedpagination.CursorResponse{
+		CursorResponse: sharedhttp.CursorResponse{
 			NextCursor: pagination.Next,
 			PrevCursor: pagination.Prev,
 			Limit:      limit,
@@ -171,11 +171,11 @@ func (handler *Handler) ListContexts(fiberCtx *fiber.Ctx) error {
 // @Param X-Request-Id header string false "Request ID for tracing"
 // @Param contextId path string true "Context ID" format(uuid)
 // @Success 200 {object} dto.ReconciliationContextResponse "Successfully retrieved context"
-// @Failure 400 {object} ErrorResponse "Invalid context ID format"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Context not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid context ID format"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Context not found"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/config/contexts/{contextId} [get]
 func (handler *Handler) GetContext(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.context.get")
@@ -202,7 +202,7 @@ func (handler *Handler) GetContext(fiberCtx *fiber.Ctx) error {
 		logSpanError(ctx, span, logger, "failed to get context", err)
 
 		if errors.Is(err, sql.ErrNoRows) {
-			return writeNotFound(fiberCtx, "context not found")
+			return writeNotFound(fiberCtx, "configuration_context_not_found", "context not found")
 		}
 
 		return writeServiceError(fiberCtx, err)
@@ -224,12 +224,12 @@ func (handler *Handler) GetContext(fiberCtx *fiber.Ctx) error {
 // @Param contextId path string true "Context ID" format(uuid)
 // @Param context body dto.UpdateContextRequest true "Context updates"
 // @Success 200 {object} dto.ReconciliationContextResponse "Successfully updated context"
-// @Failure 400 {object} ErrorResponse "Invalid request payload"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Context not found"
-// @Failure 409 {object} ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Context not found"
+// @Failure 409 {object} sharedhttp.ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/config/contexts/{contextId} [patch]
 func (handler *Handler) UpdateContext(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.context.update")
@@ -281,11 +281,11 @@ func (handler *Handler) UpdateContext(fiberCtx *fiber.Ctx) error {
 // @Param X-Request-Id header string false "Request ID for tracing"
 // @Param contextId path string true "Context ID" format(uuid)
 // @Success 204 "Context successfully deleted"
-// @Failure 400 {object} ErrorResponse "Invalid context ID format"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Context not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid context ID format"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Context not found"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/config/contexts/{contextId} [delete]
 func (handler *Handler) DeleteContext(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.context.delete")
@@ -311,11 +311,11 @@ func (handler *Handler) DeleteContext(fiberCtx *fiber.Ctx) error {
 		logSpanError(ctx, span, logger, "failed to delete context", err)
 
 		if errors.Is(err, sql.ErrNoRows) {
-			return writeNotFound(fiberCtx, "context not found")
+			return writeNotFound(fiberCtx, "configuration_context_not_found", "context not found")
 		}
 
 		if errors.Is(err, command.ErrContextHasChildEntities) {
-			return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "has_children", err.Error())
+			return respondError(fiberCtx, fiber.StatusConflict, "has_children", err.Error())
 		}
 
 		return writeServiceError(fiberCtx, err)
@@ -337,12 +337,12 @@ func (handler *Handler) DeleteContext(fiberCtx *fiber.Ctx) error {
 // @Param contextId path string true "Context ID" format(uuid)
 // @Param request body dto.CloneContextRequest true "Clone parameters"
 // @Success 201 {object} dto.CloneContextResponse "Context successfully cloned"
-// @Failure 400 {object} ErrorResponse "Invalid request payload"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Context not found"
-// @Failure 409 {object} ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Context not found"
+// @Failure 409 {object} sharedhttp.ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/config/contexts/{contextId}/clone [post]
 func (handler *Handler) CloneContext(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.context.clone")
@@ -381,16 +381,16 @@ func (handler *Handler) CloneContext(fiberCtx *fiber.Ctx) error {
 		logSpanError(ctx, span, logger, "failed to clone context", err)
 
 		if errors.Is(err, command.ErrCloneNameRequired) {
-			return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", err.Error())
+			return respondError(fiberCtx, fiber.StatusBadRequest, "configuration_context_name_required", err.Error())
 		}
 
 		if errors.Is(err, sql.ErrNoRows) {
-			return writeNotFound(fiberCtx, "source context not found")
+			return writeNotFound(fiberCtx, "configuration_context_not_found", "source context not found")
 		}
 
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "duplicate_name", "a context with this name already exists")
+			return respondError(fiberCtx, fiber.StatusConflict, "duplicate_name", "a context with this name already exists")
 		}
 
 		return writeServiceError(fiberCtx, err)

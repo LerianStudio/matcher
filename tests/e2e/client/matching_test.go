@@ -1,5 +1,6 @@
-//go:build e2e
+//go:build unit
 
+//nolint:varnamelen,wsl_v5 // Matching client tests use compact handler fixtures.
 package client
 
 import (
@@ -164,7 +165,7 @@ func TestMatchingClient_GetMatchRunResults(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result, 1)
 	assert.Equal(t, "grp-1", result[0].ID)
-	assert.Equal(t, 0.95, result[0].Confidence)
+	assert.InEpsilon(t, 0.95, result[0].Confidence, 0.0001)
 	assert.Len(t, result[0].Items, 2)
 }
 
@@ -200,14 +201,14 @@ func TestMatchingClient_ErrorHandling(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(`{"error":"invalid context"}`))
+		w.Write([]byte(`{"code":"MTCH-0013","title":"Bad Request","message":"invalid context id"}`))
 	}))
 	defer server.Close()
 
 	client := NewMatchingClient(NewClient(server.URL, "tenant-123", 5*time.Second))
 
 	_, err := client.RunMatch(context.Background(), "invalid", "COMMIT")
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "run match")
 }
 
@@ -216,14 +217,14 @@ func TestMatchingClient_NotFound(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte(`{"error":"run not found"}`))
+		w.Write([]byte(`{"code":"MTCH-0005","title":"Not Found","message":"run not found"}`))
 	}))
 	defer server.Close()
 
 	client := NewMatchingClient(NewClient(server.URL, "tenant-123", 5*time.Second))
 
 	_, err := client.GetMatchRun(context.Background(), "ctx-123", "nonexistent")
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "get match run")
 }
 

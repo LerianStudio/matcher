@@ -14,7 +14,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
-	sharedpagination "github.com/LerianStudio/matcher/internal/shared/adapters/http"
+	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 )
 
 // CreateMatchRule creates a match rule.
@@ -30,12 +30,12 @@ import (
 // @Param contextId path string true "Context ID" format(uuid)
 // @Param rule body dto.CreateMatchRuleRequest true "Match rule creation payload"
 // @Success 201 {object} dto.MatchRuleResponse "Successfully created match rule"
-// @Failure 400 {object} ErrorResponse "Invalid request payload"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Context not found"
-// @Failure 409 {object} ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Context not found"
+// @Failure 409 {object} sharedhttp.ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/config/contexts/{contextId}/rules [post]
 func (handler *Handler) CreateMatchRule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.matchrule.create")
@@ -72,7 +72,7 @@ func (handler *Handler) CreateMatchRule(fiberCtx *fiber.Ctx) error {
 		logSpanError(ctx, span, logger, "failed to create match rule", err)
 
 		if errors.Is(err, entities.ErrRulePriorityConflict) {
-			return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "priority_conflict", err.Error())
+			return respondError(fiberCtx, fiber.StatusConflict, "priority_conflict", err.Error())
 		}
 
 		return writeServiceError(fiberCtx, err)
@@ -95,11 +95,11 @@ func (handler *Handler) CreateMatchRule(fiberCtx *fiber.Ctx) error {
 // @Param cursor query string false "Cursor for pagination (opaque)"
 // @Param type query string false "Filter by rule type" Enums(EXACT,TOLERANCE,DATE_LAG)
 // @Success 200 {object} ListMatchRulesResponse "List of match rules with cursor pagination"
-// @Failure 400 {object} ErrorResponse "Invalid query parameters"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Context not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid query parameters"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Context not found"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/config/contexts/{contextId}/rules [get]
 func (handler *Handler) ListMatchRules(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.matchrule.list")
@@ -154,7 +154,7 @@ func (handler *Handler) ListMatchRules(fiberCtx *fiber.Ctx) error {
 
 	response := ListMatchRulesResponse{
 		Items: toMatchRuleValues(result),
-		CursorResponse: sharedpagination.CursorResponse{
+		CursorResponse: sharedhttp.CursorResponse{
 			NextCursor: pagination.Next,
 			PrevCursor: pagination.Prev,
 			Limit:      limit,
@@ -177,11 +177,11 @@ func (handler *Handler) ListMatchRules(fiberCtx *fiber.Ctx) error {
 // @Param contextId path string true "Context ID" format(uuid)
 // @Param ruleId path string true "Rule ID" format(uuid)
 // @Success 200 {object} dto.MatchRuleResponse "Successfully retrieved match rule"
-// @Failure 400 {object} ErrorResponse "Invalid rule ID format"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Match rule not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid rule ID format"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Match rule not found"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/config/contexts/{contextId}/rules/{ruleId} [get]
 func (handler *Handler) GetMatchRule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.matchrule.get")
@@ -213,7 +213,7 @@ func (handler *Handler) GetMatchRule(fiberCtx *fiber.Ctx) error {
 		logSpanError(ctx, span, logger, "failed to get match rule", err)
 
 		if errors.Is(err, sql.ErrNoRows) {
-			return writeNotFound(fiberCtx, "match rule not found")
+			return writeNotFound(fiberCtx, "configuration_match_rule_not_found", "match rule not found")
 		}
 
 		return writeServiceError(fiberCtx, err)
@@ -236,12 +236,12 @@ func (handler *Handler) GetMatchRule(fiberCtx *fiber.Ctx) error {
 // @Param ruleId path string true "Rule ID" format(uuid)
 // @Param rule body dto.UpdateMatchRuleRequest true "Match rule updates"
 // @Success 200 {object} dto.MatchRuleResponse "Successfully updated match rule"
-// @Failure 400 {object} ErrorResponse "Invalid request payload"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Match rule not found"
-// @Failure 409 {object} ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Match rule not found"
+// @Failure 409 {object} sharedhttp.ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/config/contexts/{contextId}/rules/{ruleId} [patch]
 func (handler *Handler) UpdateMatchRule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.matchrule.update")
@@ -278,11 +278,11 @@ func (handler *Handler) UpdateMatchRule(fiberCtx *fiber.Ctx) error {
 		logSpanError(ctx, span, logger, "failed to update match rule", err)
 
 		if errors.Is(err, entities.ErrRulePriorityConflict) {
-			return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "priority_conflict", err.Error())
+			return respondError(fiberCtx, fiber.StatusConflict, "priority_conflict", err.Error())
 		}
 
 		if errors.Is(err, sql.ErrNoRows) {
-			return writeNotFound(fiberCtx, "match rule not found")
+			return writeNotFound(fiberCtx, "configuration_match_rule_not_found", "match rule not found")
 		}
 
 		return writeServiceError(fiberCtx, err)
@@ -302,11 +302,11 @@ func (handler *Handler) UpdateMatchRule(fiberCtx *fiber.Ctx) error {
 // @Param contextId path string true "Context ID" format(uuid)
 // @Param ruleId path string true "Rule ID" format(uuid)
 // @Success 204 "Match rule successfully deleted"
-// @Failure 400 {object} ErrorResponse "Invalid rule ID format"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Match rule not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid rule ID format"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Match rule not found"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/config/contexts/{contextId}/rules/{ruleId} [delete]
 func (handler *Handler) DeleteMatchRule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.matchrule.delete")
@@ -337,7 +337,7 @@ func (handler *Handler) DeleteMatchRule(fiberCtx *fiber.Ctx) error {
 		logSpanError(ctx, span, logger, "failed to delete match rule", err)
 
 		if errors.Is(err, sql.ErrNoRows) {
-			return writeNotFound(fiberCtx, "match rule not found")
+			return writeNotFound(fiberCtx, "configuration_match_rule_not_found", "match rule not found")
 		}
 
 		return writeServiceError(fiberCtx, err)
@@ -364,11 +364,11 @@ type ReorderRequest struct {
 // @Param contextId path string true "Context ID" format(uuid)
 // @Param reorder body ReorderRequest true "Ordered list of rule IDs"
 // @Success 204 "Match rules reordered"
-// @Failure 400 {object} ErrorResponse "Invalid request payload"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Context not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Context not found"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/config/contexts/{contextId}/rules/reorder [post]
 func (handler *Handler) ReorderMatchRules(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.matchrule.reorder")
@@ -403,7 +403,7 @@ func (handler *Handler) ReorderMatchRules(fiberCtx *fiber.Ctx) error {
 		logSpanError(ctx, span, logger, "failed to reorder match rules", err)
 
 		if errors.Is(err, sql.ErrNoRows) {
-			return writeNotFound(fiberCtx, "match rule not found")
+			return writeNotFound(fiberCtx, "configuration_match_rule_not_found", "match rule not found")
 		}
 
 		return writeServiceError(fiberCtx, err)

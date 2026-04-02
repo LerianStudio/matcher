@@ -15,7 +15,10 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/exception/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/exception/services/command"
+	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 )
+
+var _ = sharedhttp.ErrorResponse{}
 
 // BulkAssign assigns multiple exceptions to the specified assignee.
 // @Summary Bulk assign exceptions
@@ -28,10 +31,10 @@ import (
 // @Param X-Request-Id header string false "Request ID for tracing"
 // @Param request body dto.BulkAssignRequest true "Bulk assign payload"
 // @Success 200 {object} dto.BulkActionResponse
-// @Failure 400 {object} ErrorResponse "Invalid request payload"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/exceptions/bulk/assign [post]
 func (handler *Handlers) BulkAssign(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.exception.bulk_assign")
@@ -70,10 +73,10 @@ func (handler *Handlers) BulkAssign(fiberCtx *fiber.Ctx) error {
 // @Param X-Request-Id header string false "Request ID for tracing"
 // @Param request body dto.BulkResolveRequest true "Bulk resolve payload"
 // @Success 200 {object} dto.BulkActionResponse
-// @Failure 400 {object} ErrorResponse "Invalid request payload"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/exceptions/bulk/resolve [post]
 func (handler *Handlers) BulkResolve(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.exception.bulk_resolve")
@@ -113,10 +116,10 @@ func (handler *Handlers) BulkResolve(fiberCtx *fiber.Ctx) error {
 // @Param X-Request-Id header string false "Request ID for tracing"
 // @Param request body dto.BulkDispatchRequest true "Bulk dispatch payload"
 // @Success 200 {object} dto.BulkActionResponse
-// @Failure 400 {object} ErrorResponse "Invalid request payload"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/exceptions/bulk/dispatch [post]
 func (handler *Handlers) BulkDispatch(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.exception.bulk_dispatch")
@@ -162,10 +165,10 @@ func handleBulkError(
 		errors.Is(err, command.ErrBulkResolutionEmpty) ||
 		errors.Is(err, command.ErrBulkTargetSystemEmpty) ||
 		errors.Is(err, command.ErrActorRequired) {
-		return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", err.Error())
+		return respondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", err.Error())
 	}
 
-	return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
+	return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 }
 
 // ErrNilUUIDNotAllowed is returned when a parsed UUID is the nil UUID.

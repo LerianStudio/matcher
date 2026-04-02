@@ -751,7 +751,7 @@ func TestPreviewFileHandler_InvalidSourceID(t *testing.T) {
 
 	require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 
-	var errResp libHTTP.ErrorResponse
+	var errResp ErrorResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
 	assert.Equal(t, "invalid source_id", errResp.Message)
 }

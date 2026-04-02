@@ -1,5 +1,4 @@
-//go:build e2e
-
+//nolint:perfsprint,varnamelen,wsl_v5 // Test reporting client favors concise path composition.
 package client
 
 import (
@@ -15,12 +14,7 @@ type ReportingClient struct {
 }
 
 // NewReportingClient creates a new reporting client.
-// Panics if client is nil (test infrastructure — fail fast on misconfiguration).
 func NewReportingClient(client *Client) *ReportingClient {
-	if client == nil {
-		panic("nil client passed to NewReportingClient")
-	}
-
 	return &ReportingClient{client: client}
 }
 
@@ -130,6 +124,7 @@ func (c *ReportingClient) ExportMatchedReport(
 		dateFrom,
 		dateTo,
 	)
+	//nolint:bodyclose // DoRaw reads and closes the response body internally.
 	_, body, err := c.client.DoRaw(ctx, http.MethodGet, path, nil, "")
 	if err != nil {
 		return nil, fmt.Errorf("export matched report: %w", err)
@@ -148,6 +143,7 @@ func (c *ReportingClient) ExportUnmatchedReport(
 		dateFrom,
 		dateTo,
 	)
+	//nolint:bodyclose // DoRaw reads and closes the response body internally.
 	_, body, err := c.client.DoRaw(ctx, http.MethodGet, path, nil, "")
 	if err != nil {
 		return nil, fmt.Errorf("export unmatched report: %w", err)
@@ -161,6 +157,7 @@ func (c *ReportingClient) ExportSummaryReport(
 	contextID, dateFrom, dateTo string,
 ) ([]byte, error) {
 	path := fmt.Sprintf("/v1/reports/contexts/%s/summary/export?date_from=%s&date_to=%s", contextID, dateFrom, dateTo)
+	//nolint:bodyclose // DoRaw reads and closes the response body internally.
 	_, body, err := c.client.DoRaw(ctx, http.MethodGet, path, nil, "")
 	if err != nil {
 		return nil, fmt.Errorf("export summary report: %w", err)
@@ -174,6 +171,7 @@ func (c *ReportingClient) ExportVarianceReport(
 	contextID, dateFrom, dateTo string,
 ) ([]byte, error) {
 	path := fmt.Sprintf("/v1/reports/contexts/%s/variance/export?date_from=%s&date_to=%s", contextID, dateFrom, dateTo)
+	//nolint:bodyclose // DoRaw reads and closes the response body internally.
 	_, body, err := c.client.DoRaw(ctx, http.MethodGet, path, nil, "")
 	if err != nil {
 		return nil, fmt.Errorf("export variance report: %w", err)
@@ -232,6 +230,7 @@ func (c *ReportingClient) CancelExportJob(ctx context.Context, jobID string) err
 // DownloadExportJob downloads the export job result.
 func (c *ReportingClient) DownloadExportJob(ctx context.Context, jobID string) ([]byte, error) {
 	path := fmt.Sprintf("/v1/export-jobs/%s/download", jobID)
+	//nolint:bodyclose // DoRaw reads and closes the response body internally.
 	_, body, err := c.client.DoRaw(ctx, http.MethodGet, path, nil, "")
 	if err != nil {
 		return nil, fmt.Errorf("download export job: %w", err)

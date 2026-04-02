@@ -11,7 +11,10 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/matching/services/command"
+	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 )
+
+var _ = sharedhttp.ErrorResponse{}
 
 // Unmatch breaks an existing match group and reverts transaction statuses.
 // @Summary Break/Unmatch a match group
@@ -26,11 +29,11 @@ import (
 // @Param contextId query string true "Context ID" format(uuid)
 // @Param request body UnmatchRequest true "Unmatch payload with rejection reason"
 // @Success 204 "No Content"
-// @Failure 400 {object} libHTTP.ErrorResponse "Invalid request payload"
-// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
-// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
-// @Failure 404 {object} libHTTP.ErrorResponse "Match group not found"
-// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Match group not found"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/matching/groups/{matchGroupId} [delete]
 func (handler *Handler) Unmatch(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.matching.unmatch")

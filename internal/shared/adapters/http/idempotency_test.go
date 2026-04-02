@@ -16,8 +16,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 	"github.com/LerianStudio/matcher/internal/auth"
+	"github.com/LerianStudio/matcher/pkg/constant"
 )
 
 var errRedisConnection = errors.New("redis connection failed")
@@ -79,10 +79,10 @@ func (repo *stubIdempotencyRepo) TryReacquireFromFailed(_ context.Context, key I
 	return repo.reacquireResult, repo.reacquireErr
 }
 
-func decodeErrorResponse(t *testing.T, body io.Reader) libHTTP.ErrorResponse {
+func decodeErrorResponse(t *testing.T, body io.Reader) ErrorResponse {
 	t.Helper()
 
-	var errResp libHTTP.ErrorResponse
+	var errResp ErrorResponse
 	require.NoError(t, json.NewDecoder(body).Decode(&errResp))
 
 	return errResp
@@ -280,8 +280,8 @@ func TestIdempotencyMiddleware_PendingRequest_Returns409(t *testing.T) {
 
 	assert.Equal(t, http.StatusConflict, resp.StatusCode)
 	errResp := decodeErrorResponse(t, resp.Body)
-	assert.Equal(t, http.StatusConflict, errResp.Code)
-	assert.Equal(t, "request_in_progress", errResp.Title)
+	assert.Equal(t, constant.CodeRequestInProgress, errResp.Code)
+	assert.Equal(t, http.StatusText(http.StatusConflict), errResp.Title)
 	assert.Equal(t, "A request with this idempotency key is currently being processed", errResp.Message)
 }
 
@@ -310,8 +310,8 @@ func TestIdempotencyMiddleware_InvalidKeyFormat_Returns400Contract(t *testing.T)
 
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	errResp := decodeErrorResponse(t, resp.Body)
-	assert.Equal(t, http.StatusBadRequest, errResp.Code)
-	assert.Equal(t, "invalid_idempotency_key", errResp.Title)
+	assert.Equal(t, constant.CodeInvalidIdempotencyKey, errResp.Code)
+	assert.Equal(t, http.StatusText(http.StatusBadRequest), errResp.Title)
 	assert.Equal(t, ErrInvalidIdempotencyKey.Error(), errResp.Message)
 	assert.False(t, repo.acquireCalled, "repository should not be called when key format is invalid")
 }
@@ -348,8 +348,8 @@ func TestIdempotencyMiddleware_MissingTenant_Returns500Contract(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 	errResp := decodeErrorResponse(t, resp.Body)
-	assert.Equal(t, http.StatusInternalServerError, errResp.Code)
-	assert.Equal(t, "idempotency_configuration_error", errResp.Title)
+	assert.Equal(t, constant.CodeIdempotencyConfiguration, errResp.Code)
+	assert.Equal(t, http.StatusText(http.StatusInternalServerError), errResp.Title)
 	assert.Equal(t, "an unexpected error occurred", errResp.Message)
 	assert.False(t, repo.acquireCalled, "repository should not be called when tenant is missing")
 }
@@ -459,7 +459,7 @@ func TestIdempotencyMiddleware_FailedRequest_ReacquireDeniedReturns409(t *testin
 
 	assert.Equal(t, http.StatusConflict, resp.StatusCode)
 	errResp := decodeErrorResponse(t, resp.Body)
-	assert.Equal(t, "request_in_progress", errResp.Title)
+	assert.Equal(t, http.StatusText(http.StatusConflict), errResp.Title)
 	assert.True(t, repo.reacquireCalled)
 }
 
@@ -611,10 +611,10 @@ func TestIdempotencyMiddleware_AcquireError_Returns500(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 
-	var errResp libHTTP.ErrorResponse
+	var errResp ErrorResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
-	assert.Equal(t, http.StatusInternalServerError, errResp.Code)
-	assert.Equal(t, "idempotency_error", errResp.Title)
+	assert.Equal(t, constant.CodeIdempotencyError, errResp.Code)
+	assert.Equal(t, http.StatusText(http.StatusInternalServerError), errResp.Title)
 	assert.Equal(t, "an unexpected error occurred", errResp.Message)
 }
 

@@ -14,10 +14,8 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/governance/adapters/http/dto"
 	governanceEntities "github.com/LerianStudio/matcher/internal/governance/domain/entities"
@@ -106,23 +104,19 @@ func (handler *Handler) initMetrics() error {
 }
 
 func startHandlerSpan(c *fiber.Ctx, name string) (context.Context, trace.Span, libLog.Logger) {
-	ctx := c.UserContext()
-	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
-
-	if tracer == nil {
-		tracer = otel.Tracer("governance.http")
-	}
-
-	ctx, span := tracer.Start(ctx, name)
-
-	return ctx, span, logger
+	return sharedhttp.StartHandlerSpanWithFallback(c, name, "governance.http")
 }
 
 func logSpanError(ctx context.Context, span trace.Span, logger libLog.Logger, message string, err error) {
-	libOpentelemetry.HandleSpanError(span, message, err)
-	libLog.SafeError(logger, ctx, message, err, productionMode.Load())
+	sharedhttp.LogSpanError(ctx, span, logger, productionMode.Load(), message, err)
 }
 
+//nolint:wrapcheck // HTTP transport response is the terminal error boundary.
+func respondError(fiberCtx *fiber.Ctx, status int, slug, message string) error {
+	return sharedhttp.RespondError(fiberCtx, status, slug, message)
+}
+
+//nolint:wrapcheck // HTTP transport response is the terminal error boundary.
 func badRequest(
 	ctx context.Context,
 	fiberCtx *fiber.Ctx,
@@ -131,11 +125,10 @@ func badRequest(
 	message string,
 	err error,
 ) error {
-	logSpanError(ctx, span, logger, message, err)
-
-	return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", message)
+	return sharedhttp.BadRequest(ctx, fiberCtx, span, logger, productionMode.Load(), message, err)
 }
 
+//nolint:wrapcheck // HTTP transport response is the terminal error boundary.
 func writeServiceError(
 	ctx context.Context,
 	fiberCtx *fiber.Ctx,
@@ -144,9 +137,7 @@ func writeServiceError(
 	message string,
 	err error,
 ) error {
-	logSpanError(ctx, span, logger, message, err)
-
-	return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
+	return sharedhttp.InternalError(ctx, fiberCtx, span, logger, productionMode.Load(), message, err)
 }
 
 func writeNotFound(
@@ -154,12 +145,13 @@ func writeNotFound(
 	fiberCtx *fiber.Ctx,
 	span trace.Span,
 	logger libLog.Logger,
+	slug string,
 	message string,
 	err error,
 ) error {
-	logSpanError(ctx, span, logger, message, err)
+	sharedhttp.LogSpanError(ctx, span, logger, productionMode.Load(), message, err)
 
-	return libHTTP.RespondError(fiberCtx, fiber.StatusNotFound, "not_found", message)
+	return respondError(fiberCtx, fiber.StatusNotFound, slug, message)
 }
 
 // GetAuditLog retrieves a single audit log by ID.
@@ -172,11 +164,11 @@ func writeNotFound(
 // @Param X-Request-Id header string false "Request ID for tracing"
 // @Param id path string true "Audit Log ID" format(uuid)
 // @Success 200 {object} dto.AuditLogResponse
-// @Failure 400 {object} libHTTP.ErrorResponse "Invalid request payload"
-// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
-// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
-// @Failure 404 {object} libHTTP.ErrorResponse "Audit log not found"
-// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Audit log not found"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/governance/audit-logs/{id} [get]
 func (handler *Handler) GetAuditLog(
 	fiberCtx *fiber.Ctx,
@@ -211,7 +203,7 @@ func (handler *Handler) GetAuditLog(
 
 	if err != nil {
 		if errors.Is(err, governanceErrors.ErrAuditLogNotFound) {
-			return writeNotFound(ctx, fiberCtx, span, logger, "audit log not found", err)
+			return writeNotFound(ctx, fiberCtx, span, logger, "governance_audit_log_not_found", "audit log not found", err)
 		}
 
 		return writeServiceError(ctx, fiberCtx, span, logger, "failed to get audit log", err)
@@ -223,6 +215,7 @@ func (handler *Handler) GetAuditLog(
 			fiberCtx,
 			span,
 			logger,
+			"governance_audit_log_not_found",
 			"audit log not found",
 			governanceErrors.ErrAuditLogNotFound,
 		)
@@ -248,10 +241,10 @@ func (handler *Handler) GetAuditLog(
 // @Param limit query int false "Maximum number of records to return" default(20) minimum(1) maximum(200)
 // @Param cursor query string false "Cursor for pagination (opaque)"
 // @Success 200 {object} dto.ListAuditLogsResponse
-// @Failure 400 {object} libHTTP.ErrorResponse "Invalid request payload"
-// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
-// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
-// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/governance/entities/{entityType}/{entityId}/audit-logs [get]
 func (handler *Handler) ListAuditLogsByEntity(
 	fiberCtx *fiber.Ctx,
@@ -330,10 +323,10 @@ func (handler *Handler) ListAuditLogsByEntity(
 // @Param limit query int false "Maximum number of records to return" default(20) minimum(1) maximum(200)
 // @Param cursor query string false "Cursor for pagination (opaque)"
 // @Success 200 {object} dto.ListAuditLogsResponse
-// @Failure 400 {object} libHTTP.ErrorResponse "Invalid query parameters"
-// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
-// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
-// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid query parameters"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/governance/audit-logs [get]
 func (handler *Handler) ListAuditLogs(
 	fiberCtx *fiber.Ctx,

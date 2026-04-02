@@ -9,17 +9,15 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/services/command"
 	"github.com/LerianStudio/matcher/internal/configuration/services/query"
+	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 )
 
 // Configuration handler errors.
@@ -46,23 +44,14 @@ type Handler struct {
 }
 
 func startHandlerSpan(c *fiber.Ctx, name string) (context.Context, trace.Span, libLog.Logger) {
-	ctx := c.UserContext()
-	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
-
-	if tracer == nil {
-		tracer = otel.Tracer("commons.default")
-	}
-
-	ctx, span := tracer.Start(ctx, name)
-
-	return ctx, span, logger
+	return sharedhttp.StartHandlerSpan(c, name)
 }
 
 func logSpanError(ctx context.Context, span trace.Span, logger libLog.Logger, message string, err error) {
-	libOpentelemetry.HandleSpanError(span, message, err)
-	libLog.SafeError(logger, ctx, message, err, productionMode.Load())
+	sharedhttp.LogSpanError(ctx, span, logger, productionMode.Load(), message, err)
 }
 
+//nolint:wrapcheck // HTTP transport response is the terminal error boundary.
 func badRequest(
 	ctx context.Context,
 	fiberCtx *fiber.Ctx,
@@ -71,18 +60,44 @@ func badRequest(
 	message string,
 	err error,
 ) error {
-	logSpanError(ctx, span, logger, message, err)
-
-	return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", safeClientMessage(message, err))
+	return sharedhttp.BadRequest(ctx, fiberCtx, span, logger, productionMode.Load(), safeClientMessage(message, err), err)
 }
 
 func unauthorized(ctx context.Context, c *fiber.Ctx, span trace.Span, logger libLog.Logger, err error) error {
 	logSpanError(ctx, span, logger, "invalid tenant id", err)
-	return libHTTP.RespondError(c, fiber.StatusUnauthorized, "unauthorized", "unauthorized")
+	return respondError(c, fiber.StatusUnauthorized, "unauthorized", "unauthorized")
 }
 
-func writeNotFound(c *fiber.Ctx, message string) error {
-	return libHTTP.RespondError(c, fiber.StatusNotFound, "not_found", message)
+func writeNotFound(c *fiber.Ctx, slug, message string) error {
+	return respondError(c, fiber.StatusNotFound, slug, message)
+}
+
+//nolint:wrapcheck // HTTP transport response is the terminal error boundary.
+func respondError(fiberCtx *fiber.Ctx, status int, slug, message string) error {
+	return sharedhttp.RespondError(fiberCtx, status, slug, message)
+}
+
+//nolint:wrapcheck // HTTP transport response is the terminal error boundary.
+func respondContextVerificationError(fiberCtx *fiber.Ctx, err error) error {
+	return sharedhttp.RespondProductError(
+		fiberCtx,
+		sharedhttp.ValidateContextVerificationError(
+			err,
+			sharedhttp.WithContextNotFound("configuration_context_not_found", "context not found"),
+		),
+	)
+}
+
+//nolint:wrapcheck // HTTP transport response is the terminal error boundary.
+func respondOwnershipVerificationError(fiberCtx *fiber.Ctx, err error, notFoundSlug, notFoundMessage string) error {
+	return sharedhttp.RespondProductError(
+		fiberCtx,
+		sharedhttp.ValidateContextVerificationError(
+			err,
+			sharedhttp.WithContextNotFound(notFoundSlug, notFoundMessage),
+			sharedhttp.WithHiddenContextOwnershipAsNotFound(notFoundSlug, notFoundMessage),
+		),
+	)
 }
 
 func safeClientMessage(defaultMsg string, err error) string {
@@ -109,7 +124,7 @@ func (handler *Handler) ensureSourceAccess(
 		logSpanError(ctx, span, logger, "failed to load source", err)
 
 		if errors.Is(err, sql.ErrNoRows) {
-			return writeNotFound(fiberCtx, "source not found")
+			return writeNotFound(fiberCtx, "configuration_source_not_found", "source not found")
 		}
 
 		return writeServiceError(fiberCtx, err)
@@ -127,30 +142,11 @@ func handleContextVerificationError(
 ) error {
 	logSpanError(ctx, span, logger, "context verification failed", err)
 
-	if errors.Is(err, libHTTP.ErrMissingContextID) ||
-		errors.Is(err, libHTTP.ErrInvalidContextID) {
-		return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", "invalid context id")
-	}
-
-	if errors.Is(err, libHTTP.ErrTenantIDNotFound) ||
-		errors.Is(err, libHTTP.ErrInvalidTenantID) {
-		return libHTTP.RespondError(fiberCtx, fiber.StatusUnauthorized, "unauthorized", "unauthorized")
-	}
-
 	if errors.Is(err, libHTTP.ErrContextNotFound) {
-		return writeNotFound(fiberCtx, "context not found")
+		return writeNotFound(fiberCtx, "configuration_context_not_found", "context not found")
 	}
 
-	if errors.Is(err, libHTTP.ErrContextNotActive) {
-		return libHTTP.RespondError(fiberCtx, fiber.StatusForbidden, "context_not_active", "context is not active")
-	}
-
-	if errors.Is(err, libHTTP.ErrContextNotOwned) ||
-		errors.Is(err, libHTTP.ErrContextAccessDenied) {
-		return libHTTP.RespondError(fiberCtx, fiber.StatusForbidden, "forbidden", "access denied")
-	}
-
-	return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
+	return respondContextVerificationError(fiberCtx, err)
 }
 
 func handleOwnershipVerificationError(
@@ -159,15 +155,11 @@ func handleOwnershipVerificationError(
 	span trace.Span,
 	logger libLog.Logger,
 	err error,
+	notFoundSlug, notFoundMessage string,
 ) error {
 	logSpanError(ctx, span, logger, "context ownership verification failed", err)
 
-	if errors.Is(err, libHTTP.ErrContextNotFound) ||
-		errors.Is(err, libHTTP.ErrContextNotOwned) {
-		return writeNotFound(fiberCtx, "resource not found")
-	}
-
-	return writeServiceError(fiberCtx, err)
+	return respondOwnershipVerificationError(fiberCtx, err, notFoundSlug, notFoundMessage)
 }
 
 // NewHandler creates a new configuration handler.
@@ -201,33 +193,25 @@ func boolDefault(b *bool, defaultVal bool) bool {
 func mapUpdateContextError(fiberCtx *fiber.Ctx, err error) error {
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
-		return writeNotFound(fiberCtx, "context not found")
+		return writeNotFound(fiberCtx, "configuration_context_not_found", "context not found")
 	case errors.Is(err, command.ErrContextNameAlreadyExists):
-		return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "duplicate_name", err.Error())
+		return respondError(fiberCtx, fiber.StatusConflict, "duplicate_name", err.Error())
 	case errors.Is(err, entities.ErrInvalidStateTransition):
-		return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "invalid_state_transition", err.Error())
+		return respondError(fiberCtx, fiber.StatusConflict, "invalid_state_transition", err.Error())
 	case errors.Is(err, entities.ErrArchivedContextCannotBeModified):
-		return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "archived_context", err.Error())
+		return respondError(fiberCtx, fiber.StatusConflict, "archived_context", err.Error())
 	default:
 		return writeServiceError(fiberCtx, err)
 	}
 }
 
-// ErrorResponse is a placeholder for Swagger documentation.
-// The actual error response type is defined in lib-commons.
-type ErrorResponse struct {
-	Code    int    `json:"code"`
-	Title   string `json:"title"`
-	Message string `json:"message"`
-}
-
 func writeServiceError(fiberCtx *fiber.Ctx, err error) error {
 	message := clientErrorMessage(err)
 	if isClientSafeError(err) {
-		return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", message)
+		return respondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", message)
 	}
 
-	return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
+	return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 }
 
 func clientErrorMessage(err error) string {

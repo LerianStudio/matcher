@@ -229,5 +229,5 @@ func TestPollExtraction_FetcherUnavailable_Returns503(t *testing.T) {
 
 	resp, err := app.Test(req)
 	require.NoError(t, err)
-	assertStructuredErrorResponse(t, resp, http.StatusServiceUnavailable, "service_unavailable", "fetcher service unavailable")
+	assertStructuredErrorResponse(t, resp, http.StatusServiceUnavailable, "discovery_fetcher_unavailable", "fetcher service unavailable")
 }

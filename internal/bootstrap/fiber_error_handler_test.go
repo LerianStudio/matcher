@@ -7,8 +7,10 @@
 package bootstrap
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
@@ -17,6 +19,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	matcherAuth "github.com/LerianStudio/matcher/internal/auth"
+	"github.com/LerianStudio/matcher/pkg/constant"
 )
 
 // --- customErrorHandlerWithEnv ---
@@ -118,7 +122,7 @@ func TestCustomErrorHandlerWithEnv_FiberError_BadRequest(t *testing.T) {
 
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
-	assert.Contains(t, string(body), "invalid_request")
+	assert.Contains(t, string(body), constant.CodeInvalidRequest)
 }
 
 func TestCustomErrorHandlerWithEnv_FiberError_Unauthorized(t *testing.T) {
@@ -138,6 +142,50 @@ func TestCustomErrorHandlerWithEnv_FiberError_Unauthorized(t *testing.T) {
 	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestCustomErrorHandlerWithEnv_PreservesSafeAuthUnauthorizedMessage(t *testing.T) {
+	t.Parallel()
+
+	handler := customErrorHandlerWithEnv(&libLog.NopLogger{}, "development")
+
+	app := fiber.New(fiber.Config{ErrorHandler: handler})
+	app.Get("/auth", func(_ *fiber.Ctx) error {
+		return fiber.NewError(fiber.StatusUnauthorized, matcherAuth.ErrMissingToken.Error())
+	})
+
+	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/auth", http.NoBody))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	var body map[string]any
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+	assert.Equal(t, constant.CodeUnauthorized, body["code"])
+	assert.Equal(t, http.StatusText(http.StatusUnauthorized), body["title"])
+	assert.Equal(t, matcherAuth.ErrMissingToken.Error(), body["message"])
+}
+
+func TestCustomErrorHandlerWithEnv_PreservesSafeAuthForbiddenMessage(t *testing.T) {
+	t.Parallel()
+
+	handler := customErrorHandlerWithEnv(&libLog.NopLogger{}, "development")
+
+	app := fiber.New(fiber.Config{ErrorHandler: handler})
+	app.Get("/auth", func(_ *fiber.Ctx) error {
+		return fiber.NewError(fiber.StatusForbidden, "tenant claim required")
+	})
+
+	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/auth", http.NoBody))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	var body map[string]any
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	assert.Equal(t, fiber.StatusForbidden, resp.StatusCode)
+	assert.Equal(t, constant.CodeForbidden, body["code"])
+	assert.Equal(t, http.StatusText(http.StatusForbidden), body["title"])
+	assert.Equal(t, "tenant claim required", body["message"])
 }
 
 // --- sanitizeErrorForLogging ---
@@ -235,42 +283,6 @@ func TestFindValueEnd_AtSemicolon(t *testing.T) {
 	end := findValueEnd(msg, len("password="))
 
 	assert.Equal(t, len("password=secret"), end)
-}
-
-// --- clientErrorMessageForStatus ---
-
-func TestClientErrorMessageForStatus_KnownCodes(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		code     int
-		expected string
-	}{
-		{name: "bad_request", code: fiber.StatusBadRequest, expected: "invalid_request"},
-		{name: "unauthorized", code: fiber.StatusUnauthorized, expected: "unauthorized"},
-		{name: "forbidden", code: fiber.StatusForbidden, expected: "forbidden"},
-		{name: "not_found", code: fiber.StatusNotFound, expected: "not_found"},
-		{name: "request_too_large", code: fiber.StatusRequestEntityTooLarge, expected: "request_entity_too_large"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			result := clientErrorMessageForStatus(tt.code)
-
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
-func TestClientErrorMessageForStatus_UnknownCode(t *testing.T) {
-	t.Parallel()
-
-	result := clientErrorMessageForStatus(fiber.StatusConflict)
-
-	assert.Equal(t, "request_failed", result)
 }
 
 // --- sanitizeHeaderID ---

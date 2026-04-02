@@ -1,5 +1,6 @@
-//go:build e2e
+//go:build unit
 
+//nolint:wsl_v5 // DTO round-trip tests prioritize compact fixtures.
 package client
 
 import (
@@ -270,7 +271,7 @@ func TestMatchGroup_WithItems(t *testing.T) {
 	err = json.Unmarshal(data, &decoded)
 	require.NoError(t, err)
 
-	assert.Equal(t, 0.95, decoded.Confidence)
+	assert.InEpsilon(t, 0.95, decoded.Confidence, 0.0001)
 	require.Len(t, decoded.Items, 1)
 	assert.Equal(t, "tx-001", decoded.Items[0].TransactionID)
 }
@@ -310,7 +311,7 @@ func TestDashboardAggregates_JSONSerialization(t *testing.T) {
 	require.NotNil(t, decoded.Volume)
 	assert.Equal(t, 1000, decoded.Volume.TotalTransactions)
 	require.NotNil(t, decoded.MatchRate)
-	assert.Equal(t, 0.90, decoded.MatchRate.MatchRate)
+	assert.InEpsilon(t, 0.90, decoded.MatchRate.MatchRate, 0.0001)
 }
 
 func TestExportJob_AllStatuses(t *testing.T) {
@@ -356,10 +357,9 @@ func TestErrorResponse_JSONSerialization(t *testing.T) {
 	t.Parallel()
 
 	resp := ErrorResponse{
-		Code:    400,
+		Code:    "MTCH-0001",
 		Title:   "Bad Request",
 		Message: "Field 'name' is required",
-		Error:   "validation_error",
 		Details: map[string]any{"field": "name"},
 	}
 
@@ -370,10 +370,9 @@ func TestErrorResponse_JSONSerialization(t *testing.T) {
 	err = json.Unmarshal(data, &decoded)
 	require.NoError(t, err)
 
-	assert.Equal(t, 400, decoded.Code)
+	assert.Equal(t, "MTCH-0001", decoded.Code)
 	assert.Equal(t, "Bad Request", decoded.Title)
 	assert.Equal(t, "Field 'name' is required", decoded.Message)
-	assert.Equal(t, "validation_error", decoded.Error)
 	assert.NotNil(t, decoded.Details)
 }
 
@@ -381,7 +380,7 @@ func TestErrorResponse_OmitsEmptyOptionalFields(t *testing.T) {
 	t.Parallel()
 
 	resp := ErrorResponse{
-		Code:    404,
+		Code:    "MTCH-0005",
 		Message: "Not found",
 	}
 
@@ -391,7 +390,7 @@ func TestErrorResponse_OmitsEmptyOptionalFields(t *testing.T) {
 	assert.NotContains(t, string(data), "title")
 	assert.NotContains(t, string(data), "error")
 	assert.NotContains(t, string(data), "details")
-	assert.Contains(t, string(data), `"code":404`)
+	assert.Contains(t, string(data), `"code":"MTCH-0005"`)
 	assert.Contains(t, string(data), `"message":"Not found"`)
 }
 

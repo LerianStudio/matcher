@@ -1,5 +1,6 @@
-//go:build e2e
+//go:build unit
 
+//nolint:varnamelen,wsl_v5 // Discovery client tests use compact handler fixtures.
 package client
 
 import (
@@ -322,13 +323,13 @@ func TestDiscoveryClient_ErrorHandling(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		_, _ = w.Write([]byte(`{"error":"connection not found"}`))
+		_, _ = w.Write([]byte(`{"code":"MTCH-0201","title":"Not Found","message":"connection not found"}`))
 	}))
 	defer server.Close()
 
 	client := NewDiscoveryClient(NewClient(server.URL, "tenant-123", 5*time.Second))
 
 	_, err := client.GetConnection(context.Background(), "nonexistent")
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "get discovery connection")
 }

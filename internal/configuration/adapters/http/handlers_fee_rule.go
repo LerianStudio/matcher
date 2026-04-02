@@ -11,8 +11,11 @@ import (
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/configuration/services/command"
+	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
+
+var _ = sharedhttp.ErrorResponse{}
 
 // CreateFeeRule creates a fee rule.
 //
@@ -28,12 +31,12 @@ import (
 // @Param contextId path string true "Context ID" format(uuid)
 // @Param feeRule body dto.CreateFeeRuleRequest true "Fee rule creation payload"
 // @Success 201 {object} dto.FeeRuleResponse "Successfully created fee rule"
-// @Failure 400 {object} ErrorResponse "Invalid request payload"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Context not found"
-// @Failure 409 {object} ErrorResponse "Conflict: duplicate priority or name"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Context not found"
+// @Failure 409 {object} sharedhttp.ErrorResponse "Conflict: duplicate priority or name"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/config/contexts/{contextId}/fee-rules [post]
 func (handler *Handler) CreateFeeRule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fee_rule.create")
@@ -96,11 +99,11 @@ func (handler *Handler) CreateFeeRule(fiberCtx *fiber.Ctx) error {
 // @Param X-Request-Id header string false "Request ID for tracing"
 // @Param contextId path string true "Context ID" format(uuid)
 // @Success 200 {array} dto.FeeRuleResponse "List of fee rules"
-// @Failure 400 {object} ErrorResponse "Invalid context ID format"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Context not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid context ID format"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Context not found"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/config/contexts/{contextId}/fee-rules [get]
 func (handler *Handler) ListFeeRules(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fee_rule.list")
@@ -146,11 +149,11 @@ func (handler *Handler) ListFeeRules(fiberCtx *fiber.Ctx) error {
 // @Param X-Request-Id header string false "Request ID for tracing"
 // @Param feeRuleId path string true "Fee Rule ID" format(uuid)
 // @Success 200 {object} dto.FeeRuleResponse "Successfully retrieved fee rule"
-// @Failure 400 {object} ErrorResponse "Invalid fee rule ID format"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Fee rule not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid fee rule ID format"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Fee rule not found"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/config/fee-rules/{feeRuleId} [get]
 func (handler *Handler) GetFeeRule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fee_rule.get")
@@ -173,18 +176,18 @@ func (handler *Handler) GetFeeRule(fiberCtx *fiber.Ctx) error {
 		logSpanError(ctx, span, logger, "failed to get fee rule", err)
 
 		if errors.Is(err, fee.ErrFeeRuleNotFound) {
-			return writeNotFound(fiberCtx, "fee rule not found")
+			return writeNotFound(fiberCtx, "configuration_fee_rule_not_found", "fee rule not found")
 		}
 
 		return writeServiceError(fiberCtx, err)
 	}
 
 	if result == nil {
-		return writeNotFound(fiberCtx, "fee rule not found")
+		return writeNotFound(fiberCtx, "configuration_fee_rule_not_found", "fee rule not found")
 	}
 
 	if err := handler.contextVerifier(ctx, tenantID, result.ContextID); err != nil {
-		return handleOwnershipVerificationError(ctx, fiberCtx, span, logger, err)
+		return handleOwnershipVerificationError(ctx, fiberCtx, span, logger, err, "configuration_fee_rule_not_found", "fee rule not found")
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, result.ContextID)
@@ -206,12 +209,12 @@ func (handler *Handler) GetFeeRule(fiberCtx *fiber.Ctx) error {
 // @Param feeRuleId path string true "Fee Rule ID" format(uuid)
 // @Param feeRule body dto.UpdateFeeRuleRequest true "Fee rule updates"
 // @Success 200 {object} dto.FeeRuleResponse "Successfully updated fee rule"
-// @Failure 400 {object} ErrorResponse "Invalid request payload"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Fee rule not found"
-// @Failure 409 {object} ErrorResponse "Conflict: duplicate priority or name"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Fee rule not found"
+// @Failure 409 {object} sharedhttp.ErrorResponse "Conflict: duplicate priority or name"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/config/fee-rules/{feeRuleId} [patch]
 func (handler *Handler) UpdateFeeRule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fee_rule.update")
@@ -234,18 +237,18 @@ func (handler *Handler) UpdateFeeRule(fiberCtx *fiber.Ctx) error {
 		logSpanError(ctx, span, logger, "failed to get fee rule", err)
 
 		if errors.Is(err, fee.ErrFeeRuleNotFound) {
-			return writeNotFound(fiberCtx, "fee rule not found")
+			return writeNotFound(fiberCtx, "configuration_fee_rule_not_found", "fee rule not found")
 		}
 
 		return writeServiceError(fiberCtx, err)
 	}
 
 	if existing == nil {
-		return writeNotFound(fiberCtx, "fee rule not found")
+		return writeNotFound(fiberCtx, "configuration_fee_rule_not_found", "fee rule not found")
 	}
 
 	if err := handler.contextVerifier(ctx, tenantID, existing.ContextID); err != nil {
-		return handleOwnershipVerificationError(ctx, fiberCtx, span, logger, err)
+		return handleOwnershipVerificationError(ctx, fiberCtx, span, logger, err, "configuration_fee_rule_not_found", "fee rule not found")
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, existing.ContextID)
@@ -291,11 +294,11 @@ func (handler *Handler) UpdateFeeRule(fiberCtx *fiber.Ctx) error {
 // @Param X-Request-Id header string false "Request ID for tracing"
 // @Param feeRuleId path string true "Fee Rule ID" format(uuid)
 // @Success 204 "Fee rule successfully deleted"
-// @Failure 400 {object} ErrorResponse "Invalid fee rule ID format"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Fee rule not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid fee rule ID format"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Fee rule not found"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/config/fee-rules/{feeRuleId} [delete]
 func (handler *Handler) DeleteFeeRule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fee_rule.delete")
@@ -318,18 +321,18 @@ func (handler *Handler) DeleteFeeRule(fiberCtx *fiber.Ctx) error {
 		logSpanError(ctx, span, logger, "failed to get fee rule", err)
 
 		if errors.Is(err, fee.ErrFeeRuleNotFound) {
-			return writeNotFound(fiberCtx, "fee rule not found")
+			return writeNotFound(fiberCtx, "configuration_fee_rule_not_found", "fee rule not found")
 		}
 
 		return writeServiceError(fiberCtx, err)
 	}
 
 	if existing == nil {
-		return writeNotFound(fiberCtx, "fee rule not found")
+		return writeNotFound(fiberCtx, "configuration_fee_rule_not_found", "fee rule not found")
 	}
 
 	if err := handler.contextVerifier(ctx, tenantID, existing.ContextID); err != nil {
-		return handleOwnershipVerificationError(ctx, fiberCtx, span, logger, err)
+		return handleOwnershipVerificationError(ctx, fiberCtx, span, logger, err, "configuration_fee_rule_not_found", "fee rule not found")
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, existing.ContextID)
@@ -338,7 +341,7 @@ func (handler *Handler) DeleteFeeRule(fiberCtx *fiber.Ctx) error {
 		logSpanError(ctx, span, logger, "failed to delete fee rule", err)
 
 		if errors.Is(err, fee.ErrFeeRuleNotFound) {
-			return writeNotFound(fiberCtx, "fee rule not found")
+			return writeNotFound(fiberCtx, "configuration_fee_rule_not_found", "fee rule not found")
 		}
 
 		return writeServiceError(fiberCtx, err)
@@ -351,15 +354,15 @@ func (handler *Handler) DeleteFeeRule(fiberCtx *fiber.Ctx) error {
 func mapFeeRuleError(fiberCtx *fiber.Ctx, err error) error {
 	switch {
 	case errors.Is(err, fee.ErrFeeRuleNotFound):
-		return writeNotFound(fiberCtx, "fee rule not found")
+		return writeNotFound(fiberCtx, "configuration_fee_rule_not_found", "fee rule not found")
 	case errors.Is(err, command.ErrDuplicateFeeRulePriority):
-		return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "duplicate_priority", err.Error())
+		return respondError(fiberCtx, fiber.StatusConflict, "duplicate_priority", err.Error())
 	case errors.Is(err, command.ErrDuplicateFeeRuleName):
-		return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "duplicate_name", err.Error())
+		return respondError(fiberCtx, fiber.StatusConflict, "duplicate_name", err.Error())
 	case errors.Is(err, fee.ErrFeeScheduleNotFound):
-		return writeNotFound(fiberCtx, "fee schedule not found")
+		return writeNotFound(fiberCtx, "configuration_fee_schedule_not_found", "fee schedule not found")
 	case isFeeRuleClientError(err):
-		return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", err.Error())
+		return respondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", err.Error())
 	default:
 		return writeServiceError(fiberCtx, err)
 	}

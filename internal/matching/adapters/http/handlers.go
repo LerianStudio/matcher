@@ -9,10 +9,8 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
@@ -22,6 +20,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/matching/ports"
 	"github.com/LerianStudio/matcher/internal/matching/services/command"
 	matchingQuery "github.com/LerianStudio/matcher/internal/matching/services/query"
+	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 )
 
 // Pagination constants.
@@ -69,7 +68,6 @@ var (
 	// ErrInvalidSortBy indicates sort by parameter is invalid for cursor pagination.
 	ErrInvalidSortBy    = errors.New("invalid sort_by")
 	errMissingParameter = errors.New("missing parameter")
-	errForbidden        = errors.New("forbidden")
 )
 
 // RunMatchRequest defines the payload to trigger a matching run.
@@ -153,23 +151,24 @@ func NewHandler(
 }
 
 func startHandlerSpan(c *fiber.Ctx, name string) (context.Context, trace.Span, libLog.Logger) {
-	ctx := c.UserContext()
-	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
-
-	if tracer == nil {
-		tracer = otel.Tracer("commons.default")
-	}
-
-	ctx, span := tracer.Start(ctx, name)
-
-	return ctx, span, logger
+	return sharedhttp.StartHandlerSpan(c, name)
 }
 
 func logSpanError(ctx context.Context, span trace.Span, logger libLog.Logger, message string, err error) {
-	libOpentelemetry.HandleSpanError(span, message, err)
-	libLog.SafeError(logger, ctx, message, err, productionMode.Load())
+	sharedhttp.LogSpanError(ctx, span, logger, productionMode.Load(), message, err)
 }
 
+//nolint:wrapcheck // HTTP transport response is the terminal error boundary.
+func respondError(fiberCtx *fiber.Ctx, status int, slug, message string) error {
+	return sharedhttp.RespondError(fiberCtx, status, slug, message)
+}
+
+//nolint:wrapcheck // HTTP transport response is the terminal error boundary.
+func respondContextVerificationError(fiberCtx *fiber.Ctx, err error) error {
+	return sharedhttp.RespondProductError(fiberCtx, sharedhttp.ValidateContextVerificationError(err))
+}
+
+//nolint:wrapcheck // HTTP transport response is the terminal error boundary.
 func badRequest(
 	ctx context.Context,
 	fiberCtx *fiber.Ctx,
@@ -178,11 +177,10 @@ func badRequest(
 	message string,
 	err error,
 ) error {
-	logSpanError(ctx, span, logger, message, err)
-
-	return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", message)
+	return sharedhttp.BadRequest(ctx, fiberCtx, span, logger, productionMode.Load(), message, err)
 }
 
+//nolint:wrapcheck // HTTP transport response is the terminal error boundary.
 func writeServiceError(
 	ctx context.Context,
 	fiberCtx *fiber.Ctx,
@@ -191,27 +189,11 @@ func writeServiceError(
 	message string,
 	err error,
 ) error {
-	logSpanError(ctx, span, logger, message, err)
-
-	return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
+	return sharedhttp.InternalError(ctx, fiberCtx, span, logger, productionMode.Load(), message, err)
 }
 
 func writeNotFound(fiberCtx *fiber.Ctx, message string) error {
-	return libHTTP.RespondError(fiberCtx, fiber.StatusNotFound, "not_found", message)
-}
-
-func forbidden(ctx context.Context, fiberCtx *fiber.Ctx, span trace.Span, logger libLog.Logger, err error) error {
-	const message = "access denied"
-
-	if err == nil {
-		err = fmt.Errorf("%w: %s", errForbidden, message)
-	}
-
-	libOpentelemetry.HandleSpanError(span, message, err)
-
-	logger.Log(ctx, libLog.LevelWarn, "access denied: "+message)
-
-	return libHTTP.RespondError(fiberCtx, fiber.StatusForbidden, "forbidden", message)
+	return respondError(fiberCtx, fiber.StatusNotFound, "not_found", message)
 }
 
 // handleContextVerificationError handles errors from ParseAndVerifyTenantScopedID.
@@ -227,41 +209,25 @@ func handleContextVerificationError(
 		return false, nil
 	}
 
-	switch {
-	case errors.Is(err, libHTTP.ErrMissingContextID),
-		errors.Is(err, libHTTP.ErrInvalidContextID):
-		return true, badRequest(ctx, fiberCtx, span, logger, "invalid context id", err)
+	if errors.Is(err, libHTTP.ErrMissingContextID) || errors.Is(err, libHTTP.ErrInvalidContextID) {
+		logSpanError(ctx, span, logger, "context verification failed", err)
 
-	case errors.Is(err, libHTTP.ErrTenantIDNotFound),
-		errors.Is(err, libHTTP.ErrInvalidTenantID):
-		return true, libHTTP.RespondError(fiberCtx, fiber.StatusUnauthorized, "unauthorized", "unauthorized")
+		return true, respondContextVerificationError(fiberCtx, err)
+	}
 
-	case errors.Is(err, libHTTP.ErrContextNotFound):
-		return true, writeNotFound(fiberCtx, "context not found")
-
-	case errors.Is(err, libHTTP.ErrContextNotActive):
+	if errors.Is(err, libHTTP.ErrContextNotActive) {
 		libOpentelemetry.HandleSpanError(span, "context not active", err)
 
-		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("context not active: %v", err))
+		if logger != nil {
+			logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("context not active: %v", err))
+		}
 
-		return true, libHTTP.RespondError(
-			fiberCtx,
-			fiber.StatusForbidden,
-			"context_not_active",
-			"context is not active",
-		)
-
-	case errors.Is(err, libHTTP.ErrContextNotOwned),
-		errors.Is(err, libHTTP.ErrContextAccessDenied):
-		return true, forbidden(ctx, fiberCtx, span, logger, err)
-
-	// Infrastructure lookup failures (e.g. database errors during ownership check) → 500
-	case errors.Is(err, libHTTP.ErrContextLookupFailed):
-		return true, writeServiceError(ctx, fiberCtx, span, logger, "context verification failed", err)
-
-	default:
-		return true, writeServiceError(ctx, fiberCtx, span, logger, "context verification failed", err)
+		return true, respondError(fiberCtx, fiber.StatusForbidden, "context_not_active", "context is not active")
 	}
+
+	logSpanError(ctx, span, logger, "context verification failed", err)
+
+	return true, respondContextVerificationError(fiberCtx, err)
 }
 
 // handleContextQueryVerificationError handles errors from ParseAndVerifyResourceScopedID.
@@ -277,49 +243,25 @@ func handleContextQueryVerificationError(
 		return false, nil
 	}
 
-	switch {
-	case errors.Is(err, libHTTP.ErrMissingContextID),
-		errors.Is(err, libHTTP.ErrInvalidContextID):
-		return true, badRequest(ctx, fiberCtx, span, logger, "invalid context id", err)
+	if errors.Is(err, libHTTP.ErrMissingContextID) || errors.Is(err, libHTTP.ErrInvalidContextID) {
+		logSpanError(ctx, span, logger, "context query verification failed", err)
 
-	case errors.Is(err, libHTTP.ErrContextNotActive):
+		return true, respondContextVerificationError(fiberCtx, err)
+	}
+
+	if errors.Is(err, libHTTP.ErrContextNotActive) {
 		libOpentelemetry.HandleSpanError(span, "context not active", err)
 
-		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("context not active: %v", err))
+		if logger != nil {
+			logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("context not active: %v", err))
+		}
 
-		return true, libHTTP.RespondError(
-			fiberCtx,
-			fiber.StatusForbidden,
-			"context_not_active",
-			"context is not active",
-		)
-
-	case errors.Is(err, libHTTP.ErrTenantIDNotFound),
-		errors.Is(err, libHTTP.ErrInvalidTenantID):
-		return true, libHTTP.RespondError(fiberCtx, fiber.StatusUnauthorized, "unauthorized", "unauthorized")
-
-	case errors.Is(err, libHTTP.ErrContextNotFound):
-		return true, writeNotFound(fiberCtx, "context not found")
-
-	case errors.Is(err, libHTTP.ErrContextNotOwned),
-		errors.Is(err, libHTTP.ErrContextAccessDenied):
-		return true, forbidden(ctx, fiberCtx, span, logger, err)
-
-	// Infrastructure lookup failures (e.g. database errors during ownership check) → 500
-	case errors.Is(err, libHTTP.ErrLookupFailed),
-		errors.Is(err, libHTTP.ErrContextLookupFailed):
-		return true, writeServiceError(ctx, fiberCtx, span, logger, "context query verification failed", err)
-
-	default:
-		return true, writeServiceError(
-			ctx,
-			fiberCtx,
-			span,
-			logger,
-			"context query verification failed",
-			err,
-		)
+		return true, respondError(fiberCtx, fiber.StatusForbidden, "context_not_active", "context is not active")
 	}
+
+	logSpanError(ctx, span, logger, "context query verification failed", err)
+
+	return true, respondContextVerificationError(fiberCtx, err)
 }
 
 func parseUUIDParam(c *fiber.Ctx, name string) (uuid.UUID, error) {

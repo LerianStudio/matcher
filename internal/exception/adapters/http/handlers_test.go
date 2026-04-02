@@ -32,6 +32,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/exception/services/query"
 	govEntities "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/internal/shared/testutil"
+	"github.com/LerianStudio/matcher/pkg/constant"
 )
 
 // errTest is a sentinel error for testing internal error handling.
@@ -78,7 +79,7 @@ func requireErrorResponse(
 	t *testing.T,
 	resp *http.Response,
 	expectedStatus int,
-	expectedCode int,
+	_ int,
 	expectedTitle,
 	expectedMessage string,
 ) {
@@ -88,11 +89,65 @@ func requireErrorResponse(
 
 	require.Equal(t, expectedStatus, resp.StatusCode)
 
-	var errResp libHTTP.ErrorResponse
+	var errResp ErrorResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
-	require.Equal(t, expectedCode, errResp.Code)
-	require.Equal(t, expectedTitle, errResp.Title)
+	require.Equal(t, expectedMTCHCode(expectedTitle, expectedMessage), errResp.Code)
+	require.Equal(t, http.StatusText(expectedStatus), errResp.Title)
 	require.Equal(t, expectedMessage, errResp.Message)
+}
+
+func expectedMTCHCode(expectedTitle, expectedMessage string) string {
+	switch expectedMessage {
+	case "exception not found":
+		return constant.CodeExceptionNotFound
+	case "dispute not found":
+		return constant.CodeDisputeNotFound
+	case "comment not found":
+		return constant.CodeCommentNotFound
+	case "connector not configured for target system":
+		return constant.CodeDispatchConnectorNotConfigured
+	case "exception cannot be resolved in current state":
+		return constant.CodeExceptionInvalidState
+	}
+
+	switch expectedTitle {
+	case "invalid_request":
+		return constant.CodeInvalidRequest
+	case "not_found":
+		return constant.CodeNotFound
+	case "unprocessable_entity":
+		if strings.Contains(expectedMessage, "unsupported target system") {
+			return constant.CodeDispatchTargetUnsupported
+		}
+
+		return constant.CodeUnprocessableEntity
+	case "internal_server_error":
+		return constant.CodeInternalServerError
+	case "unauthorized":
+		return constant.CodeUnauthorized
+	case "forbidden":
+		return constant.CodeForbidden
+	case "context_not_active":
+		return constant.CodeContextNotActive
+	case "rate_limit_exceeded":
+		return constant.CodeCallbackRateLimitExceeded
+	case "callback_in_progress":
+		return constant.CodeCallbackInProgress
+	case "callback_retryable":
+		return constant.CodeCallbackRetryable
+	case "exception_not_found":
+		return constant.CodeExceptionNotFound
+	case "dispute_not_found":
+		return constant.CodeDisputeNotFound
+	case "comment_not_found":
+		return constant.CodeCommentNotFound
+	case "dispatch_target_unsupported":
+		return constant.CodeDispatchTargetUnsupported
+	case "dispatch_connector_not_configured":
+		return constant.CodeDispatchConnectorNotConfigured
+	default:
+		return constant.CodeInternalServerError
+	}
 }
 
 type stubExceptionRepo struct {
@@ -1215,6 +1270,29 @@ func TestForbiddenWithNilError(t *testing.T) {
 	resp, err := app.Test(request)
 	require.NoError(t, err)
 
+	defer resp.Body.Close()
+
+	requireErrorResponse(t, resp, fiber.StatusForbidden, 403, "forbidden", "access denied")
+}
+
+func TestForbiddenWithNilLogger_DoesNotPanic(t *testing.T) {
+	t.Parallel()
+
+	tracer := noop.NewTracerProvider().Tracer("test")
+	ctx := libCommons.ContextWithTracer(context.Background(), tracer)
+
+	app := newFiberTestApp(ctx)
+	app.Get("/", func(c *fiber.Ctx) error {
+		spanCtx, span := tracer.Start(c.UserContext(), "test")
+		c.SetUserContext(spanCtx)
+		defer span.End()
+
+		return forbidden(spanCtx, c, span, nil, errTest)
+	})
+
+	request := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	resp, err := app.Test(request)
+	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	requireErrorResponse(t, resp, fiber.StatusForbidden, 403, "forbidden", "access denied")

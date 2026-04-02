@@ -17,7 +17,10 @@ import (
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
 	"github.com/LerianStudio/matcher/internal/exception/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/exception/services/command"
+	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 )
+
+var _ = sharedhttp.ErrorResponse{}
 
 // ProcessCallback handles webhook callbacks from external systems.
 // It processes status updates from external ticketing/dispatch systems.
@@ -33,13 +36,13 @@ import (
 // @Param exceptionId path string true "Exception ID" format(uuid)
 // @Param request body dto.ProcessCallbackRequest true "Callback payload"
 // @Success 200 {object} dto.ProcessCallbackResponse "Callback processed successfully"
-// @Failure 400 {object} libHTTP.ErrorResponse "Invalid request"
-// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized - Bearer token missing or invalid"
-// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden - insufficient permissions"
-// @Failure 404 {object} libHTTP.ErrorResponse "Exception not found"
-// @Failure 409 {object} libHTTP.ErrorResponse "Conflict or idempotency"
-// @Failure 429 {object} libHTTP.ErrorResponse "Rate limit exceeded"
-// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized - Bearer token missing or invalid"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden - insufficient permissions"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Exception not found"
+// @Failure 409 {object} sharedhttp.ErrorResponse "Conflict or idempotency"
+// @Failure 429 {object} sharedhttp.ErrorResponse "Rate limit exceeded"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/exceptions/{exceptionId}/callback [post]
 //
 // Design Decision: This handler intentionally does NOT use ParseAndVerifyResourceScopedID
@@ -154,19 +157,19 @@ func handleCallbackError(
 	if errors.Is(err, command.ErrCallbackRateLimitExceeded) {
 		logSpanError(ctx, span, logger, "callback rate limit exceeded", err)
 
-		return libHTTP.RespondError(fiberCtx, fiber.StatusTooManyRequests, "rate_limit_exceeded", "callback rate limit exceeded")
+		return respondError(fiberCtx, fiber.StatusTooManyRequests, "rate_limit_exceeded", "callback rate limit exceeded")
 	}
 
 	if errors.Is(err, command.ErrCallbackInProgress) {
 		logSpanError(ctx, span, logger, "callback already in progress", err)
 
-		return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "callback_in_progress", "callback is already being processed")
+		return respondError(fiberCtx, fiber.StatusConflict, "callback_in_progress", "callback is already being processed")
 	}
 
 	if errors.Is(err, command.ErrCallbackRetryable) {
 		logSpanError(ctx, span, logger, "callback retry required", err)
 
-		return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "callback_retryable", "callback can be retried")
+		return respondError(fiberCtx, fiber.StatusConflict, "callback_retryable", "callback can be retried")
 	}
 
 	// Validation errors -> 400
@@ -176,7 +179,7 @@ func handleCallbackError(
 
 	// Exception not found -> 404
 	if errors.Is(err, sql.ErrNoRows) || errors.Is(err, entities.ErrExceptionNotFound) {
-		return notFound(ctx, fiberCtx, span, logger, "exception not found", err)
+		return notFoundWithSlug(ctx, fiberCtx, span, logger, "exception_not_found", "exception not found", err)
 	}
 
 	// Everything else -> 500

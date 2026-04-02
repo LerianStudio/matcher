@@ -1,5 +1,6 @@
-//go:build e2e
+//go:build unit
 
+//nolint:varnamelen,wsl_v5 // Fee schedule client tests use compact handler fixtures.
 package client
 
 import (

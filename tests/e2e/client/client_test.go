@@ -1,12 +1,12 @@
-//go:build e2e
+//go:build unit
 
+//nolint:varnamelen,wsl_v5 // HTTP client tests use compact handler variables and fixture layout.
 package client
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +15,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/LerianStudio/matcher/pkg/constant"
 )
 
 func TestNewClient(t *testing.T) {
@@ -142,7 +144,7 @@ func TestClient_DoJSON_APIError(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(`{"error":"bad request"}`))
+		w.Write([]byte(`{"code":"MTCH-0001","title":"Bad Request","message":"invalid request"}`))
 	}))
 	defer server.Close()
 
@@ -151,9 +153,13 @@ func TestClient_DoJSON_APIError(t *testing.T) {
 
 	require.Error(t, err)
 	var apiErr *APIError
-	assert.True(t, errors.As(err, &apiErr))
+	require.ErrorAs(t, err, &apiErr)
 	assert.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
-	assert.Contains(t, string(apiErr.Body), "bad request")
+	assert.Contains(t, string(apiErr.Body), "invalid request")
+	require.NotNil(t, apiErr.Parsed)
+	assert.Equal(t, "MTCH-0001", apiErr.ProductCode())
+	assert.Equal(t, "Bad Request", apiErr.ProductTitle())
+	assert.Equal(t, "invalid request", apiErr.ProductMessage())
 }
 
 func TestClient_DoJSON_NilResponse(t *testing.T) {
@@ -229,6 +235,7 @@ func TestClient_DoMultipart_Success(t *testing.T) {
 	)
 
 	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusAccepted, resp.StatusCode)
 	assert.Contains(t, string(body), "job-123")
 }
@@ -246,6 +253,7 @@ func TestClient_DoRaw_Success(t *testing.T) {
 	resp, data, err := client.DoRaw(context.Background(), http.MethodGet, "/test", nil, "")
 
 	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, "raw data", string(data))
 }
@@ -255,7 +263,7 @@ func TestClient_DoRaw_APIError(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("not found"))
+		w.Write([]byte(`{"code":"MTCH-0005","title":"Not Found","message":"job not found"}`))
 	}))
 	defer server.Close()
 
@@ -263,12 +271,15 @@ func TestClient_DoRaw_APIError(t *testing.T) {
 	resp, data, err := client.DoRaw(context.Background(), http.MethodGet, "/test", nil, "")
 
 	require.Error(t, err)
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
-	assert.Equal(t, "not found", string(data))
+	assert.Contains(t, string(data), "job not found")
 
 	var apiErr *APIError
-	assert.True(t, errors.As(err, &apiErr))
+	require.ErrorAs(t, err, &apiErr)
 	assert.True(t, apiErr.IsNotFound())
+	require.NotNil(t, apiErr.Parsed)
+	assert.Equal(t, constant.CodeNotFound, apiErr.ProductCode())
 }
 
 func TestAPIError_Error(t *testing.T) {
@@ -276,10 +287,14 @@ func TestAPIError_Error(t *testing.T) {
 
 	err := &APIError{
 		StatusCode: 400,
-		Body:       []byte("invalid request"),
+		Parsed: &ErrorResponse{
+			Code:    "MTCH-0001",
+			Message: "invalid request",
+		},
 	}
 
 	assert.Contains(t, err.Error(), "400")
+	assert.Contains(t, err.Error(), "MTCH-0001")
 	assert.Contains(t, err.Error(), "invalid request")
 }
 
@@ -352,6 +367,9 @@ func TestClient_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err := client.Do(ctx, http.MethodGet, "/test", nil, "")
-	assert.Error(t, err)
+	resp, err := client.Do(ctx, http.MethodGet, "/test", nil, "")
+	if resp != nil && resp.Body != nil {
+		defer func() { _ = resp.Body.Close() }()
+	}
+	require.Error(t, err)
 }

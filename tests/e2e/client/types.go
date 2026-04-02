@@ -1,5 +1,3 @@
-//go:build e2e
-
 package client
 
 import "time"
@@ -373,15 +371,6 @@ type ListResponse[T any] struct {
 	HasMore    bool   `json:"hasMore"`
 }
 
-// ErrorResponse represents an API error response.
-type ErrorResponse struct {
-	Code    int    `json:"code"`
-	Title   string `json:"title,omitempty"`
-	Message string `json:"message"`
-	Error   string `json:"error,omitempty"`
-	Details any    `json:"details,omitempty"`
-}
-
 // FeeScheduleResponse represents a fee schedule.
 type FeeScheduleResponse struct {
 	ID               string                    `json:"id"`
@@ -715,7 +704,8 @@ type BulkActionResponse struct {
 	Total     int           `json:"total"`
 }
 
-// BulkFailure represents a single failed item in a bulk operation.
+// BulkFailure represents a domain-level bulk-operation failure entry.
+// It intentionally keeps the upstream `error` field and is unrelated to ErrorResponse.
 type BulkFailure struct {
 	ExceptionID string `json:"exception_id"`
 	Error       string `json:"error"`

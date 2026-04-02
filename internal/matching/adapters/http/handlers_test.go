@@ -19,8 +19,10 @@ import (
 
 	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
-	sharedhttp "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
+	"github.com/LerianStudio/matcher/pkg/constant"
 )
 
 func TestStartHandlerSpan(t *testing.T) {
@@ -128,8 +130,8 @@ func TestBadRequest(t *testing.T) {
 
 		var errResp sharedhttp.ErrorResponse
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
-		assert.Equal(t, 400, errResp.Code)
-		assert.Equal(t, "invalid_request", errResp.Title)
+		assert.Equal(t, constant.CodeInvalidRequest, errResp.Code)
+		assert.Equal(t, http.StatusText(fiber.StatusBadRequest), errResp.Title)
 		assert.Equal(t, "validation failed", errResp.Message)
 	})
 
@@ -254,89 +256,9 @@ func TestWriteNotFound(t *testing.T) {
 
 		var errResp sharedhttp.ErrorResponse
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
-		assert.Equal(t, 404, errResp.Code)
-		assert.Equal(t, "not_found", errResp.Title)
+		assert.Equal(t, constant.CodeNotFound, errResp.Code)
+		assert.Equal(t, http.StatusText(fiber.StatusNotFound), errResp.Title)
 		assert.Equal(t, "resource not found", errResp.Message)
-	})
-}
-
-func TestForbidden(t *testing.T) {
-	t.Parallel()
-
-	t.Run("returns_403_with_access_denied_message", func(t *testing.T) {
-		t.Parallel()
-
-		tracer := noop.NewTracerProvider().Tracer("test")
-		ctx := libCommons.ContextWithTracer(context.Background(), tracer)
-		app := newFiberTestApp(ctx)
-
-		app.Get("/", func(c *fiber.Ctx) error {
-			spanCtx, span := tracer.Start(c.UserContext(), "test")
-			c.SetUserContext(spanCtx)
-			defer span.End()
-
-			return forbidden(spanCtx, c, span, &libLog.NopLogger{}, errTestBoom)
-		})
-
-		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-		resp, err := app.Test(req)
-		require.NoError(t, err)
-		defer resp.Body.Close()
-
-		assert.Equal(t, fiber.StatusForbidden, resp.StatusCode)
-
-		var errResp sharedhttp.ErrorResponse
-		require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
-		assert.Equal(t, 403, errResp.Code)
-		assert.Equal(t, "forbidden", errResp.Title)
-		assert.Equal(t, "access denied", errResp.Message)
-	})
-
-	t.Run("creates_error_when_err_is_nil", func(t *testing.T) {
-		t.Parallel()
-
-		tracer := noop.NewTracerProvider().Tracer("test")
-		ctx := libCommons.ContextWithTracer(context.Background(), tracer)
-		app := newFiberTestApp(ctx)
-
-		app.Get("/", func(c *fiber.Ctx) error {
-			spanCtx, span := tracer.Start(c.UserContext(), "test")
-			c.SetUserContext(spanCtx)
-			defer span.End()
-
-			return forbidden(spanCtx, c, span, &libLog.NopLogger{}, nil)
-		})
-
-		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-		resp, err := app.Test(req)
-		require.NoError(t, err)
-		defer resp.Body.Close()
-
-		assert.Equal(t, fiber.StatusForbidden, resp.StatusCode)
-	})
-
-	t.Run("logs_warning_when_logger_provided", func(t *testing.T) {
-		t.Parallel()
-
-		tracer := noop.NewTracerProvider().Tracer("test")
-		mockLog := &mockLogger{}
-		ctx := libCommons.ContextWithTracer(context.Background(), tracer)
-		app := newFiberTestApp(ctx)
-
-		app.Get("/", func(c *fiber.Ctx) error {
-			spanCtx, span := tracer.Start(c.UserContext(), "test")
-			c.SetUserContext(spanCtx)
-			defer span.End()
-
-			return forbidden(spanCtx, c, span, mockLog, errTestBoom)
-		})
-
-		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-		resp, err := app.Test(req)
-		require.NoError(t, err)
-		defer resp.Body.Close()
-
-		assert.True(t, mockLog.warnCalled)
 	})
 }
 
@@ -344,11 +266,12 @@ func TestHandleContextVerificationError(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name           string
-		err            error
-		expectedStatus int
-		expectedTitle  string
-		shouldReturn   bool
+		name            string
+		err             error
+		expectedStatus  int
+		expectedCode    string
+		expectedMessage string
+		shouldReturn    bool
 	}{
 		{
 			name:         "nil_error_returns_false",
@@ -356,74 +279,84 @@ func TestHandleContextVerificationError(t *testing.T) {
 			shouldReturn: false,
 		},
 		{
-			name:           "missing_context_id_returns_bad_request",
-			err:            sharedhttp.ErrMissingContextID,
-			expectedStatus: fiber.StatusBadRequest,
-			expectedTitle:  "invalid_request",
-			shouldReturn:   true,
+			name:            "missing_context_id_returns_bad_request",
+			err:             libHTTP.ErrMissingContextID,
+			expectedStatus:  fiber.StatusBadRequest,
+			expectedCode:    constant.CodeInvalidContextID,
+			expectedMessage: "invalid context id",
+			shouldReturn:    true,
 		},
 		{
-			name:           "invalid_context_id_returns_bad_request",
-			err:            sharedhttp.ErrInvalidContextID,
-			expectedStatus: fiber.StatusBadRequest,
-			expectedTitle:  "invalid_request",
-			shouldReturn:   true,
+			name:            "invalid_context_id_returns_bad_request",
+			err:             libHTTP.ErrInvalidContextID,
+			expectedStatus:  fiber.StatusBadRequest,
+			expectedCode:    constant.CodeInvalidContextID,
+			expectedMessage: "invalid context id",
+			shouldReturn:    true,
 		},
 		{
-			name:           "tenant_id_not_found_returns_unauthorized",
-			err:            sharedhttp.ErrTenantIDNotFound,
-			expectedStatus: fiber.StatusUnauthorized,
-			expectedTitle:  "unauthorized",
-			shouldReturn:   true,
+			name:            "tenant_id_not_found_returns_unauthorized",
+			err:             libHTTP.ErrTenantIDNotFound,
+			expectedStatus:  fiber.StatusUnauthorized,
+			expectedCode:    constant.CodeUnauthorized,
+			expectedMessage: "unauthorized",
+			shouldReturn:    true,
 		},
 		{
-			name:           "invalid_tenant_id_returns_unauthorized",
-			err:            sharedhttp.ErrInvalidTenantID,
-			expectedStatus: fiber.StatusUnauthorized,
-			expectedTitle:  "unauthorized",
-			shouldReturn:   true,
+			name:            "invalid_tenant_id_returns_unauthorized",
+			err:             libHTTP.ErrInvalidTenantID,
+			expectedStatus:  fiber.StatusUnauthorized,
+			expectedCode:    constant.CodeUnauthorized,
+			expectedMessage: "unauthorized",
+			shouldReturn:    true,
 		},
 		{
-			name:           "context_not_found_returns_not_found",
-			err:            sharedhttp.ErrContextNotFound,
-			expectedStatus: fiber.StatusNotFound,
-			expectedTitle:  "not_found",
-			shouldReturn:   true,
+			name:            "context_not_found_returns_not_found",
+			err:             libHTTP.ErrContextNotFound,
+			expectedStatus:  fiber.StatusNotFound,
+			expectedCode:    constant.CodeNotFound,
+			expectedMessage: "context not found",
+			shouldReturn:    true,
 		},
 		{
-			name:           "context_not_active_returns_forbidden",
-			err:            sharedhttp.ErrContextNotActive,
-			expectedStatus: fiber.StatusForbidden,
-			expectedTitle:  "context_not_active",
-			shouldReturn:   true,
+			name:            "context_not_active_returns_forbidden",
+			err:             libHTTP.ErrContextNotActive,
+			expectedStatus:  fiber.StatusForbidden,
+			expectedCode:    constant.CodeContextNotActive,
+			expectedMessage: "context is not active",
+			shouldReturn:    true,
 		},
 		{
-			name:           "context_not_owned_returns_forbidden",
-			err:            sharedhttp.ErrContextNotOwned,
-			expectedStatus: fiber.StatusForbidden,
-			expectedTitle:  "forbidden",
-			shouldReturn:   true,
+			name:            "context_not_owned_returns_forbidden",
+			err:             libHTTP.ErrContextNotOwned,
+			expectedStatus:  fiber.StatusForbidden,
+			expectedCode:    constant.CodeForbidden,
+			expectedMessage: "access denied",
+			shouldReturn:    true,
 		},
 		{
-			name:           "context_access_denied_returns_forbidden",
-			err:            sharedhttp.ErrContextAccessDenied,
-			expectedStatus: fiber.StatusForbidden,
-			expectedTitle:  "forbidden",
-			shouldReturn:   true,
+			name:            "context_access_denied_returns_forbidden",
+			err:             libHTTP.ErrContextAccessDenied,
+			expectedStatus:  fiber.StatusForbidden,
+			expectedCode:    constant.CodeForbidden,
+			expectedMessage: "access denied",
+			shouldReturn:    true,
 		},
 		{
-			name:           "context_lookup_failed_returns_internal_server_error",
-			err:            sharedhttp.ErrContextLookupFailed,
-			expectedStatus: fiber.StatusInternalServerError,
-			expectedTitle:  "internal_server_error",
-			shouldReturn:   true,
+			name:            "context_lookup_failed_returns_internal_server_error",
+			err:             libHTTP.ErrContextLookupFailed,
+			expectedStatus:  fiber.StatusInternalServerError,
+			expectedCode:    constant.CodeInternalServerError,
+			expectedMessage: "an unexpected error occurred",
+			shouldReturn:    true,
 		},
 		{
-			name:           "unknown_error_returns_internal_server_error",
-			err:            errors.New("unexpected error"),
-			expectedStatus: fiber.StatusInternalServerError,
-			expectedTitle:  "internal_server_error",
-			shouldReturn:   true,
+			name:            "unknown_error_returns_internal_server_error",
+			err:             errors.New("unexpected error"),
+			expectedStatus:  fiber.StatusInternalServerError,
+			expectedCode:    constant.CodeInternalServerError,
+			expectedMessage: "an unexpected error occurred",
+			shouldReturn:    true,
 		},
 	}
 
@@ -462,7 +395,9 @@ func TestHandleContextVerificationError(t *testing.T) {
 
 				var errResp sharedhttp.ErrorResponse
 				require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
-				assert.Equal(t, tt.expectedTitle, errResp.Title)
+				assert.Equal(t, tt.expectedCode, errResp.Code)
+				assert.Equal(t, http.StatusText(tt.expectedStatus), errResp.Title)
+				assert.Equal(t, tt.expectedMessage, errResp.Message)
 			} else {
 				assert.Equal(t, fiber.StatusOK, resp.StatusCode)
 			}
@@ -470,15 +405,44 @@ func TestHandleContextVerificationError(t *testing.T) {
 	}
 }
 
+func TestHandleContextVerificationError_ContextNotActiveWithNilLogger(t *testing.T) {
+	t.Parallel()
+
+	tracer := noop.NewTracerProvider().Tracer("test")
+	ctx := libCommons.ContextWithTracer(context.Background(), tracer)
+	app := newFiberTestApp(ctx)
+
+	app.Get("/", func(c *fiber.Ctx) error {
+		spanCtx, span := tracer.Start(c.UserContext(), "test")
+		c.SetUserContext(spanCtx)
+		defer span.End()
+
+		shouldReturn, handlerErr := handleContextVerificationError(spanCtx, c, span, nil, libHTTP.ErrContextNotActive)
+		if shouldReturn {
+			return handlerErr
+		}
+
+		return c.SendStatus(fiber.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusForbidden, resp.StatusCode)
+}
+
 func TestHandleContextQueryVerificationError(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name           string
-		err            error
-		expectedStatus int
-		expectedTitle  string
-		shouldReturn   bool
+		name            string
+		err             error
+		expectedStatus  int
+		expectedCode    string
+		expectedMessage string
+		shouldReturn    bool
 	}{
 		{
 			name:         "nil_error_returns_false",
@@ -486,81 +450,92 @@ func TestHandleContextQueryVerificationError(t *testing.T) {
 			shouldReturn: false,
 		},
 		{
-			name:           "missing_context_id_returns_bad_request",
-			err:            sharedhttp.ErrMissingContextID,
-			expectedStatus: fiber.StatusBadRequest,
-			expectedTitle:  "invalid_request",
-			shouldReturn:   true,
+			name:            "missing_context_id_returns_bad_request",
+			err:             libHTTP.ErrMissingContextID,
+			expectedStatus:  fiber.StatusBadRequest,
+			expectedCode:    constant.CodeInvalidContextID,
+			expectedMessage: "invalid context id",
+			shouldReturn:    true,
 		},
 		{
-			name:           "invalid_context_id_returns_bad_request",
-			err:            sharedhttp.ErrInvalidContextID,
-			expectedStatus: fiber.StatusBadRequest,
-			expectedTitle:  "invalid_request",
-			shouldReturn:   true,
+			name:            "invalid_context_id_returns_bad_request",
+			err:             libHTTP.ErrInvalidContextID,
+			expectedStatus:  fiber.StatusBadRequest,
+			expectedCode:    constant.CodeInvalidContextID,
+			expectedMessage: "invalid context id",
+			shouldReturn:    true,
 		},
 		{
-			name:           "context_not_active_returns_forbidden",
-			err:            sharedhttp.ErrContextNotActive,
-			expectedStatus: fiber.StatusForbidden,
-			expectedTitle:  "context_not_active",
-			shouldReturn:   true,
+			name:            "context_not_active_returns_forbidden",
+			err:             libHTTP.ErrContextNotActive,
+			expectedStatus:  fiber.StatusForbidden,
+			expectedCode:    constant.CodeContextNotActive,
+			expectedMessage: "context is not active",
+			shouldReturn:    true,
 		},
 		{
-			name:           "tenant_id_not_found_returns_unauthorized",
-			err:            sharedhttp.ErrTenantIDNotFound,
-			expectedStatus: fiber.StatusUnauthorized,
-			expectedTitle:  "unauthorized",
-			shouldReturn:   true,
+			name:            "tenant_id_not_found_returns_unauthorized",
+			err:             libHTTP.ErrTenantIDNotFound,
+			expectedStatus:  fiber.StatusUnauthorized,
+			expectedCode:    constant.CodeUnauthorized,
+			expectedMessage: "unauthorized",
+			shouldReturn:    true,
 		},
 		{
-			name:           "invalid_tenant_id_returns_unauthorized",
-			err:            sharedhttp.ErrInvalidTenantID,
-			expectedStatus: fiber.StatusUnauthorized,
-			expectedTitle:  "unauthorized",
-			shouldReturn:   true,
+			name:            "invalid_tenant_id_returns_unauthorized",
+			err:             libHTTP.ErrInvalidTenantID,
+			expectedStatus:  fiber.StatusUnauthorized,
+			expectedCode:    constant.CodeUnauthorized,
+			expectedMessage: "unauthorized",
+			shouldReturn:    true,
 		},
 		{
-			name:           "context_not_found_returns_not_found",
-			err:            sharedhttp.ErrContextNotFound,
-			expectedStatus: fiber.StatusNotFound,
-			expectedTitle:  "not_found",
-			shouldReturn:   true,
+			name:            "context_not_found_returns_not_found",
+			err:             libHTTP.ErrContextNotFound,
+			expectedStatus:  fiber.StatusNotFound,
+			expectedCode:    constant.CodeNotFound,
+			expectedMessage: "context not found",
+			shouldReturn:    true,
 		},
 		{
-			name:           "context_not_owned_returns_forbidden",
-			err:            sharedhttp.ErrContextNotOwned,
-			expectedStatus: fiber.StatusForbidden,
-			expectedTitle:  "forbidden",
-			shouldReturn:   true,
+			name:            "context_not_owned_returns_forbidden",
+			err:             libHTTP.ErrContextNotOwned,
+			expectedStatus:  fiber.StatusForbidden,
+			expectedCode:    constant.CodeForbidden,
+			expectedMessage: "access denied",
+			shouldReturn:    true,
 		},
 		{
-			name:           "context_access_denied_returns_forbidden",
-			err:            sharedhttp.ErrContextAccessDenied,
-			expectedStatus: fiber.StatusForbidden,
-			expectedTitle:  "forbidden",
-			shouldReturn:   true,
+			name:            "context_access_denied_returns_forbidden",
+			err:             libHTTP.ErrContextAccessDenied,
+			expectedStatus:  fiber.StatusForbidden,
+			expectedCode:    constant.CodeForbidden,
+			expectedMessage: "access denied",
+			shouldReturn:    true,
 		},
 		{
-			name:           "lookup_failed_returns_internal_server_error",
-			err:            sharedhttp.ErrLookupFailed,
-			expectedStatus: fiber.StatusInternalServerError,
-			expectedTitle:  "internal_server_error",
-			shouldReturn:   true,
+			name:            "lookup_failed_returns_internal_server_error",
+			err:             libHTTP.ErrLookupFailed,
+			expectedStatus:  fiber.StatusInternalServerError,
+			expectedCode:    constant.CodeInternalServerError,
+			expectedMessage: "an unexpected error occurred",
+			shouldReturn:    true,
 		},
 		{
-			name:           "context_lookup_failed_returns_internal_server_error",
-			err:            sharedhttp.ErrContextLookupFailed,
-			expectedStatus: fiber.StatusInternalServerError,
-			expectedTitle:  "internal_server_error",
-			shouldReturn:   true,
+			name:            "context_lookup_failed_returns_internal_server_error",
+			err:             libHTTP.ErrContextLookupFailed,
+			expectedStatus:  fiber.StatusInternalServerError,
+			expectedCode:    constant.CodeInternalServerError,
+			expectedMessage: "an unexpected error occurred",
+			shouldReturn:    true,
 		},
 		{
-			name:           "unknown_error_returns_internal_server_error",
-			err:            errors.New("unexpected query error"),
-			expectedStatus: fiber.StatusInternalServerError,
-			expectedTitle:  "internal_server_error",
-			shouldReturn:   true,
+			name:            "unknown_error_returns_internal_server_error",
+			err:             errors.New("unexpected query error"),
+			expectedStatus:  fiber.StatusInternalServerError,
+			expectedCode:    constant.CodeInternalServerError,
+			expectedMessage: "an unexpected error occurred",
+			shouldReturn:    true,
 		},
 	}
 
@@ -599,12 +574,42 @@ func TestHandleContextQueryVerificationError(t *testing.T) {
 
 				var errResp sharedhttp.ErrorResponse
 				require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
-				assert.Equal(t, tt.expectedTitle, errResp.Title)
+				assert.Equal(t, tt.expectedCode, errResp.Code)
+				assert.Equal(t, http.StatusText(tt.expectedStatus), errResp.Title)
+				assert.Equal(t, tt.expectedMessage, errResp.Message)
 			} else {
 				assert.Equal(t, fiber.StatusOK, resp.StatusCode)
 			}
 		})
 	}
+}
+
+func TestHandleContextQueryVerificationError_ContextNotActiveWithNilLogger(t *testing.T) {
+	t.Parallel()
+
+	tracer := noop.NewTracerProvider().Tracer("test")
+	ctx := libCommons.ContextWithTracer(context.Background(), tracer)
+	app := newFiberTestApp(ctx)
+
+	app.Get("/", func(c *fiber.Ctx) error {
+		spanCtx, span := tracer.Start(c.UserContext(), "test")
+		c.SetUserContext(spanCtx)
+		defer span.End()
+
+		shouldReturn, handlerErr := handleContextQueryVerificationError(spanCtx, c, span, nil, libHTTP.ErrContextNotActive)
+		if shouldReturn {
+			return handlerErr
+		}
+
+		return c.SendStatus(fiber.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusForbidden, resp.StatusCode)
 }
 
 func TestHandleContextVerificationError_WithLogger(t *testing.T) {
@@ -623,7 +628,7 @@ func TestHandleContextVerificationError_WithLogger(t *testing.T) {
 			c.SetUserContext(spanCtx)
 			defer span.End()
 
-			shouldRet, handlerErr := handleContextVerificationError(spanCtx, c, span, mockLog, sharedhttp.ErrContextNotActive)
+			shouldRet, handlerErr := handleContextVerificationError(spanCtx, c, span, mockLog, libHTTP.ErrContextNotActive)
 			if shouldRet {
 				return handlerErr
 			}
@@ -655,7 +660,7 @@ func TestHandleContextQueryVerificationError_WithLogger(t *testing.T) {
 			c.SetUserContext(spanCtx)
 			defer span.End()
 
-			shouldRet, handlerErr := handleContextQueryVerificationError(spanCtx, c, span, mockLog, sharedhttp.ErrContextNotActive)
+			shouldRet, handlerErr := handleContextQueryVerificationError(spanCtx, c, span, mockLog, libHTTP.ErrContextNotActive)
 			if shouldRet {
 				return handlerErr
 			}

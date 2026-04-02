@@ -1,11 +1,6 @@
-//go:build e2e
+//go:build unit
 
-// NOTE: build tag is e2e (not unit) because all source files in this package —
-// including types.go and configuration.go — use //go:build e2e.
-// A unit tag would make the types invisible. Despite the tag, these tests exercise
-// HTTP client logic (URL building, request formatting, response parsing) using
-// httptest.NewServer, not a real running service.
-
+//nolint:varnamelen,wsl_v5 // Configuration fee-rule client tests use compact handler fixtures.
 package client
 
 import (
@@ -173,7 +168,7 @@ func TestConfigurationClient_CreateFeeRule_ServerError(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusConflict)
-		w.Write([]byte(`{"error":"duplicate priority"}`))
+		w.Write([]byte(`{"code":"MTCH-0107","title":"Conflict","message":"duplicate priority"}`))
 	}))
 	defer server.Close()
 
@@ -193,7 +188,7 @@ func TestConfigurationClient_GetFeeRule_NotFound(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte(`{"error":"fee rule not found"}`))
+		w.Write([]byte(`{"code":"MTCH-0114","title":"Not Found","message":"fee rule not found"}`))
 	}))
 	defer server.Close()
 
@@ -210,7 +205,7 @@ func TestConfigurationClient_DeleteFeeRule_ServerError(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(`{"error":"internal error"}`))
+		w.Write([]byte(`{"code":"MTCH-0002","title":"Internal Server Error","message":"internal error"}`))
 	}))
 	defer server.Close()
 

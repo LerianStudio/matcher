@@ -17,10 +17,8 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
@@ -122,23 +120,19 @@ func NewHandlers(
 }
 
 func startHandlerSpan(c *fiber.Ctx, name string) (context.Context, trace.Span, libLog.Logger) {
-	ctx := c.UserContext()
-	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
-
-	if tracer == nil {
-		tracer = otel.Tracer("commons.default")
-	}
-
-	ctx, span := tracer.Start(ctx, name)
-
-	return ctx, span, logger
+	return sharedhttp.StartHandlerSpan(c, name)
 }
 
 func logSpanError(ctx context.Context, span trace.Span, logger libLog.Logger, message string, err error) {
-	libOpentelemetry.HandleSpanError(span, message, err)
-	libLog.SafeError(logger, ctx, message, err, productionMode.Load())
+	sharedhttp.LogSpanError(ctx, span, logger, productionMode.Load(), message, err)
 }
 
+//nolint:wrapcheck // HTTP transport response is the terminal error boundary.
+func respondError(fiberCtx *fiber.Ctx, status int, slug, message string) error {
+	return sharedhttp.RespondError(fiberCtx, status, slug, message)
+}
+
+//nolint:wrapcheck // HTTP transport response is the terminal error boundary.
 func badRequest(
 	ctx context.Context,
 	fiberCtx *fiber.Ctx,
@@ -147,9 +141,7 @@ func badRequest(
 	message string,
 	err error,
 ) error {
-	logSpanError(ctx, span, logger, message, err)
-
-	return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", message)
+	return sharedhttp.BadRequest(ctx, fiberCtx, span, logger, productionMode.Load(), message, err)
 }
 
 func notFound(
@@ -160,9 +152,20 @@ func notFound(
 	message string,
 	err error,
 ) error {
-	logSpanError(ctx, span, logger, message, err)
+	return notFoundWithSlug(ctx, fiberCtx, span, logger, "not_found", message, err)
+}
 
-	return libHTTP.RespondError(fiberCtx, fiber.StatusNotFound, "not_found", message)
+func notFoundWithSlug(
+	ctx context.Context,
+	fiberCtx *fiber.Ctx,
+	span trace.Span,
+	logger libLog.Logger,
+	slug, message string,
+	err error,
+) error {
+	sharedhttp.LogSpanError(ctx, span, logger, productionMode.Load(), message, err)
+
+	return respondError(fiberCtx, fiber.StatusNotFound, slug, message)
 }
 
 func unprocessable(
@@ -173,11 +176,31 @@ func unprocessable(
 	message string,
 	err error,
 ) error {
-	logSpanError(ctx, span, logger, message, err)
-
-	return libHTTP.RespondError(fiberCtx, fiber.StatusUnprocessableEntity, "unprocessable_entity", message)
+	return unprocessableWithSlug(ctx, fiberCtx, span, logger, "unprocessable_entity", message, err)
 }
 
+func unprocessableWithSlug(
+	ctx context.Context,
+	fiberCtx *fiber.Ctx,
+	span trace.Span,
+	logger libLog.Logger,
+	slug, message string,
+	err error,
+) error {
+	logSpanError(ctx, span, logger, message, err)
+
+	return respondError(fiberCtx, fiber.StatusUnprocessableEntity, slug, message)
+}
+
+func exceptionNotFound(ctx context.Context, fiberCtx *fiber.Ctx, span trace.Span, logger libLog.Logger, message string, err error) error {
+	return notFoundWithSlug(ctx, fiberCtx, span, logger, "exception_not_found", message, err)
+}
+
+func disputeNotFound(ctx context.Context, fiberCtx *fiber.Ctx, span trace.Span, logger libLog.Logger, message string, err error) error {
+	return notFoundWithSlug(ctx, fiberCtx, span, logger, "dispute_not_found", message, err)
+}
+
+//nolint:wrapcheck // HTTP transport response is the terminal error boundary.
 func internalError(
 	ctx context.Context,
 	fiberCtx *fiber.Ctx,
@@ -186,9 +209,7 @@ func internalError(
 	message string,
 	err error,
 ) error {
-	logSpanError(ctx, span, logger, message, err)
-
-	return libHTTP.RespondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
+	return sharedhttp.InternalError(ctx, fiberCtx, span, logger, productionMode.Load(), message, err)
 }
 
 func forbidden(ctx context.Context, fiberCtx *fiber.Ctx, span trace.Span, logger libLog.Logger, err error) error {
@@ -200,9 +221,50 @@ func forbidden(ctx context.Context, fiberCtx *fiber.Ctx, span trace.Span, logger
 
 	libOpentelemetry.HandleSpanError(span, message, err)
 
-	logger.Log(ctx, libLog.LevelWarn, "access denied: "+message)
+	if logger != nil {
+		logger.Log(ctx, libLog.LevelWarn, "access denied: "+message)
+	}
 
-	return libHTTP.RespondError(fiberCtx, fiber.StatusForbidden, "forbidden", message)
+	return respondError(fiberCtx, fiber.StatusForbidden, "forbidden", message)
+}
+
+type verificationErrorConfig struct {
+	missingIDErr     error
+	invalidIDErr     error
+	invalidIDMessage string
+	notFoundSlug     string
+	notFoundErr      error
+	notFoundMessage  string
+	lookupMessage    string
+}
+
+func handleVerificationError(
+	ctx context.Context,
+	fiberCtx *fiber.Ctx,
+	span trace.Span,
+	logger libLog.Logger,
+	err error,
+	config verificationErrorConfig,
+) error {
+	if errors.Is(err, config.missingIDErr) || errors.Is(err, config.invalidIDErr) {
+		return badRequest(ctx, fiberCtx, span, logger, config.invalidIDMessage, err)
+	}
+
+	if errors.Is(err, libHTTP.ErrTenantIDNotFound) || errors.Is(err, libHTTP.ErrInvalidTenantID) {
+		logSpanError(ctx, span, logger, "invalid tenant id", err)
+
+		return respondError(fiberCtx, fiber.StatusUnauthorized, "unauthorized", "unauthorized")
+	}
+
+	if errors.Is(err, config.notFoundErr) {
+		return notFoundWithSlug(ctx, fiberCtx, span, logger, config.notFoundSlug, config.notFoundMessage, err)
+	}
+
+	if errors.Is(err, libHTTP.ErrLookupFailed) {
+		return internalError(ctx, fiberCtx, span, logger, config.lookupMessage, err)
+	}
+
+	return forbidden(ctx, fiberCtx, span, logger, err)
 }
 
 // handleExceptionVerificationError maps errors from ParseAndVerifyResourceScopedID to HTTP responses.
@@ -213,32 +275,15 @@ func handleExceptionVerificationError(
 	logger libLog.Logger,
 	err error,
 ) error {
-	// Invalid or missing exception ID -> bad request
-	if errors.Is(err, ErrMissingExceptionID) ||
-		errors.Is(err, ErrInvalidExceptionID) {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid exception_id", err)
-	}
-
-	// Missing or invalid tenant ID -> unauthorized
-	if errors.Is(err, libHTTP.ErrTenantIDNotFound) ||
-		errors.Is(err, libHTTP.ErrInvalidTenantID) {
-		logSpanError(ctx, span, logger, "invalid tenant id", err)
-
-		return libHTTP.RespondError(fiberCtx, fiber.StatusUnauthorized, "unauthorized", "unauthorized")
-	}
-
-	// Exception not found -> 404
-	if errors.Is(err, ErrExceptionNotFound) {
-		return notFound(ctx, fiberCtx, span, logger, "exception not found", err)
-	}
-
-	// Infrastructure lookup failures (e.g. database errors during ownership check) -> 500
-	if errors.Is(err, libHTTP.ErrLookupFailed) {
-		return internalError(ctx, fiberCtx, span, logger, "failed to verify exception access", err)
-	}
-
-	// Tenant or ownership issues -> forbidden
-	return forbidden(ctx, fiberCtx, span, logger, err)
+	return handleVerificationError(ctx, fiberCtx, span, logger, err, verificationErrorConfig{
+		missingIDErr:     ErrMissingExceptionID,
+		invalidIDErr:     ErrInvalidExceptionID,
+		invalidIDMessage: "invalid exception_id",
+		notFoundSlug:     "exception_not_found",
+		notFoundErr:      ErrExceptionNotFound,
+		notFoundMessage:  "exception not found",
+		lookupMessage:    "failed to verify exception access",
+	})
 }
 
 // handleDisputeVerificationError maps errors from ParseAndVerifyResourceScopedID to HTTP responses.
@@ -249,32 +294,15 @@ func handleDisputeVerificationError(
 	logger libLog.Logger,
 	err error,
 ) error {
-	// Invalid or missing dispute ID -> bad request
-	if errors.Is(err, ErrMissingDisputeID) ||
-		errors.Is(err, ErrInvalidDisputeID) {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid dispute_id", err)
-	}
-
-	// Missing or invalid tenant ID -> unauthorized
-	if errors.Is(err, libHTTP.ErrTenantIDNotFound) ||
-		errors.Is(err, libHTTP.ErrInvalidTenantID) {
-		logSpanError(ctx, span, logger, "invalid tenant id", err)
-
-		return libHTTP.RespondError(fiberCtx, fiber.StatusUnauthorized, "unauthorized", "unauthorized")
-	}
-
-	// Dispute not found -> 404
-	if errors.Is(err, ErrDisputeNotFound) {
-		return notFound(ctx, fiberCtx, span, logger, "dispute not found", err)
-	}
-
-	// Infrastructure lookup failures (e.g. database errors during ownership check) -> 500
-	if errors.Is(err, libHTTP.ErrLookupFailed) {
-		return internalError(ctx, fiberCtx, span, logger, "failed to verify dispute access", err)
-	}
-
-	// Tenant or ownership issues -> forbidden
-	return forbidden(ctx, fiberCtx, span, logger, err)
+	return handleVerificationError(ctx, fiberCtx, span, logger, err, verificationErrorConfig{
+		missingIDErr:     ErrMissingDisputeID,
+		invalidIDErr:     ErrInvalidDisputeID,
+		invalidIDMessage: "invalid dispute_id",
+		notFoundSlug:     "dispute_not_found",
+		notFoundErr:      ErrDisputeNotFound,
+		notFoundMessage:  "dispute not found",
+		lookupMessage:    "failed to verify dispute access",
+	})
 }
 
 // errorResponseHandler is the function signature for HTTP error response helpers.
@@ -285,6 +313,7 @@ type errorResponseHandler func(context.Context, *fiber.Ctx, trace.Span, libLog.L
 type errorMapping struct {
 	target  error
 	handler errorResponseHandler
+	slug    string
 	message string
 }
 
@@ -294,34 +323,34 @@ type errorMapping struct {
 //nolint:gochecknoglobals // package-level table used by handleExceptionError
 var exceptionErrorMappings = []errorMapping{
 	// Exception not found -> 404
-	{sql.ErrNoRows, notFound, "exception not found"},
-	{entities.ErrExceptionNotFound, notFound, "exception not found"},
+	{sql.ErrNoRows, exceptionNotFound, "", "exception not found"},
+	{entities.ErrExceptionNotFound, exceptionNotFound, "", "exception not found"},
 
 	// Validation errors -> 400 (message derived from error)
-	{command.ErrExceptionIDRequired, badRequest, ""},
-	{command.ErrActorRequired, badRequest, ""},
-	{command.ErrZeroAdjustmentAmount, badRequest, ""},
-	{command.ErrNegativeAdjustmentAmount, badRequest, ""},
-	{command.ErrInvalidCurrency, badRequest, ""},
-	{value_objects.ErrInvalidCurrencyCode, badRequest, ""},
-	{value_objects.ErrInvalidAdjustmentReason, badRequest, ""},
-	{value_objects.ErrInvalidOverrideReason, badRequest, ""},
-	{entities.ErrResolutionNotesRequired, badRequest, ""},
+	{command.ErrExceptionIDRequired, badRequest, "", ""},
+	{command.ErrActorRequired, badRequest, "", ""},
+	{command.ErrZeroAdjustmentAmount, badRequest, "", ""},
+	{command.ErrNegativeAdjustmentAmount, badRequest, "", ""},
+	{command.ErrInvalidCurrency, badRequest, "", ""},
+	{value_objects.ErrInvalidCurrencyCode, badRequest, "", ""},
+	{value_objects.ErrInvalidAdjustmentReason, badRequest, "", ""},
+	{value_objects.ErrInvalidOverrideReason, badRequest, "", ""},
+	{entities.ErrResolutionNotesRequired, badRequest, "", ""},
 
 	// State transition errors -> 422
-	{entities.ErrExceptionMustBeOpenOrAssignedToResolve, unprocessable, "exception cannot be resolved in current state"},
-	{value_objects.ErrInvalidResolutionTransition, unprocessable, "exception cannot be resolved in current state"},
+	{entities.ErrExceptionMustBeOpenOrAssignedToResolve, unprocessable, "exception_invalid_state", "exception cannot be resolved in current state"},
+	{value_objects.ErrInvalidResolutionTransition, unprocessable, "exception_invalid_state", "exception cannot be resolved in current state"},
 
 	// Cross-context lookup failures: the exception references data that
 	// cannot be resolved (transaction, ingestion job, or source not found).
 	// These indicate a data integrity issue rather than a system error.
-	{crossAdapters.ErrTransactionNotFound, notFound, "transaction referenced by exception not found"},
-	{crossAdapters.ErrIngestionJobNotFound, unprocessable, "unable to resolve reconciliation context for exception"},
-	{crossAdapters.ErrSourceNotFound, unprocessable, "unable to resolve reconciliation context for exception"},
-	{crossAdapters.ErrContextNotFound, unprocessable, "unable to resolve reconciliation context for exception"},
+	{crossAdapters.ErrTransactionNotFound, notFound, "", "transaction referenced by exception not found"},
+	{crossAdapters.ErrIngestionJobNotFound, unprocessable, "", "unable to resolve reconciliation context for exception"},
+	{crossAdapters.ErrSourceNotFound, unprocessable, "", "unable to resolve reconciliation context for exception"},
+	{crossAdapters.ErrContextNotFound, unprocessable, "", "unable to resolve reconciliation context for exception"},
 
 	// Infrastructure errors -> 500
-	{crossAdapters.ErrContextLookupNotInitialized, internalError, "context lookup service not configured"},
+	{crossAdapters.ErrContextLookupNotInitialized, internalError, "", "context lookup service not configured"},
 }
 
 // handleExceptionError maps exception use case errors to HTTP responses.
@@ -337,6 +366,10 @@ func handleExceptionError(
 			msg := mapping.message
 			if msg == "" {
 				msg = err.Error()
+			}
+
+			if mapping.slug != "" {
+				return unprocessableWithSlug(ctx, fiberCtx, span, logger, mapping.slug, msg, err)
 			}
 
 			return mapping.handler(ctx, fiberCtx, span, logger, msg, err)
@@ -355,7 +388,11 @@ func handleDisputeError(
 	err error,
 ) error {
 	if errors.Is(err, sql.ErrNoRows) {
-		return notFound(ctx, fiberCtx, span, logger, "dispute not found", err)
+		return disputeNotFound(ctx, fiberCtx, span, logger, "dispute not found", err)
+	}
+
+	if errors.Is(err, query.ErrDisputeNotFound) {
+		return disputeNotFound(ctx, fiberCtx, span, logger, "dispute not found", err)
 	}
 
 	if errors.Is(err, command.ErrDisputeIDRequired) ||
@@ -389,12 +426,12 @@ func handleDisputeError(
 // @Param exceptionId path string true "Exception ID" format(uuid)
 // @Param request body dto.ForceMatchRequest true "Force match payload"
 // @Success 200 {object} dto.ExceptionResponse
-// @Failure 400 {object} ErrorResponse "Invalid request payload"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Exception not found"
-// @Failure 422 {object} ErrorResponse "Unprocessable entity: invalid state transition"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Exception not found"
+// @Failure 422 {object} sharedhttp.ErrorResponse "Unprocessable entity: invalid state transition"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/exceptions/{exceptionId}/force-match [post]
 func (handler *Handlers) ForceMatch(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.exception.force_match")
@@ -448,12 +485,12 @@ func (handler *Handlers) ForceMatch(fiberCtx *fiber.Ctx) error {
 // @Param exceptionId path string true "Exception ID" format(uuid)
 // @Param request body dto.AdjustEntryRequest true "Adjust entry payload"
 // @Success 200 {object} dto.ExceptionResponse
-// @Failure 400 {object} ErrorResponse "Invalid request payload"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Exception not found"
-// @Failure 422 {object} ErrorResponse "Unprocessable entity: invalid state transition"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Exception not found"
+// @Failure 422 {object} sharedhttp.ErrorResponse "Unprocessable entity: invalid state transition"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/exceptions/{exceptionId}/adjust-entry [post]
 func (handler *Handlers) AdjustEntry(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.exception.adjust_entry")
@@ -510,11 +547,11 @@ func (handler *Handlers) AdjustEntry(fiberCtx *fiber.Ctx) error {
 // @Param exceptionId path string true "Exception ID" format(uuid)
 // @Param request body dto.OpenDisputeRequest true "Open dispute payload"
 // @Success 201 {object} dto.DisputeResponse
-// @Failure 400 {object} ErrorResponse "Invalid request payload"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Exception not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Exception not found"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/exceptions/{exceptionId}/disputes [post]
 func (handler *Handlers) OpenDispute(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.exception.open_dispute")
@@ -568,12 +605,12 @@ func (handler *Handlers) OpenDispute(fiberCtx *fiber.Ctx) error {
 // @Param disputeId path string true "Dispute ID" format(uuid)
 // @Param request body dto.CloseDisputeRequest true "Close dispute payload"
 // @Success 200 {object} dto.DisputeResponse
-// @Failure 400 {object} ErrorResponse "Invalid request payload"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Dispute not found"
-// @Failure 422 {object} ErrorResponse "Unprocessable entity: invalid state transition"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Dispute not found"
+// @Failure 422 {object} sharedhttp.ErrorResponse "Unprocessable entity: invalid state transition"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/disputes/{disputeId}/close [post]
 func (handler *Handlers) CloseDispute(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.exception.close_dispute")
@@ -627,12 +664,12 @@ func (handler *Handlers) CloseDispute(fiberCtx *fiber.Ctx) error {
 // @Param disputeId path string true "Dispute ID" format(uuid)
 // @Param request body dto.SubmitEvidenceRequest true "Submit evidence payload"
 // @Success 200 {object} dto.DisputeResponse
-// @Failure 400 {object} ErrorResponse "Invalid request payload"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Dispute not found"
-// @Failure 422 {object} ErrorResponse "Unprocessable entity: invalid state transition"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Dispute not found"
+// @Failure 422 {object} sharedhttp.ErrorResponse "Unprocessable entity: invalid state transition"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/disputes/{disputeId}/evidence [post]
 func (handler *Handlers) SubmitEvidence(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.exception.submit_evidence")
@@ -692,10 +729,10 @@ func (handler *Handlers) SubmitEvidence(fiberCtx *fiber.Ctx) error {
 // @Param sort_by query string false "Sort by field" Enums(id,created_at,updated_at,severity,status) default(id)
 // @Param sort_order query string false "Sort order" Enums(asc,desc) default(desc)
 // @Success 200 {object} dto.ListExceptionsResponse
-// @Failure 400 {object} ErrorResponse "Invalid request payload"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/exceptions [get]
 func (handler *Handlers) ListExceptions(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.exception.list")
@@ -750,10 +787,10 @@ func (handler *Handlers) ListExceptions(fiberCtx *fiber.Ctx) error {
 // @Param sort_by query string false "Sort by field" Enums(id,created_at,updated_at,state,category) default(id)
 // @Param sort_order query string false "Sort order" Enums(asc,desc) default(desc)
 // @Success 200 {object} dto.ListDisputesResponse
-// @Failure 400 {object} ErrorResponse "Invalid request payload"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/disputes [get]
 func (handler *Handlers) ListDisputes(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.dispute.list")
@@ -801,11 +838,11 @@ func (handler *Handlers) ListDisputes(fiberCtx *fiber.Ctx) error {
 // @Param X-Request-Id header string false "Request ID for tracing"
 // @Param disputeId path string true "Dispute ID" format(uuid)
 // @Success 200 {object} dto.DisputeResponse
-// @Failure 400 {object} ErrorResponse "Invalid request payload"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Dispute not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Dispute not found"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/disputes/{disputeId} [get]
 func (handler *Handlers) GetDispute(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.dispute.get")
@@ -831,7 +868,7 @@ func (handler *Handlers) GetDispute(fiberCtx *fiber.Ctx) error {
 	result, err := handler.queryUC.GetDispute(ctx, disputeID)
 	if err != nil {
 		if errors.Is(err, query.ErrDisputeNotFound) {
-			return notFound(ctx, fiberCtx, span, logger, "dispute not found", err)
+			return disputeNotFound(ctx, fiberCtx, span, logger, "dispute not found", err)
 		}
 
 		return internalError(ctx, fiberCtx, span, logger, "failed to get dispute", err)
@@ -1012,11 +1049,11 @@ func parseCursorFilter(fiberCtx *fiber.Ctx) (repositories.CursorFilter, error) {
 // @Param X-Request-Id header string false "Request ID for tracing"
 // @Param exceptionId path string true "Exception ID" format(uuid)
 // @Success 200 {object} dto.ExceptionResponse
-// @Failure 400 {object} ErrorResponse "Invalid request payload"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Exception not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Exception not found"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/exceptions/{exceptionId} [get]
 func (handler *Handlers) GetException(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.exception.get")
@@ -1042,7 +1079,7 @@ func (handler *Handlers) GetException(fiberCtx *fiber.Ctx) error {
 	exception, err := handler.queryUC.GetException(ctx, exceptionID)
 	if err != nil {
 		if errors.Is(err, entities.ErrExceptionNotFound) {
-			return notFound(ctx, fiberCtx, span, logger, "exception not found", err)
+			return notFoundWithSlug(ctx, fiberCtx, span, logger, "exception_not_found", "exception not found", err)
 		}
 
 		return internalError(ctx, fiberCtx, span, logger, "failed to get exception", err)
@@ -1064,12 +1101,12 @@ func (handler *Handlers) GetException(fiberCtx *fiber.Ctx) error {
 // @Param exceptionId path string true "Exception ID" format(uuid)
 // @Param request body dto.DispatchRequest true "Dispatch payload"
 // @Success 200 {object} dto.DispatchResponse
-// @Failure 400 {object} ErrorResponse "Invalid request payload"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Exception not found"
-// @Failure 422 {object} ErrorResponse "Unprocessable entity: invalid state transition or connector not configured"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Exception not found"
+// @Failure 422 {object} sharedhttp.ErrorResponse "Unprocessable entity: invalid state transition or connector not configured"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/exceptions/{exceptionId}/dispatch [post]
 func (handler *Handlers) DispatchToExternal(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.exception.dispatch")
@@ -1127,7 +1164,7 @@ func handleDispatchError(
 	// Not-found: raw sql.ErrNoRows is a defensive fallback for edge cases where
 	// the repository does not convert to the domain error.
 	if errors.Is(err, sql.ErrNoRows) || errors.Is(err, entities.ErrExceptionNotFound) {
-		return notFound(ctx, fiberCtx, span, logger, "exception not found", err)
+		return notFoundWithSlug(ctx, fiberCtx, span, logger, "exception_not_found", "exception not found", err)
 	}
 
 	if errors.Is(err, command.ErrExceptionIDRequired) ||
@@ -1137,11 +1174,11 @@ func handleDispatchError(
 	}
 
 	if errors.Is(err, command.ErrUnsupportedTargetSystem) {
-		return unprocessable(ctx, fiberCtx, span, logger, err.Error(), err)
+		return unprocessableWithSlug(ctx, fiberCtx, span, logger, "dispatch_target_unsupported", err.Error(), err)
 	}
 
 	if errors.Is(err, command.ErrDispatchConnectorNotConfigured) {
-		return unprocessable(ctx, fiberCtx, span, logger, "connector not configured for target system", err)
+		return unprocessableWithSlug(ctx, fiberCtx, span, logger, "dispatch_connector_not_configured", "connector not configured for target system", err)
 	}
 
 	return internalError(ctx, fiberCtx, span, logger, "failed to dispatch exception", err)
@@ -1159,11 +1196,11 @@ func handleDispatchError(
 // @Param cursor query string false "Cursor for pagination (opaque)"
 // @Param limit query int false "Maximum number of records to return" default(20) minimum(1) maximum(200)
 // @Success 200 {object} dto.HistoryResponse
-// @Failure 400 {object} ErrorResponse "Invalid request payload"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Exception not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Exception not found"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/exceptions/{exceptionId}/history [get]
 func (handler *Handlers) GetHistory(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.exception.get_history")
@@ -1255,12 +1292,4 @@ func parseTimestampCursorPagination(fiberCtx *fiber.Ctx) (*libHTTP.TimestampCurs
 	limit = libHTTP.ValidateLimit(limit, constants.DefaultPaginationLimit, constants.MaximumPaginationLimit)
 
 	return cursor, limit, nil
-}
-
-// ErrorResponse is a placeholder for Swagger documentation.
-// The actual error response type is defined in lib-commons.
-type ErrorResponse struct {
-	Code    int    `json:"code"`
-	Title   string `json:"title"`
-	Message string `json:"message"`
 }

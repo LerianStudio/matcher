@@ -10,7 +10,10 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/http/dto"
+	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 )
+
+var _ = sharedhttp.ErrorResponse{}
 
 // CreateFieldMap creates a field map.
 //
@@ -26,12 +29,12 @@ import (
 // @Param sourceId path string true "Source ID" format(uuid)
 // @Param fieldMap body dto.CreateFieldMapRequest true "Field map creation payload"
 // @Success 201 {object} dto.FieldMapResponse "Successfully created field map"
-// @Failure 400 {object} ErrorResponse "Invalid request payload"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Context or source not found"
-// @Failure 409 {object} ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Context or source not found"
+// @Failure 409 {object} sharedhttp.ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/config/contexts/{contextId}/sources/{sourceId}/field-maps [post]
 func (handler *Handler) CreateFieldMap(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fieldmap.create")
@@ -88,11 +91,11 @@ func (handler *Handler) CreateFieldMap(fiberCtx *fiber.Ctx) error {
 // @Param contextId path string true "Context ID" format(uuid)
 // @Param sourceId path string true "Source ID" format(uuid)
 // @Success 200 {object} dto.FieldMapResponse "Successfully retrieved field map"
-// @Failure 400 {object} ErrorResponse "Invalid source ID format"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Field map not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid source ID format"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Field map not found"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/config/contexts/{contextId}/sources/{sourceId}/field-maps [get]
 func (handler *Handler) GetFieldMapBySource(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fieldmap.get_by_source")
@@ -126,7 +129,7 @@ func (handler *Handler) GetFieldMapBySource(fiberCtx *fiber.Ctx) error {
 	result, err := handler.query.GetFieldMapBySource(ctx, sourceID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return writeNotFound(fiberCtx, "field map not found")
+			return writeNotFound(fiberCtx, "configuration_field_map_not_found", "field map not found")
 		}
 
 		logSpanError(ctx, span, logger, "failed to get field map", err)
@@ -150,12 +153,12 @@ func (handler *Handler) GetFieldMapBySource(fiberCtx *fiber.Ctx) error {
 // @Param fieldMapId path string true "Field map ID" format(uuid)
 // @Param fieldMap body dto.UpdateFieldMapRequest true "Field map updates"
 // @Success 200 {object} dto.FieldMapResponse "Successfully updated field map"
-// @Failure 400 {object} ErrorResponse "Invalid request payload"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Field map not found"
-// @Failure 409 {object} ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Field map not found"
+// @Failure 409 {object} sharedhttp.ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/config/field-maps/{fieldMapId} [patch]
 func (handler *Handler) UpdateFieldMap(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fieldmap.update")
@@ -179,7 +182,7 @@ func (handler *Handler) UpdateFieldMap(fiberCtx *fiber.Ctx) error {
 	fieldMap, err := handler.query.GetFieldMap(ctx, fieldMapID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return writeNotFound(fiberCtx, "resource not found")
+			return writeNotFound(fiberCtx, "configuration_field_map_not_found", "field map not found")
 		}
 
 		logSpanError(ctx, span, logger, "failed to load field map", err)
@@ -188,7 +191,7 @@ func (handler *Handler) UpdateFieldMap(fiberCtx *fiber.Ctx) error {
 	}
 
 	if err := handler.contextVerifier(ctx, tenantID, fieldMap.ContextID); err != nil {
-		return handleOwnershipVerificationError(ctx, fiberCtx, span, logger, err)
+		return handleOwnershipVerificationError(ctx, fiberCtx, span, logger, err, "configuration_field_map_not_found", "field map not found")
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, fieldMap.ContextID)
@@ -198,7 +201,7 @@ func (handler *Handler) UpdateFieldMap(fiberCtx *fiber.Ctx) error {
 		logSpanError(ctx, span, logger, "failed to update field map", err)
 
 		if errors.Is(err, sql.ErrNoRows) {
-			return writeNotFound(fiberCtx, "resource not found")
+			return writeNotFound(fiberCtx, "configuration_field_map_not_found", "field map not found")
 		}
 
 		return writeServiceError(fiberCtx, err)
@@ -217,11 +220,11 @@ func (handler *Handler) UpdateFieldMap(fiberCtx *fiber.Ctx) error {
 // @Param X-Request-Id header string false "Request ID for tracing"
 // @Param fieldMapId path string true "Field map ID" format(uuid)
 // @Success 204 "Field map successfully deleted"
-// @Failure 400 {object} ErrorResponse "Invalid field map ID format"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Field map not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid field map ID format"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Field map not found"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/config/field-maps/{fieldMapId} [delete]
 func (handler *Handler) DeleteFieldMap(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.fieldmap.delete")
@@ -240,7 +243,7 @@ func (handler *Handler) DeleteFieldMap(fiberCtx *fiber.Ctx) error {
 	fieldMap, err := handler.query.GetFieldMap(ctx, fieldMapID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return writeNotFound(fiberCtx, "resource not found")
+			return writeNotFound(fiberCtx, "configuration_field_map_not_found", "field map not found")
 		}
 
 		logSpanError(ctx, span, logger, "failed to load field map", err)
@@ -249,7 +252,7 @@ func (handler *Handler) DeleteFieldMap(fiberCtx *fiber.Ctx) error {
 	}
 
 	if err := handler.contextVerifier(ctx, tenantID, fieldMap.ContextID); err != nil {
-		return handleOwnershipVerificationError(ctx, fiberCtx, span, logger, err)
+		return handleOwnershipVerificationError(ctx, fiberCtx, span, logger, err, "configuration_field_map_not_found", "field map not found")
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, fieldMap.ContextID)
@@ -258,7 +261,7 @@ func (handler *Handler) DeleteFieldMap(fiberCtx *fiber.Ctx) error {
 		logSpanError(ctx, span, logger, "failed to delete field map", err)
 
 		if errors.Is(err, sql.ErrNoRows) {
-			return writeNotFound(fiberCtx, "resource not found")
+			return writeNotFound(fiberCtx, "configuration_field_map_not_found", "field map not found")
 		}
 
 		return writeServiceError(fiberCtx, err)

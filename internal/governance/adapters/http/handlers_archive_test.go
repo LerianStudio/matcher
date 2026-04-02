@@ -18,7 +18,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	sharedhttp "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 	"github.com/LerianStudio/matcher/internal/auth"
 	governanceDTO "github.com/LerianStudio/matcher/internal/governance/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
@@ -205,7 +204,7 @@ func TestListArchives(t *testing.T) {
 
 		require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 
-		var errResp sharedhttp.ErrorResponse
+		var errResp ErrorResponse
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
 		require.Contains(t, errResp.Message, "from")
 	})
@@ -229,7 +228,7 @@ func TestListArchives(t *testing.T) {
 
 		require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 
-		var errResp sharedhttp.ErrorResponse
+		var errResp ErrorResponse
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
 		require.Contains(t, errResp.Message, "to")
 	})
@@ -285,9 +284,9 @@ func TestListArchives(t *testing.T) {
 
 		require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 
-		var errResp sharedhttp.ErrorResponse
+		var errResp ErrorResponse
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
-		require.Equal(t, fiber.StatusBadRequest, errResp.Code)
+		require.Equal(t, http.StatusText(http.StatusBadRequest), errResp.Title)
 		require.Contains(t, errResp.Message, "invalid pagination")
 	})
 
@@ -564,7 +563,7 @@ func TestDownloadArchive(t *testing.T) {
 
 		require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 
-		var errResp sharedhttp.ErrorResponse
+		var errResp ErrorResponse
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
 		require.Equal(t, "invalid archive id", errResp.Message)
 	})

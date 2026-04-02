@@ -51,8 +51,8 @@ func TestHandleCallbackError_RateLimitExceeded(t *testing.T) {
 
 	var body map[string]any
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
-	assert.Equal(t, float64(429), body["code"])
-	assert.Equal(t, "rate_limit_exceeded", body["title"])
+	assert.Equal(t, "MTCH-0506", body["code"])
+	assert.Equal(t, http.StatusText(http.StatusTooManyRequests), body["title"])
 }
 
 func TestHandleCallbackError_ValidationErrors(t *testing.T) {

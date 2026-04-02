@@ -16,7 +16,10 @@ import (
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/matching/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/matching/services/command"
+	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 )
+
+var _ = sharedhttp.ErrorResponse{}
 
 // CreateManualMatch creates a manual match group for selected transactions.
 // @Summary Create a manual match
@@ -30,11 +33,11 @@ import (
 // @Param contextId query string true "Context ID" format(uuid)
 // @Param request body CreateManualMatchRequest true "Manual match payload"
 // @Success 201 {object} ManualMatchResponse
-// @Failure 400 {object} libHTTP.ErrorResponse "Invalid request payload"
-// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
-// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
-// @Failure 404 {object} libHTTP.ErrorResponse "Transaction not found"
-// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Transaction not found"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/matching/manual [post]
 func (handler *Handler) CreateManualMatch(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.matching.create_manual_match")
@@ -106,7 +109,7 @@ func mapManualMatchErrorToResponse(
 	case errors.Is(err, command.ErrContextNotActive):
 		logSpanError(ctx, span, logger, "context not active", err)
 
-		return libHTTP.RespondError(fiberCtx, fiber.StatusForbidden, "context_not_active", "context is not active")
+		return respondError(fiberCtx, fiber.StatusForbidden, "context_not_active", "context is not active")
 	case errors.Is(err, command.ErrTransactionNotFound):
 		logSpanError(ctx, span, logger, "transaction not found", err)
 

@@ -14,9 +14,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"go.opentelemetry.io/otel/trace"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	pkghttp "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/auth"
@@ -124,10 +122,7 @@ func NewIdempotencyMiddleware(cfg IdempotencyMiddlewareConfig) fiber.Handler {
 
 		fiberCtx.Locals(idempotencyProcessedKey, true)
 
-		ctx := fiberCtx.UserContext()
-
-		logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
-		ctx, span := tracer.Start(ctx, "middleware.idempotency")
+		ctx, span, logger := StartHandlerSpan(fiberCtx, "middleware.idempotency")
 
 		defer span.End()
 
@@ -148,14 +143,14 @@ func handleKeyValidationError(
 	if errors.Is(validationErr, ErrMissingTenantID) {
 		libOpentelemetry.HandleSpanError(span, "missing tenant ID for idempotency", validationErr)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("idempotency middleware: %v", validationErr))
+		logIdempotency(ctx, logger, libLog.LevelError, fmt.Sprintf("idempotency middleware: %v", validationErr))
 
-		return pkghttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "idempotency_configuration_error", "an unexpected error occurred")
+		return RespondError(fiberCtx, fiber.StatusInternalServerError, "idempotency_configuration_error", "an unexpected error occurred")
 	}
 
 	libOpentelemetry.HandleSpanError(span, "invalid idempotency key format", validationErr)
 
-	logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("idempotency middleware: invalid key format: %v", validationErr))
+	logIdempotency(ctx, logger, libLog.LevelWarn, fmt.Sprintf("idempotency middleware: invalid key format: %v", validationErr))
 
 	message := validationErr.Error()
 	if errors.Is(validationErr, ErrEmptyIdempotencyKey) {
@@ -166,7 +161,7 @@ func handleKeyValidationError(
 		message = ErrInvalidIdempotencyKey.Error()
 	}
 
-	return pkghttp.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_idempotency_key", message)
+	return RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_idempotency_key", message)
 }
 
 // executeIdempotencyLogic handles the core idempotency logic after initial checks pass.
@@ -192,9 +187,9 @@ func executeIdempotencyLogic(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to acquire idempotency lock", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("idempotency middleware: failed to acquire lock: %v", err))
+		logIdempotency(ctx, logger, libLog.LevelError, fmt.Sprintf("idempotency middleware: failed to acquire lock: %v", err))
 
-		return pkghttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "idempotency_error", "an unexpected error occurred")
+		return RespondError(fiberCtx, fiber.StatusInternalServerError, "idempotency_error", "an unexpected error occurred")
 	}
 
 	if acquired {
@@ -346,6 +341,12 @@ func canonicalRequestTarget(fiberCtx *fiber.Ctx) string {
 
 type idempotencyLogger = libLog.Logger
 
+func logIdempotency(ctx context.Context, logger idempotencyLogger, level libLog.Level, message string) {
+	if logger != nil {
+		logger.Log(ctx, level, message)
+	}
+}
+
 func idempotencyKeyFingerprint(key IdempotencyKey) string {
 	hash := sha256.Sum256([]byte(key))
 
@@ -360,7 +361,7 @@ func markRequestFailed(
 	logger idempotencyLogger,
 ) {
 	if markErr := repo.MarkFailed(ctx, key); markErr != nil {
-		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("idempotency: failed to mark failed: %v", markErr))
+		logIdempotency(ctx, logger, libLog.LevelWarn, fmt.Sprintf("idempotency: failed to mark failed: %v", markErr))
 	}
 }
 
@@ -374,7 +375,7 @@ func markRequestComplete(
 	logger idempotencyLogger,
 ) {
 	if markErr := repo.MarkComplete(ctx, key, responseBody, statusCode); markErr != nil {
-		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("idempotency: failed to mark complete: %v", markErr))
+		logIdempotency(ctx, logger, libLog.LevelWarn, fmt.Sprintf("idempotency: failed to mark complete: %v", markErr))
 	}
 }
 
@@ -421,22 +422,22 @@ func handleDuplicateRequest(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to get cached result", err)
 
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("idempotency: failed to get cached result: %v", err))
+		logIdempotency(ctx, logger, libLog.LevelError, fmt.Sprintf("idempotency: failed to get cached result: %v", err))
 
-		return pkghttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "idempotency_error", "an unexpected error occurred")
+		return RespondError(fiberCtx, fiber.StatusInternalServerError, "idempotency_error", "an unexpected error occurred")
 	}
 
 	if result == nil {
-		logger.Log(ctx, libLog.LevelError, "idempotency: cached result is nil")
+		logIdempotency(ctx, logger, libLog.LevelError, "idempotency: cached result is nil")
 
-		return pkghttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "idempotency_error", "an unexpected error occurred")
+		return RespondError(fiberCtx, fiber.StatusInternalServerError, "idempotency_error", "an unexpected error occurred")
 	}
 
 	switch result.Status {
 	case IdempotencyStatusPending:
-		logger.Log(ctx, libLog.LevelInfo, fmt.Sprintf("idempotency: request in progress (key_hash=%s)", idempotencyKeyFingerprint(key)))
+		logIdempotency(ctx, logger, libLog.LevelInfo, fmt.Sprintf("idempotency: request in progress (key_hash=%s)", idempotencyKeyFingerprint(key)))
 
-		return pkghttp.RespondError(
+		return RespondError(
 			fiberCtx,
 			fiber.StatusConflict,
 			"request_in_progress",
@@ -444,7 +445,7 @@ func handleDuplicateRequest(
 		)
 
 	case IdempotencyStatusComplete:
-		logger.Log(ctx, libLog.LevelInfo, fmt.Sprintf("idempotency: replaying cached response (key_hash=%s)", idempotencyKeyFingerprint(key)))
+		logIdempotency(ctx, logger, libLog.LevelInfo, fmt.Sprintf("idempotency: replaying cached response (key_hash=%s)", idempotencyKeyFingerprint(key)))
 
 		fiberCtx.Set(HeaderXIdempotencyReplayed, "true")
 
@@ -462,15 +463,15 @@ func handleDuplicateRequest(
 		if reacquireErr != nil {
 			libOpentelemetry.HandleSpanError(span, "failed to reacquire failed idempotency key", reacquireErr)
 
-			logger.Log(ctx, libLog.LevelError, fmt.Sprintf("idempotency: failed to reacquire failed key: %v", reacquireErr))
+			logIdempotency(ctx, logger, libLog.LevelError, fmt.Sprintf("idempotency: failed to reacquire failed key: %v", reacquireErr))
 
-			return pkghttp.RespondError(fiberCtx, fiber.StatusInternalServerError, "idempotency_error", "an unexpected error occurred")
+			return RespondError(fiberCtx, fiber.StatusInternalServerError, "idempotency_error", "an unexpected error occurred")
 		}
 
 		if !reacquired {
-			logger.Log(ctx, libLog.LevelInfo, fmt.Sprintf("idempotency: failed-key retry already in progress (key_hash=%s)", idempotencyKeyFingerprint(key)))
+			logIdempotency(ctx, logger, libLog.LevelInfo, fmt.Sprintf("idempotency: failed-key retry already in progress (key_hash=%s)", idempotencyKeyFingerprint(key)))
 
-			return pkghttp.RespondError(
+			return RespondError(
 				fiberCtx,
 				fiber.StatusConflict,
 				"request_in_progress",
@@ -478,14 +479,14 @@ func handleDuplicateRequest(
 			)
 		}
 
-		logger.Log(ctx, libLog.LevelInfo, fmt.Sprintf("idempotency: previous request failed, allowing retry (key_hash=%s)", idempotencyKeyFingerprint(key)))
+		logIdempotency(ctx, logger, libLog.LevelInfo, fmt.Sprintf("idempotency: previous request failed, allowing retry (key_hash=%s)", idempotencyKeyFingerprint(key)))
 
 		return processNewRequest(ctx, fiberCtx, repo, key, logger, span)
 
 	default:
 		libOpentelemetry.HandleSpanError(span, "idempotency: unknown status", fmt.Errorf("status %q: %w", result.Status, ErrUnknownIdempotencyStatus))
 
-		return pkghttp.RespondError(
+		return RespondError(
 			fiberCtx,
 			fiber.StatusInternalServerError,
 			"idempotency_error",

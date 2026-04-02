@@ -13,7 +13,10 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/services/command"
 	"github.com/LerianStudio/matcher/internal/configuration/services/query"
+	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 )
+
+var _ = sharedhttp.ErrorResponse{}
 
 // CreateSchedule creates a reconciliation schedule for a context.
 //
@@ -28,12 +31,12 @@ import (
 // @Param contextId path string true "Context ID" format(uuid)
 // @Param schedule body dto.CreateScheduleRequest true "Schedule creation payload"
 // @Success 201 {object} dto.ScheduleResponse "Successfully created schedule"
-// @Failure 400 {object} ErrorResponse "Invalid request payload"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Context not found"
-// @Failure 409 {object} ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Context not found"
+// @Failure 409 {object} sharedhttp.ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/contexts/{contextId}/schedules [post]
 func (handler *Handler) CreateSchedule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.schedule.create")
@@ -65,11 +68,11 @@ func (handler *Handler) CreateSchedule(fiberCtx *fiber.Ctx) error {
 		logSpanError(ctx, span, logger, "failed to create schedule", err)
 
 		if isScheduleClientError(err) {
-			return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", err.Error())
+			return respondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", err.Error())
 		}
 
 		if errors.Is(err, sql.ErrNoRows) {
-			return writeNotFound(fiberCtx, "context not found")
+			return writeNotFound(fiberCtx, "configuration_context_not_found", "context not found")
 		}
 
 		return writeServiceError(fiberCtx, err)
@@ -89,11 +92,11 @@ func (handler *Handler) CreateSchedule(fiberCtx *fiber.Ctx) error {
 // @Param X-Request-Id header string false "Request ID for tracing"
 // @Param contextId path string true "Context ID" format(uuid)
 // @Success 200 {array} dto.ScheduleResponse "List of schedules"
-// @Failure 400 {object} ErrorResponse "Invalid context ID format"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Context not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid context ID format"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Context not found"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/contexts/{contextId}/schedules [get]
 func (handler *Handler) ListSchedules(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.schedule.list")
@@ -136,11 +139,11 @@ func (handler *Handler) ListSchedules(fiberCtx *fiber.Ctx) error {
 // @Param contextId path string true "Context ID" format(uuid)
 // @Param scheduleId path string true "Schedule ID" format(uuid)
 // @Success 200 {object} dto.ScheduleResponse "Successfully retrieved schedule"
-// @Failure 400 {object} ErrorResponse "Invalid schedule ID format"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Schedule not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid schedule ID format"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Schedule not found"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/contexts/{contextId}/schedules/{scheduleId} [get]
 func (handler *Handler) GetSchedule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.schedule.get")
@@ -172,7 +175,7 @@ func (handler *Handler) GetSchedule(fiberCtx *fiber.Ctx) error {
 		logSpanError(ctx, span, logger, "failed to get schedule", err)
 
 		if errors.Is(err, query.ErrScheduleNotFound) || errors.Is(err, sql.ErrNoRows) {
-			return writeNotFound(fiberCtx, "schedule not found")
+			return writeNotFound(fiberCtx, "configuration_schedule_not_found", "schedule not found")
 		}
 
 		return writeServiceError(fiberCtx, err)
@@ -180,7 +183,7 @@ func (handler *Handler) GetSchedule(fiberCtx *fiber.Ctx) error {
 
 	// Verify schedule belongs to this context
 	if result.ContextID != contextID {
-		return writeNotFound(fiberCtx, "schedule not found")
+		return writeNotFound(fiberCtx, "configuration_schedule_not_found", "schedule not found")
 	}
 
 	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ScheduleToResponse(result))
@@ -200,12 +203,12 @@ func (handler *Handler) GetSchedule(fiberCtx *fiber.Ctx) error {
 // @Param scheduleId path string true "Schedule ID" format(uuid)
 // @Param schedule body dto.UpdateScheduleRequest true "Schedule updates"
 // @Success 200 {object} dto.ScheduleResponse "Successfully updated schedule"
-// @Failure 400 {object} ErrorResponse "Invalid request payload"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Schedule not found"
-// @Failure 409 {object} ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Schedule not found"
+// @Failure 409 {object} sharedhttp.ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/contexts/{contextId}/schedules/{scheduleId} [patch]
 func (handler *Handler) UpdateSchedule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.schedule.update")
@@ -242,13 +245,13 @@ func (handler *Handler) UpdateSchedule(fiberCtx *fiber.Ctx) error {
 		logSpanError(ctx, span, logger, "failed to update schedule", err)
 
 		if isScheduleClientError(err) {
-			return libHTTP.RespondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", err.Error())
+			return respondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", err.Error())
 		}
 
 		if errors.Is(err, command.ErrScheduleNotFound) ||
 			errors.Is(err, command.ErrScheduleContextMismatch) ||
 			errors.Is(err, sql.ErrNoRows) {
-			return writeNotFound(fiberCtx, "schedule not found")
+			return writeNotFound(fiberCtx, "configuration_schedule_not_found", "schedule not found")
 		}
 
 		return writeServiceError(fiberCtx, err)
@@ -268,11 +271,11 @@ func (handler *Handler) UpdateSchedule(fiberCtx *fiber.Ctx) error {
 // @Param contextId path string true "Context ID" format(uuid)
 // @Param scheduleId path string true "Schedule ID" format(uuid)
 // @Success 204 "Schedule successfully deleted"
-// @Failure 400 {object} ErrorResponse "Invalid schedule ID format"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Schedule not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid schedule ID format"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Schedule not found"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/contexts/{contextId}/schedules/{scheduleId} [delete]
 func (handler *Handler) DeleteSchedule(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.schedule.delete")
@@ -305,7 +308,7 @@ func (handler *Handler) DeleteSchedule(fiberCtx *fiber.Ctx) error {
 		if errors.Is(err, command.ErrScheduleNotFound) ||
 			errors.Is(err, command.ErrScheduleContextMismatch) ||
 			errors.Is(err, sql.ErrNoRows) {
-			return writeNotFound(fiberCtx, "schedule not found")
+			return writeNotFound(fiberCtx, "configuration_schedule_not_found", "schedule not found")
 		}
 
 		return writeServiceError(fiberCtx, err)

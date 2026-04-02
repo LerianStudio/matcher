@@ -65,13 +65,13 @@ func TestHandleContextVerificationError_AllBranches(t *testing.T) {
 			name:           "ErrMissingContextID returns 400",
 			err:            libHTTP.ErrMissingContextID,
 			expectedStatus: fiber.StatusBadRequest,
-			expectedCode:   "invalid_request",
+			expectedCode:   "invalid_context_id",
 		},
 		{
 			name:           "ErrInvalidContextID returns 400",
 			err:            libHTTP.ErrInvalidContextID,
 			expectedStatus: fiber.StatusBadRequest,
-			expectedCode:   "invalid_request",
+			expectedCode:   "invalid_context_id",
 		},
 		{
 			name:           "ErrTenantIDNotFound returns 401",
@@ -89,7 +89,7 @@ func TestHandleContextVerificationError_AllBranches(t *testing.T) {
 			name:           "ErrContextNotFound returns 404",
 			err:            libHTTP.ErrContextNotFound,
 			expectedStatus: fiber.StatusNotFound,
-			expectedCode:   "not_found",
+			expectedCode:   "configuration_context_not_found",
 		},
 		{
 			name:           "libHTTP.ErrContextNotActive returns 403",
@@ -138,7 +138,8 @@ func TestHandleContextVerificationError_AllBranches(t *testing.T) {
 			if tt.expectedCode != "" {
 				var payload map[string]any
 				require.NoError(t, json.NewDecoder(resp.Body).Decode(&payload))
-				assert.Equal(t, tt.expectedCode, payload["title"])
+				assert.Equal(t, expectedConfigurationCode(tt.expectedCode), payload["code"])
+				assert.Equal(t, http.StatusText(tt.expectedStatus), payload["title"])
 			}
 		})
 	}
@@ -159,13 +160,19 @@ func TestHandleOwnershipVerificationError_AllBranches(t *testing.T) {
 			name:           "ErrContextNotFound returns 404",
 			err:            libHTTP.ErrContextNotFound,
 			expectedStatus: fiber.StatusNotFound,
-			expectedCode:   "not_found",
+			expectedCode:   "configuration_field_map_not_found",
 		},
 		{
 			name:           "libHTTP.ErrContextNotOwned returns 404",
 			err:            libHTTP.ErrContextNotOwned,
 			expectedStatus: fiber.StatusNotFound,
-			expectedCode:   "not_found",
+			expectedCode:   "configuration_field_map_not_found",
+		},
+		{
+			name:           "libHTTP.ErrContextAccessDenied returns 403",
+			err:            libHTTP.ErrContextAccessDenied,
+			expectedStatus: fiber.StatusForbidden,
+			expectedCode:   "forbidden",
 		},
 		{
 			name:           "generic error returns 500",
@@ -185,7 +192,7 @@ func TestHandleOwnershipVerificationError_AllBranches(t *testing.T) {
 
 			app := fiber.New()
 			app.Get("/test", func(c *fiber.Ctx) error {
-				return handleOwnershipVerificationError(c.UserContext(), c, span, &libLog.NopLogger{}, tt.err)
+				return handleOwnershipVerificationError(c.UserContext(), c, span, &libLog.NopLogger{}, tt.err, "configuration_field_map_not_found", "field map not found")
 			})
 
 			resp := performRequest(t, app, http.MethodGet, "/test", nil)
@@ -196,7 +203,8 @@ func TestHandleOwnershipVerificationError_AllBranches(t *testing.T) {
 			if tt.expectedCode != "" {
 				var payload map[string]any
 				require.NoError(t, json.NewDecoder(resp.Body).Decode(&payload))
-				assert.Equal(t, tt.expectedCode, payload["title"])
+				assert.Equal(t, expectedConfigurationCode(tt.expectedCode), payload["code"])
+				assert.Equal(t, http.StatusText(tt.expectedStatus), payload["title"])
 			}
 		})
 	}
@@ -454,7 +462,7 @@ func TestUpdateFieldMap_NotFound(t *testing.T) {
 
 	require.Equal(t, fiber.StatusNotFound, resp.StatusCode)
 	requireSpanName(t, recorder, "handler.fieldmap.update")
-	requireNotFoundResponse(t, resp, "resource not found")
+	requireNotFoundResponse(t, resp, "field map not found")
 }
 
 func TestUpdateFieldMap_InvalidPayload(t *testing.T) {
@@ -532,7 +540,7 @@ func TestUpdateFieldMap_OwnershipDenied(t *testing.T) {
 
 	require.Equal(t, fiber.StatusNotFound, resp.StatusCode)
 	requireSpanName(t, recorder, "handler.fieldmap.update")
-	requireNotFoundResponse(t, resp, "resource not found")
+	requireResourceNotFoundResponse(t, resp, "field map not found")
 }
 
 // ─── DeleteFieldMap error path tests ──────────────────────────
@@ -554,7 +562,7 @@ func TestDeleteFieldMap_NotFound(t *testing.T) {
 
 	require.Equal(t, fiber.StatusNotFound, resp.StatusCode)
 	requireSpanName(t, recorder, "handler.fieldmap.delete")
-	requireNotFoundResponse(t, resp, "resource not found")
+	requireNotFoundResponse(t, resp, "field map not found")
 }
 
 func TestDeleteFieldMap_InvalidUUID(t *testing.T) {
@@ -617,7 +625,7 @@ func TestDeleteFieldMap_OwnershipDenied(t *testing.T) {
 
 	require.Equal(t, fiber.StatusNotFound, resp.StatusCode)
 	requireSpanName(t, recorder, "handler.fieldmap.delete")
-	requireNotFoundResponse(t, resp, "resource not found")
+	requireResourceNotFoundResponse(t, resp, "field map not found")
 }
 
 // ─── NewHandler tests ─────────────────────────────────────────

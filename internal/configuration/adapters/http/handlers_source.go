@@ -15,7 +15,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/configuration/services/command"
-	sharedpagination "github.com/LerianStudio/matcher/internal/shared/adapters/http"
+	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 )
 
 // CreateSource creates a reconciliation source.
@@ -31,12 +31,12 @@ import (
 // @Param contextId path string true "Context ID" format(uuid)
 // @Param source body dto.CreateSourceRequest true "Source creation payload"
 // @Success 201 {object} dto.ReconciliationSourceResponse "Successfully created source"
-// @Failure 400 {object} ErrorResponse "Invalid request payload"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Context not found"
-// @Failure 409 {object} ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Context not found"
+// @Failure 409 {object} sharedhttp.ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/config/contexts/{contextId}/sources [post]
 func (handler *Handler) CreateSource(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.source.create")
@@ -91,11 +91,11 @@ func (handler *Handler) CreateSource(fiberCtx *fiber.Ctx) error {
 // @Param cursor query string false "Cursor for pagination (opaque)"
 // @Param type query string false "Filter by source type" Enums(LEDGER,BANK,GATEWAY,CUSTOM,FETCHER)
 // @Success 200 {object} ListSourcesResponse "List of sources with cursor pagination"
-// @Failure 400 {object} ErrorResponse "Invalid query parameters"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Context not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid query parameters"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Context not found"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/config/contexts/{contextId}/sources [get]
 func (handler *Handler) ListSources(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.source.list")
@@ -162,7 +162,7 @@ func (handler *Handler) ListSources(fiberCtx *fiber.Ctx) error {
 
 	response := ListSourcesResponse{
 		Items: toSourceValuesWithFieldMaps(result, fieldMapsExist),
-		CursorResponse: sharedpagination.CursorResponse{
+		CursorResponse: sharedhttp.CursorResponse{
 			NextCursor: pagination.Next,
 			PrevCursor: pagination.Prev,
 			Limit:      limit,
@@ -185,11 +185,11 @@ func (handler *Handler) ListSources(fiberCtx *fiber.Ctx) error {
 // @Param contextId path string true "Context ID" format(uuid)
 // @Param sourceId path string true "Source ID" format(uuid)
 // @Success 200 {object} dto.ReconciliationSourceResponse "Successfully retrieved source"
-// @Failure 400 {object} ErrorResponse "Invalid source ID format"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Source not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid source ID format"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Source not found"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/config/contexts/{contextId}/sources/{sourceId} [get]
 func (handler *Handler) GetSource(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.source.get")
@@ -221,7 +221,7 @@ func (handler *Handler) GetSource(fiberCtx *fiber.Ctx) error {
 		logSpanError(ctx, span, logger, "failed to get source", err)
 
 		if errors.Is(err, sql.ErrNoRows) {
-			return writeNotFound(fiberCtx, "source not found")
+			return writeNotFound(fiberCtx, "configuration_source_not_found", "source not found")
 		}
 
 		return writeServiceError(fiberCtx, err)
@@ -244,12 +244,12 @@ func (handler *Handler) GetSource(fiberCtx *fiber.Ctx) error {
 // @Param sourceId path string true "Source ID" format(uuid)
 // @Param source body dto.UpdateSourceRequest true "Source updates"
 // @Success 200 {object} dto.ReconciliationSourceResponse "Successfully updated source"
-// @Failure 400 {object} ErrorResponse "Invalid request payload"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Source not found"
-// @Failure 409 {object} ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request payload"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Source not found"
+// @Failure 409 {object} sharedhttp.ErrorResponse "Conflict: duplicate resource or idempotency key in progress"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/config/contexts/{contextId}/sources/{sourceId} [patch]
 func (handler *Handler) UpdateSource(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.source.update")
@@ -291,7 +291,7 @@ func (handler *Handler) UpdateSource(fiberCtx *fiber.Ctx) error {
 		logSpanError(ctx, span, logger, "failed to update source", err)
 
 		if errors.Is(err, sql.ErrNoRows) {
-			return writeNotFound(fiberCtx, "source not found")
+			return writeNotFound(fiberCtx, "configuration_source_not_found", "source not found")
 		}
 
 		return writeServiceError(fiberCtx, err)
@@ -311,11 +311,11 @@ func (handler *Handler) UpdateSource(fiberCtx *fiber.Ctx) error {
 // @Param contextId path string true "Context ID" format(uuid)
 // @Param sourceId path string true "Source ID" format(uuid)
 // @Success 204 "Source successfully deleted"
-// @Failure 400 {object} ErrorResponse "Invalid source ID format"
-// @Failure 401 {object} ErrorResponse "Unauthorized"
-// @Failure 403 {object} ErrorResponse "Forbidden"
-// @Failure 404 {object} ErrorResponse "Source not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid source ID format"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Source not found"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/config/contexts/{contextId}/sources/{sourceId} [delete]
 func (handler *Handler) DeleteSource(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.source.delete")
@@ -346,11 +346,11 @@ func (handler *Handler) DeleteSource(fiberCtx *fiber.Ctx) error {
 		logSpanError(ctx, span, logger, "failed to delete source", err)
 
 		if errors.Is(err, sql.ErrNoRows) {
-			return writeNotFound(fiberCtx, "source not found")
+			return writeNotFound(fiberCtx, "configuration_source_not_found", "source not found")
 		}
 
 		if errors.Is(err, command.ErrSourceHasFieldMap) {
-			return libHTTP.RespondError(fiberCtx, fiber.StatusConflict, "has_field_map", err.Error())
+			return respondError(fiberCtx, fiber.StatusConflict, "has_field_map", err.Error())
 		}
 
 		return writeServiceError(fiberCtx, err)

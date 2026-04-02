@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/LerianStudio/matcher/pkg/constant"
 	"github.com/LerianStudio/matcher/tests/integration/server"
 )
 
@@ -844,6 +845,13 @@ func TestIntegrationHTTPFlow_UploadFile_InvalidContextID_ReturnsBadRequest(t *te
 			resp.StatusCode,
 			string(body),
 		)
+		RequireExactErrorResponse(
+			t,
+			body,
+			constant.CodeInvalidContextID,
+			http.StatusText(http.StatusBadRequest),
+			"invalid context id",
+		)
 	})
 }
 
@@ -866,6 +874,13 @@ func TestIntegrationHTTPFlow_UploadFile_InvalidSourceID_ReturnsBadRequest(t *tes
 			"expected 400 Bad Request, got %d: %s",
 			resp.StatusCode,
 			string(body),
+		)
+		RequireExactErrorResponse(
+			t,
+			body,
+			constant.CodeInvalidRequest,
+			http.StatusText(http.StatusBadRequest),
+			"invalid source_id",
 		)
 	})
 }
@@ -1017,8 +1032,13 @@ func TestIntegrationHTTPFlow_GetJob_NonExistentJob_ReturnsNotFound(t *testing.T)
 			resp.StatusCode,
 			string(body),
 		)
-		errResp := AssertErrorResponse(t, body)
-		t.Logf("Error response: code=%d, message=%s", errResp.Code, errResp.Message)
+		RequireExactErrorResponse(
+			t,
+			body,
+			constant.CodeIngestionJobNotFound,
+			http.StatusText(http.StatusNotFound),
+			"job not found",
+		)
 	})
 }
 
@@ -1038,8 +1058,13 @@ func TestIntegrationHTTPFlow_GetJob_InvalidJobID_ReturnsBadRequest(t *testing.T)
 			resp.StatusCode,
 			string(body),
 		)
-		errResp := AssertErrorResponse(t, body)
-		t.Logf("Error response: code=%d, message=%s", errResp.Code, errResp.Message)
+		RequireExactErrorResponse(
+			t,
+			body,
+			constant.CodeInvalidRequest,
+			http.StatusText(http.StatusBadRequest),
+			"invalid job_id",
+		)
 	})
 }
 
@@ -2175,8 +2200,13 @@ func TestIntegrationHTTPFlow_ListTransactions_InvalidJobID_ReturnsBadRequest(t *
 		resp, body, err := sh.DoJSON(http.MethodGet, listPath, nil)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusBadRequest, resp.StatusCode, "expected 400: %s", string(body))
-		errResp := AssertErrorResponse(t, body)
-		t.Logf("Error response: code=%d, message=%s", errResp.Code, errResp.Message)
+		RequireExactErrorResponse(
+			t,
+			body,
+			constant.CodeInvalidRequest,
+			http.StatusText(http.StatusBadRequest),
+			"invalid job_id",
+		)
 	})
 }
 
@@ -2189,8 +2219,13 @@ func TestIntegrationHTTPFlow_ListTransactions_NonExistentJob_ReturnsNotFound(t *
 		resp, body, err := sh.DoJSON(http.MethodGet, listPath, nil)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusNotFound, resp.StatusCode, "expected 404: %s", string(body))
-		errResp := AssertErrorResponse(t, body)
-		t.Logf("Error response: code=%d, message=%s", errResp.Code, errResp.Message)
+		RequireExactErrorResponse(
+			t,
+			body,
+			constant.CodeIngestionJobNotFound,
+			http.StatusText(http.StatusNotFound),
+			"job not found",
+		)
 	})
 }
 

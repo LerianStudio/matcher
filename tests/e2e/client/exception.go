@@ -1,5 +1,4 @@
-//go:build e2e
-
+//nolint:perfsprint,varnamelen,wsl_v5 // Test exception client favors concise path composition.
 package client
 
 import (
@@ -19,12 +18,7 @@ type ExceptionClient struct {
 }
 
 // NewExceptionClient creates a new exception client.
-// Panics if client is nil (test infrastructure — fail fast on misconfiguration).
 func NewExceptionClient(client *Client) *ExceptionClient {
-	if client == nil {
-		panic("nil client passed to NewExceptionClient")
-	}
-
 	return &ExceptionClient{client: client}
 }
 
@@ -202,7 +196,9 @@ func (c *ExceptionClient) ListExceptionsByStatus(
 	ctx context.Context,
 	status string,
 ) (*ListResponse[Exception], error) {
-	return c.ListExceptions(ctx, ExceptionListFilter{Status: status, Limit: 100})
+	const defaultStatusListLimit = 100
+
+	return c.ListExceptions(ctx, ExceptionListFilter{Status: status, Limit: defaultStatusListLimit})
 }
 
 // ListOpenExceptions retrieves all open exceptions.

@@ -1,5 +1,4 @@
-//go:build e2e
-
+//nolint:perfsprint,varnamelen,wsl_v5 // Test discovery client favors concise path composition.
 package client
 
 import (
@@ -14,12 +13,7 @@ type DiscoveryClient struct {
 }
 
 // NewDiscoveryClient creates a new discovery client.
-// Panics if client is nil (test infrastructure — fail fast on misconfiguration).
 func NewDiscoveryClient(client *Client) *DiscoveryClient {
-	if client == nil {
-		panic("nil client passed to NewDiscoveryClient")
-	}
-
 	return &DiscoveryClient{client: client}
 }
 

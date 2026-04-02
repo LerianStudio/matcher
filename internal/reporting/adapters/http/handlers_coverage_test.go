@@ -5,7 +5,6 @@ package http
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -1682,50 +1681,6 @@ func TestCashImpactSummaryToResponse_NilInput(t *testing.T) {
 	assert.Equal(t, "0", result.TotalUnmatchedAmount)
 	assert.Empty(t, result.ByCurrency)
 	assert.Empty(t, result.ByAge)
-}
-
-// --- forbidden helper test ---
-
-func TestForbidden_WithNilError(t *testing.T) {
-	t.Parallel()
-
-	app := fiber.New()
-
-	app.Get("/test", func(c *fiber.Ctx) error {
-		_, span, logger := startHandlerSpan(c, "test")
-		defer span.End()
-
-		return forbidden(c.UserContext(), c, span, logger, nil)
-	})
-
-	req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
-	resp, err := app.Test(req)
-	require.NoError(t, err)
-
-	defer resp.Body.Close()
-
-	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
-}
-
-func TestForbidden_WithError(t *testing.T) {
-	t.Parallel()
-
-	app := fiber.New()
-
-	app.Get("/test", func(c *fiber.Ctx) error {
-		_, span, logger := startHandlerSpan(c, "test")
-		defer span.End()
-
-		return forbidden(c.UserContext(), c, span, logger, errors.New("test forbidden error"))
-	})
-
-	req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
-	resp, err := app.Test(req)
-	require.NoError(t, err)
-
-	defer resp.Body.Close()
-
-	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 }
 
 // --- parseExportJobRequest coverage ---

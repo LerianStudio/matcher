@@ -1,5 +1,4 @@
-//go:build e2e
-
+//nolint:varnamelen,wsl_v5 // Test HTTP client helpers favor concise receiver names and direct path assembly.
 package client
 
 import (
@@ -22,6 +21,8 @@ type Client struct {
 	tenantID   string
 	userID     string
 }
+
+const httpErrorStatusThreshold = 400
 
 // RequestOptions customize outgoing test requests.
 type RequestOptions struct {
@@ -79,6 +80,7 @@ func (c *Client) DoWithOptions(
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
+
 	req.Header.Set("X-Tenant-ID", c.tenantID)
 	req.Header.Set("X-User-ID", c.userID)
 	req.Header.Set("Accept", "application/json")
@@ -89,6 +91,7 @@ func (c *Client) DoWithOptions(
 		if idempotencyKey == "" {
 			idempotencyKey = uuid.New().String()
 		}
+
 		req.Header.Set("X-Idempotency-Key", idempotencyKey)
 	}
 
@@ -96,7 +99,12 @@ func (c *Client) DoWithOptions(
 		req.Header.Set(key, value)
 	}
 
-	return c.httpClient.Do(req)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("execute request: %w", err)
+	}
+
+	return resp, nil
 }
 
 // DoJSON performs a JSON request and decodes the response.
@@ -113,11 +121,13 @@ func (c *Client) DoJSONWithOptions(
 	opts RequestOptions,
 ) error {
 	var body io.Reader
+
 	if reqBody != nil {
 		data, err := json.Marshal(reqBody)
 		if err != nil {
 			return fmt.Errorf("failed to marshal request: %w", err)
 		}
+
 		body = bytes.NewReader(data)
 	}
 
@@ -132,11 +142,8 @@ func (c *Client) DoJSONWithOptions(
 		return fmt.Errorf("failed to read response: %w", err)
 	}
 
-	if resp.StatusCode >= 400 {
-		return &APIError{
-			StatusCode: resp.StatusCode,
-			Body:       respData,
-		}
+	if resp.StatusCode >= httpErrorStatusThreshold {
+		return newAPIError(resp.StatusCode, respData)
 	}
 
 	if respBody != nil && len(respData) > 0 {
@@ -162,6 +169,7 @@ func (c *Client) DoMultipart(
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create form file: %w", err)
 	}
+
 	if _, err := part.Write(fileContent); err != nil {
 		return nil, nil, fmt.Errorf("failed to write file content: %w", err)
 	}
@@ -208,11 +216,8 @@ func (c *Client) DoRaw(
 		return resp, nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
-	if resp.StatusCode >= 400 {
-		return resp, data, &APIError{
-			StatusCode: resp.StatusCode,
-			Body:       data,
-		}
+	if resp.StatusCode >= httpErrorStatusThreshold {
+		return resp, data, newAPIError(resp.StatusCode, data)
 	}
 
 	return resp, data, nil
@@ -222,10 +227,50 @@ func (c *Client) DoRaw(
 type APIError struct {
 	StatusCode int
 	Body       []byte
+	Parsed     *ErrorResponse
 }
 
 func (e *APIError) Error() string {
+	if e == nil {
+		return "API error <nil>"
+	}
+
+	if e.Parsed != nil {
+		if e.Parsed.Code != "" {
+			return fmt.Sprintf("API error %d (%s): %s", e.StatusCode, e.Parsed.Code, e.Parsed.Message)
+		}
+
+		return fmt.Sprintf("API error %d: %s", e.StatusCode, e.Parsed.Message)
+	}
+
 	return fmt.Sprintf("API error %d: %s", e.StatusCode, string(e.Body))
+}
+
+// ProductCode returns the parsed Matcher product code when available.
+func (e *APIError) ProductCode() string {
+	if e == nil || e.Parsed == nil {
+		return ""
+	}
+
+	return e.Parsed.Code
+}
+
+// ProductTitle returns the parsed Matcher product title when available.
+func (e *APIError) ProductTitle() string {
+	if e == nil || e.Parsed == nil {
+		return ""
+	}
+
+	return e.Parsed.Title
+}
+
+// ProductMessage returns the parsed Matcher product message when available.
+func (e *APIError) ProductMessage() string {
+	if e == nil || e.Parsed == nil {
+		return ""
+	}
+
+	return e.Parsed.Message
 }
 
 // IsNotFound returns true if the error is a 404.
@@ -241,4 +286,18 @@ func (e *APIError) IsBadRequest() bool {
 // IsConflict returns true if the error is a 409.
 func (e *APIError) IsConflict() bool {
 	return e.StatusCode == http.StatusConflict
+}
+
+func newAPIError(statusCode int, body []byte) *APIError {
+	apiError := &APIError{
+		StatusCode: statusCode,
+		Body:       body,
+	}
+
+	var parsed ErrorResponse
+	if err := json.Unmarshal(body, &parsed); err == nil && parsed.Code != "" {
+		apiError.Parsed = &parsed
+	}
+
+	return apiError
 }

@@ -1,5 +1,6 @@
-//go:build e2e
+//go:build unit
 
+//nolint:varnamelen,wsl_v5 // Configuration client tests use compact handler fixtures.
 package client
 
 import (
@@ -499,7 +500,7 @@ func TestConfigurationClient_ErrorHandling(t *testing.T) {
 			name: "server error",
 			handler: func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusInternalServerError)
-				w.Write([]byte(`{"error":"server error"}`))
+				w.Write([]byte(`{"code":"MTCH-0002","title":"Internal Server Error","message":"server error"}`))
 			},
 			timeout:        5 * time.Second,
 			expectContains: []string{"create context", "API error 500"},
@@ -526,6 +527,8 @@ func TestConfigurationClient_ErrorHandling(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			server := httptest.NewServer(tt.handler)
 			if tt.name == "network failure" {
 				server.Close()

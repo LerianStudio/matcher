@@ -289,7 +289,7 @@ func TestLoadSystemplaneBackendConfig_ProductionRequiresSecretMasterKey(t *testi
 
 	require.Error(t, err)
 	assert.Nil(t, result)
-	assert.Contains(t, err.Error(), "secret master key must be exactly 32 raw bytes")
+	assert.Contains(t, err.Error(), "SYSTEMPLANE_SECRET_MASTER_KEY is required")
 }
 
 // ---------------------------------------------------------------------------

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -28,6 +29,7 @@ import (
 	discoveryCommand "github.com/LerianStudio/matcher/internal/discovery/services/command"
 	discoveryQuery "github.com/LerianStudio/matcher/internal/discovery/services/query"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+	"github.com/LerianStudio/matcher/pkg/constant"
 )
 
 // --- Mocks ---
@@ -296,15 +298,49 @@ func assertStructuredErrorResponse(t *testing.T, resp *http.Response, expectedSt
 
 	assert.Equal(t, expectedStatus, resp.StatusCode)
 
-	var body struct {
-		Code    int    `json:"code"`
-		Title   string `json:"title"`
-		Message string `json:"message"`
-	}
+	var body ErrorResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
-	assert.Equal(t, expectedStatus, body.Code)
-	assert.Equal(t, expectedType, body.Title)
+	assert.Equal(t, expectedDiscoveryCode(expectedType, expectedMessage), body.Code)
+	assert.Equal(t, http.StatusText(expectedStatus), body.Title)
 	assert.Equal(t, expectedMessage, body.Message)
+}
+
+func expectedDiscoveryCode(expectedType, expectedMessage string) string {
+	switch expectedMessage {
+	case "connection not found":
+		return constant.CodeDiscoveryConnectionNotFound
+	case "extraction not found":
+		return constant.CodeDiscoveryExtractionNotFound
+	case "fetcher service unavailable":
+		return constant.CodeDiscoveryFetcherUnavailable
+	case "discovery refresh already in progress":
+		return constant.CodeDiscoveryRefreshInProgress
+	}
+
+	if expectedType == "invalid_request" && strings.HasPrefix(expectedMessage, "invalid extraction request:") {
+		return constant.CodeDiscoveryInvalidExtraction
+	}
+
+	switch expectedType {
+	case "invalid_request":
+		return constant.CodeInvalidRequest
+	case "not_found":
+		return constant.CodeNotFound
+	case "conflict":
+		return constant.CodeConflict
+	case "discovery_connection_not_found":
+		return constant.CodeDiscoveryConnectionNotFound
+	case "discovery_extraction_not_found":
+		return constant.CodeDiscoveryExtractionNotFound
+	case "discovery_invalid_extraction":
+		return constant.CodeDiscoveryInvalidExtraction
+	case "discovery_fetcher_unavailable":
+		return constant.CodeDiscoveryFetcherUnavailable
+	case "refresh_in_progress":
+		return constant.CodeDiscoveryRefreshInProgress
+	default:
+		return constant.CodeInternalServerError
+	}
 }
 
 func (f *handlerFixture) seedExtraction(t *testing.T, connectionID uuid.UUID) *entities.ExtractionRequest {
@@ -620,7 +656,7 @@ func TestTestConnection_FetcherUnavailable(t *testing.T) {
 	resp, err := app.Test(req)
 	require.NoError(t, err)
 
-	assertStructuredErrorResponse(t, resp, http.StatusServiceUnavailable, "service_unavailable", "fetcher service unavailable")
+	assertStructuredErrorResponse(t, resp, http.StatusServiceUnavailable, "discovery_fetcher_unavailable", "fetcher service unavailable")
 }
 
 func TestRefreshDiscovery_Success(t *testing.T) {

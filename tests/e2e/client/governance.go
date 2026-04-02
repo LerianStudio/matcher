@@ -1,5 +1,4 @@
-//go:build e2e
-
+//nolint:perfsprint,varnamelen,wsl_v5 // Test governance client favors concise path composition.
 package client
 
 import (
@@ -15,12 +14,7 @@ type GovernanceClient struct {
 }
 
 // NewGovernanceClient creates a new governance client.
-// Panics if client is nil (test infrastructure — fail fast on misconfiguration).
 func NewGovernanceClient(client *Client) *GovernanceClient {
-	if client == nil {
-		panic("nil client passed to NewGovernanceClient")
-	}
-
 	return &GovernanceClient{client: client}
 }
 

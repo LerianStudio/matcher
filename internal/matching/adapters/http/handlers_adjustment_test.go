@@ -24,6 +24,7 @@ import (
 	matchingRepositories "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
 	"github.com/LerianStudio/matcher/internal/matching/ports"
 	"github.com/LerianStudio/matcher/internal/matching/services/command"
+	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
@@ -240,7 +241,7 @@ func TestCreateAdjustmentMissingTargets(t *testing.T) {
 
 	defer resp.Body.Close()
 
-	var errResp libHTTP.ErrorResponse
+	var errResp sharedhttp.ErrorResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
 
 	require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
@@ -357,7 +358,7 @@ func TestCreateAdjustmentMissingRequiredFields(t *testing.T) {
 
 			defer resp.Body.Close()
 
-			var errResp libHTTP.ErrorResponse
+			var errResp sharedhttp.ErrorResponse
 			require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
 
 			require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
@@ -414,7 +415,7 @@ func TestCreateAdjustmentInvalidAmountFormat(t *testing.T) {
 
 	defer resp.Body.Close()
 
-	var errResp libHTTP.ErrorResponse
+	var errResp sharedhttp.ErrorResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
 
 	require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
@@ -471,7 +472,7 @@ func TestCreateAdjustmentContextNotFound(t *testing.T) {
 
 	defer resp.Body.Close()
 
-	var errResp libHTTP.ErrorResponse
+	var errResp sharedhttp.ErrorResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
 
 	require.Equal(t, fiber.StatusNotFound, resp.StatusCode)
@@ -526,11 +527,11 @@ func TestCreateAdjustmentContextNotActive(t *testing.T) {
 
 	defer resp.Body.Close()
 
-	var errResp libHTTP.ErrorResponse
+	var errResp sharedhttp.ErrorResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
 
 	require.Equal(t, fiber.StatusForbidden, resp.StatusCode)
-	require.Equal(t, "context_not_active", errResp.Title)
+	require.Equal(t, http.StatusText(fiber.StatusForbidden), errResp.Title)
 }
 
 func TestCreateAdjustmentInvalidPayload(t *testing.T) {
@@ -568,7 +569,7 @@ func TestCreateAdjustmentInvalidPayload(t *testing.T) {
 
 	defer resp.Body.Close()
 
-	var errResp libHTTP.ErrorResponse
+	var errResp sharedhttp.ErrorResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
 
 	require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
@@ -622,7 +623,7 @@ func TestCreateAdjustmentInvalidMatchGroupID(t *testing.T) {
 
 	defer resp.Body.Close()
 
-	var errResp libHTTP.ErrorResponse
+	var errResp sharedhttp.ErrorResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
 
 	require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
@@ -676,7 +677,7 @@ func TestCreateAdjustmentInvalidTransactionID(t *testing.T) {
 
 	defer resp.Body.Close()
 
-	var errResp libHTTP.ErrorResponse
+	var errResp sharedhttp.ErrorResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
 
 	require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
@@ -784,7 +785,7 @@ func TestCreateAdjustmentServiceError(t *testing.T) {
 
 	defer resp.Body.Close()
 
-	var errResp libHTTP.ErrorResponse
+	var errResp sharedhttp.ErrorResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
 
 	require.Equal(t, fiber.StatusInternalServerError, resp.StatusCode)

@@ -28,6 +28,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/reporting/services/query"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 	portsmocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
+	"github.com/LerianStudio/matcher/pkg/constant"
 )
 
 // testTenantID is the tenant ID used in test middleware (setupExportJobTestApp).
@@ -1305,6 +1306,12 @@ func TestExportJobHandlers_DownloadExportJob(t *testing.T) {
 		defer resp.Body.Close()
 
 		assert.Equal(t, fiber.StatusGone, resp.StatusCode)
+
+		var payload ErrorResponse
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&payload))
+		assert.Equal(t, constant.CodeReportingExportExpired, payload.Code)
+		assert.Equal(t, stdhttp.StatusText(stdhttp.StatusGone), payload.Title)
+		assert.Equal(t, "export file has expired", payload.Message)
 	})
 
 	t.Run("returns bad request for invalid job ID", func(t *testing.T) {

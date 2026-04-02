@@ -9,15 +9,18 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 
-	sharedhttp "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/governance/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
 	governanceErrors "github.com/LerianStudio/matcher/internal/governance/domain/errors"
 	"github.com/LerianStudio/matcher/internal/governance/domain/repositories"
+	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
+
+var _ = sharedhttp.ErrorResponse{}
 
 // Sentinel errors for archive handler validation.
 var (
@@ -126,7 +129,7 @@ func (ah *ArchiveHandler) ListArchives(fiberCtx *fiber.Ctx) error {
 		return badRequest(ctx, fiberCtx, span, logger, "invalid tenant id", err)
 	}
 
-	limit, offset, err := sharedhttp.ParsePagination(fiberCtx)
+	limit, offset, err := libHTTP.ParsePagination(fiberCtx)
 	if err != nil {
 		return badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
 	}
@@ -170,7 +173,7 @@ func (ah *ArchiveHandler) ListArchives(fiberCtx *fiber.Ctx) error {
 		HasMore: hasMore,
 	}
 
-	if writeErr := sharedhttp.Respond(fiberCtx, fiber.StatusOK, response); writeErr != nil {
+	if writeErr := libHTTP.Respond(fiberCtx, fiber.StatusOK, response); writeErr != nil {
 		return fmt.Errorf("write ok response: %w", writeErr)
 	}
 
@@ -217,14 +220,14 @@ func (ah *ArchiveHandler) DownloadArchive(fiberCtx *fiber.Ctx) error {
 	archive, err := ah.archiveRepo.GetByID(ctx, archiveID)
 	if err != nil {
 		if errors.Is(err, governanceErrors.ErrMetadataNotFound) {
-			return writeNotFound(ctx, fiberCtx, span, logger, "archive not found", err)
+			return writeNotFound(ctx, fiberCtx, span, logger, "governance_archive_not_found", "archive not found", err)
 		}
 
 		return writeServiceError(ctx, fiberCtx, span, logger, "failed to get archive", err)
 	}
 
 	if archive == nil {
-		return writeNotFound(ctx, fiberCtx, span, logger, "archive not found", governanceErrors.ErrMetadataNotFound)
+		return writeNotFound(ctx, fiberCtx, span, logger, "governance_archive_not_found", "archive not found", governanceErrors.ErrMetadataNotFound)
 	}
 
 	// Verify tenant ownership
@@ -236,7 +239,7 @@ func (ah *ArchiveHandler) DownloadArchive(fiberCtx *fiber.Ctx) error {
 	}
 
 	if archive.TenantID != tenantID {
-		return writeNotFound(ctx, fiberCtx, span, logger, "archive not found", governanceErrors.ErrMetadataNotFound)
+		return writeNotFound(ctx, fiberCtx, span, logger, "governance_archive_not_found", "archive not found", governanceErrors.ErrMetadataNotFound)
 	}
 
 	presignExpiry := ah.currentPresignExpiry()
@@ -246,7 +249,7 @@ func (ah *ArchiveHandler) DownloadArchive(fiberCtx *fiber.Ctx) error {
 		if errors.Is(err, sharedPorts.ErrObjectStorageUnavailable) {
 			logSpanError(ctx, span, logger, "archive storage unavailable", err)
 
-			return sharedhttp.RespondError(fiberCtx, fiber.StatusServiceUnavailable, "object_storage_unavailable", "archive storage is unavailable")
+			return respondError(fiberCtx, fiber.StatusServiceUnavailable, "object_storage_unavailable", "archive storage is unavailable")
 		}
 
 		return writeServiceError(ctx, fiberCtx, span, logger, "failed to generate download url", err)
@@ -260,7 +263,7 @@ func (ah *ArchiveHandler) DownloadArchive(fiberCtx *fiber.Ctx) error {
 		Checksum:    archive.Checksum,
 	}
 
-	if writeErr := sharedhttp.Respond(fiberCtx, fiber.StatusOK, response); writeErr != nil {
+	if writeErr := libHTTP.Respond(fiberCtx, fiber.StatusOK, response); writeErr != nil {
 		return fmt.Errorf("write ok response: %w", writeErr)
 	}
 

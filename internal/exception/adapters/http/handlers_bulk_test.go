@@ -20,8 +20,9 @@ import (
 	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 
-	sharedhttp "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 	"github.com/LerianStudio/matcher/internal/exception/services/command"
+	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
+	"github.com/LerianStudio/matcher/pkg/constant"
 )
 
 // --- parseUUIDs tests ---
@@ -206,7 +207,7 @@ func requireBulkErrorResponse(
 	t *testing.T,
 	resp *http.Response,
 	expectedStatus int,
-	expectedCode int,
+	_ int,
 	expectedTitle,
 	expectedMessage string,
 ) {
@@ -218,9 +219,18 @@ func requireBulkErrorResponse(
 
 	var errResp sharedhttp.ErrorResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
-	require.Equal(t, expectedCode, errResp.Code)
-	require.Equal(t, expectedTitle, errResp.Title)
+	require.Equal(t, expectedBulkCode(expectedTitle), errResp.Code)
+	require.Equal(t, http.StatusText(expectedStatus), errResp.Title)
 	require.Equal(t, expectedMessage, errResp.Message)
+}
+
+func expectedBulkCode(expectedTitle string) string {
+	switch expectedTitle {
+	case "invalid_request":
+		return constant.CodeInvalidRequest
+	default:
+		return constant.CodeInternalServerError
+	}
 }
 
 func TestHandleBulkError_BulkEmptyIDs(t *testing.T) {

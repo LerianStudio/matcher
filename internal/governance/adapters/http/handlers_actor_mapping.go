@@ -14,7 +14,10 @@ import (
 	governanceErrors "github.com/LerianStudio/matcher/internal/governance/domain/errors"
 	"github.com/LerianStudio/matcher/internal/governance/services/command"
 	"github.com/LerianStudio/matcher/internal/governance/services/query"
+	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 )
+
+var _ = sharedhttp.ErrorResponse{}
 
 // Sentinel errors for actor mapping handler validation.
 var (
@@ -62,10 +65,10 @@ func NewActorMappingHandler(
 // @Param actorId path string true "Actor ID"
 // @Param request body dto.UpsertActorMappingRequest true "Actor mapping data"
 // @Success 200 {object} dto.ActorMappingResponse
-// @Failure 400 {object} libHTTP.ErrorResponse "Invalid request"
-// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
-// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
-// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/governance/actor-mappings/{actorId} [put]
 func (ha *ActorMappingHandler) UpsertActorMapping(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.governance.upsert_actor_mapping")
@@ -120,11 +123,11 @@ func (ha *ActorMappingHandler) UpsertActorMapping(fiberCtx *fiber.Ctx) error {
 // @Param X-Request-Id header string false "Request ID for tracing"
 // @Param actorId path string true "Actor ID"
 // @Success 200 {object} dto.ActorMappingResponse
-// @Failure 400 {object} libHTTP.ErrorResponse "Invalid request"
-// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
-// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
-// @Failure 404 {object} libHTTP.ErrorResponse "Actor mapping not found"
-// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Actor mapping not found"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/governance/actor-mappings/{actorId} [get]
 func (ha *ActorMappingHandler) GetActorMapping(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.governance.get_actor_mapping")
@@ -138,14 +141,14 @@ func (ha *ActorMappingHandler) GetActorMapping(fiberCtx *fiber.Ctx) error {
 	mapping, err := ha.queryUC.GetActorMapping(ctx, actorID)
 	if err != nil {
 		if errors.Is(err, governanceErrors.ErrActorMappingNotFound) {
-			return writeNotFound(ctx, fiberCtx, span, logger, "actor mapping not found", err)
+			return writeNotFound(ctx, fiberCtx, span, logger, "governance_actor_mapping_not_found", "actor mapping not found", err)
 		}
 
 		return writeServiceError(ctx, fiberCtx, span, logger, "failed to get actor mapping", err)
 	}
 
 	if mapping == nil {
-		return writeNotFound(ctx, fiberCtx, span, logger, "actor mapping not found", governanceErrors.ErrActorMappingNotFound)
+		return writeNotFound(ctx, fiberCtx, span, logger, "governance_actor_mapping_not_found", "actor mapping not found", governanceErrors.ErrActorMappingNotFound)
 	}
 
 	if writeErr := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ActorMappingToResponse(mapping)); writeErr != nil {
@@ -165,11 +168,11 @@ func (ha *ActorMappingHandler) GetActorMapping(fiberCtx *fiber.Ctx) error {
 // @Param X-Request-Id header string false "Request ID for tracing"
 // @Param actorId path string true "Actor ID"
 // @Success 204 "No Content"
-// @Failure 400 {object} libHTTP.ErrorResponse "Invalid request"
-// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
-// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
-// @Failure 404 {object} libHTTP.ErrorResponse "Actor mapping not found"
-// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Actor mapping not found"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/governance/actor-mappings/{actorId}/pseudonymize [post]
 func (ha *ActorMappingHandler) PseudonymizeActor(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.governance.pseudonymize_actor")
@@ -182,7 +185,7 @@ func (ha *ActorMappingHandler) PseudonymizeActor(fiberCtx *fiber.Ctx) error {
 
 	if err := ha.commandUC.PseudonymizeActor(ctx, actorID); err != nil {
 		if errors.Is(err, governanceErrors.ErrActorMappingNotFound) {
-			return writeNotFound(ctx, fiberCtx, span, logger, "actor mapping not found", err)
+			return writeNotFound(ctx, fiberCtx, span, logger, "governance_actor_mapping_not_found", "actor mapping not found", err)
 		}
 
 		return writeServiceError(ctx, fiberCtx, span, logger, "failed to pseudonymize actor", err)
@@ -201,11 +204,11 @@ func (ha *ActorMappingHandler) PseudonymizeActor(fiberCtx *fiber.Ctx) error {
 // @Param X-Request-Id header string false "Request ID for tracing"
 // @Param actorId path string true "Actor ID"
 // @Success 204 "No Content"
-// @Failure 400 {object} libHTTP.ErrorResponse "Invalid request"
-// @Failure 401 {object} libHTTP.ErrorResponse "Unauthorized"
-// @Failure 403 {object} libHTTP.ErrorResponse "Forbidden"
-// @Failure 404 {object} libHTTP.ErrorResponse "Actor mapping not found"
-// @Failure 500 {object} libHTTP.ErrorResponse "Internal server error"
+// @Failure 400 {object} sharedhttp.ErrorResponse "Invalid request"
+// @Failure 401 {object} sharedhttp.ErrorResponse "Unauthorized"
+// @Failure 403 {object} sharedhttp.ErrorResponse "Forbidden"
+// @Failure 404 {object} sharedhttp.ErrorResponse "Actor mapping not found"
+// @Failure 500 {object} sharedhttp.ErrorResponse "Internal server error"
 // @Router /v1/governance/actor-mappings/{actorId} [delete]
 func (ha *ActorMappingHandler) DeleteActorMapping(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "handler.governance.delete_actor_mapping")
@@ -218,7 +221,7 @@ func (ha *ActorMappingHandler) DeleteActorMapping(fiberCtx *fiber.Ctx) error {
 
 	if err := ha.commandUC.DeleteActorMapping(ctx, actorID); err != nil {
 		if errors.Is(err, governanceErrors.ErrActorMappingNotFound) {
-			return writeNotFound(ctx, fiberCtx, span, logger, "actor mapping not found", err)
+			return writeNotFound(ctx, fiberCtx, span, logger, "governance_actor_mapping_not_found", "actor mapping not found", err)
 		}
 
 		return writeServiceError(ctx, fiberCtx, span, logger, "failed to delete actor mapping", err)

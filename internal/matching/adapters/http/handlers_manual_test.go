@@ -18,10 +18,10 @@ import (
 
 	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
 
-	sharedhttp "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/matching/ports"
 	"github.com/LerianStudio/matcher/internal/matching/services/command"
+	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
@@ -469,7 +469,7 @@ func TestCreateManualMatchContextNotActive(t *testing.T) {
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
 
 	require.Equal(t, fiber.StatusForbidden, resp.StatusCode)
-	require.Equal(t, "context_not_active", errResp.Title)
+	require.Equal(t, http.StatusText(fiber.StatusForbidden), errResp.Title)
 }
 
 func TestCreateManualMatchSameSourceTransactions(t *testing.T) {
