@@ -1,3 +1,11 @@
+## [1.3.0-beta.7](https://github.com/LerianStudio/matcher/compare/v1.3.0-beta.6...v1.3.0-beta.7) (2026-04-02)
+
+
+### Bug Fixes
+
+* address CodeRabbit review - clarify lib-commons refs, align Go version, fix Swagger path ([ce8e023](https://github.com/LerianStudio/matcher/commit/ce8e023ac0c75d081c7c82bfba9f04d932c54d92))
+* address CodeRabbit review - remove stale toolchain ref, add Swagger path ([12ed48c](https://github.com/LerianStudio/matcher/commit/12ed48c4910dc8ed0d9748afe9c33ca802ed2515))
+
 ## [1.3.0-beta.6](https://github.com/LerianStudio/matcher/compare/v1.3.0-beta.5...v1.3.0-beta.6) (2026-04-01)
 
 ## [1.3.0-beta.5](https://github.com/LerianStudio/matcher/compare/v1.3.0-beta.4...v1.3.0-beta.5) (2026-04-01)
