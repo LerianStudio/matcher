@@ -116,12 +116,12 @@ func LoadSystemplaneBackendConfig(appCfg *Config) (*spBootstrap.BootstrapConfig,
 
 	cfg.ApplyDefaults()
 
-	if err := cfg.Validate(); err != nil {
-		return nil, fmt.Errorf("validate systemplane config: %w", err)
-	}
-
 	if err := validateLoadedSystemplaneBackendConfig(cfg, appCfg); err != nil {
 		return nil, err
+	}
+
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("validate systemplane config: %w", err)
 	}
 
 	return cfg, nil
