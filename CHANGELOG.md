@@ -1,3 +1,11 @@
+## [1.3.0-beta.8](https://github.com/LerianStudio/matcher/compare/v1.3.0-beta.7...v1.3.0-beta.8) (2026-04-04)
+
+
+### Features
+
+* **auth:** add Casdoor seed generator ([3877651](https://github.com/LerianStudio/matcher/commit/3877651c6563f136cbb771386e1845d55be630ef))
+* **bootstrap:** add runtime settings layer ([fa73f05](https://github.com/LerianStudio/matcher/commit/fa73f059b226a50ffd4e267ad5da17ea2f7aebf0))
+
 ## [1.3.0-beta.7](https://github.com/LerianStudio/matcher/compare/v1.3.0-beta.6...v1.3.0-beta.7) (2026-04-02)
 
 
