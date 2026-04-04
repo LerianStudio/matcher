@@ -7,9 +7,11 @@
 package bootstrap
 
 import (
+	"os"
 	"reflect"
 	"testing"
 
+	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -230,6 +232,57 @@ func TestResolveConfigValue_RenamedRuntimeKeyAliases(t *testing.T) {
 	}
 }
 
+func TestResolveSnapshotConfigValue_PrefersSettingsForSettingKeys(t *testing.T) {
+	t.Parallel()
+
+	snap := domain.Snapshot{
+		Configs: map[string]domain.EffectiveValue{
+			"rate_limit.max": {Key: "rate_limit.max", Value: 999},
+		},
+		GlobalSettings: map[string]domain.EffectiveValue{
+			"rate_limit.max": {Key: "rate_limit.max", Value: 100},
+		},
+	}
+
+	val, ok := resolveSnapshotConfigValue(snap, "rate_limit.max")
+
+	require.True(t, ok)
+	assert.Equal(t, 100, val)
+}
+
+func TestResolveSnapshotConfigValue_SettingKeysFallBackToConfigsForUpgradeCompatibility(t *testing.T) {
+	t.Parallel()
+
+	snap := domain.Snapshot{
+		Configs: map[string]domain.EffectiveValue{
+			"rate_limit.max": {Key: "rate_limit.max", Value: 999},
+		},
+	}
+
+	val, ok := resolveSnapshotConfigValue(snap, "rate_limit.max")
+
+	require.True(t, ok)
+	assert.Equal(t, 999, val)
+}
+
+func TestResolveSnapshotConfigValue_PrefersConfigsForConfigKeys(t *testing.T) {
+	t.Parallel()
+
+	snap := domain.Snapshot{
+		Configs: map[string]domain.EffectiveValue{
+			"app.log_level": {Key: "app.log_level", Value: "debug"},
+		},
+		GlobalSettings: map[string]domain.EffectiveValue{
+			"app.log_level": {Key: "app.log_level", Value: "info"},
+		},
+	}
+
+	val, ok := resolveSnapshotConfigValue(snap, "app.log_level")
+
+	require.True(t, ok)
+	assert.Equal(t, "debug", val)
+}
+
 // --- derefPointerValue ---
 
 func TestDerefPointerValue_NonPointer(t *testing.T) {
@@ -328,4 +381,60 @@ func TestHasExplicitEnvOverride_EmptyEnvTag(t *testing.T) {
 	result := hasExplicitEnvOverride(fieldType)
 
 	assert.False(t, result)
+}
+
+func TestOverlayExplicitEnvOverrides_OnlyCopiesEnvControlledFields(t *testing.T) {
+	t.Setenv("WEBHOOK_TIMEOUT_SEC", "45")
+
+	dst := defaultConfig()
+	dst.Webhook.TimeoutSec = 15
+	dst.RateLimit.Max = 100
+
+	source := defaultConfig()
+	source.Webhook.TimeoutSec = 45
+	source.RateLimit.Max = 999
+
+	overlayExplicitEnvOverrides(dst, source)
+
+	assert.Equal(t, 45, dst.Webhook.TimeoutSec)
+	assert.Equal(t, 100, dst.RateLimit.Max)
+}
+
+func TestResolveConfigEnvVar_AliasKeyReturnsCanonicalEnvVar(t *testing.T) {
+	t.Parallel()
+
+	envVar, ok := resolveConfigEnvVar("cors.allowed_origins")
+
+	require.True(t, ok)
+	assert.Equal(t, "CORS_ALLOWED_ORIGINS", envVar)
+}
+
+func TestResolveConfigEnvVar_UnknownKeyReturnsFalse(t *testing.T) {
+	t.Parallel()
+
+	envVar, ok := resolveConfigEnvVar("unknown.key")
+
+	assert.False(t, ok)
+	assert.Empty(t, envVar)
+}
+
+func TestHasExplicitEnvOverrideForKey_UsesAliasMapping(t *testing.T) {
+	t.Setenv("CORS_ALLOWED_ORIGINS", "https://app.example.com")
+
+	assert.True(t, hasExplicitEnvOverrideForKey("cors.allowed_origins"))
+	assert.False(t, hasExplicitEnvOverrideForKey("rate_limit.max"))
+}
+
+func TestHasExplicitEnvOverride_ReadsProcessEnvironment(t *testing.T) {
+	t.Setenv("WEBHOOK_TIMEOUT_SEC", "45")
+
+	field, ok := reflect.TypeOf(Config{}).FieldByName("Webhook")
+	require.True(t, ok)
+
+	timeoutField, found := field.Type.FieldByName("TimeoutSec")
+	require.True(t, found)
+
+	assert.True(t, hasExplicitEnvOverride(timeoutField))
+	require.NoError(t, os.Unsetenv("WEBHOOK_TIMEOUT_SEC"))
+	assert.False(t, hasExplicitEnvOverride(timeoutField))
 }

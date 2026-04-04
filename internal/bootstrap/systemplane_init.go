@@ -362,7 +362,7 @@ func newSystemplaneManager(
 		return nil, fmt.Errorf("create systemplane manager: %w", err)
 	}
 
-	return manager, nil
+	return newMatcherSystemplaneRuntimeManager(manager, reg, backend.Store, supervisor), nil
 }
 
 func performInitialSystemplaneReload(

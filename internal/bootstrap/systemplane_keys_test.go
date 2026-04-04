@@ -16,10 +16,14 @@ import (
 	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/registry"
 )
 
-// expectedTotalKeys is the total number of configuration keys registered by
+// expectedTotalKeys is the total number of registered keys.
 // RegisterMatcherKeys. This constant MUST be updated when keys are added or
 // removed from matcherKeyDefs.
 const expectedTotalKeys = 134
+
+const expectedConfigKeyCount = 120
+
+const expectedSettingKeyCount = 14
 
 // expectedBootstrapOnlyCount is the count of keys with ApplyBootstrapOnly.
 const expectedBootstrapOnlyCount = 23
@@ -57,10 +61,20 @@ func TestRegisterMatcherKeys_KeyCount(t *testing.T) {
 	err := RegisterMatcherKeys(reg)
 	require.NoError(t, err)
 
-	allKeys := reg.List(domain.KindConfig)
+	allKeys := append(reg.List(domain.KindConfig), reg.List(domain.KindSetting)...)
 
 	assert.Len(t, allKeys, expectedTotalKeys,
 		"total registered key count mismatch; update expectedTotalKeys if keys were added/removed")
+}
+
+func TestRegisterMatcherKeys_ConfigAndSettingCounts(t *testing.T) {
+	t.Parallel()
+
+	reg := registry.New()
+	require.NoError(t, RegisterMatcherKeys(reg))
+
+	assert.Len(t, reg.List(domain.KindConfig), expectedConfigKeyCount)
+	assert.Len(t, reg.List(domain.KindSetting), expectedSettingKeyCount)
 }
 
 func TestRegisterMatcherKeys_BootstrapOnlyCount(t *testing.T) {
@@ -123,6 +137,38 @@ func TestRegisterMatcherKeys_BundleRebuildAndReconcileCount(t *testing.T) {
 		"bundle-rebuild+worker-reconcile key count mismatch")
 }
 
+func TestRegisterMatcherKeys_ConfigKeysRemainGlobal(t *testing.T) {
+	t.Parallel()
+
+	reg := registry.New()
+	require.NoError(t, RegisterMatcherKeys(reg))
+
+	for _, def := range reg.List(domain.KindConfig) {
+		require.Len(t, def.AllowedScopes, 1,
+			"config key %q must have exactly one allowed scope", def.Key)
+		assert.Equal(t, domain.ScopeGlobal, def.AllowedScopes[0],
+			"config key %q must have ScopeGlobal", def.Key)
+	}
+}
+
+func TestRegisterMatcherKeys_SettingsUseExpectedScopes(t *testing.T) {
+	t.Parallel()
+
+	reg := registry.New()
+	require.NoError(t, RegisterMatcherKeys(reg))
+
+	for _, def := range reg.List(domain.KindSetting) {
+		switch def.Key {
+		case "rate_limit.enabled", "export_worker.presign_expiry_sec", "archival.presign_expiry_sec":
+			assert.Equal(t, []domain.Scope{domain.ScopeGlobal}, def.AllowedScopes,
+				"setting key %q must remain global-only", def.Key)
+		default:
+			assert.Equal(t, []domain.Scope{domain.ScopeGlobal, domain.ScopeTenant}, def.AllowedScopes,
+				"setting key %q must support global and tenant scopes", def.Key)
+		}
+	}
+}
+
 func TestRegisterMatcherKeys_SelectedApplyBehaviors(t *testing.T) {
 	t.Parallel()
 
@@ -131,20 +177,21 @@ func TestRegisterMatcherKeys_SelectedApplyBehaviors(t *testing.T) {
 
 	tests := []struct {
 		key      string
+		kind     domain.Kind
 		behavior domain.ApplyBehavior
 		mutable  bool
 	}{
-		{key: "app.log_level", behavior: domain.ApplyLiveRead, mutable: true},
-		{key: "cors.allowed_origins", behavior: domain.ApplyLiveRead, mutable: true},
-		{key: "postgres.query_timeout_sec", behavior: domain.ApplyLiveRead, mutable: true},
-		{key: "idempotency.retry_window_sec", behavior: domain.ApplyLiveRead, mutable: true},
-		{key: "idempotency.success_ttl_hours", behavior: domain.ApplyLiveRead, mutable: true},
-		{key: "webhook.timeout_sec", behavior: domain.ApplyLiveRead, mutable: true},
-		{key: "tenancy.default_tenant_id", behavior: domain.ApplyBootstrapOnly, mutable: false},
-		{key: "tenancy.default_tenant_slug", behavior: domain.ApplyBootstrapOnly, mutable: false},
-		{key: "server.body_limit_bytes", behavior: domain.ApplyBundleRebuild, mutable: true},
-		{key: "postgres.migrations_path", behavior: domain.ApplyBootstrapOnly, mutable: false},
-		{key: "idempotency.hmac_secret", behavior: domain.ApplyBootstrapOnly, mutable: false},
+		{key: "app.log_level", kind: domain.KindConfig, behavior: domain.ApplyLiveRead, mutable: true},
+		{key: "cors.allowed_origins", kind: domain.KindConfig, behavior: domain.ApplyLiveRead, mutable: true},
+		{key: "postgres.query_timeout_sec", kind: domain.KindConfig, behavior: domain.ApplyLiveRead, mutable: true},
+		{key: "idempotency.retry_window_sec", kind: domain.KindSetting, behavior: domain.ApplyLiveRead, mutable: true},
+		{key: "idempotency.success_ttl_hours", kind: domain.KindSetting, behavior: domain.ApplyLiveRead, mutable: true},
+		{key: "webhook.timeout_sec", kind: domain.KindSetting, behavior: domain.ApplyLiveRead, mutable: true},
+		{key: "tenancy.default_tenant_id", kind: domain.KindConfig, behavior: domain.ApplyBootstrapOnly, mutable: false},
+		{key: "tenancy.default_tenant_slug", kind: domain.KindConfig, behavior: domain.ApplyBootstrapOnly, mutable: false},
+		{key: "server.body_limit_bytes", kind: domain.KindConfig, behavior: domain.ApplyBundleRebuild, mutable: true},
+		{key: "postgres.migrations_path", kind: domain.KindConfig, behavior: domain.ApplyBootstrapOnly, mutable: false},
+		{key: "idempotency.hmac_secret", kind: domain.KindConfig, behavior: domain.ApplyBootstrapOnly, mutable: false},
 	}
 
 	for _, tt := range tests {
@@ -154,6 +201,7 @@ func TestRegisterMatcherKeys_SelectedApplyBehaviors(t *testing.T) {
 
 			def, ok := reg.Get(tt.key)
 			require.True(t, ok)
+			assert.Equal(t, tt.kind, def.Kind)
 			assert.Equal(t, tt.behavior, def.ApplyBehavior)
 			assert.Equal(t, tt.mutable, def.MutableAtRuntime)
 		})
@@ -436,30 +484,6 @@ func TestRegisterMatcherKeys_AllKeysHaveGroup(t *testing.T) {
 	}
 }
 
-func TestRegisterMatcherKeys_AllKeysAreKindConfig(t *testing.T) {
-	t.Parallel()
-
-	defs := matcherKeyDefs()
-
-	for _, def := range defs {
-		assert.Equal(t, domain.KindConfig, def.Kind,
-			"key %q must be KindConfig (settings set is initially empty)", def.Key)
-	}
-}
-
-func TestRegisterMatcherKeys_AllKeysHaveGlobalScope(t *testing.T) {
-	t.Parallel()
-
-	defs := matcherKeyDefs()
-
-	for _, def := range defs {
-		require.Len(t, def.AllowedScopes, 1,
-			"key %q must have exactly one allowed scope", def.Key)
-		assert.Equal(t, domain.ScopeGlobal, def.AllowedScopes[0],
-			"key %q must have ScopeGlobal", def.Key)
-	}
-}
-
 func TestRegisterMatcherKeys_BootstrapOnlyKeysAreImmutable(t *testing.T) {
 	t.Parallel()
 
@@ -566,6 +590,12 @@ func TestRegisterMatcherKeys_RegistryValidation(t *testing.T) {
 	// rate_limit.max has a positive int validator.
 	require.NoError(t, reg.Validate("rate_limit.max", 100))
 	require.Error(t, reg.Validate("rate_limit.max", 0))
+	require.NoError(t, reg.Validate("webhook.timeout_sec", 300))
+	require.Error(t, reg.Validate("webhook.timeout_sec", 301))
+	require.NoError(t, reg.Validate("export_worker.presign_expiry_sec", 604800))
+	require.Error(t, reg.Validate("export_worker.presign_expiry_sec", 604801))
+	require.NoError(t, reg.Validate("archival.presign_expiry_sec", 604800))
+	require.Error(t, reg.Validate("archival.presign_expiry_sec", 604801))
 
 	// redis.db has a non-negative int validator.
 	require.NoError(t, reg.Validate("redis.db", 0))
@@ -574,7 +604,7 @@ func TestRegisterMatcherKeys_RegistryValidation(t *testing.T) {
 
 // countByApplyBehavior counts the number of registered keys with the given apply behavior.
 func countByApplyBehavior(reg registry.Registry, behavior domain.ApplyBehavior) int {
-	allKeys := reg.List(domain.KindConfig)
+	allKeys := append(reg.List(domain.KindConfig), reg.List(domain.KindSetting)...)
 
 	count := 0
 

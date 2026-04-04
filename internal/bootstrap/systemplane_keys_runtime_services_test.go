@@ -103,7 +103,14 @@ func TestMatcherKeyDefsIdempotency_KeyProperties(t *testing.T) {
 
 			def := defs[i]
 			assert.Equal(t, expKey, def.Key)
-			assert.Equal(t, domain.KindConfig, def.Kind)
+			if def.Key == "idempotency.hmac_secret" {
+				assert.Equal(t, domain.KindConfig, def.Kind)
+				require.Len(t, def.AllowedScopes, 1)
+				assert.Equal(t, domain.ScopeGlobal, def.AllowedScopes[0])
+			} else {
+				assert.Equal(t, domain.KindSetting, def.Kind)
+				assert.Equal(t, []domain.Scope{domain.ScopeGlobal, domain.ScopeTenant}, def.AllowedScopes)
+			}
 			assert.Equal(t, "idempotency", def.Group)
 			assert.NotEmpty(t, def.Description)
 		})
@@ -144,7 +151,8 @@ func TestMatcherKeyDefsCallbackRateLimit_KeyProperties(t *testing.T) {
 
 	def := defs[0]
 	assert.Equal(t, "callback_rate_limit.per_minute", def.Key)
-	assert.Equal(t, domain.KindConfig, def.Kind)
+	assert.Equal(t, domain.KindSetting, def.Kind)
+	assert.Equal(t, []domain.Scope{domain.ScopeGlobal, domain.ScopeTenant}, def.AllowedScopes)
 	assert.Equal(t, "callback_rate_limit", def.Group)
 	assert.Equal(t, domain.ValueTypeInt, def.ValueType)
 	assert.NotNil(t, def.Validator)

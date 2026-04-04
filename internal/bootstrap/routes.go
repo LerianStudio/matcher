@@ -69,6 +69,7 @@ func RegisterRoutes(
 	app *fiber.App,
 	cfg *Config,
 	configGetter func() *Config,
+	settingsResolver *runtimeSettingsResolver,
 	readiness *readinessState,
 	deps *HealthDependencies,
 	logger libLog.Logger,
@@ -136,7 +137,7 @@ func RegisterRoutes(
 		},
 	)
 
-	globalRateLimit := NewGlobalRateLimit(rateLimiterGetter, cfg, configGetter)
+	globalRateLimit := NewGlobalRateLimit(rateLimiterGetter, cfg, configGetter, settingsResolver)
 
 	routes := &Routes{
 		API: app.Group(""),

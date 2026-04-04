@@ -46,31 +46,45 @@ func (cm *ConfigManager) SeedStore(ctx context.Context, store ports.Store, reg r
 		return errSeedStoreConfigNil
 	}
 
-	defs := reg.List(domain.KindConfig)
+	configOps := buildSeedOps(cfg, reg.List(domain.KindConfig))
+	settingOps := buildSeedOps(cfg, reg.List(domain.KindSetting))
 
-	ops := buildSeedOps(cfg, defs)
-
-	if len(ops) == 0 {
+	if len(configOps) == 0 && len(settingOps) == 0 {
 		cm.logger.Log(ctx, libLog.LevelInfo,
 			"seed store: no non-default values to seed")
 
 		return nil
 	}
 
-	target, err := domain.NewTarget(domain.KindConfig, domain.ScopeGlobal, "")
-	if err != nil {
-		return fmt.Errorf("seed store: create target: %w", err)
+	if err := putSeedOps(ctx, store, domain.KindConfig, configOps); err != nil {
+		return err
 	}
 
-	_, err = store.Put(ctx, target, ops, domain.RevisionZero,
-		domain.Actor{ID: seedActorID}, seedSource)
-	if err != nil {
-		return fmt.Errorf("seed store: put ops: %w", err)
+	if err := putSeedOps(ctx, store, domain.KindSetting, settingOps); err != nil {
+		return err
 	}
 
 	cm.logger.Log(ctx, libLog.LevelInfo,
 		"seed store: seeded systemplane store",
-		libLog.Int("keys_seeded", len(ops)))
+		libLog.Int("config_keys_seeded", len(configOps)),
+		libLog.Int("setting_keys_seeded", len(settingOps)))
+
+	return nil
+}
+
+func putSeedOps(ctx context.Context, store ports.Store, kind domain.Kind, ops []ports.WriteOp) error {
+	if len(ops) == 0 {
+		return nil
+	}
+
+	target, err := domain.NewTarget(kind, domain.ScopeGlobal, "")
+	if err != nil {
+		return fmt.Errorf("seed store: create %s target: %w", kind, err)
+	}
+
+	if _, err = store.Put(ctx, target, ops, domain.RevisionZero, domain.Actor{ID: seedActorID}, seedSource); err != nil {
+		return fmt.Errorf("seed store: put %s ops: %w", kind, err)
+	}
 
 	return nil
 }

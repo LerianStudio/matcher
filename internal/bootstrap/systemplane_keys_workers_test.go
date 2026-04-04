@@ -46,11 +46,16 @@ func TestMatcherKeyDefsWorkers_KeyProperties(t *testing.T) {
 
 			def := defs[i]
 			assert.Equal(t, expKey, def.Key)
-			assert.Equal(t, domain.KindConfig, def.Kind)
+			if def.Key == "webhook.timeout_sec" {
+				assert.Equal(t, domain.KindSetting, def.Kind)
+				assert.Equal(t, []domain.Scope{domain.ScopeGlobal, domain.ScopeTenant}, def.AllowedScopes)
+			} else {
+				assert.Equal(t, domain.KindConfig, def.Kind)
+				require.Len(t, def.AllowedScopes, 1)
+				assert.Equal(t, domain.ScopeGlobal, def.AllowedScopes[0])
+			}
 			assert.True(t, def.MutableAtRuntime)
 			assert.NotEmpty(t, def.Description)
-			require.Len(t, def.AllowedScopes, 1)
-			assert.Equal(t, domain.ScopeGlobal, def.AllowedScopes[0])
 		})
 	}
 }
@@ -128,6 +133,11 @@ func TestMatcherKeyDefsWorkers_AllGlobalScope(t *testing.T) {
 	for _, def := range defs {
 		t.Run(def.Key+"_global_scope", func(t *testing.T) {
 			t.Parallel()
+
+			if def.Key == "webhook.timeout_sec" {
+				assert.Equal(t, []domain.Scope{domain.ScopeGlobal, domain.ScopeTenant}, def.AllowedScopes)
+				return
+			}
 
 			require.Len(t, def.AllowedScopes, 1)
 			assert.Equal(t, domain.ScopeGlobal, def.AllowedScopes[0])

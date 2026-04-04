@@ -1297,6 +1297,14 @@ func TestConfig_WebhookTimeout_LogsWarningOnCap(t *testing.T) {
 	assert.Equal(t, 300*time.Second, result)
 }
 
+func TestConfig_WebhookTimeout_NilConfigUsesDefault(t *testing.T) {
+	t.Parallel()
+
+	var cfg *Config
+
+	assert.Equal(t, 30*time.Second, cfg.WebhookTimeout())
+}
+
 func TestConfig_ValidateServerConfig_TLSValidation(t *testing.T) {
 	t.Parallel()
 
@@ -2410,6 +2418,14 @@ func TestConfig_ArchivalPresignExpiry(t *testing.T) {
 	}
 }
 
+func TestConfig_ArchivalPresignExpiry_NilConfigUsesDefault(t *testing.T) {
+	t.Parallel()
+
+	var cfg *Config
+
+	assert.Equal(t, 3600*time.Second, cfg.ArchivalPresignExpiry())
+}
+
 func TestConfig_ArchivalPresignExpiry_LogsWarningOnCap(t *testing.T) {
 	t.Parallel()
 
@@ -2520,6 +2536,14 @@ func TestConfig_ExportPresignExpiry(t *testing.T) {
 			assert.Equal(t, tt.expected, cfg.ExportPresignExpiry())
 		})
 	}
+}
+
+func TestConfig_ExportPresignExpiry_NilConfigUsesDefault(t *testing.T) {
+	t.Parallel()
+
+	var cfg *Config
+
+	assert.Equal(t, 3600*time.Second, cfg.ExportPresignExpiry())
 }
 
 func TestConfig_ExportPresignExpiry_LogsWarningOnCap(t *testing.T) {

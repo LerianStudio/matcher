@@ -50,7 +50,10 @@ func isWellKnownDevCredential(value string) bool {
 
 // Validate checks the configuration for required fields and production constraints.
 func (cfg *Config) Validate() error {
-	ctx := context.Background()
+	return cfg.validateWithContext(context.Background())
+}
+
+func (cfg *Config) validateWithContext(ctx context.Context) error {
 	asserter := newConfigAsserter(ctx, "config.validate")
 
 	if err := asserter.NotNil(ctx, cfg, "config must be provided"); err != nil {
@@ -58,28 +61,28 @@ func (cfg *Config) Validate() error {
 	}
 
 	if IsProductionEnvironment(cfg.App.EnvName) {
-		if err := cfg.validateProductionConfig(asserter); err != nil {
+		if err := cfg.validateProductionConfig(ctx, asserter); err != nil {
 			return err
 		}
 	}
 
-	if err := cfg.validateServerConfig(asserter); err != nil {
+	if err := cfg.validateServerConfig(ctx, asserter); err != nil {
 		return err
 	}
 
-	if err := cfg.validateRateLimitConfig(asserter); err != nil {
+	if err := cfg.validateRateLimitConfig(ctx, asserter); err != nil {
 		return err
 	}
 
-	if err := cfg.validateArchivalConfig(asserter); err != nil {
+	if err := cfg.validateArchivalConfig(ctx, asserter); err != nil {
 		return err
 	}
 
-	if err := cfg.validateReportingStorageConfig(asserter); err != nil {
+	if err := cfg.validateReportingStorageConfig(ctx, asserter); err != nil {
 		return err
 	}
 
-	if err := cfg.validateInsecureObjectStoragePolicy(asserter); err != nil {
+	if err := cfg.validateInsecureObjectStoragePolicy(ctx, asserter); err != nil {
 		return err
 	}
 
@@ -87,14 +90,12 @@ func (cfg *Config) Validate() error {
 }
 
 // validateServerConfig validates server and middleware configuration.
-func (cfg *Config) validateServerConfig(asserter *assert.Asserter) error {
-	ctx := context.Background()
-
+func (cfg *Config) validateServerConfig(ctx context.Context, asserter *assert.Asserter) error {
 	if err := asserter.That(ctx, (strings.TrimSpace(cfg.Server.TLSCertFile) == "") == (strings.TrimSpace(cfg.Server.TLSKeyFile) == ""), "SERVER_TLS_CERT_FILE and SERVER_TLS_KEY_FILE must be set together"); err != nil {
 		return fmt.Errorf("config validation: %w", err)
 	}
 
-	if err := cfg.validateAuthConfig(asserter); err != nil {
+	if err := cfg.validateAuthConfig(ctx, asserter); err != nil {
 		return err
 	}
 
@@ -102,7 +103,7 @@ func (cfg *Config) validateServerConfig(asserter *assert.Asserter) error {
 		return fmt.Errorf("config validation: %w", err)
 	}
 
-	if err := cfg.validateTenancyConfig(asserter); err != nil {
+	if err := cfg.validateTenancyConfig(ctx, asserter); err != nil {
 		return err
 	}
 
@@ -130,20 +131,18 @@ func (cfg *Config) validateServerConfig(asserter *assert.Asserter) error {
 		return fmt.Errorf("config validation: %w", err)
 	}
 
-	if err := cfg.validateLogLevel(asserter); err != nil {
+	if err := cfg.validateLogLevel(ctx, asserter); err != nil {
 		return err
 	}
 
-	if err := cfg.validateTelemetryConfig(asserter); err != nil {
+	if err := cfg.validateTelemetryConfig(ctx, asserter); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (cfg *Config) validateLogLevel(asserter *assert.Asserter) error {
-	ctx := context.Background()
-
+func (cfg *Config) validateLogLevel(ctx context.Context, asserter *assert.Asserter) error {
 	validLogLevels := map[string]bool{
 		"debug": true,
 		"info":  true,
@@ -162,12 +161,11 @@ func (cfg *Config) validateLogLevel(asserter *assert.Asserter) error {
 	return nil
 }
 
-func (cfg *Config) validateTelemetryConfig(asserter *assert.Asserter) error {
+func (cfg *Config) validateTelemetryConfig(ctx context.Context, asserter *assert.Asserter) error {
 	if !cfg.Telemetry.Enabled {
 		return nil
 	}
 
-	ctx := context.Background()
 	validOtelEnvs := map[string]bool{"development": true, "staging": true, "production": true}
 
 	otelEnv := strings.ToLower(strings.TrimSpace(cfg.Telemetry.DeploymentEnv))
@@ -180,9 +178,7 @@ func (cfg *Config) validateTelemetryConfig(asserter *assert.Asserter) error {
 	return nil
 }
 
-func (cfg *Config) validateTenancyConfig(asserter *assert.Asserter) error {
-	ctx := context.Background()
-
+func (cfg *Config) validateTenancyConfig(ctx context.Context, asserter *assert.Asserter) error {
 	if !multiTenantModeEnabled(cfg) {
 		return nil
 	}
@@ -282,12 +278,10 @@ func validateTrustedProxies(ctx context.Context, asserter *assert.Asserter, trus
 }
 
 // validateAuthConfig validates authentication configuration when auth is enabled.
-func (cfg *Config) validateAuthConfig(asserter *assert.Asserter) error {
+func (cfg *Config) validateAuthConfig(ctx context.Context, asserter *assert.Asserter) error {
 	if !cfg.Auth.Enabled {
 		return nil
 	}
-
-	ctx := context.Background()
 
 	if err := asserter.NotEmpty(ctx, strings.TrimSpace(cfg.Auth.Host), "PLUGIN_AUTH_ADDRESS is required when PLUGIN_AUTH_ENABLED=true"); err != nil {
 		return fmt.Errorf("config validation: %w", err)
@@ -302,8 +296,8 @@ func (cfg *Config) validateAuthConfig(asserter *assert.Asserter) error {
 
 // validateRateLimitConfig validates rate limiting configuration.
 // Export limits are always validated; global and dispatch limits only when rate limiting is enabled.
-func (cfg *Config) validateRateLimitConfig(asserter *assert.Asserter) error {
-	if err := cfg.validateExportRateLimitConfig(asserter); err != nil {
+func (cfg *Config) validateRateLimitConfig(ctx context.Context, asserter *assert.Asserter) error {
+	if err := cfg.validateExportRateLimitConfig(ctx, asserter); err != nil {
 		return err
 	}
 
@@ -311,13 +305,11 @@ func (cfg *Config) validateRateLimitConfig(asserter *assert.Asserter) error {
 		return nil
 	}
 
-	return cfg.validateActiveRateLimitConfig(asserter)
+	return cfg.validateActiveRateLimitConfig(ctx, asserter)
 }
 
 // validateExportRateLimitConfig validates export-specific rate limit bounds.
-func (cfg *Config) validateExportRateLimitConfig(asserter *assert.Asserter) error {
-	ctx := context.Background()
-
+func (cfg *Config) validateExportRateLimitConfig(ctx context.Context, asserter *assert.Asserter) error {
 	if err := asserter.That(ctx, cfg.RateLimit.ExportMax > 0, "EXPORT_RATE_LIMIT_MAX must be positive", "export_rate_limit_max", cfg.RateLimit.ExportMax); err != nil {
 		return fmt.Errorf("config validation: %w", err)
 	}
@@ -343,9 +335,7 @@ func (cfg *Config) validateExportRateLimitConfig(asserter *assert.Asserter) erro
 
 // validateActiveRateLimitConfig validates global and dispatch rate limit bounds
 // when rate limiting is enabled.
-func (cfg *Config) validateActiveRateLimitConfig(asserter *assert.Asserter) error {
-	ctx := context.Background()
-
+func (cfg *Config) validateActiveRateLimitConfig(ctx context.Context, asserter *assert.Asserter) error {
 	if err := asserter.That(ctx, cfg.RateLimit.Max > 0, "RATE_LIMIT_MAX must be positive", "rate_limit_max", cfg.RateLimit.Max); err != nil {
 		return fmt.Errorf("config validation: %w", err)
 	}
@@ -390,25 +380,23 @@ func (cfg *Config) validateActiveRateLimitConfig(asserter *assert.Asserter) erro
 }
 
 // validateProductionConfig validates configuration constraints specific to production environments.
-func (cfg *Config) validateProductionConfig(asserter *assert.Asserter) error {
-	if err := cfg.validateProductionCoreConfig(asserter); err != nil {
+func (cfg *Config) validateProductionConfig(ctx context.Context, asserter *assert.Asserter) error {
+	if err := cfg.validateProductionCoreConfig(ctx, asserter); err != nil {
 		return err
 	}
 
-	if err := cfg.validateProductionSecurityConfig(asserter); err != nil {
+	if err := cfg.validateProductionSecurityConfig(ctx, asserter); err != nil {
 		return err
 	}
 
-	if err := cfg.validateProductionOptionalConfig(asserter); err != nil {
+	if err := cfg.validateProductionOptionalConfig(ctx, asserter); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (cfg *Config) validateProductionCoreConfig(asserter *assert.Asserter) error {
-	ctx := context.Background()
-
+func (cfg *Config) validateProductionCoreConfig(ctx context.Context, asserter *assert.Asserter) error {
 	if err := asserter.NotEmpty(ctx, strings.TrimSpace(cfg.Postgres.PrimaryPassword), "POSTGRES_PASSWORD is required in production"); err != nil {
 		return fmt.Errorf("production config validation: %w", err)
 	}
@@ -426,9 +414,7 @@ func (cfg *Config) validateProductionCoreConfig(asserter *assert.Asserter) error
 	return nil
 }
 
-func (cfg *Config) validateProductionSecurityConfig(asserter *assert.Asserter) error {
-	ctx := context.Background()
-
+func (cfg *Config) validateProductionSecurityConfig(ctx context.Context, asserter *assert.Asserter) error {
 	if err := asserter.That(ctx, !strings.EqualFold(strings.TrimSpace(cfg.RabbitMQ.User), "guest") && !strings.EqualFold(strings.TrimSpace(cfg.RabbitMQ.Password), "guest"), "RABBITMQ credentials must be set to non-default values in production"); err != nil {
 		return fmt.Errorf("production config validation: %w", err)
 	}
@@ -450,12 +436,10 @@ func (cfg *Config) validateProductionSecurityConfig(asserter *assert.Asserter) e
 	return nil
 }
 
-func (cfg *Config) validateInsecureObjectStoragePolicy(asserter *assert.Asserter) error {
+func (cfg *Config) validateInsecureObjectStoragePolicy(ctx context.Context, asserter *assert.Asserter) error {
 	if cfg == nil || !cfg.ObjectStorage.AllowInsecure {
 		return nil
 	}
-
-	ctx := context.Background()
 
 	if err := asserter.That(
 		ctx,
@@ -470,14 +454,12 @@ func (cfg *Config) validateInsecureObjectStoragePolicy(asserter *assert.Asserter
 	return nil
 }
 
-func (cfg *Config) validateProductionOptionalConfig(asserter *assert.Asserter) error {
-	ctx := context.Background()
-
+func (cfg *Config) validateProductionOptionalConfig(ctx context.Context, asserter *assert.Asserter) error {
 	if err := asserter.NotEmpty(ctx, strings.TrimSpace(cfg.Redis.Password), "REDIS_PASSWORD is required in production"); err != nil {
 		return fmt.Errorf("production config validation: %w", err)
 	}
 
-	if err := cfg.validateProductionEndpoints(asserter); err != nil {
+	if err := cfg.validateProductionEndpoints(ctx, asserter); err != nil {
 		return err
 	}
 
@@ -485,9 +467,7 @@ func (cfg *Config) validateProductionOptionalConfig(asserter *assert.Asserter) e
 }
 
 // validateProductionEndpoints enforces HTTPS for service URLs in production environments.
-func (cfg *Config) validateProductionEndpoints(asserter *assert.Asserter) error {
-	ctx := context.Background()
-
+func (cfg *Config) validateProductionEndpoints(ctx context.Context, asserter *assert.Asserter) error {
 	// Multi-tenant URL must use HTTPS in production — it carries tenant
 	// provisioning data and service API keys.
 	if multiTenantModeEnabled(cfg) && strings.TrimSpace(cfg.Tenancy.MultiTenantURL) != "" {
@@ -539,12 +519,10 @@ func requireProductionHTTPS(ctx context.Context, asserter *assert.Asserter, rawU
 // Retention and batch validations only run when archival is enabled because
 // lib-commons.SetConfigFromEnvVars does not apply envDefault tags -- fields
 // default to Go zero values when env vars are absent.
-func (cfg *Config) validateArchivalConfig(asserter *assert.Asserter) error {
+func (cfg *Config) validateArchivalConfig(ctx context.Context, asserter *assert.Asserter) error {
 	if !cfg.Archival.Enabled {
 		return nil
 	}
-
-	ctx := context.Background()
 
 	if err := asserter.NotEmpty(ctx, strings.TrimSpace(cfg.Archival.StorageBucket), "ARCHIVAL_STORAGE_BUCKET is required when ARCHIVAL_WORKER_ENABLED=true"); err != nil {
 		return fmt.Errorf("config validation: %w", err)
@@ -575,12 +553,10 @@ func (cfg *Config) validateArchivalConfig(asserter *assert.Asserter) error {
 	return nil
 }
 
-func (cfg *Config) validateReportingStorageConfig(asserter *assert.Asserter) error {
+func (cfg *Config) validateReportingStorageConfig(ctx context.Context, asserter *assert.Asserter) error {
 	if cfg == nil || !reportingStorageRequired(cfg) {
 		return nil
 	}
-
-	ctx := context.Background()
 
 	if err := asserter.NotEmpty(ctx, strings.TrimSpace(cfg.ObjectStorage.Bucket), "OBJECT_STORAGE_BUCKET is required when export or cleanup workers are enabled"); err != nil {
 		return fmt.Errorf("config validation: %w", err)

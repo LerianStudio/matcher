@@ -118,13 +118,13 @@ type ExportJobRuntimeConfig struct {
 
 // ExportJobHandlers provides HTTP handlers for export job operations.
 type ExportJobHandlers struct {
-	exportJobUC     *command.ExportJobUseCase
-	querySvc        *query.ExportJobQueryService
-	storage         sharedPorts.ObjectStorageClient
-	contextVerifier libHTTP.TenantOwnershipVerifier
-	enabled         bool
-	presignExpiry   time.Duration
-	runtimeConfig   func() ExportJobRuntimeConfig
+	exportJobUC           *command.ExportJobUseCase
+	querySvc              *query.ExportJobQueryService
+	storage               sharedPorts.ObjectStorageClient
+	contextVerifier       libHTTP.TenantOwnershipVerifier
+	enabled               bool
+	presignExpiry         time.Duration
+	runtimeConfigResolver func(context.Context) ExportJobRuntimeConfig
 }
 
 // NewExportJobHandlers creates a new ExportJobHandlers instance.
@@ -176,14 +176,14 @@ func (handler *ExportJobHandlers) SetRuntimeEnabled(enabled bool) {
 	}
 }
 
-// SetRuntimeConfigGetter allows bootstrap to inject live runtime settings.
-func (handler *ExportJobHandlers) SetRuntimeConfigGetter(getter func() ExportJobRuntimeConfig) {
+// SetRuntimeConfigResolver allows bootstrap to inject context-aware runtime settings.
+func (handler *ExportJobHandlers) SetRuntimeConfigResolver(resolver func(context.Context) ExportJobRuntimeConfig) {
 	if handler != nil {
-		handler.runtimeConfig = getter
+		handler.runtimeConfigResolver = resolver
 	}
 }
 
-func (handler *ExportJobHandlers) currentRuntimeConfig() ExportJobRuntimeConfig {
+func (handler *ExportJobHandlers) currentRuntimeConfigForContext(ctx context.Context) ExportJobRuntimeConfig {
 	enabled := true
 	config := ExportJobRuntimeConfig{
 		Enabled:       &enabled,
@@ -200,20 +200,20 @@ func (handler *ExportJobHandlers) currentRuntimeConfig() ExportJobRuntimeConfig 
 		config.PresignExpiry = handler.presignExpiry
 	}
 
-	if handler.runtimeConfig == nil {
-		return config
+	if handler.runtimeConfigResolver != nil {
+		runtimeConfig := handler.runtimeConfigResolver(ctx)
+		if runtimeConfig.Enabled == nil {
+			runtimeConfig.Enabled = config.Enabled
+		}
+
+		if runtimeConfig.PresignExpiry <= 0 {
+			runtimeConfig.PresignExpiry = config.PresignExpiry
+		}
+
+		return runtimeConfig
 	}
 
-	runtimeConfig := handler.runtimeConfig()
-	if runtimeConfig.Enabled == nil {
-		runtimeConfig.Enabled = config.Enabled
-	}
-
-	if runtimeConfig.PresignExpiry <= 0 {
-		runtimeConfig.PresignExpiry = config.PresignExpiry
-	}
-
-	return runtimeConfig
+	return config
 }
 
 // CreateExportJobRequest represents the request body for creating an export job.
@@ -426,7 +426,7 @@ func (handler *ExportJobHandlers) CreateExportJob(fiberCtx *fiber.Ctx) error {
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
-	runtimeConfig := handler.currentRuntimeConfig()
+	runtimeConfig := handler.currentRuntimeConfigForContext(ctx)
 	if runtimeConfig.Enabled != nil && !*runtimeConfig.Enabled {
 		return respondError(
 			fiberCtx,
@@ -780,7 +780,7 @@ func (handler *ExportJobHandlers) DownloadExportJob(fiberCtx *fiber.Ctx) error {
 		)
 	}
 
-	runtimeConfig := handler.currentRuntimeConfig()
+	runtimeConfig := handler.currentRuntimeConfigForContext(ctx)
 
 	downloadURL, err := handler.storage.GeneratePresignedURL(ctx, job.FileKey, runtimeConfig.PresignExpiry)
 	if err != nil {

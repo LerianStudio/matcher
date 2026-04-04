@@ -175,7 +175,12 @@ func TestMatcherKeyDefsRateLimit_KeyProperties(t *testing.T) {
 
 			def := defs[i]
 			assert.Equal(t, expKey, def.Key)
-			assert.Equal(t, domain.KindConfig, def.Kind)
+			assert.Equal(t, domain.KindSetting, def.Kind)
+			if def.Key == "rate_limit.enabled" {
+				assert.Equal(t, []domain.Scope{domain.ScopeGlobal}, def.AllowedScopes)
+			} else {
+				assert.Equal(t, []domain.Scope{domain.ScopeGlobal, domain.ScopeTenant}, def.AllowedScopes)
+			}
 			assert.Equal(t, "rate_limit", def.Group)
 			assert.Equal(t, domain.ApplyLiveRead, def.ApplyBehavior,
 				"rate_limit key %q must be live-read", def.Key)

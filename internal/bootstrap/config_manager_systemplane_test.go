@@ -49,7 +49,9 @@ func TestUpdateFromSystemplane_Success(t *testing.T) {
 
 	snap := domain.Snapshot{
 		Configs: map[string]domain.EffectiveValue{
-			"app.log_level":  {Value: "debug"},
+			"app.log_level": {Value: "debug"},
+		},
+		GlobalSettings: map[string]domain.EffectiveValue{
 			"rate_limit.max": {Value: 999},
 		},
 	}
@@ -76,6 +78,18 @@ func TestUpdateFromSystemplane_PreservesBootstrapFields(t *testing.T) {
 	cfg.Server.TLSCertFile = "/etc/tls/cert.pem"
 	cfg.Server.TLSKeyFile = "/etc/tls/key.pem"
 	cfg.Postgres.MigrationsPath = "db/migrations"
+	cfg.Infrastructure.ConnectTimeoutSec = 77
+	cfg.Tenancy.MultiTenantRedisPassword = "tenant-redis-secret"
+	cfg.Tenancy.MultiTenantServiceAPIKey = "tenant-manager-key"
+	cfg.Postgres.PrimaryPassword = "primary-secret"
+	cfg.Postgres.ReplicaPassword = "replica-secret"
+	cfg.Redis.Password = "redis-secret"
+	cfg.RabbitMQ.User = "rabbit-user"
+	cfg.RabbitMQ.Password = "rabbit-secret"
+	cfg.ObjectStorage.AccessKeyID = "access-key"
+	cfg.ObjectStorage.SecretAccessKey = "secret-key"
+	cfg.M2M.M2MTargetService = "ledger"
+	cfg.M2M.AWSRegion = "us-east-2"
 	cfg.Auth = AuthConfig{
 		Enabled:     true,
 		Host:        "https://auth.example.com",
@@ -117,10 +131,25 @@ func TestUpdateFromSystemplane_PreservesBootstrapFields(t *testing.T) {
 	assert.Equal(t, "/etc/tls/cert.pem", updated.Server.TLSCertFile)
 	assert.Equal(t, "/etc/tls/key.pem", updated.Server.TLSKeyFile)
 	assert.Equal(t, "db/migrations", updated.Postgres.MigrationsPath)
+	assert.Equal(t, 77, updated.Infrastructure.ConnectTimeoutSec)
 	assert.Equal(t, cfg.Auth, updated.Auth)
 	assert.Equal(t, cfg.Telemetry, updated.Telemetry)
+	assert.Equal(t, "ledger", updated.M2M.M2MTargetService)
+	assert.Equal(t, "us-east-2", updated.M2M.AWSRegion)
 	assert.Equal(t, cfg.Logger, updated.Logger)
 	assert.Equal(t, 15*time.Second, updated.ShutdownGracePeriod)
+
+	// Runtime-mutable config values should come from the snapshot/defaults, not
+	// from the previous process config.
+	assert.Equal(t, defaultPGPassword, updated.Postgres.PrimaryPassword)
+	assert.Equal(t, "", updated.Postgres.ReplicaPassword)
+	assert.Equal(t, "", updated.Redis.Password)
+	assert.Equal(t, defaultRabbitUser, updated.RabbitMQ.User)
+	assert.Equal(t, defaultRabbitPassword, updated.RabbitMQ.Password)
+	assert.Equal(t, "", updated.ObjectStorage.AccessKeyID)
+	assert.Equal(t, "", updated.ObjectStorage.SecretAccessKey)
+	assert.Equal(t, "", updated.Tenancy.MultiTenantRedisPassword)
+	assert.Equal(t, "", updated.Tenancy.MultiTenantServiceAPIKey)
 }
 
 func TestSnapshotToFullConfig_RuntimeFields(t *testing.T) {
@@ -131,11 +160,13 @@ func TestSnapshotToFullConfig_RuntimeFields(t *testing.T) {
 	snap := domain.Snapshot{
 		Configs: map[string]domain.EffectiveValue{
 			"app.log_level":           {Value: "debug"},
-			"rate_limit.max":          {Value: 200},
 			"fetcher.enabled":         {Value: true},
 			"archival.storage_bucket": {Value: "test-bucket"},
-			"webhook.timeout_sec":     {Value: 45},
 			"scheduler.interval_sec":  {Value: 120},
+		},
+		GlobalSettings: map[string]domain.EffectiveValue{
+			"rate_limit.max":      {Value: 200},
+			"webhook.timeout_sec": {Value: 45},
 		},
 	}
 
@@ -147,6 +178,90 @@ func TestSnapshotToFullConfig_RuntimeFields(t *testing.T) {
 	assert.Equal(t, "test-bucket", result.Archival.StorageBucket)
 	assert.Equal(t, 45, result.Webhook.TimeoutSec)
 	assert.Equal(t, 120, result.Scheduler.IntervalSec)
+}
+
+func TestSnapshotToFullConfig_PrefersSettingsForMovedRuntimeKeys(t *testing.T) {
+	t.Parallel()
+
+	oldCfg := defaultConfig()
+
+	snap := domain.Snapshot{
+		Configs: map[string]domain.EffectiveValue{
+			"rate_limit.max": {Value: 999},
+		},
+		GlobalSettings: map[string]domain.EffectiveValue{
+			"rate_limit.max": {Value: 200},
+		},
+	}
+
+	result := snapshotToFullConfig(snap, oldCfg)
+
+	require.NotNil(t, result)
+	assert.Equal(t, 200, result.RateLimit.Max)
+}
+
+func TestSnapshotToFullConfig_PreservesExplicitEnvOverrides(t *testing.T) {
+	t.Setenv("RATE_LIMIT_MAX", "999")
+	t.Setenv("WEBHOOK_TIMEOUT_SEC", "44")
+
+	oldCfg := defaultConfig()
+	oldCfg.RateLimit.Max = 999
+	oldCfg.Webhook.TimeoutSec = 44
+
+	snap := domain.Snapshot{
+		GlobalSettings: map[string]domain.EffectiveValue{
+			"rate_limit.max":      {Value: 100},
+			"webhook.timeout_sec": {Value: 30},
+		},
+	}
+
+	result := snapshotToFullConfig(snap, oldCfg)
+
+	require.NotNil(t, result)
+	assert.Equal(t, 999, result.RateLimit.Max)
+	assert.Equal(t, 44, result.Webhook.TimeoutSec)
+}
+
+func TestSnapshotToFullConfig_RuntimeMutableSecretsComeFromSnapshot(t *testing.T) {
+	t.Parallel()
+
+	oldCfg := defaultConfig()
+	oldCfg.Postgres.PrimaryPassword = "old-primary-secret"
+	oldCfg.Postgres.ReplicaPassword = "old-replica-secret"
+	oldCfg.Redis.Password = "old-redis-secret"
+	oldCfg.RabbitMQ.User = "old-rabbit-user"
+	oldCfg.RabbitMQ.Password = "old-rabbit-secret"
+	oldCfg.ObjectStorage.AccessKeyID = "old-access-key"
+	oldCfg.ObjectStorage.SecretAccessKey = "old-secret-key"
+	oldCfg.Tenancy.MultiTenantRedisPassword = "old-tenant-redis-secret"
+	oldCfg.Tenancy.MultiTenantServiceAPIKey = "old-tenant-service-key"
+
+	snap := domain.Snapshot{
+		Configs: map[string]domain.EffectiveValue{
+			"postgres.primary_password":            {Value: "new-primary-secret"},
+			"postgres.replica_password":            {Value: "new-replica-secret"},
+			"redis.password":                       {Value: "new-redis-secret"},
+			"rabbitmq.user":                        {Value: "new-rabbit-user"},
+			"rabbitmq.password":                    {Value: "new-rabbit-secret"},
+			"object_storage.access_key_id":         {Value: "new-access-key"},
+			"object_storage.secret_access_key":     {Value: "new-secret-key"},
+			"tenancy.multi_tenant_redis_password":  {Value: "new-tenant-redis-secret"},
+			"tenancy.multi_tenant_service_api_key": {Value: "new-tenant-service-key"},
+		},
+	}
+
+	result := snapshotToFullConfig(snap, oldCfg)
+
+	require.NotNil(t, result)
+	assert.Equal(t, "new-primary-secret", result.Postgres.PrimaryPassword)
+	assert.Equal(t, "new-replica-secret", result.Postgres.ReplicaPassword)
+	assert.Equal(t, "new-redis-secret", result.Redis.Password)
+	assert.Equal(t, "new-rabbit-user", result.RabbitMQ.User)
+	assert.Equal(t, "new-rabbit-secret", result.RabbitMQ.Password)
+	assert.Equal(t, "new-access-key", result.ObjectStorage.AccessKeyID)
+	assert.Equal(t, "new-secret-key", result.ObjectStorage.SecretAccessKey)
+	assert.Equal(t, "new-tenant-redis-secret", result.Tenancy.MultiTenantRedisPassword)
+	assert.Equal(t, "new-tenant-service-key", result.Tenancy.MultiTenantServiceAPIKey)
 }
 
 func TestConfigFromSnapshot_RenamedKeysHydrate(t *testing.T) {
@@ -368,6 +483,7 @@ func TestUpdateFromSystemplane_TypeMismatchValue_HandledGracefully(t *testing.T)
 		t.Parallel()
 
 		cfg := defaultConfig()
+		cfg.RateLimit.Enabled = true
 		cm, err := NewConfigManager(cfg, nil)
 		require.NoError(t, err)
 
@@ -383,8 +499,9 @@ func TestUpdateFromSystemplane_TypeMismatchValue_HandledGracefully(t *testing.T)
 		// to the default (100), so the resulting Config is valid and the update
 		// succeeds without crashing.
 		snap := domain.Snapshot{
-			Configs: map[string]domain.EffectiveValue{
-				"rate_limit.max": {Value: "not-a-number"},
+			GlobalSettings: map[string]domain.EffectiveValue{
+				"rate_limit.enabled": {Value: true},
+				"rate_limit.max":     {Value: "not-a-number"},
 			},
 		}
 
@@ -412,8 +529,9 @@ func TestUpdateFromSystemplane_TypeMismatchValue_HandledGracefully(t *testing.T)
 		// "RATE_LIMIT_MAX must be positive" → the update is rejected and
 		// the old config is preserved.
 		snap := domain.Snapshot{
-			Configs: map[string]domain.EffectiveValue{
-				"rate_limit.max": {Value: -1},
+			GlobalSettings: map[string]domain.EffectiveValue{
+				"rate_limit.enabled": {Value: true},
+				"rate_limit.max":     {Value: -1},
 			},
 		}
 

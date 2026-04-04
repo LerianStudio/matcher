@@ -299,6 +299,46 @@ func TestValidateLogLevel_CaseInsensitive(t *testing.T) {
 	}
 }
 
+func TestValidateDedupeTTLSeconds(t *testing.T) {
+	t.Parallel()
+
+	t.Run("rejects sub minute values", func(t *testing.T) {
+		t.Parallel()
+
+		err := validateDedupeTTLSeconds(59)
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, domain.ErrValueInvalid)
+	})
+
+	t.Run("accepts one minute and above", func(t *testing.T) {
+		t.Parallel()
+
+		assert.NoError(t, validateDedupeTTLSeconds(60))
+		assert.NoError(t, validateDedupeTTLSeconds(120))
+	})
+}
+
+func TestValidateRateLimitRequestsPerWindow(t *testing.T) {
+	t.Parallel()
+
+	assert.NoError(t, validateRateLimitRequestsPerWindow(maxRateLimitRequestsPerWindow))
+
+	err := validateRateLimitRequestsPerWindow(maxRateLimitRequestsPerWindow + 1)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, domain.ErrValueInvalid)
+}
+
+func TestValidateRateLimitWindowSeconds(t *testing.T) {
+	t.Parallel()
+
+	assert.NoError(t, validateRateLimitWindowSeconds(maxRateLimitWindowSeconds))
+
+	err := validateRateLimitWindowSeconds(maxRateLimitWindowSeconds + 1)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, domain.ErrValueInvalid)
+}
+
 func TestValidateSSLMode_ExactValues(t *testing.T) {
 	t.Parallel()
 

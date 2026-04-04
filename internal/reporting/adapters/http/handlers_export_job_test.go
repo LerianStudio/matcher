@@ -243,11 +243,11 @@ func TestExportJobHandlers_CurrentRuntimeConfig_PreservesDefaultEnabledOnPartial
 	t.Parallel()
 
 	handlers := &ExportJobHandlers{enabled: false, presignExpiry: time.Hour}
-	handlers.SetRuntimeConfigGetter(func() ExportJobRuntimeConfig {
+	handlers.SetRuntimeConfigResolver(func(context.Context) ExportJobRuntimeConfig {
 		return ExportJobRuntimeConfig{PresignExpiry: 2 * time.Hour}
 	})
 
-	runtimeCfg := handlers.currentRuntimeConfig()
+	runtimeCfg := handlers.currentRuntimeConfigForContext(context.Background())
 	require.NotNil(t, runtimeCfg.Enabled)
 	assert.False(t, *runtimeCfg.Enabled)
 	assert.Equal(t, 2*time.Hour, runtimeCfg.PresignExpiry)
@@ -331,6 +331,40 @@ func TestExportJobHandlers_CreateExportJob(t *testing.T) {
 		resp := makeCreateExportJobRequest(t, app, contextID, reqBody)
 		defer resp.Body.Close()
 
+		assert.Equal(t, fiber.StatusServiceUnavailable, resp.StatusCode)
+	})
+
+	t.Run("returns service unavailable when runtime config resolver disables create for request context", func(t *testing.T) {
+		t.Parallel()
+
+		contextID := uuid.New()
+		repo := newExportJobRepoMock(t)
+
+		handlers := setupCreateExportJobHandlers(t, contextID, repo)
+		resolverCalled := false
+		handlers.SetRuntimeConfigResolver(func(ctx context.Context) ExportJobRuntimeConfig {
+			resolverCalled = true
+			enabled := true
+			if tenantID, ok := auth.LookupTenantID(ctx); ok && tenantID == "11111111-1111-1111-1111-111111111111" {
+				enabled = false
+			}
+
+			return ExportJobRuntimeConfig{Enabled: &enabled}
+		})
+
+		app := setupExportJobTestAppWithContext(handlers.CreateExportJob, "create", contextID)
+
+		reqBody := CreateExportJobRequest{
+			ReportType: "MATCHED",
+			Format:     "CSV",
+			DateFrom:   "2024-01-01",
+			DateTo:     "2024-01-31",
+		}
+
+		resp := makeCreateExportJobRequest(t, app, contextID, reqBody)
+		defer resp.Body.Close()
+
+		assert.True(t, resolverCalled)
 		assert.Equal(t, fiber.StatusServiceUnavailable, resp.StatusCode)
 	})
 
@@ -1232,7 +1266,7 @@ func TestExportJobHandlers_DownloadExportJob(t *testing.T) {
 
 		handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour)
 		require.NoError(t, err)
-		handlers.SetRuntimeConfigGetter(func() ExportJobRuntimeConfig {
+		handlers.SetRuntimeConfigResolver(func(context.Context) ExportJobRuntimeConfig {
 			enabled := true
 			return ExportJobRuntimeConfig{Enabled: &enabled, PresignExpiry: 2 * time.Hour}
 		})

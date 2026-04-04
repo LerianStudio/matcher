@@ -21,27 +21,31 @@ import (
 )
 
 var (
-	errMountSystemplaneAppRequired     = errors.New("mount systemplane api: app is required")
-	errMountSystemplaneManagerRequired = errors.New("mount systemplane api: manager is required")
+	errMountSystemplaneAppRequired       = errors.New("mount systemplane api: app is required")
+	errMountSystemplaneProtectedRequired = errors.New("mount systemplane api: protected router is required")
+	errMountSystemplaneManagerRequired   = errors.New("mount systemplane api: manager is required")
 )
 
 // MountSystemplaneAPI creates and mounts the systemplane HTTP transport on
 // the given Fiber app behind the standard auth middleware chain. The protected
 // function must wrap routes with JWT validation, tenant extraction, and
 // permission checking — the same chain used by all other Matcher API routes.
-//
-// When protected is nil (auth disabled), routes are mounted directly on the app
-// with only the handler's own requireAuth middleware as a secondary gate.
 func MountSystemplaneAPI(
 	app *fiber.App,
 	authClient *authMiddleware.AuthClient,
 	protected func(resource string, actions ...string) fiber.Router,
 	manager service.Manager,
+	configGetter func() *Config,
+	settingsResolver *runtimeSettingsResolver,
 	authEnabled bool,
 	logger libLog.Logger,
 ) error {
 	if app == nil {
 		return errMountSystemplaneAppRequired
+	}
+
+	if protected == nil {
+		return errMountSystemplaneProtectedRequired
 	}
 
 	if domain.IsNilValue(manager) {
@@ -50,22 +54,25 @@ func MountSystemplaneAPI(
 
 	identity := &MatcherIdentityResolver{}
 	authorizer := NewMatcherAuthorizer(authEnabled)
+	aliasAwareManager := newAliasAwareSystemplaneManager(manager)
 
-	handler, err := fiberhttp.NewHandler(newAliasAwareSystemplaneManager(manager), identity, authorizer)
+	handler, err := fiberhttp.NewHandler(aliasAwareManager, identity, authorizer)
 	if err != nil {
 		return fmt.Errorf("mount systemplane api: create handler: %w", err)
 	}
 
-	if protected != nil {
-		// Mount each route behind the full auth middleware chain (JWT validation,
-		// tenant extraction, permission check, idempotency, rate limiting).
-		// The handler's own requireAuth/settingsAuth still runs as defense-in-depth.
-		mountSystemplaneRoutesProtected(authClient, protected, handler)
-	} else {
-		// Auth disabled — mount directly. The handler's own requireAuth middleware
-		// provides a secondary gate (MatcherAuthorizer permits all when auth disabled).
-		handler.Mount(app)
+	runtimeManager, hasRuntimeAccess := manager.(systemplaneRuntimeManager)
+	if hasRuntimeAccess && !hasCompleteRuntimeAccess(runtimeManager) {
+		hasRuntimeAccess = false
+		runtimeManager = nil
 	}
+
+	customHandler := newMatcherSystemplaneHandler(aliasAwareManager, runtimeManager, configGetter, settingsResolver)
+
+	// Mount each route behind the full auth middleware chain (JWT validation,
+	// tenant extraction, permission check, idempotency, rate limiting).
+	// The handler's own requireAuth/settingsAuth still runs as defense-in-depth.
+	mountSystemplaneRoutesProtected(authClient, protected, handler, customHandler, hasRuntimeAccess)
 
 	if logger != nil {
 		logger.Log(context.Background(), libLog.LevelInfo,
@@ -83,12 +90,26 @@ func mountSystemplaneRoutesProtected(
 	authClient *authMiddleware.AuthClient,
 	protected func(resource string, actions ...string) fiber.Router,
 	handler *fiberhttp.Handler,
+	customHandler *matcherSystemplaneHandler,
+	hasRuntimeAccess bool,
 ) {
 	// Configs routes — admin/system runtime configuration.
+	configsGet := handler.GetConfigs
+	configsPatch := handler.PatchConfigs
+	settingsGet := handler.GetSettings
+	settingsPatch := handler.PatchSettings
+
+	if hasRuntimeAccess && customHandler != nil {
+		configsGet = customHandler.getConfigs
+		configsPatch = customHandler.patchConfigs
+		settingsGet = customHandler.getSettings
+		settingsPatch = customHandler.patchSettings
+	}
+
 	protected(auth.ResourceSystem, auth.ActionConfigRead).
-		Get("/v1/system/configs", handler.GetConfigs)
+		Get("/v1/system/configs", configsGet)
 	protected(auth.ResourceSystem, auth.ActionConfigWrite).
-		Patch("/v1/system/configs", handler.PatchConfigs)
+		Patch("/v1/system/configs", configsPatch)
 	protected(auth.ResourceSystem, auth.ActionConfigSchemaRead).
 		Get("/v1/system/configs/schema", handler.GetConfigSchema)
 	protected(auth.ResourceSystem, auth.ActionConfigHistoryRead).
@@ -100,9 +121,9 @@ func mountSystemplaneRoutesProtected(
 	// Base permission covers tenant scope; the handler's settingsAuth middleware
 	// elevates to global permission when ?scope=global is requested.
 	protected(auth.ResourceSystem, auth.ActionSettingsRead).
-		Get("/v1/system/settings", settingsScopeAuthorization(authClient, auth.ActionSettingsGlobalRead), handler.GetSettings)
+		Get("/v1/system/settings", settingsScopeAuthorization(authClient, auth.ActionSettingsGlobalRead), settingsGet)
 	protected(auth.ResourceSystem, auth.ActionSettingsWrite).
-		Patch("/v1/system/settings", settingsScopeAuthorization(authClient, auth.ActionSettingsGlobalWrite), handler.PatchSettings)
+		Patch("/v1/system/settings", settingsScopeAuthorization(authClient, auth.ActionSettingsGlobalWrite), settingsPatch)
 	protected(auth.ResourceSystem, auth.ActionSettingsSchemaRead).
 		Get("/v1/system/settings/schema", handler.GetSettingSchema)
 	protected(auth.ResourceSystem, auth.ActionSettingsHistoryRead).
@@ -125,4 +146,14 @@ func settingsScopeAuthorization(authClient *authMiddleware.AuthClient, globalAct
 
 		return globalAuthorize(fiberCtx)
 	}
+}
+
+func hasCompleteRuntimeAccess(manager systemplaneRuntimeManager) bool {
+	if manager == nil {
+		return false
+	}
+
+	return !domain.IsNilValue(manager.registry()) &&
+		!domain.IsNilValue(manager.store()) &&
+		!domain.IsNilValue(manager.supervisor())
 }

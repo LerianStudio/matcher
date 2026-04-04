@@ -114,38 +114,40 @@ type transactionCleanupTxUpdater interface {
 
 // UseCase implements ingestion command operations.
 type UseCase struct {
-	jobRepo         ingestionRepositories.JobRepository
-	transactionRepo ingestionRepositories.TransactionRepository
-	dedupe          ports.DedupeService
-	dedupeTTL       time.Duration
-	dedupeTTLGetter func() time.Duration
-	publisher       sharedPorts.IngestionEventPublisher
-	outboxRepo      sharedPorts.OutboxRepository
-	jobTxRunner     jobTxRunner
-	jobRepoTx       jobTxUpdater
-	txCleanupRepoTx transactionCleanupTxUpdater
-	outboxRepoTx    outboxTxCreator
-	parsers         ports.ParserRegistry
-	fieldMapRepo    ports.FieldMapRepository
-	sourceRepo      ports.SourceRepository
-	matchTrigger    sharedPorts.MatchTrigger
-	contextProvider sharedPorts.ContextProvider
+	jobRepo           ingestionRepositories.JobRepository
+	transactionRepo   ingestionRepositories.TransactionRepository
+	dedupe            ports.DedupeService
+	dedupeTTL         time.Duration
+	dedupeTTLResolver func(context.Context) time.Duration
+	dedupeTTLGetter   func() time.Duration
+	publisher         sharedPorts.IngestionEventPublisher
+	outboxRepo        sharedPorts.OutboxRepository
+	jobTxRunner       jobTxRunner
+	jobRepoTx         jobTxUpdater
+	txCleanupRepoTx   transactionCleanupTxUpdater
+	outboxRepoTx      outboxTxCreator
+	parsers           ports.ParserRegistry
+	fieldMapRepo      ports.FieldMapRepository
+	sourceRepo        ports.SourceRepository
+	matchTrigger      sharedPorts.MatchTrigger
+	contextProvider   sharedPorts.ContextProvider
 }
 
 // UseCaseDeps groups all dependencies required by the ingestion UseCase.
 type UseCaseDeps struct {
-	JobRepo         ingestionRepositories.JobRepository
-	TransactionRepo ingestionRepositories.TransactionRepository
-	Dedupe          ports.DedupeService
-	Publisher       sharedPorts.IngestionEventPublisher
-	OutboxRepo      sharedPorts.OutboxRepository
-	Parsers         ports.ParserRegistry
-	FieldMapRepo    ports.FieldMapRepository
-	SourceRepo      ports.SourceRepository
-	DedupeTTL       time.Duration
-	DedupeTTLGetter func() time.Duration
-	MatchTrigger    sharedPorts.MatchTrigger
-	ContextProvider sharedPorts.ContextProvider
+	JobRepo           ingestionRepositories.JobRepository
+	TransactionRepo   ingestionRepositories.TransactionRepository
+	Dedupe            ports.DedupeService
+	Publisher         sharedPorts.IngestionEventPublisher
+	OutboxRepo        sharedPorts.OutboxRepository
+	Parsers           ports.ParserRegistry
+	FieldMapRepo      ports.FieldMapRepository
+	SourceRepo        ports.SourceRepository
+	DedupeTTL         time.Duration
+	DedupeTTLResolver func(context.Context) time.Duration
+	DedupeTTLGetter   func() time.Duration
+	MatchTrigger      sharedPorts.MatchTrigger
+	ContextProvider   sharedPorts.ContextProvider
 }
 
 func (deps *UseCaseDeps) validate() error {
@@ -216,22 +218,23 @@ func NewUseCase(deps UseCaseDeps) (*UseCase, error) {
 	}
 
 	return &UseCase{
-		jobRepo:         deps.JobRepo,
-		transactionRepo: deps.TransactionRepo,
-		dedupe:          deps.Dedupe,
-		dedupeTTL:       deps.DedupeTTL,
-		dedupeTTLGetter: deps.DedupeTTLGetter,
-		publisher:       deps.Publisher,
-		outboxRepo:      deps.OutboxRepo,
-		jobTxRunner:     jobTx,
-		jobRepoTx:       jobRepoTx,
-		txCleanupRepoTx: txCleanupRepoTx,
-		outboxRepoTx:    outboxRepoTx,
-		parsers:         deps.Parsers,
-		fieldMapRepo:    deps.FieldMapRepo,
-		sourceRepo:      deps.SourceRepo,
-		matchTrigger:    deps.MatchTrigger,
-		contextProvider: deps.ContextProvider,
+		jobRepo:           deps.JobRepo,
+		transactionRepo:   deps.TransactionRepo,
+		dedupe:            deps.Dedupe,
+		dedupeTTL:         deps.DedupeTTL,
+		dedupeTTLResolver: deps.DedupeTTLResolver,
+		dedupeTTLGetter:   deps.DedupeTTLGetter,
+		publisher:         deps.Publisher,
+		outboxRepo:        deps.OutboxRepo,
+		jobTxRunner:       jobTx,
+		jobRepoTx:         jobRepoTx,
+		txCleanupRepoTx:   txCleanupRepoTx,
+		outboxRepoTx:      outboxRepoTx,
+		parsers:           deps.Parsers,
+		fieldMapRepo:      deps.FieldMapRepo,
+		sourceRepo:        deps.SourceRepo,
+		matchTrigger:      deps.MatchTrigger,
+		contextProvider:   deps.ContextProvider,
 	}, nil
 }
 
@@ -696,7 +699,7 @@ func (uc *UseCase) filterAndInsertChunk(
 
 	for _, tx := range transactions {
 		hash := uc.dedupe.CalculateHash(tx.SourceID, tx.ExternalID)
-		if err := uc.dedupe.MarkSeenWithRetry(ctx, job.ContextID, hash, uc.currentDedupeTTL(), defaultDedupeRetries); err != nil {
+		if err := uc.dedupe.MarkSeenWithRetry(ctx, job.ContextID, hash, uc.currentDedupeTTL(ctx), defaultDedupeRetries); err != nil {
 			if errors.Is(err, ports.ErrDuplicateTransaction) {
 				continue
 			}
@@ -968,9 +971,15 @@ func convertParseErrors(errs []ports.ParseError) []entities.RowError {
 	return result
 }
 
-func (uc *UseCase) currentDedupeTTL() time.Duration {
+func (uc *UseCase) currentDedupeTTL(ctx context.Context) time.Duration {
 	if uc == nil {
 		return 0
+	}
+
+	if uc.dedupeTTLResolver != nil {
+		if ttl := uc.dedupeTTLResolver(ctx); ttl > 0 {
+			return ttl
+		}
 	}
 
 	if uc.dedupeTTLGetter != nil {

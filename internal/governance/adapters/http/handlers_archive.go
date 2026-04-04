@@ -2,6 +2,7 @@
 package http
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -35,10 +36,10 @@ var (
 
 // ArchiveHandler handles HTTP requests for archive retrieval.
 type ArchiveHandler struct {
-	archiveRepo         repositories.ArchiveMetadataRepository
-	storage             sharedPorts.ObjectStorageClient
-	presignExpiry       time.Duration
-	presignExpiryGetter func() time.Duration
+	archiveRepo           repositories.ArchiveMetadataRepository
+	storage               sharedPorts.ObjectStorageClient
+	presignExpiry         time.Duration
+	presignExpiryResolver func(context.Context) time.Duration
 }
 
 type (
@@ -75,22 +76,22 @@ func NewArchiveHandler(
 	}, nil
 }
 
-// SetRuntimePresignExpiryGetter injects a live config-backed presign expiry source.
-func (ah *ArchiveHandler) SetRuntimePresignExpiryGetter(getter func() time.Duration) {
+// SetRuntimePresignExpiryResolver injects a context-aware presign expiry source.
+func (ah *ArchiveHandler) SetRuntimePresignExpiryResolver(resolver func(context.Context) time.Duration) {
 	if ah == nil {
 		return
 	}
 
-	ah.presignExpiryGetter = getter
+	ah.presignExpiryResolver = resolver
 }
 
-func (ah *ArchiveHandler) currentPresignExpiry() time.Duration {
+func (ah *ArchiveHandler) currentPresignExpiryForContext(ctx context.Context) time.Duration {
 	if ah == nil {
 		return 0
 	}
 
-	if ah.presignExpiryGetter != nil {
-		if runtimeExpiry := ah.presignExpiryGetter(); runtimeExpiry > 0 {
+	if ah.presignExpiryResolver != nil {
+		if runtimeExpiry := ah.presignExpiryResolver(ctx); runtimeExpiry > 0 {
 			return runtimeExpiry
 		}
 	}
@@ -242,7 +243,7 @@ func (ah *ArchiveHandler) DownloadArchive(fiberCtx *fiber.Ctx) error {
 		return writeNotFound(ctx, fiberCtx, span, logger, "governance_archive_not_found", "archive not found", governanceErrors.ErrMetadataNotFound)
 	}
 
-	presignExpiry := ah.currentPresignExpiry()
+	presignExpiry := ah.currentPresignExpiryForContext(ctx)
 
 	downloadURL, err := ah.storage.GeneratePresignedURL(ctx, archive.ArchiveKey, presignExpiry)
 	if err != nil {

@@ -509,7 +509,7 @@ func TestDownloadArchive(t *testing.T) {
 
 		handler, err := NewArchiveHandler(repo, storage, testPresignExpiry)
 		require.NoError(t, err)
-		handler.SetRuntimePresignExpiryGetter(func() time.Duration { return runtimeExpiry })
+		handler.SetRuntimePresignExpiryResolver(func(context.Context) time.Duration { return runtimeExpiry })
 
 		ctx := createTestContextWithTenant(tenantID)
 		resp := testDownloadArchiveRequest(ctx, t, handler, archiveID.String())

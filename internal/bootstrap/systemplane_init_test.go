@@ -24,7 +24,8 @@ import (
 )
 
 type seedInitStoreMock struct {
-	putErr error
+	putErr  error
+	putErrs []error
 }
 
 func (m *seedInitStoreMock) Get(_ context.Context, _ domain.Target) (ports.ReadResult, error) {
@@ -39,6 +40,16 @@ func (m *seedInitStoreMock) Put(
 	_ domain.Actor,
 	_ string,
 ) (domain.Revision, error) {
+	if len(m.putErrs) > 0 {
+		err := m.putErrs[0]
+		m.putErrs = m.putErrs[1:]
+		if err != nil {
+			return domain.RevisionZero, err
+		}
+
+		return domain.RevisionZero.Next(), nil
+	}
+
 	return domain.RevisionZero, m.putErr
 }
 
@@ -479,7 +490,7 @@ func TestSeedStoreForInitialReload_RevisionMismatch_EntersSeedMode(t *testing.T)
 	reg := registry.New()
 	require.NoError(t, RegisterMatcherKeys(reg))
 
-	store := &seedInitStoreMock{putErr: domain.ErrRevisionMismatch}
+	store := &seedInitStoreMock{putErrs: []error{domain.ErrRevisionMismatch, nil}}
 
 	err = seedStoreForInitialReload(context.Background(), cm, store, reg)
 
@@ -506,6 +517,48 @@ func TestSeedStoreForInitialReload_UnexpectedSeedError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "seed store")
 	assert.False(t, cm.InSeedMode())
+}
+
+func TestSeedStoreForInitialReload_RefreshFailureReturned(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cfg.Server.Address = ":4999"
+
+	cm, err := NewConfigManager(cfg, nil)
+	require.NoError(t, err)
+
+	reg := registry.New()
+	require.NoError(t, RegisterMatcherKeys(reg))
+
+	store := &seedInitStoreMock{putErrs: []error{domain.ErrRevisionMismatch, errors.New("refresh boom")}}
+
+	err = seedStoreForInitialReload(context.Background(), cm, store, reg)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "refresh bootstrap seed values")
+	assert.False(t, cm.InSeedMode())
+}
+
+func TestSeedStoreForInitialReload_RevisionMismatchEntersSeedModeWithoutBackfill(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	cfg.Server.Address = ":4999"
+	cfg.RateLimit.Max = 999
+
+	cm, err := NewConfigManager(cfg, nil)
+	require.NoError(t, err)
+
+	reg := registry.New()
+	require.NoError(t, RegisterMatcherKeys(reg))
+
+	store := &seedInitStoreMock{putErrs: []error{domain.ErrRevisionMismatch, nil}}
+
+	err = seedStoreForInitialReload(context.Background(), cm, store, reg)
+
+	require.NoError(t, err)
+	assert.True(t, cm.InSeedMode())
 }
 
 // ---------------------------------------------------------------------------

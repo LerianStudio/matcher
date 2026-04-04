@@ -156,6 +156,7 @@ const (
 
 	// Webhook defaults.
 	defaultWebhookTimeout = 30
+	maxWebhookTimeoutSec  = 300
 
 	// Cleanup worker defaults.
 	defaultCleanupEnabled     = true
@@ -178,6 +179,7 @@ const (
 	defaultArchivalStorageClass  = "GLACIER"
 	defaultArchivalPartitionLA   = 3
 	defaultArchivalPresignExpiry = 3600
+	maxPresignExpirySec          = 604800
 )
 
 // RegisterMatcherKeys registers all Matcher configuration keys in the
@@ -211,4 +213,37 @@ func matcherKeyDefs() []domain.KeyDef {
 		matcherKeyDefsWorkers(),
 		matcherKeyDefsArchival(),
 	)
+}
+
+var matcherKeyKinds = func() map[string]domain.Kind {
+	defs := matcherKeyDefs()
+	kinds := make(map[string]domain.Kind, len(defs)+len(configKeyAliases))
+
+	for _, def := range defs {
+		kinds[def.Key] = def.Kind
+		if legacyKey, ok := legacyConfigKey(def.Key); ok {
+			kinds[legacyKey] = def.Kind
+		}
+	}
+
+	return kinds
+}()
+
+func matcherSystemplaneKeyKind(key string) (domain.Kind, bool) {
+	registryKey := key
+	if canonicalKey, ok := canonicalConfigKey(key); ok {
+		registryKey = canonicalKey
+	}
+
+	kind, ok := matcherKeyKinds[registryKey]
+
+	return kind, ok
+}
+
+func settingScopes() []domain.Scope {
+	return []domain.Scope{domain.ScopeGlobal, domain.ScopeTenant}
+}
+
+func globalSettingScope() []domain.Scope {
+	return []domain.Scope{domain.ScopeGlobal}
 }

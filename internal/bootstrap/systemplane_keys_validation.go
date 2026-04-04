@@ -12,6 +12,8 @@ import (
 	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
 )
 
+const minDedupeTTLSeconds int64 = 60
+
 func validateAbsoluteHTTPURL(value any) error {
 	rawValue, ok := value.(string)
 	if !ok {
@@ -74,6 +76,52 @@ func validatePositiveInt(value any) error {
 
 	if intVal <= 0 {
 		return fmt.Errorf("value must be a positive integer, got %d: %w", intVal, domain.ErrValueInvalid)
+	}
+
+	return nil
+}
+
+func validateBoundedPositiveInt(value any, maxValue int64, label string) error {
+	intVal, ok := toInt(value)
+	if !ok {
+		return fmt.Errorf("expected integer value: %w", domain.ErrValueInvalid)
+	}
+
+	if intVal <= 0 {
+		return fmt.Errorf("value must be a positive integer, got %d: %w", intVal, domain.ErrValueInvalid)
+	}
+
+	if intVal > maxValue {
+		return fmt.Errorf("%s must not exceed %d, got %d: %w", label, maxValue, intVal, domain.ErrValueInvalid)
+	}
+
+	return nil
+}
+
+func validateWebhookTimeoutSeconds(value any) error {
+	return validateBoundedPositiveInt(value, maxWebhookTimeoutSec, "webhook timeout seconds")
+}
+
+func validateRateLimitRequestsPerWindow(value any) error {
+	return validateBoundedPositiveInt(value, maxRateLimitRequestsPerWindow, "rate limit requests per window")
+}
+
+func validateRateLimitWindowSeconds(value any) error {
+	return validateBoundedPositiveInt(value, maxRateLimitWindowSeconds, "rate limit window seconds")
+}
+
+func validatePresignExpirySeconds(value any) error {
+	return validateBoundedPositiveInt(value, maxPresignExpirySec, "presign expiry seconds")
+}
+
+func validateDedupeTTLSeconds(value any) error {
+	intVal, ok := toInt(value)
+	if !ok {
+		return fmt.Errorf("expected integer value: %w", domain.ErrValueInvalid)
+	}
+
+	if intVal < minDedupeTTLSeconds {
+		return fmt.Errorf("dedupe ttl seconds must be at least %d, got %d: %w", minDedupeTTLSeconds, intVal, domain.ErrValueInvalid)
 	}
 
 	return nil

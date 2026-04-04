@@ -56,8 +56,8 @@ func matcherKeyDefsIdempotency() []domain.KeyDef {
 		// --- Idempotency. ---
 		{
 			Key:              "idempotency.retry_window_sec",
-			Kind:             domain.KindConfig,
-			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+			Kind:             domain.KindSetting,
+			AllowedScopes:    settingScopes(),
 			DefaultValue:     defaultIdempotencyRetryWindow,
 			ValueType:        domain.ValueTypeInt,
 			Validator:        validatePositiveInt,
@@ -70,8 +70,8 @@ func matcherKeyDefsIdempotency() []domain.KeyDef {
 		},
 		{
 			Key:              "idempotency.success_ttl_hours",
-			Kind:             domain.KindConfig,
-			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+			Kind:             domain.KindSetting,
+			AllowedScopes:    settingScopes(),
 			DefaultValue:     defaultIdempotencySuccessTTL,
 			ValueType:        domain.ValueTypeInt,
 			Validator:        validatePositiveInt,
@@ -104,8 +104,8 @@ func matcherKeyDefsCallbackRateLimit() []domain.KeyDef {
 		// --- Callback Rate Limit. ---
 		{
 			Key:              "callback_rate_limit.per_minute",
-			Kind:             domain.KindConfig,
-			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+			Kind:             domain.KindSetting,
+			AllowedScopes:    settingScopes(),
 			DefaultValue:     defaultCallbackPerMinute,
 			ValueType:        domain.ValueTypeInt,
 			Validator:        validatePositiveInt,

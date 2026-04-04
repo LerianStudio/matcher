@@ -158,19 +158,33 @@ func formatWorkerStatus(enabled bool, interval time.Duration) string {
 	return statusDisabled
 }
 
-func newArchivalPresignExpiryGetter(cfg *Config, configGetter func() *Config) func() time.Duration {
-	if configGetter == nil {
+func newArchivalPresignExpiryResolver(
+	cfg *Config,
+	configGetter func() *Config,
+	settingsResolver *runtimeSettingsResolver,
+) func(context.Context) time.Duration {
+	if configGetter == nil && settingsResolver == nil {
 		return nil
 	}
 
-	return func() time.Duration {
-		runtimeCfg := configGetter()
-		if runtimeCfg == nil {
-			return cfg.ArchivalPresignExpiry()
+	return func(ctx context.Context) time.Duration {
+		runtimeCfg := runtimeConfigOrFallback(cfg, configGetter)
+		fallback := configuredArchivalPresignExpiry(ctx, cfg)
+
+		if runtimeCfg != nil {
+			fallback = configuredArchivalPresignExpiry(ctx, runtimeCfg)
 		}
 
-		return runtimeCfg.ArchivalPresignExpiry()
+		if settingsResolver == nil {
+			return fallback
+		}
+
+		return settingsResolver.archivalPresignExpiry(ctx, fallback)
 	}
+}
+
+func configuredArchivalPresignExpiry(ctx context.Context, cfg *Config) time.Duration {
+	return normalizedArchivalPresignExpiry(ctx, cfg)
 }
 
 func registerArchiveRoutesIfAvailable(
@@ -179,18 +193,19 @@ func registerArchiveRoutesIfAvailable(
 	archiveRepo *archiveMetadataRepo.Repository,
 	archivalStorage sharedPorts.ObjectStorageClient,
 	configGetter func() *Config,
+	settingsResolver *runtimeSettingsResolver,
 ) error {
 	if archivalStorage == nil {
 		return nil
 	}
 
-	archiveHandler, err := governanceHTTP.NewArchiveHandler(archiveRepo, archivalStorage, cfg.ArchivalPresignExpiry())
+	archiveHandler, err := governanceHTTP.NewArchiveHandler(archiveRepo, archivalStorage, configuredArchivalPresignExpiry(context.Background(), cfg))
 	if err != nil {
 		return fmt.Errorf("create archive handler: %w", err)
 	}
 
-	if expiryGetter := newArchivalPresignExpiryGetter(cfg, configGetter); expiryGetter != nil {
-		archiveHandler.SetRuntimePresignExpiryGetter(expiryGetter)
+	if expiryResolver := newArchivalPresignExpiryResolver(cfg, configGetter, settingsResolver); expiryResolver != nil {
+		archiveHandler.SetRuntimePresignExpiryResolver(expiryResolver)
 	}
 
 	if err := governanceHTTP.RegisterArchiveRoutes(routes.Protected, archiveHandler); err != nil {
@@ -223,6 +238,7 @@ func initArchivalComponents(
 	routes *Routes,
 	cfg *Config,
 	configGetter func() *Config,
+	settingsResolver *runtimeSettingsResolver,
 	provider sharedPorts.InfrastructureProvider,
 	logger libLog.Logger,
 	cleanups *[]func(),
@@ -239,7 +255,7 @@ func initArchivalComponents(
 		archivalStorage = newRuntimeArchivalStorageClient(cfg, configGetter, archivalStorage)
 	}
 
-	if err := registerArchiveRoutesIfAvailable(routes, cfg, archiveRepo, archivalStorage, configGetter); err != nil {
+	if err := registerArchiveRoutesIfAvailable(routes, cfg, archiveRepo, archivalStorage, configGetter, settingsResolver); err != nil {
 		return nil, err
 	}
 

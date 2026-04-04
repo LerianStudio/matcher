@@ -325,23 +325,7 @@ func (cfg *Config) IdempotencySuccessTTL() time.Duration {
 // Returns a minimum of 1 second if configured value is non-positive.
 // Caps at 300 seconds (5 minutes) to prevent runaway connections.
 func (cfg *Config) WebhookTimeout() time.Duration {
-	const (
-		maxWebhookTimeoutSec     = 300 // 5 minutes
-		defaultWebhookTimeoutSec = 30
-	)
-
-	if cfg.Webhook.TimeoutSec <= 0 {
-		return time.Duration(defaultWebhookTimeoutSec) * time.Second
-	}
-
-	if cfg.Webhook.TimeoutSec > maxWebhookTimeoutSec {
-		cfg.logConfigWarn(context.Background(), fmt.Sprintf("WEBHOOK_TIMEOUT_SEC=%d exceeds maximum of %d seconds, capping to maximum",
-			cfg.Webhook.TimeoutSec, maxWebhookTimeoutSec))
-
-		return time.Duration(maxWebhookTimeoutSec) * time.Second
-	}
-
-	return time.Duration(cfg.Webhook.TimeoutSec) * time.Second
+	return normalizedWebhookTimeout(context.Background(), cfg)
 }
 
 // FetcherHealthTimeout returns the fetcher health-check timeout.
@@ -418,23 +402,7 @@ func (cfg *Config) ExportWorkerPollInterval() time.Duration {
 // Returns a default of 1 hour if configured value is non-positive.
 // Caps at S3's maximum of 7 days (604800 seconds) if exceeded.
 func (cfg *Config) ExportPresignExpiry() time.Duration {
-	const (
-		maxPresignExpiry     = 604800 // S3 maximum: 7 days in seconds
-		defaultPresignExpiry = 3600   // 1 hour default
-	)
-
-	if cfg.ExportWorker.PresignExpirySec <= 0 {
-		return time.Duration(defaultPresignExpiry) * time.Second
-	}
-
-	if cfg.ExportWorker.PresignExpirySec > maxPresignExpiry {
-		cfg.logConfigWarn(context.Background(), fmt.Sprintf("EXPORT_PRESIGN_EXPIRY_SEC=%d exceeds S3 maximum of %d seconds, capping to maximum",
-			cfg.ExportWorker.PresignExpirySec, maxPresignExpiry))
-
-		return time.Duration(maxPresignExpiry) * time.Second
-	}
-
-	return time.Duration(cfg.ExportWorker.PresignExpirySec) * time.Second
+	return normalizedExportPresignExpiry(context.Background(), cfg)
 }
 
 // CleanupWorkerInterval returns the cleanup worker run interval as a time.Duration.
@@ -489,17 +457,61 @@ func (cfg *Config) ArchivalInterval() time.Duration {
 // Returns a default of 1 hour if configured value is non-positive.
 // Caps at S3's maximum of 7 days (604800 seconds) if exceeded.
 func (cfg *Config) ArchivalPresignExpiry() time.Duration {
+	return normalizedArchivalPresignExpiry(context.Background(), cfg)
+}
+
+func normalizedWebhookTimeout(ctx context.Context, cfg *Config) time.Duration {
+	const (
+		maxWebhookTimeoutSec     = 300 // 5 minutes
+		defaultWebhookTimeoutSec = 30
+	)
+
+	if cfg == nil || cfg.Webhook.TimeoutSec <= 0 {
+		return time.Duration(defaultWebhookTimeoutSec) * time.Second
+	}
+
+	if cfg.Webhook.TimeoutSec > maxWebhookTimeoutSec {
+		cfg.logConfigWarn(ctx, fmt.Sprintf("WEBHOOK_TIMEOUT_SEC=%d exceeds maximum of %d seconds, capping to maximum",
+			cfg.Webhook.TimeoutSec, maxWebhookTimeoutSec))
+
+		return time.Duration(maxWebhookTimeoutSec) * time.Second
+	}
+
+	return time.Duration(cfg.Webhook.TimeoutSec) * time.Second
+}
+
+func normalizedExportPresignExpiry(ctx context.Context, cfg *Config) time.Duration {
 	const (
 		maxPresignExpiry     = 604800 // S3 maximum: 7 days in seconds
 		defaultPresignExpiry = 3600   // 1 hour default
 	)
 
-	if cfg.Archival.PresignExpirySec <= 0 {
+	if cfg == nil || cfg.ExportWorker.PresignExpirySec <= 0 {
+		return time.Duration(defaultPresignExpiry) * time.Second
+	}
+
+	if cfg.ExportWorker.PresignExpirySec > maxPresignExpiry {
+		cfg.logConfigWarn(ctx, fmt.Sprintf("EXPORT_PRESIGN_EXPIRY_SEC=%d exceeds S3 maximum of %d seconds, capping to maximum",
+			cfg.ExportWorker.PresignExpirySec, maxPresignExpiry))
+
+		return time.Duration(maxPresignExpiry) * time.Second
+	}
+
+	return time.Duration(cfg.ExportWorker.PresignExpirySec) * time.Second
+}
+
+func normalizedArchivalPresignExpiry(ctx context.Context, cfg *Config) time.Duration {
+	const (
+		maxPresignExpiry     = 604800 // S3 maximum: 7 days in seconds
+		defaultPresignExpiry = 3600   // 1 hour default
+	)
+
+	if cfg == nil || cfg.Archival.PresignExpirySec <= 0 {
 		return time.Duration(defaultPresignExpiry) * time.Second
 	}
 
 	if cfg.Archival.PresignExpirySec > maxPresignExpiry {
-		cfg.logConfigWarn(context.Background(), fmt.Sprintf("ARCHIVAL_PRESIGN_EXPIRY_SEC=%d exceeds S3 maximum of %d seconds, capping to maximum",
+		cfg.logConfigWarn(ctx, fmt.Sprintf("ARCHIVAL_PRESIGN_EXPIRY_SEC=%d exceeds S3 maximum of %d seconds, capping to maximum",
 			cfg.Archival.PresignExpirySec, maxPresignExpiry))
 
 		return time.Duration(maxPresignExpiry) * time.Second

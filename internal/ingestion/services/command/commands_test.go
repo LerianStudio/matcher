@@ -74,6 +74,60 @@ func (f fakeDedupe) ClearBatch(_ context.Context, _ uuid.UUID, _ []string) error
 	return nil
 }
 
+type recordingDedupe struct{ lastTTL time.Duration }
+
+func (r *recordingDedupe) CalculateHash(_ uuid.UUID, _ string) string { return "hash" }
+func (r *recordingDedupe) IsDuplicate(_ context.Context, _ uuid.UUID, _ string) (bool, error) {
+	return false, nil
+}
+
+func (r *recordingDedupe) MarkSeen(_ context.Context, _ uuid.UUID, _ string, ttl time.Duration) error {
+	r.lastTTL = ttl
+	return nil
+}
+
+func (r *recordingDedupe) MarkSeenWithRetry(_ context.Context, _ uuid.UUID, _ string, ttl time.Duration, _ int) error {
+	r.lastTTL = ttl
+	return nil
+}
+
+func (r *recordingDedupe) Clear(_ context.Context, _ uuid.UUID, _ string) error { return nil }
+func (r *recordingDedupe) ClearBatch(_ context.Context, _ uuid.UUID, _ []string) error {
+	return nil
+}
+
+func TestUseCase_CurrentDedupeTTL_PrefersResolver(t *testing.T) {
+	t.Parallel()
+
+	uc := &UseCase{
+		dedupeTTL:         time.Minute,
+		dedupeTTLResolver: func(context.Context) time.Duration { return 2 * time.Minute },
+	}
+
+	require.Equal(t, 2*time.Minute, uc.currentDedupeTTL(context.Background()))
+}
+
+func TestUseCase_FilterAndInsertChunk_UsesResolverTTLForDedupeMarking(t *testing.T) {
+	t.Parallel()
+
+	dedupe := &recordingDedupe{}
+	uc := &UseCase{
+		transactionRepo:   fakeTxRepo{},
+		dedupe:            dedupe,
+		dedupeTTL:         time.Minute,
+		dedupeTTLResolver: func(context.Context) time.Duration { return 2 * time.Minute },
+	}
+
+	job := &entities.IngestionJob{ContextID: uuid.New()}
+	transactions := []*shared.Transaction{{SourceID: uuid.New(), ExternalID: "ext-1"}}
+
+	inserted, markedHashes, err := uc.filterAndInsertChunk(context.Background(), job, transactions)
+	require.NoError(t, err)
+	require.Equal(t, 1, inserted)
+	require.Len(t, markedHashes, 1)
+	require.Equal(t, 2*time.Minute, dedupe.lastTTL)
+}
+
 type fakePublisher struct{ called bool }
 
 func (f *fakePublisher) PublishIngestionCompleted(

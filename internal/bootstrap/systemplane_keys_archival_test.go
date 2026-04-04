@@ -173,7 +173,14 @@ func TestMatcherKeyDefsArchivalRuntime_KeyProperties(t *testing.T) {
 
 			def := defs[i]
 			assert.Equal(t, tt.key, def.Key)
-			assert.Equal(t, domain.KindConfig, def.Kind)
+			if def.Key == "archival.presign_expiry_sec" {
+				assert.Equal(t, domain.KindSetting, def.Kind)
+				assert.Equal(t, []domain.Scope{domain.ScopeGlobal}, def.AllowedScopes)
+			} else {
+				assert.Equal(t, domain.KindConfig, def.Kind)
+				require.Len(t, def.AllowedScopes, 1)
+				assert.Equal(t, domain.ScopeGlobal, def.AllowedScopes[0])
+			}
 			assert.Equal(t, "archival", def.Group)
 			assert.Equal(t, domain.ValueTypeInt, def.ValueType)
 			assert.NotNil(t, def.Validator)
@@ -203,6 +210,12 @@ func TestMatcherKeyDefsArchival_AllKeysHaveGlobalScope(t *testing.T) {
 	defs := matcherKeyDefsArchival()
 
 	for _, def := range defs {
+		if def.Key == "archival.presign_expiry_sec" {
+			assert.Equal(t, []domain.Scope{domain.ScopeGlobal}, def.AllowedScopes,
+				"archival key %q must have global-only scope", def.Key)
+			continue
+		}
+
 		require.Len(t, def.AllowedScopes, 1,
 			"archival key %q must have exactly one allowed scope", def.Key)
 		assert.Equal(t, domain.ScopeGlobal, def.AllowedScopes[0],

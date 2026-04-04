@@ -18,6 +18,8 @@ import (
 
 	"github.com/LerianStudio/lib-commons/v4/commons/net/http/ratelimit"
 	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
+	spdomain "github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
+	spservice "github.com/LerianStudio/lib-commons/v4/commons/systemplane/service"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 )
@@ -115,7 +117,7 @@ func TestNewGlobalRateLimit_NilRateLimiter_ReturnsPassthrough(t *testing.T) {
 	t.Parallel()
 
 	cfg := &Config{RateLimit: RateLimitConfig{Enabled: true, Max: 1, ExpirySec: 60}}
-	handler := NewGlobalRateLimit(nilRLGetter, cfg, nil)
+	handler := NewGlobalRateLimit(nilRLGetter, cfg, nil, nil)
 	require.NotNil(t, handler)
 
 	app := fiber.New()
@@ -136,7 +138,7 @@ func TestNewGlobalRateLimit_DisabledConfig_ReturnsPassthrough(t *testing.T) {
 	t.Parallel()
 
 	cfg := &Config{RateLimit: RateLimitConfig{Enabled: false, Max: 1, ExpirySec: 60}}
-	handler := NewGlobalRateLimit(nilRLGetter, cfg, nil)
+	handler := NewGlobalRateLimit(nilRLGetter, cfg, nil, nil)
 	require.NotNil(t, handler)
 
 	app := fiber.New()
@@ -156,7 +158,7 @@ func TestNewExportRateLimit_NilRateLimiter_ReturnsPassthrough(t *testing.T) {
 	t.Parallel()
 
 	cfg := &Config{RateLimit: RateLimitConfig{Enabled: true, ExportMax: 1, ExportExpirySec: 60}}
-	handler := NewExportRateLimit(nilRLGetter, cfg, nil)
+	handler := NewExportRateLimit(nilRLGetter, cfg, nil, nil)
 	require.NotNil(t, handler)
 
 	app := fiber.New()
@@ -176,7 +178,7 @@ func TestNewDispatchRateLimit_NilRateLimiter_ReturnsPassthrough(t *testing.T) {
 	t.Parallel()
 
 	cfg := &Config{RateLimit: RateLimitConfig{Enabled: true, DispatchMax: 1, DispatchExpirySec: 60}}
-	handler := NewDispatchRateLimit(nilRLGetter, cfg, nil)
+	handler := NewDispatchRateLimit(nilRLGetter, cfg, nil, nil)
 	require.NotNil(t, handler)
 
 	app := fiber.New()
@@ -197,7 +199,7 @@ func TestNewGlobalRateLimit_DynamicDisabled_ReturnsPassthrough(t *testing.T) {
 
 	activeCfg := &Config{RateLimit: RateLimitConfig{Enabled: false, Max: 1, ExpirySec: 60}}
 
-	handler := NewGlobalRateLimit(nilRLGetter, activeCfg, func() *Config { return activeCfg })
+	handler := NewGlobalRateLimit(nilRLGetter, activeCfg, func() *Config { return activeCfg }, nil)
 	require.NotNil(t, handler)
 
 	app := fiber.New()
@@ -219,7 +221,7 @@ func TestNewGlobalRateLimit_DynamicDisabled_ReturnsPassthrough(t *testing.T) {
 func TestNewGlobalRateLimit_DynamicNilConfig_ReturnsPassthrough(t *testing.T) {
 	t.Parallel()
 
-	handler := NewGlobalRateLimit(nilRLGetter, nil, func() *Config { return nil })
+	handler := NewGlobalRateLimit(nilRLGetter, nil, func() *Config { return nil }, nil)
 	require.NotNil(t, handler)
 
 	app := fiber.New()
@@ -230,6 +232,117 @@ func TestNewGlobalRateLimit_DynamicNilConfig_ReturnsPassthrough(t *testing.T) {
 	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/test", http.NoBody))
 	require.NoError(t, err)
 
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
+func TestNewGlobalRateLimit_SettingsResolverCanDisableBeforeLimiterLookup(t *testing.T) {
+	t.Parallel()
+
+	baseCfg := &Config{RateLimit: RateLimitConfig{Enabled: true, Max: 10, ExpirySec: 60}}
+	settingsResolver := newRuntimeSettingsResolver(func() spservice.Manager {
+		return &runtimeSettingsManagerStub{
+			getSettings: func(context.Context, spservice.Subject) (spservice.ResolvedSet, error) {
+				return spservice.ResolvedSet{
+					Values: map[string]spdomain.EffectiveValue{
+						"rate_limit.enabled": {Key: "rate_limit.enabled", Value: false, Source: "tenant-override"},
+					},
+				}, nil
+			},
+		}
+	})
+
+	handler := NewGlobalRateLimit(func() *ratelimit.RateLimiter {
+		panic("rate limiter should not be resolved when settings disable the route")
+	}, baseCfg, func() *Config { return baseCfg }, settingsResolver)
+	require.NotNil(t, handler)
+
+	app := fiber.New()
+	app.Get("/test", func(c *fiber.Ctx) error {
+		ctx := context.WithValue(c.UserContext(), auth.TenantIDKey, "tenant-123")
+		c.SetUserContext(ctx)
+		return c.Next()
+	}, handler, func(c *fiber.Ctx) error {
+		return c.SendString("ok")
+	})
+
+	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/test", http.NoBody))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
+func TestNewExportRateLimit_SettingsResolverCanDisableBeforeLimiterLookup(t *testing.T) {
+	t.Parallel()
+
+	baseCfg := &Config{RateLimit: RateLimitConfig{Enabled: true, ExportMax: 10, ExportExpirySec: 60}}
+	settingsResolver := newRuntimeSettingsResolver(func() spservice.Manager {
+		return &runtimeSettingsManagerStub{
+			getSettings: func(context.Context, spservice.Subject) (spservice.ResolvedSet, error) {
+				return spservice.ResolvedSet{
+					Values: map[string]spdomain.EffectiveValue{
+						"rate_limit.export_max": {Key: "rate_limit.export_max", Value: 0, Source: "tenant-override"},
+					},
+				}, nil
+			},
+		}
+	})
+
+	handler := NewExportRateLimit(func() *ratelimit.RateLimiter {
+		panic("rate limiter should not be resolved when export settings disable the route")
+	}, baseCfg, func() *Config { return baseCfg }, settingsResolver)
+	require.NotNil(t, handler)
+
+	app := fiber.New()
+	app.Get("/export", func(c *fiber.Ctx) error {
+		ctx := context.WithValue(c.UserContext(), auth.TenantIDKey, "tenant-123")
+		c.SetUserContext(ctx)
+		return c.Next()
+	}, handler, func(c *fiber.Ctx) error {
+		return c.SendString("ok")
+	})
+
+	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/export", http.NoBody))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
+func TestNewDispatchRateLimit_SettingsResolverCanDisableBeforeLimiterLookup(t *testing.T) {
+	t.Parallel()
+
+	baseCfg := &Config{RateLimit: RateLimitConfig{Enabled: true, DispatchMax: 10, DispatchExpirySec: 60}}
+	settingsResolver := newRuntimeSettingsResolver(func() spservice.Manager {
+		return &runtimeSettingsManagerStub{
+			getSettings: func(context.Context, spservice.Subject) (spservice.ResolvedSet, error) {
+				return spservice.ResolvedSet{
+					Values: map[string]spdomain.EffectiveValue{
+						"rate_limit.dispatch_max": {Key: "rate_limit.dispatch_max", Value: 0, Source: "tenant-override"},
+					},
+				}, nil
+			},
+		}
+	})
+
+	handler := NewDispatchRateLimit(func() *ratelimit.RateLimiter {
+		panic("rate limiter should not be resolved when dispatch settings disable the route")
+	}, baseCfg, func() *Config { return baseCfg }, settingsResolver)
+	require.NotNil(t, handler)
+
+	app := fiber.New()
+	app.Post("/dispatch", func(c *fiber.Ctx) error {
+		ctx := context.WithValue(c.UserContext(), auth.TenantIDKey, "tenant-123")
+		c.SetUserContext(ctx)
+		return c.Next()
+	}, handler, func(c *fiber.Ctx) error {
+		return c.SendString("ok")
+	})
+
+	resp, err := app.Test(httptest.NewRequest(http.MethodPost, "/dispatch", http.NoBody))
+	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)

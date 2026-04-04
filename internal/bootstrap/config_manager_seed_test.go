@@ -24,6 +24,8 @@ import (
 type mockStore struct {
 	putCalls []mockPutCall
 	putErr   error
+	getErr   error
+	results  map[string]ports.ReadResult
 }
 
 type mockPutCall struct {
@@ -34,8 +36,21 @@ type mockPutCall struct {
 	Source   string
 }
 
-func (m *mockStore) Get(_ context.Context, _ domain.Target) (ports.ReadResult, error) {
-	return ports.ReadResult{}, nil
+func (m *mockStore) Get(_ context.Context, target domain.Target) (ports.ReadResult, error) {
+	if m.getErr != nil {
+		return ports.ReadResult{}, m.getErr
+	}
+
+	if m.results == nil {
+		return ports.ReadResult{}, nil
+	}
+
+	result, ok := m.results[m.targetKey(target)]
+	if !ok {
+		return ports.ReadResult{}, nil
+	}
+
+	return result, nil
 }
 
 func (m *mockStore) Put(_ context.Context, target domain.Target, ops []ports.WriteOp,
@@ -54,6 +69,10 @@ func (m *mockStore) Put(_ context.Context, target domain.Target, ops []ports.Wri
 	}
 
 	return expected.Next(), nil
+}
+
+func (m *mockStore) targetKey(target domain.Target) string {
+	return fmt.Sprintf("%s|%s|%s", target.Kind, target.Scope, target.SubjectID)
 }
 
 func TestConfigManager_SeedMode_DefaultOff(t *testing.T) {
@@ -487,8 +506,8 @@ func TestSeedStore_WithNonDefaultValues(t *testing.T) {
 	}))
 	require.NoError(t, reg.Register(domain.KeyDef{
 		Key:              "rate_limit.max",
-		Kind:             domain.KindConfig,
-		AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+		Kind:             domain.KindSetting,
+		AllowedScopes:    []domain.Scope{domain.ScopeGlobal, domain.ScopeTenant},
 		DefaultValue:     100,
 		ValueType:        domain.ValueTypeInt,
 		ApplyBehavior:    domain.ApplyLiveRead,
@@ -496,8 +515,8 @@ func TestSeedStore_WithNonDefaultValues(t *testing.T) {
 	}))
 	require.NoError(t, reg.Register(domain.KeyDef{
 		Key:              "rate_limit.enabled",
-		Kind:             domain.KindConfig,
-		AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+		Kind:             domain.KindSetting,
+		AllowedScopes:    []domain.Scope{domain.ScopeGlobal, domain.ScopeTenant},
 		DefaultValue:     true,
 		ValueType:        domain.ValueTypeBool,
 		ApplyBehavior:    domain.ApplyLiveRead,
@@ -507,15 +526,24 @@ func TestSeedStore_WithNonDefaultValues(t *testing.T) {
 	err = cm.SeedStore(context.Background(), store, reg)
 	require.NoError(t, err)
 
-	require.Len(t, store.putCalls, 1, "should make exactly one Put call")
+	require.Len(t, store.putCalls, 2, "should seed configs and settings separately")
 
-	call := store.putCalls[0]
-	assert.Equal(t, domain.KindConfig, call.Target.Kind)
-	assert.Equal(t, domain.ScopeGlobal, call.Target.Scope)
-	assert.Equal(t, domain.RevisionZero, call.Expected)
-	assert.Equal(t, domain.Actor{ID: "seed-migration"}, call.Actor)
-	assert.Equal(t, "seed", call.Source)
-	assert.Len(t, call.Ops, 3)
+	configCall := store.putCalls[0]
+	settingCall := store.putCalls[1]
+
+	assert.Equal(t, domain.KindConfig, configCall.Target.Kind)
+	assert.Equal(t, domain.ScopeGlobal, configCall.Target.Scope)
+	assert.Equal(t, domain.RevisionZero, configCall.Expected)
+	assert.Equal(t, domain.Actor{ID: "seed-migration"}, configCall.Actor)
+	assert.Equal(t, "seed", configCall.Source)
+	assert.Len(t, configCall.Ops, 1)
+
+	assert.Equal(t, domain.KindSetting, settingCall.Target.Kind)
+	assert.Equal(t, domain.ScopeGlobal, settingCall.Target.Scope)
+	assert.Equal(t, domain.RevisionZero, settingCall.Expected)
+	assert.Equal(t, domain.Actor{ID: "seed-migration"}, settingCall.Actor)
+	assert.Equal(t, "seed", settingCall.Source)
+	assert.Len(t, settingCall.Ops, 2)
 
 	assert.False(t, cm.InSeedMode(), "SeedStore should not enter seed mode before initial reload succeeds")
 }

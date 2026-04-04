@@ -26,8 +26,12 @@ import (
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
 	libRabbitmq "github.com/LerianStudio/lib-commons/v4/commons/rabbitmq"
+	spdomain "github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
+	systemplanePorts "github.com/LerianStudio/lib-commons/v4/commons/systemplane/ports"
+	spservice "github.com/LerianStudio/lib-commons/v4/commons/systemplane/service"
 
 	"github.com/LerianStudio/matcher/internal/auth"
+	configWorker "github.com/LerianStudio/matcher/internal/configuration/services/worker"
 	discoveryWorker "github.com/LerianStudio/matcher/internal/discovery/services/worker"
 	governanceWorker "github.com/LerianStudio/matcher/internal/governance/services/worker"
 	ingestionRabbitmq "github.com/LerianStudio/matcher/internal/ingestion/adapters/rabbitmq"
@@ -1176,7 +1180,7 @@ func TestInitArchivalComponents_DisabledNoStorage(t *testing.T) {
 		}
 
 		var cleanups []func()
-		worker, err := initArchivalComponents(nil, cfg, nil, nil, &libLog.NopLogger{}, &cleanups)
+		worker, err := initArchivalComponents(nil, cfg, nil, nil, nil, &libLog.NopLogger{}, &cleanups)
 
 		assert.NoError(t, err)
 		assert.Nil(t, worker)
@@ -1722,8 +1726,35 @@ func TestCreateIdempotencyRepository_NilProvider(t *testing.T) {
 		},
 	}
 
-	repo := createIdempotencyRepository(cfg, nil, nil, &libLog.NopLogger{})
+	repo := createIdempotencyRepository(cfg, nil, nil, nil, &libLog.NopLogger{})
 	assert.Nil(t, repo)
+}
+
+func TestBuildWorkerManager_ReusesExistingManager(t *testing.T) {
+	t.Parallel()
+
+	existing := NewWorkerManager(&libLog.NopLogger{}, nil)
+	modules := &modulesResult{
+		schedulerWorker: &configWorker.SchedulerWorker{},
+	}
+
+	wm := buildWorkerManager(modules, existing, nil, &libLog.NopLogger{})
+
+	require.Same(t, existing, wm)
+	assert.Len(t, wm.slots, 1)
+	assert.Equal(t, workerNameScheduler, wm.slots[0].name)
+}
+
+func TestCanSwapRuntimePublishers_RequiresNonNilBundle(t *testing.T) {
+	t.Parallel()
+
+	modules := &modulesResult{
+		ingestionEvents: &swappableIngestionPublisher{},
+		matchingEvents:  &swappableMatchPublisher{},
+	}
+
+	assert.False(t, canSwapRuntimePublishers(nil, modules))
+	assert.True(t, canSwapRuntimePublishers(&MatcherBundle{}, modules))
 }
 
 func TestModulesResult_SchedulerWorkerField(t *testing.T) {
@@ -2370,4 +2401,161 @@ func TestConnectInfrastructure_ContextCanceled_PropagatesError(t *testing.T) {
 	require.Error(t, err)
 	// The error should indicate context cancellation propagated through.
 	assert.True(t, errors.Is(err, context.Canceled), "expected context.Canceled in error chain, got: %v", err)
+}
+
+func TestRuntimeConfigOrFallback_PrefersConfigGetter(t *testing.T) {
+	t.Parallel()
+
+	baseCfg := defaultConfig()
+	runtimeCfg := defaultConfig()
+	runtimeCfg.CallbackRateLimit.PerMinute = 75
+
+	resolved := runtimeConfigOrFallback(baseCfg, func() *Config { return runtimeCfg })
+
+	assert.Same(t, runtimeCfg, resolved)
+}
+
+func TestResolveRuntimeIntSetting_NilResolverFallsBackToRuntimeConfig(t *testing.T) {
+	t.Parallel()
+
+	baseCfg := defaultConfig()
+	baseCfg.CallbackRateLimit.PerMinute = 60
+	runtimeCfg := defaultConfig()
+	runtimeCfg.CallbackRateLimit.PerMinute = 75
+
+	resolved := resolveRuntimeIntSetting(context.Background(), baseCfg, func() *Config { return runtimeCfg }, nil,
+		func(current *Config) int { return current.CallbackRateLimit.PerMinute },
+		func(_ context.Context, fallback int) int { return fallback + 1 },
+	)
+
+	assert.Equal(t, 75, resolved)
+}
+
+func TestResolveRuntimeIntSetting_UsesResolverFallbackFromRuntimeConfig(t *testing.T) {
+	t.Parallel()
+
+	baseCfg := defaultConfig()
+	baseCfg.CallbackRateLimit.PerMinute = 60
+	runtimeCfg := defaultConfig()
+	runtimeCfg.CallbackRateLimit.PerMinute = 75
+
+	resolved := resolveRuntimeIntSetting(context.Background(), baseCfg, func() *Config { return runtimeCfg }, &runtimeSettingsResolver{},
+		func(current *Config) int { return current.CallbackRateLimit.PerMinute },
+		func(_ context.Context, fallback int) int { return fallback + 25 },
+	)
+
+	assert.Equal(t, 100, resolved)
+}
+
+func TestResolveIdempotencyRetryWindow_FallsBackWhenRuntimeSettingNonPositive(t *testing.T) {
+	t.Parallel()
+
+	baseCfg := defaultConfig()
+	baseCfg.Idempotency.RetryWindowSec = 60
+	runtimeCfg := defaultConfig()
+	runtimeCfg.Idempotency.RetryWindowSec = 75
+
+	manager := &runtimeSettingsManagerStub{
+		getSettings: func(_ context.Context, _ spservice.Subject) (spservice.ResolvedSet, error) {
+			return spservice.ResolvedSet{
+				Values: map[string]spdomain.EffectiveValue{
+					"idempotency.retry_window_sec": {
+						Key:    "idempotency.retry_window_sec",
+						Value:  0,
+						Source: "global-override",
+					},
+				},
+			}, nil
+		},
+	}
+
+	resolver := newRuntimeSettingsResolver(func() spservice.Manager { return manager })
+	require.NotNil(t, resolver)
+
+	resolved := resolveIdempotencyRetryWindow(context.Background(), baseCfg, func() *Config { return runtimeCfg }, resolver)
+
+	assert.Equal(t, 75*time.Second, resolved)
+}
+
+func TestResolveWebhookTimeout_FallsBackWhenRuntimeSettingNonPositive(t *testing.T) {
+	t.Parallel()
+
+	baseCfg := defaultConfig()
+	baseCfg.Webhook.TimeoutSec = 30
+	runtimeCfg := defaultConfig()
+	runtimeCfg.Webhook.TimeoutSec = 45
+
+	manager := &runtimeSettingsManagerStub{
+		getSettings: func(_ context.Context, _ spservice.Subject) (spservice.ResolvedSet, error) {
+			return spservice.ResolvedSet{
+				Values: map[string]spdomain.EffectiveValue{
+					"webhook.timeout_sec": {
+						Key:    "webhook.timeout_sec",
+						Value:  -1,
+						Source: "global-override",
+					},
+				},
+			}, nil
+		},
+	}
+
+	resolver := newRuntimeSettingsResolver(func() spservice.Manager { return manager })
+	require.NotNil(t, resolver)
+
+	resolved := resolveWebhookTimeout(context.Background(), baseCfg, func() *Config { return runtimeCfg }, resolver)
+
+	assert.Equal(t, 45*time.Second, resolved)
+}
+
+func TestRuntimeSettingsAwareApplyChangeSignal_InvalidatesTenantCache(t *testing.T) {
+	t.Parallel()
+
+	resolver := newRuntimeSettingsResolver(func() spservice.Manager { return nil })
+	require.NotNil(t, resolver)
+	resolver.tenantCache = map[string]cachedRuntimeSettings{
+		"tenant-123": {expiresAt: time.Now().UTC().Add(time.Second)},
+		"tenant-456": {expiresAt: time.Now().UTC().Add(time.Second)},
+	}
+
+	managerCalled := false
+	manager := &runtimeHandlerManagerStub{
+		applyChangeSignal: func(context.Context, systemplanePorts.ChangeSignal) error {
+			managerCalled = true
+			return nil
+		},
+	}
+
+	applySignal := runtimeSettingsAwareApplyChangeSignal(manager, resolver)
+	require.NotNil(t, applySignal)
+
+	err := applySignal(context.Background(), systemplanePorts.ChangeSignal{
+		Target: spdomain.Target{Kind: spdomain.KindSetting, Scope: spdomain.ScopeTenant, SubjectID: "tenant-123"},
+	})
+
+	require.NoError(t, err)
+	assert.True(t, managerCalled)
+	assert.NotContains(t, resolver.tenantCache, "tenant-123")
+	assert.Contains(t, resolver.tenantCache, "tenant-456")
+}
+
+func TestRuntimeSettingsAwareApplyChangeSignal_GlobalSettingInvalidatesAllCaches(t *testing.T) {
+	t.Parallel()
+
+	resolver := newRuntimeSettingsResolver(func() spservice.Manager { return nil })
+	require.NotNil(t, resolver)
+	resolver.tenantCache = map[string]cachedRuntimeSettings{
+		"tenant-123": {expiresAt: time.Now().UTC().Add(time.Second)},
+		"tenant-456": {expiresAt: time.Now().UTC().Add(time.Second)},
+	}
+
+	manager := &runtimeHandlerManagerStub{}
+	applySignal := runtimeSettingsAwareApplyChangeSignal(manager, resolver)
+	require.NotNil(t, applySignal)
+
+	err := applySignal(context.Background(), systemplanePorts.ChangeSignal{
+		Target: spdomain.Target{Kind: spdomain.KindSetting, Scope: spdomain.ScopeGlobal},
+	})
+
+	require.NoError(t, err)
+	assert.Empty(t, resolver.tenantCache)
 }

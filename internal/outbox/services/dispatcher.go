@@ -95,7 +95,7 @@ type Dispatcher struct {
 	failureCountsMu             sync.Mutex
 	listPendingFailureThreshold int
 	retryWindow                 time.Duration
-	retryWindowGetter           func() time.Duration
+	retryWindowResolver         func(context.Context) time.Duration
 	maxDispatchAttempts         int
 	processingTimeout           time.Duration
 	stop                        chan struct{}
@@ -114,22 +114,22 @@ type Dispatcher struct {
 	queueDepth       metric.Int64Gauge
 }
 
-// SetRetryWindowGetter injects a live config-backed retry window source.
-func (dispatcher *Dispatcher) SetRetryWindowGetter(getter func() time.Duration) {
+// SetRetryWindowResolver injects a live config-backed retry window source.
+func (dispatcher *Dispatcher) SetRetryWindowResolver(resolver func(context.Context) time.Duration) {
 	if dispatcher == nil {
 		return
 	}
 
-	dispatcher.retryWindowGetter = getter
+	dispatcher.retryWindowResolver = resolver
 }
 
-func (dispatcher *Dispatcher) currentRetryWindow() time.Duration {
+func (dispatcher *Dispatcher) currentRetryWindow(ctx context.Context) time.Duration {
 	if dispatcher == nil {
 		return defaultRetryWindow
 	}
 
-	if dispatcher.retryWindowGetter != nil {
-		if window := dispatcher.retryWindowGetter(); window > 0 {
+	if dispatcher.retryWindowResolver != nil {
+		if window := dispatcher.retryWindowResolver(ctx); window > 0 {
 			return window
 		}
 	}
@@ -528,7 +528,7 @@ func (dispatcher *Dispatcher) collectEvents(
 	span trace.Span,
 ) []*outboxEntities.OutboxEvent {
 	logger := dispatcher.logger
-	failedBefore := time.Now().UTC().Add(-dispatcher.currentRetryWindow())
+	failedBefore := time.Now().UTC().Add(-dispatcher.currentRetryWindow(ctx))
 	processingBefore := time.Now().UTC().Add(-dispatcher.processingTimeout)
 
 	priorityBudget := min(defaultPriorityBudget, dispatcher.batchSize)

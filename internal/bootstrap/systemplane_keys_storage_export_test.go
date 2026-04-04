@@ -49,15 +49,27 @@ func TestMatcherKeyDefsDeduplication_KeyProperties(t *testing.T) {
 
 	def := defs[0]
 	assert.Equal(t, "deduplication.ttl_sec", def.Key)
-	assert.Equal(t, domain.KindConfig, def.Kind)
+	assert.Equal(t, domain.KindSetting, def.Kind)
 	assert.Equal(t, "deduplication", def.Group)
 	assert.Equal(t, domain.ValueTypeInt, def.ValueType)
 	assert.Equal(t, domain.ApplyLiveRead, def.ApplyBehavior)
 	assert.True(t, def.MutableAtRuntime)
 	assert.NotNil(t, def.Validator, "deduplication.ttl_sec must have a validator")
 	assert.NotEmpty(t, def.Description)
-	require.Len(t, def.AllowedScopes, 1)
-	assert.Equal(t, domain.ScopeGlobal, def.AllowedScopes[0])
+	assert.Equal(t, []domain.Scope{domain.ScopeGlobal, domain.ScopeTenant}, def.AllowedScopes)
+}
+
+func TestMatcherKeyDefsDeduplication_RejectsSubMinuteTTL(t *testing.T) {
+	t.Parallel()
+
+	def := matcherKeyDefsDeduplication()[0]
+	require.NotNil(t, def.Validator)
+
+	err := def.Validator(59)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, domain.ErrValueInvalid)
+	assert.Contains(t, err.Error(), "at least 60")
 }
 
 // --- matcherKeyDefsObjectStorage ---
@@ -167,12 +179,17 @@ func TestMatcherKeyDefsExportWorker_KeyProperties(t *testing.T) {
 
 			def := defs[i]
 			assert.Equal(t, expKey, def.Key)
-			assert.Equal(t, domain.KindConfig, def.Kind)
+			if def.Key == "export_worker.presign_expiry_sec" {
+				assert.Equal(t, domain.KindSetting, def.Kind)
+				assert.Equal(t, []domain.Scope{domain.ScopeGlobal}, def.AllowedScopes)
+			} else {
+				assert.Equal(t, domain.KindConfig, def.Kind)
+				require.Len(t, def.AllowedScopes, 1)
+				assert.Equal(t, domain.ScopeGlobal, def.AllowedScopes[0])
+			}
 			assert.Equal(t, "export_worker", def.Group)
 			assert.True(t, def.MutableAtRuntime)
 			assert.NotEmpty(t, def.Description)
-			require.Len(t, def.AllowedScopes, 1)
-			assert.Equal(t, domain.ScopeGlobal, def.AllowedScopes[0])
 		})
 	}
 }

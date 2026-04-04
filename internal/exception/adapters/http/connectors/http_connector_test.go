@@ -244,6 +244,42 @@ func TestHTTPConnector_Webhook_WithSignature(t *testing.T) {
 	require.Contains(t, receivedSignature, "sha256=")
 }
 
+func TestHTTPConnector_WebhookTimeoutResolver_OverridesBaseTimeout(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(
+		http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+			time.Sleep(20 * time.Millisecond)
+			writer.WriteHeader(http.StatusOK)
+		}),
+	)
+	defer server.Close()
+
+	baseTimeout := 5 * time.Millisecond
+	maxRetries := 1
+	backoff := time.Nanosecond
+	config := connectors.ConnectorConfig{
+		AllowPrivateIPs: true,
+		Webhook: &connectors.WebhookConnectorConfig{
+			BaseConnectorConfig: connectors.BaseConnectorConfig{
+				Timeout:      &baseTimeout,
+				MaxRetries:   &maxRetries,
+				RetryBackoff: &backoff,
+			},
+			URL: server.URL,
+		},
+	}
+
+	connector, err := connectors.NewHTTPConnector(config)
+	require.NoError(t, err)
+	connector.SetWebhookTimeoutResolver(func(context.Context) time.Duration { return 100 * time.Millisecond })
+
+	decision := services.RoutingDecision{Target: services.RoutingTargetWebhook}
+	result, err := connector.Dispatch(context.Background(), "exc-timeout-override", decision, []byte(`{"test":true}`))
+	require.NoError(t, err)
+	require.True(t, result.Acknowledged)
+}
+
 func TestHTTPConnector_Manual_NoDispatch(t *testing.T) {
 	t.Parallel()
 

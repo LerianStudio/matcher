@@ -1259,6 +1259,75 @@ func TestDispatcherSetRetryWindow(t *testing.T) {
 	require.Equal(t, 10*time.Minute, dispatcher.retryWindow)
 }
 
+func TestDispatcherCurrentRetryWindow_UsesResolverContext(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	repo := mocks.NewMockOutboxRepository(ctrl)
+	publisher := &stubPublisher{}
+	dispatcher, err := NewDispatcher(repo, publisher, publisher, nil, nil)
+	require.NoError(t, err)
+
+	dispatcher.SetRetryWindowResolver(func(ctx context.Context) time.Duration {
+		tenantID, ok := auth.LookupTenantID(ctx)
+		require.True(t, ok)
+		require.Equal(t, "tenant-123", tenantID)
+
+		return 9 * time.Minute
+	})
+
+	ctx := context.WithValue(context.Background(), auth.TenantIDKey, "tenant-123")
+	require.Equal(t, 9*time.Minute, dispatcher.currentRetryWindow(ctx))
+}
+
+func TestDispatcherDispatchOnce_UsesRetryWindowResolverContextForRetryCollection(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	repo := mocks.NewMockOutboxRepository(ctrl)
+	publisher := &stubPublisher{}
+	dispatcher, err := NewDispatcher(repo, publisher, publisher, nil, nil)
+	require.NoError(t, err)
+
+	dispatcher.SetRetryWindowResolver(func(ctx context.Context) time.Duration {
+		tenantID, ok := auth.LookupTenantID(ctx)
+		require.True(t, ok)
+		require.Equal(t, "tenant-123", tenantID)
+
+		return 9 * time.Minute
+	})
+
+	ctx := context.WithValue(context.Background(), auth.TenantIDKey, "tenant-123")
+
+	repo.EXPECT().
+		ListPendingByType(gomock.Any(), sharedDomain.EventTypeAuditLogCreated, defaultPriorityBudget).
+		Return([]*outboxEntities.OutboxEvent{}, nil)
+	repo.EXPECT().
+		ResetStuckProcessing(gomock.Any(), dispatcher.batchSize, gomock.Any(), dispatcher.maxDispatchAttempts).
+		Return([]*outboxEntities.OutboxEvent{}, nil)
+	repo.EXPECT().
+		ResetForRetry(gomock.Any(), defaultMaxFailedPerBatch, gomock.Any(), dispatcher.maxDispatchAttempts).
+		DoAndReturn(func(callCtx context.Context, _ int, failedBefore time.Time, _ int) ([]*outboxEntities.OutboxEvent, error) {
+			tenantID, ok := auth.LookupTenantID(callCtx)
+			require.True(t, ok)
+			require.Equal(t, "tenant-123", tenantID)
+
+			expectedCutoff := time.Now().UTC().Add(-9 * time.Minute)
+			require.WithinDuration(t, expectedCutoff, failedBefore, 2*time.Second)
+
+			return []*outboxEntities.OutboxEvent{}, nil
+		})
+	repo.EXPECT().
+		ListPending(gomock.Any(), dispatcher.batchSize).
+		Return([]*outboxEntities.OutboxEvent{}, nil)
+
+	require.Equal(t, 0, dispatcher.DispatchOnce(ctx))
+}
+
 func TestDispatcherSetMaxDispatchAttempts(t *testing.T) {
 	t.Parallel()
 

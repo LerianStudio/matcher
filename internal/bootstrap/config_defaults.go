@@ -32,20 +32,27 @@ func defaultConfig() *Config {
 // computed from the same key definitions used at runtime.
 func defaultSnapshotFromKeyDefs(defs []domain.KeyDef) domain.Snapshot {
 	configs := make(map[string]domain.EffectiveValue, len(defs))
+	globalSettings := make(map[string]domain.EffectiveValue, len(defs))
 
 	for _, def := range defs {
-		// Include all keys regardless of Kind — snapshotToFullConfig reads
-		// from snap.Configs for all runtime-managed fields.
-		configs[def.Key] = domain.EffectiveValue{
+		value := domain.EffectiveValue{
 			Key:     def.Key,
 			Value:   def.DefaultValue,
 			Default: def.DefaultValue,
 			Source:  "registry-default",
 		}
+
+		switch def.Kind {
+		case domain.KindSetting:
+			globalSettings[def.Key] = value
+		default:
+			configs[def.Key] = value
+		}
 	}
 
 	return domain.Snapshot{
-		Configs: configs,
-		BuiltAt: time.Now().UTC(),
+		Configs:        configs,
+		GlobalSettings: globalSettings,
+		BuiltAt:        time.Now().UTC(),
 	}
 }

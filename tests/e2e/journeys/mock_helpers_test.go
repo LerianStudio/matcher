@@ -47,6 +47,39 @@ type systemplaneConfigResponse struct {
 	} `json:"values"`
 }
 
+type systemplaneSettingsResponse struct {
+	Revision int    `json:"revision"`
+	Scope    string `json:"scope"`
+	Values   map[string]struct {
+		Value  any    `json:"value"`
+		Source string `json:"source"`
+	} `json:"values"`
+}
+
+func doSystemplaneRequest(method, url string, body io.Reader, headers map[string]string) (*http.Response, []byte, error) {
+	req, err := http.NewRequest(method, url, body) //nolint:noctx // test helper
+	if err != nil {
+		return nil, nil, fmt.Errorf("create systemplane request: %w", err)
+	}
+
+	for key, value := range headers {
+		req.Header.Set(key, value)
+	}
+
+	resp, err := systemplaneHTTPClient.Do(req)
+	if err != nil {
+		return nil, nil, fmt.Errorf("execute systemplane request: %w", err)
+	}
+
+	bodyBytes, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		resp.Body.Close() //nolint:errcheck // test helper
+		return nil, nil, fmt.Errorf("read systemplane response body: %w", readErr)
+	}
+
+	return resp, bodyBytes, nil
+}
+
 func readSystemplaneConfig(appBaseURL string) (*systemplaneConfigResponse, error) {
 	resp, err := systemplaneHTTPClient.Get(appBaseURL + "/v1/system/configs") //nolint:noctx // test helper
 	if err != nil {
@@ -119,6 +152,75 @@ func patchSystemplaneConfigValues(appBaseURL string, values map[string]any) erro
 	if patchResp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(patchResp.Body)
 		return fmt.Errorf("patch systemplane returned %d: %s", patchResp.StatusCode, string(respBody))
+	}
+
+	return nil
+}
+
+func readSystemplaneSettings(appBaseURL, scope, userID string) (*systemplaneSettingsResponse, error) {
+	path := appBaseURL + "/v1/system/settings"
+	if scope == "global" {
+		path += "?scope=global"
+	}
+
+	headers := map[string]string{"Accept": "application/json"}
+	if userID != "" {
+		headers["X-User-ID"] = userID
+	}
+
+	resp, body, err := doSystemplaneRequest(http.MethodGet, path, nil, headers)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close() //nolint:errcheck // test helper
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("systemplane settings returned %d: %s", resp.StatusCode, string(body))
+	}
+
+	var current systemplaneSettingsResponse
+	if err := json.Unmarshal(body, &current); err != nil {
+		return nil, fmt.Errorf("parse systemplane settings: %w", err)
+	}
+
+	return &current, nil
+}
+
+func patchSystemplaneSettingValues(appBaseURL, scope string, values map[string]any, userID string) error {
+	current, err := readSystemplaneSettings(appBaseURL, scope, userID)
+	if err != nil {
+		return err
+	}
+
+	patch := map[string]any{"values": values}
+	patchBody, marshalErr := json.Marshal(patch)
+	if marshalErr != nil {
+		return fmt.Errorf("marshal systemplane settings patch: %w", marshalErr)
+	}
+
+	path := appBaseURL + "/v1/system/settings"
+	if scope == "global" {
+		path += "?scope=global"
+	}
+
+	headers := map[string]string{
+		"Accept":            "application/json",
+		"Content-Type":      "application/json",
+		"If-Match":          fmt.Sprintf("%d", current.Revision),
+		"X-Idempotency-Key": fmt.Sprintf("settings-%d", time.Now().UnixNano()),
+	}
+	if userID != "" {
+		headers["X-User-ID"] = userID
+	}
+
+	resp, body, err := doSystemplaneRequest(http.MethodPatch, path, bytes.NewReader(patchBody), headers)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close() //nolint:errcheck // test helper
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("patch systemplane settings returned %d: %s", resp.StatusCode, string(body))
 	}
 
 	return nil

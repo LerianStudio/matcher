@@ -33,7 +33,7 @@ func TestRegisterRoutes_NilTenantExtractor_ReturnsError(t *testing.T) {
 	cfg := &Config{App: AppConfig{EnvName: "test"}}
 	client := authMiddleware.NewAuthClient("", false, nil)
 
-	routes, err := RegisterRoutes(app, cfg, nil, nil, nil, &libLog.NopLogger{}, client, nil, nil, nil, nil)
+	routes, err := RegisterRoutes(app, cfg, nil, nil, nil, nil, &libLog.NopLogger{}, client, nil, nil, nil, nil)
 	require.Error(t, err)
 	require.Nil(t, routes)
 	require.ErrorContains(t, err, "tenant extractor is required")
@@ -53,7 +53,7 @@ func TestRegisterRoutes_NilApp_ReturnsError(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	routes, err := RegisterRoutes(nil, cfg, nil, nil, nil, &libLog.NopLogger{}, client, extractor, nil, nil, nil)
+	routes, err := RegisterRoutes(nil, cfg, nil, nil, nil, nil, &libLog.NopLogger{}, client, extractor, nil, nil, nil)
 	require.Error(t, err)
 	require.Nil(t, routes)
 	require.ErrorContains(t, err, "fiber app is required")
@@ -73,7 +73,7 @@ func TestRegisterRoutes_NilConfig_ReturnsError(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	routes, err := RegisterRoutes(app, nil, nil, nil, nil, &libLog.NopLogger{}, client, extractor, nil, nil, nil)
+	routes, err := RegisterRoutes(app, nil, nil, nil, nil, nil, &libLog.NopLogger{}, client, extractor, nil, nil, nil)
 	require.Error(t, err)
 	require.Nil(t, routes)
 	require.ErrorContains(t, err, "config is required")
@@ -107,6 +107,7 @@ func TestRegisterRoutes_Success(t *testing.T) {
 		routes, err := RegisterRoutes(
 			app,
 			cfg,
+			nil,
 			nil,
 			nil,
 			nil,
@@ -148,6 +149,7 @@ func TestRegisterRoutes_Success(t *testing.T) {
 			nil,
 			nil,
 			nil,
+			nil,
 			&libLog.NopLogger{},
 			client,
 			extractor,
@@ -183,6 +185,7 @@ func TestRegisterRoutes_Success(t *testing.T) {
 		routes, err := RegisterRoutes(
 			app,
 			cfg,
+			nil,
 			nil,
 			nil,
 			nil,
@@ -229,6 +232,7 @@ func TestRegisterRoutes_Success(t *testing.T) {
 				nil,
 				nil,
 				nil,
+				nil,
 				&libLog.NopLogger{},
 				client,
 				extractor,
@@ -262,6 +266,7 @@ func TestRegisterRoutes_Success(t *testing.T) {
 			_, err = RegisterRoutes(
 				app,
 				cfg,
+				nil,
 				nil,
 				nil,
 				nil,
@@ -309,6 +314,7 @@ func TestRegisterRoutes_Success(t *testing.T) {
 				nil,
 				nil,
 				nil,
+				nil,
 				&libLog.NopLogger{},
 				client,
 				extractor,
@@ -342,6 +348,7 @@ func TestRegisterRoutes_Success(t *testing.T) {
 			_, err = RegisterRoutes(
 				app,
 				cfg,
+				nil,
 				nil,
 				nil,
 				nil,
@@ -381,6 +388,7 @@ func TestRegisterRoutes_Success(t *testing.T) {
 				nil,
 				nil,
 				nil,
+				nil,
 				&libLog.NopLogger{},
 				client,
 				extractor,
@@ -412,7 +420,7 @@ func TestRegisterRoutes_Success(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		_, err = RegisterRoutes(app, cfg, nil, nil, nil, &libLog.NopLogger{}, client, extractor, nil, nil, nil)
+		_, err = RegisterRoutes(app, cfg, nil, nil, nil, nil, &libLog.NopLogger{}, client, extractor, nil, nil, nil)
 		require.NoError(t, err)
 
 		req := httptest.NewRequest(http.MethodGet, "/swagger/index.html", http.NoBody)
@@ -439,7 +447,7 @@ func TestRegisterRoutes_HealthEndpoints(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	_, err = RegisterRoutes(app, cfg, nil, nil, nil, &libLog.NopLogger{}, client, extractor, nil, nil, nil)
+	_, err = RegisterRoutes(app, cfg, nil, nil, nil, nil, &libLog.NopLogger{}, client, extractor, nil, nil, nil)
 	require.NoError(t, err)
 
 	t.Run("health endpoint is accessible", func(t *testing.T) {
@@ -491,6 +499,7 @@ func TestRoutesStruct(t *testing.T) {
 		routes, err := RegisterRoutes(
 			app,
 			cfg,
+			nil,
 			nil,
 			nil,
 			nil,
@@ -558,7 +567,7 @@ func TestRegisterRoutes_DynamicRateLimitToggle(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	routes, err := RegisterRoutes(app, cfg, configGetter, nil, nil, &libLog.NopLogger{}, client, extractor, rateLimiterGetter, nil, nil)
+	routes, err := RegisterRoutes(app, cfg, configGetter, nil, nil, nil, &libLog.NopLogger{}, client, extractor, rateLimiterGetter, nil, nil)
 	require.NoError(t, err)
 
 	router := routes.Protected("configuration", "read")

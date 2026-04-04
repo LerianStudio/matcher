@@ -218,6 +218,33 @@ func snapshotToFullConfig(snap domain.Snapshot, oldCfg *Config) *Config {
 		return cfg
 	}
 
+	// Step 2a: preserve any explicitly-set env overrides across snapshot reloads.
+	// This keeps env as the highest-precedence global override layer for both
+	// configs and global settings while still allowing tenant settings to diverge.
+	overlayExplicitEnvOverrides(cfg, oldCfg)
+
+	// Step 2b: preserve bootstrap-only fields from the running config.
+	overlayBootstrapOnlyConfigFields(cfg, oldCfg)
+
+	return cfg
+}
+
+func snapshotToPersistedConfig(snap domain.Snapshot, oldCfg *Config) *Config {
+	cfg := configFromSnapshot(snap)
+	overlayBootstrapOnlyConfigFields(cfg, oldCfg)
+
+	return cfg
+}
+
+// overlayBootstrapOnlyConfigFields preserves fields that are truly bootstrap-only
+// and therefore must remain sourced from the running process config. Runtime-
+// mutable config keys must not be copied from oldCfg here, otherwise snapshot
+// hydration stops being the source of truth for live runtime updates.
+func overlayBootstrapOnlyConfigFields(cfg, oldCfg *Config) {
+	if cfg == nil || oldCfg == nil {
+		return
+	}
+
 	cfg.App.EnvName = oldCfg.App.EnvName
 	cfg.Server.Address = oldCfg.Server.Address
 	cfg.Server.TLSCertFile = oldCfg.Server.TLSCertFile
@@ -228,10 +255,11 @@ func snapshotToFullConfig(snap domain.Snapshot, oldCfg *Config) *Config {
 	cfg.Tenancy.DefaultTenantID = oldCfg.Tenancy.DefaultTenantID
 	cfg.Tenancy.DefaultTenantSlug = oldCfg.Tenancy.DefaultTenantSlug
 	cfg.Postgres.MigrationsPath = oldCfg.Postgres.MigrationsPath
+	cfg.Infrastructure.ConnectTimeoutSec = oldCfg.Infrastructure.ConnectTimeoutSec
 	cfg.Telemetry = oldCfg.Telemetry
 	cfg.Idempotency.HMACSecret = oldCfg.Idempotency.HMACSecret
+	cfg.M2M.M2MTargetService = oldCfg.M2M.M2MTargetService
+	cfg.M2M.AWSRegion = oldCfg.M2M.AWSRegion
 	cfg.Logger = oldCfg.Logger
 	cfg.ShutdownGracePeriod = oldCfg.ShutdownGracePeriod
-
-	return cfg
 }

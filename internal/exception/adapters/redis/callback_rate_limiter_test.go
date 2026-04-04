@@ -222,6 +222,38 @@ func TestCallbackRateLimiter_NilProviderConstructor(t *testing.T) {
 	require.Nil(t, limiter)
 }
 
+func TestCallbackRateLimiter_CurrentLimit_PrefersResolver(t *testing.T) {
+	t.Parallel()
+
+	limiter := &CallbackRateLimiter{limit: 10}
+	limiter.SetRuntimeLimitResolver(func(context.Context) int { return 25 })
+
+	assert.Equal(t, 25, limiter.currentLimit(context.Background()))
+}
+
+func TestCallbackRateLimiter_AllowUsesRuntimeResolver(t *testing.T) {
+	t.Parallel()
+
+	conn, cleanup := setupRedis(t)
+	t.Cleanup(cleanup)
+
+	provider := &testutil.MockInfrastructureProvider{RedisConn: conn}
+	limiter := newTestRateLimiter(t, provider, 1, time.Minute)
+	limiter.SetRuntimeLimitResolver(func(context.Context) int { return 2 })
+
+	allowed, err := limiter.Allow(context.Background(), "test-system")
+	require.NoError(t, err)
+	require.True(t, allowed)
+
+	allowed, err = limiter.Allow(context.Background(), "test-system")
+	require.NoError(t, err)
+	require.True(t, allowed, "runtime resolver should raise the effective limit above the constructor default")
+
+	allowed, err = limiter.Allow(context.Background(), "test-system")
+	require.NoError(t, err)
+	require.False(t, allowed)
+}
+
 func TestCallbackRateLimiter_RedisConnectionError(t *testing.T) {
 	t.Parallel()
 

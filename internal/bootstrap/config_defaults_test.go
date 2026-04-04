@@ -344,11 +344,15 @@ func TestDefaultSnapshotFromKeyDefs_AllKeysPresent(t *testing.T) {
 	defs := matcherKeyDefs()
 	snap := defaultSnapshotFromKeyDefs(defs)
 
-	assert.Equal(t, len(defs), len(snap.Configs),
-		"snapshot should contain one config entry per key definition")
+	total := len(snap.Configs) + len(snap.GlobalSettings)
+	assert.Equal(t, len(defs), total,
+		"snapshot should contain one effective default entry per key definition")
 
 	for _, def := range defs {
 		ev, exists := snap.Configs[def.Key]
+		if !exists {
+			ev, exists = snap.GlobalSettings[def.Key]
+		}
 		require.True(t, exists, "snapshot missing key %q", def.Key)
 		assert.Equal(t, def.DefaultValue, ev.Default,
 			"key %q: Default should match KeyDef.DefaultValue", def.Key)
@@ -364,6 +368,11 @@ func TestDefaultSnapshotFromKeyDefs_SourceIsRegistryDefault(t *testing.T) {
 	snap := defaultSnapshotFromKeyDefs(defs)
 
 	for key, ev := range snap.Configs {
+		assert.Equal(t, "registry-default", ev.Source,
+			"key %q: Source should be 'registry-default', got %q", key, ev.Source)
+	}
+
+	for key, ev := range snap.GlobalSettings {
 		assert.Equal(t, "registry-default", ev.Source,
 			"key %q: Source should be 'registry-default', got %q", key, ev.Source)
 	}
@@ -402,8 +411,10 @@ func TestConfigFromSnapshot_PopulatedSnapshot(t *testing.T) {
 			"app.log_level":           {Key: "app.log_level", Value: "warn"},
 			"postgres.primary_host":   {Key: "postgres.primary_host", Value: "db.staging.example.com"},
 			"redis.host":              {Key: "redis.host", Value: "redis.staging:6380"},
-			"rate_limit.max":          {Key: "rate_limit.max", Value: 500},
 			"server.body_limit_bytes": {Key: "server.body_limit_bytes", Value: 2048},
+		},
+		GlobalSettings: map[string]domain.EffectiveValue{
+			"rate_limit.max": {Key: "rate_limit.max", Value: 500},
 		},
 	}
 

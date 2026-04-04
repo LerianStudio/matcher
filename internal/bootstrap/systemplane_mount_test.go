@@ -98,7 +98,7 @@ var _ service.Manager = (*mockManagerForMount)(nil)
 func TestMountSystemplaneAPI_NilApp(t *testing.T) {
 	t.Parallel()
 
-	err := MountSystemplaneAPI(nil, nil, nil, &mockManagerForMount{}, false, &libLog.NopLogger{})
+	err := MountSystemplaneAPI(nil, nil, nil, &mockManagerForMount{}, nil, nil, false, &libLog.NopLogger{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "app is required")
 }
@@ -109,9 +109,21 @@ func TestMountSystemplaneAPI_NilManager(t *testing.T) {
 	app := fiber.New()
 	defer func() { _ = app.Shutdown() }()
 
-	err := MountSystemplaneAPI(app, nil, nil, nil, false, &libLog.NopLogger{})
+	protected := func(_ string, _ ...string) fiber.Router { return app.Group("") }
+	err := MountSystemplaneAPI(app, nil, protected, nil, nil, nil, false, &libLog.NopLogger{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "manager is required")
+}
+
+func TestMountSystemplaneAPI_NilProtected(t *testing.T) {
+	t.Parallel()
+
+	app := fiber.New()
+	defer func() { _ = app.Shutdown() }()
+
+	err := MountSystemplaneAPI(app, nil, nil, &mockManagerForMount{}, nil, nil, false, &libLog.NopLogger{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "protected router is required")
 }
 
 func TestMountSystemplaneAPI_Success(t *testing.T) {
@@ -120,7 +132,8 @@ func TestMountSystemplaneAPI_Success(t *testing.T) {
 	app := fiber.New()
 	defer func() { _ = app.Shutdown() }()
 
-	err := MountSystemplaneAPI(app, nil, nil, &mockManagerForMount{}, false, &libLog.NopLogger{})
+	protected := func(_ string, _ ...string) fiber.Router { return app.Group("") }
+	err := MountSystemplaneAPI(app, nil, protected, &mockManagerForMount{}, nil, nil, false, &libLog.NopLogger{})
 	require.NoError(t, err)
 }
 
@@ -130,8 +143,10 @@ func TestMountSystemplaneAPI_NilLogger(t *testing.T) {
 	app := fiber.New()
 	defer func() { _ = app.Shutdown() }()
 
+	protected := func(_ string, _ ...string) fiber.Router { return app.Group("") }
+
 	// A nil logger should not cause a panic — the function guards it.
-	err := MountSystemplaneAPI(app, nil, nil, &mockManagerForMount{}, false, nil)
+	err := MountSystemplaneAPI(app, nil, protected, &mockManagerForMount{}, nil, nil, false, nil)
 	require.NoError(t, err)
 }
 
@@ -141,7 +156,8 @@ func TestMountSystemplaneAPI_RoutesRegistered(t *testing.T) {
 	app := fiber.New()
 	defer func() { _ = app.Shutdown() }()
 
-	err := MountSystemplaneAPI(app, nil, nil, &mockManagerForMount{}, false, &libLog.NopLogger{})
+	protected := func(_ string, _ ...string) fiber.Router { return app.Group("") }
+	err := MountSystemplaneAPI(app, nil, protected, &mockManagerForMount{}, nil, nil, false, &libLog.NopLogger{})
 	require.NoError(t, err)
 
 	// Build a set of registered routes from the Fiber app stack.
@@ -154,13 +170,13 @@ func TestMountSystemplaneAPI_RoutesRegistered(t *testing.T) {
 
 	// Verify the expected systemplane routes are present.
 	expectedRoutes := []string{
-		http.MethodGet + " /v1/system/configs/",
-		http.MethodPatch + " /v1/system/configs/",
+		http.MethodGet + " /v1/system/configs",
+		http.MethodPatch + " /v1/system/configs",
 		http.MethodGet + " /v1/system/configs/schema",
 		http.MethodGet + " /v1/system/configs/history",
 		http.MethodPost + " /v1/system/configs/reload",
-		http.MethodGet + " /v1/system/settings/",
-		http.MethodPatch + " /v1/system/settings/",
+		http.MethodGet + " /v1/system/settings",
+		http.MethodPatch + " /v1/system/settings",
 		http.MethodGet + " /v1/system/settings/schema",
 		http.MethodGet + " /v1/system/settings/history",
 	}
@@ -216,7 +232,7 @@ func TestMountSystemplaneAPI_ProtectedRoutesServeRequests(t *testing.T) {
 	}
 
 	protected := func(_ string, _ ...string) fiber.Router { return app.Group("") }
-	err := MountSystemplaneAPI(app, nil, protected, manager, false, &libLog.NopLogger{})
+	err := MountSystemplaneAPI(app, nil, protected, manager, nil, nil, false, &libLog.NopLogger{})
 	require.NoError(t, err)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/system/configs", http.NoBody)
@@ -232,13 +248,46 @@ func TestMountSystemplaneAPI_ProtectedRoutesServeRequests(t *testing.T) {
 	assert.Equal(t, float64(1), payload["revision"])
 }
 
+func TestMountSystemplaneAPI_IncompleteRuntimeManagerFallsBackToBaseHandler(t *testing.T) {
+	t.Parallel()
+
+	app := fiber.New()
+	defer func() { _ = app.Shutdown() }()
+
+	manager := &runtimeHandlerManagerStub{
+		getConfigs: func(_ context.Context) (service.ResolvedSet, error) {
+			return service.ResolvedSet{
+				Values: map[string]domain.EffectiveValue{
+					"app.log_level": {Key: "app.log_level", Value: "info", Source: "default"},
+				},
+				Revision: 1,
+			}, nil
+		},
+		// Intentionally nil runtime dependencies. If the custom runtime handler is
+		// mounted, these requests would panic when it tries to access them.
+		runtimeRegistry:   nil,
+		runtimeStore:      nil,
+		runtimeSupervisor: nil,
+	}
+
+	protected := func(_ string, _ ...string) fiber.Router { return app.Group("") }
+	err := MountSystemplaneAPI(app, nil, protected, manager, nil, nil, false, &libLog.NopLogger{})
+	require.NoError(t, err)
+
+	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/v1/system/configs", nil), -1)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
 func TestLegacyConfigRoutes_NotMounted(t *testing.T) {
 	t.Parallel()
 
 	app := fiber.New()
 	defer func() { _ = app.Shutdown() }()
 
-	err := MountSystemplaneAPI(app, nil, nil, &mockManagerForMount{}, false, &libLog.NopLogger{})
+	protected := func(_ string, _ ...string) fiber.Router { return app.Group("") }
+	err := MountSystemplaneAPI(app, nil, protected, &mockManagerForMount{}, nil, nil, false, &libLog.NopLogger{})
 	require.NoError(t, err)
 
 	for _, path := range []string{"/v1/configs", "/api/v1/configs", "/v1/config", "/api/v1/config"} {
@@ -271,7 +320,7 @@ func TestMountSystemplaneAPI_HistoryRoutesUseExpectedPermissions(t *testing.T) {
 		return app.Group("")
 	}
 
-	err := MountSystemplaneAPI(app, nil, protected, &mockManagerForMount{}, false, &libLog.NopLogger{})
+	err := MountSystemplaneAPI(app, nil, protected, &mockManagerForMount{}, nil, nil, false, &libLog.NopLogger{})
 	require.NoError(t, err)
 
 	assert.Contains(t, bindings, routeBinding{resource: auth.ResourceSystem, action: auth.ActionConfigHistoryRead})
@@ -286,7 +335,7 @@ func TestMountSystemplaneAPI_GlobalSettingsHistoryRequiresElevatedAuth(t *testin
 
 	authClient := authMiddleware.NewAuthClient("http://auth.example", true, nil)
 	protected := func(_ string, _ ...string) fiber.Router { return app.Group("") }
-	err := MountSystemplaneAPI(app, authClient, protected, &mockManagerForMount{}, true, &libLog.NopLogger{})
+	err := MountSystemplaneAPI(app, authClient, protected, &mockManagerForMount{}, nil, nil, true, &libLog.NopLogger{})
 	require.NoError(t, err)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/system/settings/history?scope=global", http.NoBody)

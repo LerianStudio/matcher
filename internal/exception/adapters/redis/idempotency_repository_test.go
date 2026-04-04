@@ -101,6 +101,63 @@ func TestNewIdempotencyRepositoryWithConfig_NilProvider(t *testing.T) {
 	require.Nil(t, repo)
 }
 
+func TestIdempotencyRepository_CurrentRuntimeConfig_PrefersResolvers(t *testing.T) {
+	t.Parallel()
+
+	repo := &IdempotencyRepository{
+		failedRetryWindow: time.Minute,
+		successTTL:        time.Hour,
+		hmacSecret:        "base-secret",
+	}
+	repo.SetRuntimeConfigResolvers(
+		func(context.Context) time.Duration { return 2 * time.Minute },
+		func(context.Context) time.Duration { return 2 * time.Hour },
+		func(context.Context) string { return "runtime-secret" },
+	)
+
+	ctx := context.Background()
+	require.Equal(t, 2*time.Minute, repo.currentFailedRetryWindow(ctx))
+	require.Equal(t, 2*time.Hour, repo.currentSuccessTTL(ctx))
+	require.Equal(t, "runtime-secret", repo.currentHMACSecret(ctx))
+}
+
+func TestIdempotencyRepository_RuntimeResolversAffectPublicBehavior(t *testing.T) {
+	t.Parallel()
+
+	conn, rawClient, cleanup := setupRedisWithClient(t)
+	t.Cleanup(cleanup)
+
+	provider := &testutil.MockInfrastructureProvider{RedisConn: conn}
+	repo := newTestIdempotencyRepoWithConfig(t, provider, time.Minute, time.Hour, "base-secret")
+	repo.SetRuntimeConfigResolvers(
+		func(context.Context) time.Duration { return 2 * time.Minute },
+		func(context.Context) time.Duration { return 2 * time.Hour },
+		func(context.Context) string { return "runtime-secret" },
+	)
+
+	ctx := context.WithValue(context.Background(), auth.TenantIDKey, "tenant-a")
+	key, err := value_objects.ParseIdempotencyKey("callback-" + uuid.New().String())
+	require.NoError(t, err)
+
+	acquired, err := repo.TryAcquire(ctx, key)
+	require.NoError(t, err)
+	require.True(t, acquired)
+
+	redisKey := repo.storageKey(ctx, key)
+	expectedKey := idempotencyKeyPrefix + "tenant-a:" + key.SignKey("runtime-secret")
+	require.Equal(t, expectedKey, redisKey)
+
+	pendingTTL, err := rawClient.TTL(ctx, redisKey).Result()
+	require.NoError(t, err)
+	require.Greater(t, pendingTTL, time.Minute)
+
+	require.NoError(t, repo.MarkComplete(ctx, key, []byte(`{"ok":true}`), 200))
+
+	completeTTL, err := rawClient.TTL(ctx, redisKey).Result()
+	require.NoError(t, err)
+	require.Greater(t, completeTTL, time.Hour)
+}
+
 func TestIdempotencyRepository_TryAcquireAndMarkComplete(t *testing.T) {
 	t.Parallel()
 

@@ -97,7 +97,22 @@ func (rlp *rateLimiterProvider) Get() *ratelimit.RateLimiter {
 // NewGlobalRateLimit creates a fiber.Handler for the global rate limiter tier.
 // The rlGetter is called at request time to obtain the current rate limiter,
 // allowing transparent Redis client swaps via systemplane bundle reloads.
-func NewGlobalRateLimit(rlGetter func() *ratelimit.RateLimiter, cfg *Config, configGetter func() *Config) fiber.Handler {
+func NewGlobalRateLimit(
+	rlGetter func() *ratelimit.RateLimiter,
+	cfg *Config,
+	configGetter func() *Config,
+	settingsResolver *runtimeSettingsResolver,
+) fiber.Handler {
+	if settingsResolver != nil {
+		return settingsBackedRateLimitHandler(rlGetter, cfg, configGetter, settingsResolver, func(currentCfg RateLimitConfig) ratelimit.Tier {
+			return ratelimit.Tier{
+				Name:   "global",
+				Max:    currentCfg.Max,
+				Window: time.Duration(safeExpiry(currentCfg.ExpirySec)) * time.Second,
+			}
+		})
+	}
+
 	if configGetter != nil {
 		return dynamicRateLimitHandler(rlGetter, configGetter, func(c *Config) ratelimit.Tier {
 			return ratelimit.Tier{
@@ -122,7 +137,22 @@ func NewGlobalRateLimit(rlGetter func() *ratelimit.RateLimiter, cfg *Config, con
 // NewExportRateLimit creates a fiber.Handler for the export rate limiter tier.
 // The rlGetter is called at request time to obtain the current rate limiter,
 // allowing transparent Redis client swaps via systemplane bundle reloads.
-func NewExportRateLimit(rlGetter func() *ratelimit.RateLimiter, cfg *Config, configGetter func() *Config) fiber.Handler {
+func NewExportRateLimit(
+	rlGetter func() *ratelimit.RateLimiter,
+	cfg *Config,
+	configGetter func() *Config,
+	settingsResolver *runtimeSettingsResolver,
+) fiber.Handler {
+	if settingsResolver != nil {
+		return settingsBackedRateLimitHandler(rlGetter, cfg, configGetter, settingsResolver, func(currentCfg RateLimitConfig) ratelimit.Tier {
+			return ratelimit.Tier{
+				Name:   "export",
+				Max:    currentCfg.ExportMax,
+				Window: time.Duration(safeExpiry(currentCfg.ExportExpirySec)) * time.Second,
+			}
+		})
+	}
+
 	if configGetter != nil {
 		return dynamicRateLimitHandler(rlGetter, configGetter, func(c *Config) ratelimit.Tier {
 			return ratelimit.Tier{
@@ -147,7 +177,22 @@ func NewExportRateLimit(rlGetter func() *ratelimit.RateLimiter, cfg *Config, con
 // NewDispatchRateLimit creates a fiber.Handler for the dispatch rate limiter tier.
 // The rlGetter is called at request time to obtain the current rate limiter,
 // allowing transparent Redis client swaps via systemplane bundle reloads.
-func NewDispatchRateLimit(rlGetter func() *ratelimit.RateLimiter, cfg *Config, configGetter func() *Config) fiber.Handler {
+func NewDispatchRateLimit(
+	rlGetter func() *ratelimit.RateLimiter,
+	cfg *Config,
+	configGetter func() *Config,
+	settingsResolver *runtimeSettingsResolver,
+) fiber.Handler {
+	if settingsResolver != nil {
+		return settingsBackedRateLimitHandler(rlGetter, cfg, configGetter, settingsResolver, func(currentCfg RateLimitConfig) ratelimit.Tier {
+			return ratelimit.Tier{
+				Name:   "dispatch",
+				Max:    currentCfg.DispatchMax,
+				Window: time.Duration(safeExpiry(currentCfg.DispatchExpirySec)) * time.Second,
+			}
+		})
+	}
+
 	if configGetter != nil {
 		return dynamicRateLimitHandler(rlGetter, configGetter, func(c *Config) ratelimit.Tier {
 			return ratelimit.Tier{
@@ -213,6 +258,48 @@ func dynamicRateLimitHandler(
 			return tier
 		})(fiberCtx)
 	}
+}
+
+func settingsBackedRateLimitHandler(
+	rlGetter func() *ratelimit.RateLimiter,
+	cfg *Config,
+	configGetter func() *Config,
+	settingsResolver *runtimeSettingsResolver,
+	tierBuilder func(RateLimitConfig) ratelimit.Tier,
+) fiber.Handler {
+	return func(fiberCtx *fiber.Ctx) error {
+		currentCfg := currentRateLimitConfig(cfg, configGetter)
+
+		currentCfg = settingsResolver.rateLimit(fiberCtx.UserContext(), currentCfg)
+		if !currentCfg.Enabled {
+			return fiberCtx.Next()
+		}
+
+		tier := tierBuilder(currentCfg)
+		if tier.Max <= 0 {
+			return fiberCtx.Next()
+		}
+
+		rl := resolveRL(rlGetter)
+
+		return rl.WithDynamicRateLimit(func(_ *fiber.Ctx) ratelimit.Tier {
+			return tier
+		})(fiberCtx)
+	}
+}
+
+func currentRateLimitConfig(cfg *Config, configGetter func() *Config) RateLimitConfig {
+	if configGetter != nil {
+		if runtimeCfg := configGetter(); runtimeCfg != nil {
+			return runtimeCfg.RateLimit
+		}
+	}
+
+	if cfg != nil {
+		return cfg.RateLimit
+	}
+
+	return RateLimitConfig{}
 }
 
 // safeExpiry clamps expiry seconds to a minimum of 1.

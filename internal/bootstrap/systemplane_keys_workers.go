@@ -11,11 +11,11 @@ func matcherKeyDefsWorkers() []domain.KeyDef {
 		// --- Webhook. ---
 		{
 			Key:              "webhook.timeout_sec",
-			Kind:             domain.KindConfig,
-			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+			Kind:             domain.KindSetting,
+			AllowedScopes:    settingScopes(),
 			DefaultValue:     defaultWebhookTimeout,
 			ValueType:        domain.ValueTypeInt,
-			Validator:        validatePositiveInt,
+			Validator:        validateWebhookTimeoutSeconds,
 			ApplyBehavior:    domain.ApplyLiveRead,
 			MutableAtRuntime: true,
 			Description:      "Default HTTP timeout for webhook dispatches in seconds",

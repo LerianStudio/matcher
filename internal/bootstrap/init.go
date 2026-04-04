@@ -40,6 +40,7 @@ import (
 	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
 	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/adapters/changefeed"
 	systemplaneDomain "github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
+	systemplanePorts "github.com/LerianStudio/lib-commons/v4/commons/systemplane/ports"
 	systemplaneService "github.com/LerianStudio/lib-commons/v4/commons/systemplane/service"
 	tmclient "github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/client"
 	tmmiddleware "github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/middleware"
@@ -438,7 +439,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 
 	done()
 
-	done = timer.track("config")
+	configDone := timer.track("config")
 
 	cfg, err := LoadConfigWithLogger(logger)
 	if err != nil {
@@ -454,12 +455,51 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		cfg = managedCfg
 	}
 
+	bundleState := newActiveMatcherBundleState()
+
+	var (
+		runtimeSettingsManager systemplaneService.Manager
+		modules                *modulesResult
+		wm                     = NewWorkerManager(logger, configManager)
+		spComponents           *SystemplaneComponents
+		cancelChangeFeed       context.CancelFunc
+	)
+
+	settingsResolver := newRuntimeSettingsResolver(func() systemplaneService.Manager {
+		return runtimeSettingsManager
+	}, logger)
+
+	runtimeReloadObserver := newRuntimeReloadObserver(
+		ctx,
+		logger,
+		settingsResolver,
+		bundleState,
+		configManager,
+		func() *modulesResult { return modules },
+		func() *WorkerManager { return wm },
+	)
+
+	systemplaneDone := timer.track("systemplane")
+
+	spComponents, err = InitSystemplane(ctx, cfg, configManager, wm, logger, runtimeReloadObserver)
+	if err != nil {
+		return nil, fmt.Errorf("systemplane initialization required: %w", err)
+	}
+
+	runtimeSettingsManager = spComponents.Manager
+
+	systemplaneDone()
+
+	if managedCfg := configManager.Get(); managedCfg != nil {
+		cfg = managedCfg
+	}
+
 	// Configure runtime for production mode (redacts sensitive data in error reports)
 	if IsProductionEnvironment(cfg.App.EnvName) {
 		runtime.SetProductionMode(true)
 	}
 
-	done()
+	configDone()
 
 	done = timer.track("telemetry")
 
@@ -483,8 +523,6 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 	infraCtx, infraCancel := context.WithTimeout(ctx, cfg.InfraConnectTimeout())
 	defer infraCancel()
 
-	bundleState := newActiveMatcherBundleState()
-
 	done = timer.track("redis_connect")
 
 	// Redis v2 New() connects immediately. Reuse the global infra startup context
@@ -498,6 +536,23 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 
 	// Cleanup accumulator: collects cleanup functions to run on failure
 	var cleanups []func()
+
+	cleanups = append(cleanups, func() {
+		if bundle := bundleState.Current(); bundle != nil {
+			_ = bundle.Close(detachedContext(ctx))
+		}
+	})
+	if spComponents != nil {
+		cleanups = append(cleanups, func() {
+			if cancelChangeFeed != nil {
+				cancelChangeFeed()
+			}
+
+			if spComponents.Backend != nil {
+				_ = spComponents.Backend.Close()
+			}
+		})
+	}
 
 	var infraConnectionManager connectionCloser
 
@@ -575,7 +630,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 
 	connCloser := connectionManager
 
-	idempotencyRepo := createIdempotencyRepository(cfg, configManager.Get, infraProvider, logger)
+	idempotencyRepo := createIdempotencyRepository(cfg, configManager.Get, settingsResolver, infraProvider, logger)
 
 	// Pass configManager.Get as the dynamic config getter when available.
 	// This enables hot-reload of rate limits without service restart.
@@ -585,6 +640,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		app,
 		cfg,
 		routeConfigGetter,
+		settingsResolver,
 		readiness,
 		healthDeps,
 		logger,
@@ -605,11 +661,12 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 	// Build a configGetter for dynamic rate limiters if ConfigManager is available.
 	moduleConfigGetter := configGetterFuncFromManager(configManager)
 
-	modules, err := initModulesAndMessaging(
+	modules, err = initModulesAndMessaging(
 		ctx,
 		routes,
 		cfg,
 		moduleConfigGetter,
+		settingsResolver,
 		infraProvider,
 		bundleState,
 		rabbitMQConnection,
@@ -620,7 +677,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		return nil, err
 	}
 
-	archivalWorker, archivalErr := initArchivalComponents(routes, cfg, configManager.Get, infraProvider, logger, &cleanups)
+	archivalWorker, archivalErr := initArchivalComponents(routes, cfg, configManager.Get, settingsResolver, infraProvider, logger, &cleanups)
 	if archivalErr != nil {
 		if cfg.Archival.Enabled {
 			return nil, fmt.Errorf("init archival components: %w", archivalErr)
@@ -664,61 +721,19 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 
 	done()
 
-	// Build WorkerManager before systemplane — the worker reconciler needs it.
-	wm := buildWorkerManager(modules, configManager, logger)
+	// WorkerManager is created after modules, but systemplane is already active.
+	// Runtime worker updates are applied from the reload observer once the
+	// manager exists.
+	done = timer.track("systemplane_runtime")
 
-	done = timer.track("systemplane")
-
-	// Initialize systemplane — the centralized runtime configuration plane.
-	// Systemplane is a hard startup dependency: it owns the runtime configuration
-	// registry, snapshot builder, and change-feed subscriber. Without it, the
-	// service cannot serve consistent configuration to consumers.
-	var cancelChangeFeed context.CancelFunc
-
-	reloadLogCtx := detachedContext(ctx)
-
-	runtimeReloadObserver := func(event systemplaneService.ReloadEvent) {
-		bundle, bundleOK := event.Bundle.(*MatcherBundle)
-		if bundleOK {
-			bundleState.Update(bundle)
-		}
-
-		if configManager != nil {
-			//nolint:contextcheck // ConfigManager runtime bridge does not expose a context-aware variant.
-			if updateErr := updateConfigManagerFromSnapshot(configManager, event.Snapshot); updateErr != nil {
-				logger.Log(reloadLogCtx, libLog.LevelWarn, "systemplane config bridge apply failed",
-					libLog.String("error", updateErr.Error()),
-					libLog.String("reason", event.Reason))
-			}
-		}
-
-		var runtimeCfg *Config
-		if configManager != nil {
-			runtimeCfg = configManager.Get()
-		}
-
-		if err := syncRuntimeLogger(reloadLogCtx, logger, runtimeCfg, bundle); err != nil {
-			logger.Log(reloadLogCtx, libLog.LevelWarn, "systemplane logger sync failed",
-				libLog.String("error", err.Error()),
-				libLog.String("reason", event.Reason))
-		}
-
-		if canSwapRuntimePublishers(bundleOK, modules) {
-			swapRuntimePublishers(reloadLogCtx, logger, modules, bundle)
-		}
-	}
-
-	spComponents, spErr := InitSystemplane(ctx, cfg, configManager, wm, logger, runtimeReloadObserver)
-	if spErr != nil {
-		return nil, fmt.Errorf("systemplane initialization required: %w", spErr)
-	}
+	wm = buildWorkerManager(modules, wm, configManager, logger)
 
 	// Start change feed subscriber that triggers supervisor reloads on store changes.
 	// Wrap the raw feed with trailing-edge debounce to coalesce rapid signals
 	// (e.g., bulk config writes) into fewer supervisor reloads.
 	debouncedFeed := changefeed.NewDebouncedFeed(spComponents.ChangeFeed, changefeed.WithWindow(changeFeedDebounceWindow))
 
-	cancelChangeFeed, err = startChangeFeed(ctx, debouncedFeed, spComponents.Supervisor, logger, spComponents.Manager.ApplyChangeSignal)
+	cancelChangeFeed, err = startChangeFeed(ctx, debouncedFeed, spComponents.Supervisor, logger, runtimeSettingsAwareApplyChangeSignal(spComponents.Manager, settingsResolver))
 	if err != nil {
 		logger.Log(ctx, libLog.LevelWarn, "systemplane change feed start failed",
 			libLog.String("error", err.Error()))
@@ -728,7 +743,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 	// Pass routes.Protected so systemplane routes go through the same auth
 	// middleware chain (JWT validation, tenant extraction, permission check)
 	// as all other Matcher API routes.
-	if mountErr := MountSystemplaneAPI(app, authClient, routes.Protected, spComponents.Manager, cfg.Auth.Enabled, logger); mountErr != nil {
+	if mountErr := MountSystemplaneAPI(app, authClient, routes.Protected, spComponents.Manager, configManager.Get, settingsResolver, cfg.Auth.Enabled, logger); mountErr != nil {
 		logger.Log(ctx, libLog.LevelWarn, "systemplane API mount failed",
 			libLog.String("error", mountErr.Error()))
 	}
@@ -808,12 +823,15 @@ func registerCriticalWorkers(wm *WorkerManager, modules *modulesResult) {
 // init-time module results. Each worker is wrapped in a factory closure that
 // returns the pre-built instance. The factory's cfg parameter is available for
 // future hot-reload support where workers can be reconstructed from new config.
-func buildWorkerManager(modules *modulesResult, configManager *ConfigManager, logger libLog.Logger) *WorkerManager {
-	if modules == nil {
-		return nil
+func buildWorkerManager(modules *modulesResult, existing *WorkerManager, configManager *ConfigManager, logger libLog.Logger) *WorkerManager {
+	wm := existing
+	if wm == nil {
+		wm = NewWorkerManager(logger, configManager)
 	}
 
-	wm := NewWorkerManager(logger, configManager)
+	if modules == nil {
+		return wm
+	}
 
 	registerCriticalWorkers(wm, modules)
 
@@ -1698,8 +1716,92 @@ func initializeAuthBoundaryLogger() (libLog.Logger, error) {
 	return authLogger, nil
 }
 
-func canSwapRuntimePublishers(bundleOK bool, modules *modulesResult) bool {
-	return bundleOK && modules != nil && modules.ingestionEvents != nil && modules.matchingEvents != nil
+func newRuntimeReloadObserver(
+	ctx context.Context,
+	logger libLog.Logger,
+	settingsResolver *runtimeSettingsResolver,
+	bundleState *activeMatcherBundleState,
+	configManager *ConfigManager,
+	modulesProvider func() *modulesResult,
+	workerManagerProvider func() *WorkerManager,
+) func(systemplaneService.ReloadEvent) {
+	reloadLogCtx := detachedContext(ctx)
+
+	return func(event systemplaneService.ReloadEvent) {
+		if settingsResolver != nil {
+			settingsResolver.invalidateAll()
+		}
+
+		bundle, bundleOK := event.Bundle.(*MatcherBundle)
+		if bundleOK && bundle != nil {
+			bundleState.Update(bundle)
+		}
+
+		if configManager != nil {
+			//nolint:contextcheck // ConfigManager runtime bridge does not expose a context-aware variant.
+			if updateErr := updateConfigManagerFromSnapshot(configManager, event.Snapshot); updateErr != nil {
+				logger.Log(reloadLogCtx, libLog.LevelWarn, "systemplane config bridge apply failed",
+					libLog.String("error", updateErr.Error()),
+					libLog.String("reason", event.Reason))
+			}
+		}
+
+		var runtimeCfg *Config
+		if configManager != nil {
+			runtimeCfg = configManager.Get()
+		}
+
+		if err := syncRuntimeLogger(reloadLogCtx, logger, runtimeCfg, bundle); err != nil {
+			logger.Log(reloadLogCtx, libLog.LevelWarn, "systemplane logger sync failed",
+				libLog.String("error", err.Error()),
+				libLog.String("reason", event.Reason))
+		}
+
+		wm := workerManagerProvider()
+		if wm != nil {
+			//nolint:contextcheck // worker manager apply path is currently context-free by design.
+			if applyErr := wm.ApplyConfig(snapshotToWorkerConfig(event.Snapshot)); applyErr != nil {
+				logger.Log(reloadLogCtx, libLog.LevelWarn, "systemplane worker apply failed",
+					libLog.String("error", applyErr.Error()),
+					libLog.String("reason", event.Reason))
+			}
+		}
+
+		modules := modulesProvider()
+		if canSwapRuntimePublishers(bundle, modules) {
+			swapRuntimePublishers(reloadLogCtx, logger, modules, bundle)
+		}
+	}
+}
+
+func runtimeSettingsAwareApplyChangeSignal(
+	manager systemplaneService.Manager,
+	settingsResolver *runtimeSettingsResolver,
+) func(context.Context, systemplanePorts.ChangeSignal) error {
+	if manager == nil {
+		return nil
+	}
+
+	return func(ctx context.Context, signal systemplanePorts.ChangeSignal) error {
+		if err := manager.ApplyChangeSignal(ctx, signal); err != nil {
+			return fmt.Errorf("apply runtime change signal: %w", err)
+		}
+
+		if settingsResolver == nil || signal.Target.Kind != systemplaneDomain.KindSetting {
+			return nil
+		}
+
+		settingsResolver.invalidateSubject(systemplaneService.Subject{
+			Scope:     signal.Target.Scope,
+			SubjectID: signal.Target.SubjectID,
+		})
+
+		return nil
+	}
+}
+
+func canSwapRuntimePublishers(bundle *MatcherBundle, modules *modulesResult) bool {
+	return bundle != nil && modules != nil && modules.ingestionEvents != nil && modules.matchingEvents != nil
 }
 
 func cleanupPreviousRuntimePublisher[PublisherType any](
@@ -1758,12 +1860,108 @@ func schedulerInterval(cfg *Config) time.Duration {
 	return cfg.SchedulerInterval()
 }
 
-func webhookTimeout(cfg *Config) time.Duration {
-	return cfg.WebhookTimeout()
+func runtimeConfigOrFallback(cfg *Config, configGetter func() *Config) *Config {
+	if configGetter != nil {
+		if runtimeCfg := configGetter(); runtimeCfg != nil {
+			return runtimeCfg
+		}
+	}
+
+	return cfg
 }
 
-func exportPresignExpiry(cfg *Config) time.Duration {
-	return cfg.ExportPresignExpiry()
+func resolveRuntimeDurationSetting(
+	ctx context.Context,
+	cfg *Config,
+	configGetter func() *Config,
+	settingsResolver *runtimeSettingsResolver,
+	fallbackFn func(*Config) time.Duration,
+	resolverFn func(context.Context, time.Duration) time.Duration,
+) time.Duration {
+	runtimeCfg := runtimeConfigOrFallback(cfg, configGetter)
+
+	fallback := fallbackFn(cfg)
+	if runtimeCfg != nil {
+		fallback = fallbackFn(runtimeCfg)
+	}
+
+	if settingsResolver == nil {
+		return fallback
+	}
+
+	return resolverFn(ctx, fallback)
+}
+
+func resolveRuntimeIntSetting(
+	ctx context.Context,
+	cfg *Config,
+	configGetter func() *Config,
+	settingsResolver *runtimeSettingsResolver,
+	fallbackFn func(*Config) int,
+	resolverFn func(context.Context, int) int,
+) int {
+	runtimeCfg := runtimeConfigOrFallback(cfg, configGetter)
+
+	fallback := fallbackFn(cfg)
+	if runtimeCfg != nil {
+		fallback = fallbackFn(runtimeCfg)
+	}
+
+	if settingsResolver == nil {
+		return fallback
+	}
+
+	return resolverFn(ctx, fallback)
+}
+
+func resolveIdempotencyRetryWindow(ctx context.Context, cfg *Config, configGetter func() *Config, settingsResolver *runtimeSettingsResolver) time.Duration {
+	return resolveRuntimeDurationSetting(ctx, cfg, configGetter, settingsResolver,
+		func(current *Config) time.Duration { return current.IdempotencyRetryWindow() },
+		settingsResolver.idempotencyRetryWindow,
+	)
+}
+
+func resolveIdempotencySuccessTTL(ctx context.Context, cfg *Config, configGetter func() *Config, settingsResolver *runtimeSettingsResolver) time.Duration {
+	return resolveRuntimeDurationSetting(ctx, cfg, configGetter, settingsResolver,
+		func(current *Config) time.Duration { return current.IdempotencySuccessTTL() },
+		settingsResolver.idempotencySuccessTTL,
+	)
+}
+
+func resolveCallbackRateLimit(ctx context.Context, cfg *Config, configGetter func() *Config, settingsResolver *runtimeSettingsResolver) int {
+	return resolveRuntimeIntSetting(ctx, cfg, configGetter, settingsResolver,
+		func(current *Config) int { return current.CallbackRateLimitPerMinute() },
+		settingsResolver.callbackRateLimitPerMinute,
+	)
+}
+
+func resolveWebhookTimeout(ctx context.Context, cfg *Config, configGetter func() *Config, settingsResolver *runtimeSettingsResolver) time.Duration {
+	return resolveRuntimeDurationSetting(ctx, cfg, configGetter, settingsResolver,
+		func(current *Config) time.Duration { return configuredWebhookTimeout(ctx, current) },
+		settingsResolver.webhookTimeout,
+	)
+}
+
+func resolveDedupeTTL(ctx context.Context, cfg *Config, configGetter func() *Config, settingsResolver *runtimeSettingsResolver) time.Duration {
+	return resolveRuntimeDurationSetting(ctx, cfg, configGetter, settingsResolver,
+		func(current *Config) time.Duration { return current.DedupeTTL() },
+		settingsResolver.dedupeTTL,
+	)
+}
+
+func resolveExportPresignExpiry(ctx context.Context, cfg *Config, configGetter func() *Config, settingsResolver *runtimeSettingsResolver) time.Duration {
+	return resolveRuntimeDurationSetting(ctx, cfg, configGetter, settingsResolver,
+		func(current *Config) time.Duration { return configuredExportPresignExpiry(ctx, current) },
+		settingsResolver.exportPresignExpiry,
+	)
+}
+
+func configuredWebhookTimeout(ctx context.Context, cfg *Config) time.Duration {
+	return normalizedWebhookTimeout(ctx, cfg)
+}
+
+func configuredExportPresignExpiry(ctx context.Context, cfg *Config) time.Duration {
+	return normalizedExportPresignExpiry(ctx, cfg)
 }
 
 func evaluateInsecureRabbitMQHealthCheckPolicy(cfg *Config) (bool, string) {
@@ -2115,6 +2313,7 @@ func initModulesAndMessaging(
 	routes *Routes,
 	cfg *Config,
 	configGetter func() *Config,
+	settingsResolver *runtimeSettingsResolver,
 	provider sharedPorts.InfrastructureProvider,
 	bundleState *activeMatcherBundleState,
 	rabbitMQConnection *libRabbitmq.RabbitMQConnection,
@@ -2166,7 +2365,7 @@ func initModulesAndMessaging(
 		return nil, err
 	}
 
-	if err := initIngestionModule(cfg, configGetter, routes, provider, sharedOutboxRepository, runtimeIngestionPublisher, matchingUseCase, sharedRepos, isProduction); err != nil {
+	if err := initIngestionModule(cfg, configGetter, settingsResolver, routes, provider, sharedOutboxRepository, runtimeIngestionPublisher, matchingUseCase, sharedRepos, isProduction); err != nil {
 		return nil, err
 	}
 
@@ -2197,6 +2396,7 @@ func initModulesAndMessaging(
 		routes,
 		cfg,
 		configGetter,
+		settingsResolver,
 		provider,
 		storage,
 		rateLimiterGetter,
@@ -2212,10 +2412,10 @@ func initModulesAndMessaging(
 		return nil, err
 	}
 
-	dispatchLimiter := NewDispatchRateLimit(rateLimiterGetter, cfg, configGetter)
+	//nolint:contextcheck // dispatch limiter resolves request-scoped settings through Fiber user context.
+	dispatchLimiter := NewDispatchRateLimit(rateLimiterGetter, cfg, configGetter, settingsResolver)
 
-	//nolint:contextcheck // Exception config accessors are not context-aware.
-	if err := initExceptionModule(cfg, configGetter, routes, provider, sharedOutboxRepository, dispatchLimiter, sharedRepos, isProduction); err != nil {
+	if err := initExceptionModule(ctx, cfg, configGetter, settingsResolver, routes, provider, sharedOutboxRepository, dispatchLimiter, sharedRepos, isProduction); err != nil {
 		return nil, err
 	}
 
@@ -2258,14 +2458,9 @@ func initModulesAndMessaging(
 
 	outboxDispatcher.SetRetryWindow(cfg.IdempotencyRetryWindow())
 
-	if configGetter != nil {
-		outboxDispatcher.SetRetryWindowGetter(func() time.Duration {
-			runtimeCfg := configGetter()
-			if runtimeCfg == nil {
-				return cfg.IdempotencyRetryWindow()
-			}
-
-			return runtimeCfg.IdempotencyRetryWindow()
+	if configGetter != nil || settingsResolver != nil {
+		outboxDispatcher.SetRetryWindowResolver(func(ctx context.Context) time.Duration {
+			return resolveIdempotencyRetryWindow(ctx, cfg, configGetter, settingsResolver)
 		})
 	}
 
@@ -2518,6 +2713,7 @@ func createSchedulerWorker(
 func createIdempotencyRepository(
 	cfg *Config,
 	configGetter func() *Config,
+	settingsResolver *runtimeSettingsResolver,
 	provider sharedPorts.InfrastructureProvider,
 	logger libLog.Logger,
 ) sharedPorts.IdempotencyRepository {
@@ -2542,23 +2738,13 @@ func createIdempotencyRepository(
 		return nil
 	}
 
-	if configGetter != nil {
-		exceptionIdempotencyRepo.SetRuntimeConfigGetters(
-			func() time.Duration {
-				runtimeCfg := configGetter()
-				if runtimeCfg == nil {
-					return cfg.IdempotencyRetryWindow()
-				}
-
-				return runtimeCfg.IdempotencyRetryWindow()
+	if configGetter != nil || settingsResolver != nil {
+		exceptionIdempotencyRepo.SetRuntimeConfigResolvers(
+			func(ctx context.Context) time.Duration {
+				return resolveIdempotencyRetryWindow(ctx, cfg, configGetter, settingsResolver)
 			},
-			func() time.Duration {
-				runtimeCfg := configGetter()
-				if runtimeCfg == nil {
-					return cfg.IdempotencySuccessTTL()
-				}
-
-				return runtimeCfg.IdempotencySuccessTTL()
+			func(ctx context.Context) time.Duration {
+				return resolveIdempotencySuccessTTL(ctx, cfg, configGetter, settingsResolver)
 			},
 			nil,
 		)
@@ -2666,6 +2852,7 @@ func initConfigurationModule(
 func initIngestionModule(
 	cfg *Config,
 	configGetter func() *Config,
+	settingsResolver *runtimeSettingsResolver,
 	routes *Routes,
 	provider sharedPorts.InfrastructureProvider,
 	outboxRepository sharedPorts.OutboxRepository,
@@ -2715,6 +2902,9 @@ func initIngestionModule(
 		TransactionRepo: repos.ingestionTx,
 		Dedupe:          dedupeService,
 		DedupeTTL:       cfg.DedupeTTL(),
+		DedupeTTLResolver: func(ctx context.Context) time.Duration {
+			return resolveDedupeTTL(ctx, cfg, configGetter, settingsResolver)
+		},
 		DedupeTTLGetter: func() time.Duration {
 			runtimeCfg := configGetter()
 			if runtimeCfg == nil {
@@ -2852,6 +3042,7 @@ func initReportingModule(
 	routes *Routes,
 	cfg *Config,
 	configGetter func() *Config,
+	settingsResolver *runtimeSettingsResolver,
 	provider sharedPorts.InfrastructureProvider,
 	storage sharedPorts.ObjectStorageClient,
 	rateLimiterGetter func() *ratelimit.RateLimiter,
@@ -2886,7 +3077,7 @@ func initReportingModule(
 		return nil, nil, fmt.Errorf("create reporting handler: %w", err)
 	}
 
-	exportLimiter := NewExportRateLimit(rateLimiterGetter, cfg, configGetter)
+	exportLimiter := NewExportRateLimit(rateLimiterGetter, cfg, configGetter, settingsResolver)
 
 	if err := reportingHTTP.RegisterRoutes(routes.Protected, reportingHandler, exportLimiter); err != nil {
 		return nil, nil, fmt.Errorf("register reporting routes: %w", err)
@@ -2896,6 +3087,7 @@ func initReportingModule(
 		routes,
 		cfg,
 		configGetter,
+		settingsResolver,
 		exportJobRepository,
 		reportRepository,
 		storage,
@@ -2909,6 +3101,7 @@ func initExportWorkers(
 	routes *Routes,
 	cfg *Config,
 	configGetter func() *Config,
+	settingsResolver *runtimeSettingsResolver,
 	exportJobRepository *reportExportJob.Repository,
 	reportRepository *reportRepo.Repository,
 	storage sharedPorts.ObjectStorageClient,
@@ -2931,7 +3124,7 @@ func initExportWorkers(
 		exportJobQuerySvc,
 		storage,
 		contextAdapter,
-		exportPresignExpiry(cfg),
+		configuredExportPresignExpiry(context.Background(), cfg),
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("create export job handler: %w", err)
@@ -2939,23 +3132,18 @@ func initExportWorkers(
 
 	exportJobHandler.SetRuntimeEnabled(cfg.ExportWorker.Enabled)
 
-	if configGetter != nil {
-		exportJobHandler.SetRuntimeConfigGetter(func() reportingHTTP.ExportJobRuntimeConfig {
-			runtimeCfg := configGetter()
-			if runtimeCfg == nil {
-				enabled := cfg.ExportWorker.Enabled
+	if configGetter != nil || settingsResolver != nil {
+		exportJobHandler.SetRuntimeConfigResolver(func(ctx context.Context) reportingHTTP.ExportJobRuntimeConfig {
+			runtimeCfg := runtimeConfigOrFallback(cfg, configGetter)
 
-				return reportingHTTP.ExportJobRuntimeConfig{
-					Enabled:       &enabled,
-					PresignExpiry: exportPresignExpiry(cfg),
-				}
+			enabled := cfg.ExportWorker.Enabled
+			if runtimeCfg != nil {
+				enabled = runtimeCfg.ExportWorker.Enabled
 			}
-
-			enabled := runtimeCfg.ExportWorker.Enabled
 
 			return reportingHTTP.ExportJobRuntimeConfig{
 				Enabled:       &enabled,
-				PresignExpiry: exportPresignExpiry(runtimeCfg),
+				PresignExpiry: resolveExportPresignExpiry(ctx, cfg, configGetter, settingsResolver),
 			}
 		})
 	}
@@ -3035,8 +3223,10 @@ func initGovernanceModule(routes *Routes, repos *sharedRepositories, provider sh
 }
 
 func initExceptionModule(
+	ctx context.Context,
 	cfg *Config,
 	configGetter func() *Config,
+	settingsResolver *runtimeSettingsResolver,
 	routes *Routes,
 	provider sharedPorts.InfrastructureProvider,
 	outboxRepository sharedPorts.OutboxRepository,
@@ -3055,8 +3245,10 @@ func initExceptionModule(
 	}
 
 	useCases, err := initExceptionUseCases(
+		ctx,
 		cfg,
 		configGetter,
+		settingsResolver,
 		provider,
 		exceptionRepository,
 		disputeRepository,
@@ -3068,7 +3260,7 @@ func initExceptionModule(
 		return err
 	}
 
-	callbackUseCase, err := initExceptionCallbackUseCase(cfg, configGetter, provider, exceptionRepository, deps)
+	callbackUseCase, err := initExceptionCallbackUseCase(cfg, configGetter, settingsResolver, provider, exceptionRepository, deps)
 	if err != nil {
 		return err
 	}
@@ -3156,8 +3348,10 @@ func initExceptionDependencies(
 
 // initExceptionUseCases creates the core exception use cases (exception, dispute, query, dispatch, comment).
 func initExceptionUseCases(
+	ctx context.Context,
 	cfg *Config,
 	configGetter func() *Config,
+	settingsResolver *runtimeSettingsResolver,
 	provider sharedPorts.InfrastructureProvider,
 	exceptionRepository *exceptionExceptionRepo.Repository,
 	disputeRepository *exceptionDisputeRepo.Repository,
@@ -3197,7 +3391,7 @@ func initExceptionUseCases(
 		return nil, fmt.Errorf("create exception query use case: %w", err)
 	}
 
-	webhookDispatchTimeout := webhookTimeout(cfg)
+	webhookDispatchTimeout := configuredWebhookTimeout(ctx, cfg)
 
 	httpConnector, err := exceptionConnectors.NewHTTPConnector(
 		exceptionConnectors.ConnectorConfig{
@@ -3212,14 +3406,9 @@ func initExceptionUseCases(
 		return nil, fmt.Errorf("create http connector: %w", err)
 	}
 
-	if configGetter != nil {
-		httpConnector.SetWebhookTimeoutGetter(func() time.Duration {
-			runtimeCfg := configGetter()
-			if runtimeCfg == nil {
-				return webhookTimeout(cfg)
-			}
-
-			return webhookTimeout(runtimeCfg)
+	if configGetter != nil || settingsResolver != nil {
+		httpConnector.SetWebhookTimeoutResolver(func(ctx context.Context) time.Duration {
+			return resolveWebhookTimeout(ctx, cfg, configGetter, settingsResolver)
 		})
 	}
 
@@ -3262,6 +3451,7 @@ func initExceptionUseCases(
 func initExceptionCallbackUseCase(
 	cfg *Config,
 	configGetter func() *Config,
+	settingsResolver *runtimeSettingsResolver,
 	provider sharedPorts.InfrastructureProvider,
 	exceptionRepository *exceptionExceptionRepo.Repository,
 	deps *exceptionModuleDeps,
@@ -3275,14 +3465,9 @@ func initExceptionCallbackUseCase(
 		return nil, fmt.Errorf("create callback rate limiter: %w", err)
 	}
 
-	if configGetter != nil {
-		callbackRateLimiter.SetRuntimeLimitGetter(func() int {
-			runtimeCfg := configGetter()
-			if runtimeCfg == nil {
-				return cfg.CallbackRateLimitPerMinute()
-			}
-
-			return runtimeCfg.CallbackRateLimitPerMinute()
+	if configGetter != nil || settingsResolver != nil {
+		callbackRateLimiter.SetRuntimeLimitResolver(func(ctx context.Context) int {
+			return resolveCallbackRateLimit(ctx, cfg, configGetter, settingsResolver)
 		})
 	}
 
@@ -3296,23 +3481,13 @@ func initExceptionCallbackUseCase(
 		return nil, fmt.Errorf("create callback idempotency repository: %w", err)
 	}
 
-	if configGetter != nil {
-		callbackIdempotencyRepo.SetRuntimeConfigGetters(
-			func() time.Duration {
-				runtimeCfg := configGetter()
-				if runtimeCfg == nil {
-					return cfg.IdempotencyRetryWindow()
-				}
-
-				return runtimeCfg.IdempotencyRetryWindow()
+	if configGetter != nil || settingsResolver != nil {
+		callbackIdempotencyRepo.SetRuntimeConfigResolvers(
+			func(ctx context.Context) time.Duration {
+				return resolveIdempotencyRetryWindow(ctx, cfg, configGetter, settingsResolver)
 			},
-			func() time.Duration {
-				runtimeCfg := configGetter()
-				if runtimeCfg == nil {
-					return cfg.IdempotencySuccessTTL()
-				}
-
-				return runtimeCfg.IdempotencySuccessTTL()
+			func(ctx context.Context) time.Duration {
+				return resolveIdempotencySuccessTTL(ctx, cfg, configGetter, settingsResolver)
 			},
 			nil,
 		)

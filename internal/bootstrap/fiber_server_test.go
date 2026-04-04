@@ -382,7 +382,7 @@ func TestRateLimiterMiddleware(t *testing.T) {
 
 	rl := NewLibRateLimiter(nil, &libLog.NopLogger{})
 	rlGetter := func() *ratelimit.RateLimiter { return rl }
-	rateLimiterHandler := NewGlobalRateLimit(rlGetter, cfg, nil)
+	rateLimiterHandler := NewGlobalRateLimit(rlGetter, cfg, nil, nil)
 
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.SendStatus(http.StatusOK)
@@ -765,7 +765,7 @@ func TestExportRateLimiter(t *testing.T) {
 			},
 		}
 
-		handler := NewExportRateLimit(nil, cfg, nil)
+		handler := NewExportRateLimit(nil, cfg, nil, nil)
 
 		require.NotNil(t, handler)
 
@@ -801,7 +801,7 @@ func TestExportRateLimiter(t *testing.T) {
 
 		rl := NewLibRateLimiter(nil, &libLog.NopLogger{})
 		rlGetter := func() *ratelimit.RateLimiter { return rl }
-		handler := NewExportRateLimit(rlGetter, cfg, nil)
+		handler := NewExportRateLimit(rlGetter, cfg, nil, nil)
 
 		require.NotNil(t, handler)
 
@@ -1226,7 +1226,7 @@ func TestNewRateLimiterReturnsHandler(t *testing.T) {
 			},
 		}
 
-		handler := NewGlobalRateLimit(nil, cfg, nil)
+		handler := NewGlobalRateLimit(nil, cfg, nil, nil)
 
 		require.NotNil(t, handler)
 	})
@@ -1244,7 +1244,7 @@ func TestNewRateLimiterReturnsHandler(t *testing.T) {
 
 		rl := NewLibRateLimiter(nil, &libLog.NopLogger{})
 		rlGetter := func() *ratelimit.RateLimiter { return rl }
-		handler := NewGlobalRateLimit(rlGetter, cfg, nil)
+		handler := NewGlobalRateLimit(rlGetter, cfg, nil, nil)
 
 		require.NotNil(t, handler)
 	})
