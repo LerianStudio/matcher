@@ -167,6 +167,7 @@ help:
 	@echo ""
 	@echo "Code Generation Commands:"
 	@echo "  make generate                    - Run code generation (mocks, etc.)"
+	@echo "  make generate-casdoor           - Generate Casdoor RBAC seed data"
 	@echo "  make generate-docs               - Generate Swagger documentation"
 	@echo ""
 	@echo ""
@@ -411,6 +412,9 @@ cover:
 
 ci:
 	$(call print_title,Running local CI verification pipeline)
+	@$(MAKE) generate
+	@$(MAKE) generate-docs
+	@$(MAKE) generate-casdoor
 	@$(MAKE) lint
 	@$(MAKE) test
 	@$(MAKE) test-int
@@ -488,12 +492,17 @@ docker-build:
 # Code Generation Commands
 #-------------------------------------------------------
 
-.PHONY: generate generate-docs
+.PHONY: generate generate-casdoor generate-docs
 
 generate:
 	$(call print_title,Running code generation)
 	@go generate ./...
 	@echo "[ok] Code generation completed"
+
+generate-casdoor:
+	$(call print_title,Generating Casdoor seed data)
+	@go run ./cmd/generate-casdoor --output config/casdoor/init_data.json
+	@echo "[ok] Casdoor seed data generated at config/casdoor/init_data.json"
 
 generate-docs:
 	$(call print_title,Generating Swagger documentation)
