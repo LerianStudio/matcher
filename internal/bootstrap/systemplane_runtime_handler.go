@@ -271,6 +271,9 @@ func (handler *matcherSystemplaneHandler) applyConfigPatch(
 		return matcherSystemplanePatchResult{}, fmt.Errorf("classify config ops: %w", err)
 	}
 
+	appliedRuntime := len(runtimeOps) > 0
+	pendingRestart := len(restartOps) > 0
+
 	if err := handler.validateConfigPatch(ctx, ops); err != nil {
 		return matcherSystemplanePatchResult{}, fmt.Errorf("validate config patch: %w", err)
 	}
@@ -285,33 +288,37 @@ func (handler *matcherSystemplaneHandler) applyConfigPatch(
 		return matcherSystemplanePatchResult{}, fmt.Errorf("patch configs put: %w", err)
 	}
 
-	if len(runtimeOps) > 0 {
-		behavior, _, err := spservice.Escalate(handler.runtime.registry(), runtimeOps)
-		if err != nil {
-			return matcherSystemplanePatchResult{}, fmt.Errorf("escalate config ops: %w", err)
-		}
-
-		if err := handler.manager.ApplyChangeSignal(ctx, spports.ChangeSignal{
-			Target:        target,
-			Revision:      newRevision,
-			ApplyBehavior: behavior,
-		}); err != nil {
-			if rollbackErr := handler.rollbackConfigPatch(ctx, target, newRevision, actor, resolved.Values, ops); rollbackErr != nil {
-				return matcherSystemplanePatchResult{}, fmt.Errorf("apply config change signal: %w (rollback failed: %w)", err, rollbackErr)
-			}
-
-			return matcherSystemplanePatchResult{}, fmt.Errorf("apply config change signal: %w", err)
-		}
-	}
-
-	return matcherSystemplanePatchResult{
+	result := matcherSystemplanePatchResult{
 		Revision:           newRevision,
-		AppliedRuntime:     len(runtimeOps) > 0,
-		PendingRestart:     len(restartOps) > 0,
+		AppliedRuntime:     appliedRuntime,
+		PendingRestart:     pendingRestart,
 		AppliedKeys:        matcherSystemplaneOpKeys(runtimeOps),
 		PendingRestartKeys: matcherSystemplaneOpKeys(restartOps),
 		MaskedByEnvKeys:    maskedKeys,
-	}, nil
+	}
+
+	if !appliedRuntime {
+		return result, nil
+	}
+
+	behavior, _, err := spservice.Escalate(handler.runtime.registry(), runtimeOps)
+	if err != nil {
+		return matcherSystemplanePatchResult{}, fmt.Errorf("escalate config ops: %w", err)
+	}
+
+	if err := handler.manager.ApplyChangeSignal(ctx, spports.ChangeSignal{
+		Target:        target,
+		Revision:      newRevision,
+		ApplyBehavior: behavior,
+	}); err != nil {
+		if rollbackErr := handler.rollbackConfigPatch(ctx, target, newRevision, actor, resolved.Values, ops); rollbackErr != nil {
+			return matcherSystemplanePatchResult{}, fmt.Errorf("apply config change signal: %w (rollback failed: %w)", err, rollbackErr)
+		}
+
+		return matcherSystemplanePatchResult{}, fmt.Errorf("apply config change signal: %w", err)
+	}
+
+	return result, nil
 }
 
 func (handler *matcherSystemplaneHandler) rollbackConfigPatch(
@@ -342,7 +349,7 @@ func rollbackConfigOps(previous map[string]spdomain.EffectiveValue, ops []spport
 	rollbackOps := make([]spports.WriteOp, 0, len(ops))
 	for _, op := range ops {
 		effective, ok := previous[op.Key]
-		if !ok || effective.Source == "default" || effective.Source == "registry-default" {
+		if !ok || effective.Source == defaultTenantSlug || effective.Source == "registry-default" {
 			rollbackOps = append(rollbackOps, spports.WriteOp{Key: op.Key, Reset: true})
 			continue
 		}
