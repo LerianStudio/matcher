@@ -1,3 +1,10 @@
+## [1.3.0-beta.9](https://github.com/LerianStudio/matcher/compare/v1.3.0-beta.8...v1.3.0-beta.9) (2026-04-04)
+
+
+### Bug Fixes
+
+* **bootstrap:** flatten config patch apply flow ([af6e886](https://github.com/LerianStudio/matcher/commit/af6e88684d14e211d632b048245fb9bc55d84c05))
+
 ## [1.3.0-beta.8](https://github.com/LerianStudio/matcher/compare/v1.3.0-beta.7...v1.3.0-beta.8) (2026-04-04)
 
 
