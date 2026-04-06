@@ -6,7 +6,7 @@ require (
 	codeberg.org/go-pdf/fpdf v0.11.1
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/LerianStudio/lib-auth/v2 v2.6.0
-	github.com/LerianStudio/lib-commons/v4 v4.6.0-beta.7
+	github.com/LerianStudio/lib-commons/v4 v4.6.0
 	github.com/Masterminds/squirrel v1.5.4
 	github.com/Shopify/toxiproxy/v2 v2.12.0
 	github.com/alicebob/miniredis/v2 v2.37.0
