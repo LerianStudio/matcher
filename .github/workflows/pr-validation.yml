@@ -45,6 +45,7 @@ jobs:
         scripts
         configs
         deps
+        workflows
         configuration
         ingestion
         matching
