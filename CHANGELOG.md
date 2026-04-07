@@ -1,3 +1,10 @@
+## [1.3.0-beta.11](https://github.com/LerianStudio/matcher/compare/v1.3.0-beta.10...v1.3.0-beta.11) (2026-04-07)
+
+
+### Bug Fixes
+
+* **ci:** remove deprecated pr-validation parameters ([180e8bf](https://github.com/LerianStudio/matcher/commit/180e8bf3feabf75b2dced721e0eb49929e2fceea))
+
 ## [1.3.0-beta.10](https://github.com/LerianStudio/matcher/compare/v1.3.0-beta.9...v1.3.0-beta.10) (2026-04-04)
 
 ## [1.3.0-beta.9](https://github.com/LerianStudio/matcher/compare/v1.3.0-beta.8...v1.3.0-beta.9) (2026-04-04)
