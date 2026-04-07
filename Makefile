@@ -598,4 +598,3 @@ migrate-create:
 	@echo "  1. Edit the .up.sql file with your changes"
 	@echo "  2. Edit the .down.sql file with the rollback"
 	@echo "  3. Run 'make migrate-up' to apply"
-
