@@ -1,3 +1,10 @@
+## [1.3.0-beta.12](https://github.com/LerianStudio/matcher/compare/v1.3.0-beta.11...v1.3.0-beta.12) (2026-04-08)
+
+
+### Features
+
+* **bootstrap:** add migration preflight guards ([59b43b2](https://github.com/LerianStudio/matcher/commit/59b43b297e3cabfcbba0efc34fe5d3c9fdd0e0dc))
+
 ## [1.3.0-beta.11](https://github.com/LerianStudio/matcher/compare/v1.3.0-beta.10...v1.3.0-beta.11) (2026-04-07)
 
 
