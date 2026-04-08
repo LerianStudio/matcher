@@ -8,10 +8,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 
-	"github.com/LerianStudio/lib-commons/v4/commons/pointers"
-
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
+	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
 
 // ContextPostgreSQLModel represents the database model for reconciliation contexts.
@@ -22,7 +21,6 @@ type ContextPostgreSQLModel struct {
 	Type              string
 	Interval          string
 	Status            string
-	RateID            *string
 	FeeToleranceAbs   string
 	FeeTolerancePct   string
 	FeeNormalization  *string
@@ -58,12 +56,6 @@ func NewContextPostgreSQLModel(
 		updatedAt = createdAt
 	}
 
-	var rateID *string
-
-	if entity.RateID != nil {
-		rateID = pointers.String(entity.RateID.String())
-	}
-
 	return &ContextPostgreSQLModel{
 		ID:                id.String(),
 		TenantID:          entity.TenantID.String(),
@@ -71,7 +63,6 @@ func NewContextPostgreSQLModel(
 		Type:              entity.Type.String(),
 		Interval:          entity.Interval,
 		Status:            entity.Status.String(),
-		RateID:            rateID,
 		FeeToleranceAbs:   entity.FeeToleranceAbs.String(),
 		FeeTolerancePct:   entity.FeeTolerancePct.String(),
 		FeeNormalization:  entity.FeeNormalization,
@@ -107,17 +98,6 @@ func (model *ContextPostgreSQLModel) ToEntity() (*entities.ReconciliationContext
 		return nil, fmt.Errorf("parsing Status '%s': %w", model.Status, err)
 	}
 
-	var rateID *uuid.UUID
-
-	if model.RateID != nil && *model.RateID != "" {
-		parsed, err := uuid.Parse(*model.RateID)
-		if err != nil {
-			return nil, fmt.Errorf("parsing RateID '%s': %w", *model.RateID, err)
-		}
-
-		rateID = &parsed
-	}
-
 	feeToleranceAbs, err := parseDecimalField(model.FeeToleranceAbs, "FeeToleranceAbs")
 	if err != nil {
 		return nil, err
@@ -128,6 +108,13 @@ func (model *ContextPostgreSQLModel) ToEntity() (*entities.ReconciliationContext
 		return nil, err
 	}
 
+	if model.FeeNormalization != nil && *model.FeeNormalization != "" {
+		mode := sharedfee.NormalizationMode(*model.FeeNormalization)
+		if !mode.IsValid() {
+			return nil, fmt.Errorf("parsing FeeNormalization %q: %w", *model.FeeNormalization, entities.ErrFeeNormalizationInvalid)
+		}
+	}
+
 	return &entities.ReconciliationContext{
 		ID:                id,
 		TenantID:          tenantID,
@@ -135,7 +122,6 @@ func (model *ContextPostgreSQLModel) ToEntity() (*entities.ReconciliationContext
 		Type:              contextType,
 		Interval:          model.Interval,
 		Status:            contextStatus,
-		RateID:            rateID,
 		FeeToleranceAbs:   feeToleranceAbs,
 		FeeTolerancePct:   feeTolerancePct,
 		FeeNormalization:  model.FeeNormalization,

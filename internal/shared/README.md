@@ -7,8 +7,8 @@ The `internal/shared` bounded context contains domain objects, value objects, an
 This context includes:
 1. **Common Domain Entities**: `Transaction`, `MatchRule`, and `FieldMap` are canonical data structures used by Ingestion, Matching, and Reporting.
 2. **Cross-Context Adapters**: Bridge adapters that connect bounded contexts without creating direct dependencies.
-3. **Fee Calculation Engine**: Full fee calculation subsystem with calculator, verifier, normalization, and schedule/rate models.
-4. **Infrastructure Adapters**: Database connection managers, common SQL utilities, outbox repository, RabbitMQ publisher, idempotency middleware.
+3. **Fee Calculation Engine**: Full fee calculation subsystem with schedule calculation, verifier, normalization, and fee schedule/rule/structure models.
+4. **Infrastructure Adapters**: Tenant-aware infrastructure ports, common SQL utilities, outbox repository, RabbitMQ publisher, idempotency middleware, and M2M helpers.
 5. **Constants and Utilities**: System-wide constants and text utilities.
 
 ## Architecture
@@ -26,7 +26,7 @@ internal/shared/
 ├── domain/
 │   ├── events.go        # Shared event types
 │   ├── exception/       # Shared exception severity definitions
-│   ├── fee/             # Fee calculation engine (calculator, verifier, normalization, schedule)
+│   ├── fee/             # Fee calculation engine (schedule calculator, verifier, normalization, fee schedule/rule/structure)
 │   ├── field_map.go     # Canonical FieldMap definition
 │   ├── match_rule.go    # Canonical MatchRule definition
 │   └── transaction.go   # Canonical Transaction entity
@@ -66,10 +66,10 @@ Bridge adapters that connect bounded contexts without creating direct dependenci
 ### Fee Calculation Engine
 
 Full fee calculation subsystem shared across contexts:
-- **Calculator**: Computes expected fees from rate schedules.
+- **Calculator**: Computes expected fees from fee schedules.
 - **Verifier**: Compares expected vs. actual fees and reports variances.
 - **Normalization**: Net-to-gross conversion and money handling.
-- **Schedule/Rate Models**: Fee schedule and rate definitions.
+- **Schedule/Rule Models**: Fee schedule, fee rule, and fee structure definitions.
 
 ### RabbitMQ Adapters
 

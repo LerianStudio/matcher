@@ -51,6 +51,14 @@ func (uc *UseCase) ensureLockFresh(
 }
 
 func (uc *UseCase) validateRunMatchDependencies() error {
+	if err := uc.validateCoreRunMatchDependencies(); err != nil {
+		return err
+	}
+
+	return uc.validateFeeRunMatchDependencies()
+}
+
+func (uc *UseCase) validateCoreRunMatchDependencies() error {
 	if uc.contextProvider == nil {
 		return ErrNilContextRepository
 	}
@@ -89,6 +97,22 @@ func (uc *UseCase) validateRunMatchDependencies() error {
 
 	if uc.outboxRepoTx == nil {
 		return ErrOutboxRepoNotConfigured
+	}
+
+	return nil
+}
+
+func (uc *UseCase) validateFeeRunMatchDependencies() error {
+	if uc.feeVarianceRepo == nil {
+		return ErrNilFeeVarianceRepository
+	}
+
+	if uc.feeRuleProvider == nil {
+		return ErrNilFeeRuleProvider
+	}
+
+	if uc.feeScheduleRepo == nil {
+		return ErrNilFeeScheduleRepository
 	}
 
 	return nil

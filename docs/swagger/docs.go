@@ -5650,7 +5650,7 @@ const docTemplate = `{
                         }
                     },
                     "409": {
-                        "description": "Conflict: fee schedule is still referenced by fee rules",
+                        "description": "Conflict: fee schedule is still in use",
                         "schema": {
                             "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_shared_adapters_http.ErrorResponse"
                         }
@@ -9978,11 +9978,6 @@ const docTemplate = `{
                     "minLength": 1,
                     "example": "Bank Reconciliation Q1"
                 },
-                "rateId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "example": "550e8400-e29b-41d4-a716-446655440000"
-                },
                 "rules": {
                     "type": "array",
                     "maxItems": 50,
@@ -10622,11 +10617,6 @@ const docTemplate = `{
                     "type": "string",
                     "example": "Bank Reconciliation Q1"
                 },
-                "rateId": {
-                    "description": "Optional rate ID for FX conversions",
-                    "type": "string",
-                    "example": "550e8400-e29b-41d4-a716-446655440000"
-                },
                 "status": {
                     "description": "Current status of the context",
                     "type": "string",
@@ -10918,11 +10908,6 @@ const docTemplate = `{
                     "type": "string",
                     "maxLength": 100,
                     "example": "Bank Reconciliation Q2"
-                },
-                "rateId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "example": "550e8400-e29b-41d4-a716-446655440000"
                 },
                 "status": {
                     "type": "string",
@@ -13362,7 +13347,11 @@ const docTemplate = `{
                     "type": "string",
                     "example": "USD"
                 },
-                "fee_type": {
+                "fee_schedule_id": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440001"
+                },
+                "fee_schedule_name": {
                     "type": "string",
                     "example": "INTERCHANGE"
                 },

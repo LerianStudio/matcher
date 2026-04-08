@@ -545,12 +545,6 @@ func (r *runMatchOutboxRepo) MarkInvalid(_ context.Context, _ uuid.UUID, _ strin
 	return nil
 }
 
-type runMatchRateRepo struct{}
-
-func (r *runMatchRateRepo) GetByID(_ context.Context, _ uuid.UUID) (*matchingFee.Rate, error) {
-	return nil, nil
-}
-
 type runMatchFeeVarianceRepo struct{}
 
 func (r *runMatchFeeVarianceRepo) CreateBatchWithTx(
@@ -797,7 +791,6 @@ func newRunMatchUseCase(
 	itemRepo := &runMatchItemRepo{}
 	exceptionCreator := &runMatchExceptionCreator{}
 	outboxRepo := &runMatchOutboxRepo{}
-	rateRepo := &runMatchRateRepo{}
 	feeVarianceRepo := &runMatchFeeVarianceRepo{}
 	adjustmentRepo := &runMatchAdjustmentRepo{}
 	infraProvider := &runMatchInfraProvider{}
@@ -816,7 +809,6 @@ func newRunMatchUseCase(
 		MatchItemRepo:    itemRepo,
 		ExceptionCreator: exceptionCreator,
 		OutboxRepo:       outboxRepo,
-		RateRepo:         rateRepo,
 		FeeVarianceRepo:  feeVarianceRepo,
 		AdjustmentRepo:   adjustmentRepo,
 		InfraProvider:    infraProvider,

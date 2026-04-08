@@ -180,6 +180,11 @@ func (uc *UseCase) RunMatch(
 		ctxInfo:        mrc.ctxInfo,
 		txByID:         execResult.allTxByID,
 		sourceTypeByID: mrc.sourceTypeByID,
+		leftSourceIDs:  mrc.leftSourceIDs,
+		rightSourceIDs: mrc.rightSourceIDs,
+		leftRules:      mrc.leftRules,
+		rightRules:     mrc.rightRules,
+		allSchedules:   mrc.allSchedules,
 	}
 
 	updatedRun, commitErr := uc.commitMatchResults(
@@ -244,23 +249,6 @@ func (uc *UseCase) prepareMatchRun(
 		feeNorm = fee.NormalizationMode(*ctxInfo.FeeNormalization)
 	}
 
-	var (
-		leftRules    []*fee.FeeRule
-		rightRules   []*fee.FeeRule
-		allSchedules map[uuid.UUID]*fee.FeeSchedule
-	)
-
-	if feeNorm != fee.NormalizationModeNone {
-		leftRules, rightRules, allSchedules, err = uc.loadFeeRulesAndSchedules(ctx, in.ContextID)
-		if err != nil {
-			return nil, err
-		}
-
-		if len(leftRules) == 0 && len(rightRules) == 0 {
-			return nil, ErrFeeRulesRequiredForNormalization
-		}
-	}
-
 	leftCandidates, rightCandidates, unmatchedIDs, externalTxByID, err := uc.loadAndClassifyCandidates(
 		ctx,
 		span,
@@ -268,6 +256,17 @@ func (uc *UseCase) prepareMatchRun(
 		in,
 		leftSourceIDs,
 		rightSourceIDs,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	leftRules, rightRules, allSchedules, err := uc.prepareFeeVerificationInputs(
+		ctx,
+		in.ContextID,
+		feeNorm,
+		leftCandidates,
+		rightCandidates,
 	)
 	if err != nil {
 		return nil, err
@@ -309,6 +308,29 @@ func (uc *UseCase) prepareMatchRun(
 		rightRules:      rightRules,
 		allSchedules:    allSchedules,
 	}, nil
+}
+
+func (uc *UseCase) prepareFeeVerificationInputs(
+	ctx context.Context,
+	contextID uuid.UUID,
+	feeNorm fee.NormalizationMode,
+	leftCandidates []*shared.Transaction,
+	rightCandidates []*shared.Transaction,
+) ([]*fee.FeeRule, []*fee.FeeRule, map[uuid.UUID]*fee.FeeSchedule, error) {
+	leftRules, rightRules, allSchedules, err := uc.loadFeeRulesAndSchedules(ctx, contextID)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	if feeNorm != fee.NormalizationModeNone && len(leftRules) == 0 && len(rightRules) == 0 {
+		return nil, nil, nil, ErrFeeRulesRequiredForNormalization
+	}
+
+	if len(leftCandidates) == 0 || len(rightCandidates) == 0 {
+		return leftRules, rightRules, allSchedules, nil
+	}
+
+	return leftRules, rightRules, allSchedules, nil
 }
 
 func (uc *UseCase) validateAndEnrichTenant(

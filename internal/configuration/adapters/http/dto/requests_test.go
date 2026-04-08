@@ -3,13 +3,13 @@
 package dto
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/go-playground/validator/v10"
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -24,7 +24,6 @@ func TestCreateContextRequest_ToDomainInput(t *testing.T) {
 	t.Run("all fields populated", func(t *testing.T) {
 		t.Parallel()
 
-		rateID := uuid.MustParse("550e8400-e29b-41d4-a716-446655440000").String()
 		abs := "0.01"
 		pct := "0.5"
 		norm := "NET"
@@ -34,7 +33,6 @@ func TestCreateContextRequest_ToDomainInput(t *testing.T) {
 			Name:              "Bank Reconciliation Q1",
 			Type:              "1:1",
 			Interval:          "daily",
-			RateID:            &rateID,
 			FeeToleranceAbs:   &abs,
 			FeeTolerancePct:   &pct,
 			FeeNormalization:  &norm,
@@ -42,13 +40,11 @@ func TestCreateContextRequest_ToDomainInput(t *testing.T) {
 		}
 
 		input, err := req.ToDomainInput()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		assert.Equal(t, "Bank Reconciliation Q1", input.Name)
 		assert.Equal(t, value_objects.ContextType("1:1"), input.Type)
 		assert.Equal(t, "daily", input.Interval)
-		assert.NotNil(t, input.RateID)
-		assert.Equal(t, rateID, input.RateID.String())
 		assert.Equal(t, &abs, input.FeeToleranceAbs)
 		assert.Equal(t, &pct, input.FeeTolerancePct)
 		assert.Equal(t, &norm, input.FeeNormalization)
@@ -65,29 +61,12 @@ func TestCreateContextRequest_ToDomainInput(t *testing.T) {
 		}
 
 		input, err := req.ToDomainInput()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		assert.Equal(t, "Minimal", input.Name)
 		assert.Equal(t, value_objects.ContextType("N:M"), input.Type)
-		assert.Nil(t, input.RateID)
 		assert.Nil(t, input.FeeToleranceAbs)
 		assert.Nil(t, input.AutoMatchOnUpload)
-	})
-
-	t.Run("invalid uuid in rateId returns error", func(t *testing.T) {
-		t.Parallel()
-
-		invalid := "not-a-uuid"
-		req := CreateContextRequest{
-			Name:     "Test",
-			Type:     "1:1",
-			Interval: "daily",
-			RateID:   &invalid,
-		}
-
-		_, err := req.ToDomainInput()
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid rateId")
 	})
 
 	t.Run("with nested sources and rules", func(t *testing.T) {
@@ -142,6 +121,54 @@ func TestCreateContextRequest_ToDomainInput(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "rule.config exceeds maximum size")
 	})
+}
+
+func TestCreateContextRequest_UnmarshalJSON_RejectsDeprecatedRateID(t *testing.T) {
+	t.Parallel()
+
+	raw := []byte(`{"name":"Context","type":"1:1","interval":"daily","rateId":"550e8400-e29b-41d4-a716-446655440000"}`)
+	var req CreateContextRequest
+	err := json.Unmarshal(raw, &req)
+	require.ErrorIs(t, err, ErrDeprecatedRateID)
+}
+
+func TestCreateContextRequest_UnmarshalJSON_RejectsDeprecatedRateIDPresenceVariants(t *testing.T) {
+	t.Parallel()
+
+	for _, raw := range [][]byte{
+		[]byte(`{"name":"Context","type":"1:1","interval":"daily","rateId":null}`),
+		[]byte(`{"name":"Context","type":"1:1","interval":"daily","rateId":{"legacy":true}}`),
+	} {
+		var req CreateContextRequest
+		err := json.Unmarshal(raw, &req)
+		require.ErrorIs(t, err, ErrDeprecatedRateID)
+	}
+}
+
+func TestCreateContextRequest_UnmarshalJSON_ValidPayload(t *testing.T) {
+	t.Parallel()
+
+	raw := []byte(`{
+		"name":"Context",
+		"type":"1:1",
+		"interval":"daily",
+		"feeToleranceAbs":"0.01",
+		"feeNormalization":"NET",
+		"autoMatchOnUpload":true
+	}`)
+
+	var req CreateContextRequest
+	err := json.Unmarshal(raw, &req)
+	require.NoError(t, err)
+	require.Equal(t, "Context", req.Name)
+	require.Equal(t, "1:1", req.Type)
+	require.Equal(t, "daily", req.Interval)
+	require.NotNil(t, req.FeeToleranceAbs)
+	require.Equal(t, "0.01", *req.FeeToleranceAbs)
+	require.NotNil(t, req.FeeNormalization)
+	require.Equal(t, "NET", *req.FeeNormalization)
+	require.NotNil(t, req.AutoMatchOnUpload)
+	assert.True(t, *req.AutoMatchOnUpload)
 }
 
 func TestCreateContextSourceRequest_ToDomainInput(t *testing.T) {
@@ -240,7 +267,7 @@ func TestCreateContextRequest_Validation_SourcesAndRulesBoundary(t *testing.T) {
 		}
 
 		err := v.Struct(req)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("11 sources fails validation", func(t *testing.T) {
@@ -288,7 +315,7 @@ func TestCreateContextRequest_Validation_SourcesAndRulesBoundary(t *testing.T) {
 		}
 
 		err := v.Struct(req)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("51 rules fails validation", func(t *testing.T) {
@@ -327,25 +354,22 @@ func TestUpdateContextRequest_ToDomainInput(t *testing.T) {
 		typ := "1:N"
 		interval := "weekly"
 		status := "PAUSED"
-		rateID := uuid.MustParse("660e8400-e29b-41d4-a716-446655440000").String()
 
 		req := UpdateContextRequest{
 			Name:     &name,
 			Type:     &typ,
 			Interval: &interval,
 			Status:   &status,
-			RateID:   &rateID,
 		}
 
 		input, err := req.ToDomainInput()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		assert.Equal(t, &name, input.Name)
 		assert.NotNil(t, input.Type)
 		assert.Equal(t, value_objects.ContextType("1:N"), *input.Type)
 		assert.NotNil(t, input.Status)
 		assert.Equal(t, value_objects.ContextStatus("PAUSED"), *input.Status)
-		assert.NotNil(t, input.RateID)
 	})
 
 	t.Run("nil fields stay nil", func(t *testing.T) {
@@ -353,12 +377,11 @@ func TestUpdateContextRequest_ToDomainInput(t *testing.T) {
 
 		req := UpdateContextRequest{}
 		input, err := req.ToDomainInput()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		assert.Nil(t, input.Name)
 		assert.Nil(t, input.Type)
 		assert.Nil(t, input.Status)
-		assert.Nil(t, input.RateID)
 	})
 
 	t.Run("status ACTIVE converts correctly", func(t *testing.T) {
@@ -367,7 +390,7 @@ func TestUpdateContextRequest_ToDomainInput(t *testing.T) {
 		status := "ACTIVE"
 		req := UpdateContextRequest{Status: &status}
 		input, err := req.ToDomainInput()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotNil(t, input.Status)
 		assert.Equal(t, value_objects.ContextStatus("ACTIVE"), *input.Status)
 	})
@@ -378,20 +401,55 @@ func TestUpdateContextRequest_ToDomainInput(t *testing.T) {
 		status := "ARCHIVED"
 		req := UpdateContextRequest{Status: &status}
 		input, err := req.ToDomainInput()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotNil(t, input.Status)
 		assert.Equal(t, value_objects.ContextStatus("ARCHIVED"), *input.Status)
 	})
+}
 
-	t.Run("invalid uuid in rateId returns error", func(t *testing.T) {
-		t.Parallel()
+func TestUpdateContextRequest_UnmarshalJSON_RejectsDeprecatedRateID(t *testing.T) {
+	t.Parallel()
 
-		invalid := "not-a-uuid"
-		req := UpdateContextRequest{RateID: &invalid}
-		_, err := req.ToDomainInput()
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid rateId")
-	})
+	raw := []byte(`{"status":"ACTIVE","rateId":"550e8400-e29b-41d4-a716-446655440000"}`)
+	var req UpdateContextRequest
+	err := json.Unmarshal(raw, &req)
+	require.ErrorIs(t, err, ErrDeprecatedRateID)
+}
+
+func TestUpdateContextRequest_UnmarshalJSON_RejectsDeprecatedRateIDPresenceVariants(t *testing.T) {
+	t.Parallel()
+
+	for _, raw := range [][]byte{
+		[]byte(`{"status":"ACTIVE","rateId":null}`),
+		[]byte(`{"status":"ACTIVE","rateId":{"legacy":true}}`),
+	} {
+		var req UpdateContextRequest
+		err := json.Unmarshal(raw, &req)
+		require.ErrorIs(t, err, ErrDeprecatedRateID)
+	}
+}
+
+func TestUpdateContextRequest_UnmarshalJSON_ValidPayload(t *testing.T) {
+	t.Parallel()
+
+	raw := []byte(`{
+		"name":"Updated Context",
+		"status":"ACTIVE",
+		"feeTolerancePct":"0.5",
+		"autoMatchOnUpload":false
+	}`)
+
+	var req UpdateContextRequest
+	err := json.Unmarshal(raw, &req)
+	require.NoError(t, err)
+	require.NotNil(t, req.Name)
+	require.Equal(t, "Updated Context", *req.Name)
+	require.NotNil(t, req.Status)
+	require.Equal(t, "ACTIVE", *req.Status)
+	require.NotNil(t, req.FeeTolerancePct)
+	require.Equal(t, "0.5", *req.FeeTolerancePct)
+	require.NotNil(t, req.AutoMatchOnUpload)
+	assert.False(t, *req.AutoMatchOnUpload)
 }
 
 func TestUpdateContextRequest_StatusValidation_RejectsDraft(t *testing.T) {
@@ -421,7 +479,7 @@ func TestCreateSourceRequest_ToDomainInput(t *testing.T) {
 		}
 
 		input, err := req.ToDomainInput()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		assert.Equal(t, "Primary Bank", input.Name)
 		assert.Equal(t, value_objects.SourceType("BANK"), input.Type)
@@ -439,7 +497,7 @@ func TestCreateSourceRequest_ToDomainInput(t *testing.T) {
 		}
 
 		input, err := req.ToDomainInput()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Nil(t, input.Config)
 		assert.Equal(t, sharedfee.MatchingSideRight, input.Side)
 	})
@@ -490,7 +548,7 @@ func TestUpdateSourceRequest_ToDomainInput(t *testing.T) {
 		}
 
 		input, err := req.ToDomainInput()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		assert.NotNil(t, input.Name)
 		assert.Equal(t, "Updated", *input.Name)
@@ -571,7 +629,7 @@ func TestCreateMatchRuleRequest_ToDomainInput(t *testing.T) {
 
 	input, err := req.ToDomainInput()
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, 1, input.Priority)
 	assert.Equal(t, shared.RuleType("EXACT"), input.Type)
 	assert.Equal(t, map[string]any{"matchAmount": true}, input.Config)

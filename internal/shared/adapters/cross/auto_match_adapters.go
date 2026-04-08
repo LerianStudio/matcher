@@ -111,12 +111,27 @@ func (adapter *MatchTriggerAdapter) TriggerMatchForContext(
 			_, _, err := adapter.matchingUseCase.RunMatch(innerCtx, input)
 			if err != nil {
 				innerLogger, _, _, _ := libCommons.NewTrackingFromContext(innerCtx)
-				innerLogger.Log(
-					innerCtx,
-					libLog.LevelWarn,
-					fmt.Sprintf("auto-match trigger failed for context %s: %v", contextID.String(), err),
-				)
+				level := libLog.LevelWarn
+				failureKind := "transient"
+
+				if isAutoMatchConfigurationError(err) {
+					level = libLog.LevelError
+					failureKind = "configuration"
+				}
+
+				innerLogger.With(
+					libLog.String("failure_kind", failureKind),
+					libLog.String("context_id", contextID.String()),
+				).Log(innerCtx, level, "auto-match trigger failed")
 			}
 		},
 	)
+}
+
+func isAutoMatchConfigurationError(err error) bool {
+	return errors.Is(err, matchingCommand.ErrFeeRulesReferenceMissingSchedules) ||
+		errors.Is(err, matchingCommand.ErrFeeRulesRequiredForNormalization) ||
+		errors.Is(err, matchingCommand.ErrNilFeeRuleProvider) ||
+		errors.Is(err, matchingCommand.ErrNilFeeScheduleRepository) ||
+		errors.Is(err, matchingCommand.ErrNilFeeVarianceRepository)
 }

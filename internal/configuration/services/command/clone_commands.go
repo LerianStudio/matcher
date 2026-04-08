@@ -60,6 +60,9 @@ type (
 	matchRuleTxFinder interface {
 		FindByContextIDWithTx(ctx context.Context, tx *sql.Tx, contextID uuid.UUID, cursor string, limit int) (entities.MatchRules, libHTTP.CursorPagination, error)
 	}
+	contextTxFinder interface {
+		FindByIDWithTx(ctx context.Context, tx *sql.Tx, id uuid.UUID) (*entities.ReconciliationContext, error)
+	}
 	feeRuleTxFinder interface {
 		FindByContextIDWithTx(ctx context.Context, tx *sql.Tx, contextID uuid.UUID) ([]*fee.FeeRule, error)
 	}
@@ -113,7 +116,7 @@ func (uc *UseCase) CloneContext(ctx context.Context, input CloneContextInput) (*
 	autoMatchOnUpload := sourceContext.AutoMatchOnUpload
 
 	if uc.infraProvider != nil {
-		result, txErr := uc.cloneContextTransactional(ctx, input, sourceContext, autoMatchOnUpload)
+		result, txErr := uc.cloneContextTransactional(ctx, input, sourceContext)
 		if txErr != nil {
 			libOpentelemetry.HandleSpanError(span, "failed to clone context (transactional)", txErr)
 

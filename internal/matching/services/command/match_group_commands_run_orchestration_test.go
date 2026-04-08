@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
@@ -94,7 +95,6 @@ func TestRunMatch_OrchestrationCommit(t *testing.T) {
 		MatchItemRepo:    matchItemRepo,
 		ExceptionCreator: exceptionCreator,
 		OutboxRepo:       outboxRepo,
-		RateRepo:         &stubRateRepo{},
 		FeeVarianceRepo:  &stubFeeVarianceRepo{},
 		AdjustmentRepo:   &stubAdjustmentRepo{},
 		InfraProvider:    &stubInfraProviderForRun{},
@@ -208,7 +208,6 @@ func TestRunMatch_OutboxEventContent(t *testing.T) {
 		MatchItemRepo:    matchItemRepo,
 		ExceptionCreator: exceptionCreator,
 		OutboxRepo:       outboxRepo,
-		RateRepo:         &stubRateRepo{},
 		FeeVarianceRepo:  &stubFeeVarianceRepo{},
 		AdjustmentRepo:   &stubAdjustmentRepo{},
 		InfraProvider:    &stubInfraProviderForRun{},
@@ -331,7 +330,6 @@ func TestRunMatch_Locking(t *testing.T) {
 		MatchItemRepo:    matchItemRepo,
 		ExceptionCreator: exceptionCreator,
 		OutboxRepo:       outboxRepo,
-		RateRepo:         &stubRateRepo{},
 		FeeVarianceRepo:  &stubFeeVarianceRepo{},
 		AdjustmentRepo:   &stubAdjustmentRepo{},
 		InfraProvider:    &stubInfraProviderForRun{},
@@ -439,7 +437,6 @@ func TestRunMatch_UsesBaseAmountForExpected(t *testing.T) {
 		MatchItemRepo:    matchItemRepo,
 		ExceptionCreator: exceptionCreator,
 		OutboxRepo:       outboxRepo,
-		RateRepo:         &stubRateRepo{},
 		FeeVarianceRepo:  &stubFeeVarianceRepo{},
 		AdjustmentRepo:   &stubAdjustmentRepo{},
 		InfraProvider:    &stubInfraProviderForRun{},
@@ -520,7 +517,6 @@ func TestRunMatch_NoTransactions(t *testing.T) {
 		MatchItemRepo:    matchItemRepo,
 		ExceptionCreator: exceptionCreator,
 		OutboxRepo:       outboxRepo,
-		RateRepo:         &stubRateRepo{},
 		FeeVarianceRepo:  &stubFeeVarianceRepo{},
 		AdjustmentRepo:   &stubAdjustmentRepo{},
 		InfraProvider:    &stubInfraProviderForRun{},
@@ -627,7 +623,6 @@ func TestRunMatch_NoTransactionsCommitCreatesExceptions(t *testing.T) {
 		MatchItemRepo:    matchItemRepo,
 		ExceptionCreator: exceptionCreator,
 		OutboxRepo:       outboxRepo,
-		RateRepo:         &stubRateRepo{},
 		FeeVarianceRepo:  &stubFeeVarianceRepo{},
 		AdjustmentRepo:   &stubAdjustmentRepo{},
 		InfraProvider:    &stubInfraProviderForRun{},
@@ -717,6 +712,9 @@ func TestValidateRunMatchDependencies(t *testing.T) {
 			matchItemRepo:    &stubMatchItemRepo{},
 			exceptionCreator: &stubExceptionCreator{},
 			outboxRepoTx:     outboxRepo,
+			feeVarianceRepo:  &stubFeeVarianceRepo{},
+			feeRuleProvider:  &stubFeeRuleProviderWithResult{},
+			feeScheduleRepo:  &stubFeeScheduleRepoWithResult{},
 		}
 	}
 
@@ -794,6 +792,27 @@ func TestValidateRunMatchDependencies(t *testing.T) {
 				uc.outboxRepoTx = nil
 			},
 			expected: ErrOutboxRepoNotConfigured,
+		},
+		{
+			name: "nil fee variance repository",
+			mutate: func(uc *UseCase) {
+				uc.feeVarianceRepo = nil
+			},
+			expected: ErrNilFeeVarianceRepository,
+		},
+		{
+			name: "nil fee rule provider",
+			mutate: func(uc *UseCase) {
+				uc.feeRuleProvider = nil
+			},
+			expected: ErrNilFeeRuleProvider,
+		},
+		{
+			name: "nil fee schedule repository",
+			mutate: func(uc *UseCase) {
+				uc.feeScheduleRepo = nil
+			},
+			expected: ErrNilFeeScheduleRepository,
 		},
 	}
 
@@ -886,7 +905,6 @@ func TestRunMatch_CallOrderCommit(t *testing.T) {
 		MatchItemRepo:    matchItemRepo,
 		ExceptionCreator: exceptionCreator,
 		OutboxRepo:       outboxRepo,
-		RateRepo:         &stubRateRepo{},
 		FeeVarianceRepo:  &stubFeeVarianceRepo{},
 		AdjustmentRepo:   &stubAdjustmentRepo{},
 		InfraProvider:    &stubInfraProviderForRun{},
@@ -998,7 +1016,6 @@ func TestRunMatch_LockingArgs_IDsAndTTL(t *testing.T) {
 		MatchItemRepo:    matchItemRepo,
 		ExceptionCreator: exceptionCreator,
 		OutboxRepo:       outboxRepo,
-		RateRepo:         &stubRateRepo{},
 		FeeVarianceRepo:  &stubFeeVarianceRepo{},
 		AdjustmentRepo:   &stubAdjustmentRepo{},
 		InfraProvider:    &stubInfraProviderForRun{},
@@ -1057,6 +1074,10 @@ func TestRunMatch_FeeNormalizationEnabledButNoFeeRules(t *testing.T) {
 		{ID: ledgerSourceID, Type: ports.SourceTypeLedger, Side: fee.MatchingSideLeft},
 		{ID: rightSourceID, Type: ports.SourceTypeFile, Side: fee.MatchingSideRight},
 	}
+	txs := []*shared.Transaction{
+		{ID: uuid.MustParse("00000000-0000-0000-0000-00000000f006"), SourceID: ledgerSourceID, Amount: decimal.RequireFromString("100.00"), Currency: "USD", Date: time.Now().UTC()},
+		{ID: uuid.MustParse("00000000-0000-0000-0000-00000000f007"), SourceID: rightSourceID, Amount: decimal.RequireFromString("100.00"), Currency: "USD", Date: time.Now().UTC()},
+	}
 
 	// Fee rule provider returns NO rules → triggers ErrFeeRulesRequiredForNormalization.
 	feeRuleProvider := &stubFeeRuleProviderWithResult{rules: nil}
@@ -1065,14 +1086,13 @@ func TestRunMatch_FeeNormalizationEnabledButNoFeeRules(t *testing.T) {
 		ContextProvider:  stubContextProvider{contextInfo: ctxInfo},
 		SourceProvider:   stubSourceProvider{sources: sources},
 		RuleProvider:     stubRuleProvider{rules: shared.MatchRules{rule}},
-		TxRepo:           &stubTxRepo{transactions: nil},
+		TxRepo:           &stubTxRepo{transactions: txs},
 		LockManager:      &stubLockManager{},
 		MatchRunRepo:     &stubMatchRunRepo{},
 		MatchGroupRepo:   &stubMatchGroupRepo{},
 		MatchItemRepo:    &stubMatchItemRepo{},
 		ExceptionCreator: &stubExceptionCreator{},
 		OutboxRepo:       newMockOutboxRepository(t, nil),
-		RateRepo:         &stubRateRepo{},
 		FeeVarianceRepo:  &stubFeeVarianceRepo{},
 		AdjustmentRepo:   &stubAdjustmentRepo{},
 		InfraProvider:    &stubInfraProviderForRun{},
@@ -1092,6 +1112,153 @@ func TestRunMatch_FeeNormalizationEnabledButNoFeeRules(t *testing.T) {
 	)
 	require.Error(t, err)
 	require.ErrorIs(t, err, ErrFeeRulesRequiredForNormalization)
+}
+
+func TestPrepareMatchRun_LoadsFeeRulesWithoutNormalization(t *testing.T) {
+	t.Parallel()
+
+	contextID := uuid.MustParse("00000000-0000-0000-0000-00000000f101")
+	tenantID := uuid.MustParse("00000000-0000-0000-0000-00000000f102")
+	leftSourceID := uuid.MustParse("00000000-0000-0000-0000-00000000f103")
+	rightSourceID := uuid.MustParse("00000000-0000-0000-0000-00000000f104")
+	scheduleID := uuid.MustParse("00000000-0000-0000-0000-00000000f105")
+
+	ctxInfo := &ports.ReconciliationContextInfo{
+		ID:     contextID,
+		Type:   shared.ContextTypeOneToOne,
+		Active: true,
+	}
+	sources := []*ports.SourceInfo{
+		{ID: leftSourceID, Type: ports.SourceTypeLedger, Side: fee.MatchingSideLeft},
+		{ID: rightSourceID, Type: ports.SourceTypeFile, Side: fee.MatchingSideRight},
+	}
+	txs := []*shared.Transaction{
+		{ID: uuid.MustParse("00000000-0000-0000-0000-00000000f106"), SourceID: leftSourceID, Amount: decimal.RequireFromString("100.00"), Currency: "USD", Date: time.Now().UTC()},
+		{ID: uuid.MustParse("00000000-0000-0000-0000-00000000f107"), SourceID: rightSourceID, Amount: decimal.RequireFromString("100.00"), Currency: "USD", Date: time.Now().UTC()},
+	}
+
+	rule, err := fee.NewFeeRule(
+		context.Background(),
+		contextID,
+		scheduleID,
+		fee.MatchingSideLeft,
+		"left fee rule",
+		1,
+		nil,
+	)
+	require.NoError(t, err)
+
+	feeRuleProvider := &stubFeeRuleProviderWithResult{rules: []*fee.FeeRule{rule}}
+	feeScheduleRepo := &stubFeeScheduleRepoWithResult{
+		schedules: map[uuid.UUID]*fee.FeeSchedule{
+			scheduleID: {ID: scheduleID, Currency: "USD"},
+		},
+	}
+
+	uc, err := New(UseCaseDeps{
+		ContextProvider:  stubContextProvider{contextInfo: ctxInfo},
+		SourceProvider:   stubSourceProvider{sources: sources},
+		RuleProvider:     stubRuleProvider{rules: nil},
+		TxRepo:           &stubTxRepo{transactions: txs},
+		LockManager:      &stubLockManager{},
+		MatchRunRepo:     &stubMatchRunRepo{},
+		MatchGroupRepo:   &stubMatchGroupRepo{},
+		MatchItemRepo:    &stubMatchItemRepo{},
+		ExceptionCreator: &stubExceptionCreator{},
+		OutboxRepo:       newMockOutboxRepository(t, nil),
+		FeeVarianceRepo:  &stubFeeVarianceRepo{},
+		AdjustmentRepo:   &stubAdjustmentRepo{},
+		InfraProvider:    &stubInfraProviderForRun{},
+		AuditLogRepo:     &stubAuditLogRepoForRun{},
+		FeeScheduleRepo:  feeScheduleRepo,
+		FeeRuleProvider:  feeRuleProvider,
+	})
+	require.NoError(t, err)
+
+	ctx := context.WithValue(context.Background(), auth.TenantIDKey, tenantID.String())
+	mrc, err := uc.prepareMatchRun(ctx, nil, nil, RunMatchInput{
+		TenantID:  tenantID,
+		ContextID: contextID,
+		Mode:      matchingVO.MatchRunModeCommit,
+	})
+	require.NoError(t, err)
+	require.Len(t, mrc.leftRules, 1)
+	require.Empty(t, mrc.rightRules)
+	require.Contains(t, mrc.allSchedules, scheduleID)
+}
+
+func TestPrepareMatchRun_LoadsFeeRulesForEmptyRun(t *testing.T) {
+	t.Parallel()
+
+	contextID := uuid.MustParse("00000000-0000-0000-0000-00000000f111")
+	tenantID := uuid.MustParse("00000000-0000-0000-0000-00000000f112")
+	leftSourceID := uuid.MustParse("00000000-0000-0000-0000-00000000f113")
+	rightSourceID := uuid.MustParse("00000000-0000-0000-0000-00000000f114")
+	scheduleID := uuid.MustParse("00000000-0000-0000-0000-00000000f115")
+
+	ctxInfo := &ports.ReconciliationContextInfo{
+		ID:     contextID,
+		Type:   shared.ContextTypeOneToOne,
+		Active: true,
+	}
+	sources := []*ports.SourceInfo{
+		{ID: leftSourceID, Type: ports.SourceTypeLedger, Side: fee.MatchingSideLeft},
+		{ID: rightSourceID, Type: ports.SourceTypeFile, Side: fee.MatchingSideRight},
+	}
+
+	schedule, err := fee.NewFeeSchedule(context.Background(), fee.NewFeeScheduleInput{
+		TenantID:         tenantID,
+		Name:             "empty-run-fee-schedule",
+		Currency:         "USD",
+		ApplicationOrder: fee.ApplicationOrderParallel,
+		RoundingScale:    2,
+		RoundingMode:     fee.RoundingModeHalfUp,
+		Items: []fee.FeeScheduleItemInput{{
+			Name:      "flat",
+			Priority:  1,
+			Structure: fee.FlatFee{Amount: decimal.RequireFromString("10.00")},
+		}},
+	})
+	require.NoError(t, err)
+	schedule.ID = scheduleID
+
+	rule, err := fee.NewFeeRule(context.Background(), contextID, scheduleID, fee.MatchingSideAny, "empty-run-rule", 1, nil)
+	require.NoError(t, err)
+
+	feeRuleProvider := &stubFeeRuleProviderWithResult{rules: []*fee.FeeRule{rule}}
+
+	uc, err := New(UseCaseDeps{
+		ContextProvider:  stubContextProvider{contextInfo: ctxInfo},
+		SourceProvider:   stubSourceProvider{sources: sources},
+		RuleProvider:     stubRuleProvider{rules: nil},
+		TxRepo:           &stubTxRepo{transactions: nil},
+		LockManager:      &stubLockManager{},
+		MatchRunRepo:     &stubMatchRunRepo{},
+		MatchGroupRepo:   &stubMatchGroupRepo{},
+		MatchItemRepo:    &stubMatchItemRepo{},
+		ExceptionCreator: &stubExceptionCreator{},
+		OutboxRepo:       newMockOutboxRepository(t, nil),
+		FeeVarianceRepo:  &stubFeeVarianceRepo{},
+		AdjustmentRepo:   &stubAdjustmentRepo{},
+		InfraProvider:    &stubInfraProviderForRun{},
+		AuditLogRepo:     &stubAuditLogRepoForRun{},
+		FeeScheduleRepo:  &stubFeeScheduleRepoWithResult{schedules: map[uuid.UUID]*fee.FeeSchedule{scheduleID: schedule}},
+		FeeRuleProvider:  feeRuleProvider,
+	})
+	require.NoError(t, err)
+
+	ctx := context.WithValue(context.Background(), auth.TenantIDKey, tenantID.String())
+	mrc, err := uc.prepareMatchRun(ctx, nil, nil, RunMatchInput{
+		TenantID:  tenantID,
+		ContextID: contextID,
+		Mode:      matchingVO.MatchRunModeCommit,
+	})
+	require.NoError(t, err)
+	require.Empty(t, mrc.leftCandidates)
+	require.Empty(t, mrc.rightCandidates)
+	assert.Len(t, mrc.leftRules, 1)
+	assert.Len(t, mrc.rightRules, 1)
+	assert.Contains(t, mrc.allSchedules, scheduleID)
 }
 
 func TestRunMatch_FeeRulesReferenceMissingSchedules(t *testing.T) {
@@ -1126,6 +1293,10 @@ func TestRunMatch_FeeRulesReferenceMissingSchedules(t *testing.T) {
 		{ID: ledgerSourceID, Type: ports.SourceTypeLedger, Side: fee.MatchingSideLeft},
 		{ID: rightSourceID, Type: ports.SourceTypeFile, Side: fee.MatchingSideRight},
 	}
+	txs := []*shared.Transaction{
+		{ID: uuid.MustParse("00000000-0000-0000-0000-00000000f018"), SourceID: ledgerSourceID, Amount: decimal.RequireFromString("100.00"), Currency: "USD", Date: time.Now().UTC()},
+		{ID: uuid.MustParse("00000000-0000-0000-0000-00000000f019"), SourceID: rightSourceID, Amount: decimal.RequireFromString("100.00"), Currency: "USD", Date: time.Now().UTC()},
+	}
 
 	// Fee rules exist but reference a schedule that does not exist.
 	feeRuleProvider := &stubFeeRuleProviderWithResult{
@@ -1148,14 +1319,13 @@ func TestRunMatch_FeeRulesReferenceMissingSchedules(t *testing.T) {
 		ContextProvider:  stubContextProvider{contextInfo: ctxInfo},
 		SourceProvider:   stubSourceProvider{sources: sources},
 		RuleProvider:     stubRuleProvider{rules: shared.MatchRules{rule}},
-		TxRepo:           &stubTxRepo{transactions: nil},
+		TxRepo:           &stubTxRepo{transactions: txs},
 		LockManager:      &stubLockManager{},
 		MatchRunRepo:     &stubMatchRunRepo{},
 		MatchGroupRepo:   &stubMatchGroupRepo{},
 		MatchItemRepo:    &stubMatchItemRepo{},
 		ExceptionCreator: &stubExceptionCreator{},
 		OutboxRepo:       newMockOutboxRepository(t, nil),
-		RateRepo:         &stubRateRepo{},
 		FeeVarianceRepo:  &stubFeeVarianceRepo{},
 		AdjustmentRepo:   &stubAdjustmentRepo{},
 		InfraProvider:    &stubInfraProviderForRun{},

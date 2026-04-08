@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -292,16 +293,20 @@ func TestContextProviderAdapter_FindByID_Success(t *testing.T) {
 	tenantID := uuid.New()
 	contextID := uuid.New()
 	now := time.Now().UTC()
+	feeNormalization := "NET"
 
 	ctxEntity := &configEntities.ReconciliationContext{
-		ID:        contextID,
-		TenantID:  tenantID,
-		Name:      "Test Context",
-		Type:      value_objects.ContextTypeOneToOne,
-		Interval:  "daily",
-		Status:    value_objects.ContextStatusActive,
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:               contextID,
+		TenantID:         tenantID,
+		Name:             "Test Context",
+		Type:             value_objects.ContextTypeOneToOne,
+		Interval:         "daily",
+		Status:           value_objects.ContextStatusActive,
+		FeeToleranceAbs:  decimal.RequireFromString("0.10"),
+		FeeTolerancePct:  decimal.RequireFromString("0.05"),
+		FeeNormalization: &feeNormalization,
+		CreatedAt:        now,
+		UpdatedAt:        now,
 	}
 
 	mockRepo.EXPECT().
@@ -315,6 +320,10 @@ func TestContextProviderAdapter_FindByID_Success(t *testing.T) {
 	assert.Equal(t, contextID, result.ID)
 	assert.Equal(t, shared.ContextType(ctxEntity.Type.String()), result.Type)
 	assert.True(t, result.Active)
+	assert.True(t, ctxEntity.FeeToleranceAbs.Equal(result.FeeToleranceAbs))
+	assert.True(t, ctxEntity.FeeTolerancePct.Equal(result.FeeTolerancePct))
+	require.NotNil(t, result.FeeNormalization)
+	assert.Equal(t, *ctxEntity.FeeNormalization, *result.FeeNormalization)
 }
 
 func TestContextProviderAdapter_FindByID_NilResult(t *testing.T) {

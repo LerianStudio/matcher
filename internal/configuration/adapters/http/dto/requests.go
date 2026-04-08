@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/google/uuid"
-
 	"github.com/LerianStudio/lib-commons/v4/commons/pointers"
 
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
@@ -22,6 +20,7 @@ var (
 	ErrJSONNestingTooDeep = errors.New("JSON field exceeds maximum nesting depth")
 	ErrJSONTooManyKeys    = errors.New("JSON field exceeds maximum key count")
 	ErrNameWhitespaceOnly = errors.New("name must contain non-whitespace characters")
+	ErrDeprecatedRateID   = errors.New("rateId is no longer supported")
 )
 
 const (
@@ -38,13 +37,34 @@ type CreateContextRequest struct {
 	Name              string                       `json:"name"                       validate:"required,max=100" example:"Bank Reconciliation Q1"               minLength:"1" maxLength:"100"`
 	Type              string                       `json:"type"                       validate:"required,oneof=1:1 1:N N:M" example:"1:1"                                                  enums:"1:1,1:N,N:M"`
 	Interval          string                       `json:"interval"                   validate:"required,max=100" example:"daily"                                minLength:"1" maxLength:"100"`
-	RateID            *string                      `json:"rateId,omitempty"           validate:"omitempty,uuid"   example:"550e8400-e29b-41d4-a716-446655440000" format:"uuid"`
 	FeeToleranceAbs   *string                      `json:"feeToleranceAbs,omitempty"                              example:"0.01"`
 	FeeTolerancePct   *string                      `json:"feeTolerancePct,omitempty"                              example:"0.5"`
 	FeeNormalization  *string                      `json:"feeNormalization,omitempty"                             example:"NET"                                                                enums:"NET,GROSS"`
 	AutoMatchOnUpload *bool                        `json:"autoMatchOnUpload,omitempty"                            example:"false"`
 	Sources           []CreateContextSourceRequest `json:"sources,omitempty"          validate:"omitempty,max=10,dive" maxItems:"10"`
 	Rules             []CreateMatchRuleRequest     `json:"rules,omitempty"            validate:"omitempty,max=50,dive" maxItems:"50"`
+}
+
+// UnmarshalJSON rejects deprecated fields that must fail fast instead of being ignored.
+func (req *CreateContextRequest) UnmarshalJSON(data []byte) error {
+	type createContextRequestAlias CreateContextRequest
+
+	var payload struct {
+		createContextRequestAlias
+		RateID json.RawMessage `json:"rateId"`
+	}
+
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return err
+	}
+
+	if payload.RateID != nil {
+		return ErrDeprecatedRateID
+	}
+
+	*req = CreateContextRequest(payload.createContextRequestAlias)
+
+	return nil
 }
 
 // CreateContextSourceRequest represents a source created inline with a context.
@@ -68,15 +88,6 @@ func (req *CreateContextRequest) ToDomainInput() (entities.CreateReconciliationC
 		FeeTolerancePct:   req.FeeTolerancePct,
 		FeeNormalization:  req.FeeNormalization,
 		AutoMatchOnUpload: req.AutoMatchOnUpload,
-	}
-
-	if req.RateID != nil {
-		parsed, err := uuid.Parse(*req.RateID)
-		if err != nil {
-			return entities.CreateReconciliationContextInput{}, fmt.Errorf("invalid rateId: %w", err)
-		}
-
-		input.RateID = &parsed
 	}
 
 	if len(req.Sources) > 0 {
@@ -137,11 +148,32 @@ type UpdateContextRequest struct {
 	Type              *string `json:"type,omitempty"              validate:"omitempty,oneof=1:1 1:N N:M"              example:"1:N"                                   enums:"1:1,1:N,N:M"`
 	Interval          *string `json:"interval,omitempty"          validate:"omitempty,max=100"                          example:"weekly"                                 maxLength:"100"`
 	Status            *string `json:"status,omitempty"            validate:"omitempty,oneof=ACTIVE PAUSED ARCHIVED" example:"ACTIVE"                                 enums:"ACTIVE,PAUSED,ARCHIVED"`
-	RateID            *string `json:"rateId,omitempty"             validate:"omitempty,uuid"   example:"550e8400-e29b-41d4-a716-446655440000" format:"uuid"`
 	FeeToleranceAbs   *string `json:"feeToleranceAbs,omitempty"                                example:"0.01"`
 	FeeTolerancePct   *string `json:"feeTolerancePct,omitempty"                                example:"0.5"`
 	FeeNormalization  *string `json:"feeNormalization,omitempty"                                example:"NET"                                                  enums:"NET,GROSS"`
 	AutoMatchOnUpload *bool   `json:"autoMatchOnUpload,omitempty"                              example:"true"`
+}
+
+// UnmarshalJSON rejects deprecated fields that must fail fast instead of being ignored.
+func (req *UpdateContextRequest) UnmarshalJSON(data []byte) error {
+	type updateContextRequestAlias UpdateContextRequest
+
+	var payload struct {
+		updateContextRequestAlias
+		RateID json.RawMessage `json:"rateId"`
+	}
+
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return err
+	}
+
+	if payload.RateID != nil {
+		return ErrDeprecatedRateID
+	}
+
+	*req = UpdateContextRequest(payload.updateContextRequestAlias)
+
+	return nil
 }
 
 // ToDomainInput converts the API request to a domain input struct.
@@ -164,15 +196,6 @@ func (req *UpdateContextRequest) ToDomainInput() (entities.UpdateReconciliationC
 	if req.Status != nil {
 		cs := value_objects.ContextStatus(*req.Status)
 		input.Status = &cs
-	}
-
-	if req.RateID != nil {
-		parsed, err := uuid.Parse(*req.RateID)
-		if err != nil {
-			return entities.UpdateReconciliationContextInput{}, fmt.Errorf("invalid rateId: %w", err)
-		}
-
-		input.RateID = &parsed
 	}
 
 	return input, nil

@@ -95,30 +95,34 @@ type VarianceReportFilter struct {
 	SortOrder string
 }
 
-// VarianceReportRow represents an aggregated variance grouped by source, currency, and fee type.
+// VarianceReportRow represents an aggregated variance grouped by source, currency, and fee schedule.
 type VarianceReportRow struct {
-	SourceID      uuid.UUID
-	Currency      string
-	FeeType       string
-	TotalExpected decimal.Decimal
-	TotalActual   decimal.Decimal
-	NetVariance   decimal.Decimal
-	VariancePct   *decimal.Decimal
+	SourceID        uuid.UUID
+	Currency        string
+	FeeScheduleID   uuid.UUID
+	FeeScheduleName string
+	TotalExpected   decimal.Decimal
+	TotalActual     decimal.Decimal
+	NetVariance     decimal.Decimal
+	VariancePct     *decimal.Decimal
 }
 
 // BuildVarianceRow creates a VarianceReportRow with calculated variance percentage.
 func BuildVarianceRow(
 	sourceID uuid.UUID,
-	currency, feeType string,
+	currency string,
+	feeScheduleID uuid.UUID,
+	feeScheduleName string,
 	totalExpected, totalActual, netVariance decimal.Decimal,
 ) *VarianceReportRow {
 	row := &VarianceReportRow{
-		SourceID:      sourceID,
-		Currency:      currency,
-		FeeType:       feeType,
-		TotalExpected: totalExpected,
-		TotalActual:   totalActual,
-		NetVariance:   netVariance,
+		SourceID:        sourceID,
+		Currency:        currency,
+		FeeScheduleID:   feeScheduleID,
+		FeeScheduleName: feeScheduleName,
+		TotalExpected:   totalExpected,
+		TotalActual:     totalActual,
+		NetVariance:     netVariance,
 	}
 
 	if !totalExpected.IsZero() {

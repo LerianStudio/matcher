@@ -14,6 +14,7 @@ import (
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
+	"github.com/LerianStudio/matcher/internal/configuration/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	"github.com/LerianStudio/matcher/internal/configuration/services/command"
 	"github.com/LerianStudio/matcher/internal/configuration/services/query"
@@ -220,6 +221,7 @@ func clientErrorMessage(err error) string {
 
 func isClientSafeError(err error) bool {
 	safeErrors := []error{
+		dto.ErrDeprecatedRateID,
 		entities.ErrNilReconciliationContext,
 		entities.ErrContextNameRequired,
 		entities.ErrContextNameTooLong,

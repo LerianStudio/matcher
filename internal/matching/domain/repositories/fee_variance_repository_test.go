@@ -48,7 +48,7 @@ func createTestFeeVariance(id uuid.UUID) *entities.FeeVariance {
 		RunID:         uuid.New(),
 		MatchGroupID:  uuid.New(),
 		TransactionID: uuid.New(),
-		RateID:        uuid.New(),
+		FeeScheduleID: uuid.New(),
 		Currency:      "USD",
 		ExpectedFee:   decimal.NewFromFloat(10.00),
 		ActualFee:     decimal.NewFromFloat(9.50),

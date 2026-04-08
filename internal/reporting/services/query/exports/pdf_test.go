@@ -3,6 +3,7 @@
 package exports
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -120,30 +121,32 @@ func TestBuildVariancePDF(t *testing.T) {
 	variancePct := decimal.NewFromFloat(10.0)
 	rows := []*entities.VarianceReportRow{
 		{
-			SourceID:      uuid.New(),
-			Currency:      "USD",
-			FeeType:       "PERCENTAGE",
-			TotalExpected: decimal.NewFromInt(100),
-			TotalActual:   decimal.NewFromInt(110),
-			NetVariance:   decimal.NewFromInt(10),
-			VariancePct:   &variancePct,
+			SourceID:        uuid.New(),
+			Currency:        "USD",
+			FeeScheduleName: "PERCENTAGE",
+			TotalExpected:   decimal.NewFromInt(100),
+			TotalActual:     decimal.NewFromInt(110),
+			NetVariance:     decimal.NewFromInt(10),
+			VariancePct:     &variancePct,
 		},
 		{
-			SourceID:      uuid.New(),
-			Currency:      "EUR",
-			FeeType:       "FLAT",
-			TotalExpected: decimal.NewFromInt(50),
-			TotalActual:   decimal.NewFromInt(50),
-			NetVariance:   decimal.Zero,
-			VariancePct:   nil,
+			SourceID:        uuid.New(),
+			Currency:        "EUR",
+			FeeScheduleName: "FLAT",
+			TotalExpected:   decimal.NewFromInt(50),
+			TotalActual:     decimal.NewFromInt(50),
+			NetVariance:     decimal.Zero,
+			VariancePct:     nil,
 		},
 	}
 
-	output, err := BuildVariancePDF(rows)
+	output, err := buildVariancePDF(rows, false)
 	require.NoError(t, err)
 	assert.NotEmpty(t, output)
 	require.GreaterOrEqual(t, len(output), 4)
 	assert.Equal(t, "%PDF", string(output[:4]))
+	assert.Contains(t, string(output), "Fee Schedule")
+	assert.Contains(t, string(output), "PERCENTAGE")
 }
 
 func TestBuildVariancePDF_NilRowsSkipped(t *testing.T) {
@@ -153,19 +156,20 @@ func TestBuildVariancePDF_NilRowsSkipped(t *testing.T) {
 	rows := []*entities.VarianceReportRow{
 		nil,
 		{
-			SourceID:      uuid.New(),
-			Currency:      "EUR",
-			FeeType:       "TIERED",
-			TotalExpected: decimal.NewFromInt(200),
-			TotalActual:   decimal.NewFromInt(210),
-			NetVariance:   decimal.NewFromInt(10),
-			VariancePct:   &variancePct,
+			SourceID:        uuid.New(),
+			Currency:        "EUR",
+			FeeScheduleName: "TIERED",
+			TotalExpected:   decimal.NewFromInt(200),
+			TotalActual:     decimal.NewFromInt(210),
+			NetVariance:     decimal.NewFromInt(10),
+			VariancePct:     &variancePct,
 		},
 	}
 
-	output, err := BuildVariancePDF(rows)
+	output, err := buildVariancePDF(rows, false)
 	require.NoError(t, err)
 	assert.NotEmpty(t, output)
+	assert.Contains(t, string(output), "TIERED")
 }
 
 func TestBuildVariancePDF_Empty(t *testing.T) {
@@ -257,21 +261,22 @@ func TestBuildVariancePDF_NilVariancePct(t *testing.T) {
 
 	rows := []*entities.VarianceReportRow{
 		{
-			SourceID:      uuid.New(),
-			Currency:      "USD",
-			FeeType:       "FLAT",
-			TotalExpected: decimal.NewFromInt(100),
-			TotalActual:   decimal.NewFromInt(100),
-			NetVariance:   decimal.Zero,
-			VariancePct:   nil,
+			SourceID:        uuid.New(),
+			Currency:        "USD",
+			FeeScheduleName: "FLAT",
+			TotalExpected:   decimal.NewFromInt(100),
+			TotalActual:     decimal.NewFromInt(100),
+			NetVariance:     decimal.Zero,
+			VariancePct:     nil,
 		},
 	}
 
-	output, err := BuildVariancePDF(rows)
+	output, err := buildVariancePDF(rows, false)
 	require.NoError(t, err)
 	assert.NotEmpty(t, output)
 	require.GreaterOrEqual(t, len(output), 4)
 	assert.Equal(t, "%PDF", string(output[:4]))
+	assert.Contains(t, string(output), "Fee Schedule")
 }
 
 func TestBuildVariancePDF_Sorting(t *testing.T) {
@@ -282,28 +287,49 @@ func TestBuildVariancePDF_Sorting(t *testing.T) {
 
 	rows := []*entities.VarianceReportRow{
 		{
-			SourceID:      sourceB,
-			Currency:      "USD",
-			FeeType:       "PERCENTAGE",
-			TotalExpected: decimal.NewFromInt(100),
-			TotalActual:   decimal.NewFromInt(110),
-			NetVariance:   decimal.NewFromInt(10),
+			SourceID:        sourceB,
+			Currency:        "USD",
+			FeeScheduleID:   uuid.MustParse("00000000-0000-0000-0000-000000000200"),
+			FeeScheduleName: "ZETA",
+			TotalExpected:   decimal.NewFromInt(100),
+			TotalActual:     decimal.NewFromInt(110),
+			NetVariance:     decimal.NewFromInt(10),
 		},
 		{
-			SourceID:      sourceA,
-			Currency:      "EUR",
-			FeeType:       "FLAT",
-			TotalExpected: decimal.NewFromInt(50),
-			TotalActual:   decimal.NewFromInt(50),
-			NetVariance:   decimal.Zero,
+			SourceID:        sourceA,
+			Currency:        "EUR",
+			FeeScheduleID:   uuid.MustParse("00000000-0000-0000-0000-000000000100"),
+			FeeScheduleName: "ALPHA",
+			TotalExpected:   decimal.NewFromInt(50),
+			TotalActual:     decimal.NewFromInt(50),
+			NetVariance:     decimal.Zero,
 		},
 	}
 
-	output, err := BuildVariancePDF(rows)
+	output, err := buildVariancePDF(rows, false)
 	require.NoError(t, err)
 	assert.NotEmpty(t, output)
-	require.GreaterOrEqual(t, len(output), 4)
-	assert.Equal(t, "%PDF", string(output[:4]))
+	content := string(output)
+	assert.True(t, strings.Index(content, "ALPHA") < strings.Index(content, "ZETA"))
+}
+
+func TestBuildVariancePDF_SanitizesUnsafeFeeScheduleText(t *testing.T) {
+	t.Parallel()
+
+	rows := []*entities.VarianceReportRow{
+		{
+			SourceID:        uuid.New(),
+			Currency:        "USD",
+			FeeScheduleName: " Visa\n\x00Domestic ",
+			TotalExpected:   decimal.NewFromInt(100),
+			TotalActual:     decimal.NewFromInt(100),
+			NetVariance:     decimal.Zero,
+		},
+	}
+
+	output, err := buildVariancePDF(rows, false)
+	require.NoError(t, err)
+	assert.Contains(t, string(output), "VisaDomestic")
 }
 
 func TestBuildMatchedPDF_LargeDataset(t *testing.T) {
@@ -361,13 +387,13 @@ func TestBuildVariancePDF_LargeDataset(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		pct := decimal.NewFromFloat(float64(i) * 0.1)
 		rows[i] = &entities.VarianceReportRow{
-			SourceID:      uuid.New(),
-			Currency:      "USD",
-			FeeType:       "PERCENTAGE",
-			TotalExpected: decimal.NewFromInt(int64(i * 100)),
-			TotalActual:   decimal.NewFromInt(int64(i*100 + i)),
-			NetVariance:   decimal.NewFromInt(int64(i)),
-			VariancePct:   &pct,
+			SourceID:        uuid.New(),
+			Currency:        "USD",
+			FeeScheduleName: "PERCENTAGE",
+			TotalExpected:   decimal.NewFromInt(int64(i * 100)),
+			TotalActual:     decimal.NewFromInt(int64(i*100 + i)),
+			NetVariance:     decimal.NewFromInt(int64(i)),
+			VariancePct:     &pct,
 		}
 	}
 

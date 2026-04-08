@@ -68,8 +68,8 @@ func (repo *Repository) createBatch(
 		func(execTx *sql.Tx) ([]*matchingEntities.FeeVariance, error) {
 			stmt, err := execTx.PrepareContext(
 				ctx,
-				`INSERT INTO match_fee_variances (id, context_id, run_id, match_group_id, transaction_id, rate_id, currency, expected_fee_amount, actual_fee_amount, delta, tolerance_abs, tolerance_percent, variance_type, created_at, updated_at)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+				`INSERT INTO match_fee_variances (id, context_id, run_id, match_group_id, transaction_id, fee_schedule_id, fee_schedule_name_snapshot, currency, expected_fee_amount, actual_fee_amount, delta, tolerance_abs, tolerance_percent, variance_type, created_at, updated_at)
+				 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
 			)
 			if err != nil {
 				return nil, fmt.Errorf("prepare insert fee variance: %w", err)
@@ -93,7 +93,8 @@ func (repo *Repository) createBatch(
 					model.RunID,
 					model.MatchGroupID,
 					model.TransactionID,
-					model.RateID,
+					model.FeeScheduleID,
+					model.FeeScheduleNameSnapshot,
 					model.Currency,
 					model.ExpectedFee,
 					model.ActualFee,

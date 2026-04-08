@@ -4,7 +4,6 @@ import "errors"
 
 // Fee domain errors.
 var (
-	ErrNilRate                 = errors.New("rate is nil")
 	ErrNilFeeStructure         = errors.New("fee structure is nil")
 	ErrInvalidCurrency         = errors.New("invalid currency")
 	ErrCurrencyMismatch        = errors.New("currency mismatch")
@@ -12,8 +11,6 @@ var (
 	ErrInvalidPercentageRate   = errors.New("percentage rate must be between 0 and 1 inclusive")
 	ErrInvalidTieredDefinition = errors.New("invalid tiered fee definition")
 	ErrToleranceNegative       = errors.New("tolerance must be non-negative")
-	ErrNilTransaction          = errors.New("transaction is nil")
-	ErrActualFeeMissing        = errors.New("actual fee is missing")
 
 	// Fee schedule errors.
 	ErrScheduleTenantIDRequired = errors.New("fee schedule tenant id is required")
@@ -26,7 +23,6 @@ var (
 	ErrInvalidRoundingMode      = errors.New("invalid rounding mode")
 	ErrItemNameRequired         = errors.New("fee schedule item name is required")
 	ErrNilSchedule              = errors.New("fee schedule is nil")
-	ErrInvalidNormalizationMode = errors.New("invalid normalization mode")
 	ErrGrossConvergenceFailed   = errors.New("gross calculation failed to converge")
 	ErrFeeScheduleNotFound      = errors.New("fee schedule not found")
 

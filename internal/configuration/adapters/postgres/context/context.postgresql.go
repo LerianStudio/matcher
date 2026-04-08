@@ -25,7 +25,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
-const contextColumns = "id, tenant_id, name, type, interval, status, rate_id, fee_tolerance_abs, fee_tolerance_pct, fee_normalization, auto_match_on_upload, created_at, updated_at"
+const contextColumns = "id, tenant_id, name, type, interval, status, fee_tolerance_abs, fee_tolerance_pct, fee_normalization, auto_match_on_upload, created_at, updated_at"
 
 // Repository provides PostgreSQL operations for reconciliation contexts.
 type Repository struct {
@@ -138,15 +138,14 @@ func (repo *Repository) executeCreate(
 
 	_, err = tx.ExecContext(
 		ctx,
-		`INSERT INTO reconciliation_contexts (id, tenant_id, name, type, interval, status, rate_id, fee_tolerance_abs, fee_tolerance_pct, fee_normalization, auto_match_on_upload, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+		`INSERT INTO reconciliation_contexts (id, tenant_id, name, type, interval, status, fee_tolerance_abs, fee_tolerance_pct, fee_normalization, auto_match_on_upload, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
 		model.ID,
 		model.TenantID,
 		model.Name,
 		model.Type,
 		model.Interval,
 		model.Status,
-		model.RateID,
 		model.FeeToleranceAbs,
 		model.FeeTolerancePct,
 		model.FeeNormalization,
@@ -199,6 +198,36 @@ func (repo *Repository) FindByID(
 		}
 
 		return nil, fmt.Errorf("find reconciliation context by id: %w", err)
+	}
+
+	return result, nil
+}
+
+// FindByIDWithTx retrieves a reconciliation context by tenant and context ID using the provided transaction.
+func (repo *Repository) FindByIDWithTx(
+	ctx stdctx.Context,
+	tx *sql.Tx,
+	id uuid.UUID,
+) (*entities.ReconciliationContext, error) {
+	if repo == nil || repo.provider == nil {
+		return nil, ErrRepoNotInitialized
+	}
+
+	if tx == nil {
+		return nil, ErrTransactionRequired
+	}
+
+	tenantID := auth.GetTenantID(ctx)
+	row := tx.QueryRowContext(
+		ctx,
+		"SELECT "+contextColumns+" FROM reconciliation_contexts WHERE tenant_id = $1 AND id = $2",
+		tenantID,
+		id.String(),
+	)
+
+	result, err := scanContext(row)
+	if err != nil {
+		return nil, fmt.Errorf("find reconciliation context by id with tx: %w", err)
 	}
 
 	return result, nil
@@ -439,13 +468,12 @@ func (repo *Repository) executeUpdate(
 
 	result, err := tx.ExecContext(
 		ctx,
-		`UPDATE reconciliation_contexts SET name = $1, type = $2, interval = $3, status = $4, rate_id = $5, fee_tolerance_abs = $6, fee_tolerance_pct = $7, fee_normalization = $8, auto_match_on_upload = $9, updated_at = $10
-		WHERE tenant_id = $11 AND id = $12`,
+		`UPDATE reconciliation_contexts SET name = $1, type = $2, interval = $3, status = $4, fee_tolerance_abs = $5, fee_tolerance_pct = $6, fee_normalization = $7, auto_match_on_upload = $8, updated_at = $9
+		WHERE tenant_id = $10 AND id = $11`,
 		model.Name,
 		model.Type,
 		model.Interval,
 		model.Status,
-		model.RateID,
 		model.FeeToleranceAbs,
 		model.FeeTolerancePct,
 		model.FeeNormalization,
@@ -623,7 +651,6 @@ func scanContext(
 		&model.Type,
 		&model.Interval,
 		&model.Status,
-		&model.RateID,
 		&model.FeeToleranceAbs,
 		&model.FeeTolerancePct,
 		&model.FeeNormalization,

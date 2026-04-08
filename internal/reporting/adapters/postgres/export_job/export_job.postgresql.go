@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/Masterminds/squirrel"
@@ -26,6 +27,8 @@ import (
 )
 
 const exportJobsTable = "export_jobs"
+
+const uuidSchemaRegex = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
 
 // safeLimit converts a non-negative int to uint64 for squirrel's Limit method.
 // Returns 0 for negative values (which squirrel treats as no limit).
@@ -527,6 +530,62 @@ func (repo *Repository) ListExpired(
 	}
 
 	return jobs, nil
+}
+
+// ListTenants returns tenant IDs based on database schemas so background workers
+// can fan out work across tenant-scoped data.
+func (repo *Repository) ListTenants(ctx context.Context) ([]string, error) {
+	if repo == nil || repo.provider == nil {
+		return nil, ErrRepositoryNotInitialized
+	}
+
+	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
+
+	ctx, span := tracer.Start(ctx, "postgres.export_job.list_tenants")
+	defer span.End()
+
+	result, err := pgcommon.WithTenantRead(
+		ctx,
+		repo.provider,
+		func(conn *sql.Conn) ([]string, error) {
+			rows, err := conn.QueryContext(ctx, "SELECT nspname FROM pg_namespace WHERE nspname ~* $1", uuidSchemaRegex)
+			if err != nil {
+				return nil, fmt.Errorf("query tenant schemas: %w", err)
+			}
+			defer rows.Close()
+
+			var tenants []string
+
+			for rows.Next() {
+				var tenant string
+				if scanErr := rows.Scan(&tenant); scanErr != nil {
+					return nil, fmt.Errorf("scan tenant schema: %w", scanErr)
+				}
+
+				tenants = append(tenants, tenant)
+			}
+
+			if err := rows.Err(); err != nil {
+				return nil, fmt.Errorf("iterate tenant schemas: %w", err)
+			}
+
+			defaultTenantID := auth.GetDefaultTenantID()
+			if defaultTenantID != "" && !slices.Contains(tenants, defaultTenantID) {
+				tenants = append(tenants, defaultTenantID)
+			}
+
+			return tenants, nil
+		},
+	)
+	if err != nil {
+		wrappedErr := fmt.Errorf("list export job tenants: %w", err)
+		libOpentelemetry.HandleSpanError(span, "failed to list export job tenants", wrappedErr)
+		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to list export job tenants: %v", wrappedErr))
+
+		return nil, wrappedErr
+	}
+
+	return result, nil
 }
 
 // ClaimNextQueued atomically claims the next queued job for processing.

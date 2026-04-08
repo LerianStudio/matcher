@@ -45,7 +45,6 @@ import (
 	matchGroupRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/match_group"
 	matchItemRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/match_item"
 	matchRunRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/match_run"
-	rateRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/rate"
 	matchLockManager "github.com/LerianStudio/matcher/internal/matching/adapters/redis"
 	matchingEntities "github.com/LerianStudio/matcher/internal/matching/domain/entities"
 	matchingVO "github.com/LerianStudio/matcher/internal/matching/domain/value_objects"
@@ -257,7 +256,6 @@ func wireE4T9UseCases(t *testing.T, h *integration.TestHarness) e4t9Wired {
 	matchGroup := matchGroupRepo.NewRepository(provider)
 	matchItem := matchItemRepo.NewRepository(provider)
 	exceptionCreator := exceptionCreatorRepo.NewRepository(provider)
-	rate := rateRepo.NewRepository(provider)
 	feeVariance := feeVarianceRepo.NewRepository(provider)
 	auditLogRepo := governancePostgres.NewRepository(provider)
 	adjustment := adjustmentRepo.NewRepository(provider, auditLogRepo)
@@ -277,7 +275,6 @@ func wireE4T9UseCases(t *testing.T, h *integration.TestHarness) e4t9Wired {
 		MatchItemRepo:    matchItem,
 		ExceptionCreator: exceptionCreator,
 		OutboxRepo:       outbox,
-		RateRepo:         rate,
 		FeeVarianceRepo:  feeVariance,
 		AdjustmentRepo:   adjustment,
 		InfraProvider:    provider,

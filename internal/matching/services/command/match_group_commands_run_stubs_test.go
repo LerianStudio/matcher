@@ -20,7 +20,6 @@ import (
 	matching "github.com/LerianStudio/matcher/internal/matching/domain/services"
 	"github.com/LerianStudio/matcher/internal/matching/ports"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
-	"github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 	outboxmocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
 )
@@ -674,17 +673,8 @@ func (stub *stubExceptionCreator) CreateExceptionsWithTx(
 }
 
 // ---------------------------------------------------------------------------
-// Stub types: rate, fee variance, adjustment repositories
+// Stub types: fee variance, adjustment repositories
 // ---------------------------------------------------------------------------
-
-type stubRateRepo struct {
-	rate *fee.Rate
-	err  error
-}
-
-func (s *stubRateRepo) GetByID(_ context.Context, _ uuid.UUID) (*fee.Rate, error) {
-	return s.rate, s.err
-}
 
 type stubFeeVarianceRepo struct {
 	variances []*matchingEntities.FeeVariance
@@ -865,7 +855,6 @@ var (
 	_ matchingRepositories.MatchGroupRepository  = (*stubMatchGroupRepo)(nil)
 	_ matchingRepositories.MatchItemRepository   = (*stubMatchItemRepo)(nil)
 	_ ports.ExceptionCreator                     = (*stubExceptionCreator)(nil)
-	_ matchingRepositories.RateRepository        = (*stubRateRepo)(nil)
 	_ matchingRepositories.FeeVarianceRepository = (*stubFeeVarianceRepo)(nil)
 	_ matchingRepositories.AdjustmentRepository  = (*stubAdjustmentRepo)(nil)
 	_ sharedPorts.InfrastructureProvider         = (*stubInfraProviderForRun)(nil)

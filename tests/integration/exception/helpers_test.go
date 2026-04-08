@@ -45,7 +45,6 @@ import (
 	matchGroupRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/match_group"
 	matchItemRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/match_item"
 	matchRunRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/match_run"
-	rateRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/rate"
 	matchLockManager "github.com/LerianStudio/matcher/internal/matching/adapters/redis"
 	matchingCommand "github.com/LerianStudio/matcher/internal/matching/services/command"
 
@@ -265,7 +264,6 @@ func wireServices(t *testing.T, h *integration.TestHarness) wiredServices {
 	matchGroup := matchGroupRepo.NewRepository(provider)
 	matchItem := matchItemRepo.NewRepository(provider)
 	exceptionCreator := exceptionCreatorRepo.NewRepository(provider)
-	rate := rateRepo.NewRepository(provider)
 	feeVariance := feeVarianceRepo.NewRepository(provider)
 	auditLogRepo := governancePostgres.NewRepository(provider)
 	adjustment := adjustmentRepo.NewRepository(provider, auditLogRepo)
@@ -285,7 +283,6 @@ func wireServices(t *testing.T, h *integration.TestHarness) wiredServices {
 		MatchItemRepo:    matchItem,
 		ExceptionCreator: exceptionCreator,
 		OutboxRepo:       outbox,
-		RateRepo:         rate,
 		FeeVarianceRepo:  feeVariance,
 		AdjustmentRepo:   adjustment,
 		InfraProvider:    provider,

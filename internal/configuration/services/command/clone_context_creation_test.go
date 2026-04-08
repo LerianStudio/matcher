@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -32,7 +33,6 @@ func TestBuildClonedContextEntity(t *testing.T) {
 	t.Parallel()
 
 	tenantID := uuid.New()
-	rateID := uuid.New()
 
 	sourceContext := &entities.ReconciliationContext{
 		ID:                uuid.New(),
@@ -41,10 +41,9 @@ func TestBuildClonedContextEntity(t *testing.T) {
 		Type:              value_objects.ContextTypeOneToOne,
 		Interval:          "0 0 * * *",
 		Status:            value_objects.ContextStatusActive,
-		RateID:            &rateID,
 		FeeToleranceAbs:   decimal.NewFromFloat(0.01),
 		FeeTolerancePct:   decimal.NewFromFloat(0.5),
-		FeeNormalization:  ptrString("round_half_up"),
+		FeeNormalization:  ptrString("NET"),
 		AutoMatchOnUpload: true,
 		CreatedAt:         time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC),
 		UpdatedAt:         time.Date(2020, 6, 1, 0, 0, 0, 0, time.UTC),
@@ -56,6 +55,7 @@ func TestBuildClonedContextEntity(t *testing.T) {
 		autoMatchOnUpload bool
 		expectedName      string
 		expectAutoMatch   bool
+		expectedErr       error
 	}{
 		{
 			name:              "copies all fields with new name",
@@ -78,6 +78,11 @@ func TestBuildClonedContextEntity(t *testing.T) {
 			expectedName:      "Override AutoMatch",
 			expectAutoMatch:   false,
 		},
+		{
+			name:        "rejects names that violate context invariants",
+			newName:     strings.Repeat("x", 101),
+			expectedErr: entities.ErrContextNameTooLong,
+		},
 	}
 
 	for _, tt := range tests {
@@ -91,7 +96,14 @@ func TestBuildClonedContextEntity(t *testing.T) {
 				NewName:         tt.newName,
 			}
 
-			result := uc.buildClonedContextEntity(input, sourceContext, tt.autoMatchOnUpload)
+			result, err := uc.buildClonedContextEntity(context.Background(), input, sourceContext, tt.autoMatchOnUpload)
+			if tt.expectedErr != nil {
+				require.ErrorIs(t, err, tt.expectedErr)
+				assert.Nil(t, result)
+				return
+			}
+
+			require.NoError(t, err)
 
 			assert.NotEqual(t, sourceContext.ID, result.ID)
 			assert.NotEqual(t, uuid.Nil, result.ID)
@@ -100,39 +112,15 @@ func TestBuildClonedContextEntity(t *testing.T) {
 			assert.Equal(t, sourceContext.Type, result.Type)
 			assert.Equal(t, sourceContext.Interval, result.Interval)
 			assert.Equal(t, value_objects.ContextStatusActive, result.Status)
-			assert.Equal(t, &rateID, result.RateID)
 			assert.True(t, sourceContext.FeeToleranceAbs.Equal(result.FeeToleranceAbs))
 			assert.True(t, sourceContext.FeeTolerancePct.Equal(result.FeeTolerancePct))
 			assert.Equal(t, sourceContext.FeeNormalization, result.FeeNormalization)
 			assert.Equal(t, tt.expectAutoMatch, result.AutoMatchOnUpload)
 			assert.False(t, result.CreatedAt.IsZero())
 			assert.False(t, result.UpdatedAt.IsZero())
-			// Timestamps must be new, not copied from source
-			assert.NotEqual(t, sourceContext.CreatedAt, result.CreatedAt)
+			assert.False(t, result.CreatedAt.Before(sourceContext.CreatedAt))
 		})
 	}
-}
-
-func TestBuildClonedContextEntity_NilRateID(t *testing.T) {
-	t.Parallel()
-
-	sourceContext := &entities.ReconciliationContext{
-		ID:       uuid.New(),
-		TenantID: uuid.New(),
-		Name:     "No Rate",
-		Type:     value_objects.ContextTypeOneToOne,
-		Interval: "0 0 * * *",
-		RateID:   nil,
-	}
-
-	uc := &UseCase{}
-	result := uc.buildClonedContextEntity(
-		CloneContextInput{NewName: "Clone"},
-		sourceContext,
-		false,
-	)
-
-	assert.Nil(t, result.RateID)
 }
 
 // ===========================================================================
@@ -190,7 +178,7 @@ func TestCreateClonedContext_RepoError(t *testing.T) {
 	_, err := uc.createClonedContext(
 		context.Background(),
 		CloneContextInput{NewName: "Clone"},
-		&entities.ReconciliationContext{ID: uuid.New(), TenantID: uuid.New()},
+		&entities.ReconciliationContext{ID: uuid.New(), TenantID: uuid.New(), Type: value_objects.ContextTypeOneToOne, Interval: "daily"},
 		false,
 	)
 
@@ -253,7 +241,7 @@ func TestCreateClonedContextWithTx_RepoDoesNotSupportTx(t *testing.T) {
 		context.Background(),
 		fakeTx,
 		CloneContextInput{NewName: "No Tx Support"},
-		&entities.ReconciliationContext{ID: uuid.New(), TenantID: uuid.New()},
+		&entities.ReconciliationContext{ID: uuid.New(), TenantID: uuid.New(), Type: value_objects.ContextTypeOneToOne, Interval: "daily"},
 		false,
 	)
 
@@ -280,7 +268,7 @@ func TestCreateClonedContextWithTx_CreateError(t *testing.T) {
 		context.Background(),
 		fakeTx,
 		CloneContextInput{NewName: "Fail"},
-		&entities.ReconciliationContext{ID: uuid.New(), TenantID: uuid.New()},
+		&entities.ReconciliationContext{ID: uuid.New(), TenantID: uuid.New(), Type: value_objects.ContextTypeOneToOne, Interval: "daily"},
 		false,
 	)
 
@@ -626,7 +614,7 @@ func TestCloneContextNonTransactional_CreateContextError(t *testing.T) {
 	_, err := uc.cloneContextNonTransactional(
 		context.Background(),
 		CloneContextInput{NewName: "Fail"},
-		&entities.ReconciliationContext{ID: uuid.New(), TenantID: uuid.New()},
+		&entities.ReconciliationContext{ID: uuid.New(), TenantID: uuid.New(), Type: value_objects.ContextTypeOneToOne, Interval: "daily"},
 		false,
 	)
 
@@ -662,7 +650,19 @@ func TestCloneContextTransactional_Success(t *testing.T) {
 
 	ctxRepo := &contextRepoTxStub{
 		contextRepoStub: &contextRepoStub{},
+		findByIDWithTxFn: func(_ context.Context, _ *sql.Tx, _ uuid.UUID) (*entities.ReconciliationContext, error) {
+			return &entities.ReconciliationContext{
+				ID:       sourceCtxID,
+				TenantID: sourceContext.TenantID,
+				Name:     "Locked Source",
+				Type:     sourceContext.Type,
+				Interval: "hourly",
+				Status:   value_objects.ContextStatusPaused,
+			}, nil
+		},
 		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.ReconciliationContext) (*entities.ReconciliationContext, error) {
+			assert.Equal(t, "hourly", entity.Interval)
+			assert.Equal(t, value_objects.ContextStatusActive, entity.Status)
 			return entity, nil
 		},
 	}
@@ -684,12 +684,12 @@ func TestCloneContextTransactional_Success(t *testing.T) {
 			IncludeRules:    false,
 		},
 		sourceContext,
-		false,
 	)
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, "Tx Clone", result.Context.Name)
+	assert.Equal(t, "hourly", result.Context.Interval)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -705,7 +705,6 @@ func TestCloneContextTransactional_BeginTxError(t *testing.T) {
 		context.Background(),
 		CloneContextInput{NewName: "Fail"},
 		&entities.ReconciliationContext{ID: uuid.New(), TenantID: uuid.New()},
-		false,
 	)
 
 	require.Error(t, err)
@@ -739,7 +738,6 @@ func TestCloneContextTransactional_LockError(t *testing.T) {
 			NewName:         "Lock Fail",
 		},
 		&entities.ReconciliationContext{ID: sourceCtxID, TenantID: uuid.New()},
-		false,
 	)
 
 	require.Error(t, err)
@@ -764,6 +762,9 @@ func TestCloneContextTransactional_CommitError(t *testing.T) {
 
 	ctxRepo := &contextRepoTxStub{
 		contextRepoStub: &contextRepoStub{},
+		findByIDWithTxFn: func(_ context.Context, _ *sql.Tx, _ uuid.UUID) (*entities.ReconciliationContext, error) {
+			return &entities.ReconciliationContext{ID: sourceCtxID, TenantID: uuid.New(), Type: value_objects.ContextTypeOneToOne, Interval: "daily"}, nil
+		},
 		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.ReconciliationContext) (*entities.ReconciliationContext, error) {
 			return entity, nil
 		},
@@ -784,7 +785,6 @@ func TestCloneContextTransactional_CommitError(t *testing.T) {
 			NewName:         "Commit Fail",
 		},
 		&entities.ReconciliationContext{ID: sourceCtxID, TenantID: uuid.New()},
-		false,
 	)
 
 	require.Error(t, err)
@@ -809,6 +809,9 @@ func TestCloneContextTransactional_SourceCloneError(t *testing.T) {
 
 	ctxRepo := &contextRepoTxStub{
 		contextRepoStub: &contextRepoStub{},
+		findByIDWithTxFn: func(_ context.Context, _ *sql.Tx, _ uuid.UUID) (*entities.ReconciliationContext, error) {
+			return &entities.ReconciliationContext{ID: sourceCtxID, TenantID: uuid.New(), Type: value_objects.ContextTypeOneToOne, Interval: "daily"}, nil
+		},
 		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.ReconciliationContext) (*entities.ReconciliationContext, error) {
 			return entity, nil
 		},
@@ -837,7 +840,6 @@ func TestCloneContextTransactional_SourceCloneError(t *testing.T) {
 			IncludeSources:  true,
 		},
 		&entities.ReconciliationContext{ID: sourceCtxID, TenantID: uuid.New()},
-		false,
 	)
 
 	require.Error(t, err)
@@ -871,6 +873,9 @@ func TestCloneContextTransactional_WithAllIncludes(t *testing.T) {
 
 	ctxRepo := &contextRepoTxStub{
 		contextRepoStub: &contextRepoStub{},
+		findByIDWithTxFn: func(_ context.Context, _ *sql.Tx, _ uuid.UUID) (*entities.ReconciliationContext, error) {
+			return sourceContext, nil
+		},
 		createWithTxFn: func(_ context.Context, _ *sql.Tx, entity *entities.ReconciliationContext) (*entities.ReconciliationContext, error) {
 			return entity, nil
 		},
@@ -926,7 +931,6 @@ func TestCloneContextTransactional_WithAllIncludes(t *testing.T) {
 			IncludeRules:    true,
 		},
 		sourceContext,
-		true,
 	)
 
 	require.NoError(t, err)

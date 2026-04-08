@@ -175,7 +175,11 @@ func (uc *UseCase) performFeeVerification(
 	groups []*matchingEntities.MatchGroup,
 	feeInput *feeVerificationInput,
 ) error {
-	if feeInput == nil || feeInput.ctxInfo == nil || feeInput.ctxInfo.RateID == nil {
+	if feeInput == nil || feeInput.ctxInfo == nil {
+		return nil
+	}
+
+	if len(feeInput.leftRules) == 0 && len(feeInput.rightRules) == 0 {
 		return nil
 	}
 
@@ -184,31 +188,23 @@ func (uc *UseCase) performFeeVerification(
 	ctx, span := tracer.Start(ctx, "command.matching.fee_verification")
 	defer span.End()
 
-	rate, err := uc.rateRepo.GetByID(ctx, *feeInput.ctxInfo.RateID)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "failed to load rate for fee verification", err)
-		return fmt.Errorf("load rate for fee verification: %w", err)
-	}
-
-	if rate == nil {
-		return fmt.Errorf("load rate for fee verification: %w: ID %s", ErrRateNotFound, *feeInput.ctxInfo.RateID)
-	}
-
 	tolerance := fee.Tolerance{
 		Abs:     feeInput.ctxInfo.FeeToleranceAbs,
 		Percent: feeInput.ctxInfo.FeeTolerancePct,
 	}
 
-	findings, feeErr := collectFeeFindings(ctx, span, groups, createdRun, feeInput, rate, tolerance)
+	findings, feeErr := collectFeeFindings(ctx, span, groups, createdRun, feeInput, tolerance)
 	if feeErr != nil {
 		libOpentelemetry.HandleSpanError(span, "fee finding collection failed", feeErr)
 		return fmt.Errorf("collect fee findings: %w", feeErr)
 	}
 
 	span.SetAttributes(
-		attribute.String("fee.currency", rate.Currency),
-		attribute.String("fee.structure_type", string(rate.Structure.Type())),
 		attribute.Int("fee.items_checked", len(feeInput.txByID)),
+		attribute.Int("fee.left_rules", len(feeInput.leftRules)),
+		attribute.Int("fee.right_rules", len(feeInput.rightRules)),
+		attribute.Int("fee.schedules_available", len(feeInput.allSchedules)),
+		attribute.Int("fee.items_skipped_no_schedule", findings.skippedNoSchedule),
 		attribute.Int("fee.variances_found", len(findings.variances)),
 		attribute.Int("fee.exceptions_created", len(findings.exceptionInputs)),
 	)
@@ -222,7 +218,6 @@ func collectFeeFindings(
 	groups []*matchingEntities.MatchGroup,
 	createdRun *matchingEntities.MatchRun,
 	feeInput *feeVerificationInput,
-	rate *fee.Rate,
 	tolerance fee.Tolerance,
 ) (*feeFindings, error) {
 	findings := &feeFindings{}
@@ -233,7 +228,17 @@ func collectFeeFindings(
 		}
 
 		for _, item := range group.Items {
-			result := processFeeForItem(ctx, span, item, group, createdRun, feeInput, rate, tolerance)
+			if item == nil {
+				continue
+			}
+
+			schedule := resolveScheduleForTransaction(item.TransactionID, feeInput)
+			if schedule == nil {
+				findings.skippedNoSchedule++
+				continue
+			}
+
+			result := processFeeForItem(ctx, span, item, group, createdRun, feeInput, schedule, tolerance)
 			if result == nil {
 				continue
 			}
@@ -255,6 +260,34 @@ func collectFeeFindings(
 	return findings, nil
 }
 
+// resolveScheduleForTransaction determines which FeeSchedule applies to a transaction
+// by looking up its source side and evaluating fee rules via predicate matching.
+func resolveScheduleForTransaction(
+	transactionID uuid.UUID,
+	feeInput *feeVerificationInput,
+) *fee.FeeSchedule {
+	if feeInput == nil {
+		return nil
+	}
+
+	txn, ok := feeInput.txByID[transactionID]
+	if !ok || txn == nil {
+		return nil
+	}
+
+	var rules []*fee.FeeRule
+
+	if _, isLeft := feeInput.leftSourceIDs[txn.SourceID]; isLeft {
+		rules = feeInput.leftRules
+	} else if _, isRight := feeInput.rightSourceIDs[txn.SourceID]; isRight {
+		rules = feeInput.rightRules
+	} else {
+		return nil
+	}
+
+	return fee.ResolveFeeSchedule(txn.Metadata, rules, feeInput.allSchedules)
+}
+
 func (uc *UseCase) persistFeeFindings(
 	ctx context.Context,
 	tx repositories.Tx,
@@ -263,6 +296,10 @@ func (uc *UseCase) persistFeeFindings(
 	findings *feeFindings,
 ) error {
 	if len(findings.variances) > 0 {
+		if uc.feeVarianceRepo == nil {
+			return ErrNilFeeVarianceRepository
+		}
+
 		if _, err := uc.feeVarianceRepo.CreateBatchWithTx(ctx, tx, findings.variances); err != nil {
 			libOpentelemetry.HandleSpanError(span, "failed to persist fee variances", err)
 			return fmt.Errorf("persist fee variances: %w", err)
@@ -286,7 +323,7 @@ func processFeeForItem(
 	group *matchingEntities.MatchGroup,
 	createdRun *matchingEntities.MatchRun,
 	feeInput *feeVerificationInput,
-	rate *fee.Rate,
+	schedule *fee.FeeSchedule,
 	tolerance fee.Tolerance,
 ) *feeItemResult {
 	if item == nil {
@@ -298,19 +335,14 @@ func processFeeForItem(
 		return nil
 	}
 
-	actualFee, feeErr := extractActualFee(txn, rate.Currency)
+	actualFee, feeErr := extractActualFee(txn, schedule.Currency)
 	if feeErr != nil {
 		return &feeItemResult{
 			exceptionInput: buildExceptionInputFromTx(txn, feeInput.sourceTypeByID, feeErr.reason),
 		}
 	}
 
-	txForFee := &fee.TransactionForFee{
-		Amount:    fee.Money{Amount: txn.Amount.Abs(), Currency: txn.Currency},
-		ActualFee: &actualFee,
-	}
-
-	expectedFee, calcErr := fee.CalculateExpectedFee(ctx, txForFee, rate)
+	expectedFee, calcErr := expectedFeeForTransaction(ctx, txn, schedule, feeInput.normalizationMode())
 	if calcErr != nil {
 		if errors.Is(calcErr, fee.ErrCurrencyMismatch) {
 			return &feeItemResult{
@@ -322,7 +354,9 @@ func processFeeForItem(
 			}
 		}
 
-		return nil
+		libOpentelemetry.HandleSpanError(span, "failed to calculate expected fee", calcErr)
+
+		return &feeItemResult{fatalErr: fmt.Errorf("calculate expected fee: %w", calcErr)}
 	}
 
 	varianceResult, verifyErr := fee.VerifyFee(actualFee, expectedFee, tolerance)
@@ -337,7 +371,9 @@ func processFeeForItem(
 			}
 		}
 
-		return nil
+		libOpentelemetry.HandleSpanError(span, "failed to verify fee variance", verifyErr)
+
+		return &feeItemResult{fatalErr: fmt.Errorf("verify fee variance: %w", verifyErr)}
 	}
 
 	if varianceResult.Type != fee.VarianceMatch {
@@ -347,8 +383,9 @@ func processFeeForItem(
 			createdRun.ID,
 			group.ID,
 			item.TransactionID,
-			*feeInput.ctxInfo.RateID,
-			rate.Currency,
+			schedule.ID,
+			schedule.Name,
+			schedule.Currency,
 			expectedFee.Amount,
 			actualFee.Amount,
 			tolerance.Abs,
@@ -371,6 +408,31 @@ func processFeeForItem(
 	}
 
 	return nil
+}
+
+func expectedFeeForTransaction(
+	ctx context.Context,
+	txn *shared.Transaction,
+	schedule *fee.FeeSchedule,
+	mode fee.NormalizationMode,
+) (fee.Money, error) {
+	amount := fee.Money{Amount: txn.Amount.Abs(), Currency: txn.Currency}
+
+	if mode == fee.NormalizationModeGross {
+		_, breakdown, err := fee.CalculateGrossFromNet(ctx, amount, schedule)
+		if err != nil {
+			return fee.Money{}, fmt.Errorf("calculate gross from net: %w", err)
+		}
+
+		return breakdown.TotalFee, nil
+	}
+
+	breakdown, err := fee.CalculateSchedule(ctx, amount, schedule)
+	if err != nil {
+		return fee.Money{}, fmt.Errorf("calculate schedule: %w", err)
+	}
+
+	return breakdown.TotalFee, nil
 }
 
 func parseAmount(amountRaw any) (decimal.Decimal, *feeExtractionError) {

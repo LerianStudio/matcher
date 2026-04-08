@@ -777,13 +777,14 @@ type SummaryReportResponse struct {
 
 // VarianceReportRowResponse represents a row in the variance report.
 type VarianceReportRowResponse struct {
-	SourceID      string  `json:"source_id"`
-	Currency      string  `json:"currency"`
-	FeeType       string  `json:"fee_type"`
-	TotalExpected string  `json:"total_expected"`
-	TotalActual   string  `json:"total_actual"`
-	NetVariance   string  `json:"net_variance"`
-	VariancePct   *string `json:"variance_pct,omitempty"`
+	SourceID        string  `json:"source_id"`
+	Currency        string  `json:"currency"`
+	FeeScheduleID   string  `json:"fee_schedule_id"`
+	FeeScheduleName string  `json:"fee_schedule_name"`
+	TotalExpected   string  `json:"total_expected"`
+	TotalActual     string  `json:"total_actual"`
+	NetVariance     string  `json:"net_variance"`
+	VariancePct     *string `json:"variance_pct,omitempty"`
 }
 
 // PaginatedMatchedReport wraps a paginated list of matched items.

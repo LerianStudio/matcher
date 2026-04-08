@@ -45,32 +45,25 @@ const (
 			SELECT
 				t.source_id,
 				fv.currency,
-				r.structure_type AS fee_type,
+				fv.fee_schedule_id,
+				COALESCE(MAX(fs.name), MAX(fv.fee_schedule_name_snapshot), '') AS fee_schedule_name,
 				COALESCE(SUM(fv.expected_fee_amount), 0) AS total_expected,
 				COALESCE(SUM(fv.actual_fee_amount), 0) AS total_actual,
 				COALESCE(SUM(fv.delta), 0) AS net_variance
 			FROM match_fee_variances fv
 			JOIN transactions t ON t.id = fv.transaction_id
-			JOIN rates r ON r.id = fv.rate_id
+			LEFT JOIN fee_schedules fs ON fs.id = fv.fee_schedule_id
 			WHERE fv.context_id = $1
 			  AND fv.created_at >= $2 AND fv.created_at <= $3`
 
-	varianceGroupByClause = " GROUP BY t.source_id, fv.currency, r.structure_type"
-	varianceOrderByClause = " ORDER BY t.source_id, fv.currency, r.structure_type"
+	varianceGroupByClause = " GROUP BY t.source_id, fv.currency, fv.fee_schedule_id"
+	varianceOrderByClause = " ORDER BY t.source_id, fv.currency, fv.fee_schedule_id"
 
 	cursorPartCount = 3
 )
 
 // currencyPattern validates ISO 4217 currency codes (3 uppercase letters).
 var currencyPattern = regexp.MustCompile(`^[A-Z]{3}$`)
-
-// validFeeStructureTypes is the set of recognized fee structure types for
-// variance cursor validation.
-var validFeeStructureTypes = map[string]bool{
-	"FLAT":       true,
-	"PERCENTAGE": true,
-	"TIERED":     true,
-}
 
 // safeLimitForPage converts a non-negative int to uint64 for squirrel's Limit method.
 // Returns 0 for negative values.
@@ -692,7 +685,7 @@ func (repo *Repository) validateVarianceFilter(filter *entities.VarianceReportFi
 	return nil
 }
 
-// GetVarianceReport retrieves variance data aggregated by source, currency, and fee type.
+// GetVarianceReport retrieves variance data aggregated by source, currency, and fee schedule.
 func (repo *Repository) GetVarianceReport(
 	ctx context.Context,
 	filter entities.VarianceReportFilter,
@@ -768,15 +761,15 @@ func (repo *Repository) GetVarianceReport(
 }
 
 // buildVarianceSelectBuilder constructs the base squirrel query for fee variance
-// reports. It performs a three-table JOIN (match_fee_variances, transactions, rates)
-// with GROUP BY aggregation, producing per-source/currency/fee-type totals.
+// reports. It aggregates per source, currency, and fee schedule while preserving
+// the historical fee schedule name snapshot stored on each variance row.
 //
 // The returned builder includes GROUP BY and ORDER BY clauses but no LIMIT or
 // cursor filtering -- callers add those according to their pagination strategy.
 //
 // Columns returned:
 //
-//	t.source_id, fv.currency, r.structure_type (as fee_type),
+//	t.source_id, fv.currency, fv.fee_schedule_id, fee_schedule_name,
 //	total_expected, total_actual, net_variance
 func buildVarianceSelectBuilder(
 	contextID uuid.UUID,
@@ -787,22 +780,23 @@ func buildVarianceSelectBuilder(
 	query := squirrel.Select(
 		"t.source_id",
 		"fv.currency",
-		"r.structure_type AS fee_type",
+		"fv.fee_schedule_id",
+		"COALESCE(MAX(fs.name), MAX(fv.fee_schedule_name_snapshot), '') AS fee_schedule_name",
 		"COALESCE(SUM(fv.expected_fee_amount), 0) AS total_expected",
 		"COALESCE(SUM(fv.actual_fee_amount), 0) AS total_actual",
 		"COALESCE(SUM(fv.delta), 0) AS net_variance",
 	).
 		From("match_fee_variances fv").
 		Join("transactions t ON t.id = fv.transaction_id").
-		Join("rates r ON r.id = fv.rate_id").
+		LeftJoin("fee_schedules fs ON fs.id = fv.fee_schedule_id").
 		Where(squirrel.Eq{"fv.context_id": contextID}).
 		Where(squirrel.Expr("fv.created_at >= ?", dateFrom)).
 		Where(squirrel.Expr("fv.created_at <= ?", dateTo)).
-		GroupBy("t.source_id", "fv.currency", "r.structure_type").
+		GroupBy("t.source_id", "fv.currency", "fv.fee_schedule_id").
 		OrderBy(
 			"t.source_id "+orderDirection,
 			"fv.currency "+orderDirection,
-			"r.structure_type "+orderDirection,
+			"fv.fee_schedule_id "+orderDirection,
 		).
 		PlaceholderFormat(squirrel.Dollar)
 
@@ -831,17 +825,17 @@ func buildVariancePaginatedQuery(
 	)
 
 	if args.cursor.ID != "" {
-		cursorSourceID, cursorCurrency, cursorFeeType, parseErr := parseVarianceCursorParts(args.cursor.ID)
+		cursorSourceID, cursorCurrency, cursorFeeScheduleID, parseErr := parseVarianceCursorParts(args.cursor.ID)
 		if parseErr != nil {
 			return squirrel.SelectBuilder{}, fmt.Errorf("variance cursor: %w", parseErr)
 		}
 
 		query = query.Where(
 			squirrel.Expr(
-				"(t.source_id, fv.currency, r.structure_type) "+operator+" (?, ?, ?)",
+				"(t.source_id, fv.currency, fv.fee_schedule_id) "+operator+" (?, ?, ?)",
 				cursorSourceID,
 				cursorCurrency,
-				cursorFeeType,
+				cursorFeeScheduleID,
 			),
 		)
 	}
@@ -877,7 +871,7 @@ func paginateVarianceItems(
 	}
 
 	getVarianceRowKey := func(row *entities.VarianceReportRow) string {
-		return row.SourceID.String() + ":" + row.Currency + ":" + row.FeeType
+		return row.SourceID.String() + ":" + row.Currency + ":" + row.FeeScheduleID.String()
 	}
 
 	pagination, err := libHTTP.CalculateCursor(
@@ -899,14 +893,17 @@ func scanVarianceRow(
 ) (*entities.VarianceReportRow, error) {
 	var sourceID uuid.UUID
 
-	var currency, feeType string
+	var feeScheduleID uuid.UUID
+
+	var currency, feeScheduleName string
 
 	var totalExpected, totalActual, netVariance decimal.Decimal
 
 	if err := scanner.Scan(
 		&sourceID,
 		&currency,
-		&feeType,
+		&feeScheduleID,
+		&feeScheduleName,
 		&totalExpected,
 		&totalActual,
 		&netVariance,
@@ -917,7 +914,8 @@ func scanVarianceRow(
 	return entities.BuildVarianceRow(
 		sourceID,
 		currency,
-		feeType,
+		feeScheduleID,
+		feeScheduleName,
 		totalExpected,
 		totalActual,
 		netVariance,
@@ -1435,43 +1433,44 @@ func applyVarianceCursor(afterKey, query string, args []any, argIdx int) (varian
 		return varianceCursorFilter{query: query, args: args, argIdx: argIdx}, nil
 	}
 
-	sourceID, currency, feeType, err := parseVarianceCursorParts(afterKey)
+	sourceID, currency, feeScheduleID, err := parseVarianceCursorParts(afterKey)
 	if err != nil {
 		return varianceCursorFilter{}, err
 	}
 
 	p1, p2, p3 := argIdx, argIdx+1, argIdx+cursorPartCount-1
 	query += fmt.Sprintf(
-		" AND (t.source_id, fv.currency, r.structure_type) > ($%d, $%d, $%d)",
+		" AND (t.source_id, fv.currency, fv.fee_schedule_id) > ($%d, $%d, $%d)",
 		p1, p2, p3,
 	)
 
-	args = append(args, sourceID, currency, feeType)
+	args = append(args, sourceID, currency, feeScheduleID)
 	argIdx += cursorPartCount
 
 	return varianceCursorFilter{query: query, args: args, argIdx: argIdx}, nil
 }
 
-func parseVarianceCursorParts(afterKey string) (uuid.UUID, string, string, error) {
+func parseVarianceCursorParts(afterKey string) (uuid.UUID, string, uuid.UUID, error) {
 	parts := strings.SplitN(afterKey, ":", cursorPartCount)
 	if len(parts) != cursorPartCount {
-		return uuid.Nil, "", "", fmt.Errorf("%w: expected %d parts, got %d", ErrInvalidVarianceCursor, cursorPartCount, len(parts))
+		return uuid.Nil, "", uuid.Nil, fmt.Errorf("%w: expected %d parts, got %d", ErrInvalidVarianceCursor, cursorPartCount, len(parts))
 	}
 
 	sourceID, err := uuid.Parse(parts[0])
 	if err != nil {
-		return uuid.Nil, "", "", fmt.Errorf("%w: source_id is not a valid UUID: %w", ErrInvalidVarianceCursor, err)
+		return uuid.Nil, "", uuid.Nil, fmt.Errorf("%w: source_id is not a valid UUID: %w", ErrInvalidVarianceCursor, err)
 	}
 
 	if !currencyPattern.MatchString(parts[1]) {
-		return uuid.Nil, "", "", fmt.Errorf("%w: currency is not a valid 3-letter ISO code", ErrInvalidVarianceCursor)
+		return uuid.Nil, "", uuid.Nil, fmt.Errorf("%w: currency is not a valid 3-letter ISO code", ErrInvalidVarianceCursor)
 	}
 
-	if !validFeeStructureTypes[parts[2]] {
-		return uuid.Nil, "", "", fmt.Errorf("%w: fee type %q is not a recognized structure type", ErrInvalidVarianceCursor, parts[2])
+	feeScheduleID, err := uuid.Parse(parts[2])
+	if err != nil {
+		return uuid.Nil, "", uuid.Nil, fmt.Errorf("%w: fee_schedule_id is not a valid UUID: %w", ErrInvalidVarianceCursor, err)
 	}
 
-	return sourceID, parts[1], parts[2], nil
+	return sourceID, parts[1], feeScheduleID, nil
 }
 
 // ListVariancePage retrieves a page of variance rows for streaming export.
@@ -1502,7 +1501,7 @@ func (repo *Repository) ListVariancePage(
 	}
 
 	// RATIONALE: ListVariancePage uses manual SQL (varianceBaseQuery) because
-	// composite ROW keyset pagination -- (source_id, currency, structure_type) > ($N, $N+1, $N+2) --
+	// composite ROW keyset pagination -- (source_id, currency, fs.name) > ($N, $N+1, $N+2) --
 	// cannot be expressed via squirrel's Where() clause. The applyVarianceCursor
 	// helper appends this comparison with validated positional args. Other variance
 	// methods (GetVarianceReport, ListVarianceForExport) use squirrel fully.
@@ -1525,7 +1524,7 @@ func (repo *Repository) ListVariancePage(
 			}
 
 			// Keyset cursor: appends composite ROW comparison for pagination.
-			// e.g., AND (t.source_id, fv.currency, r.structure_type) > ($N, $N+1, $N+2)
+			// e.g., AND (t.source_id, fv.currency, fv.fee_schedule_id) > ($N, $N+1, $N+2)
 			cf, err := applyVarianceCursor(afterKey, querySQL, queryArgs, nextArgIdx)
 			if err != nil {
 				return pageResult{}, fmt.Errorf("applying variance cursor: %w", err)
@@ -1569,7 +1568,7 @@ func (repo *Repository) ListVariancePage(
 			if len(items) > limit {
 				items = items[:limit]
 				last := items[limit-1]
-				nextKey = last.SourceID.String() + ":" + last.Currency + ":" + last.FeeType
+				nextKey = last.SourceID.String() + ":" + last.Currency + ":" + last.FeeScheduleID.String()
 			}
 
 			return pageResult{items: items, nextKey: nextKey}, nil

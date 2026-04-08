@@ -407,7 +407,8 @@ func (stub *matchRuleRepoStub) ReorderPriorities(
 
 type contextRepoTxStub struct {
 	*contextRepoStub
-	createWithTxFn func(context.Context, *sql.Tx, *entities.ReconciliationContext) (*entities.ReconciliationContext, error)
+	createWithTxFn   func(context.Context, *sql.Tx, *entities.ReconciliationContext) (*entities.ReconciliationContext, error)
+	findByIDWithTxFn func(context.Context, *sql.Tx, uuid.UUID) (*entities.ReconciliationContext, error)
 }
 
 func (stub *contextRepoTxStub) CreateWithTx(
@@ -420,6 +421,18 @@ func (stub *contextRepoTxStub) CreateWithTx(
 	}
 
 	return nil, errCreateNotImplemented
+}
+
+func (stub *contextRepoTxStub) FindByIDWithTx(
+	ctx context.Context,
+	tx *sql.Tx,
+	identifier uuid.UUID,
+) (*entities.ReconciliationContext, error) {
+	if stub.findByIDWithTxFn != nil {
+		return stub.findByIDWithTxFn(ctx, tx, identifier)
+	}
+
+	return nil, errFindByIDNotImplemented
 }
 
 type sourceRepoTxStub struct {

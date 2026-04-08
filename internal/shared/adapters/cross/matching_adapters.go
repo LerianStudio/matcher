@@ -229,7 +229,6 @@ func (provider *MatchingConfigurationProvider) findContextByID(
 		ID:               ctxEntity.ID,
 		Type:             shared.ContextType(ctxEntity.Type.String()),
 		Active:           ctxEntity.IsActive(),
-		RateID:           ctxEntity.RateID,
 		FeeToleranceAbs:  ctxEntity.FeeToleranceAbs,
 		FeeTolerancePct:  ctxEntity.FeeTolerancePct,
 		FeeNormalization: ctxEntity.FeeNormalization,

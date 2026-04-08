@@ -262,22 +262,24 @@ func TestBuildVarianceCSV_HeaderAndOrdering(t *testing.T) {
 
 	rows := []*entities.VarianceReportRow{
 		{
-			SourceID:      sourceB,
-			Currency:      "USD",
-			FeeType:       "PERCENTAGE",
-			TotalExpected: decimal.NewFromInt(100),
-			TotalActual:   decimal.NewFromInt(110),
-			NetVariance:   decimal.NewFromInt(10),
-			VariancePct:   &variancePct,
+			SourceID:        sourceB,
+			Currency:        "USD",
+			FeeScheduleID:   uuid.MustParse("00000000-0000-0000-0000-000000000020"),
+			FeeScheduleName: "PERCENTAGE",
+			TotalExpected:   decimal.NewFromInt(100),
+			TotalActual:     decimal.NewFromInt(110),
+			NetVariance:     decimal.NewFromInt(10),
+			VariancePct:     &variancePct,
 		},
 		{
-			SourceID:      sourceA,
-			Currency:      "USD",
-			FeeType:       "FLAT",
-			TotalExpected: decimal.NewFromInt(50),
-			TotalActual:   decimal.NewFromInt(50),
-			NetVariance:   decimal.Zero,
-			VariancePct:   nil,
+			SourceID:        sourceA,
+			Currency:        "USD",
+			FeeScheduleID:   uuid.MustParse("00000000-0000-0000-0000-000000000010"),
+			FeeScheduleName: "FLAT",
+			TotalExpected:   decimal.NewFromInt(50),
+			TotalActual:     decimal.NewFromInt(50),
+			NetVariance:     decimal.Zero,
+			VariancePct:     nil,
 		},
 	}
 
@@ -293,7 +295,8 @@ func TestBuildVarianceCSV_HeaderAndOrdering(t *testing.T) {
 		[]string{
 			"source_id",
 			"currency",
-			"fee_type",
+			"fee_schedule_id",
+			"fee_schedule_name",
 			"total_expected",
 			"total_actual",
 			"net_variance",
@@ -302,11 +305,13 @@ func TestBuildVarianceCSV_HeaderAndOrdering(t *testing.T) {
 		csvRows[0],
 	)
 	assert.Equal(t, sourceA.String(), csvRows[1][0])
-	assert.Equal(t, "FLAT", csvRows[1][2])
-	assert.Empty(t, csvRows[1][6])
+	assert.Equal(t, "00000000-0000-0000-0000-000000000010", csvRows[1][2])
+	assert.Equal(t, "FLAT", csvRows[1][3])
+	assert.Empty(t, csvRows[1][7])
 	assert.Equal(t, sourceB.String(), csvRows[2][0])
-	assert.Equal(t, "PERCENTAGE", csvRows[2][2])
-	assert.Equal(t, "10.00", csvRows[2][6])
+	assert.Equal(t, "00000000-0000-0000-0000-000000000020", csvRows[2][2])
+	assert.Equal(t, "PERCENTAGE", csvRows[2][3])
+	assert.Equal(t, "10.00", csvRows[2][7])
 }
 
 func TestBuildVarianceCSV_SanitizesFormulaValues(t *testing.T) {
@@ -314,13 +319,14 @@ func TestBuildVarianceCSV_SanitizesFormulaValues(t *testing.T) {
 
 	rows := []*entities.VarianceReportRow{
 		{
-			SourceID:      uuid.New(),
-			Currency:      "=USD",
-			FeeType:       "+FEE",
-			TotalExpected: decimal.NewFromInt(100),
-			TotalActual:   decimal.NewFromInt(90),
-			NetVariance:   decimal.NewFromInt(-10),
-			VariancePct:   nil,
+			SourceID:        uuid.New(),
+			Currency:        "=USD",
+			FeeScheduleID:   uuid.MustParse("00000000-0000-0000-0000-000000000090"),
+			FeeScheduleName: "+FEE",
+			TotalExpected:   decimal.NewFromInt(100),
+			TotalActual:     decimal.NewFromInt(90),
+			NetVariance:     decimal.NewFromInt(-10),
+			VariancePct:     nil,
 		},
 	}
 
@@ -332,8 +338,8 @@ func TestBuildVarianceCSV_SanitizesFormulaValues(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, csvRows, 2)
 	assert.Equal(t, "'=USD", csvRows[1][1])
-	assert.Equal(t, "'+FEE", csvRows[1][2])
-	assert.Equal(t, "-10", csvRows[1][5])
+	assert.Equal(t, "'+FEE", csvRows[1][3])
+	assert.Equal(t, "-10", csvRows[1][6])
 }
 
 func TestBuildVarianceCSV_NilRowsSkipped(t *testing.T) {
@@ -343,13 +349,13 @@ func TestBuildVarianceCSV_NilRowsSkipped(t *testing.T) {
 	rows := []*entities.VarianceReportRow{
 		nil,
 		{
-			SourceID:      uuid.New(),
-			Currency:      "EUR",
-			FeeType:       "TIERED",
-			TotalExpected: decimal.NewFromInt(200),
-			TotalActual:   decimal.NewFromInt(210),
-			NetVariance:   decimal.NewFromInt(10),
-			VariancePct:   &variancePct,
+			SourceID:        uuid.New(),
+			Currency:        "EUR",
+			FeeScheduleName: "TIERED",
+			TotalExpected:   decimal.NewFromInt(200),
+			TotalActual:     decimal.NewFromInt(210),
+			NetVariance:     decimal.NewFromInt(10),
+			VariancePct:     &variancePct,
 		},
 	}
 
@@ -377,7 +383,8 @@ func TestBuildVarianceCSV_EmptyRows(t *testing.T) {
 		[]string{
 			"source_id",
 			"currency",
-			"fee_type",
+			"fee_schedule_id",
+			"fee_schedule_name",
 			"total_expected",
 			"total_actual",
 			"net_variance",
@@ -528,35 +535,38 @@ func TestBuildUnmatchedCSV_SortsSameDateByTransactionID(t *testing.T) {
 	assert.Equal(t, id2.String(), rows[2][0])
 }
 
-func TestBuildVarianceCSV_SortsByCurrencyThenFeeType(t *testing.T) {
+func TestBuildVarianceCSV_SortsByCurrencyThenFeeScheduleID(t *testing.T) {
 	t.Parallel()
 
 	sourceID := uuid.New()
 
 	rows := []*entities.VarianceReportRow{
 		{
-			SourceID:      sourceID,
-			Currency:      "USD",
-			FeeType:       "PERCENTAGE",
-			TotalExpected: decimal.NewFromInt(100),
-			TotalActual:   decimal.NewFromInt(100),
-			NetVariance:   decimal.Zero,
+			SourceID:        sourceID,
+			Currency:        "USD",
+			FeeScheduleID:   uuid.MustParse("00000000-0000-0000-0000-000000000300"),
+			FeeScheduleName: "ZETA",
+			TotalExpected:   decimal.NewFromInt(100),
+			TotalActual:     decimal.NewFromInt(100),
+			NetVariance:     decimal.Zero,
 		},
 		{
-			SourceID:      sourceID,
-			Currency:      "EUR",
-			FeeType:       "FLAT",
-			TotalExpected: decimal.NewFromInt(50),
-			TotalActual:   decimal.NewFromInt(50),
-			NetVariance:   decimal.Zero,
+			SourceID:        sourceID,
+			Currency:        "EUR",
+			FeeScheduleID:   uuid.MustParse("00000000-0000-0000-0000-000000000100"),
+			FeeScheduleName: "ZETA",
+			TotalExpected:   decimal.NewFromInt(50),
+			TotalActual:     decimal.NewFromInt(50),
+			NetVariance:     decimal.Zero,
 		},
 		{
-			SourceID:      sourceID,
-			Currency:      "EUR",
-			FeeType:       "PERCENTAGE",
-			TotalExpected: decimal.NewFromInt(75),
-			TotalActual:   decimal.NewFromInt(75),
-			NetVariance:   decimal.Zero,
+			SourceID:        sourceID,
+			Currency:        "EUR",
+			FeeScheduleID:   uuid.MustParse("00000000-0000-0000-0000-000000000200"),
+			FeeScheduleName: "ALPHA",
+			TotalExpected:   decimal.NewFromInt(75),
+			TotalActual:     decimal.NewFromInt(75),
+			NetVariance:     decimal.Zero,
 		},
 	}
 
@@ -568,9 +578,9 @@ func TestBuildVarianceCSV_SortsByCurrencyThenFeeType(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, csvRows, 4)
 	assert.Equal(t, "EUR", csvRows[1][1])
-	assert.Equal(t, "FLAT", csvRows[1][2])
+	assert.Equal(t, "00000000-0000-0000-0000-000000000100", csvRows[1][2])
 	assert.Equal(t, "EUR", csvRows[2][1])
-	assert.Equal(t, "PERCENTAGE", csvRows[2][2])
+	assert.Equal(t, "00000000-0000-0000-0000-000000000200", csvRows[2][2])
 	assert.Equal(t, "USD", csvRows[3][1])
 }
 
@@ -945,22 +955,24 @@ func TestStreamVarianceCSV_Success(t *testing.T) {
 
 	rows := []*entities.VarianceReportRow{
 		{
-			SourceID:      uuid.New(),
-			Currency:      "USD",
-			FeeType:       "PERCENTAGE",
-			TotalExpected: decimal.NewFromInt(1000),
-			TotalActual:   decimal.NewFromInt(1100),
-			NetVariance:   decimal.NewFromInt(100),
-			VariancePct:   &variancePct,
+			SourceID:        uuid.New(),
+			Currency:        "USD",
+			FeeScheduleID:   uuid.MustParse("00000000-0000-0000-0000-000000000401"),
+			FeeScheduleName: "PERCENTAGE",
+			TotalExpected:   decimal.NewFromInt(1000),
+			TotalActual:     decimal.NewFromInt(1100),
+			NetVariance:     decimal.NewFromInt(100),
+			VariancePct:     &variancePct,
 		},
 		{
-			SourceID:      uuid.New(),
-			Currency:      "EUR",
-			FeeType:       "FLAT",
-			TotalExpected: decimal.NewFromInt(500),
-			TotalActual:   decimal.NewFromInt(500),
-			NetVariance:   decimal.Zero,
-			VariancePct:   nil,
+			SourceID:        uuid.New(),
+			Currency:        "EUR",
+			FeeScheduleID:   uuid.MustParse("00000000-0000-0000-0000-000000000402"),
+			FeeScheduleName: "FLAT",
+			TotalExpected:   decimal.NewFromInt(500),
+			TotalActual:     decimal.NewFromInt(500),
+			NetVariance:     decimal.Zero,
+			VariancePct:     nil,
 		},
 	}
 
@@ -979,7 +991,8 @@ func TestStreamVarianceCSV_Success(t *testing.T) {
 		[]string{
 			"source_id",
 			"currency",
-			"fee_type",
+			"fee_schedule_id",
+			"fee_schedule_name",
 			"total_expected",
 			"total_actual",
 			"net_variance",
@@ -987,8 +1000,8 @@ func TestStreamVarianceCSV_Success(t *testing.T) {
 		},
 		csvRows[0],
 	)
-	assert.Equal(t, "10.50", csvRows[1][6])
-	assert.Empty(t, csvRows[2][6])
+	assert.Equal(t, "10.50", csvRows[1][7])
+	assert.Empty(t, csvRows[2][7])
 }
 
 func TestStreamVarianceCSV_EmptyIterator(t *testing.T) {

@@ -27,7 +27,6 @@ var (
 	ErrOutboxRepoNotTxCreator   = errors.New(
 		"outbox repository does not support transactional creates",
 	)
-	ErrNilRateRepository         = errors.New("rate repository is required")
 	ErrNilFeeVarianceRepository  = errors.New("fee variance repository is required")
 	ErrNilAdjustmentRepository   = errors.New("adjustment repository is required")
 	ErrNilInfrastructureProvider = errors.New("infrastructure provider is required")
@@ -57,7 +56,6 @@ type UseCase struct {
 	exceptionCreator     ports.ExceptionCreator
 	outboxRepo           sharedPorts.OutboxRepository
 	outboxRepoTx         outboxTxCreator
-	rateRepo             matchingRepositories.RateRepository
 	feeVarianceRepo      matchingRepositories.FeeVarianceRepository
 	adjustmentRepo       matchingRepositories.AdjustmentRepository
 	infraProvider        sharedPorts.InfrastructureProvider
@@ -82,7 +80,6 @@ type UseCaseDeps struct {
 	MatchItemRepo    matchingRepositories.MatchItemRepository
 	ExceptionCreator ports.ExceptionCreator
 	OutboxRepo       sharedPorts.OutboxRepository
-	RateRepo         matchingRepositories.RateRepository
 	FeeVarianceRepo  matchingRepositories.FeeVarianceRepository
 	AdjustmentRepo   matchingRepositories.AdjustmentRepository
 	InfraProvider    sharedPorts.InfrastructureProvider
@@ -106,7 +103,6 @@ func (deps *UseCaseDeps) validate() error {
 		{sharedPorts.IsNilValue(deps.MatchItemRepo), ErrNilMatchItemRepository},
 		{sharedPorts.IsNilValue(deps.ExceptionCreator), ErrNilExceptionCreator},
 		{sharedPorts.IsNilValue(deps.OutboxRepo), ErrNilOutboxRepository},
-		{sharedPorts.IsNilValue(deps.RateRepo), ErrNilRateRepository},
 		{sharedPorts.IsNilValue(deps.FeeVarianceRepo), ErrNilFeeVarianceRepository},
 		{sharedPorts.IsNilValue(deps.AdjustmentRepo), ErrNilAdjustmentRepository},
 		{sharedPorts.IsNilValue(deps.InfraProvider), ErrNilInfrastructureProvider},
@@ -147,7 +143,6 @@ func New(deps UseCaseDeps) (*UseCase, error) {
 		exceptionCreator:    deps.ExceptionCreator,
 		outboxRepo:          deps.OutboxRepo,
 		outboxRepoTx:        outboxTx,
-		rateRepo:            deps.RateRepo,
 		feeVarianceRepo:     deps.FeeVarianceRepo,
 		adjustmentRepo:      deps.AdjustmentRepo,
 		infraProvider:       deps.InfraProvider,

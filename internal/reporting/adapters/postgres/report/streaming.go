@@ -158,18 +158,20 @@ func (iter *varianceRowIterator) Close() error { //nolint:revive // implements i
 
 func (iter *varianceRowIterator) Scan() (*entities.VarianceReportRow, error) { //nolint:revive // implements interface
 	var (
-		sourceID      uuid.UUID
-		currency      string
-		feeType       string
-		totalExpected decimal.Decimal
-		totalActual   decimal.Decimal
-		netVariance   decimal.Decimal
+		sourceID        uuid.UUID
+		feeScheduleID   uuid.UUID
+		currency        string
+		feeScheduleName string
+		totalExpected   decimal.Decimal
+		totalActual     decimal.Decimal
+		netVariance     decimal.Decimal
 	)
 
 	if err := iter.rows.Scan(
 		&sourceID,
 		&currency,
-		&feeType,
+		&feeScheduleID,
+		&feeScheduleName,
 		&totalExpected,
 		&totalActual,
 		&netVariance,
@@ -180,7 +182,8 @@ func (iter *varianceRowIterator) Scan() (*entities.VarianceReportRow, error) { /
 	return entities.BuildVarianceRow(
 		sourceID,
 		currency,
-		feeType,
+		feeScheduleID,
+		feeScheduleName,
 		totalExpected,
 		totalActual,
 		netVariance,

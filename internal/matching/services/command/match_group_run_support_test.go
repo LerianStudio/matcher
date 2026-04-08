@@ -74,6 +74,18 @@ func TestLoadFeeRulesAndSchedules_NoRules_Returns_NilSlices(t *testing.T) {
 	assert.Nil(t, schedules)
 }
 
+func TestLoadFeeRulesAndSchedules_NilFeeRuleProvider_ReturnsError(t *testing.T) {
+	t.Parallel()
+
+	uc := &UseCase{}
+
+	leftRules, rightRules, schedules, err := uc.loadFeeRulesAndSchedules(context.Background(), uuid.New())
+	require.ErrorIs(t, err, ErrNilFeeRuleProvider)
+	assert.Nil(t, leftRules)
+	assert.Nil(t, rightRules)
+	assert.Nil(t, schedules)
+}
+
 func TestLoadFeeRulesAndSchedules_ProviderError(t *testing.T) {
 	t.Parallel()
 

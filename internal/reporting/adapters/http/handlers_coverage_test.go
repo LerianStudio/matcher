@@ -198,7 +198,7 @@ func (m *countMockReportRepository) GetVarianceReport(
 	_ context.Context,
 	_ entities.VarianceReportFilter,
 ) ([]*entities.VarianceReportRow, libHTTP.CursorPagination, error) {
-	return nil, libHTTP.CursorPagination{}, m.getVarianceErr
+	return m.varianceRows, libHTTP.CursorPagination{}, m.getVarianceErr
 }
 
 // --- helpers ---
@@ -318,7 +318,18 @@ func TestHandlers_GetMatcherDashboardMetrics_BadDateFilter(t *testing.T) {
 	provider := &mockContextProvider{
 		info: &ReconciliationContextInfo{ID: contextID, Active: true},
 	}
-	handlers := setupDashboardHandlers(t, &fullMockDashboardRepository{}, provider, nil)
+	reportRepo := &countMockReportRepository{}
+	reportRepo.getVarianceErr = nil
+	reportRepo.varianceRows = []*entities.VarianceReportRow{{
+		SourceID:        uuid.New(),
+		Currency:        "USD",
+		FeeScheduleID:   uuid.MustParse("00000000-0000-0000-0000-00000000aa01"),
+		FeeScheduleName: "INTERCHANGE",
+		TotalExpected:   decimal.RequireFromString("10.00"),
+		TotalActual:     decimal.RequireFromString("12.00"),
+		NetVariance:     decimal.RequireFromString("2.00"),
+	}}
+	handlers := setupDashboardHandlers(t, &fullMockDashboardRepository{}, provider, reportRepo)
 
 	app := setupFullTestApp(
 		handlers.GetMatcherDashboardMetrics,
@@ -505,7 +516,17 @@ func TestHandlers_GetSourceBreakdown_BadDate(t *testing.T) {
 	provider := &mockContextProvider{
 		info: &ReconciliationContextInfo{ID: contextID, Active: true},
 	}
-	handlers := setupDashboardHandlers(t, &fullMockDashboardRepository{}, provider, nil)
+	reportRepo := &countMockReportRepository{}
+	reportRepo.varianceRows = []*entities.VarianceReportRow{{
+		SourceID:        uuid.New(),
+		Currency:        "USD",
+		FeeScheduleID:   uuid.MustParse("00000000-0000-0000-0000-00000000aa01"),
+		FeeScheduleName: "INTERCHANGE",
+		TotalExpected:   decimal.RequireFromString("10.00"),
+		TotalActual:     decimal.RequireFromString("12.00"),
+		NetVariance:     decimal.RequireFromString("2.00"),
+	}}
+	handlers := setupDashboardHandlers(t, &fullMockDashboardRepository{}, provider, reportRepo)
 
 	app := setupFullTestApp(
 		handlers.GetSourceBreakdown,
@@ -615,7 +636,17 @@ func TestHandlers_GetCashImpactSummary_BadDate(t *testing.T) {
 	provider := &mockContextProvider{
 		info: &ReconciliationContextInfo{ID: contextID, Active: true},
 	}
-	handlers := setupDashboardHandlers(t, &fullMockDashboardRepository{}, provider, nil)
+	reportRepo := &countMockReportRepository{}
+	reportRepo.varianceRows = []*entities.VarianceReportRow{{
+		SourceID:        uuid.New(),
+		Currency:        "USD",
+		FeeScheduleID:   uuid.MustParse("00000000-0000-0000-0000-00000000aa01"),
+		FeeScheduleName: "INTERCHANGE",
+		TotalExpected:   decimal.RequireFromString("10.00"),
+		TotalActual:     decimal.RequireFromString("12.00"),
+		NetVariance:     decimal.RequireFromString("2.00"),
+	}}
+	handlers := setupDashboardHandlers(t, &fullMockDashboardRepository{}, provider, reportRepo)
 
 	app := setupFullTestApp(
 		handlers.GetCashImpactSummary,
@@ -1418,7 +1449,17 @@ func TestHandlers_GetMatchedReport_Success(t *testing.T) {
 	provider := &mockContextProvider{
 		info: &ReconciliationContextInfo{ID: contextID, Active: true},
 	}
-	handlers := setupDashboardHandlers(t, &fullMockDashboardRepository{}, provider, nil)
+	reportRepo := &countMockReportRepository{}
+	reportRepo.varianceRows = []*entities.VarianceReportRow{{
+		SourceID:        uuid.New(),
+		Currency:        "USD",
+		FeeScheduleID:   uuid.MustParse("00000000-0000-0000-0000-00000000aa01"),
+		FeeScheduleName: "INTERCHANGE",
+		TotalExpected:   decimal.RequireFromString("10.00"),
+		TotalActual:     decimal.RequireFromString("12.00"),
+		NetVariance:     decimal.RequireFromString("2.00"),
+	}}
+	handlers := setupDashboardHandlers(t, &fullMockDashboardRepository{}, provider, reportRepo)
 
 	app := setupFullTestApp(
 		handlers.GetMatchedReport,
@@ -1451,7 +1492,17 @@ func TestHandlers_GetMatchedReport_BadDate(t *testing.T) {
 	provider := &mockContextProvider{
 		info: &ReconciliationContextInfo{ID: contextID, Active: true},
 	}
-	handlers := setupDashboardHandlers(t, &fullMockDashboardRepository{}, provider, nil)
+	reportRepo := &countMockReportRepository{}
+	reportRepo.varianceRows = []*entities.VarianceReportRow{{
+		SourceID:        uuid.New(),
+		Currency:        "USD",
+		FeeScheduleID:   uuid.MustParse("00000000-0000-0000-0000-00000000aa01"),
+		FeeScheduleName: "INTERCHANGE",
+		TotalExpected:   decimal.RequireFromString("10.00"),
+		TotalActual:     decimal.RequireFromString("12.00"),
+		NetVariance:     decimal.RequireFromString("2.00"),
+	}}
+	handlers := setupDashboardHandlers(t, &fullMockDashboardRepository{}, provider, reportRepo)
 
 	app := setupFullTestApp(
 		handlers.GetMatchedReport,
@@ -1552,7 +1603,17 @@ func TestHandlers_GetVarianceReport_Success(t *testing.T) {
 	provider := &mockContextProvider{
 		info: &ReconciliationContextInfo{ID: contextID, Active: true},
 	}
-	handlers := setupDashboardHandlers(t, &fullMockDashboardRepository{}, provider, nil)
+	reportRepo := &countMockReportRepository{}
+	reportRepo.varianceRows = []*entities.VarianceReportRow{{
+		SourceID:        uuid.New(),
+		Currency:        "USD",
+		FeeScheduleID:   uuid.MustParse("00000000-0000-0000-0000-00000000aa01"),
+		FeeScheduleName: "INTERCHANGE",
+		TotalExpected:   decimal.RequireFromString("10.00"),
+		TotalActual:     decimal.RequireFromString("12.00"),
+		NetVariance:     decimal.RequireFromString("2.00"),
+	}}
+	handlers := setupDashboardHandlers(t, &fullMockDashboardRepository{}, provider, reportRepo)
 
 	app := setupFullTestApp(
 		handlers.GetVarianceReport,
@@ -1575,7 +1636,9 @@ func TestHandlers_GetVarianceReport_Success(t *testing.T) {
 
 	err = json.NewDecoder(resp.Body).Decode(&result)
 	require.NoError(t, err)
-	assert.NotNil(t, result.Items)
+	require.Len(t, result.Items, 1)
+	assert.Equal(t, "INTERCHANGE", result.Items[0].FeeScheduleName)
+	assert.Equal(t, "00000000-0000-0000-0000-00000000aa01", result.Items[0].FeeScheduleID)
 }
 
 func TestHandlers_GetVarianceReport_BadDate(t *testing.T) {

@@ -15,6 +15,7 @@ import (
 
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 
+	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 	repomocks "github.com/LerianStudio/matcher/internal/reporting/domain/repositories/mocks"
 	portsmocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
@@ -72,6 +73,64 @@ func TestExportWorker_ProcessJob_Success(t *testing.T) {
 
 	worker.processJob(context.Background(), job)
 
+	assert.Equal(t, entities.ExportJobStatusSucceeded, job.Status)
+}
+
+func TestExportWorker_ProcessJob_VarianceUsesJobTenantContext(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
+	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	cfg := ExportWorkerConfig{PageSize: 100, TempDir: t.TempDir()}
+	logger := &libLog.NopLogger{}
+	tenantID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+
+	reportRepo := &mockReportRepoForWorker{
+		varianceItems: []*entities.VarianceReportRow{{
+			SourceID:        uuid.New(),
+			Currency:        "USD",
+			FeeScheduleID:   uuid.MustParse("00000000-0000-0000-0000-000000000093"),
+			FeeScheduleName: "TENANT-SCOPED",
+		}},
+		varianceNextKey: "",
+	}
+
+	worker, err := NewExportWorker(jobRepo, reportRepo, storage, cfg, logger)
+	require.NoError(t, err)
+
+	job := &entities.ExportJob{
+		ID:         uuid.New(),
+		TenantID:   tenantID,
+		ContextID:  uuid.New(),
+		ReportType: entities.ExportReportTypeVariance,
+		Format:     entities.ExportFormatJSON,
+		Filter:     entities.ExportJobFilter{},
+		Status:     entities.ExportJobStatusRunning,
+	}
+
+	jobRepo.EXPECT().
+		UpdateProgress(gomock.Any(), job.ID, gomock.Any(), gomock.Any()).
+		DoAndReturn(func(ctx context.Context, _ uuid.UUID, _, _ int64) error {
+			assert.Equal(t, tenantID.String(), auth.GetTenantID(ctx))
+			return nil
+		}).
+		AnyTimes()
+
+	storage.EXPECT().
+		Upload(gomock.Any(), gomock.Any(), gomock.Any(), "application/json").
+		Return("key", nil)
+
+	jobRepo.EXPECT().
+		Update(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(ctx context.Context, _ *entities.ExportJob) error {
+			assert.Equal(t, tenantID.String(), auth.GetTenantID(ctx))
+			return nil
+		})
+
+	worker.processJob(context.Background(), job)
+
+	require.Equal(t, []string{tenantID.String()}, reportRepo.varianceTenantIDsSeen)
 	assert.Equal(t, entities.ExportJobStatusSucceeded, job.Status)
 }
 

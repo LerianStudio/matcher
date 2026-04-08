@@ -28,7 +28,11 @@ var (
 	ErrUnknownFeeStructureType = errors.New("unknown fee structure type")
 	// ErrFeeScheduleReferencedByFeeRule is returned when a fee schedule is still referenced by fee rules.
 	ErrFeeScheduleReferencedByFeeRule = errors.New("fee schedule is referenced by fee rules")
+	// ErrFeeScheduleReferencedByVarianceHistory is returned when a fee schedule is still referenced by fee variance history.
+	ErrFeeScheduleReferencedByVarianceHistory = errors.New("fee schedule is referenced by fee variance history")
 )
+
+const constraintFeeVarianceSchedule = "match_fee_variances_fee_schedule_id_fkey"
 
 // CreateFeeSchedule creates a new fee schedule.
 func (uc *UseCase) CreateFeeSchedule(
@@ -168,8 +172,13 @@ func (uc *UseCase) DeleteFeeSchedule(ctx context.Context, scheduleID uuid.UUID) 
 
 	if err := uc.feeScheduleRepo.Delete(ctx, scheduleID); err != nil {
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23503" && pgErr.ConstraintName == constraintFeeRuleSchedule {
-			return ErrFeeScheduleReferencedByFeeRule
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+			switch pgErr.ConstraintName {
+			case constraintFeeRuleSchedule:
+				return ErrFeeScheduleReferencedByFeeRule
+			case constraintFeeVarianceSchedule:
+				return ErrFeeScheduleReferencedByVarianceHistory
+			}
 		}
 
 		libOpentelemetry.HandleSpanError(span, "failed to delete fee schedule", err)

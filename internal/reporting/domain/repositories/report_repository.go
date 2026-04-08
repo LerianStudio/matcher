@@ -5,7 +5,6 @@ package repositories
 
 import (
 	"context"
-	"io"
 
 	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
@@ -64,7 +63,7 @@ type ReportRepository interface {
 	// GetSummary retrieves aggregated summary statistics.
 	GetSummary(ctx context.Context, filter entities.ReportFilter) (*entities.SummaryReport, error)
 
-	// GetVarianceReport retrieves variance data aggregated by source, currency, and fee type.
+	// GetVarianceReport retrieves variance data aggregated by source, currency, and fee schedule.
 	GetVarianceReport(
 		ctx context.Context,
 		filter entities.VarianceReportFilter,
@@ -162,16 +161,4 @@ type StreamingReportRepository interface {
 		filter entities.VarianceReportFilter,
 		maxRecords int,
 	) (VarianceRowIterator, error)
-}
-
-// CSVStreamer writes CSV data to a writer from a row iterator.
-type CSVStreamer interface {
-	// StreamMatchedCSV streams matched items as CSV to the writer.
-	StreamMatchedCSV(w io.Writer, iter MatchedRowIterator) error
-
-	// StreamUnmatchedCSV streams unmatched items as CSV to the writer.
-	StreamUnmatchedCSV(w io.Writer, iter UnmatchedRowIterator) error
-
-	// StreamVarianceCSV streams variance rows as CSV to the writer.
-	StreamVarianceCSV(w io.Writer, iter VarianceRowIterator) error
 }

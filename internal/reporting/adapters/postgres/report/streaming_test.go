@@ -278,7 +278,8 @@ func TestVarianceRowIterator_Methods(t *testing.T) {
 			[]string{
 				"source_id",
 				"currency",
-				"fee_type",
+				"fee_schedule_id",
+				"fee_schedule_name",
 				"total_expected",
 				"total_actual",
 				"net_variance",
@@ -406,9 +407,9 @@ func TestVarianceRowIterator_Scan(t *testing.T) {
 	netVariance := decimal.NewFromFloat(10.00)
 
 	rows := sqlmock.NewRows([]string{
-		"source_id", "currency", "fee_type", "total_expected", "total_actual", "net_variance",
+		"source_id", "currency", "fee_schedule_id", "fee_schedule_name", "total_expected", "total_actual", "net_variance",
 	}).AddRow(
-		sourceID, currency, feeType, totalExpected, totalActual, netVariance,
+		sourceID, currency, uuid.New(), feeType, totalExpected, totalActual, netVariance,
 	)
 
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
@@ -424,7 +425,7 @@ func TestVarianceRowIterator_Scan(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, sourceID, item.SourceID)
 	assert.Equal(t, currency, item.Currency)
-	assert.Equal(t, feeType, item.FeeType)
+	assert.Equal(t, feeType, item.FeeScheduleName)
 	assert.True(t, item.TotalExpected.Equal(totalExpected))
 	assert.True(t, item.TotalActual.Equal(totalActual))
 	assert.True(t, item.NetVariance.Equal(netVariance))
@@ -502,9 +503,9 @@ func TestVarianceRowIterator_ScanError(t *testing.T) {
 	defer db.Close()
 
 	rows := sqlmock.NewRows([]string{
-		"source_id", "currency", "fee_type", "total_expected", "total_actual", "net_variance",
+		"source_id", "currency", "fee_schedule_id", "fee_schedule_name", "total_expected", "total_actual", "net_variance",
 	}).AddRow(
-		"not-a-uuid", "USD", "FLAT", decimal.NewFromInt(100), decimal.NewFromInt(100), decimal.Zero,
+		"not-a-uuid", "USD", uuid.New(), "FLAT", decimal.NewFromInt(100), decimal.NewFromInt(100), decimal.Zero,
 	)
 
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
@@ -609,7 +610,8 @@ func TestVarianceRowIterator_CloseWithTransaction(t *testing.T) {
 		[]string{
 			"source_id",
 			"currency",
-			"fee_type",
+			"fee_schedule_id",
+			"fee_schedule_name",
 			"total_expected",
 			"total_actual",
 			"net_variance",
@@ -717,7 +719,8 @@ func TestVarianceRowIterator_CloseWithTransactionError(t *testing.T) {
 		[]string{
 			"source_id",
 			"currency",
-			"fee_type",
+			"fee_schedule_id",
+			"fee_schedule_name",
 			"total_expected",
 			"total_actual",
 			"net_variance",
@@ -1038,7 +1041,7 @@ func TestStreamVarianceForExport_WithSourceIDFilter(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT")).
-		WillReturnRows(sqlmock.NewRows([]string{"source_id", "currency", "fee_type", "total_expected", "total_actual", "net_variance"}))
+		WillReturnRows(sqlmock.NewRows([]string{"source_id", "currency", "fee_schedule_id", "fee_schedule_name", "total_expected", "total_actual", "net_variance"}))
 	mock.ExpectCommit()
 
 	iter, err := repo.StreamVarianceForExport(ctx, filter, 100)
@@ -1169,14 +1172,15 @@ func TestStreamVarianceForExport_SuccessfulIteration(t *testing.T) {
 	}
 
 	sourceID := uuid.New()
+	feeScheduleID := uuid.New()
 	totalExpected := decimal.NewFromFloat(1000.00)
 	totalActual := decimal.NewFromFloat(950.00)
 	netVariance := decimal.NewFromFloat(-50.00)
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT")).
-		WillReturnRows(sqlmock.NewRows([]string{"source_id", "currency", "fee_type", "total_expected", "total_actual", "net_variance"}).
-			AddRow(sourceID, "USD", "FLAT", totalExpected, totalActual, netVariance))
+		WillReturnRows(sqlmock.NewRows([]string{"source_id", "currency", "fee_schedule_id", "fee_schedule_name", "total_expected", "total_actual", "net_variance"}).
+			AddRow(sourceID, "USD", feeScheduleID, "FLAT", totalExpected, totalActual, netVariance))
 	mock.ExpectCommit()
 
 	iter, err := repo.StreamVarianceForExport(ctx, filter, 100)
@@ -1189,7 +1193,8 @@ func TestStreamVarianceForExport_SuccessfulIteration(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, sourceID, item.SourceID)
 	assert.Equal(t, "USD", item.Currency)
-	assert.Equal(t, "FLAT", item.FeeType)
+	assert.Equal(t, feeScheduleID, item.FeeScheduleID)
+	assert.Equal(t, "FLAT", item.FeeScheduleName)
 	require.NotNil(t, item.VariancePct)
 
 	expectedVariancePct := netVariance.Div(totalExpected).Mul(decimal.NewFromInt(100))
@@ -1280,7 +1285,8 @@ func TestVarianceRowIterator_ScanAfterExhausted(t *testing.T) {
 		[]string{
 			"source_id",
 			"currency",
-			"fee_type",
+			"fee_schedule_id",
+			"fee_schedule_name",
 			"total_expected",
 			"total_actual",
 			"net_variance",
@@ -1364,7 +1370,8 @@ func TestIterator_CloseWithoutTransaction(t *testing.T) {
 			[]string{
 				"source_id",
 				"currency",
-				"fee_type",
+				"fee_schedule_id",
+				"fee_schedule_name",
 				"total_expected",
 				"total_actual",
 				"net_variance",

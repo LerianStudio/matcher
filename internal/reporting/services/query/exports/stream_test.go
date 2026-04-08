@@ -278,7 +278,8 @@ func TestStreamingCSVWriter_WriteVarianceHeader(t *testing.T) {
 		[]string{
 			"source_id",
 			"currency",
-			"fee_type",
+			"fee_schedule_id",
+			"fee_schedule_name",
 			"total_expected",
 			"total_actual",
 			"net_variance",
@@ -299,13 +300,14 @@ func TestStreamingCSVWriter_WriteVarianceRow(t *testing.T) {
 
 		variancePct := decimal.NewFromFloat(5.25)
 		row := &entities.VarianceReportRow{
-			SourceID:      uuid.New(),
-			Currency:      "USD",
-			FeeType:       "PERCENTAGE",
-			TotalExpected: decimal.NewFromInt(1000),
-			TotalActual:   decimal.NewFromInt(1050),
-			NetVariance:   decimal.NewFromInt(50),
-			VariancePct:   &variancePct,
+			SourceID:        uuid.New(),
+			Currency:        "USD",
+			FeeScheduleID:   uuid.MustParse("00000000-0000-0000-0000-000000000050"),
+			FeeScheduleName: "PERCENTAGE",
+			TotalExpected:   decimal.NewFromInt(1000),
+			TotalActual:     decimal.NewFromInt(1050),
+			NetVariance:     decimal.NewFromInt(50),
+			VariancePct:     &variancePct,
 		}
 
 		require.NoError(t, writer.WriteVarianceHeader())
@@ -317,7 +319,9 @@ func TestStreamingCSVWriter_WriteVarianceRow(t *testing.T) {
 		rows, err := reader.ReadAll()
 		require.NoError(t, err)
 		require.Len(t, rows, 2)
-		assert.Equal(t, "5.25", rows[1][6])
+		assert.Equal(t, "00000000-0000-0000-0000-000000000050", rows[1][2])
+		assert.Equal(t, "PERCENTAGE", rows[1][3])
+		assert.Equal(t, "5.25", rows[1][7])
 	})
 
 	t.Run("writes row with nil variance percentage", func(t *testing.T) {
@@ -327,13 +331,14 @@ func TestStreamingCSVWriter_WriteVarianceRow(t *testing.T) {
 		writer := NewStreamingCSVWriter(buf)
 
 		row := &entities.VarianceReportRow{
-			SourceID:      uuid.New(),
-			Currency:      "EUR",
-			FeeType:       "FLAT",
-			TotalExpected: decimal.Zero,
-			TotalActual:   decimal.NewFromInt(100),
-			NetVariance:   decimal.NewFromInt(100),
-			VariancePct:   nil,
+			SourceID:        uuid.New(),
+			Currency:        "EUR",
+			FeeScheduleID:   uuid.MustParse("00000000-0000-0000-0000-000000000060"),
+			FeeScheduleName: "FLAT",
+			TotalExpected:   decimal.Zero,
+			TotalActual:     decimal.NewFromInt(100),
+			NetVariance:     decimal.NewFromInt(100),
+			VariancePct:     nil,
 		}
 
 		require.NoError(t, writer.WriteVarianceHeader())
@@ -345,7 +350,36 @@ func TestStreamingCSVWriter_WriteVarianceRow(t *testing.T) {
 		rows, err := reader.ReadAll()
 		require.NoError(t, err)
 		require.Len(t, rows, 2)
-		assert.Empty(t, rows[1][6])
+		assert.Equal(t, "00000000-0000-0000-0000-000000000060", rows[1][2])
+		assert.Equal(t, "FLAT", rows[1][3])
+		assert.Empty(t, rows[1][7])
+	})
+
+	t.Run("sanitizes fee schedule name", func(t *testing.T) {
+		t.Parallel()
+
+		buf := &bytes.Buffer{}
+		writer := NewStreamingCSVWriter(buf)
+
+		row := &entities.VarianceReportRow{
+			SourceID:        uuid.New(),
+			Currency:        "USD",
+			FeeScheduleID:   uuid.MustParse("00000000-0000-0000-0000-000000000070"),
+			FeeScheduleName: "=danger",
+			TotalExpected:   decimal.NewFromInt(100),
+			TotalActual:     decimal.NewFromInt(100),
+			NetVariance:     decimal.Zero,
+		}
+
+		require.NoError(t, writer.WriteVarianceHeader())
+		require.NoError(t, writer.WriteVarianceRow(row))
+		require.NoError(t, writer.Flush())
+
+		reader := csv.NewReader(strings.NewReader(buf.String()))
+		rows, err := reader.ReadAll()
+		require.NoError(t, err)
+		require.Len(t, rows, 2)
+		assert.Equal(t, "'=danger", rows[1][3])
 	})
 
 	t.Run("skips nil row", func(t *testing.T) {

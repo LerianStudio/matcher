@@ -125,6 +125,11 @@ func (uc *UseCase) loadFeeRulesAndSchedules(
 
 	logger, _, _, _ := libCommons.NewTrackingFromContext(ctx) //nolint:dogsled // only logger needed here
 
+	if uc.feeRuleProvider == nil {
+		span.SetAttributes(attribute.Bool("fee_rules_load_error", true))
+		return nil, nil, nil, ErrNilFeeRuleProvider
+	}
+
 	rules, err := uc.feeRuleProvider.FindByContextID(ctx, contextID)
 	if err != nil {
 		span.SetAttributes(attribute.Bool("fee_rules_load_error", true))
@@ -145,17 +150,7 @@ func (uc *UseCase) loadFeeRulesAndSchedules(
 		return nil, nil, nil, fee.ErrFeeRuleCountLimitExceeded
 	}
 
-	sort.SliceStable(rules, func(i, j int) bool {
-		if rules[i] == nil {
-			return false
-		}
-
-		if rules[j] == nil {
-			return true
-		}
-
-		return rules[i].Priority < rules[j].Priority
-	})
+	sortFeeRulesByPriority(rules)
 
 	scheduleIDSet := make(map[uuid.UUID]struct{})
 
@@ -204,6 +199,20 @@ func (uc *UseCase) loadFeeRulesAndSchedules(
 	leftRules, rightRules := fee.SplitRulesBySide(rules)
 
 	return leftRules, rightRules, schedules, nil
+}
+
+func sortFeeRulesByPriority(rules []*fee.FeeRule) {
+	sort.SliceStable(rules, func(i, j int) bool {
+		if rules[i] == nil {
+			return false
+		}
+
+		if rules[j] == nil {
+			return true
+		}
+
+		return rules[i].Priority < rules[j].Priority
+	})
 }
 
 func buildSourceTypeMap(sources []*ports.SourceInfo) map[uuid.UUID]string {

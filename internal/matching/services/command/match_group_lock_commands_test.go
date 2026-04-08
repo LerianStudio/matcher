@@ -101,6 +101,9 @@ func TestValidateRunMatchDependencies_AllPresent(t *testing.T) {
 		matchItemRepo:    &mockMatchItemRepository{},
 		exceptionCreator: &mockExceptionCreator{},
 		outboxRepoTx:     &stubOutboxTxCreatorForLockTest{},
+		feeVarianceRepo:  &stubFeeVarianceRepo{},
+		feeRuleProvider:  &stubFeeRuleProviderWithResult{},
+		feeScheduleRepo:  &stubFeeScheduleRepoWithResult{},
 	}
 	err := uc.validateRunMatchDependencies()
 	require.NoError(t, err)
@@ -121,6 +124,9 @@ func TestValidateRunMatchDependencies_EachNil(t *testing.T) {
 			matchItemRepo:    &mockMatchItemRepository{},
 			exceptionCreator: &mockExceptionCreator{},
 			outboxRepoTx:     &stubOutboxTxCreatorForLockTest{},
+			feeVarianceRepo:  &stubFeeVarianceRepo{},
+			feeRuleProvider:  &stubFeeRuleProviderWithResult{},
+			feeScheduleRepo:  &stubFeeScheduleRepoWithResult{},
 		}
 	}
 
@@ -139,6 +145,9 @@ func TestValidateRunMatchDependencies_EachNil(t *testing.T) {
 		{"nil matchItemRepo", func(uc *UseCase) { uc.matchItemRepo = nil }, ErrNilMatchItemRepository},
 		{"nil exceptionCreator", func(uc *UseCase) { uc.exceptionCreator = nil }, ErrNilExceptionCreator},
 		{"nil outboxRepoTx", func(uc *UseCase) { uc.outboxRepoTx = nil }, ErrOutboxRepoNotConfigured},
+		{"nil feeVarianceRepo", func(uc *UseCase) { uc.feeVarianceRepo = nil }, ErrNilFeeVarianceRepository},
+		{"nil feeRuleProvider", func(uc *UseCase) { uc.feeRuleProvider = nil }, ErrNilFeeRuleProvider},
+		{"nil feeScheduleRepo", func(uc *UseCase) { uc.feeScheduleRepo = nil }, ErrNilFeeScheduleRepository},
 	}
 
 	for _, tt := range tests {

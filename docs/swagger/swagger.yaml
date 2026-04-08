@@ -109,10 +109,6 @@ definitions:
         maxLength: 100
         minLength: 1
         type: string
-      rateId:
-        example: 550e8400-e29b-41d4-a716-446655440000
-        format: uuid
-        type: string
       rules:
         items:
           $ref: '#/definitions/github_com_LerianStudio_matcher_internal_configuration_adapters_http_dto.CreateMatchRuleRequest'
@@ -601,10 +597,6 @@ definitions:
         description: Name of the reconciliation context
         example: Bank Reconciliation Q1
         type: string
-      rateId:
-        description: Optional rate ID for FX conversions
-        example: 550e8400-e29b-41d4-a716-446655440000
-        type: string
       status:
         description: Current status of the context
         enum:
@@ -828,10 +820,6 @@ definitions:
       name:
         example: Bank Reconciliation Q2
         maxLength: 100
-        type: string
-      rateId:
-        example: 550e8400-e29b-41d4-a716-446655440000
-        format: uuid
         type: string
       status:
         enum:
@@ -2654,7 +2642,10 @@ definitions:
       currency:
         example: USD
         type: string
-      fee_type:
+      fee_schedule_id:
+        example: 550e8400-e29b-41d4-a716-446655440001
+        type: string
+      fee_schedule_name:
         example: INTERCHANGE
         type: string
       net_variance:
@@ -6947,7 +6938,7 @@ paths:
           schema:
             $ref: '#/definitions/github_com_LerianStudio_matcher_internal_shared_adapters_http.ErrorResponse'
         "409":
-          description: 'Conflict: fee schedule is still referenced by fee rules'
+          description: 'Conflict: fee schedule is still in use'
           schema:
             $ref: '#/definitions/github_com_LerianStudio_matcher_internal_shared_adapters_http.ErrorResponse'
         "500":

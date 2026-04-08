@@ -17,6 +17,7 @@ import (
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/bxcodec/dbresolver/v2"
+	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/stretchr/testify/assert"
@@ -36,8 +37,10 @@ import (
 	governanceWorker "github.com/LerianStudio/matcher/internal/governance/services/worker"
 	ingestionRabbitmq "github.com/LerianStudio/matcher/internal/ingestion/adapters/rabbitmq"
 	matchingRabbitmq "github.com/LerianStudio/matcher/internal/matching/adapters/rabbitmq"
+	matchingCommand "github.com/LerianStudio/matcher/internal/matching/services/command"
 	reportingStorage "github.com/LerianStudio/matcher/internal/reporting/adapters/storage"
 	reportingWorker "github.com/LerianStudio/matcher/internal/reporting/services/worker"
+	outboxPgRepo "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/outbox"
 	sharedRabbitmq "github.com/LerianStudio/matcher/internal/shared/adapters/rabbitmq"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
@@ -386,6 +389,64 @@ func TestCreateRabbitMQConnection(t *testing.T) {
 			),
 		)
 	})
+}
+
+func TestInitMatchingModule_WiresFeeDependencies(t *testing.T) {
+	t.Parallel()
+
+	db, _, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	resolver := dbresolver.New(dbresolver.WithPrimaryDBs(db), dbresolver.WithReplicaDBs(db))
+	conn := testutil.NewClientWithResolver(resolver)
+	provider := &testutil.MockInfrastructureProvider{PostgresConn: conn}
+
+	repos, err := initSharedRepositories(provider)
+	require.NoError(t, err)
+	require.NotNil(t, repos.feeSchedule)
+	require.NotNil(t, repos.configFeeRule)
+
+	app := fiber.New()
+	routes := &Routes{
+		API: app.Group("/v1"),
+		Protected: func(_ string, _ ...string) fiber.Router {
+			return app.Group("/v1")
+		},
+	}
+
+	useCase, err := initMatchingModule(routes, provider, outboxPgRepo.NewRepository(provider), repos, false)
+	require.NoError(t, err)
+	require.NotNil(t, useCase)
+	require.NoError(t, routes.RegistrationErr())
+}
+
+func TestInitMatchingModule_MissingFeeScheduleRepo_ReturnsError(t *testing.T) {
+	t.Parallel()
+
+	db, _, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	resolver := dbresolver.New(dbresolver.WithPrimaryDBs(db), dbresolver.WithReplicaDBs(db))
+	conn := testutil.NewClientWithResolver(resolver)
+	provider := &testutil.MockInfrastructureProvider{PostgresConn: conn}
+
+	repos, err := initSharedRepositories(provider)
+	require.NoError(t, err)
+	repos.feeSchedule = nil
+
+	app := fiber.New()
+	routes := &Routes{
+		API: app.Group("/v1"),
+		Protected: func(_ string, _ ...string) fiber.Router {
+			return app.Group("/v1")
+		},
+	}
+
+	useCase, err := initMatchingModule(routes, provider, outboxPgRepo.NewRepository(provider), repos, false)
+	require.ErrorIs(t, err, matchingCommand.ErrNilFeeScheduleRepository)
+	assert.Nil(t, useCase)
 }
 
 func TestEvaluateInsecureRabbitMQHealthCheckPolicy(t *testing.T) {

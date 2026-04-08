@@ -719,6 +719,7 @@ func TestIsClientSafeError_Comprehensive(t *testing.T) {
 	t.Parallel()
 
 	safeErrors := []error{
+		dto.ErrDeprecatedRateID,
 		entities.ErrNilReconciliationContext,
 		entities.ErrContextNameRequired,
 		entities.ErrContextNameTooLong,
@@ -1664,6 +1665,59 @@ func TestUpdateContext_InvalidPayload(t *testing.T) {
 	defer resp.Body.Close()
 
 	require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+	requireSpanName(t, recorder, "handler.context.update")
+}
+
+func TestCreateContext_DeprecatedRateID_ReturnsExplicitBadRequest(t *testing.T) {
+	t.Parallel()
+
+	tracer, recorder := newTestTracer(t)
+	tenantID := uuid.New()
+	ctx := newRequestContext(tracer, tenantID)
+	app := newTestApp(ctx)
+	fixture := newHandlerFixture(t)
+
+	app.Post("/v1/config/contexts", fixture.handler.CreateContext)
+
+	payload := []byte(`{"name":"Context","type":"1:1","interval":"daily","rateId":"550e8400-e29b-41d4-a716-446655440000"}`)
+	resp := performRequest(t, app, http.MethodPost, "/v1/config/contexts", payload)
+	defer resp.Body.Close()
+
+	require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+	var responsePayload map[string]any
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&responsePayload))
+	require.Equal(t, expectedConfigurationCode("invalid_request"), responsePayload["code"])
+	require.Equal(t, http.StatusText(http.StatusBadRequest), responsePayload["title"])
+	assert.Contains(t, responsePayload["message"], dto.ErrDeprecatedRateID.Error())
+	requireSpanName(t, recorder, "handler.context.create")
+}
+
+func TestUpdateContext_DeprecatedRateID_ReturnsExplicitBadRequest(t *testing.T) {
+	t.Parallel()
+
+	tracer, recorder := newTestTracer(t)
+	tenantID := uuid.New()
+	ctx := newRequestContext(tracer, tenantID)
+	app := newTestApp(ctx)
+	fixture := newHandlerFixture(t)
+	contextEntity := fixture.seedContext(t, tenantID)
+
+	app.Patch("/v1/config/contexts/:contextId", fixture.handler.UpdateContext)
+
+	requestPath := replacePathParams(
+		"/v1/config/contexts/:contextId",
+		contextEntity.ID.String(),
+	)
+	payload := []byte(`{"status":"ACTIVE","rateId":"550e8400-e29b-41d4-a716-446655440000"}`)
+	resp := performRequest(t, app, http.MethodPatch, requestPath, payload)
+	defer resp.Body.Close()
+
+	require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+	var responsePayload map[string]any
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&responsePayload))
+	require.Equal(t, expectedConfigurationCode("invalid_request"), responsePayload["code"])
+	require.Equal(t, http.StatusText(http.StatusBadRequest), responsePayload["title"])
+	assert.Contains(t, responsePayload["message"], dto.ErrDeprecatedRateID.Error())
 	requireSpanName(t, recorder, "handler.context.update")
 }
 

@@ -96,7 +96,6 @@ import (
 	matchGroupRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/match_group"
 	matchItemRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/match_item"
 	matchRunRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/match_run"
-	matchRateRepo "github.com/LerianStudio/matcher/internal/matching/adapters/postgres/rate"
 	matchingRabbitmq "github.com/LerianStudio/matcher/internal/matching/adapters/rabbitmq"
 	matchLockManager "github.com/LerianStudio/matcher/internal/matching/adapters/redis"
 	matchingCommand "github.com/LerianStudio/matcher/internal/matching/services/command"
@@ -2990,7 +2989,6 @@ func initMatchingModule(
 	matchGroupRepository := matchGroupRepo.NewRepository(provider)
 	matchItemRepository := matchItemRepo.NewRepository(provider)
 	exceptionCreator := matchExceptionRepo.NewRepository(provider)
-	rateRepository := matchRateRepo.NewRepository(provider)
 	feeVarianceRepository := matchFeeVarianceRepo.NewRepository(provider)
 
 	useCase, err := matchingCommand.New(matchingCommand.UseCaseDeps{
@@ -3004,7 +3002,6 @@ func initMatchingModule(
 		MatchItemRepo:    matchItemRepository,
 		ExceptionCreator: exceptionCreator,
 		OutboxRepo:       outboxRepo,
-		RateRepo:         rateRepository,
 		FeeVarianceRepo:  feeVarianceRepository,
 		AdjustmentRepo:   repos.adjustment,
 		InfraProvider:    provider,

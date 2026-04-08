@@ -436,7 +436,7 @@ func (uc *UseCase) ExportSummaryPDF(
 	return data, nil
 }
 
-// GetVarianceReport retrieves variance data aggregated by source, currency, and fee type.
+// GetVarianceReport retrieves variance data aggregated by source, currency, and fee schedule.
 func (uc *UseCase) GetVarianceReport(
 	ctx context.Context,
 	filter entities.VarianceReportFilter,

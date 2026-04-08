@@ -475,6 +475,30 @@ func TestNewReconciliationContext_InvalidFeeNormalization(t *testing.T) {
 	require.ErrorIs(t, err, ErrFeeNormalizationInvalid)
 }
 
+func TestNewReconciliationContext_NegativeFeeTolerances(t *testing.T) {
+	t.Parallel()
+
+	tenantID := uuid.New()
+	abs := "-0.01"
+	pct := "-0.5"
+
+	_, err := NewReconciliationContext(context.Background(), tenantID, CreateReconciliationContextInput{
+		Name:            "Test",
+		Type:            value_objects.ContextTypeOneToOne,
+		Interval:        "0 0 * * *",
+		FeeToleranceAbs: &abs,
+	})
+	require.ErrorIs(t, err, ErrFeeToleranceAbsInvalid)
+
+	_, err = NewReconciliationContext(context.Background(), tenantID, CreateReconciliationContextInput{
+		Name:            "Test",
+		Type:            value_objects.ContextTypeOneToOne,
+		Interval:        "0 0 * * *",
+		FeeTolerancePct: &pct,
+	})
+	require.ErrorIs(t, err, ErrFeeTolerancePctInvalid)
+}
+
 func TestUpdateReconciliationContext_InvalidFeeNormalization(t *testing.T) {
 	t.Parallel()
 
@@ -487,6 +511,29 @@ func TestUpdateReconciliationContext_InvalidFeeNormalization(t *testing.T) {
 		contextEntity,
 		UpdateReconciliationContextInput{FeeNormalization: &invalidMode},
 		ErrFeeNormalizationInvalid,
+	)
+}
+
+func TestUpdateReconciliationContext_NegativeFeeTolerances(t *testing.T) {
+	t.Parallel()
+
+	tenantID := uuid.New()
+	contextEntity := createTestContextEntity(t, tenantID)
+	abs := "-0.01"
+	pct := "-0.5"
+
+	testContextUpdateError(
+		t,
+		contextEntity,
+		UpdateReconciliationContextInput{FeeToleranceAbs: &abs},
+		ErrFeeToleranceAbsInvalid,
+	)
+
+	testContextUpdateError(
+		t,
+		contextEntity,
+		UpdateReconciliationContextInput{FeeTolerancePct: &pct},
+		ErrFeeTolerancePctInvalid,
 	)
 }
 

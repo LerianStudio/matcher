@@ -4,10 +4,12 @@ package journeys
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"testing"
 	"time"
 
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/stretchr/testify/require"
 
 	"github.com/LerianStudio/matcher/tests/e2e"
@@ -21,6 +23,34 @@ import (
 func reportDateRange() (string, string) {
 	now := time.Now().UTC()
 	return now.AddDate(0, 0, -89).Format("2006-01-02"), now.Format("2006-01-02")
+}
+
+func setFeeMetadataForE2EContextTransactions(
+	t *testing.T,
+	tc *e2e.TestContext,
+	contextID string,
+	amount string,
+	currency string,
+) {
+	t.Helper()
+
+	db, err := sql.Open("pgx", tc.Config().PostgresDSN())
+	require.NoError(t, err)
+	defer db.Close()
+
+	payload := fmt.Sprintf(`{"fee":{"amount":"%s","currency":"%s"}}`, amount, currency)
+	_, err = db.ExecContext(
+		context.Background(),
+		`UPDATE public.transactions
+		 SET metadata = $1::jsonb,
+		     updated_at = NOW()
+		 WHERE ingestion_job_id IN (
+		     SELECT id FROM public.ingestion_jobs WHERE context_id = $2
+		 )`,
+		payload,
+		contextID,
+	)
+	require.NoError(t, err)
 }
 
 // setupMatchedPipeline creates a full reconciliation pipeline with matched and unmatched
@@ -139,6 +169,89 @@ func setupMatchedPipeline(
 	return reconciliationContext.ID
 }
 
+func setupVariancePipeline(
+	t *testing.T,
+	ctx context.Context,
+	tc *e2e.TestContext,
+	apiClient *e2e.Client,
+	name string,
+) string {
+	t.Helper()
+
+	f := factories.New(tc, apiClient)
+
+	reconciliationContext := f.Context.NewContext().
+		WithName(name).
+		MustCreate(ctx)
+	ledgerSource := f.Source.NewSource(reconciliationContext.ID).
+		WithName("ledger").AsLedger().MustCreate(ctx)
+	bankSource := f.Source.NewSource(reconciliationContext.ID).
+		WithName("bank").AsBank().MustCreate(ctx)
+
+	f.Source.NewFieldMap(reconciliationContext.ID, ledgerSource.ID).
+		WithStandardMapping().MustCreate(ctx)
+	f.Source.NewFieldMap(reconciliationContext.ID, bankSource.ID).
+		WithStandardMapping().MustCreate(ctx)
+	f.Rule.NewRule(reconciliationContext.ID).
+		Exact().WithExactConfig(true, true).MustCreate(ctx)
+
+	schedule := f.FeeSchedule.NewFeeSchedule().
+		WithName("variance-fee-schedule").
+		WithFlatFee("flat-fee", 1, "10.00").
+		MustCreate(ctx)
+	f.FeeRule.NewFeeRule(reconciliationContext.ID).
+		Any().
+		WithName("variance-fee-rule").
+		WithFeeScheduleID(schedule.ID).
+		WithPriority(1).
+		MustCreate(ctx)
+
+	matchedDate := time.Now().UTC().AddDate(0, 0, -2).Format("2006-01-02")
+
+	ledgerCSV := factories.NewCSVBuilder(tc.NamePrefix()).
+		AddRow("VRP-001", "250.00", "USD", matchedDate, "variance payment").
+		Build()
+	ledgerJob, err := apiClient.Ingestion.UploadCSV(
+		ctx,
+		reconciliationContext.ID,
+		ledgerSource.ID,
+		"variance_ledger.csv",
+		ledgerCSV,
+	)
+	require.NoError(t, err)
+	require.NoError(t, e2e.WaitForJobComplete(ctx, tc, apiClient, reconciliationContext.ID, ledgerJob.ID))
+
+	bankCSV := factories.NewCSVBuilder(tc.NamePrefix()).
+		AddRow("vrp-001", "250.00", "USD", matchedDate, "variance payment").
+		Build()
+	bankJob, err := apiClient.Ingestion.UploadCSV(
+		ctx,
+		reconciliationContext.ID,
+		bankSource.ID,
+		"variance_bank.csv",
+		bankCSV,
+	)
+	require.NoError(t, err)
+	require.NoError(t, e2e.WaitForJobComplete(ctx, tc, apiClient, reconciliationContext.ID, bankJob.ID))
+
+	setFeeMetadataForE2EContextTransactions(t, tc, reconciliationContext.ID, "12.00", "USD")
+
+	matchResp, err := apiClient.Matching.RunMatchCommit(ctx, reconciliationContext.ID)
+	require.NoError(t, err)
+	require.NoError(
+		t,
+		e2e.WaitForMatchRunComplete(
+			ctx,
+			tc,
+			apiClient,
+			reconciliationContext.ID,
+			matchResp.RunID,
+		),
+	)
+
+	return reconciliationContext.ID
+}
+
 // TestReporting_GetMatchedReport verifies that the matched report endpoint returns
 // items with valid fields after a successful match run.
 func TestReporting_GetMatchedReport(t *testing.T) {
@@ -238,7 +351,7 @@ func TestReporting_GetSummaryReport(t *testing.T) {
 }
 
 // TestReporting_GetVarianceReport verifies that the variance report endpoint returns
-// a valid response (items may be empty if no fee variance is configured).
+// a fee-enabled response with at least one variance row.
 func TestReporting_GetVarianceReport(t *testing.T) {
 	e2e.RunE2EWithTimeout(
 		t,
@@ -246,7 +359,7 @@ func TestReporting_GetVarianceReport(t *testing.T) {
 		func(t *testing.T, tc *e2e.TestContext, apiClient *e2e.Client) {
 			ctx := context.Background()
 
-			contextID := setupMatchedPipeline(t, ctx, tc, apiClient, "rpt-variance", 2, 1)
+			contextID := setupVariancePipeline(t, ctx, tc, apiClient, "rpt-variance")
 
 			dateFrom, dateTo := reportDateRange()
 			report, err := apiClient.Reporting.GetVarianceReport(ctx, contextID, map[string]string{
@@ -255,7 +368,10 @@ func TestReporting_GetVarianceReport(t *testing.T) {
 			})
 			require.NoError(t, err)
 			require.NotNil(t, report)
-			// Items may be empty when no fee schedules are configured — that is valid.
+			require.NotEmpty(t, report.Items, "variance report should have at least one item")
+			for _, item := range report.Items {
+				require.NotEmpty(t, item.FeeScheduleName)
+			}
 			tc.Logf("Variance report returned %d items", len(report.Items))
 		},
 	)

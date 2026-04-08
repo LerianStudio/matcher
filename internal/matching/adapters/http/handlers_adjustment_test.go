@@ -107,7 +107,6 @@ func newAdjustmentUseCase(
 	itemRepo := &runMatchItemRepo{}
 	exceptionCreator := &runMatchExceptionCreator{}
 	outboxRepo := &runMatchOutboxRepo{}
-	rateRepo := &runMatchRateRepo{}
 	feeVarianceRepo := &runMatchFeeVarianceRepo{}
 	adjustmentRepo := &failingAdjustmentRepo{err: adjErr}
 	infraProvider := &runMatchInfraProvider{}
@@ -127,7 +126,6 @@ func newAdjustmentUseCase(
 		MatchItemRepo:    itemRepo,
 		ExceptionCreator: exceptionCreator,
 		OutboxRepo:       outboxRepo,
-		RateRepo:         rateRepo,
 		FeeVarianceRepo:  feeVarianceRepo,
 		AdjustmentRepo:   adjustmentRepo,
 		InfraProvider:    infraProvider,

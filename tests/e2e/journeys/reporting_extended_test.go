@@ -4,6 +4,7 @@ package journeys
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -261,6 +262,8 @@ func TestReporting_VarianceExport(t *testing.T) {
 			)
 			require.NoError(t, err)
 			require.NotEmpty(t, reportData, "variance report should have content")
+			require.Contains(t, strings.ToLower(string(reportData)), "fee_schedule_name")
+			require.NotContains(t, strings.ToLower(string(reportData)), "fee_type")
 			tc.Logf("✓ Variance report exported: %d bytes", len(reportData))
 		},
 	)

@@ -153,14 +153,42 @@ func TestDeleteFeeSchedule_Handler_InUseConflict(t *testing.T) {
 	schedule := fixture.seedFeeSchedule(t, tenantID)
 	fixture.feeScheduleRepo.deleteErr = command.ErrFeeScheduleReferencedByFeeRule
 
-	app.Delete("/v1/config/fee-schedules/:scheduleId", fixture.handler.DeleteFeeSchedule)
+	app.Delete("/v1/fee-schedules/:scheduleId", fixture.handler.DeleteFeeSchedule)
 
-	req := httptest.NewRequest(http.MethodDelete, "/v1/config/fee-schedules/"+schedule.ID.String(), nil)
+	req := httptest.NewRequest(http.MethodDelete, "/v1/fee-schedules/"+schedule.ID.String(), nil)
 	resp, err := app.Test(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusConflict, resp.StatusCode)
+	var payload map[string]any
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&payload))
+	require.Equal(t, expectedConfigurationCode("fee_schedule_in_use"), payload["code"])
+	assert.Contains(t, payload["message"], "fee schedule is still in use")
+}
+
+func TestDeleteFeeSchedule_Handler_VarianceHistoryConflict(t *testing.T) {
+	t.Parallel()
+
+	tenantID := uuid.New()
+	ctx := newFeeScheduleTestContext(tenantID)
+	app := newFeeScheduleTestApp(ctx)
+	fixture := newHandlerFixture(t)
+	schedule := fixture.seedFeeSchedule(t, tenantID)
+	fixture.feeScheduleRepo.deleteErr = command.ErrFeeScheduleReferencedByVarianceHistory
+
+	app.Delete("/v1/fee-schedules/:scheduleId", fixture.handler.DeleteFeeSchedule)
+
+	req := httptest.NewRequest(http.MethodDelete, "/v1/fee-schedules/"+schedule.ID.String(), nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusConflict, resp.StatusCode)
+	var payload map[string]any
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&payload))
+	require.Equal(t, expectedConfigurationCode("fee_schedule_in_use"), payload["code"])
+	assert.Contains(t, payload["message"], "fee schedule is still in use")
 }
 
 func TestSimulateFeeSchedule_Handler_InvalidID(t *testing.T) {

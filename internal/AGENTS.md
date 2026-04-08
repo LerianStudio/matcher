@@ -11,7 +11,7 @@ This directory contains the private application code, organized by Bounded Conte
 
 ### Bootstrap (`internal/bootstrap`)
 - **Role:** Composition Root.
-- **Features:** App configuration (zero-config defaults + env overrides), dependency injection, server lifecycle, infrastructure connections (PostgreSQL primary/replica, Redis, RabbitMQ, S3), systemplane integration (runtime config authority), dynamic infrastructure switching, worker lifecycle management, health checks, rate limiting, observability (OpenTelemetry).
+- **Features:** App configuration (zero-config defaults + env overrides), dependency injection, server lifecycle, infrastructure connections (PostgreSQL primary/replica, Redis, RabbitMQ, S3), systemplane integration (runtime config authority), dynamic infrastructure switching, worker lifecycle management, health checks, rate limiting, observability (OpenTelemetry), and migration orchestration with preflight guards for irreversible cutovers such as migration 022.
 - [Documentation](bootstrap/README.md)
 
 ### Configuration (`internal/configuration`)
@@ -56,7 +56,7 @@ This directory contains the private application code, organized by Bounded Conte
 
 ### Shared (`internal/shared`)
 - **Role:** Shared kernel (cross-cutting concerns).
-- **Features:** Canonical domain entities (Transaction, MatchRule, FieldMap, AuditLog, OutboxEvent), fee calculation engine (calculator, verifier, normalization, schedule/rate models), cross-context bridge adapters, common SQL utilities, RabbitMQ publisher with confirms and DLQ, idempotency middleware, tenant-aware infrastructure ports and SQL helpers, CSV formula injection prevention.
+- **Features:** Canonical domain entities (Transaction, MatchRule, FieldMap, AuditLog, OutboxEvent), fee calculation engine (schedule calculation, verifier, normalization, fee schedule/rule models), cross-context bridge adapters, common SQL utilities, RabbitMQ publisher with confirms and DLQ, idempotency middleware, tenant-aware infrastructure ports and SQL helpers, CSV formula injection prevention.
 - [Documentation](shared/README.md)
 
 ### Testutil (`internal/testutil`)

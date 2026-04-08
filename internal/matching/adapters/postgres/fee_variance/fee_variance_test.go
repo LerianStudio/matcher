@@ -59,7 +59,8 @@ func TestNewPostgreSQLModel(t *testing.T) {
 			assert.Equal(t, tt.entity.RunID.String(), model.RunID)
 			assert.Equal(t, tt.entity.MatchGroupID.String(), model.MatchGroupID)
 			assert.Equal(t, tt.entity.TransactionID.String(), model.TransactionID)
-			assert.Equal(t, tt.entity.RateID.String(), model.RateID)
+			assert.Equal(t, tt.entity.FeeScheduleID.String(), model.FeeScheduleID)
+			assert.Equal(t, tt.entity.FeeScheduleNameSnapshot, model.FeeScheduleNameSnapshot)
 			assert.Equal(t, tt.entity.Currency, model.Currency)
 			assert.True(t, tt.entity.ExpectedFee.Equal(model.ExpectedFee))
 			assert.True(t, tt.entity.ActualFee.Equal(model.ActualFee))
@@ -152,15 +153,15 @@ func TestToEntity(t *testing.T) {
 			errContain: "parse transaction id",
 		},
 		{
-			name: "invalid rate ID returns error",
+			name: "invalid fee schedule ID returns error",
 			model: func() *PostgreSQLModel {
 				m := createValidPostgreSQLModel()
-				m.RateID = "invalid-uuid"
+				m.FeeScheduleID = "invalid-uuid"
 
 				return m
 			}(),
 			wantErr:    true,
-			errContain: "parse rate id",
+			errContain: "parse fee schedule id",
 		},
 	}
 
@@ -186,7 +187,8 @@ func TestToEntity(t *testing.T) {
 			assert.Equal(t, tt.model.RunID, entity.RunID.String())
 			assert.Equal(t, tt.model.MatchGroupID, entity.MatchGroupID.String())
 			assert.Equal(t, tt.model.TransactionID, entity.TransactionID.String())
-			assert.Equal(t, tt.model.RateID, entity.RateID.String())
+			assert.Equal(t, tt.model.FeeScheduleID, entity.FeeScheduleID.String())
+			assert.Equal(t, tt.model.FeeScheduleNameSnapshot, entity.FeeScheduleNameSnapshot)
 			assert.Equal(t, tt.model.Currency, entity.Currency)
 			assert.True(t, tt.model.ExpectedFee.Equal(entity.ExpectedFee))
 			assert.True(t, tt.model.ActualFee.Equal(entity.ActualFee))
@@ -212,6 +214,7 @@ func TestPostgreSQLModel_RoundTrip(t *testing.T) {
 		uuid.New(),
 		uuid.New(),
 		uuid.New(),
+		"Visa Domestic",
 		"USD",
 		decimal.NewFromFloat(100.50),
 		decimal.NewFromFloat(105.75),
@@ -232,7 +235,8 @@ func TestPostgreSQLModel_RoundTrip(t *testing.T) {
 	assert.Equal(t, entity.RunID, back.RunID)
 	assert.Equal(t, entity.MatchGroupID, back.MatchGroupID)
 	assert.Equal(t, entity.TransactionID, back.TransactionID)
-	assert.Equal(t, entity.RateID, back.RateID)
+	assert.Equal(t, entity.FeeScheduleID, back.FeeScheduleID)
+	assert.Equal(t, entity.FeeScheduleNameSnapshot, back.FeeScheduleNameSnapshot)
 	assert.Equal(t, entity.Currency, back.Currency)
 	assert.True(t, entity.ExpectedFee.Equal(back.ExpectedFee))
 	assert.True(t, entity.ActualFee.Equal(back.ActualFee))
@@ -246,21 +250,22 @@ func createValidFeeVarianceEntity() *matchingEntities.FeeVariance {
 	now := time.Now().UTC()
 
 	return &matchingEntities.FeeVariance{
-		ID:            uuid.New(),
-		ContextID:     uuid.New(),
-		RunID:         uuid.New(),
-		MatchGroupID:  uuid.New(),
-		TransactionID: uuid.New(),
-		RateID:        uuid.New(),
-		Currency:      "USD",
-		ExpectedFee:   decimal.NewFromFloat(100.50),
-		ActualFee:     decimal.NewFromFloat(105.75),
-		Delta:         decimal.NewFromFloat(5.25),
-		ToleranceAbs:  decimal.NewFromFloat(1.00),
-		TolerancePct:  decimal.NewFromFloat(0.05),
-		VarianceType:  "over_tolerance",
-		CreatedAt:     now,
-		UpdatedAt:     now,
+		ID:                      uuid.New(),
+		ContextID:               uuid.New(),
+		RunID:                   uuid.New(),
+		MatchGroupID:            uuid.New(),
+		TransactionID:           uuid.New(),
+		FeeScheduleID:           uuid.New(),
+		FeeScheduleNameSnapshot: "Visa Domestic",
+		Currency:                "USD",
+		ExpectedFee:             decimal.NewFromFloat(100.50),
+		ActualFee:               decimal.NewFromFloat(105.75),
+		Delta:                   decimal.NewFromFloat(5.25),
+		ToleranceAbs:            decimal.NewFromFloat(1.00),
+		TolerancePct:            decimal.NewFromFloat(0.05),
+		VarianceType:            "over_tolerance",
+		CreatedAt:               now,
+		UpdatedAt:               now,
 	}
 }
 
@@ -268,20 +273,21 @@ func createValidPostgreSQLModel() *PostgreSQLModel {
 	now := time.Now().UTC()
 
 	return &PostgreSQLModel{
-		ID:            uuid.New().String(),
-		ContextID:     uuid.New().String(),
-		RunID:         uuid.New().String(),
-		MatchGroupID:  uuid.New().String(),
-		TransactionID: uuid.New().String(),
-		RateID:        uuid.New().String(),
-		Currency:      "USD",
-		ExpectedFee:   decimal.NewFromFloat(100.50),
-		ActualFee:     decimal.NewFromFloat(105.75),
-		Delta:         decimal.NewFromFloat(5.25),
-		ToleranceAbs:  decimal.NewFromFloat(1.00),
-		TolerancePct:  decimal.NewFromFloat(0.05),
-		VarianceType:  "over_tolerance",
-		CreatedAt:     now,
-		UpdatedAt:     now,
+		ID:                      uuid.New().String(),
+		ContextID:               uuid.New().String(),
+		RunID:                   uuid.New().String(),
+		MatchGroupID:            uuid.New().String(),
+		TransactionID:           uuid.New().String(),
+		FeeScheduleID:           uuid.New().String(),
+		FeeScheduleNameSnapshot: "Visa Domestic",
+		Currency:                "USD",
+		ExpectedFee:             decimal.NewFromFloat(100.50),
+		ActualFee:               decimal.NewFromFloat(105.75),
+		Delta:                   decimal.NewFromFloat(5.25),
+		ToleranceAbs:            decimal.NewFromFloat(1.00),
+		TolerancePct:            decimal.NewFromFloat(0.05),
+		VarianceType:            "over_tolerance",
+		CreatedAt:               now,
+		UpdatedAt:               now,
 	}
 }

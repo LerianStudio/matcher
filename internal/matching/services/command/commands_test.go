@@ -54,7 +54,6 @@ func TestSentinelErrors(t *testing.T) {
 		},
 		{"ErrNilExceptionCreator", ErrNilExceptionCreator, "exception creator is required"},
 		{"ErrNilOutboxRepository", ErrNilOutboxRepository, "outbox repository is required"},
-		{"ErrNilRateRepository", ErrNilRateRepository, "rate repository is required"},
 		{
 			"ErrNilFeeVarianceRepository",
 			ErrNilFeeVarianceRepository,
@@ -364,14 +363,6 @@ func (m *mockExceptionCreator) CreateExceptionsWithTx(
 	return nil
 }
 
-type mockRateRepo struct{}
-
-func (m *mockRateRepo) GetByID(_ context.Context, _ uuid.UUID) (*fee.Rate, error) {
-	return nil, nil
-}
-
-var _ matchingRepositories.RateRepository = (*mockRateRepo)(nil)
-
 type mockFeeVarianceRepo struct{}
 
 func (m *mockFeeVarianceRepo) CreateBatchWithTx(
@@ -629,7 +620,6 @@ func TestNewUseCase(t *testing.T) {
 			MatchItemRepo:    &mockMatchItemRepository{},
 			ExceptionCreator: &mockExceptionCreator{},
 			OutboxRepo:       outboxRepo,
-			RateRepo:         &mockRateRepo{},
 			FeeVarianceRepo:  &mockFeeVarianceRepo{},
 			AdjustmentRepo:   &mockAdjustmentRepo{},
 			InfraProvider:    &mockInfraProvider{},
@@ -783,18 +773,6 @@ func TestNewUseCase(t *testing.T) {
 		require.ErrorIs(t, err, ErrNilOutboxRepository)
 	})
 
-	t.Run("nil rate repository returns error", func(t *testing.T) {
-		t.Parallel()
-
-		deps := validDeps()
-		deps.RateRepo = nil
-
-		uc, err := New(deps)
-
-		assert.Nil(t, uc)
-		require.ErrorIs(t, err, ErrNilRateRepository)
-	})
-
 	t.Run("nil fee variance repository returns error", func(t *testing.T) {
 		t.Parallel()
 
@@ -892,7 +870,6 @@ func TestUseCaseFieldsInitialized(t *testing.T) {
 		MatchItemRepo:    &mockMatchItemRepository{},
 		ExceptionCreator: &mockExceptionCreator{},
 		OutboxRepo:       outboxRepo,
-		RateRepo:         &mockRateRepo{},
 		FeeVarianceRepo:  &mockFeeVarianceRepo{},
 		AdjustmentRepo:   &mockAdjustmentRepo{},
 		InfraProvider:    &mockInfraProvider{},
@@ -914,7 +891,6 @@ func TestUseCaseFieldsInitialized(t *testing.T) {
 	assert.NotNil(t, uc.matchItemRepo)
 	assert.NotNil(t, uc.exceptionCreator)
 	assert.NotNil(t, uc.outboxRepo)
-	assert.NotNil(t, uc.rateRepo)
 	assert.NotNil(t, uc.feeVarianceRepo)
 	assert.NotNil(t, uc.adjustmentRepo)
 	assert.NotNil(t, uc.feeScheduleRepo)

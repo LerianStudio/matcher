@@ -21,11 +21,6 @@ func TestErrorVariables(t *testing.T) {
 		expected string
 	}{
 		{
-			name:     "ErrNilRate",
-			err:      ErrNilRate,
-			expected: "rate is nil",
-		},
-		{
 			name:     "ErrNilFeeStructure",
 			err:      ErrNilFeeStructure,
 			expected: "fee structure is nil",
@@ -59,16 +54,6 @@ func TestErrorVariables(t *testing.T) {
 			name:     "ErrToleranceNegative",
 			err:      ErrToleranceNegative,
 			expected: "tolerance must be non-negative",
-		},
-		{
-			name:     "ErrNilTransaction",
-			err:      ErrNilTransaction,
-			expected: "transaction is nil",
-		},
-		{
-			name:     "ErrActualFeeMissing",
-			err:      ErrActualFeeMissing,
-			expected: "actual fee is missing",
 		},
 		{
 			name:     "ErrScheduleNameRequired",
@@ -116,11 +101,6 @@ func TestErrorVariables(t *testing.T) {
 			expected: "fee schedule is nil",
 		},
 		{
-			name:     "ErrInvalidNormalizationMode",
-			err:      ErrInvalidNormalizationMode,
-			expected: "invalid normalization mode",
-		},
-		{
 			name:     "ErrGrossConvergenceFailed",
 			err:      ErrGrossConvergenceFailed,
 			expected: "gross calculation failed to converge",
@@ -151,24 +131,6 @@ func TestErrorsIs(t *testing.T) {
 		target error
 		match  bool
 	}{
-		{
-			name:   "ErrNilRate matches itself",
-			err:    ErrNilRate,
-			target: ErrNilRate,
-			match:  true,
-		},
-		{
-			name:   "wrapped ErrNilRate matches ErrNilRate",
-			err:    errors.Join(errTestContext, ErrNilRate),
-			target: ErrNilRate,
-			match:  true,
-		},
-		{
-			name:   "ErrNilRate does not match ErrNilFeeStructure",
-			err:    ErrNilRate,
-			target: ErrNilFeeStructure,
-			match:  false,
-		},
 		{
 			name:   "ErrInvalidCurrency matches itself",
 			err:    ErrInvalidCurrency,
@@ -209,7 +171,6 @@ func TestErrorsAreDistinct(t *testing.T) {
 	t.Parallel()
 
 	allErrors := []error{
-		ErrNilRate,
 		ErrNilFeeStructure,
 		ErrInvalidCurrency,
 		ErrCurrencyMismatch,
@@ -217,8 +178,6 @@ func TestErrorsAreDistinct(t *testing.T) {
 		ErrInvalidPercentageRate,
 		ErrInvalidTieredDefinition,
 		ErrToleranceNegative,
-		ErrNilTransaction,
-		ErrActualFeeMissing,
 		ErrScheduleNameRequired,
 		ErrScheduleNameTooLong,
 		ErrScheduleItemsRequired,
@@ -228,7 +187,6 @@ func TestErrorsAreDistinct(t *testing.T) {
 		ErrInvalidRoundingMode,
 		ErrItemNameRequired,
 		ErrNilSchedule,
-		ErrInvalidNormalizationMode,
 		ErrGrossConvergenceFailed,
 		ErrFeeScheduleNotFound,
 	}

@@ -171,7 +171,7 @@ func BuildSummaryCSV(summary *entities.SummaryReport) ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-// BuildVarianceCSV generates a CSV file from variance report rows, sorted by source, currency, fee type.
+// BuildVarianceCSV generates a CSV file from variance report rows, sorted by source, currency, and fee schedule.
 func BuildVarianceCSV(rows []*entities.VarianceReportRow) ([]byte, error) {
 	sorted := make([]*entities.VarianceReportRow, 0, len(rows))
 
@@ -190,13 +190,13 @@ func BuildVarianceCSV(rows []*entities.VarianceReportRow) ([]byte, error) {
 			return sorted[i].Currency < sorted[j].Currency
 		}
 
-		return sorted[i].FeeType < sorted[j].FeeType
+		return sorted[i].FeeScheduleID.String() < sorted[j].FeeScheduleID.String()
 	})
 
 	buffer := &bytes.Buffer{}
 	writer := csv.NewWriter(buffer)
 
-	if err := writer.Write([]string{"source_id", "currency", "fee_type", "total_expected", "total_actual", "net_variance", "variance_pct"}); err != nil {
+	if err := writer.Write([]string{"source_id", "currency", "fee_schedule_id", "fee_schedule_name", "total_expected", "total_actual", "net_variance", "variance_pct"}); err != nil {
 		return nil, errWriteCSVHeader(err)
 	}
 
@@ -209,7 +209,8 @@ func BuildVarianceCSV(rows []*entities.VarianceReportRow) ([]byte, error) {
 		if err := writer.Write([]string{
 			sanitizeCSVValue(row.SourceID.String()),
 			sanitizeCSVValue(row.Currency),
-			sanitizeCSVValue(row.FeeType),
+			sanitizeCSVValue(row.FeeScheduleID.String()),
+			sanitizeCSVValue(row.FeeScheduleName),
 			sanitizeCSVValue(row.TotalExpected.String()),
 			sanitizeCSVValue(row.TotalActual.String()),
 			sanitizeCSVValue(row.NetVariance.String()),
@@ -330,7 +331,7 @@ func StreamUnmatchedCSV(w io.Writer, iter repositories.UnmatchedRowIterator) err
 func StreamVarianceCSV(w io.Writer, iter repositories.VarianceRowIterator) error {
 	writer := csv.NewWriter(w)
 
-	if err := writer.Write([]string{"source_id", "currency", "fee_type", "total_expected", "total_actual", "net_variance", "variance_pct"}); err != nil {
+	if err := writer.Write([]string{"source_id", "currency", "fee_schedule_id", "fee_schedule_name", "total_expected", "total_actual", "net_variance", "variance_pct"}); err != nil {
 		return errWriteCSVHeader(err)
 	}
 
@@ -348,7 +349,8 @@ func StreamVarianceCSV(w io.Writer, iter repositories.VarianceRowIterator) error
 		if err := writer.Write([]string{
 			sanitizeCSVValue(row.SourceID.String()),
 			sanitizeCSVValue(row.Currency),
-			sanitizeCSVValue(row.FeeType),
+			sanitizeCSVValue(row.FeeScheduleID.String()),
+			sanitizeCSVValue(row.FeeScheduleName),
 			sanitizeCSVValue(row.TotalExpected.String()),
 			sanitizeCSVValue(row.TotalActual.String()),
 			sanitizeCSVValue(row.NetVariance.String()),
