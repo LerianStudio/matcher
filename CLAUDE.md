@@ -547,9 +547,10 @@ All CI uses shared workflows from `LerianStudio/github-actions-shared-workflows`
 1. `make migrate-create NAME=descriptive_name`
 2. Edit `.up.sql` with schema changes
 3. Edit `.down.sql` with rollback logic
-4. Test: `make migrate-up && make migrate-down && make migrate-up`
-5. Add indexes for join/filter columns
-6. Validate: `make check-migrations`
+4. Test the forward path with `make migrate-up`
+5. If the migration is intentionally irreversible, verify the rollback/preflight guard instead of forcing `migrate-down`
+6. Add indexes for join/filter columns
+7. Validate: `make check-migrations`
 
 ### Adding a New Use Case
 

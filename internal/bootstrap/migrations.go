@@ -78,14 +78,14 @@ func RunMigrations(ctx context.Context, dsn, dbName, migrationsPath string, logg
 		}
 	}()
 
-	if err := applyMigrations(ctx, migrator, logger, allowDirtyRecovery); err != nil {
+	if err := applyMigrations(ctx, db, migrator, logger, allowDirtyRecovery); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func openMigrationDB(ctx context.Context, dsn string) (*sql.DB, error) {
+func openMigrationDBImpl(ctx context.Context, dsn string) (*sql.DB, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("migration context canceled before open: %w", err)
 	}
@@ -148,9 +148,15 @@ func closeMigrator(migrator migrationRunner) error {
 	return fmt.Errorf("close migrator db: %w", dbErr)
 }
 
-func applyMigrations(ctx context.Context, migrator migrationRunner, logger libLog.Logger, allowDirtyRecovery bool) error {
+func applyMigrations(ctx context.Context, db *sql.DB, migrator migrationRunner, logger libLog.Logger, allowDirtyRecovery bool) error {
 	if err := handleDirtyState(ctx, migrator, logger, allowDirtyRecovery); err != nil {
 		return err
+	}
+
+	if db != nil {
+		if err := preflightPendingMigrations(ctx, db); err != nil {
+			return err
+		}
 	}
 
 	if err := runMigrationsUp(ctx, migrator, logger); err != nil {
@@ -190,15 +196,12 @@ func handleDirtyState(ctx context.Context, migrator migrationRunner, logger libL
 	}
 
 	if !allowRecovery {
-		return fmt.Errorf(
-			"%w: database is dirty at version %d. "+
-				"This requires manual intervention:\n"+
-				"  1. Inspect the database schema for partial changes\n"+
-				"  2. Fix or rollback the incomplete migration\n"+
-				"  3. Run: UPDATE schema_migrations SET version = %d, dirty = false;\n"+
-				"  4. Restart the application",
-			ErrDirtyMigrationState, version, previousVersion,
-		)
+		currentVersion := 0
+		if version > 0 {
+			currentVersion = previousVersion + 1
+		}
+
+		return formatDirtyMigrationStateError(currentVersion, previousVersion)
 	}
 
 	logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("Database is dirty at version %d (development mode: attempting auto-recovery)", version))
@@ -210,6 +213,18 @@ func handleDirtyState(ctx context.Context, migrator migrationRunner, logger libL
 	logger.Log(ctx, libLog.LevelInfo, fmt.Sprintf("Auto-recovered: forced migration to version %d, retrying migrations", previousVersion))
 
 	return nil
+}
+
+func formatDirtyMigrationStateError(version, previousVersion int) error {
+	return fmt.Errorf(
+		"%w: database is dirty at version %d. "+
+			"This requires manual intervention:\n"+
+			"  1. Inspect the database schema for partial changes\n"+
+			"  2. Fix or rollback the incomplete migration\n"+
+			"  3. Run: UPDATE schema_migrations SET version = %d, dirty = false;\n"+
+			"  4. Restart the application",
+		ErrDirtyMigrationState, version, previousVersion,
+	)
 }
 
 func runMigrationsUp(ctx context.Context, migrator migrationRunner, logger libLog.Logger) error {

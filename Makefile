@@ -563,12 +563,16 @@ check-db-safety:
 migrate-up: check-db-safety
 	$(call print_title,Applying database migrations)
 	$(call check_command,migrate,"https://github.com/golang-migrate/migrate")
+	$(call check_command,go,"https://go.dev/dl/")
+	@DATABASE_URL="$(DATABASE_URL)" go run ./cmd/migration-preflight --action up
 	@migrate -path $(MIGRATE_PATH) -database "$(DATABASE_URL)" up
 	@echo "[ok] Migrations applied successfully"
 
 migrate-down: check-db-safety
 	$(call print_title,Rolling back last migration)
 	$(call check_command,migrate,"https://github.com/golang-migrate/migrate")
+	$(call check_command,go,"https://go.dev/dl/")
+	@DATABASE_URL="$(DATABASE_URL)" go run ./cmd/migration-preflight --action down
 	@migrate -path $(MIGRATE_PATH) -database "$(DATABASE_URL)" down 1
 	@echo "[ok] Migration rolled back successfully"
 
@@ -578,8 +582,10 @@ migrate-to: check-db-safety
 		echo "Error: VERSION not specified."; \
 		echo "Usage: make migrate-to VERSION=<version_number>"; \
 		exit 1; \
-	fi
+		fi
 	$(call check_command,migrate,"https://github.com/golang-migrate/migrate")
+	$(call check_command,go,"https://go.dev/dl/")
+	@DATABASE_URL="$(DATABASE_URL)" go run ./cmd/migration-preflight --action goto --target $(VERSION)
 	@migrate -path $(MIGRATE_PATH) -database "$(DATABASE_URL)" goto $(VERSION)
 	@echo "[ok] Migrated to version $(VERSION) successfully"
 

@@ -49,13 +49,20 @@ func TestRunMigrations_DiscoverySlice_ApplyRollbackAndReapply(t *testing.T) {
 	dsn, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
 	require.NoError(t, err)
 
-	logger := &libLog.NopLogger{}
-	require.NoError(t, RunMigrations(ctx, dsn, "matcher_test", "migrations", logger, false))
-
 	db, err := sql.Open("pgx", dsn)
 	require.NoError(t, err)
 	defer db.Close()
 	require.NoError(t, db.PingContext(ctx))
+
+	migrator, err := newMigrator(db, "matcher_test", "migrations")
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, closeMigrator(migrator))
+	}()
+
+	stepper, ok := migrator.(interface{ Steps(int) error })
+	require.True(t, ok, "migrator must support stepping")
+	require.NoError(t, stepper.Steps(15))
 
 	t.Run("applies discovery schema constraints and indexes", func(t *testing.T) {
 		require.True(t, tableExists(t, ctx, db, "fetcher_connections"))
@@ -181,7 +188,7 @@ func TestRunMigrations_DiscoverySlice_ApplyRollbackAndReapply(t *testing.T) {
 		assert.False(t, tableExists(t, ctx, db, "discovered_schemas"))
 		assert.False(t, tableExists(t, ctx, db, "extraction_requests"))
 
-		require.NoError(t, RunMigrations(ctx, dsn, "matcher_test", "migrations", logger, false))
+		require.NoError(t, stepper.Steps(3))
 		assert.True(t, tableExists(t, ctx, db, "fetcher_connections"))
 		assert.True(t, tableExists(t, ctx, db, "discovered_schemas"))
 		assert.True(t, tableExists(t, ctx, db, "extraction_requests"))
@@ -442,9 +449,19 @@ func mustInsertReconciliationSource(t *testing.T, ctx context.Context, db *sql.D
 	t.Helper()
 
 	var sourceID string
+	if columnExists(t, ctx, db, "reconciliation_sources", "side") {
+		err := db.QueryRowContext(ctx, `
+			INSERT INTO reconciliation_sources (context_id, name, type, side, config)
+			VALUES ($1, $2, $3, 'LEFT', '{}'::jsonb)
+			RETURNING id`, contextID, name, sourceType).Scan(&sourceID)
+		require.NoError(t, err)
+
+		return sourceID
+	}
+
 	err := db.QueryRowContext(ctx, `
-		INSERT INTO reconciliation_sources (context_id, name, type, side, config)
-		VALUES ($1, $2, $3, 'LEFT', '{}'::jsonb)
+		INSERT INTO reconciliation_sources (context_id, name, type, config)
+		VALUES ($1, $2, $3, '{}'::jsonb)
 		RETURNING id`, contextID, name, sourceType).Scan(&sourceID)
 	require.NoError(t, err)
 
@@ -464,6 +481,20 @@ func columnExists(t *testing.T, ctx context.Context, db *sql.DB, table, column s
 	require.NoError(t, err)
 
 	return exists
+}
+
+func columnNullability(t *testing.T, ctx context.Context, db *sql.DB, table, column string) string {
+	t.Helper()
+
+	var isNullable string
+	err := db.QueryRowContext(ctx, `
+		SELECT is_nullable
+		FROM information_schema.columns
+		WHERE table_name = $1 AND column_name = $2
+	`, table, column).Scan(&isNullable)
+	require.NoError(t, err)
+
+	return isNullable
 }
 
 func uniqueName(prefix string) string {
@@ -631,4 +662,461 @@ func TestMigrations_019_DropLegacySourceFeeSchedule(t *testing.T) {
 		assert.True(t, columnExists(t, ctx, db, "reconciliation_sources", "fee_schedule_id"),
 			"rollback of migration 019 must restore fee_schedule_id column")
 	})
+}
+
+func TestMigrations_022_RemoveRateUnifyFeeSchedule_BlocksLegacyContextRates(t *testing.T) {
+	t.Parallel()
+
+	harness := setupMigration022Harness(t)
+	defer harness.cleanup(t)
+
+	contextID := mustInsertReconciliationContext(t, harness.ctx, harness.db)
+	rateID := mustInsertRate22(t, harness.ctx, harness.db)
+
+	_, err := harness.db.ExecContext(harness.ctx, `UPDATE reconciliation_contexts SET rate_id = $1 WHERE id = $2`, rateID, contextID)
+	require.NoError(t, err)
+
+	err = harness.stepper.Steps(1)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "migration_000022_blocked_backfill_legacy_context_rates_before_cutover")
+	assert.True(t, tableExists(t, harness.ctx, harness.db, "rates"), "blocked migration must preserve rates table")
+	assert.True(t, columnExists(t, harness.ctx, harness.db, "reconciliation_contexts", "rate_id"), "blocked migration must preserve context rate_id")
+	assert.True(t, columnExists(t, harness.ctx, harness.db, "match_fee_variances", "rate_id"), "blocked migration must preserve variance rate_id")
+}
+
+func TestPreflightMigrationUp_022_BlocksLegacyContextRates_WithoutDirtyingState(t *testing.T) {
+	t.Parallel()
+
+	harness := setupMigration022Harness(t)
+	defer harness.cleanup(t)
+
+	contextID := mustInsertReconciliationContext(t, harness.ctx, harness.db)
+	rateID := mustInsertRate22(t, harness.ctx, harness.db)
+
+	_, err := harness.db.ExecContext(harness.ctx, `UPDATE reconciliation_contexts SET rate_id = $1 WHERE id = $2`, rateID, contextID)
+	require.NoError(t, err)
+
+	err = PreflightMigrationUp(harness.ctx, harness.dsn)
+	require.ErrorIs(t, err, ErrMigration022BlockedLegacyContextRates)
+	assertMigrationState(t, harness.ctx, harness.db, 21, false)
+}
+
+func TestMigrations_022_RemoveRateUnifyFeeSchedule_BlocksLegacyFeeVariances(t *testing.T) {
+	t.Parallel()
+
+	harness := setupMigration022Harness(t)
+	defer harness.cleanup(t)
+
+	contextID := mustInsertReconciliationContext(t, harness.ctx, harness.db)
+	sourceID := mustInsertReconciliationSource(t, harness.ctx, harness.db, contextID, uniqueName("source-022-legacy"), "LEDGER")
+	rateID := mustInsertRate22(t, harness.ctx, harness.db)
+	ruleID := mustInsertMatchRule22(t, harness.ctx, harness.db, contextID)
+	runID := mustInsertMatchRun22(t, harness.ctx, harness.db, contextID)
+	txID := mustInsertTransaction22(t, harness.ctx, harness.db, contextID, sourceID, "legacy-variance")
+	groupID := mustInsertMatchGroup22(t, harness.ctx, harness.db, contextID, runID, ruleID)
+	mustInsertMatchItem22(t, harness.ctx, harness.db, groupID, txID)
+	mustInsertFeeVariance22(t, harness.ctx, harness.db, varianceInsert22{
+		contextID:     contextID,
+		runID:         runID,
+		groupID:       groupID,
+		transactionID: txID,
+		rateID:        rateID,
+		feeScheduleID: nil,
+	})
+
+	err := harness.stepper.Steps(1)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "migration_000022_blocked_archive_or_backfill_legacy_fee_variances_before_cutover")
+	assert.True(t, tableExists(t, harness.ctx, harness.db, "rates"), "blocked migration must preserve rates table")
+	assert.True(t, columnExists(t, harness.ctx, harness.db, "match_fee_variances", "rate_id"), "blocked migration must preserve variance rate_id")
+
+	var remainingCount int
+	err = harness.db.QueryRowContext(harness.ctx, `SELECT COUNT(*) FROM match_fee_variances`).Scan(&remainingCount)
+	require.NoError(t, err)
+	assert.Equal(t, 1, remainingCount, "blocked migration must preserve legacy variance rows")
+}
+
+func TestPreflightMigrationUp_022_BlocksLegacyFeeVariances_WithoutDirtyingState(t *testing.T) {
+	t.Parallel()
+
+	harness := setupMigration022Harness(t)
+	defer harness.cleanup(t)
+
+	contextID := mustInsertReconciliationContext(t, harness.ctx, harness.db)
+	sourceID := mustInsertReconciliationSource(t, harness.ctx, harness.db, contextID, uniqueName("source-022-preflight"), "LEDGER")
+	rateID := mustInsertRate22(t, harness.ctx, harness.db)
+	ruleID := mustInsertMatchRule22(t, harness.ctx, harness.db, contextID)
+	runID := mustInsertMatchRun22(t, harness.ctx, harness.db, contextID)
+	txID := mustInsertTransaction22(t, harness.ctx, harness.db, contextID, sourceID, "legacy-preflight")
+	groupID := mustInsertMatchGroup22(t, harness.ctx, harness.db, contextID, runID, ruleID)
+	mustInsertMatchItem22(t, harness.ctx, harness.db, groupID, txID)
+	mustInsertFeeVariance22(t, harness.ctx, harness.db, varianceInsert22{
+		contextID:     contextID,
+		runID:         runID,
+		groupID:       groupID,
+		transactionID: txID,
+		rateID:        rateID,
+		feeScheduleID: nil,
+	})
+
+	err := PreflightMigrationUp(harness.ctx, harness.dsn)
+	require.ErrorIs(t, err, ErrMigration022BlockedLegacyFeeVariances)
+	assertMigrationState(t, harness.ctx, harness.db, 21, false)
+}
+
+func TestPreflightMigrationGoto_022_BlocksForwardCutoverWithoutDirtyingState(t *testing.T) {
+	t.Parallel()
+
+	harness := setupMigration022Harness(t)
+	defer harness.cleanup(t)
+
+	contextID := mustInsertReconciliationContext(t, harness.ctx, harness.db)
+	rateID := mustInsertRate22(t, harness.ctx, harness.db)
+
+	_, err := harness.db.ExecContext(harness.ctx, `UPDATE reconciliation_contexts SET rate_id = $1 WHERE id = $2`, rateID, contextID)
+	require.NoError(t, err)
+
+	err = PreflightMigrationGoto(harness.ctx, harness.dsn, 22)
+	require.ErrorIs(t, err, ErrMigration022BlockedLegacyContextRates)
+	assertMigrationState(t, harness.ctx, harness.db, 21, false)
+}
+
+func TestRunMigrations_022_BlocksLegacyContextRates_WithoutDirtyingState(t *testing.T) {
+	t.Parallel()
+
+	harness := setupMigration022Harness(t)
+	defer harness.cleanup(t)
+
+	contextID := mustInsertReconciliationContext(t, harness.ctx, harness.db)
+	rateID := mustInsertRate22(t, harness.ctx, harness.db)
+
+	_, err := harness.db.ExecContext(harness.ctx, `UPDATE reconciliation_contexts SET rate_id = $1 WHERE id = $2`, rateID, contextID)
+	require.NoError(t, err)
+
+	logger := &libLog.NopLogger{}
+	err = RunMigrations(harness.ctx, harness.dsn, harness.dbName, "migrations", logger, false)
+	require.ErrorIs(t, err, ErrMigration022BlockedLegacyContextRates)
+	assertMigrationState(t, harness.ctx, harness.db, 21, false)
+}
+
+func TestMigrations_022_RemoveRateUnifyFeeSchedule_SucceedsWithScheduleBackedVariances(t *testing.T) {
+	t.Parallel()
+
+	harness := setupMigration022Harness(t)
+	defer harness.cleanup(t)
+
+	contextID := mustInsertReconciliationContext(t, harness.ctx, harness.db)
+	sourceID := mustInsertReconciliationSource(t, harness.ctx, harness.db, contextID, uniqueName("source-022-clean"), "LEDGER")
+	rateID := mustInsertRate22(t, harness.ctx, harness.db)
+	scheduleID, scheduleName := mustInsertFeeSchedule22(t, harness.ctx, harness.db)
+	ruleID := mustInsertMatchRule22(t, harness.ctx, harness.db, contextID)
+	runID := mustInsertMatchRun22(t, harness.ctx, harness.db, contextID)
+	txID := mustInsertTransaction22(t, harness.ctx, harness.db, contextID, sourceID, "kept-variance")
+	groupID := mustInsertMatchGroup22(t, harness.ctx, harness.db, contextID, runID, ruleID)
+	mustInsertMatchItem22(t, harness.ctx, harness.db, groupID, txID)
+	mustInsertFeeVariance22(t, harness.ctx, harness.db, varianceInsert22{
+		contextID:     contextID,
+		runID:         runID,
+		groupID:       groupID,
+		transactionID: txID,
+		rateID:        rateID,
+		feeScheduleID: &scheduleID,
+	})
+
+	require.NoError(t, harness.stepper.Steps(1))
+
+	assert.False(t, tableExists(t, harness.ctx, harness.db, "rates"), "migration 022 must drop rates table")
+	assert.False(t, columnExists(t, harness.ctx, harness.db, "reconciliation_contexts", "rate_id"), "migration 022 must drop context rate_id")
+	assert.False(t, columnExists(t, harness.ctx, harness.db, "match_fee_variances", "rate_id"), "migration 022 must drop variance rate_id")
+	assert.True(t, indexExists(t, harness.ctx, harness.db, "idx_fee_variances_schedule"), "migration 022 must add schedule index")
+
+	var remainingCount, nullScheduleCount int
+	err := harness.db.QueryRowContext(harness.ctx, `SELECT COUNT(*) FROM match_fee_variances`).Scan(&remainingCount)
+	require.NoError(t, err)
+	assert.Equal(t, 1, remainingCount, "schedule-backed rows must be preserved")
+
+	err = harness.db.QueryRowContext(harness.ctx, `SELECT COUNT(*) FROM match_fee_variances WHERE fee_schedule_id IS NULL`).Scan(&nullScheduleCount)
+	require.NoError(t, err)
+	assert.Equal(t, 0, nullScheduleCount, "remaining variance rows must satisfy the new NOT NULL contract")
+
+	assert.Equal(t, "NO", columnNullability(t, harness.ctx, harness.db, "match_fee_variances", "fee_schedule_id"), "migration 022 must enforce fee_schedule_id as NOT NULL")
+
+	var persistedScheduleID string
+	err = harness.db.QueryRowContext(harness.ctx, `SELECT fee_schedule_id::text FROM match_fee_variances LIMIT 1`).Scan(&persistedScheduleID)
+	require.NoError(t, err)
+	assert.Equal(t, scheduleID, persistedScheduleID)
+
+	var persistedScheduleName string
+	err = harness.db.QueryRowContext(harness.ctx, `SELECT fee_schedule_name_snapshot FROM match_fee_variances LIMIT 1`).Scan(&persistedScheduleName)
+	require.NoError(t, err)
+	assert.Equal(t, scheduleName, persistedScheduleName)
+
+	err = harness.stepper.Steps(-1)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "migration_000022_rollback_blocked_legacy_rate_schema_is_non_reversible")
+}
+
+func TestMigrations_022_RemoveRateUnifyFeeSchedule_SucceedsWithEmptyVarianceTable(t *testing.T) {
+	t.Parallel()
+
+	harness := setupMigration022Harness(t)
+	defer harness.cleanup(t)
+
+	require.NoError(t, harness.stepper.Steps(1))
+
+	assert.False(t, tableExists(t, harness.ctx, harness.db, "rates"), "migration 022 must drop rates table")
+	assert.False(t, columnExists(t, harness.ctx, harness.db, "reconciliation_contexts", "rate_id"), "migration 022 must drop context rate_id")
+	assert.False(t, columnExists(t, harness.ctx, harness.db, "match_fee_variances", "rate_id"), "migration 022 must drop variance rate_id")
+	assert.True(t, indexExists(t, harness.ctx, harness.db, "idx_fee_variances_schedule"), "migration 022 must add schedule index")
+	assert.Equal(t, "NO", columnNullability(t, harness.ctx, harness.db, "match_fee_variances", "fee_schedule_id"))
+	assert.Equal(t, "NO", columnNullability(t, harness.ctx, harness.db, "match_fee_variances", "fee_schedule_name_snapshot"))
+	assertMigrationState(t, harness.ctx, harness.db, 22, false)
+}
+
+func TestPreflightMigrationDown_022_BlocksRollbackWithoutDirtyingState(t *testing.T) {
+	t.Parallel()
+
+	harness := setupMigration022Harness(t)
+	defer harness.cleanup(t)
+
+	contextID := mustInsertReconciliationContext(t, harness.ctx, harness.db)
+	sourceID := mustInsertReconciliationSource(t, harness.ctx, harness.db, contextID, uniqueName("source-022-down"), "LEDGER")
+	rateID := mustInsertRate22(t, harness.ctx, harness.db)
+	scheduleID, _ := mustInsertFeeSchedule22(t, harness.ctx, harness.db)
+	ruleID := mustInsertMatchRule22(t, harness.ctx, harness.db, contextID)
+	runID := mustInsertMatchRun22(t, harness.ctx, harness.db, contextID)
+	txID := mustInsertTransaction22(t, harness.ctx, harness.db, contextID, sourceID, "down-preflight")
+	groupID := mustInsertMatchGroup22(t, harness.ctx, harness.db, contextID, runID, ruleID)
+	mustInsertMatchItem22(t, harness.ctx, harness.db, groupID, txID)
+	mustInsertFeeVariance22(t, harness.ctx, harness.db, varianceInsert22{
+		contextID:     contextID,
+		runID:         runID,
+		groupID:       groupID,
+		transactionID: txID,
+		rateID:        rateID,
+		feeScheduleID: &scheduleID,
+	})
+
+	require.NoError(t, harness.stepper.Steps(1))
+
+	err := PreflightMigrationDownOne(harness.ctx, harness.dsn)
+	require.ErrorIs(t, err, ErrMigration022Irreversible)
+	assertMigrationState(t, harness.ctx, harness.db, 22, false)
+
+	err = PreflightMigrationGoto(harness.ctx, harness.dsn, 21)
+	require.ErrorIs(t, err, ErrMigration022Irreversible)
+	assertMigrationState(t, harness.ctx, harness.db, 22, false)
+}
+
+type migration022Harness struct {
+	ctx       context.Context
+	cancel    context.CancelFunc
+	dbName    string
+	dsn       string
+	db        *sql.DB
+	stepper   interface{ Steps(int) error }
+	migrator  migrationRunner
+	container testcontainers.Container
+}
+
+func setupMigration022Harness(t *testing.T) *migration022Harness {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	dbName := uniqueName("matcher_022_test")
+
+	pgContainer, err := postgres.Run(ctx,
+		"postgres:17-alpine",
+		postgres.WithDatabase(dbName),
+		postgres.WithUsername("matcher"),
+		postgres.WithPassword("matcher_test"),
+		testcontainers.WithWaitStrategy(
+			wait.ForAll(
+				wait.ForLog("database system is ready to accept connections").WithOccurrence(2),
+				wait.ForListeningPort("5432/tcp"),
+			).WithStartupTimeout(90*time.Second),
+		),
+	)
+	require.NoError(t, err)
+
+	dsn, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
+	require.NoError(t, err)
+
+	db, err := sql.Open("pgx", dsn)
+	require.NoError(t, err)
+	require.NoError(t, db.PingContext(ctx))
+
+	migrator, err := newMigrator(db, dbName, "migrations")
+	require.NoError(t, err)
+
+	stepper, ok := migrator.(interface{ Steps(int) error })
+	require.True(t, ok, "migrator must support stepping")
+	require.NoError(t, stepper.Steps(21))
+
+	return &migration022Harness{
+		ctx:       ctx,
+		cancel:    cancel,
+		dbName:    dbName,
+		dsn:       dsn,
+		db:        db,
+		stepper:   stepper,
+		migrator:  migrator,
+		container: pgContainer,
+	}
+}
+
+func (h *migration022Harness) cleanup(t *testing.T) {
+	t.Helper()
+
+	if h.migrator != nil {
+		require.NoError(t, closeMigrator(h.migrator))
+	}
+
+	if h.db != nil {
+		require.NoError(t, h.db.Close())
+	}
+
+	if h.container != nil {
+		require.NoError(t, h.container.Terminate(context.Background()))
+	}
+
+	if h.cancel != nil {
+		h.cancel()
+	}
+}
+
+func mustInsertRate22(t *testing.T, ctx context.Context, db *sql.DB) string {
+	t.Helper()
+
+	var rateID string
+	err := db.QueryRowContext(ctx, `
+		INSERT INTO rates (tenant_id, name, currency, structure_type, structure)
+		VALUES ('11111111-1111-1111-1111-111111111111', $1, 'USD', 'FLAT', '{"amount":"10.00"}'::jsonb)
+		RETURNING id
+	`, uniqueName("rate-022")).Scan(&rateID)
+	require.NoError(t, err)
+
+	return rateID
+}
+
+func mustInsertFeeSchedule22(t *testing.T, ctx context.Context, db *sql.DB) (string, string) {
+	t.Helper()
+
+	scheduleName := uniqueName("schedule-022")
+	var scheduleID string
+	err := db.QueryRowContext(ctx, `
+		INSERT INTO fee_schedules (tenant_id, name, currency, application_order, rounding_scale, rounding_mode)
+		VALUES ('11111111-1111-1111-1111-111111111111', $1, 'USD', 'PARALLEL', 2, 'HALF_UP')
+		RETURNING id
+	`, scheduleName).Scan(&scheduleID)
+	require.NoError(t, err)
+
+	return scheduleID, scheduleName
+}
+
+func mustInsertMatchRule22(t *testing.T, ctx context.Context, db *sql.DB, contextID string) string {
+	t.Helper()
+
+	var ruleID string
+	err := db.QueryRowContext(ctx, `
+		INSERT INTO match_rules (context_id, priority, type, config)
+		VALUES ($1, 1, 'EXACT', '{}'::jsonb)
+		RETURNING id
+	`, contextID).Scan(&ruleID)
+	require.NoError(t, err)
+
+	return ruleID
+}
+
+func mustInsertMatchRun22(t *testing.T, ctx context.Context, db *sql.DB, contextID string) string {
+	t.Helper()
+
+	var runID string
+	err := db.QueryRowContext(ctx, `
+		INSERT INTO match_runs (context_id, mode, status, stats)
+		VALUES ($1, 'COMMIT', 'COMPLETED', '{}'::jsonb)
+		RETURNING id
+	`, contextID).Scan(&runID)
+	require.NoError(t, err)
+
+	return runID
+}
+
+func mustInsertTransaction22(t *testing.T, ctx context.Context, db *sql.DB, contextID, sourceID, externalID string) string {
+	t.Helper()
+
+	var jobID string
+	err := db.QueryRowContext(ctx, `
+		INSERT INTO ingestion_jobs (context_id, source_id, status)
+		VALUES ($1, $2, 'COMPLETED')
+		RETURNING id
+	`, contextID, sourceID).Scan(&jobID)
+	require.NoError(t, err)
+
+	var transactionID string
+	err = db.QueryRowContext(ctx, `
+		INSERT INTO transactions (ingestion_job_id, source_id, external_id, amount, currency, date, extraction_status, status)
+		VALUES ($1, $2, $3, 100.00, 'USD', NOW(), 'COMPLETE', 'MATCHED')
+		RETURNING id
+	`, jobID, sourceID, externalID).Scan(&transactionID)
+	require.NoError(t, err)
+
+	return transactionID
+}
+
+func mustInsertMatchGroup22(t *testing.T, ctx context.Context, db *sql.DB, contextID, runID, ruleID string) string {
+	t.Helper()
+
+	var groupID string
+	err := db.QueryRowContext(ctx, `
+		INSERT INTO match_groups (context_id, run_id, rule_id, confidence, status)
+		VALUES ($1, $2, $3, 95, 'CONFIRMED')
+		RETURNING id
+	`, contextID, runID, ruleID).Scan(&groupID)
+	require.NoError(t, err)
+
+	return groupID
+}
+
+func mustInsertMatchItem22(t *testing.T, ctx context.Context, db *sql.DB, groupID, transactionID string) {
+	t.Helper()
+
+	_, err := db.ExecContext(ctx, `
+		INSERT INTO match_items (match_group_id, transaction_id, allocated_amount, allocated_currency)
+		VALUES ($1, $2, 100.00, 'USD')
+	`, groupID, transactionID)
+	require.NoError(t, err)
+}
+
+type varianceInsert22 struct {
+	contextID     string
+	runID         string
+	groupID       string
+	transactionID string
+	rateID        string
+	feeScheduleID *string
+}
+
+func mustInsertFeeVariance22(t *testing.T, ctx context.Context, db *sql.DB, input varianceInsert22) {
+	t.Helper()
+
+	_, err := db.ExecContext(ctx, `
+		INSERT INTO match_fee_variances (
+			context_id, run_id, match_group_id, transaction_id, rate_id, fee_schedule_id,
+			currency, expected_fee_amount, actual_fee_amount, delta,
+			tolerance_abs, tolerance_percent, variance_type
+		) VALUES ($1, $2, $3, $4, $5, $6, 'USD', 10.00, 12.00, 2.00, 0.01, 0.05, 'OVERCHARGE')
+	`, input.contextID, input.runID, input.groupID, input.transactionID, input.rateID, input.feeScheduleID)
+	require.NoError(t, err)
+}
+
+func assertMigrationState(t *testing.T, ctx context.Context, db *sql.DB, expectedVersion int, expectedDirty bool) {
+	t.Helper()
+
+	var version int
+	var dirty bool
+	err := db.QueryRowContext(ctx, `SELECT version, dirty FROM schema_migrations LIMIT 1`).Scan(&version, &dirty)
+	require.NoError(t, err)
+	assert.Equal(t, expectedVersion, version)
+	assert.Equal(t, expectedDirty, dirty)
 }

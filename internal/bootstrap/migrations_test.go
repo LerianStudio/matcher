@@ -223,7 +223,7 @@ func TestApplyMigrations_NoChange_ReturnsNil(t *testing.T) {
 		upErr:   migrate.ErrNoChange,
 	}
 
-	err := applyMigrations(context.Background(), migrator, &libLog.NopLogger{}, true)
+	err := applyMigrations(context.Background(), nil, migrator, &libLog.NopLogger{}, true)
 	require.NoError(t, err)
 }
 

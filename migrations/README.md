@@ -1,6 +1,6 @@
 # migrations
 
-PostgreSQL schema migrations managed with [golang-migrate](https://github.com/golang-migrate/migrate). Currently at **19 migrations** (000001 through 000019).
+PostgreSQL schema migrations managed with [golang-migrate](https://github.com/golang-migrate/migrate). Currently at **22 migrations** (000001 through 000022).
 
 ## Naming Convention
 
@@ -38,19 +38,23 @@ Every migration must have both `.up.sql` and `.down.sql` files.
 | 000017 | add_source_side_to_reconciliation_sources | Source side column |
 | 000018 | enforce_source_side_not_null | Enforce non-null source side |
 | 000019 | drop_legacy_source_fee_schedule | Remove legacy fee schedule from sources |
+| 000020 | systemplane_key_renames | Rename runtime/systemplane keys safely |
+| 000021 | exception_callback_rate_limit | Add exception callback rate limiting |
+| 000022 | remove_rate_unify_fee_schedule | Remove legacy rate schema and make fee schedules authoritative |
 
 ## Commands
 
 ```bash
 make migrate-up                          # Apply all pending migrations
 make migrate-down                        # Rollback the last migration
-make migrate-to VERSION=000015           # Migrate to a specific version
+make migrate-to VERSION=15               # Migrate to a specific version
 make migrate-create NAME=add_feature     # Create a new migration pair
 ```
 
 ## Guidelines
 
-- Always test both up and down migrations before merging.
+- Always test the forward migration path before merging.
+- If a migration is intentionally irreversible, document it clearly and test the blocked rollback/preflight behavior instead of forcing a fake down/up cycle.
 - Add indexes for new foreign keys and filter columns.
 - Never modify existing migration files after they have been applied.
 - Audit tables are append-only: never add UPDATE or DELETE operations.
