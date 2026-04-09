@@ -1,3 +1,11 @@
+## [1.3.0-beta.13](https://github.com/LerianStudio/matcher/compare/v1.3.0-beta.12...v1.3.0-beta.13) (2026-04-09)
+
+
+### Bug Fixes
+
+* **auth:** require tenant claims only when both auth and multi-tenant are enabled ([dad4227](https://github.com/LerianStudio/matcher/commit/dad4227ee79b3ead1660c6e21e2d6e51c83506b1))
+* **lint:** suppress gosec G704 in e2e test client ([4d92b0c](https://github.com/LerianStudio/matcher/commit/4d92b0c2adb21a3308e0616dfcc0f92596c3e043))
+
 ## [1.3.0-beta.12](https://github.com/LerianStudio/matcher/compare/v1.3.0-beta.11...v1.3.0-beta.12) (2026-04-08)
 
 
