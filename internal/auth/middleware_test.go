@@ -527,6 +527,7 @@ func TestTenantExtractor(t *testing.T) {
 
 		extractor, err := NewTenantExtractor(
 			false,
+			false,
 			DefaultTenantID,
 			DefaultTenantSlug,
 			testTokenSecret,
@@ -541,6 +542,7 @@ func TestTenantExtractor(t *testing.T) {
 		t.Parallel()
 
 		extractor, err := NewTenantExtractor(
+			true,
 			true,
 			DefaultTenantID,
 			DefaultTenantSlug,
@@ -571,6 +573,7 @@ func testExtractTenantAuthDisabled(t *testing.T) {
 	t.Helper()
 
 	extractor, err := NewTenantExtractor(
+		false,
 		false,
 		DefaultTenantID,
 		DefaultTenantSlug,
@@ -603,6 +606,7 @@ func testExtractTenantAuthEnabled(t *testing.T) {
 
 		extractor, err := NewTenantExtractor(
 			true,
+			true,
 			DefaultTenantID,
 			DefaultTenantSlug,
 			testTokenSecret,
@@ -629,6 +633,7 @@ func testExtractTenantAuthEnabled(t *testing.T) {
 		t.Parallel()
 
 		extractor, err := NewTenantExtractor(
+			true,
 			true,
 			DefaultTenantID,
 			DefaultTenantSlug,
@@ -657,6 +662,7 @@ func testExtractTenantAuthEnabled(t *testing.T) {
 		t.Parallel()
 
 		extractor, err := NewTenantExtractor(
+			true,
 			true,
 			DefaultTenantID,
 			DefaultTenantSlug,
@@ -894,7 +900,7 @@ func TestExtractTenant_ExpiredToken_ReturnsUnauthorized(t *testing.T) {
 	t.Parallel()
 
 	extractor, err := NewTenantExtractor(
-		true, DefaultTenantID, DefaultTenantSlug, testTokenSecret, "development",
+		true, true, DefaultTenantID, DefaultTenantSlug, testTokenSecret, "development",
 	)
 	require.NoError(t, err)
 	app := newTestFiberApp(extractor)
@@ -919,7 +925,7 @@ func TestExtractTenant_XUserIDHeader_RejectedInProduction(t *testing.T) {
 	t.Parallel()
 
 	extractor, err := NewTenantExtractor(
-		false, DefaultTenantID, DefaultTenantSlug, testTokenSecret, "production",
+		false, false, DefaultTenantID, DefaultTenantSlug, testTokenSecret, "production",
 	)
 	require.NoError(t, err)
 
@@ -946,7 +952,7 @@ func TestExtractTenant_XUserIDHeader_AcceptedInDevelopment(t *testing.T) {
 	t.Parallel()
 
 	extractor, err := NewTenantExtractor(
-		false, DefaultTenantID, DefaultTenantSlug, testTokenSecret, "development",
+		false, false, DefaultTenantID, DefaultTenantSlug, testTokenSecret, "development",
 	)
 	require.NoError(t, err)
 

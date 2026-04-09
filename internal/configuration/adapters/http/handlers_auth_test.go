@@ -57,6 +57,7 @@ func TestConfigRoutes_AuthEnforced(t *testing.T) {
 	authClient := authMiddleware.NewAuthClient(authServer.URL, true, &loggerInterface)
 	extractor, err := auth.NewTenantExtractor(
 		true,
+		true,
 		auth.DefaultTenantID,
 		auth.DefaultTenantSlug,
 		"test-secret",

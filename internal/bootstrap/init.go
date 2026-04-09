@@ -408,6 +408,7 @@ func buildTenantExtractor(cfg *Config) (*auth.TenantExtractor, error) {
 
 	extractor, err := auth.NewTenantExtractor(
 		cfg.Auth.Enabled,
+		cfg.Tenancy.MultiTenantEnabled,
 		cfg.Tenancy.DefaultTenantID,
 		cfg.Tenancy.DefaultTenantSlug,
 		cfg.Auth.TokenSecret,

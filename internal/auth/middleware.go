@@ -72,12 +72,13 @@ type TenantExtractor struct {
 }
 
 // NewTenantExtractor creates a new TenantExtractor with the given configuration.
-// When authEnabled is true, tenant claims (tenant_id/tenantId) in the JWT are REQUIRED.
-// Tokens without tenant claims will be rejected with ErrMissingTenantClaim.
+// Tenant claims (tenant_id/tenantId) in the JWT are REQUIRED only when both
+// authEnabled AND multiTenantEnabled are true. In single-tenant mode (multiTenantEnabled=false),
+// JWTs without tenant claims fall back to the configured defaults instead of being rejected.
 // The envName parameter controls security features: X-User-ID header is only accepted
 // in non-production environments (development, test, staging).
 func NewTenantExtractor(
-	authEnabled bool,
+	authEnabled, multiTenantEnabled bool,
 	defaultTenantID, defaultTenantSlug, tokenSecret, envName string,
 ) (*TenantExtractor, error) {
 	ctx := context.Background()
@@ -129,7 +130,7 @@ func NewTenantExtractor(
 
 	return &TenantExtractor{
 		authEnabled:         authEnabled,
-		requireTenantClaims: authEnabled,
+		requireTenantClaims: authEnabled && multiTenantEnabled,
 		defaultTenantID:     defaultTenantID,
 		defaultTenantSlug:   defaultTenantSlug,
 		tokenSecret:         []byte(tokenSecret),
