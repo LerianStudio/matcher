@@ -46,6 +46,7 @@ func TestRegisterRoutes_NilApp_ReturnsError(t *testing.T) {
 	client := authMiddleware.NewAuthClient("", false, nil)
 	extractor, err := auth.NewTenantExtractor(
 		false,
+		false,
 		"11111111-1111-1111-1111-111111111111",
 		"default",
 		"",
@@ -65,6 +66,7 @@ func TestRegisterRoutes_NilConfig_ReturnsError(t *testing.T) {
 	app := fiber.New()
 	client := authMiddleware.NewAuthClient("", false, nil)
 	extractor, err := auth.NewTenantExtractor(
+		false,
 		false,
 		"11111111-1111-1111-1111-111111111111",
 		"default",
@@ -96,6 +98,7 @@ func TestRegisterRoutes_Success(t *testing.T) {
 		}
 		client := authMiddleware.NewAuthClient("", false, nil)
 		extractor, err := auth.NewTenantExtractor(
+			false,
 			false,
 			"11111111-1111-1111-1111-111111111111",
 			"default",
@@ -136,6 +139,7 @@ func TestRegisterRoutes_Success(t *testing.T) {
 		client := authMiddleware.NewAuthClient("", false, nil)
 		extractor, err := auth.NewTenantExtractor(
 			false,
+			false,
 			"11111111-1111-1111-1111-111111111111",
 			"default",
 			"",
@@ -174,6 +178,7 @@ func TestRegisterRoutes_Success(t *testing.T) {
 		}
 		client := authMiddleware.NewAuthClient("", false, nil)
 		extractor, err := auth.NewTenantExtractor(
+			false,
 			false,
 			"11111111-1111-1111-1111-111111111111",
 			"default",
@@ -219,6 +224,7 @@ func TestRegisterRoutes_Success(t *testing.T) {
 			client := authMiddleware.NewAuthClient("", false, nil)
 			extractor, err := auth.NewTenantExtractor(
 				false,
+				false,
 				"11111111-1111-1111-1111-111111111111",
 				"default",
 				"",
@@ -255,6 +261,7 @@ func TestRegisterRoutes_Success(t *testing.T) {
 			}
 			client := authMiddleware.NewAuthClient("", false, nil)
 			extractor, err := auth.NewTenantExtractor(
+				false,
 				false,
 				"11111111-1111-1111-1111-111111111111",
 				"default",
@@ -301,6 +308,7 @@ func TestRegisterRoutes_Success(t *testing.T) {
 			client := authMiddleware.NewAuthClient("", false, nil)
 			extractor, err := auth.NewTenantExtractor(
 				false,
+				false,
 				"11111111-1111-1111-1111-111111111111",
 				"default",
 				"",
@@ -338,6 +346,7 @@ func TestRegisterRoutes_Success(t *testing.T) {
 			client := authMiddleware.NewAuthClient("", false, nil)
 			extractor, err := auth.NewTenantExtractor(
 				false,
+				false,
 				"11111111-1111-1111-1111-111111111111",
 				"default",
 				"",
@@ -374,6 +383,7 @@ func TestRegisterRoutes_Success(t *testing.T) {
 			}
 			client := authMiddleware.NewAuthClient("", false, nil)
 			extractor, err := auth.NewTenantExtractor(
+				false,
 				false,
 				"11111111-1111-1111-1111-111111111111",
 				"default",
@@ -413,6 +423,7 @@ func TestRegisterRoutes_Success(t *testing.T) {
 		client := authMiddleware.NewAuthClient("", false, nil)
 		extractor, err := auth.NewTenantExtractor(
 			false,
+			false,
 			"11111111-1111-1111-1111-111111111111",
 			"default",
 			"",
@@ -439,6 +450,7 @@ func TestRegisterRoutes_HealthEndpoints(t *testing.T) {
 	cfg := &Config{App: AppConfig{EnvName: "development"}}
 	client := authMiddleware.NewAuthClient("", false, nil)
 	extractor, err := auth.NewTenantExtractor(
+		false,
 		false,
 		"11111111-1111-1111-1111-111111111111",
 		"default",
@@ -488,6 +500,7 @@ func TestRoutesStruct(t *testing.T) {
 		cfg := &Config{App: AppConfig{EnvName: "test"}}
 		client := authMiddleware.NewAuthClient("", false, nil)
 		extractor, err := auth.NewTenantExtractor(
+			false,
 			false,
 			"11111111-1111-1111-1111-111111111111",
 			"default",
@@ -559,6 +572,7 @@ func TestRegisterRoutes_DynamicRateLimitToggle(t *testing.T) {
 
 	client := authMiddleware.NewAuthClient("", false, nil)
 	extractor, err := auth.NewTenantExtractor(
+		false,
 		false,
 		"11111111-1111-1111-1111-111111111111",
 		"default",

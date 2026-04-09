@@ -44,7 +44,7 @@ func TestProtectedGroupWithValidExtractorButNilAuthClient(t *testing.T) {
 	app := fiber.New()
 	router := app.Group("/api")
 
-	extractor, err := NewTenantExtractor(false, "00000000-0000-0000-0000-000000000001", "test-slug", "", "development")
+	extractor, err := NewTenantExtractor(false, false, "00000000-0000-0000-0000-000000000001", "test-slug", "", "development")
 	require.NoError(t, err)
 
 	group, err := ProtectedGroupWithActionsWithMiddleware(router, nil, extractor, "resource", []string{"read"})
@@ -91,6 +91,7 @@ func TestProtectedGroupWithMiddleware_HandlerSliceConstruction(t *testing.T) {
 	router := app.Group("/api")
 
 	extractor, err := NewTenantExtractor(
+		false,
 		false,
 		DefaultTenantID,
 		DefaultTenantSlug,
@@ -159,6 +160,7 @@ func TestProtectedGroupWithDifferentResources(t *testing.T) {
 			router := app.Group("/api")
 			extractor, err := NewTenantExtractor(
 				false,
+				false,
 				DefaultTenantID,
 				DefaultTenantSlug,
 				"",
@@ -189,7 +191,7 @@ func TestProtectedGroupWithMiddleware_AuthRunsBeforeTenantExtraction(t *testing.
 	}})
 	router := app.Group("/api")
 
-	extractor, err := NewTenantExtractor(false, DefaultTenantID, DefaultTenantSlug, "", "development")
+	extractor, err := NewTenantExtractor(false, false, DefaultTenantID, DefaultTenantSlug, "", "development")
 	require.NoError(t, err)
 
 	group, err := ProtectedGroupWithActionsWithMiddleware(router, nil, extractor, "resource", []string{"read"})
@@ -218,7 +220,7 @@ func TestProtectedGroup_AuthEnabledInvalidTokenFailsBeforeLibAuth(t *testing.T) 
 	app := fiber.New()
 	router := app.Group("/api")
 
-	extractor, err := NewTenantExtractor(true, DefaultTenantID, DefaultTenantSlug, "matcher-secret", "development")
+	extractor, err := NewTenantExtractor(true, true, DefaultTenantID, DefaultTenantSlug, "matcher-secret", "development")
 	require.NoError(t, err)
 
 	authClient := authMiddleware.NewAuthClient("http://authz.local", true, nil)
@@ -260,6 +262,7 @@ func TestProtectedGroupWithActionsWithMiddleware_EmptyActions(t *testing.T) {
 	t.Parallel()
 
 	extractor, err := NewTenantExtractor(
+		false,
 		false, DefaultTenantID, DefaultTenantSlug, "", "development",
 	)
 	require.NoError(t, err)
@@ -275,6 +278,7 @@ func TestProtectedGroupWithActionsWithMiddleware_EmptyActionString(t *testing.T)
 	t.Parallel()
 
 	extractor, err := NewTenantExtractor(
+		false,
 		false, DefaultTenantID, DefaultTenantSlug, "", "development",
 	)
 	require.NoError(t, err)
@@ -290,6 +294,7 @@ func TestProtectedGroupWithActionsWithMiddleware_ValidInputCreatesGroup(t *testi
 	t.Parallel()
 
 	extractor, err := NewTenantExtractor(
+		false,
 		false, DefaultTenantID, DefaultTenantSlug, "", "development",
 	)
 	require.NoError(t, err)
@@ -332,7 +337,7 @@ func TestProtectedGroupWithActionsWithMiddleware_MultiActionEnforcement(t *testi
 	app := fiber.New()
 	router := app.Group("/api")
 
-	extractor, err := NewTenantExtractor(true, DefaultTenantID, DefaultTenantSlug, testTokenSecret, "development")
+	extractor, err := NewTenantExtractor(true, true, DefaultTenantID, DefaultTenantSlug, testTokenSecret, "development")
 	require.NoError(t, err)
 
 	authClient := authMiddleware.NewAuthClient(authServer.URL, true, nil)
@@ -394,7 +399,7 @@ func TestProtectedGroupWithMiddleware_AdditionalMiddlewareSeesTenantAndUserAfter
 	app := fiber.New()
 	router := app.Group("/api")
 
-	extractor, err := NewTenantExtractor(true, DefaultTenantID, DefaultTenantSlug, testTokenSecret, "development")
+	extractor, err := NewTenantExtractor(true, true, DefaultTenantID, DefaultTenantSlug, testTokenSecret, "development")
 	require.NoError(t, err)
 
 	authClient := authMiddleware.NewAuthClient(authServer.URL, true, nil)

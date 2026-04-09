@@ -99,7 +99,7 @@ func (c *Client) DoWithOptions(
 		req.Header.Set(key, value)
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.httpClient.Do(req) //nolint:gosec // G704: URL is constructed from trusted test config, not user input
 	if err != nil {
 		return nil, fmt.Errorf("execute request: %w", err)
 	}
