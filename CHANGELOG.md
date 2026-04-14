@@ -1,3 +1,11 @@
+## [1.3.0-beta.14](https://github.com/LerianStudio/matcher/compare/v1.3.0-beta.13...v1.3.0-beta.14) (2026-04-14)
+
+
+### Bug Fixes
+
+* **discovery:** align Fetcher client paths with actual service routes ([e11c23e](https://github.com/LerianStudio/matcher/commit/e11c23e6fd76937ca8b01bfb19cb6d59c34c3640))
+* **lint:** remove stale nolint:gosec directive in e2e client ([76d76c2](https://github.com/LerianStudio/matcher/commit/76d76c294aa3d2d5a02846ff3273548934dfe4ca))
+
 ## [1.3.0-beta.13](https://github.com/LerianStudio/matcher/compare/v1.3.0-beta.12...v1.3.0-beta.13) (2026-04-09)
 
 
