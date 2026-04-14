@@ -17,7 +17,7 @@ func TestGetExtractionJobStatus_Success_Running(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/api/v1/extractions/job-1", r.URL.Path)
+		assert.Equal(t, "/v1/fetcher/job-1", r.URL.Path)
 		resp := fetcherExtractionStatusResponse{JobID: "job-1", Status: "RUNNING", Progress: 60}
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(resp) //nolint:errcheck,errchkjson // test helper

@@ -17,7 +17,7 @@ func TestGetSchema_Success(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/api/v1/connections/conn-abc/schema", r.URL.Path)
+		assert.Equal(t, "/v1/management/connections/conn-abc/schema", r.URL.Path)
 		resp := fetcherSchemaResponse{ConnectionID: "conn-abc", Tables: []fetcherTableResponse{{TableName: "transactions", Columns: []fetcherColumnResponse{{Name: "id", Type: "uuid", Nullable: false}, {Name: "amount", Type: "decimal", Nullable: false}, {Name: "note", Type: "text", Nullable: true}}}}}
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(resp) //nolint:errcheck,errchkjson // test helper

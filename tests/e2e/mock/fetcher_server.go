@@ -238,14 +238,14 @@ func (s *MockFetcherServer) SetJobStatus(jobID string, status string, progress i
 func (s *MockFetcherServer) registerRoutes(mux *http.ServeMux) {
 	// Go 1.22+ ServeMux supports method+path patterns.
 	mux.HandleFunc("GET /health", s.handleHealth)
-	mux.HandleFunc("GET /api/v1/connections", s.handleListConnections)
-	mux.HandleFunc("POST /api/v1/extractions", s.handleSubmitExtraction)
+	mux.HandleFunc("GET /v1/management/connections", s.handleListConnections)
+	mux.HandleFunc("POST /v1/fetcher", s.handleSubmitExtraction)
 
 	// Paths with path segments that need manual extraction:
 	// Go 1.22 ServeMux supports {name} wildcards.
-	mux.HandleFunc("GET /api/v1/connections/{id}/schema", s.handleGetSchema)
-	mux.HandleFunc("POST /api/v1/connections/{id}/test", s.handleTestConnection)
-	mux.HandleFunc("GET /api/v1/extractions/{jobId}", s.handleGetExtractionStatus)
+	mux.HandleFunc("GET /v1/management/connections/{id}/schema", s.handleGetSchema)
+	mux.HandleFunc("POST /v1/management/connections/{id}/test", s.handleTestConnection)
+	mux.HandleFunc("GET /v1/fetcher/{jobId}", s.handleGetExtractionStatus)
 }
 
 // --- Handlers ---
@@ -269,7 +269,7 @@ func (s *MockFetcherServer) handleHealth(w http.ResponseWriter, _ *http.Request)
 	writeJSON(w, map[string]string{"status": "ok"})
 }
 
-// handleListConnections: GET /api/v1/connections?orgId=X
+// handleListConnections: GET /v1/management/connections?orgId=X
 // Response shape: {"connections":[...]}
 // Each connection: {"id","configName","databaseType","host","port","databaseName","productName","status"}
 func (s *MockFetcherServer) handleListConnections(w http.ResponseWriter, r *http.Request) {
@@ -320,7 +320,7 @@ func (s *MockFetcherServer) handleListConnections(w http.ResponseWriter, r *http
 	writeJSON(w, map[string]any{"connections": items})
 }
 
-// handleGetSchema: GET /api/v1/connections/{id}/schema
+// handleGetSchema: GET /v1/management/connections/{id}/schema
 // Response shape: {"connectionId":"...","tables":[{"tableName":"...","columns":[{"name","type","nullable"}]}]}
 func (s *MockFetcherServer) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 	connID := r.PathValue("id")
@@ -379,7 +379,7 @@ func (s *MockFetcherServer) handleGetSchema(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, resp)
 }
 
-// handleTestConnection: POST /api/v1/connections/{id}/test
+// handleTestConnection: POST /v1/management/connections/{id}/test
 // Response shape: {"connectionId":"...","healthy":true,"latencyMs":42,"errorMessage":"..."}
 func (s *MockFetcherServer) handleTestConnection(w http.ResponseWriter, r *http.Request) {
 	connID := r.PathValue("id")
@@ -414,7 +414,7 @@ func (s *MockFetcherServer) handleTestConnection(w http.ResponseWriter, r *http.
 	writeJSON(w, resp)
 }
 
-// handleSubmitExtraction: POST /api/v1/extractions
+// handleSubmitExtraction: POST /v1/fetcher
 // Accepts JSON body with connectionId, tables, filters.
 // Response shape: {"jobId":"..."}
 //
@@ -467,7 +467,7 @@ func (s *MockFetcherServer) handleSubmitExtraction(w http.ResponseWriter, r *htt
 	writeJSON(w, submitJSON{JobID: jobID})
 }
 
-// handleGetExtractionStatus: GET /api/v1/extractions/{jobId}
+// handleGetExtractionStatus: GET /v1/fetcher/{jobId}
 // Response shape: {"jobId":"...","status":"COMPLETE","progress":100,"resultPath":"/data/...","errorMessage":"..."}
 func (s *MockFetcherServer) handleGetExtractionStatus(w http.ResponseWriter, r *http.Request) {
 	jobID := r.PathValue("jobId")

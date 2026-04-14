@@ -185,7 +185,7 @@ func (client *HTTPFetcherClient) ListConnections(ctx context.Context, orgID stri
 		return nil, err
 	}
 
-	reqURL := client.baseURL + "/api/v1/connections"
+	reqURL := client.baseURL + "/v1/management/connections"
 	if orgID != "" {
 		reqURL += "?orgId=" + url.QueryEscape(orgID)
 	}
@@ -228,7 +228,7 @@ func (client *HTTPFetcherClient) GetSchema(ctx context.Context, connectionID str
 		return nil, err
 	}
 
-	reqURL := client.baseURL + "/api/v1/connections/" + url.PathEscape(connectionID) + "/schema"
+	reqURL := client.baseURL + "/v1/management/connections/" + url.PathEscape(connectionID) + "/schema"
 
 	body, err := client.doGet(ctx, reqURL)
 	if err != nil {
@@ -279,7 +279,7 @@ func (client *HTTPFetcherClient) TestConnection(ctx context.Context, connectionI
 		return nil, err
 	}
 
-	reqURL := client.baseURL + "/api/v1/connections/" + url.PathEscape(connectionID) + "/test"
+	reqURL := client.baseURL + "/v1/management/connections/" + url.PathEscape(connectionID) + "/test"
 
 	body, err := client.doPost(ctx, reqURL, nil)
 	if err != nil {
@@ -334,7 +334,7 @@ func (client *HTTPFetcherClient) SubmitExtractionJob(ctx context.Context, input 
 		return "", fmt.Errorf("marshal extraction request: %w", err)
 	}
 
-	body, err := client.doPost(ctx, client.baseURL+"/api/v1/extractions", jsonBody)
+	body, err := client.doPost(ctx, client.baseURL+"/v1/fetcher", jsonBody)
 	if err != nil {
 		return "", fmt.Errorf("submit extraction: %w", err)
 	}
@@ -362,7 +362,7 @@ func (client *HTTPFetcherClient) GetExtractionJobStatus(ctx context.Context, job
 		return nil, err
 	}
 
-	reqURL := client.baseURL + "/api/v1/extractions/" + url.PathEscape(jobID)
+	reqURL := client.baseURL + "/v1/fetcher/" + url.PathEscape(jobID)
 
 	body, err := client.doGet(ctx, reqURL)
 	if err != nil {

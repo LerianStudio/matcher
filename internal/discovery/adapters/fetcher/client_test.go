@@ -108,7 +108,7 @@ func TestListConnections_Success(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/api/v1/connections", r.URL.Path)
+		assert.Equal(t, "/v1/management/connections", r.URL.Path)
 		assert.Equal(t, "org-123", r.URL.Query().Get("orgId"))
 
 		resp := fetcherConnectionListResponse{
@@ -175,7 +175,7 @@ func TestListConnections_NoOrgID(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/api/v1/connections", r.URL.Path)
+		assert.Equal(t, "/v1/management/connections", r.URL.Path)
 		assert.Empty(t, r.URL.Query().Get("orgId"))
 
 		resp := fetcherConnectionListResponse{Connections: []fetcherConnectionResponse{}}
@@ -247,7 +247,7 @@ func TestTestConnection_Success_Healthy(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/api/v1/connections/conn-1/test", r.URL.Path)
+		assert.Equal(t, "/v1/management/connections/conn-1/test", r.URL.Path)
 		assert.Equal(t, http.MethodPost, r.Method)
 
 		resp := fetcherTestResponse{
@@ -338,7 +338,7 @@ func TestSubmitExtractionJob_Success(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/api/v1/extractions", r.URL.Path)
+		assert.Equal(t, "/v1/fetcher", r.URL.Path)
 		assert.Equal(t, http.MethodPost, r.Method)
 		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 

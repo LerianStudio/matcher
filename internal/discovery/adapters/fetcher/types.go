@@ -7,7 +7,7 @@ type fetcherHealthResponse struct {
 	Status string `json:"status"`
 }
 
-// fetcherConnectionResponse maps to a single connection in GET /api/v1/connections.
+// fetcherConnectionResponse maps to a single connection in GET /v1/management/connections.
 type fetcherConnectionResponse struct {
 	ID           string `json:"id"`
 	ConfigName   string `json:"configName"`
@@ -19,7 +19,7 @@ type fetcherConnectionResponse struct {
 	Status       string `json:"status"`
 }
 
-// fetcherConnectionListResponse maps to the GET /api/v1/connections response.
+// fetcherConnectionListResponse maps to the GET /v1/management/connections response.
 type fetcherConnectionListResponse struct {
 	Connections []fetcherConnectionResponse `json:"connections"`
 }
@@ -37,13 +37,13 @@ type fetcherTableResponse struct {
 	Columns   []fetcherColumnResponse `json:"columns"`
 }
 
-// fetcherSchemaResponse maps to GET /api/v1/connections/:id/schema.
+// fetcherSchemaResponse maps to GET /v1/management/connections/:id/schema.
 type fetcherSchemaResponse struct {
 	ConnectionID string                 `json:"connectionId"`
 	Tables       []fetcherTableResponse `json:"tables"`
 }
 
-// fetcherTestResponse maps to POST /api/v1/connections/:id/test.
+// fetcherTestResponse maps to POST /v1/management/connections/:id/test.
 type fetcherTestResponse struct {
 	ConnectionID string `json:"connectionId"`
 	Healthy      bool   `json:"healthy"`
@@ -51,7 +51,7 @@ type fetcherTestResponse struct {
 	ErrorMessage string `json:"errorMessage,omitempty"`
 }
 
-// fetcherExtractionSubmitRequest is the request body for POST /api/v1/extractions.
+// fetcherExtractionSubmitRequest is the request body for POST /v1/fetcher.
 type fetcherExtractionSubmitRequest struct {
 	ConnectionID string                            `json:"connectionId"`
 	Tables       map[string]fetcherExtractionTable `json:"tables"`
@@ -65,12 +65,12 @@ type fetcherExtractionTable struct {
 	EndDate   string   `json:"endDate,omitempty"`
 }
 
-// fetcherExtractionSubmitResponse maps to POST /api/v1/extractions response.
+// fetcherExtractionSubmitResponse maps to POST /v1/fetcher response.
 type fetcherExtractionSubmitResponse struct {
 	JobID string `json:"jobId"`
 }
 
-// fetcherExtractionStatusResponse maps to GET /api/v1/extractions/:jobId response.
+// fetcherExtractionStatusResponse maps to GET /v1/fetcher/:jobId response.
 type fetcherExtractionStatusResponse struct {
 	JobID        string `json:"jobId"`
 	Status       string `json:"status"`

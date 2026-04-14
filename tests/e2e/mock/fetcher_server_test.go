@@ -24,14 +24,14 @@ func TestMockFetcherServer_ListConnections_RequiresAndFiltersOrgID(t *testing.T)
 		require.NoError(t, server.Stop())
 	})
 
-	resp, err := http.Get(baseURL + "/api/v1/connections") //nolint:noctx // test server request
+	resp, err := http.Get(baseURL + "/v1/management/connections") //nolint:noctx // test server request
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		resp.Body.Close()
 	})
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 
-	filteredResp, err := http.Get(baseURL + "/api/v1/connections?orgId=tenant-a") //nolint:noctx // test server request
+	filteredResp, err := http.Get(baseURL + "/v1/management/connections?orgId=tenant-a") //nolint:noctx // test server request
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		filteredResp.Body.Close()
@@ -60,7 +60,7 @@ func TestMockFetcherServer_GetSchema_NilSchemaReturnsNotFound(t *testing.T) {
 		require.NoError(t, server.Stop())
 	})
 
-	resp, err := http.Get(baseURL + "/api/v1/connections/conn-1/schema") //nolint:noctx // test server request
+	resp, err := http.Get(baseURL + "/v1/management/connections/conn-1/schema") //nolint:noctx // test server request
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		resp.Body.Close()
@@ -81,7 +81,7 @@ func TestMockFetcherServer_TestConnection_NilResultReturnsNotFound(t *testing.T)
 	})
 
 	client := &http.Client{Timeout: 5 * time.Second}
-	req, err := http.NewRequest(http.MethodPost, baseURL+"/api/v1/connections/conn-1/test", http.NoBody) //nolint:noctx // test server request
+	req, err := http.NewRequest(http.MethodPost, baseURL+"/v1/management/connections/conn-1/test", http.NoBody) //nolint:noctx // test server request
 	require.NoError(t, err)
 
 	resp, err := client.Do(req)
