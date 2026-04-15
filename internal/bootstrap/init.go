@@ -566,17 +566,17 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 	success := false
 
 	defer func() {
-		if !success {
-			runCleanups()
-
-			if infraConnectionManager != nil {
-				if closeErr := infraConnectionManager.Close(); closeErr != nil {
-					logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to close connection manager: %v", closeErr))
-				}
-			}
-
-			cleanupConnections(ctx, postgresConnection, redisConnection, rabbitMQConnection, logger)
+		if success {
+			return
 		}
+
+		runCleanups()
+
+		if infraConnectionManager != nil {
+			logCloseErr(ctx, logger, "failed to close connection manager", infraConnectionManager.Close)
+		}
+
+		cleanupConnections(ctx, postgresConnection, redisConnection, rabbitMQConnection, logger)
 	}()
 
 	done = timer.track("infra_connect")
@@ -2443,7 +2443,7 @@ func initModulesAndMessaging(
 		return nil, ErrAuditPublisherRequired
 	}
 
-	outboxDispatcher, err := outboxServices.NewDispatcher(
+	dispatcher, err := outboxServices.NewDispatcher(
 		sharedOutboxRepository,
 		runtimeIngestionPublisher,
 		runtimeMatchingPublisher,
@@ -2456,10 +2456,10 @@ func initModulesAndMessaging(
 		return nil, fmt.Errorf("create outbox dispatcher: %w", err)
 	}
 
-	outboxDispatcher.SetRetryWindow(cfg.IdempotencyRetryWindow())
+	dispatcher.SetRetryWindow(cfg.IdempotencyRetryWindow())
 
 	if configGetter != nil || settingsResolver != nil {
-		outboxDispatcher.SetRetryWindowResolver(func(ctx context.Context) time.Duration {
+		dispatcher.SetRetryWindowResolver(func(ctx context.Context) time.Duration {
 			return resolveIdempotencyRetryWindow(ctx, cfg, configGetter, settingsResolver)
 		})
 	}
@@ -2478,7 +2478,7 @@ func initModulesAndMessaging(
 	}
 
 	return &modulesResult{
-		outboxDispatcher: outboxDispatcher,
+		outboxDispatcher: dispatcher,
 		ingestionEvents:  runtimeIngestionPublisher,
 		matchingEvents:   runtimeMatchingPublisher,
 		exportWorker:     exportWorker,
