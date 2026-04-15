@@ -1,3 +1,4 @@
+// Package common provides shared PostgreSQL utilities for the ingestion context.
 package common
 
 import (
