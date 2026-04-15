@@ -63,7 +63,7 @@ func TestRefreshDiscovery_ListConnectionsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "list fetcher connections")
 }
 
-func TestRefreshDiscovery_UsesTenantIDAsFetcherScope(t *testing.T) {
+func TestRefreshDiscovery_PassesMatcherAsProductName(t *testing.T) {
 	t.Parallel()
 
 	fetcherClient := &mockFetcherClient{healthy: true, connections: []*sharedPorts.FetcherConnection{}}
@@ -76,32 +76,14 @@ func TestRefreshDiscovery_UsesTenantIDAsFetcherScope(t *testing.T) {
 	)
 	require.NoError(t, err)
 
+	// Even with tenant context present, ListConnections receives the product name "matcher",
+	// not the tenant ID. Tenant filtering is done server-side via JWT.
 	ctx := context.WithValue(context.Background(), auth.TenantIDKey, "22222222-2222-2222-2222-222222222222")
 
 	_, err = uc.RefreshDiscovery(ctx)
 
 	require.NoError(t, err)
-	assert.Equal(t, "22222222-2222-2222-2222-222222222222", fetcherClient.lastListOrgID)
-}
-
-func TestRefreshDiscovery_RequiresTenantContextWhenConfigured(t *testing.T) {
-	t.Parallel()
-
-	fetcherClient := &mockFetcherClient{healthy: true, connections: []*sharedPorts.FetcherConnection{}}
-	uc, err := NewUseCase(
-		fetcherClient,
-		&mockConnectionRepo{},
-		&mockSchemaRepo{},
-		&mockExtractionRepo{},
-		&libLog.NopLogger{},
-	)
-	require.NoError(t, err)
-	uc.WithTenantContextRequirement(true)
-
-	_, err = uc.RefreshDiscovery(context.Background())
-
-	require.ErrorIs(t, err, ErrTenantContextRequired)
-	assert.Empty(t, fetcherClient.lastListOrgID)
+	assert.Equal(t, "matcher", fetcherClient.lastListOrgID)
 }
 
 func TestRefreshDiscovery_RejectsConcurrentManualRefresh(t *testing.T) {
@@ -187,11 +169,8 @@ func TestRefreshDiscovery_SuccessWithConnections(t *testing.T) {
 			schema: &sharedPorts.FetcherSchema{
 				Tables: []sharedPorts.FetcherTableSchema{
 					{
-						TableName: "transactions",
-						Columns: []sharedPorts.FetcherColumnInfo{
-							{Name: "id", Type: "uuid", Nullable: false},
-							{Name: "amount", Type: "numeric", Nullable: false},
-						},
+						Name:   "transactions",
+						Fields: []string{"id", "amount"},
 					},
 				},
 			},
@@ -212,7 +191,7 @@ func TestRefreshDiscovery_SuccessWithConnections(t *testing.T) {
 	assert.Equal(t, 2, schemaRepo.upsertCount)
 }
 
-func TestRefreshDiscovery_PreservesFetcherReportedStatus(t *testing.T) {
+func TestRefreshDiscovery_SyncedConnectionIsMarkedAvailable(t *testing.T) {
 	t.Parallel()
 
 	var capturedStatus vo.ConnectionStatus
@@ -233,7 +212,6 @@ func TestRefreshDiscovery_PreservesFetcherReportedStatus(t *testing.T) {
 				ID:           "conn-1",
 				ConfigName:   "pg-primary",
 				DatabaseType: "POSTGRES",
-				Status:       "UNREACHABLE",
 			}},
 			schemaErr: errors.New("schema fetch failed"),
 		},
@@ -247,7 +225,8 @@ func TestRefreshDiscovery_PreservesFetcherReportedStatus(t *testing.T) {
 	_, err = uc.RefreshDiscovery(context.Background())
 
 	require.NoError(t, err)
-	assert.Equal(t, vo.ConnectionStatusUnreachable, capturedStatus)
+	// The syncer always calls MarkAvailable on upserted connections.
+	assert.Equal(t, vo.ConnectionStatusAvailable, capturedStatus)
 }
 
 func TestRefreshDiscovery_ConnectionUpsertError_ContinuesToNext(t *testing.T) {
@@ -375,10 +354,8 @@ func TestRefreshDiscovery_SchemaUpsertBatchError(t *testing.T) {
 			schema: &sharedPorts.FetcherSchema{
 				Tables: []sharedPorts.FetcherTableSchema{
 					{
-						TableName: "users",
-						Columns: []sharedPorts.FetcherColumnInfo{
-							{Name: "id", Type: "int", Nullable: false},
-						},
+						Name:   "users",
+						Fields: []string{"id"},
 					},
 				},
 			},
@@ -428,8 +405,8 @@ func TestRefreshDiscovery_MarksStaleConnectionsUnreachable(t *testing.T) {
 				DatabaseType: "POSTGRES",
 			}},
 			schema: &sharedPorts.FetcherSchema{Tables: []sharedPorts.FetcherTableSchema{{
-				TableName: "transactions",
-				Columns:   []sharedPorts.FetcherColumnInfo{{Name: "id", Type: "uuid", Nullable: false}},
+				Name:   "transactions",
+				Fields: []string{"id"},
 			}}},
 		},
 		connRepo,
@@ -470,9 +447,8 @@ func TestTestConnection_Success(t *testing.T) {
 		&mockFetcherClient{
 			healthy: true,
 			testResult: &sharedPorts.FetcherTestResult{
-				ConnectionID: conn.FetcherConnID,
-				Healthy:      true,
-				LatencyMs:    25,
+				Status:    "success",
+				LatencyMs: 25,
 			},
 		},
 		&mockConnectionRepo{findByIDConn: conn},

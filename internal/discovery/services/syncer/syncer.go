@@ -117,11 +117,11 @@ func (cs *ConnectionSyncer) upsertConnection(
 		existing.ConfigName = fc.ConfigName
 		existing.DatabaseType = fc.DatabaseType
 
-		if err := existing.UpdateDetails(fc.Host, fc.Port, fc.DatabaseName, fc.ProductName); err != nil {
+		if err := existing.UpdateDetails(fc.Host, fc.Port, fc.DatabaseName, fc.ProductName, fc.Schema, fc.UserName); err != nil {
 			return nil, fmt.Errorf("update existing connection details: %w", err)
 		}
 
-		existing.ApplyFetcherStatus(fc.Status)
+		existing.MarkAvailable()
 
 		if err := cs.connRepo.Upsert(ctx, existing); err != nil {
 			return nil, fmt.Errorf("upsert existing connection: %w", err)
@@ -135,11 +135,11 @@ func (cs *ConnectionSyncer) upsertConnection(
 		return nil, fmt.Errorf("create connection entity: %w", err)
 	}
 
-	if err := newConn.UpdateDetails(fc.Host, fc.Port, fc.DatabaseName, fc.ProductName); err != nil {
+	if err := newConn.UpdateDetails(fc.Host, fc.Port, fc.DatabaseName, fc.ProductName, fc.Schema, fc.UserName); err != nil {
 		return nil, fmt.Errorf("update new connection details: %w", err)
 	}
 
-	newConn.ApplyFetcherStatus(fc.Status)
+	newConn.MarkAvailable()
 
 	if err := cs.connRepo.Upsert(ctx, newConn); err != nil {
 		return nil, fmt.Errorf("upsert new connection: %w", err)
@@ -167,30 +167,18 @@ func (cs *ConnectionSyncer) SyncSchema(ctx context.Context, conn *entities.Fetch
 	skipped := 0
 
 	for _, tbl := range schema.Tables {
-		cols := make([]entities.ColumnInfo, 0, len(tbl.Columns))
-		cacheCols := make([]sharedPorts.FetcherColumnInfo, 0, len(tbl.Columns))
-
-		for _, column := range tbl.Columns {
-			cols = append(cols, entities.ColumnInfo{
-				Name:     column.Name,
-				Type:     column.Type,
-				Nullable: column.Nullable,
-			})
-
-			cacheCols = append(cacheCols, sharedPorts.FetcherColumnInfo{
-				Name:     column.Name,
-				Type:     column.Type,
-				Nullable: column.Nullable,
-			})
+		cols := make([]entities.ColumnInfo, 0, len(tbl.Fields))
+		for _, fieldName := range tbl.Fields {
+			cols = append(cols, entities.ColumnInfo{Name: fieldName})
 		}
 
-		discovered, err := entities.NewDiscoveredSchema(ctx, conn.ID, tbl.TableName, cols)
+		discovered, err := entities.NewDiscoveredSchema(ctx, conn.ID, tbl.Name, cols)
 		if err != nil {
 			skipped++
 
 			if logger != nil {
 				logger.With(
-					libLog.Any("table", tbl.TableName),
+					libLog.Any("table", tbl.Name),
 					libLog.Any("connectionID", conn.ID.String()),
 					libLog.Any("error", err.Error()),
 				).Log(ctx, libLog.LevelWarn, "skipping invalid table during schema sync")
@@ -201,8 +189,8 @@ func (cs *ConnectionSyncer) SyncSchema(ctx context.Context, conn *entities.Fetch
 
 		schemas = append(schemas, discovered)
 		validTables = append(validTables, sharedPorts.FetcherTableSchema{
-			TableName: tbl.TableName,
-			Columns:   cacheCols,
+			Name:   tbl.Name,
+			Fields: tbl.Fields,
 		})
 	}
 
@@ -227,7 +215,7 @@ func (cs *ConnectionSyncer) SyncSchema(ctx context.Context, conn *entities.Fetch
 	}
 
 	cs.refreshSchemaCache(ctx, logger, conn.ID, &sharedPorts.FetcherSchema{
-		ConnectionID: schema.ConnectionID,
+		ID:           schema.ID,
 		Tables:       validTables,
 		DiscoveredAt: schema.DiscoveredAt,
 	})

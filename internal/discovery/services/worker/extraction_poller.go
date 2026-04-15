@@ -307,6 +307,19 @@ func (ep *ExtractionPoller) handlePollStatus(
 		return false
 
 	case "COMPLETE":
+		// NOTE: Intentionally duplicated with extraction_commands.go handleExtractionStatus.
+		// Both call sites handle COMPLETE independently (polled vs inline) in different
+		// packages; extracting a shared helper would add cross-package coupling for a
+		// single log statement.
+		if status.ResultHmac != "" {
+			logger.With(
+				libLog.String("fetcher.job_id", extraction.FetcherJobID),
+				libLog.String("result_hmac", status.ResultHmac),
+			).Log(ctx, libLog.LevelWarn,
+				"extraction result HMAC received but not verified: "+
+					"Matcher does not download extraction data and lacks the external HMAC key")
+		}
+
 		expectedUpdatedAt := extraction.UpdatedAt
 		previousStatus := extraction.Status
 		previousResultPath := extraction.ResultPath

@@ -260,8 +260,7 @@ func TestExtractionPoller_DoPoll_ImmediateFailed(t *testing.T) {
 	fetcher := &stubFetcherClient{
 		getExtractionJobStatusFn: func(_ context.Context, _ string) (*sharedPorts.ExtractionJobStatus, error) {
 			return &sharedPorts.ExtractionJobStatus{
-				Status:       "FAILED",
-				ErrorMessage: "connection refused",
+				Status: "FAILED",
 			}, nil
 		},
 	}
@@ -386,7 +385,7 @@ func TestExtractionPoller_PollOnce_CancelledStatusStopsPolling(t *testing.T) {
 	repo := &stubExtractionRepo{}
 	fetcher := &stubFetcherClient{
 		getExtractionJobStatusFn: func(_ context.Context, _ string) (*sharedPorts.ExtractionJobStatus, error) {
-			return &sharedPorts.ExtractionJobStatus{Status: "CANCELLED", JobID: "job-cancelled"}, nil
+			return &sharedPorts.ExtractionJobStatus{Status: "CANCELLED", ID: "job-cancelled"}, nil
 		},
 	}
 
@@ -654,7 +653,7 @@ func TestExtractionPoller_PollOnce_FailedUpdateFailure_RollsBackState(t *testing
 
 	fetcher := &stubFetcherClient{
 		getExtractionJobStatusFn: func(_ context.Context, _ string) (*sharedPorts.ExtractionJobStatus, error) {
-			return &sharedPorts.ExtractionJobStatus{Status: "FAILED", ErrorMessage: "fatal"}, nil
+			return &sharedPorts.ExtractionJobStatus{Status: "FAILED"}, nil
 		},
 	}
 
@@ -754,7 +753,7 @@ func TestExtractionPoller_PollOnce_ConcurrentUpdateStopsOnReloadedTerminalState(
 
 	fetcher := &stubFetcherClient{
 		getExtractionJobStatusFn: func(_ context.Context, _ string) (*sharedPorts.ExtractionJobStatus, error) {
-			return &sharedPorts.ExtractionJobStatus{Status: "FAILED", ErrorMessage: "lost connection"}, nil
+			return &sharedPorts.ExtractionJobStatus{Status: "FAILED"}, nil
 		},
 	}
 
@@ -798,7 +797,7 @@ func TestExtractionPoller_PollOnce_QueuedStatusKeepsPollingWithoutUpdate(t *test
 	fetcher := &stubFetcherClient{
 		getExtractionJobStatusFn: func(_ context.Context, jobID string) (*sharedPorts.ExtractionJobStatus, error) {
 			assert.Equal(t, extraction.FetcherJobID, jobID)
-			return &sharedPorts.ExtractionJobStatus{JobID: jobID, Status: "PENDING"}, nil
+			return &sharedPorts.ExtractionJobStatus{ID: jobID, Status: "PENDING"}, nil
 		},
 	}
 

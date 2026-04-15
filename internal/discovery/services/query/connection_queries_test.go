@@ -432,8 +432,8 @@ func TestGetConnectionSchema_UsesCacheWhenAvailable(t *testing.T) {
 			assert.Equal(t, connID.String(), connectionID)
 
 			return &sharedPorts.FetcherSchema{Tables: []sharedPorts.FetcherTableSchema{{
-				TableName: "transactions",
-				Columns:   []sharedPorts.FetcherColumnInfo{{Name: "id", Type: "uuid", Nullable: false}},
+				Name:   "transactions",
+				Fields: []string{"id"},
 			}}, DiscoveredAt: discoveredAt}, nil
 		},
 	}, time.Minute)

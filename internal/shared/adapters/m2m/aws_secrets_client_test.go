@@ -10,6 +10,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awssm "github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	smtypes "github.com/aws/aws-sdk-go-v2/service/secretsmanager/types"
+	"github.com/aws/smithy-go"
+	smithyhttp "github.com/aws/smithy-go/transport/http"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -115,6 +117,24 @@ func TestAWSSecretsClient_GetM2MCredentials_NilSecretString(t *testing.T) {
 	assert.True(t, errors.Is(err, m2m.ErrM2MInvalidCredentials))
 }
 
+func TestAWSSecretsClient_GetM2MCredentials_NilOutput(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockAWSSecretsManager{
+		output: nil,
+		err:    nil,
+	}
+
+	client, clientErr := m2m.NewAWSSecretsClient(mock)
+	require.NoError(t, clientErr)
+
+	creds, err := client.GetM2MCredentials(context.Background(), "staging", "org-1", "matcher", "fetcher")
+	assert.Nil(t, creds)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, m2m.ErrM2MInvalidCredentials)
+	assert.Contains(t, err.Error(), "response is nil")
+}
+
 func TestAWSSecretsClient_GetM2MCredentials_InvalidJSON(t *testing.T) {
 	t.Parallel()
 
@@ -148,6 +168,33 @@ func TestAWSSecretsClient_GetM2MCredentials_GenericError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "network timeout")
 	assert.False(t, errors.Is(err, m2m.ErrM2MCredentialsNotFound))
+}
+
+func TestAWSSecretsClient_GetM2MCredentials_AccessDenied(t *testing.T) {
+	t.Parallel()
+
+	// Smithy API errors use the ResponseError wrapper with a concrete type.
+	mock := &mockAWSSecretsManager{
+		err: &smithy.OperationError{
+			ServiceID:     "SecretsManager",
+			OperationName: "GetSecretValue",
+			Err: &smithyhttp.ResponseError{
+				Response: &smithyhttp.Response{},
+				Err: &smithy.GenericAPIError{
+					Code:    "AccessDeniedException",
+					Message: "User is not authorized",
+				},
+			},
+		},
+	}
+
+	client, clientErr := m2m.NewAWSSecretsClient(mock)
+	require.NoError(t, clientErr)
+
+	creds, err := client.GetM2MCredentials(context.Background(), "staging", "org-1", "matcher", "fetcher")
+	assert.Nil(t, creds)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, m2m.ErrM2MVaultAccessDenied)
 }
 
 func TestNewAWSSecretsClient_NilClient_ReturnsError(t *testing.T) {

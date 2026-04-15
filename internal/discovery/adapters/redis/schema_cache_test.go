@@ -49,14 +49,11 @@ func setupRedis(t *testing.T) (*goredis.Client, *miniredis.Miniredis, func()) {
 
 func createTestFetcherSchema() *sharedPorts.FetcherSchema {
 	return &sharedPorts.FetcherSchema{
-		ConnectionID: "conn-1",
+		ID: "conn-1",
 		Tables: []sharedPorts.FetcherTableSchema{
 			{
-				TableName: "transactions",
-				Columns: []sharedPorts.FetcherColumnInfo{
-					{Name: "id", Type: "uuid", Nullable: false},
-					{Name: "amount", Type: "numeric", Nullable: false},
-				},
+				Name:   "transactions",
+				Fields: []string{"id", "amount"},
 			},
 		},
 		DiscoveredAt: time.Now().UTC(),
@@ -133,9 +130,9 @@ func TestSchemaCache_GetSchema(t *testing.T) {
 
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		assert.Equal(t, "conn-1", result.ConnectionID)
+		assert.Equal(t, "conn-1", result.ID)
 		assert.Len(t, result.Tables, 1)
-		assert.Equal(t, "transactions", result.Tables[0].TableName)
+		assert.Equal(t, "transactions", result.Tables[0].Name)
 	})
 
 	t.Run("invalid json in cache", func(t *testing.T) {
@@ -215,7 +212,7 @@ func TestSchemaCache_SetSchema(t *testing.T) {
 
 		var stored sharedPorts.FetcherSchema
 		require.NoError(t, json.Unmarshal(data, &stored))
-		assert.Equal(t, "conn-1", stored.ConnectionID)
+		assert.Equal(t, "conn-1", stored.ID)
 	})
 
 	t.Run("nil schema rejected", func(t *testing.T) {
@@ -254,7 +251,7 @@ func TestSchemaCache_TenantIsolation(t *testing.T) {
 	result, err := cache.GetSchema(tenantA, "conn-1")
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	assert.Equal(t, "conn-1", result.ConnectionID)
+	assert.Equal(t, "conn-1", result.ID)
 }
 
 func TestSchemaCache_StrictTenantContextFailsClosed(t *testing.T) {
@@ -291,6 +288,20 @@ func TestSchemaCache_UnsafeKeyInputsRejected(t *testing.T) {
 	err = cache.SetSchema(testCacheContext(), "", createTestFetcherSchema(), time.Minute)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrEmptyConnectionID)
+}
+
+func TestSchemaCache_KeyIncludesVersionSegment(t *testing.T) {
+	t.Parallel()
+
+	cache := &SchemaCache{allowSingleTenantFallback: true}
+	ctx := context.WithValue(context.Background(), auth.TenantIDKey, "tenant-x")
+
+	key, err := cache.schemaKey(ctx, "conn-abc")
+	require.NoError(t, err)
+
+	// The key must include the v2 version segment to invalidate old-format cache entries.
+	assert.Contains(t, key, ":v2:")
+	assert.Equal(t, "matcher:discovery:schema:v2:tenant-x:conn-abc", key)
 }
 
 func TestSchemaCache_InvalidateSchema(t *testing.T) {

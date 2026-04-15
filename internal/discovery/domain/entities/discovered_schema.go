@@ -13,11 +13,14 @@ import (
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
 
-// ColumnInfo represents metadata about a database column.
+// ColumnInfo represents a single column in a discovered database schema.
+// Note: Type and Nullable are historical fields -- the current Fetcher API
+// only returns flat field names. These fields remain for backward
+// compatibility with persisted data and are omitted from responses when empty.
 type ColumnInfo struct {
 	Name     string `json:"name"`
-	Type     string `json:"type"`
-	Nullable bool   `json:"nullable"`
+	Type     string `json:"type,omitempty"`
+	Nullable bool   `json:"nullable,omitempty"`
 }
 
 // DiscoveredSchema represents the schema of a table discovered from a Fetcher connection.

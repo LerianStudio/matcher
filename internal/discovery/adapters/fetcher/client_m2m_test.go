@@ -15,8 +15,17 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/LerianStudio/matcher/internal/auth"
+	m2m "github.com/LerianStudio/matcher/internal/discovery/adapters/m2m"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
+
+// newTestTokenExchanger creates a TokenExchanger pointing at a test auth server.
+// Uses WithInsecureHTTP since test servers use http:// URLs.
+func newTestTokenExchanger(t *testing.T, authURL string) (*m2m.TokenExchanger, error) {
+	t.Helper()
+
+	return m2m.NewTokenExchanger(authURL, m2m.WithInsecureHTTP())
+}
 
 // tenantContext creates a context with a tenant ID that auth.GetTenantID can retrieve.
 func tenantContext(tenantID string) context.Context {
@@ -59,7 +68,7 @@ func TestHTTPFetcherClient_WithM2MProvider_InjectsBasicAuth(t *testing.T) {
 		capturedAuth = r.Header.Get("Authorization")
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"connections":[]}`))
+		_, _ = w.Write([]byte(`{"items":[]}`))
 	}))
 	defer server.Close()
 
@@ -93,7 +102,7 @@ func TestHTTPFetcherClient_WithoutM2MProvider_NoAuth(t *testing.T) {
 		capturedAuth = r.Header.Get("Authorization")
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"connections":[]}`))
+		_, _ = w.Write([]byte(`{"items":[]}`))
 	}))
 	defer server.Close()
 
@@ -128,7 +137,7 @@ func TestHTTPFetcherClient_M2M_NoTenantInContext_UsesDefaultTenant(t *testing.T)
 		capturedAuth = r.Header.Get("Authorization")
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"connections":[]}`))
+		_, _ = w.Write([]byte(`{"items":[]}`))
 	}))
 	defer server.Close()
 
@@ -155,7 +164,7 @@ func TestHTTPFetcherClient_M2M_CredentialError_PropagatesError(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"connections":[]}`))
+		_, _ = w.Write([]byte(`{"items":[]}`))
 	}))
 	defer server.Close()
 
@@ -193,7 +202,8 @@ func TestHTTPFetcherClient_M2M_401Response_InvalidatesCredentials(t *testing.T) 
 	_, err := client.ListConnections(ctx, "org-1")
 	require.Error(t, err) // 401 produces a non-nil error from classifyResponse
 
-	assert.Equal(t, int64(1), m2m.invalidateCalls.Load(), "InvalidateCredentials should be called on 401")
+	// With retry-on-401, the client retries once: 1st 401 → invalidate + retry → 2nd 401 → invalidate + return error
+	assert.Equal(t, int64(2), m2m.invalidateCalls.Load(), "InvalidateCredentials should be called twice (once per 401)")
 }
 
 func TestWithM2MProvider_Option(t *testing.T) {
@@ -224,3 +234,165 @@ func TestWithM2MProvider_NilProvider(t *testing.T) {
 
 	assert.Nil(t, client.m2mProvider, "M2MProvider should remain nil for nil input")
 }
+
+func TestHTTPFetcherClient_M2M_NilCredentials_ReturnsError(t *testing.T) {
+	t.Parallel()
+
+	// A provider that returns (nil, nil) — interface permits it even though
+	// current implementations never do.
+	nilCredsProvider := &mockM2MProvider{
+		creds: nil,
+		err:   nil,
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"items":[]}`))
+	}))
+	defer server.Close()
+
+	client := newTestClient(t, server.URL)
+	client.SetM2MProvider(nilCredsProvider)
+
+	ctx := tenantContext("tenant-org-nil")
+
+	_, err := client.ListConnections(ctx, "org-1")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrFetcherNilCredentials)
+}
+
+func TestHTTPFetcherClient_M2M_401WithTokenExchanger_InvalidatesByTenant(t *testing.T) {
+	t.Parallel()
+
+	// This test verifies the canonical OAuth2 single-retry on 401:
+	// 1st 401 → invalidate caches, retry with fresh credentials (via injectAuth again)
+	// 2nd 401 → return error (credentials genuinely invalid)
+	//
+	// GetCredentials is called twice: once for the original request, once for the retry.
+	// InvalidateCredentials is called twice: once per 401 response.
+	// The key verification is that invalidation uses InvalidateTokenByTenant
+	// (via the reverse mapping), NOT GetCredentials for clientID lookup.
+
+	m2mProv := &mockM2MProvider{
+		creds: &sharedPorts.M2MCredentials{
+			ClientID:     "test-client-id",
+			ClientSecret: "test-client-secret",
+		},
+	}
+
+	// Token exchanger auth server that returns a valid token
+	authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"test-token","token_type":"Bearer","expires_in":3600}`))
+	}))
+	defer authServer.Close()
+
+	// Fetcher server that always returns 401
+	fetcherServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":"unauthorized"}`))
+	}))
+	defer fetcherServer.Close()
+
+	client := newTestClient(t, fetcherServer.URL)
+	client.SetM2MProvider(m2mProv)
+
+	te, teErr := newTestTokenExchanger(t, authServer.URL)
+	require.NoError(t, teErr)
+
+	client.SetTokenExchanger(te)
+
+	ctx := tenantContext("tenant-401-test")
+
+	// Call: 1st 401 → invalidate + retry → 2nd 401 → return error
+	_, err := client.ListConnections(ctx, "org-1")
+	require.Error(t, err) // final 401 → error from classifyResponse
+
+	// GetCredentials called twice: once per injectAuth (original + retry)
+	assert.Equal(t, int64(2), m2mProv.getCalls.Load(),
+		"GetCredentials should be called twice (original injectAuth + retry injectAuth)")
+
+	// InvalidateCredentials called twice: once per 401 response
+	assert.Equal(t, int64(2), m2mProv.invalidateCalls.Load(),
+		"InvalidateCredentials should be called twice (once per 401 response)")
+}
+
+func TestHTTPFetcherClient_RetriesOnceOn401WithFreshToken(t *testing.T) {
+	t.Parallel()
+
+	// Simulate credential rotation: first request uses stale token → 401,
+	// after cache invalidation the retry acquires a fresh token → 200.
+	// Verifies that a single request succeeds transparently from the caller's perspective.
+
+	var attempts atomic.Int32
+
+	fetcherServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempt := attempts.Add(1)
+
+		authHeader := r.Header.Get("Authorization")
+
+		if attempt == 1 {
+			// First attempt: stale token → 401
+			assert.Equal(t, "Bearer stale-token", authHeader, "First attempt should use stale token")
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"error":"unauthorized"}`))
+
+			return
+		}
+
+		// Second attempt: fresh token → 200
+		assert.Equal(t, "Bearer fresh-token", authHeader, "Second attempt should use fresh token")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"items":[{"id":"conn-1","type":"POSTGRESQL"}]}`))
+	}))
+	defer fetcherServer.Close()
+
+	// Auth server returns different tokens on each call: stale then fresh
+	var tokenCalls atomic.Int32
+
+	authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		call := tokenCalls.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+
+		if call == 1 {
+			_, _ = w.Write([]byte(`{"access_token":"stale-token","token_type":"Bearer","expires_in":3600}`))
+
+			return
+		}
+
+		_, _ = w.Write([]byte(`{"access_token":"fresh-token","token_type":"Bearer","expires_in":3600}`))
+	}))
+	defer authServer.Close()
+
+	m2mProv := &mockM2MProvider{
+		creds: &sharedPorts.M2MCredentials{
+			ClientID:     "client-id",
+			ClientSecret: "client-secret",
+		},
+	}
+
+	client := newTestClient(t, fetcherServer.URL)
+	client.SetM2MProvider(m2mProv)
+
+	te, teErr := newTestTokenExchanger(t, authServer.URL)
+	require.NoError(t, teErr)
+
+	client.SetTokenExchanger(te)
+
+	ctx := tenantContext("tenant-rotation-test")
+
+	// The call should succeed transparently after the 401 retry
+	conns, err := client.ListConnections(ctx, "org-1")
+	require.NoError(t, err)
+	require.Len(t, conns, 1)
+	assert.Equal(t, "conn-1", conns[0].ID)
+
+	// Exactly 2 attempts: 1st with stale token, 2nd with fresh token
+	assert.Equal(t, int32(2), attempts.Load(), "Should have made exactly 2 HTTP attempts")
+
+	// Invalidation happened once (on the first 401)
+	assert.Equal(t, int64(1), m2mProv.invalidateCalls.Load(),
+		"InvalidateCredentials should be called once (on the first 401)")
+}
+

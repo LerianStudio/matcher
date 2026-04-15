@@ -26,10 +26,17 @@ import (
 // this is an internal implementation detail (fast path optimization).
 const l1CacheTTL = 30 * time.Second
 
+// defaultCredCacheTTL is the fallback L2 cache TTL when none is provided.
+const defaultCredCacheTTL = 5 * time.Minute
+
 // Sentinel errors for M2M credential retrieval.
 var (
-	ErrM2MClientNil        = errors.New("M2M secrets client is nil")
-	ErrM2MTenantIDRequired = errors.New("tenant org ID is required")
+	ErrM2MClientNil         = errors.New("M2M secrets client is nil")
+	ErrM2MTenantIDRequired  = errors.New("tenant org ID is required")
+	ErrM2MSecretsClientNil  = errors.New("secrets client is required")
+	ErrM2MEnvRequired       = errors.New("env is required")
+	ErrM2MAppNameRequired   = errors.New("application name is required")
+	ErrM2MTargetSvcRequired = errors.New("target service is required")
 )
 
 // SecretsClient abstracts the secret store backend (AWS Secrets Manager or mock).
@@ -47,6 +54,14 @@ type SecretsClient interface {
 type cachedCredentials struct {
 	creds     *ports.M2MCredentials
 	expiresAt time.Time
+}
+
+// redisCredentials is used for Redis cache serialization.
+// M2MCredentials uses json:"-" to prevent API exposure, so we need
+// a separate type for cache storage.
+type redisCredentials struct {
+	ClientID     string `json:"clientId"`
+	ClientSecret string `json:"clientSecret"`
 }
 
 // Compile-time interface check.
@@ -70,12 +85,33 @@ type M2MCredentialProvider struct {
 
 // NewM2MCredentialProvider creates a credential provider with two-level cache.
 // Pass nil for redisClient to use local-only mode (single-tenant or dev).
+// Returns an error if required parameters are missing.
 func NewM2MCredentialProvider(
 	smClient SecretsClient,
 	env, applicationName, targetService string,
 	credCacheTTL time.Duration,
 	redisClient *libRedis.Client,
-) *M2MCredentialProvider {
+) (*M2MCredentialProvider, error) {
+	if smClient == nil {
+		return nil, ErrM2MSecretsClientNil
+	}
+
+	if env == "" {
+		return nil, ErrM2MEnvRequired
+	}
+
+	if applicationName == "" {
+		return nil, ErrM2MAppNameRequired
+	}
+
+	if targetService == "" {
+		return nil, ErrM2MTargetSvcRequired
+	}
+
+	if credCacheTTL <= 0 {
+		credCacheTTL = defaultCredCacheTTL
+	}
+
 	return &M2MCredentialProvider{
 		smClient:        smClient,
 		env:             env,
@@ -83,7 +119,7 @@ func NewM2MCredentialProvider(
 		targetService:   targetService,
 		credCacheTTL:    credCacheTTL,
 		redisClient:     redisClient,
-	}
+	}, nil
 }
 
 // m2mRedisKey returns the tenant-prefixed Redis key for M2M credentials.
@@ -202,20 +238,29 @@ func (provider *M2MCredentialProvider) getFromRedis(ctx context.Context, tenantO
 		return nil, false
 	}
 
-	var creds ports.M2MCredentials
-	if json.Unmarshal(val, &creds) != nil {
+	var rc redisCredentials
+	if json.Unmarshal(val, &rc) != nil {
 		return nil, false
 	}
 
-	// Populate L1 with short TTL
-	provider.storeInL1(tenantOrgID, &creds)
+	creds := &ports.M2MCredentials{
+		ClientID:     rc.ClientID,
+		ClientSecret: rc.ClientSecret,
+	}
 
-	return &creds, true
+	// Populate L1 with short TTL
+	provider.storeInL1(tenantOrgID, creds)
+
+	return creds, true
 }
 
 // storeInRedis stores credentials in the Redis L2 cache.
 // Errors are silently ignored (Redis is best-effort for caching).
 func (provider *M2MCredentialProvider) storeInRedis(ctx context.Context, tenantOrgID string, creds *ports.M2MCredentials) {
+	if creds == nil {
+		return
+	}
+
 	if provider.redisClient == nil {
 		return
 	}
@@ -230,10 +275,22 @@ func (provider *M2MCredentialProvider) storeInRedis(ctx context.Context, tenantO
 		return
 	}
 
-	data, marshalErr := json.Marshal(creds)
+	rc := redisCredentials{
+		ClientID:     creds.ClientID,
+		ClientSecret: creds.ClientSecret,
+	}
+
+	data, marshalErr := json.Marshal(rc) // #nosec G117 -- intentional: serializing M2M credentials for Redis L2 cache storage //nolint:gosec
 	if marshalErr != nil {
 		return
 	}
 
+	// TODO(SECURITY: M2M-SEC-03): Redis L2 cache stores credentials as plaintext JSON.
+	// Planned remediation: encrypt with AES-256-GCM using a key derived via HKDF
+	// from SYSTEMPLANE_SECRET_MASTER_KEY. Current mitigations:
+	//   - TTL expiry (5 min default) narrows exposure window
+	//   - Network isolation (Redis on internal network only)
+	//   - json:"-" tags on M2MCredentials prevent accidental API serialization
+	// Must be addressed before multi-region deployment or any deployment with shared Redis.
 	_ = rds.Set(ctx, key, data, provider.credCacheTTL).Err()
 }

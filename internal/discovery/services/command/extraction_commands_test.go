@@ -255,24 +255,31 @@ func TestStartExtraction_Success(t *testing.T) {
 	assert.Equal(t, connection.ID, extraction.ConnectionID)
 	assert.Equal(t, "job-123", extraction.FetcherJobID)
 	assert.Equal(t, vo.ExtractionStatusSubmitted, extraction.Status)
-	assert.Equal(t, connection.FetcherConnID, fetcherClient.lastSubmitInput.ConnectionID)
+	// New ExtractionJobInput structure: MappedFields[configName][table] = columns
+	require.NotNil(t, fetcherClient.lastSubmitInput.MappedFields)
+	configKey := connection.ConfigName
+	require.Contains(t, fetcherClient.lastSubmitInput.MappedFields, configKey)
+	require.Contains(t, fetcherClient.lastSubmitInput.MappedFields[configKey], "transactions")
+	assert.Equal(t, []string{"id", "amount"}, fetcherClient.lastSubmitInput.MappedFields[configKey]["transactions"])
+	// Filters: configName -> table -> filter map
 	require.NotNil(t, fetcherClient.lastSubmitInput.Filters)
-	assert.Equal(t, map[string]string{"currency": "USD"}, fetcherClient.lastSubmitInput.Filters.Equals)
-	require.Contains(t, fetcherClient.lastSubmitInput.Tables, "transactions")
-	assert.Equal(t, []string{"id", "amount"}, fetcherClient.lastSubmitInput.Tables["transactions"].Columns)
-	assert.Equal(t, "2026-03-01", fetcherClient.lastSubmitInput.Tables["transactions"].StartDate)
-	assert.Equal(t, "2026-03-08", fetcherClient.lastSubmitInput.Tables["transactions"].EndDate)
+	require.Contains(t, fetcherClient.lastSubmitInput.Filters, configKey)
+	require.Contains(t, fetcherClient.lastSubmitInput.Filters[configKey], "transactions")
+	currencyCond := fetcherClient.lastSubmitInput.Filters[configKey]["transactions"]["currency"].(map[string]any)
+	assert.Equal(t, []any{"USD"}, currencyCond["eq"])
+	// Metadata "source" must be the connection's ConfigName (unique identifier),
+	// not ProductName (human label like "PostgreSQL 16.2").
+	require.NotNil(t, fetcherClient.lastSubmitInput.Metadata)
+	assert.Equal(t, connection.ConfigName, fetcherClient.lastSubmitInput.Metadata["source"])
 }
 
-func TestBuildTableConfig(t *testing.T) {
+func TestExtractRequestedColumns(t *testing.T) {
 	t.Parallel()
-
-	params := sharedPorts.ExtractionParams{StartDate: "2026-03-01", EndDate: "2026-03-08"}
 
 	tests := []struct {
 		name     string
 		input    any
-		expected sharedPorts.ExtractionTableConfig
+		expected []string
 		errText  string
 	}{
 		{
@@ -281,13 +288,9 @@ func TestBuildTableConfig(t *testing.T) {
 			errText: "table configuration must be an object",
 		},
 		{
-			name:  "string_slice_is_preserved",
-			input: map[string]any{"columns": []string{"id", "amount"}},
-			expected: sharedPorts.ExtractionTableConfig{
-				Columns:   []string{"id", "amount"},
-				StartDate: "2026-03-01",
-				EndDate:   "2026-03-08",
-			},
+			name:     "string_slice_is_preserved",
+			input:    map[string]any{"columns": []string{"id", "amount"}},
+			expected: []string{"id", "amount"},
 		},
 		{
 			name:    "non_string_columns_rejected",
@@ -300,7 +303,7 @@ func TestBuildTableConfig(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			config, err := buildTableConfig(tt.input, params)
+			columns, err := extractRequestedColumns(tt.input)
 			if tt.errText != "" {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.errText)
@@ -308,7 +311,7 @@ func TestBuildTableConfig(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-			assert.Equal(t, tt.expected, config)
+			assert.Equal(t, tt.expected, columns)
 		})
 	}
 }
@@ -506,7 +509,7 @@ func TestPollExtractionStatus_TransitionsToRunning(t *testing.T) {
 		&mockFetcherClient{
 			healthy: true,
 			jobStatus: &sharedPorts.ExtractionJobStatus{
-				JobID:  "job-running",
+				ID:  "job-running",
 				Status: "RUNNING",
 			},
 		},
@@ -543,7 +546,7 @@ func TestPollExtractionStatus_QueuedStatusDoesNotUpdate(t *testing.T) {
 		&mockFetcherClient{
 			healthy: true,
 			jobStatus: &sharedPorts.ExtractionJobStatus{
-				JobID:  "job-queued",
+				ID:  "job-queued",
 				Status: "SUBMITTED",
 			},
 		},
@@ -580,7 +583,7 @@ func TestPollExtractionStatus_TransitionsToComplete(t *testing.T) {
 		&mockFetcherClient{
 			healthy: true,
 			jobStatus: &sharedPorts.ExtractionJobStatus{
-				JobID:      "job-complete",
+				ID:      "job-complete",
 				Status:     "COMPLETE",
 				ResultPath: "/data/result.csv",
 			},
@@ -619,9 +622,8 @@ func TestPollExtractionStatus_TransitionsToFailed(t *testing.T) {
 		&mockFetcherClient{
 			healthy: true,
 			jobStatus: &sharedPorts.ExtractionJobStatus{
-				JobID:        "job-fail",
-				Status:       "FAILED",
-				ErrorMessage: "connection refused",
+				ID:     "job-fail",
+				Status: "FAILED",
 			},
 		},
 		&mockConnectionRepo{},
@@ -777,7 +779,7 @@ func TestPollExtractionStatus_TransitionsToCancelled(t *testing.T) {
 		&mockFetcherClient{
 			healthy: true,
 			jobStatus: &sharedPorts.ExtractionJobStatus{
-				JobID:  "job-cancelled",
+				ID:  "job-cancelled",
 				Status: "CANCELLED",
 			},
 		},
@@ -836,7 +838,7 @@ func TestPollExtractionStatus_ConcurrentUpdateReturnsLatestState(t *testing.T) {
 		&mockFetcherClient{
 			healthy: true,
 			jobStatus: &sharedPorts.ExtractionJobStatus{
-				JobID:      staleReq.FetcherJobID,
+				ID:      staleReq.FetcherJobID,
 				Status:     "COMPLETE",
 				ResultPath: "/data/newer.csv",
 			},
@@ -879,7 +881,7 @@ func TestPollExtractionStatus_UpdateError(t *testing.T) {
 		&mockFetcherClient{
 			healthy: true,
 			jobStatus: &sharedPorts.ExtractionJobStatus{
-				JobID:  "job-up",
+				ID:  "job-up",
 				Status: "RUNNING",
 			},
 		},
@@ -914,7 +916,7 @@ func TestPollExtractionStatus_UnknownStatus_PersistsWithoutTransition(t *testing
 		&mockFetcherClient{
 			healthy: true,
 			jobStatus: &sharedPorts.ExtractionJobStatus{
-				JobID:  "job-weird",
+				ID:  "job-weird",
 				Status: "SUSPENDED",
 			},
 		},

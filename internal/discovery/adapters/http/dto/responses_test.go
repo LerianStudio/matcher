@@ -146,6 +146,28 @@ func TestExtractionRequestFromEntity_HidesInternalResultPath(t *testing.T) {
 	assert.NotContains(t, string(encoded), "resultPath")
 }
 
+func TestSchemaColumnResponse_JSON_OmitsEmptyTypeAndNullable(t *testing.T) {
+	t.Parallel()
+
+	t.Run("name only omits type and nullable", func(t *testing.T) {
+		t.Parallel()
+
+		col := SchemaColumnResponse{Name: "id"}
+		data, err := json.Marshal(col)
+		require.NoError(t, err)
+		assert.JSONEq(t, `{"name":"id"}`, string(data))
+	})
+
+	t.Run("all fields present", func(t *testing.T) {
+		t.Parallel()
+
+		col := SchemaColumnResponse{Name: "id", Type: "uuid", Nullable: true}
+		data, err := json.Marshal(col)
+		require.NoError(t, err)
+		assert.JSONEq(t, `{"name":"id","type":"uuid","nullable":true}`, string(data))
+	})
+}
+
 func TestDiscoveryStatusResponse_OmitsZeroLastSyncAt(t *testing.T) {
 	t.Parallel()
 

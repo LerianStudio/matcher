@@ -20,6 +20,8 @@ type ConnectionModel struct {
 	Port             int       `db:"port"`
 	DatabaseName     string    `db:"database_name"`
 	ProductName      string    `db:"product_name"`
+	Schema           string    `db:"schema"`
+	UserName         string    `db:"user_name"`
 	Status           string    `db:"status"`
 	LastSeenAt       time.Time `db:"last_seen_at"`
 	SchemaDiscovered bool      `db:"schema_discovered"`
@@ -49,6 +51,8 @@ func (model *ConnectionModel) ToDomain() *entities.FetcherConnection {
 		Port:             model.Port,
 		DatabaseName:     model.DatabaseName,
 		ProductName:      model.ProductName,
+		Schema:           model.Schema,
+		UserName:         model.UserName,
 		Status:           status,
 		LastSeenAt:       model.LastSeenAt,
 		SchemaDiscovered: model.SchemaDiscovered,
@@ -72,6 +76,8 @@ func FromDomain(entity *entities.FetcherConnection) *ConnectionModel {
 		Port:             entity.Port,
 		DatabaseName:     entity.DatabaseName,
 		ProductName:      entity.ProductName,
+		Schema:           entity.Schema,
+		UserName:         entity.UserName,
 		Status:           entity.Status.String(),
 		LastSeenAt:       entity.LastSeenAt,
 		SchemaDiscovered: entity.SchemaDiscovered,

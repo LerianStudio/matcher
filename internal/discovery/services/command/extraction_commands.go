@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
@@ -98,20 +97,9 @@ func (uc *UseCase) StartExtraction(
 		return nil, fmt.Errorf("persist pending extraction request: %w", err)
 	}
 
-	// Build the extraction job input from params.
-	input := sharedPorts.ExtractionJobInput{
-		ConnectionID: conn.FetcherConnID,
-		Filters:      params.Filters,
-		Tables:       make(map[string]sharedPorts.ExtractionTableConfig, len(tables)),
-	}
-
-	for name, cfg := range tables {
-		tableConfig, configErr := buildTableConfig(cfg, params)
-		if configErr != nil {
-			return nil, configErr
-		}
-
-		input.Tables[name] = tableConfig
+	input, inputErr := buildExtractionJobInput(conn, tables, params)
+	if inputErr != nil {
+		return nil, inputErr
 	}
 
 	jobID, err := uc.fetcherClient.SubmitExtractionJob(ctx, input)
@@ -145,180 +133,64 @@ func (uc *UseCase) StartExtraction(
 	return extractionReq, nil
 }
 
-// buildTableConfig normalizes a single table's configuration from raw JSON-deserialized data.
-func buildTableConfig(cfg any, params sharedPorts.ExtractionParams) (sharedPorts.ExtractionTableConfig, error) {
-	tc := sharedPorts.ExtractionTableConfig{
-		StartDate: params.StartDate,
-		EndDate:   params.EndDate,
+// buildExtractionJobInput assembles the Fetcher extraction request from the
+// connection metadata, requested tables, and extraction parameters.
+// MappedFields: configName -> table -> columns. Filters: configName -> table -> filter.
+func buildExtractionJobInput(
+	conn *entities.FetcherConnection,
+	tables map[string]any,
+	params sharedPorts.ExtractionParams,
+) (sharedPorts.ExtractionJobInput, error) {
+	configName := conn.ConfigName
+	if configName == "" {
+		configName = conn.FetcherConnID // fallback
 	}
 
-	columns, err := extractRequestedColumns(cfg)
-	if err != nil {
-		return sharedPorts.ExtractionTableConfig{}, err
-	}
+	tableMap := make(map[string][]string, len(tables))
 
-	if len(columns) > 0 {
-		tc.Columns = columns
-	}
-
-	return tc, nil
-}
-
-const extractionDateLayout = "2006-01-02"
-
-func validateExtractionRequest(tables map[string]any, params sharedPorts.ExtractionParams) error {
-	if len(tables) == 0 {
-		return fmt.Errorf("%w: at least one table is required", ErrInvalidExtractionRequest)
-	}
-
-	startDate, err := parseExtractionDate("start date", params.StartDate)
-	if err != nil {
-		return err
-	}
-
-	endDate, err := parseExtractionDate("end date", params.EndDate)
-	if err != nil {
-		return err
-	}
-
-	if !startDate.IsZero() && !endDate.IsZero() && endDate.Before(startDate) {
-		return fmt.Errorf("%w: end date must be on or after start date", ErrInvalidExtractionRequest)
-	}
-
-	for tableName, cfg := range tables {
-		if strings.TrimSpace(tableName) == "" {
-			return fmt.Errorf("%w: table name is required", ErrInvalidExtractionRequest)
+	for name, cfg := range tables {
+		columns, colErr := extractRequestedColumns(cfg)
+		if colErr != nil {
+			return sharedPorts.ExtractionJobInput{}, colErr
 		}
 
-		if _, err := extractRequestedColumns(cfg); err != nil {
-			return err
-		}
+		tableMap[name] = columns
 	}
 
-	return nil
-}
-
-func parseExtractionDate(label, raw string) (time.Time, error) {
-	if strings.TrimSpace(raw) == "" {
-		return time.Time{}, nil
+	mappedFields := map[string]map[string][]string{
+		configName: tableMap,
 	}
 
-	parsed, err := time.Parse(extractionDateLayout, raw)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("%w: %s must use YYYY-MM-DD format", ErrInvalidExtractionRequest, label)
-	}
+	// Build Filters (if any): configName -> table -> filter
+	var filters map[string]map[string]map[string]any
 
-	return parsed, nil
-}
-
-func validateExtractionScope(tables map[string]any, schemas []*entities.DiscoveredSchema) error {
-	if len(schemas) == 0 {
-		return fmt.Errorf("%w: schema has not been discovered for this connection", ErrInvalidExtractionRequest)
-	}
-
-	allowedTables := make(map[string]map[string]struct{}, len(schemas))
-	for _, schema := range schemas {
-		if schema == nil || strings.TrimSpace(schema.TableName) == "" {
-			continue
-		}
-
-		columns := make(map[string]struct{}, len(schema.Columns))
-		for _, column := range schema.Columns {
-			if strings.TrimSpace(column.Name) == "" {
-				continue
+	if params.Filters != nil {
+		filterMap := params.Filters.ToMap()
+		if len(filterMap) > 0 {
+			tableFilters := make(map[string]map[string]any, len(tables))
+			for name := range tables {
+				tableFilters[name] = filterMap
 			}
 
-			columns[column.Name] = struct{}{}
-		}
-
-		allowedTables[schema.TableName] = columns
-	}
-
-	for tableName, cfg := range tables {
-		allowedColumns, ok := allowedTables[tableName]
-		if !ok {
-			return fmt.Errorf("%w: unknown table %q", ErrInvalidExtractionRequest, tableName)
-		}
-
-		columns, err := extractRequestedColumns(cfg)
-		if err != nil {
-			return err
-		}
-
-		for _, column := range columns {
-			if _, exists := allowedColumns[column]; !exists {
-				return fmt.Errorf("%w: unknown column %q for table %q", ErrInvalidExtractionRequest, column, tableName)
+			filters = map[string]map[string]map[string]any{
+				configName: tableFilters,
 			}
 		}
 	}
 
-	return nil
-}
-
-func extractRequestedColumns(cfg any) ([]string, error) {
-	if cfg == nil {
-		return nil, nil
+	// Build Metadata with required "source" key.
+	// Use ConfigName (user-assigned unique identifier, e.g. "prod-db") rather than
+	// ProductName (human label, e.g. "PostgreSQL 16.2") to ensure unique provenance
+	// when multiple connections share the same engine type.
+	metadata := map[string]any{
+		"source": configName,
 	}
 
-	cfgMap, ok := cfg.(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("%w: table configuration must be an object", ErrInvalidExtractionRequest)
-	}
-
-	for key := range cfgMap {
-		if key != "columns" {
-			return nil, fmt.Errorf("%w: unsupported table configuration key %q", ErrInvalidExtractionRequest, key)
-		}
-	}
-
-	cols, ok := cfgMap["columns"]
-	if !ok {
-		return nil, nil
-	}
-
-	switch typed := cols.(type) {
-	case []string:
-		return validateRequestedColumns(typed)
-	case []any:
-		stringCols := make([]string, 0, len(typed))
-		for _, raw := range typed {
-			colName, isString := raw.(string)
-			if !isString {
-				return nil, fmt.Errorf("%w: columns must be strings", ErrInvalidExtractionRequest)
-			}
-
-			stringCols = append(stringCols, colName)
-		}
-
-		return validateRequestedColumns(stringCols)
-	default:
-		return nil, fmt.Errorf("%w: columns must be an array of strings", ErrInvalidExtractionRequest)
-	}
-}
-
-func validateRequestedColumns(columns []string) ([]string, error) {
-	if len(columns) == 0 {
-		return nil, fmt.Errorf("%w: columns must not be empty", ErrInvalidExtractionRequest)
-	}
-
-	normalized := make([]string, 0, len(columns))
-
-	seen := make(map[string]struct{}, len(columns))
-	for _, column := range columns {
-		trimmed := strings.TrimSpace(column)
-		if trimmed == "" {
-			return nil, fmt.Errorf("%w: columns must not contain blanks", ErrInvalidExtractionRequest)
-		}
-
-		if _, exists := seen[trimmed]; exists {
-			continue
-		}
-
-		seen[trimmed] = struct{}{}
-		normalized = append(normalized, trimmed)
-	}
-
-	return normalized, nil
+	return sharedPorts.ExtractionJobInput{
+		MappedFields: mappedFields,
+		Filters:      filters,
+		Metadata:     metadata,
+	}, nil
 }
 
 // PollExtractionStatus checks the status of an in-flight extraction job and updates
@@ -458,6 +330,20 @@ func (uc *UseCase) applyExtractionStatusTransition(
 
 		changed = previousStatus != req.Status || !req.UpdatedAt.Equal(previousUpdatedAt)
 	case "COMPLETE":
+		// NOTE: Intentionally duplicated with extraction_poller.go handlePollStatus.
+		// Both call sites handle COMPLETE independently (inline vs polled) in different
+		// packages; extracting a shared helper would add cross-package coupling for a
+		// single log statement.
+		if status.ResultHmac != "" {
+			logger, _, _, _ := libCommons.NewTrackingFromContext(ctx)
+			logger.With(
+				libLog.String("fetcher.job_id", req.FetcherJobID),
+				libLog.String("result_hmac", status.ResultHmac),
+			).Log(ctx, libLog.LevelWarn,
+				"extraction result HMAC received but not verified: "+
+					"Matcher does not download extraction data and lacks the external HMAC key")
+		}
+
 		previousStatus := req.Status
 		previousResultPath := req.ResultPath
 		previousErrorMessage := req.ErrorMessage
@@ -511,93 +397,4 @@ func (uc *UseCase) applyExtractionStatusTransition(
 	}
 
 	return changed, nil
-}
-
-func (uc *UseCase) persistSubmittedExtraction(
-	ctx context.Context,
-	span trace.Span,
-	extractionReq *entities.ExtractionRequest,
-) error {
-	err := uc.extractionRepo.Update(ctx, extractionReq)
-	if err == nil {
-		return nil
-	}
-
-	libOpentelemetry.HandleSpanError(span, "persist submitted extraction request", err)
-
-	recovered, recoverErr := uc.recoverSubmittedExtraction(ctx, extractionReq)
-	if recoverErr == nil {
-		if recovered != nil && recovered != extractionReq {
-			*extractionReq = *recovered
-		}
-
-		return nil
-	}
-
-	libOpentelemetry.HandleSpanError(span, "recover submitted extraction request", recoverErr)
-
-	return fmt.Errorf("%w: extraction %s: %w", ErrExtractionTrackingIncomplete, extractionReq.ID, recoverErr)
-}
-
-func (uc *UseCase) recoverSubmittedExtraction(
-	ctx context.Context,
-	submitted *entities.ExtractionRequest,
-) (*entities.ExtractionRequest, error) {
-	latest, err := uc.extractionRepo.FindByID(ctx, submitted.ID)
-	if err != nil {
-		if errors.Is(err, repositories.ErrExtractionNotFound) {
-			return nil, ErrExtractionNotFound
-		}
-
-		return nil, fmt.Errorf("reload extraction request: %w", err)
-	}
-
-	if latest == nil {
-		return nil, ErrExtractionNotFound
-	}
-
-	if latest.Status == submitted.Status && latest.FetcherJobID == submitted.FetcherJobID {
-		return latest, nil
-	}
-
-	if strings.TrimSpace(latest.FetcherJobID) != "" {
-		return latest, nil
-	}
-
-	expectedUpdatedAt := latest.UpdatedAt
-	if expectedUpdatedAt.IsZero() {
-		expectedUpdatedAt = submitted.CreatedAt
-	}
-
-	err = uc.extractionRepo.UpdateIfUnchanged(ctx, submitted, expectedUpdatedAt)
-	if err == nil {
-		return submitted, nil
-	}
-
-	if !errors.Is(err, repositories.ErrExtractionConflict) {
-		return nil, fmt.Errorf("repair submitted extraction request: %w", err)
-	}
-
-	return uc.reloadRecoveredExtraction(ctx, submitted.ID)
-}
-
-func (uc *UseCase) reloadRecoveredExtraction(ctx context.Context, extractionID uuid.UUID) (*entities.ExtractionRequest, error) {
-	reloaded, err := uc.extractionRepo.FindByID(ctx, extractionID)
-	if err != nil {
-		if errors.Is(err, repositories.ErrExtractionNotFound) {
-			return nil, ErrExtractionNotFound
-		}
-
-		return nil, fmt.Errorf("reload extraction request after repair conflict: %w", err)
-	}
-
-	if reloaded == nil {
-		return nil, ErrExtractionNotFound
-	}
-
-	if strings.TrimSpace(reloaded.FetcherJobID) == "" {
-		return nil, fmt.Errorf("repair submitted extraction request: %w", repositories.ErrExtractionConflict)
-	}
-
-	return reloaded, nil
 }

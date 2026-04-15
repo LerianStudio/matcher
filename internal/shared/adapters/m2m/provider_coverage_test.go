@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/LerianStudio/matcher/internal/shared/adapters/m2m"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
@@ -19,10 +20,11 @@ func TestNewM2MCredentialProvider_Construction(t *testing.T) {
 		creds: &ports.M2MCredentials{ClientID: "id", ClientSecret: "secret"},
 	}
 
-	provider := m2m.NewM2MCredentialProvider(
+	provider, err := m2m.NewM2MCredentialProvider(
 		mock, "prod", "matcher", "fetcher",
 		10*time.Minute, nil,
 	)
+	require.NoError(t, err)
 
 	assert.NotNil(t, provider, "Provider should be constructed successfully")
 }

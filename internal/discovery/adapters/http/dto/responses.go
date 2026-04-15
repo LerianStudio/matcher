@@ -42,11 +42,14 @@ type SchemaTableResponse struct {
 	Columns   []SchemaColumnResponse `json:"columns"`
 }
 
-// SchemaColumnResponse represents a column.
+// SchemaColumnResponse represents a column in the API schema response.
+// Note: Type and Nullable are historical fields -- the current Fetcher API
+// only returns flat field names. These fields remain for backward
+// compatibility with persisted data and are omitted from responses when empty.
 type SchemaColumnResponse struct {
 	Name     string `json:"name"`
-	Type     string `json:"type"`
-	Nullable bool   `json:"nullable"`
+	Type     string `json:"type,omitempty"`
+	Nullable bool   `json:"nullable,omitempty"`
 }
 
 // ConnectionSchemaResponse wraps the schema for a connection.

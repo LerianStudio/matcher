@@ -13,17 +13,19 @@ import (
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 
 	discoveryFetcher "github.com/LerianStudio/matcher/internal/discovery/adapters/fetcher"
+	discoveryPorts "github.com/LerianStudio/matcher/internal/discovery/ports"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 type dynamicFetcherClient struct {
-	initialCfg   *Config
-	configGetter func() *Config
-	mu           sync.Mutex
-	activeKey    string
-	activeClient sharedPorts.FetcherClient
-	breaker      circuitbreaker.Manager
-	m2mProvider  sharedPorts.M2MProvider // nil in single-tenant mode
+	initialCfg     *Config
+	configGetter   func() *Config
+	mu             sync.Mutex
+	activeKey      string
+	activeClient   sharedPorts.FetcherClient
+	breaker        circuitbreaker.Manager
+	m2mProvider    sharedPorts.M2MProvider       // nil in single-tenant mode
+	tokenExchanger discoveryPorts.TokenExchanger // nil in single-tenant mode
 }
 
 func newDynamicFetcherClient(initialCfg *Config, configGetter func() *Config, logger libLog.Logger, m2mProvider ...sharedPorts.M2MProvider) sharedPorts.FetcherClient {
@@ -57,13 +59,13 @@ func (client *dynamicFetcherClient) IsHealthy(ctx context.Context) bool {
 }
 
 // ListConnections delegates connection listing to the active Fetcher client.
-func (client *dynamicFetcherClient) ListConnections(ctx context.Context, orgID string) ([]*sharedPorts.FetcherConnection, error) {
+func (client *dynamicFetcherClient) ListConnections(ctx context.Context, productName string) ([]*sharedPorts.FetcherConnection, error) {
 	delegate, err := client.current()
 	if err != nil {
 		return nil, fmt.Errorf("resolve fetcher client for list connections: %w", err)
 	}
 
-	connections, err := delegate.ListConnections(ctx, orgID)
+	connections, err := delegate.ListConnections(ctx, productName)
 	if err != nil {
 		return nil, fmt.Errorf("list fetcher connections: %w", err)
 	}
@@ -159,6 +161,11 @@ func (client *dynamicFetcherClient) current() (sharedPorts.FetcherClient, error)
 	// Inject M2M provider for multi-tenant credential injection.
 	if client.m2mProvider != nil {
 		fetcherClient.SetM2MProvider(client.m2mProvider)
+	}
+
+	// Inject token exchanger for Bearer authentication.
+	if client.tokenExchanger != nil {
+		fetcherClient.SetTokenExchanger(client.tokenExchanger)
 	}
 
 	client.activeKey = key

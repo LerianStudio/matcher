@@ -50,9 +50,9 @@ func (m *mockFetcherClient) IsHealthy(_ context.Context) bool {
 	return m.healthy
 }
 
-func (m *mockFetcherClient) ListConnections(_ context.Context, orgID string) ([]*sharedPorts.FetcherConnection, error) {
+func (m *mockFetcherClient) ListConnections(_ context.Context, productName string) ([]*sharedPorts.FetcherConnection, error) {
 	m.listCallCount++
-	m.lastListOrgID = orgID
+	m.lastListOrgID = productName
 
 	return m.connections, m.listErr
 }

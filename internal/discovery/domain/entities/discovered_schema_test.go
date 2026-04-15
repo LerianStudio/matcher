@@ -141,3 +141,25 @@ func TestDiscoveredSchema_ColumnsJSON_NilReceiver(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "[]", string(data))
 }
+
+func TestColumnInfo_JSON_OmitsEmptyTypeAndNullable(t *testing.T) {
+	t.Parallel()
+
+	t.Run("name only omits type and nullable", func(t *testing.T) {
+		t.Parallel()
+
+		col := entities.ColumnInfo{Name: "id"}
+		data, err := json.Marshal(col)
+		require.NoError(t, err)
+		assert.JSONEq(t, `{"name":"id"}`, string(data))
+	})
+
+	t.Run("all fields present", func(t *testing.T) {
+		t.Parallel()
+
+		col := entities.ColumnInfo{Name: "id", Type: "uuid", Nullable: true}
+		data, err := json.Marshal(col)
+		require.NoError(t, err)
+		assert.JSONEq(t, `{"name":"id","type":"uuid","nullable":true}`, string(data))
+	})
+}

@@ -13,9 +13,9 @@ import (
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
-	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
 	vo "github.com/LerianStudio/matcher/internal/discovery/domain/value_objects"
+	"github.com/LerianStudio/matcher/internal/shared/constants"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -51,24 +51,9 @@ func (uc *UseCase) RefreshDiscovery(ctx context.Context) (int, error) {
 	}
 
 	// List all connections from Fetcher.
-	orgID, tenantPresent := ctx.Value(auth.TenantIDKey).(string)
-
-	orgID = strings.TrimSpace(orgID)
-	if orgID == "" && tenantPresent {
-		orgID = strings.TrimSpace(auth.GetTenantID(ctx))
-	}
-
-	if uc.requireTenantContext && orgID == "" {
-		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "missing tenant context", ErrTenantContextRequired)
-
-		return 0, ErrTenantContextRequired
-	}
-
-	if orgID == "" {
-		orgID = auth.GetTenantID(ctx)
-	}
-
-	fetcherConns, err := uc.fetcherClient.ListConnections(ctx, orgID)
+	// X-Product-Name identifies the calling product ("matcher"), NOT the tenant.
+	// Tenant filtering is done server-side via the JWT forwarded in the request context.
+	fetcherConns, err := uc.fetcherClient.ListConnections(ctx, constants.ApplicationName)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "list connections from fetcher", err)
 
@@ -275,8 +260,8 @@ func (uc *UseCase) TestConnection(ctx context.Context, connectionID uuid.UUID) (
 	return &ConnectionTestResult{
 		ConnectionID:  conn.ID,
 		FetcherConnID: conn.FetcherConnID,
-		Healthy:       result.Healthy,
+		Healthy:       strings.EqualFold(result.Status, "success"),
 		LatencyMs:     result.LatencyMs,
-		ErrorMessage:  result.ErrorMessage,
+		ErrorMessage:  result.Message,
 	}, nil
 }

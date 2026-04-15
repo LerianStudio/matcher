@@ -24,6 +24,7 @@ import (
 	vo "github.com/LerianStudio/matcher/internal/discovery/domain/value_objects"
 	discoveryPorts "github.com/LerianStudio/matcher/internal/discovery/ports"
 	"github.com/LerianStudio/matcher/internal/discovery/services/syncer"
+	"github.com/LerianStudio/matcher/internal/shared/constants"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -351,7 +352,9 @@ func (dw *DiscoveryWorker) syncTenantConnections(parentCtx context.Context, tena
 
 	span.SetAttributes(attribute.String("tenant.id", tenantID))
 
-	fetcherConns, err := dw.fetcherClient.ListConnections(ctx, tenantID)
+	// X-Product-Name identifies the calling product ("matcher"), NOT the tenant.
+	// Tenant filtering is done server-side via JWT forwarded in the request context.
+	fetcherConns, err := dw.fetcherClient.ListConnections(ctx, constants.ApplicationName)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to list connections from fetcher", err)
 

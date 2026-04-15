@@ -18,7 +18,7 @@ func TestGetExtractionJobStatus_Success_Running(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/v1/fetcher/job-1", r.URL.Path)
-		resp := fetcherExtractionStatusResponse{JobID: "job-1", Status: "RUNNING", Progress: 60}
+		resp := fetcherExtractionStatusResponse{ID: "job-1", Status: "RUNNING"}
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(resp) //nolint:errcheck,errchkjson // test helper
 	}))
@@ -27,9 +27,8 @@ func TestGetExtractionJobStatus_Success_Running(t *testing.T) {
 	client := newTestClient(t, srv.URL)
 	status, err := client.GetExtractionJobStatus(context.Background(), "job-1")
 	require.NoError(t, err)
-	assert.Equal(t, "job-1", status.JobID)
+	assert.Equal(t, "job-1", status.ID)
 	assert.Equal(t, "RUNNING", status.Status)
-	assert.Equal(t, 60, status.Progress)
 	assert.Empty(t, status.ResultPath)
 }
 
@@ -37,7 +36,7 @@ func TestGetExtractionJobStatus_Success_Complete(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		resp := fetcherExtractionStatusResponse{JobID: "job-2", Status: "COMPLETE", Progress: 100, ResultPath: "/data/results/job-2.json"}
+		resp := fetcherExtractionStatusResponse{ID: "job-2", Status: "COMPLETE", ResultPath: "/data/results/job-2.json", ResultHmac: "abc123", RequestHash: "hash456"}
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(resp) //nolint:errcheck,errchkjson // test helper
 	}))
@@ -47,15 +46,16 @@ func TestGetExtractionJobStatus_Success_Complete(t *testing.T) {
 	status, err := client.GetExtractionJobStatus(context.Background(), "job-2")
 	require.NoError(t, err)
 	assert.Equal(t, "COMPLETE", status.Status)
-	assert.Equal(t, 100, status.Progress)
 	assert.Equal(t, "/data/results/job-2.json", status.ResultPath)
+	assert.Equal(t, "abc123", status.ResultHmac)
+	assert.Equal(t, "hash456", status.RequestHash)
 }
 
 func TestGetExtractionJobStatus_Success_Failed(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		resp := fetcherExtractionStatusResponse{JobID: "job-3", Status: "FAILED", Progress: 25, ErrorMessage: "connection lost during extraction"}
+		resp := fetcherExtractionStatusResponse{ID: "job-3", Status: "FAILED", Metadata: map[string]any{"error": "connection lost during extraction"}}
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(resp) //nolint:errcheck,errchkjson // test helper
 	}))
@@ -65,14 +65,14 @@ func TestGetExtractionJobStatus_Success_Failed(t *testing.T) {
 	status, err := client.GetExtractionJobStatus(context.Background(), "job-3")
 	require.NoError(t, err)
 	assert.Equal(t, "FAILED", status.Status)
-	assert.Equal(t, "connection lost during extraction", status.ErrorMessage)
+	assert.Equal(t, "connection lost during extraction", status.Metadata["error"])
 }
 
 func TestGetExtractionJobStatus_CanceledNormalizedToCancelled(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		resp := fetcherExtractionStatusResponse{JobID: "job-4", Status: "canceled", Progress: 100}
+		resp := fetcherExtractionStatusResponse{ID: "job-4", Status: "canceled"}
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(resp) //nolint:errcheck,errchkjson // test helper
 	}))
@@ -89,7 +89,7 @@ func TestGetExtractionJobStatus_MismatchedJobID(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		resp := fetcherExtractionStatusResponse{JobID: "job-other", Status: "RUNNING", Progress: 25}
+		resp := fetcherExtractionStatusResponse{ID: "job-other", Status: "RUNNING"}
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(resp) //nolint:errcheck,errchkjson // test helper
 	}))
@@ -107,7 +107,7 @@ func TestGetExtractionJobStatus_CompleteMissingResultPath(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		resp := fetcherExtractionStatusResponse{JobID: "job-6", Status: "COMPLETE", Progress: 100}
+		resp := fetcherExtractionStatusResponse{ID: "job-6", Status: "COMPLETE"}
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(resp) //nolint:errcheck,errchkjson // test helper
 	}))
@@ -125,7 +125,7 @@ func TestGetExtractionJobStatus_CompleteRejectsInvalidResultPath(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		resp := fetcherExtractionStatusResponse{JobID: "job-6b", Status: "COMPLETE", Progress: 100, ResultPath: "s3://bucket/output.csv"}
+		resp := fetcherExtractionStatusResponse{ID: "job-6b", Status: "COMPLETE", ResultPath: "s3://bucket/output.csv"}
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(resp) //nolint:errcheck,errchkjson // test helper
 	}))
@@ -139,11 +139,11 @@ func TestGetExtractionJobStatus_CompleteRejectsInvalidResultPath(t *testing.T) {
 	assert.Contains(t, err.Error(), "result path")
 }
 
-func TestGetExtractionJobStatus_FailedMissingErrorMessage(t *testing.T) {
+func TestGetExtractionJobStatus_FailedWithoutMetadata_Succeeds(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		resp := fetcherExtractionStatusResponse{JobID: "job-7", Status: "FAILED", Progress: 100}
+		resp := fetcherExtractionStatusResponse{ID: "job-7", Status: "FAILED"}
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(resp) //nolint:errcheck,errchkjson // test helper
 	}))
@@ -151,10 +151,8 @@ func TestGetExtractionJobStatus_FailedMissingErrorMessage(t *testing.T) {
 
 	client := newTestClient(t, srv.URL)
 	status, err := client.GetExtractionJobStatus(context.Background(), "job-7")
-	require.Error(t, err)
-	assert.Nil(t, status)
-	assert.ErrorIs(t, err, ErrFetcherBadResponse)
-	assert.Contains(t, err.Error(), "missing error message")
+	require.NoError(t, err)
+	assert.Equal(t, "FAILED", status.Status)
 }
 
 func TestGetExtractionJobStatus_NullPayloadRejected(t *testing.T) {

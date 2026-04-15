@@ -86,18 +86,18 @@ func (mr *MockFetcherClientMockRecorder) IsHealthy(ctx any) *gomock.Call {
 }
 
 // ListConnections mocks base method.
-func (m *MockFetcherClient) ListConnections(ctx context.Context, orgID string) ([]*ports.FetcherConnection, error) {
+func (m *MockFetcherClient) ListConnections(ctx context.Context, productName string) ([]*ports.FetcherConnection, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListConnections", ctx, orgID)
+	ret := m.ctrl.Call(m, "ListConnections", ctx, productName)
 	ret0, _ := ret[0].([]*ports.FetcherConnection)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ListConnections indicates an expected call of ListConnections.
-func (mr *MockFetcherClientMockRecorder) ListConnections(ctx, orgID any) *gomock.Call {
+func (mr *MockFetcherClientMockRecorder) ListConnections(ctx, productName any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListConnections", reflect.TypeOf((*MockFetcherClient)(nil).ListConnections), ctx, orgID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListConnections", reflect.TypeOf((*MockFetcherClient)(nil).ListConnections), ctx, productName)
 }
 
 // SubmitExtractionJob mocks base method.

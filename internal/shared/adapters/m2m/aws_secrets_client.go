@@ -69,6 +69,10 @@ func (client *AWSSecretsClient) GetM2MCredentials(
 		return nil, classifyAWSError(err, tenantOrgID)
 	}
 
+	if output == nil {
+		return nil, fmt.Errorf("%w: response is nil for tenant %s", ErrM2MInvalidCredentials, tenantOrgID)
+	}
+
 	if output.SecretString == nil {
 		return nil, fmt.Errorf("%w: secret value is nil for tenant %s", ErrM2MInvalidCredentials, tenantOrgID)
 	}

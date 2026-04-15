@@ -18,7 +18,15 @@ func TestGetSchema_Success(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/v1/management/connections/conn-abc/schema", r.URL.Path)
-		resp := fetcherSchemaResponse{ConnectionID: "conn-abc", Tables: []fetcherTableResponse{{TableName: "transactions", Columns: []fetcherColumnResponse{{Name: "id", Type: "uuid", Nullable: false}, {Name: "amount", Type: "decimal", Nullable: false}, {Name: "note", Type: "text", Nullable: true}}}}}
+		resp := fetcherSchemaResponse{
+			ID:           "conn-abc",
+			ConfigName:   "prod-db",
+			DatabaseName: "production",
+			Type:         "POSTGRESQL",
+			Tables: []fetcherTableResponse{
+				{Name: "transactions", Fields: []string{"id", "amount", "note"}},
+			},
+		}
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(resp) //nolint:errcheck,errchkjson // test helper
 	}))
@@ -27,14 +35,16 @@ func TestGetSchema_Success(t *testing.T) {
 	client := newTestClient(t, srv.URL)
 	schema, err := client.GetSchema(context.Background(), "conn-abc")
 	require.NoError(t, err)
-	assert.Equal(t, "conn-abc", schema.ConnectionID)
+	assert.Equal(t, "conn-abc", schema.ID)
+	assert.Equal(t, "prod-db", schema.ConfigName)
+	assert.Equal(t, "production", schema.DatabaseName)
+	assert.Equal(t, "POSTGRESQL", schema.Type)
 	assert.False(t, schema.DiscoveredAt.IsZero())
 	require.Len(t, schema.Tables, 1)
-	assert.Equal(t, "transactions", schema.Tables[0].TableName)
-	require.Len(t, schema.Tables[0].Columns, 3)
-	assert.Equal(t, "id", schema.Tables[0].Columns[0].Name)
-	assert.False(t, schema.Tables[0].Columns[0].Nullable)
-	assert.True(t, schema.Tables[0].Columns[2].Nullable)
+	assert.Equal(t, "transactions", schema.Tables[0].Name)
+	require.Len(t, schema.Tables[0].Fields, 3)
+	assert.Equal(t, "id", schema.Tables[0].Fields[0])
+	assert.Equal(t, "note", schema.Tables[0].Fields[2])
 }
 
 func TestGetSchema_NotFound(t *testing.T) {
@@ -56,7 +66,7 @@ func TestGetSchema_EmptyTables(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		resp := fetcherSchemaResponse{ConnectionID: "conn-empty", Tables: []fetcherTableResponse{}}
+		resp := fetcherSchemaResponse{ID: "conn-empty", Tables: []fetcherTableResponse{}}
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(resp) //nolint:errcheck,errchkjson // test helper
 	}))
@@ -88,7 +98,7 @@ func TestGetSchema_MismatchedConnectionID(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		resp := fetcherSchemaResponse{ConnectionID: "conn-other"}
+		resp := fetcherSchemaResponse{ID: "conn-other"}
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(resp) //nolint:errcheck,errchkjson // test helper
 	}))

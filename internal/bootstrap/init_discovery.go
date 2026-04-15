@@ -7,12 +7,14 @@ package bootstrap
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 
 	discoveryFetcher "github.com/LerianStudio/matcher/internal/discovery/adapters/fetcher"
 	discoveryHTTP "github.com/LerianStudio/matcher/internal/discovery/adapters/http"
+	discoveryM2M "github.com/LerianStudio/matcher/internal/discovery/adapters/m2m"
 	discoveryConnRepo "github.com/LerianStudio/matcher/internal/discovery/adapters/postgres/connection"
 	discoveryExtractionRepo "github.com/LerianStudio/matcher/internal/discovery/adapters/postgres/extraction"
 	discoverySchemaRepo "github.com/LerianStudio/matcher/internal/discovery/adapters/postgres/schema"
@@ -77,6 +79,86 @@ func initOptionalDiscoveryWorker(
 	return worker, nil
 }
 
+// wireDiscoveryTokenExchanger installs the OAuth2 Bearer-token auth flow on the
+// Fetcher HTTP client when cfg.Auth.Enabled is true.
+//
+// Lifecycle note: The TokenExchanger is created once with cfg.Auth.Host as its
+// authURL. This URL is bootstrap-only (ApplyBootstrapOnly in systemplane keys,
+// see systemplane_keys_runtime_http.go), so the exchanger remains valid across
+// dynamic fetcher client reinjections. If Auth.Host ever becomes
+// runtime-mutable, this function must be extended to recreate the exchanger
+// on config change.
+//
+// Failures (missing host, exchanger creation error) are logged as warnings and
+// fall back to BasicAuth, letting startup succeed.
+func wireDiscoveryTokenExchanger(fetcherClient sharedPorts.FetcherClient, cfg *Config, logger libLog.Logger) {
+	if !cfg.Auth.Enabled || cfg.Auth.Host == "" {
+		return
+	}
+
+	var teOpts []discoveryM2M.TokenExchangerOption
+
+	if strings.HasPrefix(cfg.Auth.Host, "http://") {
+		teOpts = append(teOpts, discoveryM2M.WithInsecureHTTP())
+	}
+
+	te, teErr := discoveryM2M.NewTokenExchanger(cfg.Auth.Host, teOpts...)
+	if teErr != nil {
+		logger.Log(context.Background(), libLog.LevelWarn,
+			fmt.Sprintf("discovery: failed to create token exchanger: %v -- falling back to BasicAuth", teErr))
+
+		return
+	}
+
+	dfc, ok := fetcherClient.(*dynamicFetcherClient)
+	if !ok {
+		logger.Log(context.Background(), libLog.LevelWarn,
+			"discovery: token exchanger not wired — FetcherClient is not *dynamicFetcherClient")
+
+		return
+	}
+
+	dfc.tokenExchanger = te
+
+	logger.Log(context.Background(), libLog.LevelInfo, "discovery: token exchanger wired for Bearer auth")
+}
+
+// wireDiscoveryExtractionPoller creates the extraction poller and wires it into the
+// command use case. The poller monitors extraction job completion asynchronously.
+func wireDiscoveryExtractionPoller(
+	fetcherClient sharedPorts.FetcherClient,
+	extractionRepo *discoveryExtractionRepo.Repository,
+	cmdUseCase *discoveryCommand.UseCase,
+	cfg *Config,
+	configGetter func() *Config,
+	logger libLog.Logger,
+) {
+	extractionPoller := newDynamicExtractionPoller(fetcherClient, extractionRepo, func() discoveryWorker.ExtractionPollerConfig {
+		runtimeCfg := cfg
+
+		if configGetter != nil {
+			if currentCfg := configGetter(); currentCfg != nil {
+				runtimeCfg = currentCfg
+			}
+		}
+
+		return discoveryWorker.ExtractionPollerConfig{
+			PollInterval: runtimeCfg.FetcherExtractionPollInterval(),
+			Timeout:      runtimeCfg.FetcherExtractionTimeout(),
+		}
+	}, logger)
+
+	if extractionPoller == nil {
+		return
+	}
+
+	cmdUseCase.WithExtractionPoller(extractionPoller)
+
+	logger.Log(context.Background(), libLog.LevelInfo,
+		fmt.Sprintf("discovery: extraction poller wired into command use case (poll: %s, timeout: %s)",
+			cfg.FetcherExtractionPollInterval(), cfg.FetcherExtractionTimeout()))
+}
+
 // initDiscoveryModule initializes the Fetcher discovery module including HTTP handlers,
 // PG repositories, the Fetcher HTTP client, command/query use cases, and the background
 // discovery worker. This module is non-critical: failures are logged but do not prevent startup.
@@ -95,6 +177,8 @@ func initDiscoveryModule(
 	}
 
 	fetcherClient := newDynamicFetcherClient(cfg, configGetter, logger, m2m)
+
+	wireDiscoveryTokenExchanger(fetcherClient, cfg, logger)
 
 	connRepo := discoveryConnRepo.NewRepository(provider)
 	schemaRepo := discoverySchemaRepo.NewRepository(provider)
@@ -124,28 +208,8 @@ func initDiscoveryModule(
 		return nil, fmt.Errorf("register discovery routes: %w", err)
 	}
 
-	extractionPoller := newDynamicExtractionPoller(fetcherClient, extractionRepo, func() discoveryWorker.ExtractionPollerConfig {
-		runtimeCfg := cfg
+	wireDiscoveryExtractionPoller(fetcherClient, extractionRepo, cmdUseCase, cfg, configGetter, logger)
 
-		if configGetter != nil {
-			if currentCfg := configGetter(); currentCfg != nil {
-				runtimeCfg = currentCfg
-			}
-		}
-
-		return discoveryWorker.ExtractionPollerConfig{
-			PollInterval: runtimeCfg.FetcherExtractionPollInterval(),
-			Timeout:      runtimeCfg.FetcherExtractionTimeout(),
-		}
-	}, logger)
-	if extractionPoller != nil {
-		cmdUseCase.WithExtractionPoller(extractionPoller)
-		logger.Log(context.Background(), libLog.LevelInfo,
-			fmt.Sprintf("discovery: extraction poller wired into command use case (poll: %s, timeout: %s)",
-				cfg.FetcherExtractionPollInterval(), cfg.FetcherExtractionTimeout()))
-	}
-
-	cmdUseCase.WithTenantContextRequirement(cfg.Auth.Enabled)
 	cmdUseCase.WithDiscoveryRefreshLock(provider, cfg.FetcherDiscoveryInterval())
 	cmdUseCase.WithDiscoveryRefreshLockGetter(func() time.Duration {
 		runtimeCfg := cfg

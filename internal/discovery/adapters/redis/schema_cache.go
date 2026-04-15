@@ -26,7 +26,10 @@ import (
 var _ ports.SchemaCache = (*SchemaCache)(nil)
 
 const (
-	schemaKeyPrefix   = "matcher:discovery:schema:"
+	// schemaKeyPrefix includes a version segment so that cache entries written
+	// with an earlier FetcherTableSchema JSON layout (different field tags) become
+	// invisible after deploy. Old entries expire naturally via TTL.
+	schemaKeyPrefix   = "matcher:discovery:schema:v2:"
 	singleTenantScope = "single-tenant"
 )
 

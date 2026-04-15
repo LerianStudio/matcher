@@ -46,10 +46,11 @@ func TestM2MCredentialProvider_GetCredentials_Success(t *testing.T) {
 		},
 	}
 
-	provider := m2m.NewM2MCredentialProvider(
+	provider, providerErr := m2m.NewM2MCredentialProvider(
 		mock, "staging", "matcher", "fetcher",
 		5*time.Minute, nil,
 	)
+	require.NoError(t, providerErr)
 
 	ctx := context.Background()
 
@@ -70,19 +71,20 @@ func TestM2MCredentialProvider_L1CacheHit(t *testing.T) {
 		},
 	}
 
-	provider := m2m.NewM2MCredentialProvider(
+	provider, providerErr := m2m.NewM2MCredentialProvider(
 		mock, "staging", "matcher", "fetcher",
 		5*time.Minute, nil,
 	)
+	require.NoError(t, providerErr)
 
 	ctx := context.Background()
 
-	// First call: miss → fetch from source
+	// First call: miss -> fetch from source
 	creds1, err1 := provider.GetCredentials(ctx, "tenant-1")
 	require.NoError(t, err1)
 	assert.Equal(t, "cached-id", creds1.ClientID)
 
-	// Second call: L1 cache hit → no additional fetch
+	// Second call: L1 cache hit -> no additional fetch
 	creds2, err2 := provider.GetCredentials(ctx, "tenant-1")
 	require.NoError(t, err2)
 	assert.Equal(t, "cached-id", creds2.ClientID)
@@ -101,10 +103,11 @@ func TestM2MCredentialProvider_DifferentTenants(t *testing.T) {
 		},
 	}
 
-	provider := m2m.NewM2MCredentialProvider(
+	provider, providerErr := m2m.NewM2MCredentialProvider(
 		mock, "staging", "matcher", "fetcher",
 		5*time.Minute, nil,
 	)
+	require.NoError(t, providerErr)
 
 	ctx := context.Background()
 
@@ -128,10 +131,11 @@ func TestM2MCredentialProvider_InvalidateCredentials(t *testing.T) {
 		},
 	}
 
-	provider := m2m.NewM2MCredentialProvider(
+	provider, providerErr := m2m.NewM2MCredentialProvider(
 		mock, "staging", "matcher", "fetcher",
 		5*time.Minute, nil,
 	)
+	require.NoError(t, providerErr)
 
 	ctx := context.Background()
 
@@ -159,32 +163,29 @@ func TestM2MCredentialProvider_ErrorPropagation(t *testing.T) {
 		err: errNotFound,
 	}
 
-	provider := m2m.NewM2MCredentialProvider(
+	provider, providerErr := m2m.NewM2MCredentialProvider(
 		mock, "staging", "matcher", "fetcher",
 		5*time.Minute, nil,
 	)
+	require.NoError(t, providerErr)
 
 	ctx := context.Background()
 
 	creds, err := provider.GetCredentials(ctx, "tenant-1")
 	assert.Nil(t, creds)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "credentials not found")
+	assert.ErrorIs(t, err, errNotFound)
 }
 
 func TestM2MCredentialProvider_NilClient(t *testing.T) {
 	t.Parallel()
 
-	provider := m2m.NewM2MCredentialProvider(
+	_, err := m2m.NewM2MCredentialProvider(
 		nil, "staging", "matcher", "fetcher",
 		5*time.Minute, nil,
 	)
-
-	ctx := context.Background()
-
-	creds, err := provider.GetCredentials(ctx, "tenant-1")
-	assert.Nil(t, creds)
-	assert.Error(t, err)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, m2m.ErrM2MSecretsClientNil)
 }
 
 func TestM2MCredentialProvider_EmptyTenantOrgID(t *testing.T) {
@@ -197,10 +198,11 @@ func TestM2MCredentialProvider_EmptyTenantOrgID(t *testing.T) {
 		},
 	}
 
-	provider := m2m.NewM2MCredentialProvider(
+	provider, providerErr := m2m.NewM2MCredentialProvider(
 		mock, "staging", "matcher", "fetcher",
 		5*time.Minute, nil,
 	)
+	require.NoError(t, providerErr)
 
 	ctx := context.Background()
 
@@ -208,4 +210,62 @@ func TestM2MCredentialProvider_EmptyTenantOrgID(t *testing.T) {
 	assert.Nil(t, creds)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "tenant org ID is required")
+}
+
+func TestNewM2MCredentialProvider_EmptyEnv(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockSecretsClient{}
+
+	_, err := m2m.NewM2MCredentialProvider(
+		mock, "", "matcher", "fetcher",
+		5*time.Minute, nil,
+	)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, m2m.ErrM2MEnvRequired)
+}
+
+func TestNewM2MCredentialProvider_EmptyAppName(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockSecretsClient{}
+
+	_, err := m2m.NewM2MCredentialProvider(
+		mock, "staging", "", "fetcher",
+		5*time.Minute, nil,
+	)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, m2m.ErrM2MAppNameRequired)
+}
+
+func TestNewM2MCredentialProvider_EmptyTargetService(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockSecretsClient{}
+
+	_, err := m2m.NewM2MCredentialProvider(
+		mock, "staging", "matcher", "",
+		5*time.Minute, nil,
+	)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, m2m.ErrM2MTargetSvcRequired)
+}
+
+func TestNewM2MCredentialProvider_DefaultTTL(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockSecretsClient{
+		creds: &ports.M2MCredentials{
+			ClientID:     "id",
+			ClientSecret: "secret",
+		},
+	}
+
+	// Zero TTL should not panic — constructor applies default
+	provider, err := m2m.NewM2MCredentialProvider(
+		mock, "staging", "matcher", "fetcher",
+		0, nil,
+	)
+	require.NoError(t, err)
+	assert.NotNil(t, provider)
 }

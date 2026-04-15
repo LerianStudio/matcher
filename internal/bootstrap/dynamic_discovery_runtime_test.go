@@ -85,7 +85,7 @@ func TestNewDynamicSchemaCache_ValidArgs(t *testing.T) {
 func TestDynamicSchemaCache_GetSchema_DelegatesToInner(t *testing.T) {
 	t.Parallel()
 
-	expectedSchema := &sharedPorts.FetcherSchema{ConnectionID: "conn-1"}
+	expectedSchema := &sharedPorts.FetcherSchema{ID: "conn-1"}
 	inner := &fakeSchemaCacheInner{getResult: expectedSchema}
 	cache := newDynamicSchemaCache(inner, func() time.Duration { return time.Minute })
 
@@ -116,7 +116,7 @@ func TestDynamicSchemaCache_SetSchema_UsesDynamicTTL(t *testing.T) {
 	dynamicTTL := 10 * time.Minute
 	cache := newDynamicSchemaCache(inner, func() time.Duration { return dynamicTTL })
 
-	schema := &sharedPorts.FetcherSchema{ConnectionID: "conn-1"}
+	schema := &sharedPorts.FetcherSchema{ID: "conn-1"}
 	originalTTL := 1 * time.Minute
 
 	err := cache.SetSchema(context.Background(), "conn-1", schema, originalTTL)
@@ -133,7 +133,7 @@ func TestDynamicSchemaCache_SetSchema_FallsBackToOriginalTTL(t *testing.T) {
 	// Dynamic TTL getter returns 0 — should not override.
 	cache := newDynamicSchemaCache(inner, func() time.Duration { return 0 })
 
-	schema := &sharedPorts.FetcherSchema{ConnectionID: "conn-1"}
+	schema := &sharedPorts.FetcherSchema{ID: "conn-1"}
 	originalTTL := 5 * time.Minute
 
 	err := cache.SetSchema(context.Background(), "conn-1", schema, originalTTL)

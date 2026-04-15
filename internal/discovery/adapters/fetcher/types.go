@@ -1,7 +1,5 @@
 package fetcher
 
-import sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
-
 // fetcherHealthResponse maps to GET /health.
 type fetcherHealthResponse struct {
 	Status string `json:"status"`
@@ -9,72 +7,79 @@ type fetcherHealthResponse struct {
 
 // fetcherConnectionResponse maps to a single connection in GET /v1/management/connections.
 type fetcherConnectionResponse struct {
-	ID           string `json:"id"`
-	ConfigName   string `json:"configName"`
-	DatabaseType string `json:"databaseType"`
-	Host         string `json:"host"`
-	Port         int    `json:"port"`
-	DatabaseName string `json:"databaseName"`
-	ProductName  string `json:"productName"`
-	Status       string `json:"status"`
+	ID           string         `json:"id"`
+	ConfigName   string         `json:"configName"`
+	Type         string         `json:"type"`
+	Host         string         `json:"host"`
+	Port         int            `json:"port"`
+	Schema       string         `json:"schema"`
+	DatabaseName string         `json:"databaseName"`
+	UserName     string         `json:"userName"`
+	ProductName  string         `json:"productName"`
+	SSL          bool           `json:"ssl,omitempty"`
+	Metadata     map[string]any `json:"metadata,omitempty"`
+	CreatedAt    string         `json:"createdAt,omitempty"`
+	UpdatedAt    string         `json:"updatedAt,omitempty"`
 }
 
 // fetcherConnectionListResponse maps to the GET /v1/management/connections response.
 type fetcherConnectionListResponse struct {
-	Connections []fetcherConnectionResponse `json:"connections"`
+	Items []fetcherConnectionResponse `json:"items"`
+	Page  int                         `json:"page"`
+	Limit int                         `json:"limit"`
+	Total int                         `json:"total"`
 }
 
-// fetcherColumnResponse maps to a column in schema response.
-type fetcherColumnResponse struct {
-	Name     string `json:"name"`
-	Type     string `json:"type"`
-	Nullable bool   `json:"nullable"`
-}
-
-// fetcherTableResponse maps to a table in schema response.
+// fetcherTableResponse maps to a table in the schema response.
 type fetcherTableResponse struct {
-	TableName string                  `json:"tableName"`
-	Columns   []fetcherColumnResponse `json:"columns"`
+	Name   string   `json:"name"`
+	Fields []string `json:"fields"`
 }
 
 // fetcherSchemaResponse maps to GET /v1/management/connections/:id/schema.
 type fetcherSchemaResponse struct {
-	ConnectionID string                 `json:"connectionId"`
+	ID           string                 `json:"id"`
+	ConfigName   string                 `json:"configName"`
+	DatabaseName string                 `json:"databaseName"`
+	Type         string                 `json:"type"`
 	Tables       []fetcherTableResponse `json:"tables"`
 }
 
 // fetcherTestResponse maps to POST /v1/management/connections/:id/test.
 type fetcherTestResponse struct {
-	ConnectionID string `json:"connectionId"`
-	Healthy      bool   `json:"healthy"`
-	LatencyMs    int64  `json:"latencyMs"`
-	ErrorMessage string `json:"errorMessage,omitempty"`
+	Status    string `json:"status"`
+	Message   string `json:"message,omitempty"`
+	LatencyMs int64  `json:"latencyMs"`
+}
+
+// fetcherDataRequest is the nested data request within an extraction submission.
+type fetcherDataRequest struct {
+	MappedFields map[string]map[string][]string       `json:"mappedFields"`
+	Filters      map[string]map[string]map[string]any `json:"filters,omitempty"`
 }
 
 // fetcherExtractionSubmitRequest is the request body for POST /v1/fetcher.
 type fetcherExtractionSubmitRequest struct {
-	ConnectionID string                            `json:"connectionId"`
-	Tables       map[string]fetcherExtractionTable `json:"tables"`
-	Filters      *sharedPorts.ExtractionFilters    `json:"filters,omitempty"`
-}
-
-// fetcherExtractionTable configures extraction for a single table.
-type fetcherExtractionTable struct {
-	Columns   []string `json:"columns,omitempty"`
-	StartDate string   `json:"startDate,omitempty"`
-	EndDate   string   `json:"endDate,omitempty"`
+	DataRequest fetcherDataRequest `json:"dataRequest"`
+	Metadata    map[string]any     `json:"metadata"`
 }
 
 // fetcherExtractionSubmitResponse maps to POST /v1/fetcher response.
 type fetcherExtractionSubmitResponse struct {
-	JobID string `json:"jobId"`
+	JobID     string `json:"jobId"`
+	Status    string `json:"status,omitempty"`
+	CreatedAt string `json:"createdAt,omitempty"`
+	Message   string `json:"message,omitempty"`
 }
 
 // fetcherExtractionStatusResponse maps to GET /v1/fetcher/:jobId response.
 type fetcherExtractionStatusResponse struct {
-	JobID        string `json:"jobId"`
-	Status       string `json:"status"`
-	Progress     int    `json:"progress"`
-	ResultPath   string `json:"resultPath,omitempty"`
-	ErrorMessage string `json:"errorMessage,omitempty"`
+	ID          string         `json:"id"`
+	Status      string         `json:"status"`
+	ResultPath  string         `json:"resultPath,omitempty"`
+	ResultHmac  string         `json:"resultHmac,omitempty"`
+	RequestHash string         `json:"requestHash,omitempty"`
+	Metadata    map[string]any `json:"metadata,omitempty"`
+	CreatedAt   string         `json:"createdAt,omitempty"`
+	CompletedAt string         `json:"completedAt,omitempty"`
 }

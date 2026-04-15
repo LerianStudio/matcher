@@ -109,29 +109,29 @@ func TestListConnections_Success(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/v1/management/connections", r.URL.Path)
-		assert.Equal(t, "org-123", r.URL.Query().Get("orgId"))
+		assert.Equal(t, "midaz", r.Header.Get("X-Product-Name"))
 
 		resp := fetcherConnectionListResponse{
-			Connections: []fetcherConnectionResponse{
+			Items: []fetcherConnectionResponse{
 				{
 					ID:           "conn-1",
 					ConfigName:   "prod-db",
-					DatabaseType: "POSTGRESQL",
+					Type:         "POSTGRESQL",
 					Host:         "db.example.com",
 					Port:         5432,
 					DatabaseName: "production",
 					ProductName:  "PostgreSQL 16",
-					Status:       "AVAILABLE",
+					CreatedAt:    "2026-01-15T10:00:00Z",
+					UpdatedAt:    "2026-01-16T12:00:00Z",
 				},
 				{
 					ID:           "conn-2",
 					ConfigName:   "staging-db",
-					DatabaseType: "MYSQL",
+					Type:         "MYSQL",
 					Host:         "staging.example.com",
 					Port:         3306,
 					DatabaseName: "staging",
 					ProductName:  "MySQL 8",
-					Status:       "UNREACHABLE",
 				},
 			},
 		}
@@ -142,13 +142,14 @@ func TestListConnections_Success(t *testing.T) {
 	defer srv.Close()
 
 	client := newTestClient(t, srv.URL)
-	conns, err := client.ListConnections(context.Background(), "org-123")
+	conns, err := client.ListConnections(context.Background(), "midaz")
 
 	require.NoError(t, err)
 	require.Len(t, conns, 2)
 	assert.Equal(t, "conn-1", conns[0].ID)
 	assert.Equal(t, "POSTGRESQL", conns[0].DatabaseType)
 	assert.Equal(t, 5432, conns[0].Port)
+	assert.False(t, conns[0].CreatedAt.IsZero())
 	assert.Equal(t, "conn-2", conns[1].ID)
 	assert.Equal(t, "MYSQL", conns[1].DatabaseType)
 }
@@ -157,7 +158,7 @@ func TestListConnections_EmptyList(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		resp := fetcherConnectionListResponse{Connections: []fetcherConnectionResponse{}}
+		resp := fetcherConnectionListResponse{Items: []fetcherConnectionResponse{}}
 
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(resp) //nolint:errcheck,errchkjson // test helper
@@ -171,14 +172,14 @@ func TestListConnections_EmptyList(t *testing.T) {
 	assert.Empty(t, conns)
 }
 
-func TestListConnections_NoOrgID(t *testing.T) {
+func TestListConnections_NoProductName(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/v1/management/connections", r.URL.Path)
-		assert.Empty(t, r.URL.Query().Get("orgId"))
+		assert.Empty(t, r.Header.Get("X-Product-Name"))
 
-		resp := fetcherConnectionListResponse{Connections: []fetcherConnectionResponse{}}
+		resp := fetcherConnectionListResponse{Items: []fetcherConnectionResponse{}}
 
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(resp) //nolint:errcheck,errchkjson // test helper
@@ -251,9 +252,8 @@ func TestTestConnection_Success_Healthy(t *testing.T) {
 		assert.Equal(t, http.MethodPost, r.Method)
 
 		resp := fetcherTestResponse{
-			ConnectionID: "conn-1",
-			Healthy:      true,
-			LatencyMs:    42,
+			Status:    "success",
+			LatencyMs: 42,
 		}
 
 		w.WriteHeader(http.StatusOK)
@@ -265,10 +265,9 @@ func TestTestConnection_Success_Healthy(t *testing.T) {
 	result, err := client.TestConnection(context.Background(), "conn-1")
 
 	require.NoError(t, err)
-	assert.Equal(t, "conn-1", result.ConnectionID)
-	assert.True(t, result.Healthy)
+	assert.Equal(t, "success", result.Status)
 	assert.Equal(t, int64(42), result.LatencyMs)
-	assert.Empty(t, result.ErrorMessage)
+	assert.Empty(t, result.Message)
 }
 
 func TestTestConnection_Success_Unhealthy(t *testing.T) {
@@ -276,10 +275,9 @@ func TestTestConnection_Success_Unhealthy(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		resp := fetcherTestResponse{
-			ConnectionID: "conn-2",
-			Healthy:      false,
-			LatencyMs:    0,
-			ErrorMessage: "connection refused",
+			Status:    "error",
+			Message:   "connection refused",
+			LatencyMs: 0,
 		}
 
 		w.WriteHeader(http.StatusOK)
@@ -291,15 +289,15 @@ func TestTestConnection_Success_Unhealthy(t *testing.T) {
 	result, err := client.TestConnection(context.Background(), "conn-2")
 
 	require.NoError(t, err)
-	assert.False(t, result.Healthy)
-	assert.Equal(t, "connection refused", result.ErrorMessage)
+	assert.Equal(t, "error", result.Status)
+	assert.Equal(t, "connection refused", result.Message)
 }
 
-func TestTestConnection_MismatchedConnectionID(t *testing.T) {
+func TestTestConnection_ReturnsStatusAndMessage(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		resp := fetcherTestResponse{ConnectionID: "conn-other", Healthy: true, LatencyMs: 12}
+		resp := fetcherTestResponse{Status: "success", Message: "all good", LatencyMs: 12}
 
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(resp) //nolint:errcheck,errchkjson // test helper
@@ -309,10 +307,10 @@ func TestTestConnection_MismatchedConnectionID(t *testing.T) {
 	client := newTestClient(t, srv.URL)
 	result, err := client.TestConnection(context.Background(), "conn-1")
 
-	require.Error(t, err)
-	assert.Nil(t, result)
-	assert.ErrorIs(t, err, ErrFetcherBadResponse)
-	assert.Contains(t, err.Error(), "connection id mismatch")
+	require.NoError(t, err)
+	assert.Equal(t, "success", result.Status)
+	assert.Equal(t, "all good", result.Message)
+	assert.Equal(t, int64(12), result.LatencyMs)
 }
 
 func TestTestConnection_NullPayloadRejected(t *testing.T) {
@@ -346,10 +344,10 @@ func TestSubmitExtractionJob_Success(t *testing.T) {
 		err := json.NewDecoder(r.Body).Decode(&reqBody)
 		require.NoError(t, err)
 
-		assert.Equal(t, "conn-abc", reqBody.ConnectionID)
-		require.Contains(t, reqBody.Tables, "transactions")
-		assert.Equal(t, []string{"id", "amount"}, reqBody.Tables["transactions"].Columns)
-		assert.Equal(t, "2026-01-01", reqBody.Tables["transactions"].StartDate)
+		require.Contains(t, reqBody.DataRequest.MappedFields, "prod-db")
+		require.Contains(t, reqBody.DataRequest.MappedFields["prod-db"], "transactions")
+		assert.Equal(t, []string{"id", "amount"}, reqBody.DataRequest.MappedFields["prod-db"]["transactions"])
+		assert.Equal(t, "src-1", reqBody.Metadata["source"])
 
 		resp := fetcherExtractionSubmitResponse{JobID: "job-xyz"}
 
@@ -361,15 +359,17 @@ func TestSubmitExtractionJob_Success(t *testing.T) {
 	client := newTestClient(t, srv.URL)
 
 	input := sharedPorts.ExtractionJobInput{
-		ConnectionID: "conn-abc",
-		Tables: map[string]sharedPorts.ExtractionTableConfig{
-			"transactions": {
-				Columns:   []string{"id", "amount"},
-				StartDate: "2026-01-01",
-				EndDate:   "2026-01-31",
+		MappedFields: map[string]map[string][]string{
+			"prod-db": {
+				"transactions": {"id", "amount"},
 			},
 		},
-		Filters: &sharedPorts.ExtractionFilters{Equals: map[string]string{"currency": "USD"}},
+		Filters: map[string]map[string]map[string]any{
+			"prod-db": {
+				"transactions": {"currency": "USD"},
+			},
+		},
+		Metadata: map[string]any{"source": "src-1"},
 	}
 
 	jobID, err := client.SubmitExtractionJob(context.Background(), input)
@@ -389,8 +389,8 @@ func TestSubmitExtractionJob_ServerError(t *testing.T) {
 	client := newTestClient(t, srv.URL)
 
 	input := sharedPorts.ExtractionJobInput{
-		ConnectionID: "conn-1",
-		Tables:       map[string]sharedPorts.ExtractionTableConfig{},
+		MappedFields: map[string]map[string][]string{},
+		Metadata:     map[string]any{"source": "src-1"},
 	}
 
 	jobID, err := client.SubmitExtractionJob(context.Background(), input)
@@ -411,8 +411,8 @@ func TestSubmitExtractionJob_EmptyJobIDFailsClosed(t *testing.T) {
 	client := newTestClient(t, srv.URL)
 
 	input := sharedPorts.ExtractionJobInput{
-		ConnectionID: "conn-1",
-		Tables:       map[string]sharedPorts.ExtractionTableConfig{"transactions": {}},
+		MappedFields: map[string]map[string][]string{"db": {"transactions": {"id"}}},
+		Metadata:     map[string]any{"source": "src-1"},
 	}
 
 	jobID, err := client.SubmitExtractionJob(context.Background(), input)
@@ -433,7 +433,10 @@ func TestSubmitExtractionJob_NullPayloadRejected(t *testing.T) {
 	defer srv.Close()
 
 	client := newTestClient(t, srv.URL)
-	jobID, err := client.SubmitExtractionJob(context.Background(), sharedPorts.ExtractionJobInput{ConnectionID: "conn-1", Tables: map[string]sharedPorts.ExtractionTableConfig{"transactions": {}}})
+	jobID, err := client.SubmitExtractionJob(context.Background(), sharedPorts.ExtractionJobInput{
+		MappedFields: map[string]map[string][]string{"db": {"transactions": {"id"}}},
+		Metadata:     map[string]any{"source": "src-1"},
+	})
 
 	require.Error(t, err)
 	assert.Empty(t, jobID)
@@ -455,8 +458,8 @@ func TestDoRequest_RetriesOn500(t *testing.T) {
 		}
 
 		resp := fetcherConnectionListResponse{
-			Connections: []fetcherConnectionResponse{
-				{ID: "conn-1", Status: "AVAILABLE"},
+			Items: []fetcherConnectionResponse{
+				{ID: "conn-1", Type: "POSTGRESQL"},
 			},
 		}
 
@@ -639,8 +642,8 @@ func TestDoRequest_TransportFailure_NonRetryablePost(t *testing.T) {
 	}
 
 	_, err := client.SubmitExtractionJob(context.Background(), sharedPorts.ExtractionJobInput{
-		ConnectionID: "conn-1",
-		Tables:       map[string]sharedPorts.ExtractionTableConfig{"transactions": {}},
+		MappedFields: map[string]map[string][]string{"db": {"transactions": {"id"}}},
+		Metadata:     map[string]any{"source": "src-1"},
 	})
 
 	require.Error(t, err)
@@ -670,8 +673,8 @@ func TestSubmitExtractionJob_DoesNotRetryOnServerError(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = client.SubmitExtractionJob(context.Background(), sharedPorts.ExtractionJobInput{
-		ConnectionID: "conn-1",
-		Tables:       map[string]sharedPorts.ExtractionTableConfig{"tx": {}},
+		MappedFields: map[string]map[string][]string{"db": {"tx": {"id"}}},
+		Metadata:     map[string]any{"source": "src-1"},
 	})
 
 	require.Error(t, err)
@@ -711,10 +714,10 @@ func TestDoPost_SetsContentTypeJSON(t *testing.T) {
 	client := newTestClient(t, srv.URL)
 
 	input := sharedPorts.ExtractionJobInput{
-		ConnectionID: "conn-1",
-		Tables: map[string]sharedPorts.ExtractionTableConfig{
-			"t": {Columns: []string{"id"}},
+		MappedFields: map[string]map[string][]string{
+			"db": {"t": {"id"}},
 		},
+		Metadata: map[string]any{"source": "src-1"},
 	}
 
 	_, err := client.SubmitExtractionJob(context.Background(), input)
@@ -728,7 +731,7 @@ func TestDoGet_DoesNotSetContentType(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Empty(t, r.Header.Get("Content-Type"))
 
-		resp := fetcherConnectionListResponse{Connections: []fetcherConnectionResponse{}}
+		resp := fetcherConnectionListResponse{Items: []fetcherConnectionResponse{}}
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(resp) //nolint:errcheck,errchkjson // test helper
 	}))

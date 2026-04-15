@@ -597,9 +597,8 @@ func TestTestConnection_Success(t *testing.T) {
 	fixture := newHandlerFixture(t)
 	conn := fixture.seedConnection(t)
 	fixture.fetcherMock.testResult = &sharedPorts.FetcherTestResult{
-		ConnectionID: conn.FetcherConnID,
-		Healthy:      true,
-		LatencyMs:    42,
+		Status:    "success",
+		LatencyMs: 42,
 	}
 
 	app := setupTestApp(t, fixture.handler)
@@ -623,10 +622,9 @@ func TestTestConnection_UnhealthyResponseSanitizesErrorMessage(t *testing.T) {
 	fixture := newHandlerFixture(t)
 	conn := fixture.seedConnection(t)
 	fixture.fetcherMock.testResult = &sharedPorts.FetcherTestResult{
-		ConnectionID: conn.FetcherConnID,
-		Healthy:      false,
-		LatencyMs:    7,
-		ErrorMessage: "dial tcp 10.0.0.8:5432: connection refused",
+		Status:    "failed",
+		Message:   "dial tcp 10.0.0.8:5432: connection refused",
+		LatencyMs: 7,
 	}
 
 	app := setupTestApp(t, fixture.handler)

@@ -5,12 +5,11 @@ package mock
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
-	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
@@ -26,6 +25,9 @@ type MockFetcherServer struct {
 	listener net.Listener
 	baseURL  string
 
+	// jobCounter generates deterministic job IDs for extraction submissions.
+	jobCounter atomic.Int64
+
 	// Controllable state
 	healthy     bool
 	connections []MockConnection
@@ -36,50 +38,53 @@ type MockFetcherServer struct {
 
 // MockConnection represents a database connection as returned by Fetcher.
 type MockConnection struct {
-	OrgID        string
 	ID           string
 	ConfigName   string
-	DatabaseType string
+	Type         string // e.g. "postgresql", "mysql"
 	Host         string
 	Port         int
+	Schema       string
 	DatabaseName string
+	UserName     string
 	ProductName  string
-	Status       string
+	Metadata     map[string]any
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }
 
 // MockSchema represents a connection's discovered schema.
 type MockSchema struct {
-	ConnectionID string
+	ID           string
+	ConfigName   string
+	DatabaseName string
+	Type         string
 	Tables       []MockTable
 }
 
 // MockTable represents a database table in a schema response.
 type MockTable struct {
-	TableName string
-	Columns   []MockColumn
-}
-
-// MockColumn represents a column in a table schema.
-type MockColumn struct {
-	Name     string
-	Type     string
-	Nullable bool
+	Name   string
+	Fields []string
 }
 
 // MockTestResult represents the outcome of testing a connection.
 type MockTestResult struct {
-	Healthy      bool
-	LatencyMs    int64
-	ErrorMessage string
+	Status    string // "success" or "error"
+	Message   string
+	LatencyMs int64
 }
 
 // MockExtractionJob represents the state of an extraction job.
 type MockExtractionJob struct {
-	JobID        string
-	Status       string
-	Progress     int
+	ID           string
+	Status       string // lowercase: pending, processing, completed, failed
 	ResultPath   string
-	ErrorMessage string
+	ResultHmac   string
+	RequestHash  string
+	Metadata     map[string]any
+	MappedFields map[string]map[string][]string
+	CreatedAt    time.Time
+	CompletedAt  *time.Time
 }
 
 // NewMockFetcherServer creates a new mock Fetcher server with healthy defaults.
@@ -154,6 +159,7 @@ func (s *MockFetcherServer) Reset() {
 	s.schemas = make(map[string]*MockSchema)
 	s.testResults = make(map[string]*MockTestResult)
 	s.jobs = make(map[string]*MockExtractionJob)
+	s.jobCounter.Store(0)
 }
 
 // --- State manipulation ---
@@ -171,6 +177,14 @@ func (s *MockFetcherServer) AddConnection(conn MockConnection) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if conn.CreatedAt.IsZero() {
+		conn.CreatedAt = time.Now().UTC()
+	}
+
+	if conn.UpdatedAt.IsZero() {
+		conn.UpdatedAt = time.Now().UTC()
+	}
+
 	s.connections = append(s.connections, conn)
 }
 
@@ -185,11 +199,17 @@ func (s *MockFetcherServer) SetSchema(connectionID string, schema *MockSchema) {
 		return
 	}
 
-	cp := &MockSchema{ConnectionID: schema.ConnectionID}
+	cp := &MockSchema{
+		ID:           schema.ID,
+		ConfigName:   schema.ConfigName,
+		DatabaseName: schema.DatabaseName,
+		Type:         schema.Type,
+	}
+
 	for _, tbl := range schema.Tables {
-		cols := make([]MockColumn, len(tbl.Columns))
-		copy(cols, tbl.Columns)
-		cp.Tables = append(cp.Tables, MockTable{TableName: tbl.TableName, Columns: cols})
+		fields := make([]string, len(tbl.Fields))
+		copy(fields, tbl.Fields)
+		cp.Tables = append(cp.Tables, MockTable{Name: tbl.Name, Fields: fields})
 	}
 
 	s.schemas[connectionID] = cp
@@ -207,30 +227,58 @@ func (s *MockFetcherServer) SetTestResult(connectionID string, result *MockTestR
 	}
 
 	cp := &MockTestResult{
-		Healthy:      result.Healthy,
-		LatencyMs:    result.LatencyMs,
-		ErrorMessage: result.ErrorMessage,
+		Status:    result.Status,
+		Message:   result.Message,
+		LatencyMs: result.LatencyMs,
 	}
 	s.testResults[connectionID] = cp
 }
 
-// AddJob adds an extraction job that can be polled by its JobID.
+// AddJob adds an extraction job that can be polled by its ID.
 func (s *MockFetcherServer) AddJob(job MockExtractionJob) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.jobs[job.JobID] = &job
+	if job.CreatedAt.IsZero() {
+		job.CreatedAt = time.Now().UTC()
+	}
+
+	s.jobs[job.ID] = &job
 }
 
-// SetJobStatus updates the status and progress of an existing extraction job.
-func (s *MockFetcherServer) SetJobStatus(jobID string, status string, progress int) {
+// SetJobStatus updates the status of an existing extraction job.
+func (s *MockFetcherServer) SetJobStatus(jobID string, status string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if job, ok := s.jobs[jobID]; ok {
 		job.Status = status
-		job.Progress = progress
+
+		if status == "completed" || status == "failed" {
+			now := time.Now().UTC()
+			job.CompletedAt = &now
+		}
 	}
+}
+
+// GetLastJobID returns the ID of the most recently submitted extraction job.
+// This allows tests to capture the actual generated ID instead of hardcoding it.
+func (s *MockFetcherServer) GetLastJobID() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Find the job with the highest counter suffix (most recent).
+	var latest string
+	var latestTime time.Time
+
+	for _, job := range s.jobs {
+		if latest == "" || job.CreatedAt.After(latestTime) {
+			latest = job.ID
+			latestTime = job.CreatedAt
+		}
+	}
+
+	return latest
 }
 
 // --- Route registration ---
@@ -248,279 +296,3 @@ func (s *MockFetcherServer) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/fetcher/{jobId}", s.handleGetExtractionStatus)
 }
 
-// --- Handlers ---
-
-// handleHealth: GET /health
-// The real client (IsHealthy) checks for status 200 and parses {"status":"ok"|"healthy"}.
-func (s *MockFetcherServer) handleHealth(w http.ResponseWriter, _ *http.Request) {
-	s.mu.RLock()
-	healthy := s.healthy
-	s.mu.RUnlock()
-
-	if !healthy {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusServiceUnavailable)
-		writeJSON(w, map[string]string{"status": "unhealthy"})
-
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	writeJSON(w, map[string]string{"status": "ok"})
-}
-
-// handleListConnections: GET /v1/management/connections?orgId=X
-// Response shape: {"connections":[...]}
-// Each connection: {"id","configName","databaseType","host","port","databaseName","productName","status"}
-func (s *MockFetcherServer) handleListConnections(w http.ResponseWriter, r *http.Request) {
-	s.mu.RLock()
-	conns := make([]MockConnection, len(s.connections))
-	copy(conns, s.connections)
-	s.mu.RUnlock()
-
-	orgID := r.URL.Query().Get("orgId")
-	if orgID == "" {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		writeJSON(w, map[string]string{"error": "orgId query parameter is required"})
-
-		return
-	}
-
-	type connectionJSON struct {
-		ID           string `json:"id"`
-		ConfigName   string `json:"configName"`
-		DatabaseType string `json:"databaseType"`
-		Host         string `json:"host"`
-		Port         int    `json:"port"`
-		DatabaseName string `json:"databaseName"`
-		ProductName  string `json:"productName"`
-		Status       string `json:"status"`
-	}
-
-	items := make([]connectionJSON, 0, len(conns))
-	for _, c := range conns {
-		if c.OrgID != orgID {
-			continue
-		}
-
-		items = append(items, connectionJSON{
-			ID:           c.ID,
-			ConfigName:   c.ConfigName,
-			DatabaseType: c.DatabaseType,
-			Host:         c.Host,
-			Port:         c.Port,
-			DatabaseName: c.DatabaseName,
-			ProductName:  c.ProductName,
-			Status:       c.Status,
-		})
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	writeJSON(w, map[string]any{"connections": items})
-}
-
-// handleGetSchema: GET /v1/management/connections/{id}/schema
-// Response shape: {"connectionId":"...","tables":[{"tableName":"...","columns":[{"name","type","nullable"}]}]}
-func (s *MockFetcherServer) handleGetSchema(w http.ResponseWriter, r *http.Request) {
-	connID := r.PathValue("id")
-
-	s.mu.RLock()
-	schema, ok := s.schemas[connID]
-	s.mu.RUnlock()
-
-	if !ok || schema == nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		writeJSON(w, map[string]string{"error": "connection not found"})
-
-		return
-	}
-
-	type columnJSON struct {
-		Name     string `json:"name"`
-		Type     string `json:"type"`
-		Nullable bool   `json:"nullable"`
-	}
-
-	type tableJSON struct {
-		TableName string       `json:"tableName"`
-		Columns   []columnJSON `json:"columns"`
-	}
-
-	type schemaJSON struct {
-		ConnectionID string      `json:"connectionId"`
-		Tables       []tableJSON `json:"tables"`
-	}
-
-	tables := make([]tableJSON, 0, len(schema.Tables))
-	for _, t := range schema.Tables {
-		cols := make([]columnJSON, 0, len(t.Columns))
-		for _, c := range t.Columns {
-			cols = append(cols, columnJSON{
-				Name:     c.Name,
-				Type:     c.Type,
-				Nullable: c.Nullable,
-			})
-		}
-
-		tables = append(tables, tableJSON{
-			TableName: t.TableName,
-			Columns:   cols,
-		})
-	}
-
-	resp := schemaJSON{
-		ConnectionID: schema.ConnectionID,
-		Tables:       tables,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	writeJSON(w, resp)
-}
-
-// handleTestConnection: POST /v1/management/connections/{id}/test
-// Response shape: {"connectionId":"...","healthy":true,"latencyMs":42,"errorMessage":"..."}
-func (s *MockFetcherServer) handleTestConnection(w http.ResponseWriter, r *http.Request) {
-	connID := r.PathValue("id")
-
-	s.mu.RLock()
-	result, ok := s.testResults[connID]
-	s.mu.RUnlock()
-
-	if !ok || result == nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		writeJSON(w, map[string]string{"error": "connection not found"})
-
-		return
-	}
-
-	type testJSON struct {
-		ConnectionID string `json:"connectionId"`
-		Healthy      bool   `json:"healthy"`
-		LatencyMs    int64  `json:"latencyMs"`
-		ErrorMessage string `json:"errorMessage,omitempty"`
-	}
-
-	resp := testJSON{
-		ConnectionID: connID,
-		Healthy:      result.Healthy,
-		LatencyMs:    result.LatencyMs,
-		ErrorMessage: result.ErrorMessage,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	writeJSON(w, resp)
-}
-
-// handleSubmitExtraction: POST /v1/fetcher
-// Accepts JSON body with connectionId, tables, filters.
-// Response shape: {"jobId":"..."}
-//
-// The mock generates a job ID from the connection ID in the request body,
-// or returns a default if the body cannot be parsed. This lets tests
-// pre-populate job state via AddJob with a known ID.
-func (s *MockFetcherServer) handleSubmitExtraction(w http.ResponseWriter, r *http.Request) {
-	// Parse request body to extract connectionId (used for deterministic job ID generation).
-	var reqBody struct {
-		ConnectionID string `json:"connectionId"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		writeJSON(w, map[string]string{"error": "invalid request body"})
-
-		return
-	}
-
-	reqBody.ConnectionID = strings.TrimSpace(reqBody.ConnectionID)
-	if reqBody.ConnectionID == "" {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		writeJSON(w, map[string]string{"error": "invalid connectionId"})
-
-		return
-	}
-
-	// Generate a deterministic job ID so tests can AddJob before the call.
-	jobID := "job-" + reqBody.ConnectionID
-
-	s.mu.Lock()
-	_, exists := s.jobs[jobID]
-	if !exists {
-		s.jobs[jobID] = &MockExtractionJob{
-			JobID:    jobID,
-			Status:   "PENDING",
-			Progress: 0,
-		}
-	}
-	s.mu.Unlock()
-
-	type submitJSON struct {
-		JobID string `json:"jobId"`
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	writeJSON(w, submitJSON{JobID: jobID})
-}
-
-// handleGetExtractionStatus: GET /v1/fetcher/{jobId}
-// Response shape: {"jobId":"...","status":"COMPLETE","progress":100,"resultPath":"/data/...","errorMessage":"..."}
-func (s *MockFetcherServer) handleGetExtractionStatus(w http.ResponseWriter, r *http.Request) {
-	jobID := r.PathValue("jobId")
-
-	s.mu.RLock()
-	job, ok := s.jobs[jobID]
-
-	var resp extractionStatusJSON
-	if ok {
-		resp = extractionStatusJSON{
-			JobID:        job.JobID,
-			Status:       job.Status,
-			Progress:     job.Progress,
-			ResultPath:   job.ResultPath,
-			ErrorMessage: job.ErrorMessage,
-		}
-	}
-
-	s.mu.RUnlock()
-
-	if !ok {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		writeJSON(w, map[string]string{"error": "job not found"})
-
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	writeJSON(w, resp)
-}
-
-// extractionStatusJSON matches the exact shape of fetcherExtractionStatusResponse in types.go.
-type extractionStatusJSON struct {
-	JobID        string `json:"jobId"`
-	Status       string `json:"status"`
-	Progress     int    `json:"progress"`
-	ResultPath   string `json:"resultPath,omitempty"`
-	ErrorMessage string `json:"errorMessage,omitempty"`
-}
-
-// --- Helpers ---
-
-// writeJSON marshals v to JSON and writes it to w. On marshal failure it writes
-// a plaintext 500 error. This is a test helper, so the simplified error handling
-// is acceptable.
-func writeJSON(w http.ResponseWriter, v any) {
-	data, err := json.Marshal(v)
-	if err != nil {
-		http.Error(w, "mock server: json marshal error: "+err.Error(), http.StatusInternalServerError)
-
-		return
-	}
-
-	_, _ = w.Write(data)
-}
