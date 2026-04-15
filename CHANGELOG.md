@@ -1,3 +1,15 @@
+## [1.3.0-beta.15](https://github.com/LerianStudio/matcher/compare/v1.3.0-beta.14...v1.3.0-beta.15) (2026-04-15)
+
+
+### Features
+
+* **discovery:** rewrite Fetcher integration with OAuth2 and schema qualification ([6cffce2](https://github.com/LerianStudio/matcher/commit/6cffce20deb9b79b517942445bba9c7165d04006))
+
+
+### Bug Fixes
+
+* **config:** wrap match rule validation error with context ([4f1b2f1](https://github.com/LerianStudio/matcher/commit/4f1b2f1ffc60bc0cb7cb139d228de15d00e87e5d))
+
 ## [1.3.0-beta.14](https://github.com/LerianStudio/matcher/compare/v1.3.0-beta.13...v1.3.0-beta.14) (2026-04-14)
 
 
