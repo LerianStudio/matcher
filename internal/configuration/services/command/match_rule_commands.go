@@ -63,7 +63,7 @@ func (uc *UseCase) CreateMatchRule(
 	entity, err := entities.NewMatchRule(ctx, contextID, input)
 	if err != nil {
 		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "invalid match rule input", err)
-		return nil, err
+		return nil, fmt.Errorf("validating match rule input: %w", err)
 	}
 
 	created, err := uc.matchRuleRepo.Create(ctx, entity)
