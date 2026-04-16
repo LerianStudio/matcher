@@ -100,15 +100,17 @@ func TestRegisterRoutesSuccess(t *testing.T) {
 
 	assert.NoError(t, err)
 	expectedCalls := []authCall{
-		{resource: auth.ResourceDiscovery, action: auth.ActionDiscoveryRead},
-		{resource: auth.ResourceDiscovery, action: auth.ActionDiscoveryRead},
-		{resource: auth.ResourceDiscovery, action: auth.ActionDiscoveryRead},
-		{resource: auth.ResourceDiscovery, action: auth.ActionDiscoveryRead},
-		{resource: auth.ResourceDiscovery, action: auth.ActionDiscoveryWrite},
-		{resource: auth.ResourceDiscovery, action: auth.ActionDiscoveryWrite},
-		{resource: auth.ResourceDiscovery, action: auth.ActionDiscoveryRead},
-		{resource: auth.ResourceDiscovery, action: auth.ActionDiscoveryWrite},
-		{resource: auth.ResourceDiscovery, action: auth.ActionDiscoveryWrite},
+		{resource: auth.ResourceDiscovery, action: auth.ActionDiscoveryRead},  // status
+		{resource: auth.ResourceDiscovery, action: auth.ActionDiscoveryRead},  // connections list
+		{resource: auth.ResourceDiscovery, action: auth.ActionDiscoveryRead},  // connection get
+		{resource: auth.ResourceDiscovery, action: auth.ActionDiscoveryRead},  // connection schema
+		{resource: auth.ResourceDiscovery, action: auth.ActionDiscoveryWrite}, // connection test
+		{resource: auth.ResourceDiscovery, action: auth.ActionDiscoveryWrite}, // start extraction
+		{resource: auth.ResourceDiscovery, action: auth.ActionDiscoveryRead},  // bridge summary (T-004)
+		{resource: auth.ResourceDiscovery, action: auth.ActionDiscoveryRead},  // bridge candidates (T-004)
+		{resource: auth.ResourceDiscovery, action: auth.ActionDiscoveryRead},  // get extraction
+		{resource: auth.ResourceDiscovery, action: auth.ActionDiscoveryWrite}, // poll extraction
+		{resource: auth.ResourceDiscovery, action: auth.ActionDiscoveryWrite}, // refresh
 	}
 	require.Equal(t, expectedCalls, calls)
 
@@ -126,6 +128,8 @@ func TestRegisterRoutesSuccess(t *testing.T) {
 		http.MethodGet + " /v1/discovery/connections/:connectionId/schema",
 		http.MethodPost + " /v1/discovery/connections/:connectionId/test",
 		http.MethodPost + " /v1/discovery/connections/:connectionId/extractions",
+		http.MethodGet + " /v1/discovery/extractions/bridge/summary",
+		http.MethodGet + " /v1/discovery/extractions/bridge/candidates",
 		http.MethodGet + " /v1/discovery/extractions/:extractionId",
 		http.MethodPost + " /v1/discovery/extractions/:extractionId/poll",
 		http.MethodPost + " /v1/discovery/refresh",

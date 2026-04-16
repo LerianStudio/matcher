@@ -145,6 +145,21 @@ func (r *bridgeFakeExtractionRepo) FindEligibleForBridge(_ context.Context, _ in
 	return nil, nil
 }
 
+func (r *bridgeFakeExtractionRepo) CountBridgeReadiness(_ context.Context, _ time.Duration) (repositories.BridgeReadinessCounts, error) {
+	return repositories.BridgeReadinessCounts{}, nil
+}
+
+func (r *bridgeFakeExtractionRepo) ListBridgeCandidates(
+	_ context.Context,
+	_ string,
+	_ time.Duration,
+	_ time.Time,
+	_ uuid.UUID,
+	_ int,
+) ([]*entities.ExtractionRequest, error) {
+	return nil, nil
+}
+
 // bridgeFakeCustody records Store/Open/Delete calls.
 type bridgeFakeCustody struct {
 	ref         *sharedPorts.ArtifactCustodyReference

@@ -127,6 +127,24 @@ func (m *mockExtractionRepository) FindEligibleForBridge(
 	return nil, nil
 }
 
+func (m *mockExtractionRepository) CountBridgeReadiness(
+	_ context.Context,
+	_ time.Duration,
+) (BridgeReadinessCounts, error) {
+	return BridgeReadinessCounts{}, nil
+}
+
+func (m *mockExtractionRepository) ListBridgeCandidates(
+	_ context.Context,
+	_ string,
+	_ time.Duration,
+	_ time.Time,
+	_ uuid.UUID,
+	_ int,
+) ([]*entities.ExtractionRequest, error) {
+	return nil, nil
+}
+
 func TestMockExtractionRepositoryOperations(t *testing.T) {
 	t.Parallel()
 

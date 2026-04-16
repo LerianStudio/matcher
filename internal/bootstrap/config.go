@@ -254,6 +254,15 @@ type FetcherConfig struct {
 	// bounded; raise for large backlog drain, lower for predictable
 	// latency under load.
 	BridgeBatchSize int `env:"FETCHER_BRIDGE_BATCH_SIZE" envDefault:"50" mapstructure:"bridge_batch_size"`
+
+	// BridgeStaleThresholdSec partitions the operational dashboard's
+	// bridge readiness counts. COMPLETE+unlinked extractions newer than
+	// this many seconds count as "pending" (worker is expected to drain);
+	// older rows count as "stale" (operator should investigate). Default
+	// 3600s aligns with a one-hour SLO for bridge completion. T-004 read
+	// model uses this threshold; the bridge worker itself does not read
+	// it. Bounded validator caps the value at one day.
+	BridgeStaleThresholdSec int `env:"FETCHER_BRIDGE_STALE_THRESHOLD_SEC" envDefault:"3600" mapstructure:"bridge_stale_threshold_sec"`
 }
 
 // FetcherMaxExtractionBytes returns the effective size cap for Fetcher
@@ -284,6 +293,28 @@ func (cfg *Config) FetcherBridgeBatchSize() int {
 	}
 
 	return cfg.Fetcher.BridgeBatchSize
+}
+
+// defaultFetcherBridgeStaleThreshold is the bootstrap-side fallback for the
+// staleness window. Mirrors defaultBridgeStaleThreshold in
+// internal/discovery/adapters/http/handlers_bridge_readiness.go; the two must
+// stay in sync so config-load fallbacks and handler fallbacks land on the
+// same value when the systemplane is silent. We cannot import the http
+// package here (would create a bootstrap → adapter cycle) so the constant is
+// duplicated with this guardrail comment.
+const defaultFetcherBridgeStaleThreshold = time.Hour
+
+// FetcherBridgeStaleThreshold returns the duration after which a
+// COMPLETE+unlinked extraction shifts from "pending" to "stale" in the
+// operational dashboard. Falls back to defaultFetcherBridgeStaleThreshold
+// when the configured value is non-positive so misconfiguration cannot
+// collapse the partition.
+func (cfg *Config) FetcherBridgeStaleThreshold() time.Duration {
+	if cfg == nil || cfg.Fetcher.BridgeStaleThresholdSec <= 0 {
+		return defaultFetcherBridgeStaleThreshold
+	}
+
+	return time.Duration(cfg.Fetcher.BridgeStaleThresholdSec) * time.Second
 }
 
 // M2MConfig configures machine-to-machine credential retrieval from AWS Secrets Manager.

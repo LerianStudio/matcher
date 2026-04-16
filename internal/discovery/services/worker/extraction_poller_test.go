@@ -109,6 +109,21 @@ func (m *stubExtractionRepo) FindEligibleForBridge(_ context.Context, _ int) ([]
 	return nil, nil
 }
 
+func (m *stubExtractionRepo) CountBridgeReadiness(_ context.Context, _ time.Duration) (repositories.BridgeReadinessCounts, error) {
+	return repositories.BridgeReadinessCounts{}, nil
+}
+
+func (m *stubExtractionRepo) ListBridgeCandidates(
+	_ context.Context,
+	_ string,
+	_ time.Duration,
+	_ time.Time,
+	_ uuid.UUID,
+	_ int,
+) ([]*entities.ExtractionRequest, error) {
+	return nil, nil
+}
+
 // --- NewExtractionPoller tests ---
 
 func TestNewExtractionPoller_NilFetcherClient(t *testing.T) {

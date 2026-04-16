@@ -948,6 +948,46 @@ definitions:
         example: LEDGER
         type: string
     type: object
+  github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.BridgeCandidateResponse:
+    properties:
+      ageSeconds:
+        type: integer
+      connectionId:
+        type: string
+      createdAt:
+        type: string
+      extractionId:
+        type: string
+      fetcherJobId:
+        type: string
+      ingestionJobId:
+        type: string
+      readinessState:
+        type: string
+      status:
+        type: string
+      updatedAt:
+        type: string
+    type: object
+  github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.BridgeReadinessSummaryResponse:
+    properties:
+      failedCount:
+        type: integer
+      generatedAt:
+        type: string
+      inFlightCount:
+        type: integer
+      pendingCount:
+        type: integer
+      readyCount:
+        type: integer
+      staleCount:
+        type: integer
+      staleThresholdSec:
+        type: integer
+      totalCount:
+        type: integer
+    type: object
   github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ConnectionListResponse:
     properties:
       connections:
@@ -1031,6 +1071,19 @@ definitions:
         items:
           type: string
         type: array
+    type: object
+  github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ListBridgeCandidatesResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.BridgeCandidateResponse'
+        type: array
+      limit:
+        type: integer
+      nextCursor:
+        type: string
+      state:
+        type: string
     type: object
   github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.RefreshDiscoveryResponse:
     properties:
@@ -5435,6 +5488,98 @@ paths:
       security:
       - BearerAuth: []
       summary: Poll an extraction request
+      tags:
+      - Discovery
+  /v1/discovery/extractions/bridge/candidates:
+    get:
+      description: Returns extractions in the requested readiness state with cursor
+        pagination. Drilldown surface for the operational dashboard summary. AC-F2.
+      operationId: listDiscoveryBridgeCandidates
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      - description: Readiness state filter (pending, ready, stale, failed, in_flight)
+        enum:
+        - pending
+        - ready
+        - stale
+        - failed
+        - in_flight
+        in: query
+        name: state
+        required: true
+        type: string
+      - description: Opaque pagination cursor returned by the previous response
+        in: query
+        name: cursor
+        type: string
+      - description: Page size (default 50, max 200)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Page of bridge candidates
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ListBridgeCandidatesResponse'
+        "400":
+          description: Invalid query parameters
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_shared_adapters_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_shared_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_shared_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_shared_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List Fetcher bridge readiness candidates
+      tags:
+      - Discovery
+  /v1/discovery/extractions/bridge/summary:
+    get:
+      description: Returns aggregate counts of Fetcher extractions partitioned by
+        bridge readiness state (pending, ready, stale, failed, in_flight) for the
+        requesting tenant. Powers the operational dashboard backlog widget. AC-F1.
+      operationId: getDiscoveryBridgeReadinessSummary
+      parameters:
+      - description: Request ID for tracing
+        in: header
+        name: X-Request-Id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Aggregate readiness counts
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.BridgeReadinessSummaryResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_shared_adapters_http.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_shared_adapters_http.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/github_com_LerianStudio_matcher_internal_shared_adapters_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get Fetcher bridge readiness summary
       tags:
       - Discovery
   /v1/discovery/refresh:

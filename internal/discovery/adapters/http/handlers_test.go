@@ -226,6 +226,21 @@ func (r *mockExtractionRepo) FindEligibleForBridge(_ context.Context, _ int) ([]
 	return nil, nil
 }
 
+func (r *mockExtractionRepo) CountBridgeReadiness(_ context.Context, _ time.Duration) (repositories.BridgeReadinessCounts, error) {
+	return repositories.BridgeReadinessCounts{}, nil
+}
+
+func (r *mockExtractionRepo) ListBridgeCandidates(
+	_ context.Context,
+	_ string,
+	_ time.Duration,
+	_ time.Time,
+	_ uuid.UUID,
+	_ int,
+) ([]*entities.ExtractionRequest, error) {
+	return nil, nil
+}
+
 // --- Test Helpers ---
 
 type handlerFixture struct {

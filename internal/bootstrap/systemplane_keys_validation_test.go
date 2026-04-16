@@ -458,3 +458,41 @@ func TestValidateBridgeBatchSize_AcceptsDefault(t *testing.T) {
 	err := validateBridgeBatchSize(50)
 	assert.NoError(t, err)
 }
+
+// TestValidateBridgeStaleThresholdSec_RejectsBelowFloor guards against
+// sub-minute thresholds collapsing every retry into the stale bucket.
+func TestValidateBridgeStaleThresholdSec_RejectsBelowFloor(t *testing.T) {
+	t.Parallel()
+
+	err := validateBridgeStaleThresholdSec(30)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, domain.ErrValueInvalid)
+}
+
+// TestValidateBridgeStaleThresholdSec_RejectsAboveCeiling caps the threshold
+// at one day so misconfiguration cannot mask perpetually-stuck extractions.
+func TestValidateBridgeStaleThresholdSec_RejectsAboveCeiling(t *testing.T) {
+	t.Parallel()
+
+	err := validateBridgeStaleThresholdSec(100000)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, domain.ErrValueInvalid)
+}
+
+// TestValidateBridgeStaleThresholdSec_AcceptsDefault sanity-checks the prod default.
+func TestValidateBridgeStaleThresholdSec_AcceptsDefault(t *testing.T) {
+	t.Parallel()
+
+	err := validateBridgeStaleThresholdSec(3600)
+	assert.NoError(t, err)
+}
+
+// TestValidateBridgeStaleThresholdSec_AcceptsBoundaries exercises both the
+// minimum (60s) and the maximum (86400s) endpoints to confirm closed-range
+// semantics.
+func TestValidateBridgeStaleThresholdSec_AcceptsBoundaries(t *testing.T) {
+	t.Parallel()
+
+	assert.NoError(t, validateBridgeStaleThresholdSec(60))
+	assert.NoError(t, validateBridgeStaleThresholdSec(86400))
+}

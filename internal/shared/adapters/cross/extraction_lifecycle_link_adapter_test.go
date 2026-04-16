@@ -107,6 +107,24 @@ func (repo *fakeExtractionRepo) FindEligibleForBridge(
 	return repo.eligibleResult, repo.eligibleErr
 }
 
+func (repo *fakeExtractionRepo) CountBridgeReadiness(
+	_ context.Context,
+	_ time.Duration,
+) (discoveryRepositories.BridgeReadinessCounts, error) {
+	return discoveryRepositories.BridgeReadinessCounts{}, nil
+}
+
+func (repo *fakeExtractionRepo) ListBridgeCandidates(
+	_ context.Context,
+	_ string,
+	_ time.Duration,
+	_ time.Time,
+	_ uuid.UUID,
+	_ int,
+) ([]*discoveryEntities.ExtractionRequest, error) {
+	return nil, nil
+}
+
 // completeExtraction builds a COMPLETE extraction suitable for linking.
 // Domain validation requires Status=COMPLETE, so tests that want the link
 // path to succeed must stage one.

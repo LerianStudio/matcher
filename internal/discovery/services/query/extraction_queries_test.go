@@ -61,6 +61,21 @@ func (m *mockExtractionRepoForQuery) FindEligibleForBridge(_ context.Context, _ 
 	return nil, nil
 }
 
+func (m *mockExtractionRepoForQuery) CountBridgeReadiness(_ context.Context, _ time.Duration) (repositories.BridgeReadinessCounts, error) {
+	return repositories.BridgeReadinessCounts{}, nil
+}
+
+func (m *mockExtractionRepoForQuery) ListBridgeCandidates(
+	_ context.Context,
+	_ string,
+	_ time.Duration,
+	_ time.Time,
+	_ uuid.UUID,
+	_ int,
+) ([]*entities.ExtractionRequest, error) {
+	return nil, nil
+}
+
 func TestGetExtraction_Success(t *testing.T) {
 	t.Parallel()
 

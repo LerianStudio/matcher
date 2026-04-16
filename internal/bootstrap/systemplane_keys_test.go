@@ -21,9 +21,10 @@ import (
 // removed from matcherKeyDefs.
 // T-003 added 3 fetcher keys: max_extraction_bytes (BootstrapOnly),
 // bridge_interval_sec (WorkerReconcile), bridge_batch_size (WorkerReconcile).
-const expectedTotalKeys = 138
+// T-004 added 1 fetcher key: bridge_stale_threshold_sec (LiveRead).
+const expectedTotalKeys = 139
 
-const expectedConfigKeyCount = 124
+const expectedConfigKeyCount = 125
 
 const expectedSettingKeyCount = 14
 
@@ -31,7 +32,7 @@ const expectedSettingKeyCount = 14
 const expectedBootstrapOnlyCount = 25
 
 // expectedLiveReadCount is the count of keys with ApplyLiveRead.
-const expectedLiveReadCount = 21
+const expectedLiveReadCount = 22
 
 // expectedWorkerReconcileCount is the count of keys with ApplyWorkerReconcile.
 const expectedWorkerReconcileCount = 15

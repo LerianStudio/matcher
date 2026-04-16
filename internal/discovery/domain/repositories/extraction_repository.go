@@ -51,4 +51,51 @@ type ExtractionRepository interface {
 	// tenant-scoped transaction so it only sees rows for the tenant resolved
 	// from ctx (plus the default tenant when auth is disabled).
 	FindEligibleForBridge(ctx context.Context, limit int) ([]*entities.ExtractionRequest, error)
+	// CountBridgeReadiness returns aggregate counts of extractions partitioned
+	// by bridge readiness state for the tenant resolved from ctx.
+	//
+	// staleThreshold partitions COMPLETE+unlinked rows into "pending" (created
+	// recently, worker is expected to drain) versus "stale" (created longer
+	// ago, operator should investigate). Implementations evaluate the
+	// threshold against NOW() - created_at, not against updated_at, so a
+	// stuck-but-recently-retried row still counts as stale.
+	CountBridgeReadiness(ctx context.Context, staleThreshold time.Duration) (BridgeReadinessCounts, error)
+	// ListBridgeCandidates returns extractions in the requested readiness
+	// state ordered by created_at ASC (oldest first), supporting cursor
+	// pagination via the opaque createdAfter timestamp + idAfter UUID. When
+	// createdAfter is zero, paging starts from the beginning. limit is
+	// clamped to a sensible maximum by the implementation.
+	//
+	// staleThreshold partitions COMPLETE+unlinked rows the same way
+	// CountBridgeReadiness does so call sites see a consistent picture.
+	ListBridgeCandidates(
+		ctx context.Context,
+		state string,
+		staleThreshold time.Duration,
+		createdAfter time.Time,
+		idAfter uuid.UUID,
+		limit int,
+	) ([]*entities.ExtractionRequest, error)
+}
+
+// BridgeReadinessCounts captures the five-way partition of extractions for a
+// tenant. Counts are mutually exclusive and Total() sums to the total
+// extraction count for that tenant. InFlightCount covers upstream extractions
+// not yet COMPLETE (PENDING/SUBMITTED/EXTRACTING) so the dashboard can
+// distinguish "nothing happening" from "Fetcher is actively working".
+type BridgeReadinessCounts struct {
+	Ready         int64
+	Pending       int64
+	Stale         int64
+	Failed        int64
+	InFlightCount int64
+}
+
+// Total returns the sum of all five readiness buckets. Useful for sanity
+// checking that the partition is complete (covers every extraction in the
+// tenant). Reserved for partition invariants and dashboard sanity probes;
+// T-005 will rely on this when adding bridge-failure semantics so the
+// partition remains exhaustive.
+func (c BridgeReadinessCounts) Total() int64 {
+	return c.Ready + c.Pending + c.Stale + c.Failed + c.InFlightCount
 }

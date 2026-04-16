@@ -3185,6 +3185,142 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/discovery/extractions/bridge/candidates": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns extractions in the requested readiness state with cursor pagination. Drilldown surface for the operational dashboard summary. AC-F2.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Discovery"
+                ],
+                "summary": "List Fetcher bridge readiness candidates",
+                "operationId": "listDiscoveryBridgeCandidates",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    },
+                    {
+                        "enum": [
+                            "pending",
+                            "ready",
+                            "stale",
+                            "failed",
+                            "in_flight"
+                        ],
+                        "type": "string",
+                        "description": "Readiness state filter (pending, ready, stale, failed, in_flight)",
+                        "name": "state",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Opaque pagination cursor returned by the previous response",
+                        "name": "cursor",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size (default 50, max 200)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Page of bridge candidates",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ListBridgeCandidatesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid query parameters",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_shared_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_shared_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_shared_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_shared_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/discovery/extractions/bridge/summary": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns aggregate counts of Fetcher extractions partitioned by bridge readiness state (pending, ready, stale, failed, in_flight) for the requesting tenant. Powers the operational dashboard backlog widget. AC-F1.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Discovery"
+                ],
+                "summary": "Get Fetcher bridge readiness summary",
+                "operationId": "getDiscoveryBridgeReadinessSummary",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Request ID for tracing",
+                        "name": "X-Request-Id",
+                        "in": "header"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Aggregate readiness counts",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.BridgeReadinessSummaryResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_shared_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_shared_adapters_http.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_shared_adapters_http.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/discovery/extractions/{extractionId}": {
             "get": {
                 "security": [
@@ -11078,6 +11214,67 @@ const docTemplate = `{
                 }
             }
         },
+        "github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.BridgeCandidateResponse": {
+            "type": "object",
+            "properties": {
+                "ageSeconds": {
+                    "type": "integer"
+                },
+                "connectionId": {
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "extractionId": {
+                    "type": "string"
+                },
+                "fetcherJobId": {
+                    "type": "string"
+                },
+                "ingestionJobId": {
+                    "type": "string"
+                },
+                "readinessState": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.BridgeReadinessSummaryResponse": {
+            "type": "object",
+            "properties": {
+                "failedCount": {
+                    "type": "integer"
+                },
+                "generatedAt": {
+                    "type": "string"
+                },
+                "inFlightCount": {
+                    "type": "integer"
+                },
+                "pendingCount": {
+                    "type": "integer"
+                },
+                "readyCount": {
+                    "type": "integer"
+                },
+                "staleCount": {
+                    "type": "integer"
+                },
+                "staleThresholdSec": {
+                    "type": "integer"
+                },
+                "totalCount": {
+                    "type": "integer"
+                }
+            }
+        },
         "github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ConnectionListResponse": {
             "type": "object",
             "properties": {
@@ -11204,6 +11401,26 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ListBridgeCandidatesResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.BridgeCandidateResponse"
+                    }
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "nextCursor": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
                 }
             }
         },

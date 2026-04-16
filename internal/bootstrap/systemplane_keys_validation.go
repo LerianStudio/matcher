@@ -135,6 +135,13 @@ const (
 	maxBridgeIntervalSec         int64 = 3600
 	minBridgeBatchSize           int64 = 1
 	maxBridgeBatchSize           int64 = 10000
+	// Stale threshold bounds for bridge readiness dashboard. Floor of 60s
+	// keeps the partition meaningful (sub-minute thresholds would lump
+	// every retry into "stale" before the worker can finish). Ceiling of
+	// one day matches typical operational SLOs without inviting "set and
+	// forget" misuse.
+	minBridgeStaleThresholdSec int64 = 60
+	maxBridgeStaleThresholdSec int64 = 86400
 )
 
 // validateBoundedRangeInt rejects values outside [minValue, maxValue].
@@ -182,6 +189,15 @@ func validateBridgeBatchSize(value any) error {
 		minBridgeBatchSize,
 		maxBridgeBatchSize,
 		"fetcher bridge batch size",
+	)
+}
+
+func validateBridgeStaleThresholdSec(value any) error {
+	return validateBoundedRangeInt(
+		value,
+		minBridgeStaleThresholdSec,
+		maxBridgeStaleThresholdSec,
+		"fetcher bridge stale threshold seconds",
 	)
 }
 

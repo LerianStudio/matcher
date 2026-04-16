@@ -327,6 +327,24 @@ func matcherKeyDefsFetcherRuntime() []domain.KeyDef {
 			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
+		{
+			// T-004 read-model partitioning threshold for the operational
+			// dashboard's bridge readiness counts. Read at query time;
+			// the bridge worker does not consume this value, so live-read
+			// is appropriate (no worker reconcile required).
+			Key:              "fetcher.bridge_stale_threshold_sec",
+			Kind:             domain.KindConfig,
+			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+			DefaultValue:     3600,
+			ValueType:        domain.ValueTypeInt,
+			Validator:        validateBridgeStaleThresholdSec,
+			ApplyBehavior:    domain.ApplyLiveRead,
+			MutableAtRuntime: true,
+			Description:      "Stale threshold (seconds) for bridge readiness dashboard partition (bounds [60, 86400])",
+			Group:            "fetcher",
+			Component:        domain.ComponentNone,
+			RedactPolicy:     domain.RedactNone,
+		},
 	}
 }
 

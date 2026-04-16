@@ -199,6 +199,22 @@ func initDiscoveryModule(
 		return nil, fmt.Errorf("create discovery handler: %w", err)
 	}
 
+	// T-004: wire the operator-tunable bridge readiness threshold so the
+	// dashboard summary endpoint partitions pending vs stale rows the way
+	// the systemplane currently configures it. Live-read so threshold
+	// updates take effect on the next request without a restart.
+	handler.WithStalenessProvider(func() time.Duration {
+		runtimeCfg := cfg
+
+		if configGetter != nil {
+			if currentCfg := configGetter(); currentCfg != nil {
+				runtimeCfg = currentCfg
+			}
+		}
+
+		return runtimeCfg.FetcherBridgeStaleThreshold()
+	})
+
 	if cfg.Auth.Enabled {
 		logger.Log(context.Background(), libLog.LevelWarn,
 			"discovery: auth is enabled; ensure RBAC resource 'discovery' with actions 'discovery:read' and 'discovery:write' is provisioned before exposing discovery routes")
