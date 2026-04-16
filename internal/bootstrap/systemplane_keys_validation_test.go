@@ -367,3 +367,94 @@ func TestValidateNonEmptyString_TrimsWhitespace(t *testing.T) {
 	err = validateNonEmptyString("  valid  ")
 	assert.NoError(t, err)
 }
+
+// --- Fetcher bridge bounded validators (Fix 9) ---
+
+// TestValidateFetcherMaxExtractionBytes_RejectsBelowFloor exercises the
+// minimum bound: a 1 KiB ceiling defeats the DoS guard's purpose because
+// most legitimate Fetcher payloads exceed it. The validator must reject
+// configurations that would silently make the cap useless.
+func TestValidateFetcherMaxExtractionBytes_RejectsBelowFloor(t *testing.T) {
+	t.Parallel()
+
+	err := validateFetcherMaxExtractionBytes(int64(1024))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, domain.ErrValueInvalid)
+}
+
+// TestValidateFetcherMaxExtractionBytes_RejectsAboveCeiling guards against
+// operators accidentally disabling the DoS guard with MaxInt64-style values.
+func TestValidateFetcherMaxExtractionBytes_RejectsAboveCeiling(t *testing.T) {
+	t.Parallel()
+
+	// 32 GiB is over the 16 GiB ceiling.
+	err := validateFetcherMaxExtractionBytes(int64(32 * (1 << 30)))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, domain.ErrValueInvalid)
+}
+
+// TestValidateFetcherMaxExtractionBytes_AcceptsDefault sanity-checks that
+// the production default (2 GiB) sits comfortably inside the bounded range.
+func TestValidateFetcherMaxExtractionBytes_AcceptsDefault(t *testing.T) {
+	t.Parallel()
+
+	err := validateFetcherMaxExtractionBytes(int64(2 << 30))
+	assert.NoError(t, err)
+}
+
+// TestValidateBridgeIntervalSec_RejectsTooFast guards against operators
+// configuring a 1-second poll that would hammer the extraction_requests
+// table on every cycle.
+func TestValidateBridgeIntervalSec_RejectsTooFast(t *testing.T) {
+	t.Parallel()
+
+	err := validateBridgeIntervalSec(1)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, domain.ErrValueInvalid)
+}
+
+// TestValidateBridgeIntervalSec_RejectsTooSlow guards against operators
+// disabling the bridge worker by configuring a multi-day poll interval.
+func TestValidateBridgeIntervalSec_RejectsTooSlow(t *testing.T) {
+	t.Parallel()
+
+	err := validateBridgeIntervalSec(7200)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, domain.ErrValueInvalid)
+}
+
+// TestValidateBridgeIntervalSec_AcceptsDefault sanity-checks the prod default.
+func TestValidateBridgeIntervalSec_AcceptsDefault(t *testing.T) {
+	t.Parallel()
+
+	err := validateBridgeIntervalSec(30)
+	assert.NoError(t, err)
+}
+
+// TestValidateBridgeBatchSize_RejectsZero guards against silent worker
+// disablement (a batch size of 0 means "process nothing").
+func TestValidateBridgeBatchSize_RejectsZero(t *testing.T) {
+	t.Parallel()
+
+	err := validateBridgeBatchSize(0)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, domain.ErrValueInvalid)
+}
+
+// TestValidateBridgeBatchSize_RejectsAboveCeiling guards against per-cycle
+// latency blowups under backlog conditions.
+func TestValidateBridgeBatchSize_RejectsAboveCeiling(t *testing.T) {
+	t.Parallel()
+
+	err := validateBridgeBatchSize(20000)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, domain.ErrValueInvalid)
+}
+
+// TestValidateBridgeBatchSize_AcceptsDefault sanity-checks the prod default.
+func TestValidateBridgeBatchSize_AcceptsDefault(t *testing.T) {
+	t.Parallel()
+
+	err := validateBridgeBatchSize(50)
+	assert.NoError(t, err)
+}

@@ -858,6 +858,21 @@ func buildWorkerManager(modules *modulesResult, existing *WorkerManager, configM
 		)
 	}
 
+	// Fetcher bridge worker (T-003) — runs only when Fetcher is enabled
+	// AND the verified-artifact pipeline is operational. Non-critical:
+	// startup failure to Start does NOT abort matcher boot because the
+	// bridge worker's absence only affects Fetcher-sourced data; other
+	// reconciliation flows continue.
+	if modules.bridgeWorker != nil {
+		w := modules.bridgeWorker
+
+		wm.Register("fetcher_bridge",
+			func(_ *Config) (WorkerLifecycle, error) { return w, nil },
+			func(cfg *Config) bool { return cfg != nil && cfg.Fetcher.Enabled },
+			nil, // never critical
+		)
+	}
+
 	return wm
 }
 
@@ -2247,6 +2262,7 @@ type modulesResult struct {
 	archivalWorker   *governanceWorker.ArchivalWorker
 	schedulerWorker  *configWorker.SchedulerWorker
 	discoveryWorker  *discoveryWorker.DiscoveryWorker
+	bridgeWorker     *discoveryWorker.BridgeWorker
 }
 
 // errRabbitMQConnectionNil is returned when attempting to open a channel on a nil connection.
@@ -2428,21 +2444,41 @@ func initModulesAndMessaging(
 	}
 
 	// Fetcher-to-ingestion trusted bridge (T-001 intake + T-002 verified
-	// artifact pipeline). Wired here so the adapters are reachable once
-	// the ingestion command use case, discovery extraction repository,
-	// and object storage all exist. T-003 will consume this bundle from
-	// the bridge worker; for now we only prove constructability and log
-	// the result. The verified-artifact pipeline (retrieval + verify +
-	// custody) is soft-disabled when APP_ENC_KEY is empty or when object
-	// storage is unavailable — the T-001 intake path still works.
-	if _, err := initFetcherBridgeAdapters(ctx, FetcherBridgeDeps{
+	// artifact pipeline + T-003 automatic bridging). Wired here so the
+	// adapters are reachable once the ingestion command use case,
+	// discovery extraction repository, and object storage all exist.
+	//
+	// T-003: when all preconditions are met (Fetcher enabled, bridge
+	// bundle operational, source resolver available), the bridge worker
+	// is constructed. Otherwise, the bundle is kept around for the
+	// intake path but the bridge worker is not registered — the
+	// verified-artifact pipeline is soft-disabled when APP_ENC_KEY is
+	// empty or when object storage is unavailable.
+	extractionRepo := discoveryExtractionRepo.NewRepository(provider)
+
+	bridgeBundle, err := initFetcherBridgeAdapters(ctx, FetcherBridgeDeps{
 		Config:           cfg,
 		IngestionUseCase: ingestionUseCase,
-		ExtractionRepo:   discoveryExtractionRepo.NewRepository(provider),
+		ExtractionRepo:   extractionRepo,
 		ObjectStorage:    storage,
 		Logger:           logger,
-	}); err != nil {
+	})
+	if err != nil {
 		return nil, fmt.Errorf("init fetcher bridge adapters: %w", err)
+	}
+
+	bridgeWorker, err := initFetcherBridgeWorker(
+		ctx,
+		cfg,
+		configGetter,
+		provider,
+		extractionRepo,
+		sharedOutboxRepository,
+		bridgeBundle,
+		logger,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("init fetcher bridge worker: %w", err)
 	}
 
 	// Create governance audit consumer for processing audit events from the outbox.
@@ -2505,6 +2541,7 @@ func initModulesAndMessaging(
 		cleanupWorker:    cleanupWorker,
 		schedulerWorker:  schedulerWorker,
 		discoveryWorker:  discWorker,
+		bridgeWorker:     bridgeWorker,
 	}, nil
 }
 

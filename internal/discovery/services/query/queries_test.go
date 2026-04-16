@@ -149,6 +149,14 @@ func (m *mockExtractionRepo) FindByID(_ context.Context, _ uuid.UUID) (*entities
 	return m.findByIDReq, nil
 }
 
+func (m *mockExtractionRepo) LinkIfUnlinked(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
+	return nil
+}
+
+func (m *mockExtractionRepo) FindEligibleForBridge(_ context.Context, _ int) ([]*entities.ExtractionRequest, error) {
+	return nil, nil
+}
+
 func (m *mockSchemaRepo) UpsertBatch(_ context.Context, _ []*entities.DiscoveredSchema) error {
 	return m.upsertBatchErr
 }

@@ -53,6 +53,14 @@ func (m *mockExtractionRepoForQuery) UpdateWithTx(_ context.Context, _ sharedPor
 	return nil
 }
 
+func (m *mockExtractionRepoForQuery) LinkIfUnlinked(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
+	return nil
+}
+
+func (m *mockExtractionRepoForQuery) FindEligibleForBridge(_ context.Context, _ int) ([]*entities.ExtractionRequest, error) {
+	return nil, nil
+}
+
 func TestGetExtraction_Success(t *testing.T) {
 	t.Parallel()
 

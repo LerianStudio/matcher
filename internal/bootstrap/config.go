@@ -233,6 +233,57 @@ type FetcherConfig struct {
 	// Marked json:"-" so it never leaks into JSON config dumps; log
 	// plumbing must never record this value.
 	AppEncKey string `env:"APP_ENC_KEY" json:"-" mapstructure:"app_enc_key"`
+
+	// MaxExtractionBytes caps the size (in bytes) of a Fetcher extraction
+	// payload that FlattenFetcherJSON will materialise. Anything larger
+	// surfaces as ErrFetcherPayloadTooLarge and aborts the bridge cycle
+	// for that extraction. Default 2 GiB matches Fetcher's S3 single-
+	// object headroom; tighten for smaller working-set deployments.
+	//
+	// T-003 P2-T001 hardening: eliminates the OOM attack surface that
+	// the un-wrapped io.Reader form exposed.
+	MaxExtractionBytes int64 `env:"FETCHER_MAX_EXTRACTION_BYTES" envDefault:"2147483648" mapstructure:"max_extraction_bytes"`
+
+	// BridgeInterval governs how often the bridge worker polls for
+	// COMPLETE + unlinked extractions. Default 30s is a balance between
+	// responsiveness for a freshly-completed extraction and DB load.
+	BridgeIntervalSec int `env:"FETCHER_BRIDGE_INTERVAL_SEC" envDefault:"30" mapstructure:"bridge_interval_sec"`
+
+	// BridgeBatchSize caps how many extractions the bridge worker
+	// attempts per tenant per cycle. Default 50 keeps per-cycle runtime
+	// bounded; raise for large backlog drain, lower for predictable
+	// latency under load.
+	BridgeBatchSize int `env:"FETCHER_BRIDGE_BATCH_SIZE" envDefault:"50" mapstructure:"bridge_batch_size"`
+}
+
+// FetcherMaxExtractionBytes returns the effective size cap for Fetcher
+// extraction payloads. Falls back to the FlattenFetcherJSON default when
+// the config value is non-positive so misconfiguration can't disable the
+// DoS guard by setting a negative number.
+func (cfg *Config) FetcherMaxExtractionBytes() int64 {
+	if cfg == nil || cfg.Fetcher.MaxExtractionBytes <= 0 {
+		return 2 << 30
+	}
+
+	return cfg.Fetcher.MaxExtractionBytes
+}
+
+// FetcherBridgeInterval returns the poll interval for the bridge worker.
+func (cfg *Config) FetcherBridgeInterval() time.Duration {
+	if cfg == nil || cfg.Fetcher.BridgeIntervalSec <= 0 {
+		return 30 * time.Second
+	}
+
+	return time.Duration(cfg.Fetcher.BridgeIntervalSec) * time.Second
+}
+
+// FetcherBridgeBatchSize returns the per-tenant batch size for the bridge worker.
+func (cfg *Config) FetcherBridgeBatchSize() int {
+	if cfg == nil || cfg.Fetcher.BridgeBatchSize <= 0 {
+		return 50
+	}
+
+	return cfg.Fetcher.BridgeBatchSize
 }
 
 // M2MConfig configures machine-to-machine credential retrieval from AWS Secrets Manager.

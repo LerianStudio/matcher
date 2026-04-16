@@ -17,6 +17,7 @@ import (
 
 	discoveryEntities "github.com/LerianStudio/matcher/internal/discovery/domain/entities"
 	discoveryRepositories "github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
+	vo "github.com/LerianStudio/matcher/internal/discovery/domain/value_objects"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -24,14 +25,21 @@ import (
 // failure scenarios in the extraction lifecycle link adapter tests.
 var errLinkWriterBackend = errors.New("link writer backend failure")
 
-// fakeExtractionRepo is a compact manual mock for the small subset of the
-// ExtractionRepository interface exercised by the link adapter. Other methods
-// return zero values so tests stay focused on the paths under test.
+// fakeExtractionRepo is a compact manual mock for the ExtractionRepository
+// interface. The T-003 hardening uses the atomic LinkIfUnlinked method
+// exclusively for the write path; FindByID is still called for
+// state-machine domain validation.
 type fakeExtractionRepo struct {
-	findResult *discoveryEntities.ExtractionRequest
-	findErr    error
-	updateErr  error
-	updateCall *discoveryEntities.ExtractionRequest
+	findResult     *discoveryEntities.ExtractionRequest
+	findErr        error
+	updateErr      error
+	updateCall     *discoveryEntities.ExtractionRequest
+	linkErr        error
+	linkCallExID   uuid.UUID
+	linkCallJobID  uuid.UUID
+	linkCallCount  int
+	eligibleResult []*discoveryEntities.ExtractionRequest
+	eligibleErr    error
 }
 
 func (repo *fakeExtractionRepo) Create(_ context.Context, _ *discoveryEntities.ExtractionRequest) error {
@@ -80,6 +88,40 @@ func (repo *fakeExtractionRepo) FindByID(
 	return repo.findResult, repo.findErr
 }
 
+func (repo *fakeExtractionRepo) LinkIfUnlinked(
+	_ context.Context,
+	extractionID uuid.UUID,
+	ingestionJobID uuid.UUID,
+) error {
+	repo.linkCallCount++
+	repo.linkCallExID = extractionID
+	repo.linkCallJobID = ingestionJobID
+
+	return repo.linkErr
+}
+
+func (repo *fakeExtractionRepo) FindEligibleForBridge(
+	_ context.Context,
+	_ int,
+) ([]*discoveryEntities.ExtractionRequest, error) {
+	return repo.eligibleResult, repo.eligibleErr
+}
+
+// completeExtraction builds a COMPLETE extraction suitable for linking.
+// Domain validation requires Status=COMPLETE, so tests that want the link
+// path to succeed must stage one.
+func completeExtraction(id uuid.UUID) *discoveryEntities.ExtractionRequest {
+	return &discoveryEntities.ExtractionRequest{
+		ID:           id,
+		ConnectionID: uuid.New(),
+		Status:       vo.ExtractionStatusComplete,
+		FetcherJobID: "fetcher-job",
+		ResultPath:   "/path/to/result.json",
+		CreatedAt:    time.Now().UTC(),
+		UpdatedAt:    time.Now().UTC(),
+	}
+}
+
 func TestNewExtractionLifecycleLinkWriterAdapter_RejectsNilRepo(t *testing.T) {
 	t.Parallel()
 
@@ -88,18 +130,14 @@ func TestNewExtractionLifecycleLinkWriterAdapter_RejectsNilRepo(t *testing.T) {
 	require.ErrorIs(t, err, sharedPorts.ErrNilExtractionLifecycleLinkWriter)
 }
 
-func TestLinkExtractionToIngestion_HappyPath_PersistsLink(t *testing.T) {
+func TestLinkExtractionToIngestion_HappyPath_CallsAtomicLink(t *testing.T) {
 	t.Parallel()
 
 	extractionID := uuid.New()
 	ingestionID := uuid.New()
-	connectionID := uuid.New()
 
 	repo := &fakeExtractionRepo{
-		findResult: &discoveryEntities.ExtractionRequest{
-			ID:           extractionID,
-			ConnectionID: connectionID,
-		},
+		findResult: completeExtraction(extractionID),
 	}
 
 	adapter, err := NewExtractionLifecycleLinkWriterAdapter(
@@ -110,22 +148,23 @@ func TestLinkExtractionToIngestion_HappyPath_PersistsLink(t *testing.T) {
 	err = adapter.LinkExtractionToIngestion(context.Background(), extractionID, ingestionID)
 	require.NoError(t, err)
 
-	require.NotNil(t, repo.updateCall)
-	require.Equal(t, ingestionID, repo.updateCall.IngestionJobID)
+	require.Equal(t, 1, repo.linkCallCount, "atomic link must be called exactly once")
+	require.Equal(t, extractionID, repo.linkCallExID)
+	require.Equal(t, ingestionID, repo.linkCallJobID)
+	require.Nil(t, repo.updateCall, "legacy Update must not be called anymore")
 }
 
-func TestLinkExtractionToIngestion_AlreadyLinked_ReturnsIdempotencySentinel(t *testing.T) {
+func TestLinkExtractionToIngestion_AtomicAlreadyLinked_ReturnsIdempotencySentinel(t *testing.T) {
 	t.Parallel()
 
 	extractionID := uuid.New()
-	preexistingIngestionID := uuid.New()
 
+	// The repository has a COMPLETE extraction with NO in-memory ingestion
+	// job id (FindByID returned an unlinked snapshot), but the atomic SQL
+	// UPDATE sees ingestion_job_id IS NOT NULL (concurrent writer beat us).
 	repo := &fakeExtractionRepo{
-		findResult: &discoveryEntities.ExtractionRequest{
-			ID:             extractionID,
-			ConnectionID:   uuid.New(),
-			IngestionJobID: preexistingIngestionID,
-		},
+		findResult: completeExtraction(extractionID),
+		linkErr:    sharedPorts.ErrExtractionAlreadyLinked,
 	}
 
 	adapter, err := NewExtractionLifecycleLinkWriterAdapter(
@@ -134,11 +173,50 @@ func TestLinkExtractionToIngestion_AlreadyLinked_ReturnsIdempotencySentinel(t *t
 	require.NoError(t, err)
 
 	err = adapter.LinkExtractionToIngestion(context.Background(), extractionID, uuid.New())
-	require.Error(t, err)
 	require.ErrorIs(t, err, sharedPorts.ErrExtractionAlreadyLinked)
+	require.Equal(t, 1, repo.linkCallCount)
+}
 
-	// The adapter must not issue an Update call when the link is preserved.
-	require.Nil(t, repo.updateCall, "Update must not be called when extraction is already linked")
+func TestLinkExtractionToIngestion_NonCompleteStatus_RejectedAtDomain(t *testing.T) {
+	t.Parallel()
+
+	extractionID := uuid.New()
+
+	// Extraction in SUBMITTED (not COMPLETE) must be rejected at the
+	// domain layer before the atomic SQL is even attempted.
+	extraction := completeExtraction(extractionID)
+	extraction.Status = vo.ExtractionStatusSubmitted
+
+	repo := &fakeExtractionRepo{findResult: extraction}
+
+	adapter, err := NewExtractionLifecycleLinkWriterAdapter(
+		discoveryRepositories.ExtractionRepository(repo),
+	)
+	require.NoError(t, err)
+
+	err = adapter.LinkExtractionToIngestion(context.Background(), extractionID, uuid.New())
+	require.ErrorIs(t, err, discoveryEntities.ErrInvalidTransition)
+	require.Equal(t, 0, repo.linkCallCount, "atomic link must not be called when domain rejects")
+}
+
+func TestLinkExtractionToIngestion_FailedExtraction_RejectedAtDomain(t *testing.T) {
+	t.Parallel()
+
+	extractionID := uuid.New()
+
+	extraction := completeExtraction(extractionID)
+	extraction.Status = vo.ExtractionStatusFailed
+
+	repo := &fakeExtractionRepo{findResult: extraction}
+
+	adapter, err := NewExtractionLifecycleLinkWriterAdapter(
+		discoveryRepositories.ExtractionRepository(repo),
+	)
+	require.NoError(t, err)
+
+	err = adapter.LinkExtractionToIngestion(context.Background(), extractionID, uuid.New())
+	require.ErrorIs(t, err, discoveryEntities.ErrInvalidTransition)
+	require.Equal(t, 0, repo.linkCallCount)
 }
 
 func TestLinkExtractionToIngestion_NotFound_SurfacesSentinel(t *testing.T) {
@@ -155,6 +233,7 @@ func TestLinkExtractionToIngestion_NotFound_SurfacesSentinel(t *testing.T) {
 
 	err = adapter.LinkExtractionToIngestion(context.Background(), uuid.New(), uuid.New())
 	require.ErrorIs(t, err, discoveryRepositories.ErrExtractionNotFound)
+	require.Equal(t, 0, repo.linkCallCount)
 }
 
 func TestLinkExtractionToIngestion_MissingExtractionID_ReturnsSentinel(t *testing.T) {
@@ -181,16 +260,13 @@ func TestLinkExtractionToIngestion_MissingIngestionJobID_ReturnsSentinel(t *test
 	require.ErrorIs(t, err, sharedPorts.ErrLinkIngestionJobIDRequired)
 }
 
-func TestLinkExtractionToIngestion_PersistError_WrapsUnderlying(t *testing.T) {
+func TestLinkExtractionToIngestion_AtomicLinkError_WrapsUnderlying(t *testing.T) {
 	t.Parallel()
 
 	extractionID := uuid.New()
 	repo := &fakeExtractionRepo{
-		findResult: &discoveryEntities.ExtractionRequest{
-			ID:           extractionID,
-			ConnectionID: uuid.New(),
-		},
-		updateErr: errLinkWriterBackend,
+		findResult: completeExtraction(extractionID),
+		linkErr:    errLinkWriterBackend,
 	}
 
 	adapter, err := NewExtractionLifecycleLinkWriterAdapter(
@@ -201,6 +277,7 @@ func TestLinkExtractionToIngestion_PersistError_WrapsUnderlying(t *testing.T) {
 	err = adapter.LinkExtractionToIngestion(context.Background(), extractionID, uuid.New())
 	require.Error(t, err)
 	require.ErrorIs(t, err, errLinkWriterBackend)
+	require.Contains(t, err.Error(), "persist extraction link")
 }
 
 // TestLinkExtractionToIngestion_NilAdapter_ReturnsSentinel exercises the
@@ -249,4 +326,68 @@ func TestLinkExtractionToIngestion_FindByIDReturnsNil_ReturnsNotFoundSentinel(t 
 
 	err = adapter.LinkExtractionToIngestion(context.Background(), uuid.New(), uuid.New())
 	require.ErrorIs(t, err, discoveryRepositories.ErrExtractionNotFound)
+}
+
+// TestLinkExtractionToIngestion_ReplayWithSameJobID_AtomicSQLReturnsAlreadyLinked
+// exercises the replay path: the in-memory entity is already linked to the
+// SAME ingestion job id, so LinkToIngestion is a no-op (the domain treats
+// same-id replays as idempotent). The adapter then proceeds to the atomic
+// SQL guard, which observes the row as already linked and returns
+// ErrExtractionAlreadyLinked — which the adapter forwards verbatim.
+//
+// Renamed from the prior "_SucceedsViaDomainSkip" suffix after Fix 6: the
+// fall-through branch no longer exists because the domain's same-id path
+// is a no-op (returns nil), not a rejection that the adapter has to
+// special-case. The atomic SQL is the single authority for the
+// already-linked verdict.
+func TestLinkExtractionToIngestion_ReplayWithSameJobID_AtomicSQLReturnsAlreadyLinked(t *testing.T) {
+	t.Parallel()
+
+	extractionID := uuid.New()
+	ingestionID := uuid.New()
+
+	extraction := completeExtraction(extractionID)
+	extraction.IngestionJobID = ingestionID // already linked to same job
+
+	repo := &fakeExtractionRepo{
+		findResult: extraction,
+		linkErr:    sharedPorts.ErrExtractionAlreadyLinked,
+	}
+
+	adapter, err := NewExtractionLifecycleLinkWriterAdapter(
+		discoveryRepositories.ExtractionRepository(repo),
+	)
+	require.NoError(t, err)
+
+	err = adapter.LinkExtractionToIngestion(context.Background(), extractionID, ingestionID)
+	require.ErrorIs(t, err, sharedPorts.ErrExtractionAlreadyLinked)
+	require.Equal(t, 1, repo.linkCallCount, "atomic link is still attempted for replay-same-id case")
+}
+
+// TestLinkExtractionToIngestion_CrossJobCollision_RejectedAsAlreadyLinked
+// exercises the cross-job collision path: the in-memory entity is already
+// linked to a DIFFERENT ingestion job id. The domain method now wraps this
+// case as sharedPorts.ErrExtractionAlreadyLinked (Fix 6 + Fix 6a), so the
+// adapter never reaches the atomic SQL — the rejection happens at the
+// domain layer with the canonical sentinel that callers can errors.Is on.
+func TestLinkExtractionToIngestion_CrossJobCollision_RejectedAsAlreadyLinked(t *testing.T) {
+	t.Parallel()
+
+	extractionID := uuid.New()
+	priorJobID := uuid.New()
+	newJobID := uuid.New()
+
+	extraction := completeExtraction(extractionID)
+	extraction.IngestionJobID = priorJobID // already linked to a DIFFERENT job
+
+	repo := &fakeExtractionRepo{findResult: extraction}
+
+	adapter, err := NewExtractionLifecycleLinkWriterAdapter(
+		discoveryRepositories.ExtractionRepository(repo),
+	)
+	require.NoError(t, err)
+
+	err = adapter.LinkExtractionToIngestion(context.Background(), extractionID, newJobID)
+	require.ErrorIs(t, err, sharedPorts.ErrExtractionAlreadyLinked)
+	require.Equal(t, 0, repo.linkCallCount, "atomic link must not be called when domain rejects cross-job collision")
 }

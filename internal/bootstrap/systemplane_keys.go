@@ -134,6 +134,12 @@ const (
 	defaultFetcherExtractionPoll    = 5
 	defaultFetcherExtractionTO      = 600
 
+	// Fetcher bridge worker defaults (Fix 4): mirror the Config struct
+	// envDefault tags so snapshot-driven hydration falls back to the same
+	// values an env-only deployment would see.
+	defaultBridgeIntervalSec = 30
+	defaultBridgeBatchSize   = 50
+
 	// M2M defaults.
 	defaultM2MTargetService      = "fetcher"
 	defaultM2MCredentialCacheTTL = 300

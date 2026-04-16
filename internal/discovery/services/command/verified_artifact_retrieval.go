@@ -175,22 +175,18 @@ func (orch *VerifiedArtifactRetrievalOrchestrator) retrieveAndVerify(
 		return nil, wrapped
 	}
 
-	// Fully materialise plaintext so the underlying retrieval body can be
-	// closed (see deferred Close above) before custody persistence starts.
-	// This is the streaming tradeoff called out in D8: verification is
-	// block-oriented (AES-GCM requires the tag suffix) so we have already
-	// read the entire ciphertext by this point; holding plaintext in
-	// memory adds at most a small constant factor over the ciphertext size
-	// we already materialised.
-	buf, err := io.ReadAll(plaintext)
-	if err != nil {
-		wrapped := fmt.Errorf("%w: read verified plaintext: %w", sharedPorts.ErrArtifactRetrievalFailed, err)
-		libOpentelemetry.HandleSpanError(span, "read verified plaintext failed", wrapped)
-
-		return nil, wrapped
-	}
-
-	return newBytesReader(buf), nil
+	// The verifier already materialised plaintext into a bytes.Reader (it
+	// had to, because AES-GCM requires the full ciphertext+tag before
+	// decryption completes). Passing the returned reader directly to
+	// custody avoids a redundant io.ReadAll + newBytesReader roundtrip
+	// that would triple-buffer the payload in memory for a 256 MiB
+	// artifact (ciphertext + plaintext + orchestrator rebuffer).
+	//
+	// T-003 P1 hardening: removed the orchestrator-level ReadAll; the
+	// retrieval body has already been drained by VerifyAndDecrypt, so the
+	// deferred Close above fires with no outstanding reads against the
+	// HTTP body.
+	return plaintext, nil
 }
 
 // persistCustody executes stage 3. Any failure is wrapped with
@@ -269,27 +265,4 @@ func wrapCustodyError(err error) error {
 	}
 
 	return fmt.Errorf("%w: %w", sharedPorts.ErrCustodyStoreFailed, err)
-}
-
-// newBytesReader is a tiny helper that avoids importing bytes just for
-// the reader construction at the caller site. Keeping it in-package also
-// makes mocking in tests straightforward.
-func newBytesReader(buf []byte) io.Reader {
-	return &materialisedBuffer{buf: buf}
-}
-
-type materialisedBuffer struct {
-	buf []byte
-	pos int
-}
-
-func (buf *materialisedBuffer) Read(p []byte) (int, error) {
-	if buf.pos >= len(buf.buf) {
-		return 0, io.EOF
-	}
-
-	n := copy(p, buf.buf[buf.pos:])
-	buf.pos += n
-
-	return n, nil
 }

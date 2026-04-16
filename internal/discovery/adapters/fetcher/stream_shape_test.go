@@ -20,7 +20,7 @@ import (
 func TestFlattenFetcherJSON_EmptyObject_ProducesEmptyArray(t *testing.T) {
 	t.Parallel()
 
-	out, err := FlattenFetcherJSON(strings.NewReader(`{}`))
+	out, err := FlattenFetcherJSON(strings.NewReader(`{}`), 0)
 	require.NoError(t, err)
 
 	data, err := io.ReadAll(out)
@@ -33,7 +33,7 @@ func TestFlattenFetcherJSON_SingleDatasourceSingleTable_PreservesRows(t *testing
 
 	input := `{"ds-1":{"table-1":[{"id":"a","v":1},{"id":"b","v":2}]}}`
 
-	out, err := FlattenFetcherJSON(strings.NewReader(input))
+	out, err := FlattenFetcherJSON(strings.NewReader(input), 0)
 	require.NoError(t, err)
 
 	data, err := io.ReadAll(out)
@@ -56,7 +56,7 @@ func TestFlattenFetcherJSON_MultiDatasourceMultiTable_OrdersDeterministically(t 
 		"ds-a": {"table-b": [{"k":"ab1"},{"k":"ab2"}], "table-a": [{"k":"aa1"}]}
 	}`
 
-	out, err := FlattenFetcherJSON(strings.NewReader(input))
+	out, err := FlattenFetcherJSON(strings.NewReader(input), 0)
 	require.NoError(t, err)
 
 	data, err := io.ReadAll(out)
@@ -82,7 +82,7 @@ func TestFlattenFetcherJSON_RowValuesPreservedVerbatim(t *testing.T) {
 	// re-marshal rows (which would reorder keys or canonicalise numbers).
 	input := `{"ds":{"t":[{"nested":{"x":1,"y":[1,2,3]},"n":null,"f":3.14}]}}`
 
-	out, err := FlattenFetcherJSON(strings.NewReader(input))
+	out, err := FlattenFetcherJSON(strings.NewReader(input), 0)
 	require.NoError(t, err)
 
 	data, err := io.ReadAll(out)
@@ -101,7 +101,7 @@ func TestFlattenFetcherJSON_RowValuesPreservedVerbatim(t *testing.T) {
 func TestFlattenFetcherJSON_NilReader_ReturnsMalformedError(t *testing.T) {
 	t.Parallel()
 
-	out, err := FlattenFetcherJSON(nil)
+	out, err := FlattenFetcherJSON(nil, 0)
 	require.Nil(t, out)
 	require.Error(t, err)
 	require.True(t, errors.Is(err, ErrFetcherShapeMalformed))
@@ -125,7 +125,7 @@ func TestFlattenFetcherJSON_MalformedJSON_ReturnsMalformedError(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			out, err := FlattenFetcherJSON(strings.NewReader(tc.input))
+			out, err := FlattenFetcherJSON(strings.NewReader(tc.input), 0)
 			require.Nil(t, out)
 			require.Error(t, err)
 			require.True(t, errors.Is(err, ErrFetcherShapeMalformed),
@@ -137,7 +137,7 @@ func TestFlattenFetcherJSON_MalformedJSON_ReturnsMalformedError(t *testing.T) {
 func TestFlattenFetcherJSON_EmptyTable_ProducesNoRows(t *testing.T) {
 	t.Parallel()
 
-	out, err := FlattenFetcherJSON(strings.NewReader(`{"ds":{"t":[]}}`))
+	out, err := FlattenFetcherJSON(strings.NewReader(`{"ds":{"t":[]}}`), 0)
 	require.NoError(t, err)
 
 	data, err := io.ReadAll(out)

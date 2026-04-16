@@ -37,8 +37,15 @@ type fakeObjectStorage struct {
 	uploadErr         error
 	deleteKey         string
 	deleteErr         error
+	downloadKey       string
+	downloadBody      []byte
+	downloadErr       error
+	existsResult      bool
+	existsErr         error
 	uploadCalls       int
 	deleteCalls       int
+	downloadCalls     int
+	existsCalls       int
 }
 
 func (f *fakeObjectStorage) Upload(
@@ -73,8 +80,15 @@ func (f *fakeObjectStorage) UploadWithOptions(
 	return f.Upload(ctx, key, reader, contentType)
 }
 
-func (f *fakeObjectStorage) Download(_ context.Context, _ string) (io.ReadCloser, error) {
-	return io.NopCloser(bytes.NewReader(nil)), nil
+func (f *fakeObjectStorage) Download(_ context.Context, key string) (io.ReadCloser, error) {
+	f.downloadCalls++
+	f.downloadKey = key
+
+	if f.downloadErr != nil {
+		return nil, f.downloadErr
+	}
+
+	return io.NopCloser(bytes.NewReader(f.downloadBody)), nil
 }
 
 func (f *fakeObjectStorage) Delete(_ context.Context, key string) error {
@@ -93,7 +107,9 @@ func (f *fakeObjectStorage) GeneratePresignedURL(
 }
 
 func (f *fakeObjectStorage) Exists(_ context.Context, _ string) (bool, error) {
-	return false, nil
+	f.existsCalls++
+
+	return f.existsResult, f.existsErr
 }
 
 func TestNewArtifactCustodyStore_NilStorage(t *testing.T) {
@@ -479,4 +495,201 @@ func TestDelete_NilReceiver_Sentinel(t *testing.T) {
 		Key: "tenant/fetcher-artifacts/x.json",
 	})
 	require.ErrorIs(t, err, sharedPorts.ErrCustodyStoreFailed)
+}
+
+// TestOpen_HappyPath_ReturnsReader verifies Open streams the stored plaintext
+// back to the caller (AC-F2: bridge worker consumes custody output without
+// re-downloading from Fetcher). Covers bridge_extraction_commands.ingestAndLink's
+// dependency on a functional custody.Open.
+func TestOpen_HappyPath_ReturnsReader(t *testing.T) {
+	t.Parallel()
+
+	payload := []byte(`{"datasources":[]}`)
+	storage := &fakeObjectStorage{downloadBody: payload}
+
+	store, err := NewArtifactCustodyStore(storage)
+	require.NoError(t, err)
+
+	ref := sharedPorts.ArtifactCustodyReference{
+		Key: "tenant-a/fetcher-artifacts/" + uuid.New().String() + ".json",
+	}
+
+	reader, err := store.Open(context.Background(), ref)
+	require.NoError(t, err)
+	require.NotNil(t, reader)
+
+	got, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	require.NoError(t, reader.Close())
+
+	assert.Equal(t, payload, got)
+	assert.Equal(t, 1, storage.downloadCalls)
+	assert.Equal(t, ref.Key, storage.downloadKey)
+}
+
+// TestOpen_NilReceiver_ReturnsSentinel asserts the defensive nil-receiver
+// guard returns a wrapped sentinel rather than panicking. This path is
+// symmetric with Store/Delete nil-receiver guards.
+func TestOpen_NilReceiver_ReturnsSentinel(t *testing.T) {
+	t.Parallel()
+
+	var store *ArtifactCustodyStore
+
+	reader, err := store.Open(context.Background(), sharedPorts.ArtifactCustodyReference{
+		Key: "tenant/fetcher-artifacts/x.json",
+	})
+	require.Nil(t, reader)
+	require.ErrorIs(t, err, sharedPorts.ErrCustodyStoreFailed)
+}
+
+// TestOpen_NilStorage_ReturnsSentinel covers the second branch of the guard:
+// the receiver is non-nil but storage is nil (defense-in-depth against a
+// constructor regression).
+func TestOpen_NilStorage_ReturnsSentinel(t *testing.T) {
+	t.Parallel()
+
+	store := &ArtifactCustodyStore{}
+
+	reader, err := store.Open(context.Background(), sharedPorts.ArtifactCustodyReference{
+		Key: "tenant/fetcher-artifacts/x.json",
+	})
+	require.Nil(t, reader)
+	require.ErrorIs(t, err, sharedPorts.ErrCustodyStoreFailed)
+}
+
+// TestOpen_MissingKey_ReturnsSentinel verifies the key-required guard rejects
+// blank and whitespace-only refs before touching storage. This prevents the
+// adapter from issuing an S3 Download("") which would 404 with a less
+// actionable error.
+func TestOpen_MissingKey_ReturnsSentinel(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		key  string
+	}{
+		{name: "empty key", key: ""},
+		{name: "whitespace only", key: "   "},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			storage := &fakeObjectStorage{}
+			store, err := NewArtifactCustodyStore(storage)
+			require.NoError(t, err)
+
+			reader, err := store.Open(context.Background(), sharedPorts.ArtifactCustodyReference{
+				Key: tt.key,
+			})
+			require.Nil(t, reader)
+			require.ErrorIs(t, err, ErrCustodyRefRequired)
+			assert.Equal(t, 0, storage.downloadCalls, "storage should not be invoked for blank key")
+		})
+	}
+}
+
+// TestOpen_DownloadError_WrapsSentinel verifies a storage-level failure is
+// wrapped with ErrCustodyStoreFailed so worker logging can classify the
+// failure as custody-transient rather than a logic bug.
+func TestOpen_DownloadError_WrapsSentinel(t *testing.T) {
+	t.Parallel()
+
+	storage := &fakeObjectStorage{downloadErr: errors.New("s3 timeout")}
+
+	store, err := NewArtifactCustodyStore(storage)
+	require.NoError(t, err)
+
+	reader, err := store.Open(context.Background(), sharedPorts.ArtifactCustodyReference{
+		Key: "tenant/fetcher-artifacts/x.json",
+	})
+	require.Nil(t, reader)
+	require.ErrorIs(t, err, sharedPorts.ErrCustodyStoreFailed)
+	require.ErrorContains(t, err, "download")
+	require.ErrorContains(t, err, "s3 timeout")
+}
+
+// TestStore_ReplayPath_RehashesPersistedBytes exercises Fix 7: when the
+// custody key already exists, Store performs one extra Download() to
+// recompute SHA-256 and Size from the persisted bytes, so source_metadata
+// downstream of the bridge orchestrator never carries empty digest fields.
+//
+// Pre-fix behavior returned an empty SHA-256 / zero Size on the replay
+// branch; ingestion then propagated empty strings into custody_sha256,
+// breaking audit tooling that uses the digest as a content-identity key.
+func TestStore_ReplayPath_RehashesPersistedBytes(t *testing.T) {
+	t.Parallel()
+
+	persisted := []byte(`{"rows":[{"id":"r1","amount":"1.00"}]}`)
+	expectedSHA := sha256.Sum256(persisted)
+
+	storage := &fakeObjectStorage{
+		existsResult: true,
+		downloadBody: persisted,
+	}
+
+	store, err := NewArtifactCustodyStore(storage)
+	require.NoError(t, err)
+
+	extractionID := uuid.New()
+	tenantID := "tenant-replay"
+
+	// Hand Store DIFFERENT bytes from what's persisted to prove the upload
+	// path was NOT taken on the replay branch (write-once preserves the
+	// original) AND the SHA/Size in the returned reference describes the
+	// PERSISTED bytes, not the input bytes.
+	differentInput := []byte(`{"rows":[{"id":"r2","amount":"99.99"}]}`)
+
+	ref, err := store.Store(context.Background(), sharedPorts.ArtifactCustodyWriteInput{
+		ExtractionID: extractionID,
+		TenantID:     tenantID,
+		Content:      bytes.NewReader(differentInput),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, ref)
+
+	expectedKey := tenantID + "/fetcher-artifacts/" + extractionID.String() + ".json"
+
+	assert.Equal(t, 1, storage.existsCalls, "Exists must be probed exactly once")
+	assert.Equal(t, 0, storage.uploadCalls, "Upload MUST NOT run on replay (write-once)")
+	assert.Equal(t, 1, storage.downloadCalls, "Download MUST run for replay digest recovery")
+	assert.Equal(t, expectedKey, storage.downloadKey)
+
+	assert.Equal(t, expectedKey, ref.Key)
+	assert.Equal(t, URIScheme+"://"+expectedKey, ref.URI)
+	assert.Equal(t, int64(len(persisted)), ref.Size,
+		"replay Size must describe persisted bytes, not input bytes")
+	assert.Equal(t, hex.EncodeToString(expectedSHA[:]), ref.SHA256,
+		"replay SHA256 must describe persisted bytes, not input bytes")
+}
+
+// TestStore_ReplayPath_DownloadFailureWrapsSentinel exercises the error
+// branch in Fix 7's recoverDigest helper: if Download fails on replay,
+// Store wraps the error with ErrCustodyStoreFailed instead of silently
+// returning an empty digest. Treating the recovery failure as a hard
+// error is correct because the audit contract depends on the digest;
+// an empty SHA would cascade silently into source_metadata.
+func TestStore_ReplayPath_DownloadFailureWrapsSentinel(t *testing.T) {
+	t.Parallel()
+
+	storage := &fakeObjectStorage{
+		existsResult: true,
+		downloadErr:  errors.New("s3 transient"),
+	}
+
+	store, err := NewArtifactCustodyStore(storage)
+	require.NoError(t, err)
+
+	ref, err := store.Store(context.Background(), sharedPorts.ArtifactCustodyWriteInput{
+		ExtractionID: uuid.New(),
+		TenantID:     "tenant-replay",
+		Content:      bytes.NewReader([]byte(`{"x":1}`)),
+	})
+	require.Nil(t, ref)
+	require.ErrorIs(t, err, sharedPorts.ErrCustodyStoreFailed)
+	require.ErrorContains(t, err, "replay recovery")
+	require.ErrorContains(t, err, "s3 transient")
 }

@@ -35,4 +35,20 @@ type ExtractionRepository interface {
 	UpdateWithTx(ctx context.Context, tx sharedPorts.Tx, req *entities.ExtractionRequest) error
 	// FindByID retrieves an ExtractionRequest by its internal ID.
 	FindByID(ctx context.Context, id uuid.UUID) (*entities.ExtractionRequest, error)
+	// LinkIfUnlinked atomically sets ingestion_job_id on the extraction row
+	// identified by id, but only when the existing ingestion_job_id is NULL.
+	// Returns sharedPorts.ErrExtractionAlreadyLinked when the row is already
+	// linked; returns ErrExtractionNotFound when no row matches the id.
+	//
+	// Implementations MUST use a single atomic SQL UPDATE with the
+	// ingestion_job_id IS NULL predicate so concurrent callers cannot both
+	// succeed. See internal/shared/adapters/cross/fetcher_bridge_adapters.go
+	// for the canonical consumer.
+	LinkIfUnlinked(ctx context.Context, id, ingestionJobID uuid.UUID) error
+	// FindEligibleForBridge returns up to limit completed extractions that
+	// have no ingestion_job_id yet. Results are ordered by updated_at (oldest
+	// first) to drain the backlog fairly. The query runs inside a
+	// tenant-scoped transaction so it only sees rows for the tenant resolved
+	// from ctx (plus the default tenant when auth is disabled).
+	FindEligibleForBridge(ctx context.Context, limit int) ([]*entities.ExtractionRequest, error)
 }

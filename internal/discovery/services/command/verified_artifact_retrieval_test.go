@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -124,6 +125,13 @@ func (s *fakeCustodyStore) Store(
 	}
 
 	return s.ref, nil
+}
+
+func (s *fakeCustodyStore) Open(
+	_ context.Context,
+	_ sharedPorts.ArtifactCustodyReference,
+) (io.ReadCloser, error) {
+	return io.NopCloser(bytes.NewReader(s.lastPlaintext)), nil
 }
 
 func (s *fakeCustodyStore) Delete(
@@ -549,9 +557,13 @@ func (v *plaintextVerifier) VerifyAndDecrypt(
 
 // TestRetrieveAndCustodyVerifiedArtifact_PlaintextReadFailure_Transient
 // asserts the materialisation branch: if reading the verifier's plaintext
-// Reader fails, we surface ErrArtifactRetrievalFailed so the bridge worker
-// treats the failure as transient rather than corrupt. AC-O2 relies on this
-// distinction: a failed read is "network blip", not "tampered payload".
+// Reader fails, we surface ErrCustodyStoreFailed so the bridge worker
+// treats the failure as transient. After the T-003 P1 hardening (no
+// orchestrator-level ReadAll), plaintext read errors surface through
+// custody.Store's upload teeing path, not through the orchestrator's
+// own buffer. The transient-class semantics are preserved — only the
+// wrapping sentinel moved from ErrArtifactRetrievalFailed to
+// ErrCustodyStoreFailed.
 func TestRetrieveAndCustodyVerifiedArtifact_PlaintextReadFailure_Transient(t *testing.T) {
 	t.Parallel()
 
@@ -566,7 +578,13 @@ func TestRetrieveAndCustodyVerifiedArtifact_PlaintextReadFailure_Transient(t *te
 	}
 	readErr := errors.New("plaintext stream snapped")
 	verifier := &plaintextVerifier{reader: &failingPlaintextReader{err: readErr}}
-	store := &fakeCustodyStore{}
+	// Stage a custody store that returns the read error wrapped as
+	// ErrCustodyStoreFailed — this simulates the new path where the
+	// ReadAll happens inside the custody.Upload tee, not in the
+	// orchestrator.
+	store := &fakeCustodyStore{
+		err: fmt.Errorf("%w: upload: %w", sharedPorts.ErrCustodyStoreFailed, readErr),
+	}
 
 	orchestrator, err := NewVerifiedArtifactRetrievalOrchestrator(gateway, verifier, store)
 	require.NoError(t, err)
@@ -575,9 +593,9 @@ func TestRetrieveAndCustodyVerifiedArtifact_PlaintextReadFailure_Transient(t *te
 		context.Background(),
 		VerifiedArtifactRetrievalInput{Descriptor: descriptor},
 	)
-	require.ErrorIs(t, err, sharedPorts.ErrArtifactRetrievalFailed)
+	require.ErrorIs(t, err, sharedPorts.ErrCustodyStoreFailed)
 	require.ErrorIs(t, err, readErr, "root cause preserved for diagnosis")
-	assert.Equal(t, 0, store.storeCalls, "no custody write when plaintext read fails")
+	assert.Equal(t, 1, store.storeCalls, "custody write is attempted with the streaming plaintext")
 }
 
 // TestRetrieveAndCustodyVerifiedArtifact_NilCustodyReference_Wrapped

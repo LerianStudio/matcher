@@ -101,6 +101,14 @@ func (m *stubExtractionRepo) FindByID(ctx context.Context, id uuid.UUID) (*entit
 	return nil, sql.ErrNoRows
 }
 
+func (m *stubExtractionRepo) LinkIfUnlinked(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
+	return nil
+}
+
+func (m *stubExtractionRepo) FindEligibleForBridge(_ context.Context, _ int) ([]*entities.ExtractionRequest, error) {
+	return nil, nil
+}
+
 // --- NewExtractionPoller tests ---
 
 func TestNewExtractionPoller_NilFetcherClient(t *testing.T) {

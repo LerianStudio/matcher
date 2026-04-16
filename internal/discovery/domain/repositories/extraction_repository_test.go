@@ -105,6 +105,28 @@ func (m *mockExtractionRepository) FindByID(
 	return nil, errExtractionNotFound
 }
 
+func (m *mockExtractionRepository) LinkIfUnlinked(
+	_ context.Context,
+	id uuid.UUID,
+	ingestionJobID uuid.UUID,
+) error {
+	req, ok := m.extractions[id]
+	if !ok {
+		return errExtractionNotFound
+	}
+
+	req.IngestionJobID = ingestionJobID
+
+	return nil
+}
+
+func (m *mockExtractionRepository) FindEligibleForBridge(
+	_ context.Context,
+	_ int,
+) ([]*entities.ExtractionRequest, error) {
+	return nil, nil
+}
+
 func TestMockExtractionRepositoryOperations(t *testing.T) {
 	t.Parallel()
 

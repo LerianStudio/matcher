@@ -218,6 +218,14 @@ func (r *mockExtractionRepo) FindByID(_ context.Context, _ uuid.UUID) (*entities
 	return r.findByIDReq, nil
 }
 
+func (r *mockExtractionRepo) LinkIfUnlinked(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
+	return nil
+}
+
+func (r *mockExtractionRepo) FindEligibleForBridge(_ context.Context, _ int) ([]*entities.ExtractionRequest, error) {
+	return nil, nil
+}
+
 // --- Test Helpers ---
 
 type handlerFixture struct {

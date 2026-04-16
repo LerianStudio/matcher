@@ -273,6 +273,60 @@ func matcherKeyDefsFetcherRuntime() []domain.KeyDef {
 			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactFull,
 		},
+		{
+			// max_extraction_bytes caps the size FlattenFetcherJSON will
+			// materialise. T-003 P2-T001 hardening: guards against
+			// OOM-by-giant-payload when the bridge worker wires a live
+			// Fetcher HTTP body into the flattener. Bootstrap-only because
+			// changing it mid-flight while a long-running flatten is in
+			// progress would create ambiguous behaviour.
+			//
+			// Bounded validator (Fix 9): plain validatePositiveInt accepted
+			// MaxInt64 and defeated the DoS guard. Bounds chosen so the
+			// floor (1 MiB) keeps the guard meaningful and the ceiling
+			// (16 GiB) caps the worst-case malicious payload at well under
+			// any realistic pod memory budget.
+			Key:              "fetcher.max_extraction_bytes",
+			Kind:             domain.KindConfig,
+			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+			DefaultValue:     int64(2 << 30),
+			ValueType:        domain.ValueTypeInt,
+			Validator:        validateFetcherMaxExtractionBytes,
+			ApplyBehavior:    domain.ApplyBootstrapOnly,
+			MutableAtRuntime: false,
+			Description:      "Maximum Fetcher extraction payload size in bytes (DoS guard, bounds [1 MiB, 16 GiB])",
+			Group:            "fetcher",
+			Component:        domain.ComponentNone,
+			RedactPolicy:     domain.RedactNone,
+		},
+		{
+			Key:              "fetcher.bridge_interval_sec",
+			Kind:             domain.KindConfig,
+			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+			DefaultValue:     30,
+			ValueType:        domain.ValueTypeInt,
+			Validator:        validateBridgeIntervalSec,
+			ApplyBehavior:    domain.ApplyWorkerReconcile,
+			MutableAtRuntime: true,
+			Description:      "Bridge worker poll interval in seconds (bounds [5, 3600])",
+			Group:            "fetcher",
+			Component:        domain.ComponentNone,
+			RedactPolicy:     domain.RedactNone,
+		},
+		{
+			Key:              "fetcher.bridge_batch_size",
+			Kind:             domain.KindConfig,
+			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+			DefaultValue:     50,
+			ValueType:        domain.ValueTypeInt,
+			Validator:        validateBridgeBatchSize,
+			ApplyBehavior:    domain.ApplyWorkerReconcile,
+			MutableAtRuntime: true,
+			Description:      "Bridge worker per-tenant batch size (bounds [1, 10000])",
+			Group:            "fetcher",
+			Component:        domain.ComponentNone,
+			RedactPolicy:     domain.RedactNone,
+		},
 	}
 }
 

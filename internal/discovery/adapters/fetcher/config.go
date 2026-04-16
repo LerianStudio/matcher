@@ -111,6 +111,36 @@ func (cfg HTTPClientConfig) Validate() error {
 	return nil
 }
 
+// BuildArtifactTransport creates an http.Transport with SSRF protection for
+// artifact download clients. It reuses the same DialContext guard as the main
+// fetcher HTTP client but tunes connection-pooling for bursty concurrent
+// artifact downloads under T-003 bridge worker load:
+//   - MaxIdleConnsPerHost is raised to 10 so a burst of concurrent workers
+//     hitting Fetcher does not starve the default-2 idle pool.
+//   - TLSHandshakeTimeout is explicitly bounded so stuck TLS handshakes fail
+//     inside the per-request deadline instead of the client-level timeout.
+//   - ResponseHeaderTimeout bounds the wait for the first byte from Fetcher
+//     separately from the total-request timeout, so slow server-side handles
+//     surface as a distinct failure class.
+//
+// Exported (not method-private) because the bootstrap artifact HTTP client in
+// init_fetcher_bridge.go must share this guard without importing internal
+// method scope.
+func BuildArtifactTransport(cfg HTTPClientConfig) *http.Transport {
+	t := cfg.buildTransport()
+	t.MaxIdleConnsPerHost = artifactMaxIdleConnsPerHost
+	t.TLSHandshakeTimeout = artifactTLSHandshakeTimeout
+	t.ResponseHeaderTimeout = artifactResponseHeaderTimeout
+
+	return t
+}
+
+const (
+	artifactMaxIdleConnsPerHost   = 10
+	artifactTLSHandshakeTimeout   = 10 * time.Second
+	artifactResponseHeaderTimeout = 30 * time.Second
+)
+
 // buildTransport creates an http.Transport with SSRF protection.
 func (cfg HTTPClientConfig) buildTransport() *http.Transport {
 	dialer := &net.Dialer{Timeout: cfg.RequestTimeout}

@@ -18,6 +18,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/discovery/adapters/fetcher"
 	discoveryExtractionRepo "github.com/LerianStudio/matcher/internal/discovery/adapters/postgres/extraction"
 	discoveryCommand "github.com/LerianStudio/matcher/internal/discovery/services/command"
+	discoveryWorker "github.com/LerianStudio/matcher/internal/discovery/services/worker"
 	ingestionCommand "github.com/LerianStudio/matcher/internal/ingestion/services/command"
 	crossAdapters "github.com/LerianStudio/matcher/internal/shared/adapters/cross"
 	"github.com/LerianStudio/matcher/internal/shared/adapters/custody"
@@ -47,6 +48,20 @@ var ErrFetcherBridgeMasterKeyRequired = errors.New(
 // log pipeline leaking key bytes.
 var ErrFetcherBridgeMasterKeyInvalid = errors.New(
 	"fetcher bridge APP_ENC_KEY is invalid",
+)
+
+// ErrFetcherBridgeNotOperational indicates the bridge was requested
+// (FETCHER_ENABLED=true and bridge worker slot registered) but one of
+// the preconditions for live operation failed: verified-artifact
+// orchestrator is nil (APP_ENC_KEY misconfigured), or object storage
+// is not reachable.
+//
+// T-003 P4 hardening: soft-disable at T-002 preserved the non-bridge
+// path, but T-003 bridge worker MUST refuse to start without crypto
+// and object storage. This sentinel lets bootstrap return a clear
+// error instead of logging a warning and silently continuing.
+var ErrFetcherBridgeNotOperational = errors.New(
+	"fetcher bridge cannot start: verified-artifact pipeline unavailable",
 )
 
 // artifactRetrievalTimeoutPadSec is the additional allowance we apply on
@@ -214,7 +229,7 @@ func wireVerifiedArtifactPipeline(
 		return fmt.Errorf("fetcher bridge: %w", keyErr)
 	}
 
-	if deps.ObjectStorage == nil {
+	if deps.ObjectStorage == nil || !objectStorageAvailable(ctx, deps.ObjectStorage) {
 		deps.Logger.Log(
 			ctx,
 			libLog.LevelWarn,
@@ -303,15 +318,202 @@ func decodeMasterKey(raw string) ([]byte, error) {
 // misconfiguration that emits a 3xx surfaces as a retrieval failure
 // rather than silently following a redirect to an attacker-controlled
 // host.
+//
+// T-003 P2 hardening: the transport reuses the SSRF-guarded DialContext
+// from the shared fetcher HTTP client config so artifact downloads
+// cannot bypass the private-IP guard. Without this, Fetcher could
+// redirect matcher into pulling from 169.254.169.254/latest/meta-data/
+// or any internal service. We also bump MaxIdleConnsPerHost so bursty
+// concurrent bridge work doesn't starve the connection pool.
 func newArtifactHTTPClient(cfg *Config) *http.Client {
 	timeout := time.Duration(cfg.Fetcher.RequestTimeoutSec+artifactRetrievalTimeoutPadSec) * time.Second
 
+	// Reuse the SSRF-guarded transport from the fetcher HTTP client so
+	// artifact downloads inherit the same private-IP protection.
+	clientCfg := fetcher.DefaultConfig()
+	clientCfg.BaseURL = cfg.Fetcher.URL
+	clientCfg.AllowPrivateIPs = cfg.Fetcher.AllowPrivateIPs
+	clientCfg.RequestTimeout = timeout
+
+	transport := fetcher.BuildArtifactTransport(clientCfg)
+
 	return &http.Client{
-		Timeout: timeout,
+		Timeout:   timeout,
+		Transport: transport,
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
 	}
+}
+
+// objectStorageAvailable runs a trial Exists call against a sentinel key to
+// verify that the dynamic object storage wrapper has a usable delegate at
+// runtime. The dynamicObjectStorageClient always returns a non-nil pointer,
+// so the bare `deps.ObjectStorage == nil` check never fires. This probe
+// surfaces the "configured but unreachable" state at bootstrap time
+// instead of deferring the discovery to the first real custody write.
+//
+// A timeout bounds the probe so a transient storage outage at startup does
+// not block the whole service from coming up.
+//
+// T-003 P5 hardening.
+func objectStorageAvailable(ctx context.Context, client sharedPorts.ObjectStorageClient) bool {
+	if client == nil {
+		return false
+	}
+
+	probeCtx, cancel := context.WithTimeout(ctx, objectStorageProbeTimeout)
+	defer cancel()
+
+	// A non-existent sentinel key is a cheap probe: storage backends
+	// respond with a quick "does not exist" and do NOT fail unless
+	// credentials/connectivity are broken.
+	_, err := client.Exists(probeCtx, objectStorageProbeKey)
+
+	return err == nil
+}
+
+const (
+	objectStorageProbeKey     = "matcher/bootstrap/probe.keep"
+	objectStorageProbeTimeout = 5 * time.Second
+)
+
+// EnsureBridgeOperational asserts that all prerequisites for running the
+// bridge worker are satisfied. Called from bootstrap when FETCHER_ENABLED is
+// true and the bridge worker slot is going to be registered. Returns
+// ErrFetcherBridgeNotOperational wrapped when any precondition is missing so
+// the operator sees a specific, actionable error instead of a generic
+// bootstrap failure.
+//
+// T-003 P4 hardening.
+func EnsureBridgeOperational(bundle *FetcherBridgeAdapters) error {
+	if bundle == nil {
+		return fmt.Errorf("%w: bridge adapter bundle is nil", ErrFetcherBridgeNotOperational)
+	}
+
+	if bundle.Intake == nil {
+		return fmt.Errorf("%w: intake adapter is not wired", ErrFetcherBridgeNotOperational)
+	}
+
+	if bundle.LinkWrite == nil {
+		return fmt.Errorf("%w: lifecycle link writer is not wired", ErrFetcherBridgeNotOperational)
+	}
+
+	if bundle.VerifiedArtifactOrchestrator == nil {
+		return fmt.Errorf(
+			"%w: verified-artifact orchestrator is nil (APP_ENC_KEY unset or invalid, or object storage unavailable)",
+			ErrFetcherBridgeNotOperational,
+		)
+	}
+
+	return nil
+}
+
+// initFetcherBridgeWorker constructs the T-003 bridge worker when all
+// preconditions are satisfied. Returns (nil, nil) when the bridge should
+// not run (Fetcher disabled, bundle incomplete, no source resolver). The
+// soft-disabled branch logs a warning so operators can see why the bridge
+// is idle.
+//
+// T-003 P4/P5 hardening: when Fetcher is explicitly enabled but the
+// verified-artifact orchestrator is nil, this function returns an error
+// to refuse starting the bridge worker without crypto. The caller
+// propagates that as a bootstrap failure.
+func initFetcherBridgeWorker(
+	ctx context.Context,
+	cfg *Config,
+	configGetter func() *Config,
+	provider sharedPorts.InfrastructureProvider,
+	extractionRepo *discoveryExtractionRepo.Repository,
+	tenantLister sharedPorts.TenantLister,
+	bundle *FetcherBridgeAdapters,
+	logger libLog.Logger,
+) (*discoveryWorker.BridgeWorker, error) {
+	if cfg == nil || !cfg.Fetcher.Enabled {
+		return nil, nil
+	}
+
+	if bundle == nil {
+		logger.Log(ctx, libLog.LevelWarn,
+			"fetcher bridge worker not wired: bridge adapter bundle is nil")
+
+		return nil, nil
+	}
+
+	if err := EnsureBridgeOperational(bundle); err != nil {
+		// Fetcher is enabled but bundle is incomplete — this is a hard
+		// failure so operators see the misconfiguration at startup.
+		return nil, err
+	}
+
+	if provider == nil {
+		logger.Log(ctx, libLog.LevelWarn,
+			"fetcher bridge worker not wired: infrastructure provider unavailable")
+
+		return nil, nil
+	}
+
+	if extractionRepo == nil {
+		logger.Log(ctx, libLog.LevelWarn,
+			"fetcher bridge worker not wired: extraction repository unavailable")
+
+		return nil, nil
+	}
+
+	sourceResolver, err := crossAdapters.NewBridgeSourceResolverAdapter(provider)
+	if err != nil {
+		return nil, fmt.Errorf("create bridge source resolver: %w", err)
+	}
+
+	orchestratorCfg := discoveryCommand.BridgeOrchestratorConfig{
+		FetcherBaseURLGetter: func() string {
+			if configGetter == nil {
+				return cfg.Fetcher.URL
+			}
+
+			if currentCfg := configGetter(); currentCfg != nil {
+				return currentCfg.Fetcher.URL
+			}
+
+			return cfg.Fetcher.URL
+		},
+		MaxExtractionBytes: cfg.FetcherMaxExtractionBytes(),
+		Flatten:            fetcher.FlattenFetcherJSON,
+	}
+
+	orchestrator, err := discoveryCommand.NewBridgeExtractionOrchestrator(
+		extractionRepo,
+		bundle.VerifiedArtifactOrchestrator,
+		bundle.ArtifactCustody,
+		bundle.Intake,
+		bundle.LinkWrite,
+		sourceResolver,
+		orchestratorCfg,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create bridge orchestrator: %w", err)
+	}
+
+	worker, err := discoveryWorker.NewBridgeWorker(
+		orchestrator,
+		extractionRepo,
+		tenantLister,
+		provider,
+		discoveryWorker.BridgeWorkerConfig{
+			Interval:  cfg.FetcherBridgeInterval(),
+			BatchSize: cfg.FetcherBridgeBatchSize(),
+		},
+		logger,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create bridge worker: %w", err)
+	}
+
+	logger.Log(ctx, libLog.LevelInfo,
+		fmt.Sprintf("fetcher bridge worker wired (interval=%s batch=%d)",
+			cfg.FetcherBridgeInterval(), cfg.FetcherBridgeBatchSize()))
+
+	return worker, nil
 }
 
 // describeBridgeWiring produces a single log line summarising which

@@ -244,5 +244,12 @@ type ArtifactCustodyStore interface {
 		input ArtifactCustodyWriteInput,
 	) (*ArtifactCustodyReference, error)
 
+	// Open returns an io.ReadCloser that streams the custody plaintext
+	// back. Callers MUST close it exactly once. The bridge worker uses
+	// Open to replay the custody copy into the ingestion pipeline
+	// without re-downloading from Fetcher. Returns ErrCustodyStoreFailed
+	// wrapped when the object is unreachable.
+	Open(ctx context.Context, ref ArtifactCustodyReference) (io.ReadCloser, error)
+
 	Delete(ctx context.Context, ref ArtifactCustodyReference) error
 }

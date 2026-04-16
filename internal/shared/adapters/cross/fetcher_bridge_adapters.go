@@ -116,9 +116,23 @@ func NewExtractionLifecycleLinkWriterAdapter(
 }
 
 // LinkExtractionToIngestion records ingestionJobID on the extraction
-// identified by extractionID. If the extraction already has an ingestion job
-// id (i.e. the bridge is being replayed), the call is treated as an
-// idempotency conflict and returns ErrExtractionAlreadyLinked unmodified.
+// identified by extractionID using an atomic conditional UPDATE so
+// concurrent bridge invocations cannot both succeed. If the extraction
+// already has an ingestion job id (i.e. the bridge is being replayed),
+// the call is treated as an idempotency conflict and returns
+// ErrExtractionAlreadyLinked unmodified.
+//
+// Concurrency contract (T-003 P1 hardening):
+//   - Under simultaneous link attempts for the same extraction, exactly
+//     one UPDATE matches ingestion_job_id IS NULL and succeeds; the rest
+//     observe zero rows-affected and get ErrExtractionAlreadyLinked.
+//   - A state-machine domain method (LinkToIngestion) is consulted to
+//     validate the Status invariant before we touch the DB: linking a
+//     FAILED or CANCELLED extraction is a programmer error, not a race.
+//
+// This replaces the earlier read-check-write implementation that lost
+// concurrent writers silently (TOCTOU race flagged by 6 reviewers in
+// T-001 Gate 8).
 func (adapter *ExtractionLifecycleLinkWriterAdapter) LinkExtractionToIngestion(
 	ctx context.Context,
 	extractionID uuid.UUID,
@@ -150,6 +164,11 @@ func (adapter *ExtractionLifecycleLinkWriterAdapter) LinkExtractionToIngestion(
 		return err
 	}
 
+	// Validate domain invariants via the state-machine method BEFORE the
+	// atomic SQL so the FAILED/CANCELLED case is rejected even when the
+	// row is already NULL-linked. We load the extraction here purely to
+	// run the validation; the actual write uses LinkIfUnlinked which
+	// does not depend on this in-memory copy.
 	extraction, err := adapter.repo.FindByID(ctx, extractionID)
 	if err != nil {
 		if errors.Is(err, discoveryRepositories.ErrExtractionNotFound) {
@@ -174,19 +193,26 @@ func (adapter *ExtractionLifecycleLinkWriterAdapter) LinkExtractionToIngestion(
 		return discoveryRepositories.ErrExtractionNotFound
 	}
 
-	if extraction.IngestionJobID != uuid.Nil {
-		libOpentelemetry.HandleSpanBusinessErrorEvent(
-			span,
-			"extraction already linked",
-			sharedPorts.ErrExtractionAlreadyLinked,
-		)
+	if err := extraction.LinkToIngestion(ingestionJobID); err != nil {
+		// A domain-level validation failure (FAILED/CANCELLED, wrong state,
+		// or cross-job collision wrapped as ErrExtractionAlreadyLinked) is
+		// surfaced verbatim so callers can errors.Is on the canonical
+		// sentinel. Same-id replays are NOT rejected by LinkToIngestion
+		// (the domain treats them as no-ops), so any error here is a real
+		// invariant violation and must propagate.
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "domain reject link", err)
 
-		return sharedPorts.ErrExtractionAlreadyLinked
+		return err //nolint:wrapcheck // Domain sentinel must propagate verbatim so callers can errors.Is.
 	}
 
-	extraction.IngestionJobID = ingestionJobID
+	if err := adapter.repo.LinkIfUnlinked(ctx, extractionID, ingestionJobID); err != nil {
+		if errors.Is(err, sharedPorts.ErrExtractionAlreadyLinked) ||
+			errors.Is(err, discoveryRepositories.ErrExtractionNotFound) {
+			libOpentelemetry.HandleSpanBusinessErrorEvent(span, "atomic link rejected", err)
 
-	if err := adapter.repo.Update(ctx, extraction); err != nil {
+			return err
+		}
+
 		wrappedErr := fmt.Errorf("persist extraction link: %w", err)
 		libOpentelemetry.HandleSpanError(span, "persist extraction link failed", wrappedErr)
 

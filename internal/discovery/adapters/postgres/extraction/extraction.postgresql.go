@@ -15,6 +15,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
+	vo "github.com/LerianStudio/matcher/internal/discovery/domain/value_objects"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 )
@@ -420,6 +421,171 @@ func (repo *Repository) FindByID(ctx context.Context, id uuid.UUID) (*entities.E
 		wrappedErr := fmt.Errorf("find extraction request by id: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to find extraction request by id", wrappedErr)
 		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to find extraction request by id")
+
+		return nil, wrappedErr
+	}
+
+	return result, nil
+}
+
+// LinkIfUnlinked atomically sets ingestion_job_id on the extraction row when
+// the current value is NULL. Returns sharedPorts.ErrExtractionAlreadyLinked
+// when the row exists but already carries an ingestion_job_id; returns
+// repositories.ErrExtractionNotFound when no row matches id.
+//
+// The UPDATE runs a single predicate — id = $3 AND ingestion_job_id IS NULL —
+// so concurrent bridge invocations cannot both succeed. RowsAffected
+// discriminates "not found" from "already linked" via a tiny follow-up SELECT
+// that fires only on the zero-rows-affected path to keep the hot path
+// transaction-local.
+func (repo *Repository) LinkIfUnlinked(
+	ctx context.Context,
+	id uuid.UUID,
+	ingestionJobID uuid.UUID,
+) error {
+	if repo == nil || repo.provider == nil {
+		return ErrRepoNotInitialized
+	}
+
+	if id == uuid.Nil {
+		return ports.ErrLinkExtractionIDRequired
+	}
+
+	if ingestionJobID == uuid.Nil {
+		return ports.ErrLinkIngestionJobIDRequired
+	}
+
+	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
+
+	ctx, span := tracer.Start(ctx, "postgres.extraction.link_if_unlinked")
+	defer span.End()
+
+	_, err := pgcommon.WithTenantTxProvider(ctx, repo.provider, func(tx *sql.Tx) (bool, error) {
+		updatedAt := time.Now().UTC()
+
+		result, execErr := tx.ExecContext(ctx,
+			`UPDATE `+tableName+`
+			SET ingestion_job_id = $1, updated_at = $2
+			WHERE id = $3 AND ingestion_job_id IS NULL`,
+			ingestionJobID,
+			updatedAt,
+			id,
+		)
+		if execErr != nil {
+			return false, fmt.Errorf("atomic link extraction: %w", execErr)
+		}
+
+		rowsAffected, raErr := result.RowsAffected()
+		if raErr != nil {
+			return false, fmt.Errorf("atomic link extraction rows affected: %w", raErr)
+		}
+
+		if rowsAffected != 0 {
+			return true, nil
+		}
+
+		// Zero rows affected means either the row does not exist or it is
+		// already linked. Differentiate with a narrow probe so callers get a
+		// precise sentinel.
+		var hasIngestion sql.NullBool
+
+		probeErr := tx.QueryRowContext(ctx,
+			`SELECT ingestion_job_id IS NOT NULL FROM `+tableName+` WHERE id = $1`,
+			id,
+		).Scan(&hasIngestion)
+		if errors.Is(probeErr, sql.ErrNoRows) {
+			return false, repositories.ErrExtractionNotFound
+		}
+
+		if probeErr != nil {
+			return false, fmt.Errorf("atomic link extraction probe: %w", probeErr)
+		}
+
+		if hasIngestion.Valid && hasIngestion.Bool {
+			return false, ports.ErrExtractionAlreadyLinked
+		}
+
+		// Row exists and is NULL but the UPDATE still matched zero rows — this
+		// should be impossible short of a tenant-schema misconfiguration. Surface
+		// it as a conflict so the caller can retry in a new cycle.
+		return false, repositories.ErrExtractionConflict
+	})
+	if err != nil {
+		// Pass through the domain/port sentinels untouched so callers can
+		// errors.Is on them. Only wrap genuinely unexpected errors.
+		if errors.Is(err, repositories.ErrExtractionNotFound) ||
+			errors.Is(err, ports.ErrExtractionAlreadyLinked) ||
+			errors.Is(err, repositories.ErrExtractionConflict) ||
+			errors.Is(err, ports.ErrLinkExtractionIDRequired) ||
+			errors.Is(err, ports.ErrLinkIngestionJobIDRequired) {
+			return err
+		}
+
+		wrappedErr := fmt.Errorf("link extraction if unlinked: %w", err)
+		libOpentelemetry.HandleSpanError(span, "atomic link failed", wrappedErr)
+		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "atomic link failed")
+
+		return wrappedErr
+	}
+
+	return nil
+}
+
+// FindEligibleForBridge returns up to limit COMPLETE extractions with
+// ingestion_job_id IS NULL, oldest first. Ordering by updated_at keeps the
+// backlog drain fair across tenants and avoids starving long-idle rows.
+func (repo *Repository) FindEligibleForBridge(
+	ctx context.Context,
+	limit int,
+) ([]*entities.ExtractionRequest, error) {
+	if repo == nil || repo.provider == nil {
+		return nil, ErrRepoNotInitialized
+	}
+
+	if limit <= 0 {
+		return nil, nil
+	}
+
+	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
+
+	ctx, span := tracer.Start(ctx, "postgres.extraction.find_eligible_for_bridge")
+	defer span.End()
+
+	result, err := pgcommon.WithTenantTxProvider(ctx, repo.provider, func(tx *sql.Tx) ([]*entities.ExtractionRequest, error) {
+		rows, queryErr := tx.QueryContext(ctx,
+			`SELECT `+allColumns+` FROM `+tableName+`
+			WHERE status = $1 AND ingestion_job_id IS NULL
+			ORDER BY updated_at ASC
+			LIMIT $2`,
+			string(vo.ExtractionStatusComplete),
+			limit,
+		)
+		if queryErr != nil {
+			return nil, fmt.Errorf("query eligible extractions: %w", queryErr)
+		}
+		defer rows.Close()
+
+		extractions := make([]*entities.ExtractionRequest, 0, limit)
+
+		for rows.Next() {
+			extraction, scanErr := scanExtraction(rows)
+			if scanErr != nil {
+				return nil, fmt.Errorf("scan eligible extraction: %w", scanErr)
+			}
+
+			extractions = append(extractions, extraction)
+		}
+
+		if iterErr := rows.Err(); iterErr != nil {
+			return nil, fmt.Errorf("iterate eligible extractions: %w", iterErr)
+		}
+
+		return extractions, nil
+	})
+	if err != nil {
+		wrappedErr := fmt.Errorf("find eligible extractions: %w", err)
+		libOpentelemetry.HandleSpanError(span, "find eligible extractions failed", wrappedErr)
+		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "find eligible extractions failed")
 
 		return nil, wrappedErr
 	}

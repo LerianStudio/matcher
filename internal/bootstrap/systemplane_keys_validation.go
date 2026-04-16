@@ -114,6 +114,77 @@ func validatePresignExpirySeconds(value any) error {
 	return validateBoundedPositiveInt(value, maxPresignExpirySec, "presign expiry seconds")
 }
 
+// Bounds for the Fetcher bridge knobs (Fix 9).
+//
+// max_extraction_bytes: floor 1 MiB keeps the DoS guard meaningful (anything
+// smaller would block legitimate Fetcher payloads). Ceiling 16 GiB is the
+// largest realistic working-set for a matcher pod under typical k8s memory
+// limits — anything bigger almost certainly indicates misconfiguration.
+//
+// bridge_interval_sec: floor 5 s keeps the worker from hammering the
+// extraction_requests table on every degenerate cycle. Ceiling 1 h
+// preserves backstop responsiveness for newly-completed extractions.
+//
+// bridge_batch_size: floor 1 (zero would disable the worker silently).
+// Ceiling 10 000 keeps per-cycle worst-case latency bounded; operators
+// needing more drain capacity should shorten the interval instead.
+const (
+	minFetcherMaxExtractionBytes int64 = 1 << 20        // 1 MiB
+	maxFetcherMaxExtractionBytes int64 = 16 * (1 << 30) // 16 GiB
+	minBridgeIntervalSec         int64 = 5
+	maxBridgeIntervalSec         int64 = 3600
+	minBridgeBatchSize           int64 = 1
+	maxBridgeBatchSize           int64 = 10000
+)
+
+// validateBoundedRangeInt rejects values outside [minValue, maxValue].
+// Mirrors validateBoundedPositiveInt but with a configurable lower bound
+// for cases where a true positive integer is too permissive (e.g. a
+// 1-second poll interval would melt the database).
+func validateBoundedRangeInt(value any, minValue, maxValue int64, label string) error {
+	intVal, ok := toInt(value)
+	if !ok {
+		return fmt.Errorf("expected integer value: %w", domain.ErrValueInvalid)
+	}
+
+	if intVal < minValue {
+		return fmt.Errorf("%s must be at least %d, got %d: %w", label, minValue, intVal, domain.ErrValueInvalid)
+	}
+
+	if intVal > maxValue {
+		return fmt.Errorf("%s must not exceed %d, got %d: %w", label, maxValue, intVal, domain.ErrValueInvalid)
+	}
+
+	return nil
+}
+
+func validateFetcherMaxExtractionBytes(value any) error {
+	return validateBoundedRangeInt(
+		value,
+		minFetcherMaxExtractionBytes,
+		maxFetcherMaxExtractionBytes,
+		"fetcher max extraction bytes",
+	)
+}
+
+func validateBridgeIntervalSec(value any) error {
+	return validateBoundedRangeInt(
+		value,
+		minBridgeIntervalSec,
+		maxBridgeIntervalSec,
+		"fetcher bridge interval seconds",
+	)
+}
+
+func validateBridgeBatchSize(value any) error {
+	return validateBoundedRangeInt(
+		value,
+		minBridgeBatchSize,
+		maxBridgeBatchSize,
+		"fetcher bridge batch size",
+	)
+}
+
 func validateDedupeTTLSeconds(value any) error {
 	intVal, ok := toInt(value)
 	if !ok {

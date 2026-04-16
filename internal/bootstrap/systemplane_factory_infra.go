@@ -484,6 +484,34 @@ func snapInt(snap domain.Snapshot, key string, fallback int) int {
 	}
 }
 
+// snapInt64 extracts an int64 from the snapshot for values that may exceed
+// int on 32-bit platforms (e.g. byte-size caps that can legitimately be
+// multi-GB). Mirrors snapInt but preserves full width.
+func snapInt64(snap domain.Snapshot, key string, fallback int64) int64 {
+	v, ok := resolveSnapshotConfigValue(snap, key)
+	if !ok {
+		return fallback
+	}
+
+	switch val := v.(type) {
+	case int:
+		return int64(val)
+	case int64:
+		return val
+	case float64:
+		return int64(val)
+	case string:
+		n, err := strconv.ParseInt(val, 10, 64)
+		if err != nil {
+			return fallback
+		}
+
+		return n
+	default:
+		return fallback
+	}
+}
+
 // snapBool extracts a bool from the snapshot, handling string representations.
 func snapBool(snap domain.Snapshot, key string, fallback bool) bool {
 	v, ok := resolveSnapshotConfigValue(snap, key)

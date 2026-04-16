@@ -226,6 +226,14 @@ func (m *mockExtractionRepo) FindByID(ctx context.Context, id uuid.UUID) (*entit
 	return m.findByIDReq, m.findByIDErr
 }
 
+func (m *mockExtractionRepo) LinkIfUnlinked(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
+	return nil
+}
+
+func (m *mockExtractionRepo) FindEligibleForBridge(_ context.Context, _ int) ([]*entities.ExtractionRequest, error) {
+	return nil, nil
+}
+
 // --- Tests ---
 
 func TestSentinelErrors(t *testing.T) {

@@ -161,6 +161,9 @@ func configFromSnapshot(snap domain.Snapshot) *Config {
 	cfg.Fetcher.SchemaCacheTTLSec = snapInt(snap, "fetcher.schema_cache_ttl_sec", defaultKeyFetcherSchemaCacheTTL)
 	cfg.Fetcher.ExtractionPollSec = snapInt(snap, "fetcher.extraction_poll_sec", defaultFetcherExtractionPoll)
 	cfg.Fetcher.ExtractionTimeoutSec = snapInt(snap, "fetcher.extraction_timeout_sec", defaultFetcherExtractionTO)
+	cfg.Fetcher.MaxExtractionBytes = snapInt64(snap, "fetcher.max_extraction_bytes", int64(2<<30))
+	cfg.Fetcher.BridgeIntervalSec = snapInt(snap, "fetcher.bridge_interval_sec", 30)
+	cfg.Fetcher.BridgeBatchSize = snapInt(snap, "fetcher.bridge_batch_size", 50)
 
 	// M2M.
 	cfg.M2M.M2MTargetService = snapString(snap, "m2m.m2m_target_service", defaultM2MTargetService)

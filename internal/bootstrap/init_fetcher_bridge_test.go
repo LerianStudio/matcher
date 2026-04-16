@@ -440,6 +440,13 @@ func (p *sharedPortsInterfaceCheckProbe) Store(
 	return nil, nil //nolint:nilnil // compile probe
 }
 
+func (p *sharedPortsInterfaceCheckProbe) Open(
+	_ context.Context,
+	_ sharedPorts.ArtifactCustodyReference,
+) (io.ReadCloser, error) {
+	return nil, nil //nolint:nilnil // compile probe
+}
+
 func (p *sharedPortsInterfaceCheckProbe) Delete(
 	_ context.Context,
 	_ sharedPorts.ArtifactCustodyReference,

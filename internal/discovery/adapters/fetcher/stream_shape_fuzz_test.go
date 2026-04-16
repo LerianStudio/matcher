@@ -60,7 +60,7 @@ func FuzzFlattenFetcherJSON(f *testing.F) {
 			data = data[:maxFuzzInputBytes]
 		}
 
-		out, err := fetcher.FlattenFetcherJSON(bytes.NewReader(data))
+		out, err := fetcher.FlattenFetcherJSON(bytes.NewReader(data), 0)
 		if err != nil {
 			// Rejection is a documented outcome — nothing else to assert.
 			return

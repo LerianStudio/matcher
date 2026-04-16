@@ -129,6 +129,22 @@ func NewArtifactCustodyStore(
 // libS3.GetObjectStorageKey) so operators have a single mental model for
 // where tenant data lives in object storage.
 //
+// Write-once semantics (T-003 P3 hardening): an existence check runs before
+// upload. If the key already exists, Store returns a reference that points
+// at the existing object without re-uploading. This preserves T-003's
+// idempotency guarantee — replaying the bridge worker against the same
+// extraction cannot produce a different custody copy with a different
+// SHA-256, because the second attempt never overwrites the first.
+//
+// Replay-recovery cost (T-003 polish Fix 7): on the existed==true branch,
+// Store performs one extra Download() to recompute SHA-256 and Size from
+// the persisted bytes. This costs one round-trip on replays (rare in the
+// happy path) but preserves the audit contract — source_metadata never
+// carries empty custody_sha256, even after a partial-success retry. The
+// alternative (returning empty SHA/Size on replay) propagated empty hash
+// strings into the ingestion job's source_metadata, breaking downstream
+// audit tooling that relies on the digest as a content-identity key.
+//
 // On failure, the underlying storage error is wrapped with
 // ErrCustodyStoreFailed; callers retry on the wrapped sentinel, not the
 // underlying S3 error.
@@ -162,6 +178,44 @@ func (store *ArtifactCustodyStore) Store(
 		return nil, wrapped
 	}
 
+	// Write-once guard: if the key already exists, treat it as a replay and
+	// return a reference to the existing object without re-uploading. This
+	// keeps custody SHA-256 stable across bridge replays — a critical
+	// invariant for T-003's "no duplicate downstream readiness outcomes"
+	// guarantee.
+	existed, existErr := store.storage.Exists(ctx, key)
+	if existErr != nil {
+		// Treat Exists failure as transient and surface it wrapped. We do
+		// NOT proceed to Upload blindly — doing so would overwrite on
+		// partial-success retries, which is exactly the bug P3 fixes.
+		wrapped := fmt.Errorf("%w: exists probe: %w", sharedPorts.ErrCustodyStoreFailed, existErr)
+		libOpentelemetry.HandleSpanError(span, "custody exists probe failed", wrapped)
+
+		return nil, wrapped
+	}
+
+	if existed {
+		// Replay-recovery: re-hash the persisted bytes so source_metadata
+		// downstream of the bridge orchestrator never carries empty digest
+		// fields. Cost is one extra round-trip per replay (rare in the
+		// happy path); benefit is a stable audit contract.
+		size, sha, recoverErr := store.recoverDigest(ctx, key)
+		if recoverErr != nil {
+			wrapped := fmt.Errorf("%w: replay recovery: %w", sharedPorts.ErrCustodyStoreFailed, recoverErr)
+			libOpentelemetry.HandleSpanError(span, "custody replay recovery failed", wrapped)
+
+			return nil, wrapped
+		}
+
+		return &sharedPorts.ArtifactCustodyReference{
+			URI:      URIScheme + "://" + key,
+			Key:      key,
+			Size:     size,
+			SHA256:   sha,
+			StoredAt: store.now(),
+		}, nil
+	}
+
 	hasher := sha256.New()
 	counter := &counterWriter{}
 	teed := io.TeeReader(io.TeeReader(input.Content, hasher), counter)
@@ -181,6 +235,44 @@ func (store *ArtifactCustodyStore) Store(
 		SHA256:   hex.EncodeToString(hasher.Sum(nil)),
 		StoredAt: store.now(),
 	}, nil
+}
+
+// Open streams the custody plaintext back. Used by the bridge worker to feed
+// previously-persisted custody copies into the ingestion pipeline without
+// re-downloading from Fetcher. Returns ErrCustodyStoreFailed wrapped on
+// failure.
+func (store *ArtifactCustodyStore) Open(
+	ctx context.Context,
+	ref sharedPorts.ArtifactCustodyReference,
+) (io.ReadCloser, error) {
+	_, tracer, _, _ := libCommons.NewTrackingFromContext(ctx) //nolint:dogsled
+
+	ctx, span := tracer.Start(ctx, "custody.artifact_custody_store.open")
+	defer span.End()
+
+	if store == nil || store.storage == nil {
+		err := fmt.Errorf("%w: store not initialised", sharedPorts.ErrCustodyStoreFailed)
+		libOpentelemetry.HandleSpanError(span, "nil custody store", err)
+
+		return nil, err
+	}
+
+	key := strings.TrimSpace(ref.Key)
+	if key == "" {
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "missing custody key", ErrCustodyRefRequired)
+
+		return nil, ErrCustodyRefRequired
+	}
+
+	reader, err := store.storage.Download(ctx, key)
+	if err != nil {
+		wrapped := fmt.Errorf("%w: download: %w", sharedPorts.ErrCustodyStoreFailed, err)
+		libOpentelemetry.HandleSpanError(span, "custody download failed", wrapped)
+
+		return nil, wrapped
+	}
+
+	return reader, nil
 }
 
 // Delete removes a custody copy. Invoked by the bridge worker after the
@@ -314,4 +406,31 @@ func (c *counterWriter) Write(p []byte) (int, error) {
 	c.n += int64(len(p))
 
 	return len(p), nil
+}
+
+// recoverDigest re-hashes the bytes at the given key so a replay path
+// (where Store sees the object already exists) can return a fully
+// populated reference instead of one with empty Size/SHA256. The Download
+// reader is closed eagerly and any close failure is folded into the
+// returned error so the caller never has to worry about leaked handles.
+func (store *ArtifactCustodyStore) recoverDigest(ctx context.Context, key string) (int64, string, error) {
+	reader, err := store.storage.Download(ctx, key)
+	if err != nil {
+		return 0, "", fmt.Errorf("download for replay recovery: %w", err)
+	}
+
+	hasher := sha256.New()
+	counter := &counterWriter{}
+
+	if _, copyErr := io.Copy(io.MultiWriter(hasher, counter), reader); copyErr != nil {
+		_ = reader.Close()
+
+		return 0, "", fmt.Errorf("hash persisted custody bytes: %w", copyErr)
+	}
+
+	if closeErr := reader.Close(); closeErr != nil {
+		return 0, "", fmt.Errorf("close custody reader after replay recovery: %w", closeErr)
+	}
+
+	return counter.n, hex.EncodeToString(hasher.Sum(nil)), nil
 }

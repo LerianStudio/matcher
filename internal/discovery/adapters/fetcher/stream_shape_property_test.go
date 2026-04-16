@@ -137,7 +137,7 @@ func marshalShape(s fetcherShape) ([]byte, int) {
 func flattenAndDecode(t *testing.T, raw []byte) []json.RawMessage {
 	t.Helper()
 
-	out, err := FlattenFetcherJSON(bytes.NewReader(raw))
+	out, err := FlattenFetcherJSON(bytes.NewReader(raw), 0)
 	require.NoError(t, err)
 
 	data, err := io.ReadAll(out)
@@ -158,7 +158,7 @@ func TestProperty_FlattenFetcherJSON_RowCountPreservation(t *testing.T) {
 	prop := func(s fetcherShape) bool {
 		raw, expected := marshalShape(s)
 
-		out, err := FlattenFetcherJSON(bytes.NewReader(raw))
+		out, err := FlattenFetcherJSON(bytes.NewReader(raw), 0)
 		if err != nil {
 			return false
 		}
@@ -374,7 +374,7 @@ func TestProperty_FlattenFetcherJSON_VerbatimRowPreservation(t *testing.T) {
 func TestProperty_FlattenFetcherJSON_EmptyIdentity(t *testing.T) {
 	t.Parallel()
 
-	out, err := FlattenFetcherJSON(strings.NewReader(`{}`))
+	out, err := FlattenFetcherJSON(strings.NewReader(`{}`), 0)
 	require.NoError(t, err)
 
 	data, err := io.ReadAll(out)

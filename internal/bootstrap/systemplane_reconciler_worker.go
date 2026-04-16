@@ -97,6 +97,14 @@ func snapshotToWorkerConfig(snap domain.Snapshot) *Config {
 			SchemaCacheTTLSec:    snapInt(snap, "fetcher.schema_cache_ttl_sec", defaultKeyFetcherSchemaCacheTTL),
 			ExtractionPollSec:    snapInt(snap, "fetcher.extraction_poll_sec", defaultFetcherExtractionPoll),
 			ExtractionTimeoutSec: snapInt(snap, "fetcher.extraction_timeout_sec", defaultFetcherExtractionTO),
+			// Bridge worker runtime knobs (Fix 4): without these the
+			// snapshot-driven Config never carries the operator's runtime
+			// changes and applyWorkerRuntimeConfig has nothing to push.
+			// MaxExtractionBytes uses snapInt64 because 2 GiB (the
+			// default) overflows snapInt on a 32-bit build target.
+			MaxExtractionBytes: snapInt64(snap, "fetcher.max_extraction_bytes", int64(2<<30)),
+			BridgeIntervalSec:  snapInt(snap, "fetcher.bridge_interval_sec", defaultBridgeIntervalSec),
+			BridgeBatchSize:    snapInt(snap, "fetcher.bridge_batch_size", defaultBridgeBatchSize),
 		},
 		ExportWorker: ExportWorkerConfig{
 			Enabled:         snapBool(snap, "export_worker.enabled", defaultExportEnabled),

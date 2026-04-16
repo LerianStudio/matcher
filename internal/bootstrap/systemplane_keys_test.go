@@ -19,20 +19,22 @@ import (
 // expectedTotalKeys is the total number of registered keys.
 // RegisterMatcherKeys. This constant MUST be updated when keys are added or
 // removed from matcherKeyDefs.
-const expectedTotalKeys = 135
+// T-003 added 3 fetcher keys: max_extraction_bytes (BootstrapOnly),
+// bridge_interval_sec (WorkerReconcile), bridge_batch_size (WorkerReconcile).
+const expectedTotalKeys = 138
 
-const expectedConfigKeyCount = 121
+const expectedConfigKeyCount = 124
 
 const expectedSettingKeyCount = 14
 
 // expectedBootstrapOnlyCount is the count of keys with ApplyBootstrapOnly.
-const expectedBootstrapOnlyCount = 24
+const expectedBootstrapOnlyCount = 25
 
 // expectedLiveReadCount is the count of keys with ApplyLiveRead.
 const expectedLiveReadCount = 21
 
 // expectedWorkerReconcileCount is the count of keys with ApplyWorkerReconcile.
-const expectedWorkerReconcileCount = 13
+const expectedWorkerReconcileCount = 15
 
 // expectedBundleRebuildCount is the count of keys with ApplyBundleRebuild.
 const expectedBundleRebuildCount = 70

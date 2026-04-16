@@ -101,6 +101,24 @@ INFRA_CONNECT_TIMEOUT_SEC=30
 # for the process lifetime.
 # APP_ENC_KEY=
 
+# ── Fetcher Bridge (T-003 DoS guard) ─────────────────────────────────────────
+# Maximum Fetcher extraction payload size in bytes. Caps FlattenFetcherJSON
+# materialisation so a malformed or hostile Fetcher cannot OOM the matcher
+# pod with a multi-GB response. Default 2 GiB (2147483648). Tighten for
+# smaller working-set deployments. Bootstrap-only: changing mid-flight while
+# a long-running flatten is in progress would create ambiguous behaviour.
+# Bounded validator: must be between 1 MiB (1048576) and 16 GiB (17179869184).
+# FETCHER_MAX_EXTRACTION_BYTES=2147483648
+
+# NOTE: FETCHER_BRIDGE_INTERVAL_SEC and FETCHER_BRIDGE_BATCH_SIZE are NOT
+# listed here because they are runtime-mutable via the systemplane
+# (ApplyWorkerReconcile + MutableAtRuntime=true). Operate them via:
+#   PUT /v1/system/configs/fetcher.bridge_interval_sec  (bounds [5, 3600])
+#   PUT /v1/system/configs/fetcher.bridge_batch_size    (bounds [1, 10000])
+# .config-map.example only documents BOOTSTRAP-only env vars (those that
+# require a service restart). The TestConfigMapExample_SyncWithNonHotReload
+# EnvVars guard fails the build if a hot-reloadable key sneaks in here.
+
 # ── M2M (Machine-to-Machine) ─────────────────────────────────────────────────
 # Target service name for Secrets Manager M2M credential path.
 # Path: tenants/{env}/{tenantOrgID}/{applicationName}/m2m/{targetService}/credentials

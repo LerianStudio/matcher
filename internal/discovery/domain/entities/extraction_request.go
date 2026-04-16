@@ -15,6 +15,7 @@ import (
 
 	vo "github.com/LerianStudio/matcher/internal/discovery/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // Sentinel errors for extraction state transitions.
@@ -233,6 +234,59 @@ func (er *ExtractionRequest) MarkCancelled() error {
 	er.Status = vo.ExtractionStatusCancelled
 	er.ResultPath = ""
 	er.ErrorMessage = ""
+	er.UpdatedAt = time.Now().UTC()
+
+	return nil
+}
+
+// LinkToIngestion records the downstream ingestion job id that consumed the
+// extraction's output. Valid only when the extraction is COMPLETE: linking a
+// non-COMPLETE extraction is a state-machine violation.
+//
+// This method protects the invariants that the raw-field-assign adapter form
+// bypassed:
+//   - Extractions in PENDING/SUBMITTED/EXTRACTING have no output to link to.
+//   - Extractions in FAILED/CANCELLED have no trustworthy output.
+//   - Re-linking an already-linked extraction is rejected so the 1:1
+//     extraction→ingestion invariant is enforced at the domain layer (in
+//     addition to the adapter's atomic SQL guard).
+//
+// UpdatedAt is bumped so UpdateIfUnchanged-style optimistic concurrency sees
+// a real state change. Callers wanting idempotent behavior across retries
+// should rely on the adapter's atomic UPDATE ... WHERE ingestion_job_id IS
+// NULL guard rather than mutate the entity twice.
+func (er *ExtractionRequest) LinkToIngestion(ingestionJobID uuid.UUID) error {
+	if er == nil {
+		return nil
+	}
+
+	if ingestionJobID == uuid.Nil {
+		return fmt.Errorf("%w: ingestion job id required", ErrInvalidTransition)
+	}
+
+	if er.Status != vo.ExtractionStatusComplete {
+		return fmt.Errorf(
+			"%w: cannot link ingestion job to extraction in state %s",
+			ErrInvalidTransition,
+			er.Status,
+		)
+	}
+
+	if er.IngestionJobID != uuid.Nil && er.IngestionJobID != ingestionJobID {
+		// Cross-job collision: extraction is already linked to a DIFFERENT
+		// ingestion job. Surface the canonical 1:1 invariant sentinel
+		// (sharedPorts.ErrExtractionAlreadyLinked) rather than the generic
+		// state-machine sentinel so adapters can errors.Is for it without
+		// having to re-classify the cross-job case downstream of the
+		// atomic SQL guard.
+		return fmt.Errorf(
+			"%w: extraction is already linked to ingestion job %s",
+			sharedPorts.ErrExtractionAlreadyLinked,
+			er.IngestionJobID,
+		)
+	}
+
+	er.IngestionJobID = ingestionJobID
 	er.UpdatedAt = time.Now().UTC()
 
 	return nil
