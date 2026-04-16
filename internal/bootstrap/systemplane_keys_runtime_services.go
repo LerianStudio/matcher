@@ -251,6 +251,28 @@ func matcherKeyDefsFetcherRuntime() []domain.KeyDef {
 			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
+		{
+			// app_enc_key is the raw master key shared with Fetcher. Matcher
+			// derives HMAC-SHA256 and AES-256-GCM keys locally via HKDF
+			// (contexts "fetcher-external-hmac-v1" / "fetcher-external-aes-v1")
+			// to verify completed-artifact integrity in the Fetcher bridge
+			// (T-002). Bootstrap-only because the derived keys are cached
+			// for the process lifetime; rotation requires a restart. Empty
+			// soft-disables verified-artifact retrieval (the T-001 intake
+			// path still works).
+			Key:              "fetcher.app_enc_key",
+			Kind:             domain.KindConfig,
+			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+			DefaultValue:     "",
+			ValueType:        domain.ValueTypeString,
+			ApplyBehavior:    domain.ApplyBootstrapOnly,
+			MutableAtRuntime: false,
+			Secret:           true,
+			Description:      "Master key shared with Fetcher (base64); HKDF-derived HMAC/AES keys verify artifact integrity",
+			Group:            "fetcher",
+			Component:        domain.ComponentNone,
+			RedactPolicy:     domain.RedactFull,
+		},
 	}
 }
 

@@ -27,11 +27,20 @@ func (client *HTTPFetcherClient) doGet(ctx context.Context, requestURL string) (
 
 // doGetWithHeaders performs a GET request with optional extra headers and retry logic.
 func (client *HTTPFetcherClient) doGetWithHeaders(ctx context.Context, requestURL string, headers map[string]string) ([]byte, error) {
-	return client.doRequestWithHeaders(ctx, http.MethodGet, requestURL, nil, true, headers)
+	body, _, err := client.doRequestWithHeaders(ctx, http.MethodGet, requestURL, nil, true, headers)
+	return body, err
 }
 
-// doPost performs a POST request with retry logic.
+// doPost performs a POST request without retry logic.
 func (client *HTTPFetcherClient) doPost(ctx context.Context, requestURL string, body []byte) ([]byte, error) {
+	respBody, _, err := client.doRequest(ctx, http.MethodPost, requestURL, body, false)
+	return respBody, err
+}
+
+// doPostWithStatus performs a POST request without retry logic and also returns the
+// HTTP status code so callers can distinguish semantically different success codes
+// (e.g. 200 dedup vs 202 accepted).
+func (client *HTTPFetcherClient) doPostWithStatus(ctx context.Context, requestURL string, body []byte) ([]byte, int, error) {
 	return client.doRequest(ctx, http.MethodPost, requestURL, body, false)
 }
 
@@ -64,16 +73,16 @@ func rejectEmptyOrNullBody(body []byte) error {
 const maxBackoffDelay = 30 * time.Second
 
 // doRequest performs an HTTP request with retry and exponential backoff.
-func (client *HTTPFetcherClient) doRequest(ctx context.Context, method, requestURL string, body []byte, retryable bool) ([]byte, error) {
+func (client *HTTPFetcherClient) doRequest(ctx context.Context, method, requestURL string, body []byte, retryable bool) ([]byte, int, error) {
 	return client.doRequestWithHeaders(ctx, method, requestURL, body, retryable, nil)
 }
 
 // doRequestWithHeaders performs an HTTP request with retry, exponential backoff, and optional extra headers.
 //
 //nolint:gocognit,gocyclo,cyclop // retry loop with error classification is inherently branchy; extraction done via classifyResponse.
-func (client *HTTPFetcherClient) doRequestWithHeaders(ctx context.Context, method, requestURL string, body []byte, retryable bool, headers map[string]string) ([]byte, error) {
+func (client *HTTPFetcherClient) doRequestWithHeaders(ctx context.Context, method, requestURL string, body []byte, retryable bool, headers map[string]string) ([]byte, int, error) {
 	if err := client.ensureReady(); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	_, tracer, _, _ := libCommons.NewTrackingFromContext(ctx) //nolint:dogsled // only tracer needed for span
@@ -109,7 +118,7 @@ func (client *HTTPFetcherClient) doRequestWithHeaders(ctx context.Context, metho
 			}
 
 			if err := libBackoff.WaitContext(ctx, delay); err != nil {
-				return nil, fmt.Errorf("request canceled: %w", err)
+				return nil, 0, fmt.Errorf("request canceled: %w", err)
 			}
 		}
 
@@ -120,7 +129,7 @@ func (client *HTTPFetcherClient) doRequestWithHeaders(ctx context.Context, metho
 
 		req, err := http.NewRequestWithContext(ctx, method, requestURL, bodyReader)
 		if err != nil {
-			return nil, fmt.Errorf("create request: %w", err)
+			return nil, 0, fmt.Errorf("create request: %w", err)
 		}
 
 		if body != nil {
@@ -136,7 +145,7 @@ func (client *HTTPFetcherClient) doRequestWithHeaders(ctx context.Context, metho
 		// In single-tenant mode, m2mProvider is nil and no auth is injected.
 		if err := client.injectAuth(ctx, req); err != nil {
 			libOpentelemetry.HandleSpanError(span, "fetcher auth injection failed", err)
-			return nil, err
+			return nil, 0, err
 		}
 
 		respBody, statusCode, err := client.doHTTPAttempt(req)
@@ -148,14 +157,14 @@ func (client *HTTPFetcherClient) doRequestWithHeaders(ctx context.Context, metho
 				cbErr := fmt.Errorf("%w: %w: %w", sharedPorts.ErrFetcherUnavailable, ErrFetcherCircuitOpen, err)
 				libOpentelemetry.HandleSpanError(span, "fetcher circuit breaker rejected request", cbErr)
 
-				return nil, cbErr
+				return nil, 0, cbErr
 			}
 
 			lastErr = fmt.Errorf("%w: %v", ErrFetcherUnreachable, err) //nolint:errorlint // wrapping sentinel with context detail
 			libOpentelemetry.HandleSpanError(span, "fetcher http request failed", lastErr)
 
 			if !retryable {
-				return nil, lastErr
+				return nil, 0, lastErr
 			}
 
 			continue
@@ -179,11 +188,11 @@ func (client *HTTPFetcherClient) doRequestWithHeaders(ctx context.Context, metho
 			continue
 		}
 
-		result, statusErr := classifyResponse(statusCode, respBody)
+		result, classifiedStatus, statusErr := classifyResponse(statusCode, respBody)
 		if statusErr == nil {
 			span.SetAttributes(attribute.Int("http.status_code", statusCode))
 
-			return result, nil
+			return result, classifiedStatus, nil
 		}
 
 		libOpentelemetry.HandleSpanError(span, "fetcher classify response", statusErr)
@@ -194,14 +203,14 @@ func (client *HTTPFetcherClient) doRequestWithHeaders(ctx context.Context, metho
 			continue // retry on 5xx
 		}
 
-		return nil, statusErr
+		return nil, classifiedStatus, statusErr
 	}
 
 	if retryable {
-		return nil, fmt.Errorf("exhausted retries: %w", lastErr)
+		return nil, 0, fmt.Errorf("exhausted retries: %w", lastErr)
 	}
 
-	return nil, lastErr
+	return nil, 0, lastErr
 }
 
 // httpAttemptResult holds the outcome of a single HTTP round-trip so it can

@@ -81,6 +81,26 @@ INFRA_CONNECT_TIMEOUT_SEC=30
 # SECURITY: Use a strong random secret (minimum 32 bytes) in production.
 # IDEMPOTENCY_HMAC_SECRET=
 
+# ── Fetcher Bridge (verified-artifact retrieval) ─────────────────────────────
+# Master key shared with the Fetcher service. Matcher derives two keys
+# locally via HKDF-SHA256 using the contract-locked contexts
+# "fetcher-external-hmac-v1" and "fetcher-external-aes-v1" to verify
+# completed-artifact integrity and decrypt their payloads. Must be
+# base64-encoded and decode to at least 32 bytes.
+#
+# Generate a unique value per environment:
+#   openssl rand -base64 32 | tr -d '\n'
+#
+# Empty soft-disables verified-artifact retrieval — the T-001 trusted
+# stream intake path still works, but the T-002 pipeline
+# (retrieve → verify → custody) is skipped. Populate before enabling the
+# Fetcher bridge worker (T-003) against a real Fetcher instance.
+#
+# SECURITY: treat as a secret. Never log, never commit. Bootstrap-only:
+# rotation requires a service restart because derived keys are cached
+# for the process lifetime.
+# APP_ENC_KEY=
+
 # ── M2M (Machine-to-Machine) ─────────────────────────────────────────────────
 # Target service name for Secrets Manager M2M credential path.
 # Path: tenants/{env}/{tenantOrgID}/{applicationName}/m2m/{targetService}/credentials

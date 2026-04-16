@@ -395,4 +395,3 @@ func TestHTTPFetcherClient_RetriesOnceOn401WithFreshToken(t *testing.T) {
 	assert.Equal(t, int64(1), m2mProv.invalidateCalls.Load(),
 		"InvalidateCredentials should be called once (on the first 401)")
 }
-

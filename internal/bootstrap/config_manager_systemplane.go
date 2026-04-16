@@ -260,6 +260,11 @@ func overlayBootstrapOnlyConfigFields(cfg, oldCfg *Config) {
 	cfg.Idempotency.HMACSecret = oldCfg.Idempotency.HMACSecret
 	cfg.M2M.M2MTargetService = oldCfg.M2M.M2MTargetService
 	cfg.M2M.AWSRegion = oldCfg.M2M.AWSRegion
+	// AppEncKey is bootstrap-only: Matcher derives HMAC/AES keys from it at
+	// startup and caches them for the process lifetime. Snapshot reloads
+	// must not blank out the running value, otherwise the verified-artifact
+	// pipeline loses access to its derived keys on the first config change.
+	cfg.Fetcher.AppEncKey = oldCfg.Fetcher.AppEncKey
 	cfg.Logger = oldCfg.Logger
 	cfg.ShutdownGracePeriod = oldCfg.ShutdownGracePeriod
 }

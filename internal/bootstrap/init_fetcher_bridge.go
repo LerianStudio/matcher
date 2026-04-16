@@ -6,14 +6,21 @@ package bootstrap
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"net/http"
+	"strings"
+	"time"
 
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 
+	"github.com/LerianStudio/matcher/internal/discovery/adapters/fetcher"
 	discoveryExtractionRepo "github.com/LerianStudio/matcher/internal/discovery/adapters/postgres/extraction"
+	discoveryCommand "github.com/LerianStudio/matcher/internal/discovery/services/command"
 	ingestionCommand "github.com/LerianStudio/matcher/internal/ingestion/services/command"
 	crossAdapters "github.com/LerianStudio/matcher/internal/shared/adapters/cross"
+	"github.com/LerianStudio/matcher/internal/shared/adapters/custody"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -25,31 +32,100 @@ var errFetcherBridgeMissingLogger = errors.New(
 	"fetcher bridge requires a logger",
 )
 
-// FetcherBridgeAdapters bundles the two cross adapters that form the
+// ErrFetcherBridgeMasterKeyRequired indicates verified-artifact retrieval
+// was requested but APP_ENC_KEY is empty. Exported so bootstrap callers
+// can distinguish the "crypto disabled" policy choice from a generic init
+// failure. The bridge worker in T-003 will also check this.
+var ErrFetcherBridgeMasterKeyRequired = errors.New(
+	"fetcher bridge requires APP_ENC_KEY to verify artifacts",
+)
+
+// ErrFetcherBridgeMasterKeyInvalid indicates APP_ENC_KEY was provided
+// but could not be decoded as base64 or was shorter than the Fetcher
+// contract minimum. The underlying cause is wrapped so operators can
+// see whether it was a decode failure or a length failure without the
+// log pipeline leaking key bytes.
+var ErrFetcherBridgeMasterKeyInvalid = errors.New(
+	"fetcher bridge APP_ENC_KEY is invalid",
+)
+
+// artifactRetrievalTimeoutPadSec is the additional allowance we apply on
+// top of the extraction request timeout when sizing the artifact
+// download HTTP client. Downloading a completed artifact is I/O bound;
+// allow enough headroom for a slow S3 round-trip on top of whatever the
+// operator has configured for extraction polling.
+const artifactRetrievalTimeoutPadSec = 60
+
+// FetcherBridgeAdapters bundles the adapters that form the
 // Fetcher-to-ingestion trusted bridge. They live behind shared-kernel ports
 // so discovery-side callers (in a later task) can depend on them without
 // importing the ingestion or discovery adapter implementations directly.
+//
+// The T-001 set of two (Intake + LinkWriter) is extended by T-002 with
+// three more that together form the verified-artifact pipeline:
+// Retrieval → Verification → Custody, composed by a single orchestrator.
 type FetcherBridgeAdapters struct {
+	// T-001 intake path.
 	Intake    sharedPorts.FetcherBridgeIntake
 	LinkWrite sharedPorts.ExtractionLifecycleLinkWriter
+
+	// T-002 verified-artifact pipeline.
+	ArtifactRetrieval sharedPorts.ArtifactRetrievalGateway
+	ArtifactVerifier  sharedPorts.ArtifactTrustVerifier
+	ArtifactCustody   sharedPorts.ArtifactCustodyStore
+
+	// VerifiedArtifactOrchestrator is the single entry point the bridge
+	// worker (T-003) will drive. nil when the verified-artifact pipeline
+	// is disabled (APP_ENC_KEY empty or custody storage unavailable).
+	VerifiedArtifactOrchestrator *discoveryCommand.VerifiedArtifactRetrievalOrchestrator
 }
 
-// initFetcherBridgeAdapters constructs the two cross adapters that form the
-// Fetcher trusted-stream bridge. T-001 only proves they are reachable; the
-// T-003 worker task will take these adapters and drive them from discovery.
-// The function returns nil (and logs a warning) when any prerequisite is
-// missing so bootstrap stays tolerant of fetcher-disabled deployments.
+// FetcherBridgeDeps carries the bootstrap dependencies required to wire
+// the bridge. Passing them as a struct keeps the init signature stable as
+// new adapters are added.
+type FetcherBridgeDeps struct {
+	// Config is the loaded application configuration. APP_ENC_KEY and the
+	// fetcher request timeout are read from it.
+	Config *Config
+	// IngestionUseCase is the ingestion command use case. Required for the
+	// T-001 trusted stream intake adapter.
+	IngestionUseCase *ingestionCommand.UseCase
+	// ExtractionRepo is the discovery extraction repository. Required for
+	// the T-001 lifecycle link writer.
+	ExtractionRepo *discoveryExtractionRepo.Repository
+	// ObjectStorage is the shared object storage client used to persist
+	// custody copies. When nil, the verified-artifact pipeline is
+	// disabled (artifacts cannot be stored anywhere).
+	ObjectStorage sharedPorts.ObjectStorageClient
+	// Logger is used for bootstrap warnings. Required.
+	Logger libLog.Logger
+}
+
+// initFetcherBridgeAdapters constructs the adapters that form the
+// Fetcher trusted-stream bridge. T-001 proves intake + lifecycle link
+// are reachable; T-002 extends the bundle with the verified-artifact
+// pipeline (retrieval + verify + custody + orchestrator). The T-003
+// worker task will consume these adapters from discovery.
+//
+// The function returns nil (and logs a warning) when any T-001
+// prerequisite is missing so bootstrap stays tolerant of
+// fetcher-disabled deployments. T-002 adapters are optional: when
+// APP_ENC_KEY is empty or object storage is not configured, they are
+// left nil and the orchestrator is skipped. The caller decides whether
+// to treat that as fatal or as a feature flag.
 func initFetcherBridgeAdapters(
 	ctx context.Context,
-	ingestionUseCase *ingestionCommand.UseCase,
-	extractionRepo *discoveryExtractionRepo.Repository,
-	logger libLog.Logger,
+	deps FetcherBridgeDeps,
 ) (*FetcherBridgeAdapters, error) {
+	logger := deps.Logger
 	if logger == nil {
-		return nil, fmt.Errorf("init fetcher bridge adapters: %w", errFetcherBridgeMissingLogger)
+		return nil, fmt.Errorf(
+			"init fetcher bridge adapters: %w",
+			errFetcherBridgeMissingLogger,
+		)
 	}
 
-	if ingestionUseCase == nil {
+	if deps.IngestionUseCase == nil {
 		logger.Log(
 			ctx,
 			libLog.LevelWarn,
@@ -59,7 +135,7 @@ func initFetcherBridgeAdapters(
 		return nil, nil
 	}
 
-	if extractionRepo == nil {
+	if deps.ExtractionRepo == nil {
 		logger.Log(
 			ctx,
 			libLog.LevelWarn,
@@ -69,24 +145,185 @@ func initFetcherBridgeAdapters(
 		return nil, nil
 	}
 
-	intake, err := crossAdapters.NewFetcherBridgeIntakeAdapter(ingestionUseCase)
+	intake, err := crossAdapters.NewFetcherBridgeIntakeAdapter(deps.IngestionUseCase)
 	if err != nil {
 		return nil, fmt.Errorf("create fetcher bridge intake adapter: %w", err)
 	}
 
-	linkWriter, err := crossAdapters.NewExtractionLifecycleLinkWriterAdapter(extractionRepo)
+	linkWriter, err := crossAdapters.NewExtractionLifecycleLinkWriterAdapter(deps.ExtractionRepo)
 	if err != nil {
 		return nil, fmt.Errorf("create extraction lifecycle link writer adapter: %w", err)
+	}
+
+	bundle := &FetcherBridgeAdapters{
+		Intake:    intake,
+		LinkWrite: linkWriter,
+	}
+
+	if err := wireVerifiedArtifactPipeline(ctx, bundle, deps); err != nil {
+		return nil, err
 	}
 
 	logger.Log(
 		ctx,
 		libLog.LevelInfo,
-		"fetcher bridge adapters wired (intake + lifecycle link writer)",
+		describeBridgeWiring(bundle),
 	)
 
-	return &FetcherBridgeAdapters{
-		Intake:    intake,
-		LinkWrite: linkWriter,
-	}, nil
+	return bundle, nil
+}
+
+// wireVerifiedArtifactPipeline attaches the T-002 adapters to the bundle
+// when all prerequisites are satisfied. A missing prerequisite produces
+// a warning log and leaves the T-002 fields nil; callers that depend on
+// verified-artifact retrieval must check bundle.VerifiedArtifactOrchestrator.
+//
+// Prerequisites:
+//   - APP_ENC_KEY set and base64-decodable to at least 32 bytes.
+//   - ObjectStorage configured (nil means we have nowhere to write the
+//     custody copy).
+func wireVerifiedArtifactPipeline(
+	ctx context.Context,
+	bundle *FetcherBridgeAdapters,
+	deps FetcherBridgeDeps,
+) error {
+	if deps.Config == nil {
+		deps.Logger.Log(
+			ctx,
+			libLog.LevelWarn,
+			"fetcher bridge verified-artifact pipeline not wired: nil config",
+		)
+
+		return nil
+	}
+
+	masterKey, keyErr := decodeMasterKey(deps.Config.Fetcher.AppEncKey)
+	if keyErr != nil {
+		// Invalid key is a hard error: we cannot verify anything. Empty
+		// is a soft disable handled in the empty branch below.
+		if errors.Is(keyErr, ErrFetcherBridgeMasterKeyRequired) {
+			deps.Logger.Log(
+				ctx,
+				libLog.LevelWarn,
+				"fetcher bridge verified-artifact pipeline disabled: APP_ENC_KEY is empty",
+			)
+
+			return nil
+		}
+
+		return fmt.Errorf("fetcher bridge: %w", keyErr)
+	}
+
+	if deps.ObjectStorage == nil {
+		deps.Logger.Log(
+			ctx,
+			libLog.LevelWarn,
+			"fetcher bridge verified-artifact pipeline disabled: object storage unavailable",
+		)
+
+		return nil
+	}
+
+	verifier, err := fetcher.NewArtifactVerifier(masterKey)
+	if err != nil {
+		return fmt.Errorf("fetcher bridge: create artifact verifier: %w", err)
+	}
+
+	retrievalClient, err := fetcher.NewArtifactRetrievalClient(
+		newArtifactHTTPClient(deps.Config),
+	)
+	if err != nil {
+		return fmt.Errorf("fetcher bridge: create artifact retrieval client: %w", err)
+	}
+
+	custodyStore, err := custody.NewArtifactCustodyStore(deps.ObjectStorage)
+	if err != nil {
+		return fmt.Errorf("fetcher bridge: create artifact custody store: %w", err)
+	}
+
+	orchestrator, err := discoveryCommand.NewVerifiedArtifactRetrievalOrchestrator(
+		retrievalClient,
+		verifier,
+		custodyStore,
+	)
+	if err != nil {
+		return fmt.Errorf("fetcher bridge: create verified artifact orchestrator: %w", err)
+	}
+
+	bundle.ArtifactRetrieval = retrievalClient
+	bundle.ArtifactVerifier = verifier
+	bundle.ArtifactCustody = custodyStore
+	bundle.VerifiedArtifactOrchestrator = orchestrator
+
+	return nil
+}
+
+// decodeMasterKey parses the base64-encoded master key and validates
+// that it meets the Fetcher contract length (at least 32 bytes). Empty
+// input returns ErrFetcherBridgeMasterKeyRequired so the caller can
+// distinguish "disabled" from "misconfigured".
+func decodeMasterKey(raw string) ([]byte, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil, ErrFetcherBridgeMasterKeyRequired
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(trimmed)
+	if err != nil {
+		// Also try URL-safe encoding so operators are not punished for
+		// sharing a key through a URL-compatible channel.
+		decoded, err = base64.URLEncoding.DecodeString(trimmed)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"%w: not base64 (std or url)",
+				ErrFetcherBridgeMasterKeyInvalid,
+			)
+		}
+	}
+
+	// 32-byte minimum matches fetcher.minMasterKeyLen. We re-check here
+	// so the bootstrap error is produced before the verifier constructor
+	// reports the same violation — keeps the failure signal close to the
+	// config source.
+	const minLen = 32
+	if len(decoded) < minLen {
+		return nil, fmt.Errorf(
+			"%w: decoded length %d is shorter than %d",
+			ErrFetcherBridgeMasterKeyInvalid,
+			len(decoded),
+			minLen,
+		)
+	}
+
+	return decoded, nil
+}
+
+// newArtifactHTTPClient builds an http.Client suited for artifact
+// downloads. We explicitly disable redirect following so any Fetcher
+// misconfiguration that emits a 3xx surfaces as a retrieval failure
+// rather than silently following a redirect to an attacker-controlled
+// host.
+func newArtifactHTTPClient(cfg *Config) *http.Client {
+	timeout := time.Duration(cfg.Fetcher.RequestTimeoutSec+artifactRetrievalTimeoutPadSec) * time.Second
+
+	return &http.Client{
+		Timeout: timeout,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+}
+
+// describeBridgeWiring produces a single log line summarising which
+// adapters were wired. Kept compact: operators reading bootstrap logs
+// should see at a glance whether the verified-artifact pipeline is
+// active.
+func describeBridgeWiring(bundle *FetcherBridgeAdapters) string {
+	components := []string{"intake", "lifecycle link writer"}
+
+	if bundle.VerifiedArtifactOrchestrator != nil {
+		components = append(components, "verified-artifact pipeline")
+	}
+
+	return "fetcher bridge adapters wired (" + strings.Join(components, " + ") + ")"
 }

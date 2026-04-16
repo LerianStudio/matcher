@@ -2427,16 +2427,21 @@ func initModulesAndMessaging(
 		return nil, fmt.Errorf("init optional discovery worker: %w", err)
 	}
 
-	// Fetcher-to-ingestion trusted bridge (T-001). Wired here so the adapters
-	// are reachable once both the ingestion command use case and the discovery
-	// extraction repository exist. T-003 will consume this bundle from the
-	// bridge worker; for now we only prove constructability and log the result.
-	if _, err := initFetcherBridgeAdapters(
-		ctx,
-		ingestionUseCase,
-		discoveryExtractionRepo.NewRepository(provider),
-		logger,
-	); err != nil {
+	// Fetcher-to-ingestion trusted bridge (T-001 intake + T-002 verified
+	// artifact pipeline). Wired here so the adapters are reachable once
+	// the ingestion command use case, discovery extraction repository,
+	// and object storage all exist. T-003 will consume this bundle from
+	// the bridge worker; for now we only prove constructability and log
+	// the result. The verified-artifact pipeline (retrieval + verify +
+	// custody) is soft-disabled when APP_ENC_KEY is empty or when object
+	// storage is unavailable — the T-001 intake path still works.
+	if _, err := initFetcherBridgeAdapters(ctx, FetcherBridgeDeps{
+		Config:           cfg,
+		IngestionUseCase: ingestionUseCase,
+		ExtractionRepo:   discoveryExtractionRepo.NewRepository(provider),
+		ObjectStorage:    storage,
+		Logger:           logger,
+	}); err != nil {
 		return nil, fmt.Errorf("init fetcher bridge adapters: %w", err)
 	}
 

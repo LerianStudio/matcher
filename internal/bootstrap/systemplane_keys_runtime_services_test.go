@@ -216,7 +216,8 @@ func TestMatcherKeyDefsFetcherRuntime_KeyProperties(t *testing.T) {
 
 	defs := matcherKeyDefsFetcherRuntime()
 
-	require.Len(t, defs, 5)
+	// 5 runtime integer knobs + 1 bootstrap-only secret (app_enc_key).
+	require.Len(t, defs, 6)
 
 	expectedKeys := []string{
 		"fetcher.request_timeout_sec",
@@ -251,4 +252,39 @@ func TestMatcherKeyDefsFetcherRuntime_DiscoveryIntervalIsWorkerReconcile(t *test
 	discoveryDef := defs[1]
 	assert.Equal(t, "fetcher.discovery_interval_sec", discoveryDef.Key)
 	assert.Equal(t, domain.ApplyWorkerReconcile, discoveryDef.ApplyBehavior)
+}
+
+// TestMatcherKeyDefsFetcherRuntime_AppEncKeyIsBootstrapSecret pins the
+// app_enc_key properties: it must be secret, redacted, bootstrap-only,
+// and immutable at runtime. The verified-artifact pipeline caches the
+// HKDF-derived keys for the process lifetime, so rotation requires a
+// restart — drifting any of these flags would either leak the key or
+// silently disable the integrity check.
+func TestMatcherKeyDefsFetcherRuntime_AppEncKeyIsBootstrapSecret(t *testing.T) {
+	t.Parallel()
+
+	defs := matcherKeyDefsFetcherRuntime()
+
+	var appEncKey *domain.KeyDef
+	for i := range defs {
+		if defs[i].Key == "fetcher.app_enc_key" {
+			appEncKey = &defs[i]
+			break
+		}
+	}
+	require.NotNil(t, appEncKey, "fetcher.app_enc_key must be registered")
+
+	assert.Equal(t, domain.KindConfig, appEncKey.Kind)
+	assert.Equal(t, "fetcher", appEncKey.Group)
+	assert.Equal(t, domain.ValueTypeString, appEncKey.ValueType)
+	assert.True(t, appEncKey.Secret, "app_enc_key must be marked secret")
+	assert.Equal(t, domain.RedactFull, appEncKey.RedactPolicy,
+		"app_enc_key must never render in /v1/system/configs")
+	assert.Equal(t, domain.ApplyBootstrapOnly, appEncKey.ApplyBehavior,
+		"app_enc_key is bootstrap-only: derived keys are cached for process lifetime")
+	assert.False(t, appEncKey.MutableAtRuntime,
+		"rotation requires a restart, not a runtime patch")
+	assert.Equal(t, "", appEncKey.DefaultValue,
+		"empty default soft-disables verified-artifact retrieval")
+	assert.NotEmpty(t, appEncKey.Description)
 }

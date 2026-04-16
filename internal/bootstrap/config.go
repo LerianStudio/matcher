@@ -220,6 +220,19 @@ type FetcherConfig struct {
 	SchemaCacheTTLSec    int    `env:"FETCHER_SCHEMA_CACHE_TTL_SEC"   envDefault:"300"                   mapstructure:"schema_cache_ttl_sec"`
 	ExtractionPollSec    int    `env:"FETCHER_EXTRACTION_POLL_INTERVAL_SEC" envDefault:"5"              mapstructure:"extraction_poll_sec"`
 	ExtractionTimeoutSec int    `env:"FETCHER_EXTRACTION_TIMEOUT_SEC" envDefault:"600"                   mapstructure:"extraction_timeout_sec"`
+
+	// AppEncKey is the base64-encoded master key shared with Fetcher. Used
+	// to derive HMAC-SHA256 and AES-256-GCM keys via HKDF (context strings
+	// "fetcher-external-hmac-v1" and "fetcher-external-aes-v1") for
+	// verifying completed-artifact integrity in the Fetcher bridge (T-002).
+	//
+	// Bootstrap-only (changes require restart because derived keys are
+	// cached for the process lifetime). Empty disables verified-artifact
+	// retrieval; the bridge refuses to start without it.
+	//
+	// Marked json:"-" so it never leaks into JSON config dumps; log
+	// plumbing must never record this value.
+	AppEncKey string `env:"APP_ENC_KEY" json:"-" mapstructure:"app_enc_key"`
 }
 
 // M2MConfig configures machine-to-machine credential retrieval from AWS Secrets Manager.

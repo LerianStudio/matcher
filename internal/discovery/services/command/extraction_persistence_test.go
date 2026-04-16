@@ -107,7 +107,7 @@ func TestPersistSubmittedExtraction_UpdateFails_RecoveryFails_ReturnsTrackingErr
 	t.Parallel()
 
 	extractionRepo := &mockExtractionRepo{
-		updateErr:  errors.New("primary failure"),
+		updateErr: errors.New("primary failure"),
 		findByIDFn: func(_ context.Context, _ uuid.UUID) (*entities.ExtractionRequest, error) {
 			return nil, repositories.ErrExtractionNotFound
 		},

@@ -264,6 +264,68 @@ func TestSnapshotToFullConfig_RuntimeMutableSecretsComeFromSnapshot(t *testing.T
 	assert.Equal(t, "new-tenant-service-key", result.Tenancy.MultiTenantServiceAPIKey)
 }
 
+// TestSnapshotToFullConfig_PreservesFetcherAppEncKey_AcrossReload proves
+// Fetcher.AppEncKey survives a systemplane snapshot reload even when the
+// snapshot has nothing to say about fetcher.app_enc_key. The verified-
+// artifact pipeline derives its HMAC/AES keys from AppEncKey at bootstrap
+// and caches them for the process lifetime; blanking the value at reload
+// would disconnect the running verifier from its own config and every
+// subsequent retrieval would soft-disable.
+func TestSnapshotToFullConfig_PreservesFetcherAppEncKey_AcrossReload(t *testing.T) {
+	t.Parallel()
+
+	const bootstrapKey = "U29tZVN0cm9uZ0Jhc2U2NEVuY29kZWRLZXlGb3JUZXN0aW5n"
+
+	oldCfg := defaultConfig()
+	oldCfg.Fetcher.AppEncKey = bootstrapKey
+
+	// A reload snapshot that never mentions fetcher.app_enc_key. This is
+	// the usual shape because the systemplane stores app_enc_key as a
+	// redacted secret — nothing ever writes it from the snapshot side.
+	snap := domain.Snapshot{
+		Configs: map[string]domain.EffectiveValue{
+			"fetcher.enabled":             {Value: true},
+			"fetcher.url":                 {Value: "http://new-fetcher:4006"},
+			"fetcher.request_timeout_sec": {Value: 45},
+		},
+	}
+
+	result := snapshotToFullConfig(snap, oldCfg)
+
+	require.NotNil(t, result)
+	// Runtime-mutable fields should come from snapshot.
+	assert.True(t, result.Fetcher.Enabled)
+	assert.Equal(t, "http://new-fetcher:4006", result.Fetcher.URL)
+	assert.Equal(t, 45, result.Fetcher.RequestTimeoutSec)
+	// AppEncKey is bootstrap-only and must survive untouched.
+	assert.Equal(t, bootstrapKey, result.Fetcher.AppEncKey,
+		"bootstrap-only AppEncKey must survive snapshot reload")
+}
+
+// TestSnapshotToPersistedConfig_PreservesFetcherAppEncKey mirrors the
+// full-config variant above for the persisted-config path that the
+// systemplane reconciler uses when it writes a merged config back to the
+// store. Both code paths share overlayBootstrapOnlyConfigFields, so a
+// regression in either would leak AppEncKey loss.
+func TestSnapshotToPersistedConfig_PreservesFetcherAppEncKey(t *testing.T) {
+	t.Parallel()
+
+	const bootstrapKey = "QW5vdGhlclN0cm9uZ0Jhc2U2NEtleVRvUGlu"
+
+	oldCfg := defaultConfig()
+	oldCfg.Fetcher.AppEncKey = bootstrapKey
+
+	snap := domain.Snapshot{
+		Configs: map[string]domain.EffectiveValue{},
+	}
+
+	result := snapshotToPersistedConfig(snap, oldCfg)
+
+	require.NotNil(t, result)
+	assert.Equal(t, bootstrapKey, result.Fetcher.AppEncKey,
+		"persisted-config path must also preserve bootstrap-only AppEncKey")
+}
+
 func TestConfigFromSnapshot_RenamedKeysHydrate(t *testing.T) {
 	t.Parallel()
 
