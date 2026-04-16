@@ -61,6 +61,7 @@ import (
 	configCommand "github.com/LerianStudio/matcher/internal/configuration/services/command"
 	configQuery "github.com/LerianStudio/matcher/internal/configuration/services/query"
 	configWorker "github.com/LerianStudio/matcher/internal/configuration/services/worker"
+	discoveryExtractionRepo "github.com/LerianStudio/matcher/internal/discovery/adapters/postgres/extraction"
 	discoveryWorker "github.com/LerianStudio/matcher/internal/discovery/services/worker"
 	exceptionAdapters "github.com/LerianStudio/matcher/internal/exception/adapters"
 	exceptionAudit "github.com/LerianStudio/matcher/internal/exception/adapters/audit"
@@ -2365,7 +2366,8 @@ func initModulesAndMessaging(
 		return nil, err
 	}
 
-	if err := initIngestionModule(cfg, configGetter, settingsResolver, routes, provider, sharedOutboxRepository, runtimeIngestionPublisher, matchingUseCase, sharedRepos, isProduction); err != nil {
+	ingestionUseCase, err := initIngestionModule(cfg, configGetter, settingsResolver, routes, provider, sharedOutboxRepository, runtimeIngestionPublisher, matchingUseCase, sharedRepos, isProduction)
+	if err != nil {
 		return nil, err
 	}
 
@@ -2423,6 +2425,19 @@ func initModulesAndMessaging(
 	discWorker, err := initOptionalDiscoveryWorker(routes, cfg, configGetter, provider, sharedOutboxRepository, logger, initDiscoveryModule)
 	if err != nil {
 		return nil, fmt.Errorf("init optional discovery worker: %w", err)
+	}
+
+	// Fetcher-to-ingestion trusted bridge (T-001). Wired here so the adapters
+	// are reachable once both the ingestion command use case and the discovery
+	// extraction repository exist. T-003 will consume this bundle from the
+	// bridge worker; for now we only prove constructability and log the result.
+	if _, err := initFetcherBridgeAdapters(
+		ctx,
+		ingestionUseCase,
+		discoveryExtractionRepo.NewRepository(provider),
+		logger,
+	); err != nil {
+		return nil, fmt.Errorf("init fetcher bridge adapters: %w", err)
 	}
 
 	// Create governance audit consumer for processing audit events from the outbox.
@@ -2860,7 +2875,7 @@ func initIngestionModule(
 	matchingUseCase *matchingCommand.UseCase,
 	repos *sharedRepositories,
 	production bool,
-) error {
+) (*ingestionCommand.UseCase, error) {
 	ingestionRegistry := ingestionParser.NewParserRegistry()
 	ingestionRegistry.Register(ingestionParser.NewCSVParser())
 	ingestionRegistry.Register(ingestionParser.NewJSONParser())
@@ -2870,12 +2885,12 @@ func initIngestionModule(
 
 	fieldMapAdapter, err := crossAdapters.NewFieldMapRepositoryAdapter(repos.configFieldMap)
 	if err != nil {
-		return fmt.Errorf("create field map repository adapter: %w", err)
+		return nil, fmt.Errorf("create field map repository adapter: %w", err)
 	}
 
 	sourceAdapter, err := crossAdapters.NewSourceRepositoryAdapter(repos.configSource)
 	if err != nil {
-		return fmt.Errorf("create source repository adapter: %w", err)
+		return nil, fmt.Errorf("create source repository adapter: %w", err)
 	}
 
 	contextAdapter := crossAdapters.NewContextAccessProviderAdapter(repos.configContext)
@@ -2883,7 +2898,7 @@ func initIngestionModule(
 	// Auto-match on upload: create adapters to check context config and trigger matching
 	autoMatchContextProvider, err := crossAdapters.NewAutoMatchContextProviderAdapter(repos.configContext)
 	if err != nil {
-		return fmt.Errorf("create auto-match context provider adapter: %w", err)
+		return nil, fmt.Errorf("create auto-match context provider adapter: %w", err)
 	}
 
 	var matchTriggerAdapter *crossAdapters.MatchTriggerAdapter
@@ -2893,7 +2908,7 @@ func initIngestionModule(
 
 		matchTriggerAdapter, triggerErr = crossAdapters.NewMatchTriggerAdapter(matchingUseCase)
 		if triggerErr != nil {
-			return fmt.Errorf("create match trigger adapter: %w", triggerErr)
+			return nil, fmt.Errorf("create match trigger adapter: %w", triggerErr)
 		}
 	}
 
@@ -2922,7 +2937,7 @@ func initIngestionModule(
 		ContextProvider: autoMatchContextProvider,
 	})
 	if err != nil {
-		return fmt.Errorf("create ingestion command use case: %w", err)
+		return nil, fmt.Errorf("create ingestion command use case: %w", err)
 	}
 
 	ingestionQueryUseCase, err := ingestionQuery.NewUseCase(
@@ -2930,7 +2945,7 @@ func initIngestionModule(
 		repos.ingestionTx,
 	)
 	if err != nil {
-		return fmt.Errorf("create ingestion query use case: %w", err)
+		return nil, fmt.Errorf("create ingestion query use case: %w", err)
 	}
 
 	ingestionHandler, err := ingestionHTTP.NewHandlers(
@@ -2940,14 +2955,14 @@ func initIngestionModule(
 		production,
 	)
 	if err != nil {
-		return fmt.Errorf("create ingestion handler: %w", err)
+		return nil, fmt.Errorf("create ingestion handler: %w", err)
 	}
 
 	if err := ingestionHTTP.RegisterRoutes(routes.Protected, ingestionHandler); err != nil {
-		return fmt.Errorf("register ingestion routes: %w", err)
+		return nil, fmt.Errorf("register ingestion routes: %w", err)
 	}
 
-	return nil
+	return ingestionCommandUseCase, nil
 }
 
 func initMatchingModule(

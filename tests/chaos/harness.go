@@ -41,6 +41,7 @@ import (
 	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	configVO "github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
+	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 	embeddedmigrations "github.com/LerianStudio/matcher/migrations"
@@ -568,6 +569,7 @@ func setupChaosSeedData(connection *libPostgres.Client) (SeedData, error) {
 		configEntities.CreateReconciliationSourceInput{
 			Name:   "Chaos Test Source",
 			Type:   configVO.SourceTypeLedger,
+			Side:   sharedfee.MatchingSideLeft,
 			Config: map[string]any{},
 		},
 	)
