@@ -105,6 +105,7 @@ func snapshotToWorkerConfig(snap domain.Snapshot) *Config {
 			MaxExtractionBytes:               snapInt64(snap, "fetcher.max_extraction_bytes", defaultFetcherMaxExtractionBytes),
 			BridgeIntervalSec:                snapInt(snap, "fetcher.bridge_interval_sec", defaultBridgeIntervalSec),
 			BridgeBatchSize:                  snapInt(snap, "fetcher.bridge_batch_size", defaultBridgeBatchSize),
+			BridgeRetryMaxAttempts:           snapInt(snap, "fetcher.bridge_retry_max_attempts", defaultBridgeRetryMaxAttempts),
 			CustodyRetentionSweepIntervalSec: snapInt(snap, "fetcher.custody_retention_sweep_interval_sec", defaultCustodyRetentionSweepIntervalSec),
 			CustodyRetentionGracePeriodSec:   snapInt(snap, "fetcher.custody_retention_grace_period_sec", defaultCustodyRetentionGracePeriodSec),
 		},

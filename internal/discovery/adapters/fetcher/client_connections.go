@@ -17,6 +17,12 @@ import (
 )
 
 // IsHealthy checks if the Fetcher service is reachable and healthy.
+//
+// Deliberately bypasses auth injection, retry, and the circuit breaker —
+// intended for liveness probes that must not mask real connectivity issues
+// (an auth outage or an open breaker would otherwise make a healthy upstream
+// look down). Use doRequest / doRequestWithHeaders for authenticated calls
+// that need the full retry + breaker pipeline.
 func (client *HTTPFetcherClient) IsHealthy(ctx context.Context) bool {
 	if err := client.ensureReady(); err != nil {
 		return false

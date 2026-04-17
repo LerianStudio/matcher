@@ -506,7 +506,7 @@ func applyCustodyRetentionRuntimeConfig(worker WorkerLifecycle, cfg *Config) err
 	if err := retentionWorker.UpdateRuntimeConfig(discoveryWorker.CustodyRetentionWorkerConfig{
 		Interval:    cfg.FetcherCustodyRetentionSweepInterval(),
 		GracePeriod: cfg.FetcherCustodyRetentionGracePeriod(),
-		BatchSize:   discoveryWorker.CustodyRetentionDefaultBatchSize(),
+		BatchSize:   discoveryWorker.CustodyRetentionDefaultBatchSize,
 	}); err != nil {
 		return fmt.Errorf("update custody retention runtime config: %w", err)
 	}

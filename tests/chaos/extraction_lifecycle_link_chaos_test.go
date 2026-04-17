@@ -26,6 +26,7 @@ import (
 
 	extractionRepo "github.com/LerianStudio/matcher/internal/discovery/adapters/postgres/extraction"
 	discoveryEntities "github.com/LerianStudio/matcher/internal/discovery/domain/entities"
+	discoveryVO "github.com/LerianStudio/matcher/internal/discovery/domain/value_objects"
 	cross "github.com/LerianStudio/matcher/internal/shared/adapters/cross"
 )
 
@@ -64,7 +65,8 @@ func TestIntegration_Chaos_ExtractionLifecycleLink_LatencyDeadlineExceeded(t *te
 	defer setupCancel()
 
 	connectionID := seedFetcherConnectionForChaos(t, setupCtx, directDB, "chaos-link")
-	extractionID := seedUnlinkedExtractionForChaos(t, setupCtx, directDB, connectionID)
+	extraction := seedUnlinkedExtractionForChaos(t, setupCtx, directDB, connectionID)
+	extractionID := extraction.ID
 
 	repo := extractionRepo.NewRepository(h.Provider())
 	adapter, err := cross.NewExtractionLifecycleLinkWriterAdapter(repo)
@@ -74,7 +76,7 @@ func TestIntegration_Chaos_ExtractionLifecycleLink_LatencyDeadlineExceeded(t *te
 	// before any chaos is injected. (We use a disposable second extraction
 	// for this, then a fresh one for the chaos phase; seeding both up front
 	// keeps Phase 3's timing tight and avoids setup noise under latency.)
-	baselineExtractionID := seedUnlinkedExtractionForChaos(t, setupCtx, directDB, connectionID)
+	baselineExtraction := seedUnlinkedExtractionForChaos(t, setupCtx, directDB, connectionID)
 
 	// The adapter writes extraction_requests.ingestion_job_id, which has a FK
 	// to ingestion_jobs(id). Seed a real ingestion_jobs row up front via the
@@ -86,7 +88,7 @@ func TestIntegration_Chaos_ExtractionLifecycleLink_LatencyDeadlineExceeded(t *te
 	baselineCtx, baselineCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer baselineCancel()
 	require.NoError(t, adapter.LinkExtractionToIngestion(
-		baselineCtx, baselineExtractionID, baselineIngestionJobID,
+		baselineCtx, baselineExtraction, baselineIngestionJobID,
 	), "baseline link must succeed before chaos injection")
 
 	// Seed the FK target for the Phase 3 chaos call BEFORE injecting latency,
@@ -105,7 +107,7 @@ func TestIntegration_Chaos_ExtractionLifecycleLink_LatencyDeadlineExceeded(t *te
 	defer chaosCancel()
 
 	start := time.Now()
-	linkErr := adapter.LinkExtractionToIngestion(chaosCtx, extractionID, intendedIngestionID)
+	linkErr := adapter.LinkExtractionToIngestion(chaosCtx, extraction, intendedIngestionID)
 	elapsed := time.Since(start)
 
 	require.Error(t, linkErr, "link call must fail when PG latency exceeds deadline")
@@ -149,10 +151,18 @@ func TestIntegration_Chaos_ExtractionLifecycleLink_LatencyDeadlineExceeded(t *te
 
 	// Eventually tolerates any brief pool-replacement window right after
 	// toxic removal — matching the pattern used by existing chaos tests.
+	//
+	// The Phase 3 linkErr left the domain entity's IngestionJobID
+	// populated (LinkToIngestion mutates in-memory BEFORE the atomic SQL
+	// runs). If we re-use the same pointer here, the state-machine would
+	// reject the recovery call as a cross-job collision. Reset the
+	// in-memory snapshot so state-machine validation treats the recovery
+	// call as a fresh link attempt.
+	extraction.IngestionJobID = uuid.Nil
 	require.Eventually(t, func() bool {
 		rCtx, rCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer rCancel()
-		return adapter.LinkExtractionToIngestion(rCtx, extractionID, recoveryIngestionID) == nil
+		return adapter.LinkExtractionToIngestion(rCtx, extraction, recoveryIngestionID) == nil
 	}, 15*time.Second, 500*time.Millisecond,
 		"link must succeed after PG latency toxic is cleared")
 
@@ -199,14 +209,22 @@ func seedFetcherConnectionForChaos(
 
 // seedUnlinkedExtractionForChaos inserts a real extraction_requests row
 // with ingestion_job_id = NULL via the extraction repository's own Create
-// path, then returns the generated id. Using NewExtractionRequest ensures
+// path, then returns the full entity. Using NewExtractionRequest ensures
 // the seed respects the entity invariants the adapter reads back.
+//
+// Post-C9 the link adapter takes the pre-loaded *ExtractionRequest instead
+// of re-loading via FindByID, so callers must hand back a complete entity.
+// We bump Status to COMPLETE directly on the in-memory copy because the
+// adapter's state-machine domain validation rejects non-COMPLETE rows —
+// and Create defaults to PENDING. We also UPDATE the DB row so the
+// persisted state matches what the adapter will see if it ever inspects
+// it again (the retention sweep, a future worker, etc.).
 func seedUnlinkedExtractionForChaos(
 	t *testing.T,
 	ctx context.Context,
-	_ *sql.DB,
+	directDB *sql.DB,
 	connectionID uuid.UUID,
-) uuid.UUID {
+) *discoveryEntities.ExtractionRequest {
 	t.Helper()
 
 	extraction, err := discoveryEntities.NewExtractionRequest(
@@ -227,7 +245,17 @@ func seedUnlinkedExtractionForChaos(
 	repo := extractionRepo.NewRepository(GetSharedChaos().Provider())
 	require.NoError(t, repo.Create(ctx, extraction), "create unlinked extraction")
 
-	return extraction.ID
+	// Flip Status to COMPLETE on both the in-memory copy and the DB row so
+	// state-machine validation passes in the adapter. We mutate the DB via
+	// direct SQL (not Update()) so we avoid side-effects like UpdatedAt
+	// bumps interfering with test assertions.
+	_, err = directDB.ExecContext(ctx,
+		`UPDATE extraction_requests SET status = $2 WHERE id = $1`,
+		extraction.ID, string(discoveryVO.ExtractionStatusComplete))
+	require.NoError(t, err, "promote extraction to COMPLETE")
+	extraction.Status = discoveryVO.ExtractionStatusComplete
+
+	return extraction
 }
 
 // seedIngestionJobForChaos inserts a minimal ingestion_jobs row directly

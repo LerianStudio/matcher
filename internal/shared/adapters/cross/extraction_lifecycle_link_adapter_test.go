@@ -26,12 +26,13 @@ import (
 var errLinkWriterBackend = errors.New("link writer backend failure")
 
 // fakeExtractionRepo is a compact manual mock for the ExtractionRepository
-// interface. The T-003 hardening uses the atomic LinkIfUnlinked method
-// exclusively for the write path; FindByID is still called for
-// state-machine domain validation.
+// interface. Post-C9 the link adapter no longer calls FindByID — the
+// orchestrator passes the pre-loaded entity — so findCallCount lets tests
+// assert the adapter never re-reads the row.
 type fakeExtractionRepo struct {
 	findResult     *discoveryEntities.ExtractionRequest
 	findErr        error
+	findCallCount  int
 	updateErr      error
 	updateCall     *discoveryEntities.ExtractionRequest
 	linkErr        error
@@ -85,6 +86,8 @@ func (repo *fakeExtractionRepo) FindByID(
 	_ context.Context,
 	_ uuid.UUID,
 ) (*discoveryEntities.ExtractionRequest, error) {
+	repo.findCallCount++
+
 	return repo.findResult, repo.findErr
 }
 
@@ -211,22 +214,23 @@ func TestLinkExtractionToIngestion_HappyPath_CallsAtomicLink(t *testing.T) {
 	extractionID := uuid.New()
 	ingestionID := uuid.New()
 
-	repo := &fakeExtractionRepo{
-		findResult: completeExtraction(extractionID),
-	}
+	extraction := completeExtraction(extractionID)
+	repo := &fakeExtractionRepo{}
 
 	adapter, err := NewExtractionLifecycleLinkWriterAdapter(
 		discoveryRepositories.ExtractionRepository(repo),
 	)
 	require.NoError(t, err)
 
-	err = adapter.LinkExtractionToIngestion(context.Background(), extractionID, ingestionID)
+	err = adapter.LinkExtractionToIngestion(context.Background(), extraction, ingestionID)
 	require.NoError(t, err)
 
 	require.Equal(t, 1, repo.linkCallCount, "atomic link must be called exactly once")
 	require.Equal(t, extractionID, repo.linkCallExID)
 	require.Equal(t, ingestionID, repo.linkCallJobID)
 	require.Nil(t, repo.updateCall, "legacy Update must not be called anymore")
+	require.Equal(t, 0, repo.findCallCount,
+		"adapter must NOT FindByID — caller passed the pre-loaded entity (C9)")
 }
 
 func TestLinkExtractionToIngestion_AtomicAlreadyLinked_ReturnsIdempotencySentinel(t *testing.T) {
@@ -234,20 +238,19 @@ func TestLinkExtractionToIngestion_AtomicAlreadyLinked_ReturnsIdempotencySentine
 
 	extractionID := uuid.New()
 
-	// The repository has a COMPLETE extraction with NO in-memory ingestion
-	// job id (FindByID returned an unlinked snapshot), but the atomic SQL
-	// UPDATE sees ingestion_job_id IS NOT NULL (concurrent writer beat us).
-	repo := &fakeExtractionRepo{
-		findResult: completeExtraction(extractionID),
-		linkErr:    sharedPorts.ErrExtractionAlreadyLinked,
-	}
+	// The caller passed a COMPLETE extraction with NO in-memory ingestion
+	// job id (the orchestrator's eligibility snapshot was unlinked), but the
+	// atomic SQL UPDATE sees ingestion_job_id IS NOT NULL (concurrent writer
+	// beat us).
+	extraction := completeExtraction(extractionID)
+	repo := &fakeExtractionRepo{linkErr: sharedPorts.ErrExtractionAlreadyLinked}
 
 	adapter, err := NewExtractionLifecycleLinkWriterAdapter(
 		discoveryRepositories.ExtractionRepository(repo),
 	)
 	require.NoError(t, err)
 
-	err = adapter.LinkExtractionToIngestion(context.Background(), extractionID, uuid.New())
+	err = adapter.LinkExtractionToIngestion(context.Background(), extraction, uuid.New())
 	require.ErrorIs(t, err, sharedPorts.ErrExtractionAlreadyLinked)
 	require.Equal(t, 1, repo.linkCallCount)
 }
@@ -262,14 +265,14 @@ func TestLinkExtractionToIngestion_NonCompleteStatus_RejectedAtDomain(t *testing
 	extraction := completeExtraction(extractionID)
 	extraction.Status = vo.ExtractionStatusSubmitted
 
-	repo := &fakeExtractionRepo{findResult: extraction}
+	repo := &fakeExtractionRepo{}
 
 	adapter, err := NewExtractionLifecycleLinkWriterAdapter(
 		discoveryRepositories.ExtractionRepository(repo),
 	)
 	require.NoError(t, err)
 
-	err = adapter.LinkExtractionToIngestion(context.Background(), extractionID, uuid.New())
+	err = adapter.LinkExtractionToIngestion(context.Background(), extraction, uuid.New())
 	require.ErrorIs(t, err, discoveryEntities.ErrInvalidTransition)
 	require.Equal(t, 0, repo.linkCallCount, "atomic link must not be called when domain rejects")
 }
@@ -282,74 +285,79 @@ func TestLinkExtractionToIngestion_FailedExtraction_RejectedAtDomain(t *testing.
 	extraction := completeExtraction(extractionID)
 	extraction.Status = vo.ExtractionStatusFailed
 
-	repo := &fakeExtractionRepo{findResult: extraction}
+	repo := &fakeExtractionRepo{}
 
 	adapter, err := NewExtractionLifecycleLinkWriterAdapter(
 		discoveryRepositories.ExtractionRepository(repo),
 	)
 	require.NoError(t, err)
 
-	err = adapter.LinkExtractionToIngestion(context.Background(), extractionID, uuid.New())
+	err = adapter.LinkExtractionToIngestion(context.Background(), extraction, uuid.New())
 	require.ErrorIs(t, err, discoveryEntities.ErrInvalidTransition)
 	require.Equal(t, 0, repo.linkCallCount)
 }
 
-func TestLinkExtractionToIngestion_NotFound_SurfacesSentinel(t *testing.T) {
+// TestLinkExtractionToIngestion_MissingExtraction_ReturnsSentinel exercises
+// the nil-pointer guard (post-C9 the caller must supply the entity).
+func TestLinkExtractionToIngestion_MissingExtraction_ReturnsSentinel(t *testing.T) {
 	t.Parallel()
 
-	repo := &fakeExtractionRepo{
-		findErr: discoveryRepositories.ErrExtractionNotFound,
-	}
+	repo := &fakeExtractionRepo{}
 
 	adapter, err := NewExtractionLifecycleLinkWriterAdapter(
 		discoveryRepositories.ExtractionRepository(repo),
 	)
 	require.NoError(t, err)
 
-	err = adapter.LinkExtractionToIngestion(context.Background(), uuid.New(), uuid.New())
-	require.ErrorIs(t, err, discoveryRepositories.ErrExtractionNotFound)
-	require.Equal(t, 0, repo.linkCallCount)
+	err = adapter.LinkExtractionToIngestion(context.Background(), nil, uuid.New())
+	require.ErrorIs(t, err, sharedPorts.ErrLinkExtractionRequired)
+	require.Equal(t, 0, repo.linkCallCount,
+		"atomic link must not be called when extraction pointer is nil")
 }
 
 func TestLinkExtractionToIngestion_MissingExtractionID_ReturnsSentinel(t *testing.T) {
 	t.Parallel()
+
+	// Entity supplied but with a zero-valued ID — programmer error, distinct
+	// from a nil pointer.
+	extraction := completeExtraction(uuid.New())
+	extraction.ID = uuid.Nil
 
 	adapter, err := NewExtractionLifecycleLinkWriterAdapter(
 		discoveryRepositories.ExtractionRepository(&fakeExtractionRepo{}),
 	)
 	require.NoError(t, err)
 
-	err = adapter.LinkExtractionToIngestion(context.Background(), uuid.Nil, uuid.New())
+	err = adapter.LinkExtractionToIngestion(context.Background(), extraction, uuid.New())
 	require.ErrorIs(t, err, sharedPorts.ErrLinkExtractionIDRequired)
 }
 
 func TestLinkExtractionToIngestion_MissingIngestionJobID_ReturnsSentinel(t *testing.T) {
 	t.Parallel()
 
+	extraction := completeExtraction(uuid.New())
+
 	adapter, err := NewExtractionLifecycleLinkWriterAdapter(
 		discoveryRepositories.ExtractionRepository(&fakeExtractionRepo{}),
 	)
 	require.NoError(t, err)
 
-	err = adapter.LinkExtractionToIngestion(context.Background(), uuid.New(), uuid.Nil)
+	err = adapter.LinkExtractionToIngestion(context.Background(), extraction, uuid.Nil)
 	require.ErrorIs(t, err, sharedPorts.ErrLinkIngestionJobIDRequired)
 }
 
 func TestLinkExtractionToIngestion_AtomicLinkError_WrapsUnderlying(t *testing.T) {
 	t.Parallel()
 
-	extractionID := uuid.New()
-	repo := &fakeExtractionRepo{
-		findResult: completeExtraction(extractionID),
-		linkErr:    errLinkWriterBackend,
-	}
+	extraction := completeExtraction(uuid.New())
+	repo := &fakeExtractionRepo{linkErr: errLinkWriterBackend}
 
 	adapter, err := NewExtractionLifecycleLinkWriterAdapter(
 		discoveryRepositories.ExtractionRepository(repo),
 	)
 	require.NoError(t, err)
 
-	err = adapter.LinkExtractionToIngestion(context.Background(), extractionID, uuid.New())
+	err = adapter.LinkExtractionToIngestion(context.Background(), extraction, uuid.New())
 	require.Error(t, err)
 	require.ErrorIs(t, err, errLinkWriterBackend)
 	require.Contains(t, err.Error(), "persist extraction link")
@@ -362,45 +370,31 @@ func TestLinkExtractionToIngestion_NilAdapter_ReturnsSentinel(t *testing.T) {
 
 	var adapter *ExtractionLifecycleLinkWriterAdapter
 
-	err := adapter.LinkExtractionToIngestion(context.Background(), uuid.New(), uuid.New())
+	extraction := completeExtraction(uuid.New())
+	err := adapter.LinkExtractionToIngestion(context.Background(), extraction, uuid.New())
 	require.ErrorIs(t, err, sharedPorts.ErrNilExtractionLifecycleLinkWriter)
 }
 
-// TestLinkExtractionToIngestion_FindByIDNonSentinelError_WrapsError
-// exercises the FindByID error branch where the underlying error is NOT the
-// ErrExtractionNotFound sentinel. The adapter must wrap it with the
-// "load extraction for link" prefix.
-func TestLinkExtractionToIngestion_FindByIDNonSentinelError_WrapsError(t *testing.T) {
+// TestLinkExtractionToIngestion_AtomicLinkReturnsNotFound_SurfacesSentinel
+// exercises the atomic-SQL branch where the extraction row disappeared
+// between the orchestrator's eligibility check and the UPDATE. Post-C9 this
+// is the only path by which the adapter can report "not found" — it no
+// longer pre-reads the row itself.
+func TestLinkExtractionToIngestion_AtomicLinkReturnsNotFound_SurfacesSentinel(t *testing.T) {
 	t.Parallel()
 
-	repo := &fakeExtractionRepo{findErr: errLinkWriterBackend}
+	extraction := completeExtraction(uuid.New())
+	repo := &fakeExtractionRepo{linkErr: discoveryRepositories.ErrExtractionNotFound}
 
 	adapter, err := NewExtractionLifecycleLinkWriterAdapter(
 		discoveryRepositories.ExtractionRepository(repo),
 	)
 	require.NoError(t, err)
 
-	err = adapter.LinkExtractionToIngestion(context.Background(), uuid.New(), uuid.New())
-	require.Error(t, err)
-	require.ErrorIs(t, err, errLinkWriterBackend)
-	require.Contains(t, err.Error(), "load extraction for link")
-}
-
-// TestLinkExtractionToIngestion_FindByIDReturnsNil_ReturnsNotFoundSentinel
-// exercises the branch where FindByID returns (nil, nil) — i.e. "not found"
-// expressed via a nil result rather than the sentinel error.
-func TestLinkExtractionToIngestion_FindByIDReturnsNil_ReturnsNotFoundSentinel(t *testing.T) {
-	t.Parallel()
-
-	repo := &fakeExtractionRepo{findResult: nil, findErr: nil}
-
-	adapter, err := NewExtractionLifecycleLinkWriterAdapter(
-		discoveryRepositories.ExtractionRepository(repo),
-	)
-	require.NoError(t, err)
-
-	err = adapter.LinkExtractionToIngestion(context.Background(), uuid.New(), uuid.New())
+	err = adapter.LinkExtractionToIngestion(context.Background(), extraction, uuid.New())
 	require.ErrorIs(t, err, discoveryRepositories.ErrExtractionNotFound)
+	require.Equal(t, 1, repo.linkCallCount,
+		"atomic link is attempted; ErrExtractionNotFound comes from the SQL layer")
 }
 
 // TestLinkExtractionToIngestion_ReplayWithSameJobID_AtomicSQLReturnsAlreadyLinked
@@ -424,17 +418,14 @@ func TestLinkExtractionToIngestion_ReplayWithSameJobID_AtomicSQLReturnsAlreadyLi
 	extraction := completeExtraction(extractionID)
 	extraction.IngestionJobID = ingestionID // already linked to same job
 
-	repo := &fakeExtractionRepo{
-		findResult: extraction,
-		linkErr:    sharedPorts.ErrExtractionAlreadyLinked,
-	}
+	repo := &fakeExtractionRepo{linkErr: sharedPorts.ErrExtractionAlreadyLinked}
 
 	adapter, err := NewExtractionLifecycleLinkWriterAdapter(
 		discoveryRepositories.ExtractionRepository(repo),
 	)
 	require.NoError(t, err)
 
-	err = adapter.LinkExtractionToIngestion(context.Background(), extractionID, ingestionID)
+	err = adapter.LinkExtractionToIngestion(context.Background(), extraction, ingestionID)
 	require.ErrorIs(t, err, sharedPorts.ErrExtractionAlreadyLinked)
 	require.Equal(t, 1, repo.linkCallCount, "atomic link is still attempted for replay-same-id case")
 }
@@ -455,14 +446,14 @@ func TestLinkExtractionToIngestion_CrossJobCollision_RejectedAsAlreadyLinked(t *
 	extraction := completeExtraction(extractionID)
 	extraction.IngestionJobID = priorJobID // already linked to a DIFFERENT job
 
-	repo := &fakeExtractionRepo{findResult: extraction}
+	repo := &fakeExtractionRepo{}
 
 	adapter, err := NewExtractionLifecycleLinkWriterAdapter(
 		discoveryRepositories.ExtractionRepository(repo),
 	)
 	require.NoError(t, err)
 
-	err = adapter.LinkExtractionToIngestion(context.Background(), extractionID, newJobID)
+	err = adapter.LinkExtractionToIngestion(context.Background(), extraction, newJobID)
 	require.ErrorIs(t, err, sharedPorts.ErrExtractionAlreadyLinked)
 	require.Equal(t, 0, repo.linkCallCount, "atomic link must not be called when domain rejects cross-job collision")
 }

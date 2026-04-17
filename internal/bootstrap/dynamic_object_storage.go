@@ -48,6 +48,25 @@ func (client *dynamicObjectStorageClient) Upload(ctx context.Context, key string
 	return result, nil
 }
 
+// UploadIfAbsent delegates conditional uploads to the current runtime storage
+// client. The underlying client is responsible for mapping 412 Precondition
+// Failed onto sharedPorts.ErrObjectAlreadyExists; the dynamic wrapper must
+// not swallow or re-wrap that sentinel, because custody relies on errors.Is
+// to detect the replay path.
+func (client *dynamicObjectStorageClient) UploadIfAbsent(ctx context.Context, key string, reader io.Reader, contentType string) (string, error) {
+	delegate, err := client.current()
+	if err != nil {
+		return "", fmt.Errorf("resolve object storage client for conditional upload: %w", err)
+	}
+
+	// Do NOT wrap the delegate error — the adapter contract says
+	// ErrObjectAlreadyExists must survive errors.Is at the caller, and a
+	// second fmt.Errorf("...: %w") layer only adds noise. The underlying
+	// error already carries the sentinel; other failure classes are passed
+	// through verbatim so operator diagnostics stay useful.
+	return delegate.UploadIfAbsent(ctx, key, reader, contentType)
+}
+
 // UploadWithOptions delegates object upload with options to the current runtime storage client.
 func (client *dynamicObjectStorageClient) UploadWithOptions(ctx context.Context, key string, reader io.Reader, contentType string, opts ...storageopt.UploadOption) (string, error) {
 	delegate, err := client.current()

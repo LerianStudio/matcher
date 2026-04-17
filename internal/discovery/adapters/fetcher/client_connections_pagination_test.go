@@ -245,7 +245,7 @@ func TestListConnections_Pagination_RepeatedFullPage_ReturnsOverflow(t *testing.
 
 	var requestCount atomic.Int32
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		requestCount.Add(1)
 
 		items := make([]fetcherConnectionResponse, 0, listConnectionsPageSize)
@@ -265,8 +265,6 @@ func TestListConnections_Pagination_RepeatedFullPage_ReturnsOverflow(t *testing.
 
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(resp) //nolint:errcheck,errchkjson // test helper
-
-		_ = r
 	}))
 	defer srv.Close()
 

@@ -13,9 +13,6 @@ import (
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
-// Compile-time interface check.
-var _ sharedPorts.FetcherClient = (*HTTPFetcherClient)(nil)
-
 // newTestClient creates an HTTPFetcherClient pointing at the given test server.
 func newTestClient(t *testing.T, serverURL string) *HTTPFetcherClient {
 	t.Helper()

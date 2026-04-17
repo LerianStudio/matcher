@@ -113,6 +113,15 @@ func validateFetcherResultPath(resultPath string) error {
 // classifyResponse maps HTTP status codes to domain errors or returns the body on success.
 // The returned statusCode lets callers distinguish semantically identical bodies (e.g., 200 vs 202).
 func classifyResponse(statusCode int, body []byte) ([]byte, int, error) {
+	// 1xx informational responses should never surface here — Go's HTTP
+	// transport transparently handles them and delivers the final status
+	// to callers. Treat any 1xx that slips through as an unexpected
+	// upstream condition rather than silently falling through to the
+	// success branch below.
+	if statusCode >= http.StatusContinue && statusCode < http.StatusOK {
+		return nil, statusCode, fmt.Errorf("%w: unexpected 1xx response %d", ErrFetcherBadResponse, statusCode)
+	}
+
 	if statusCode == http.StatusNotFound {
 		return nil, statusCode, ErrFetcherNotFound
 	}

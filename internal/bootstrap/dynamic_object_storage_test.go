@@ -27,6 +27,10 @@ func (client *stubObjectStorageClient) Upload(_ context.Context, key string, _ i
 	return client.prefix + key, nil
 }
 
+func (client *stubObjectStorageClient) UploadIfAbsent(ctx context.Context, key string, reader io.Reader, contentType string) (string, error) {
+	return client.Upload(ctx, key, reader, contentType)
+}
+
 func (client *stubObjectStorageClient) UploadWithOptions(ctx context.Context, key string, reader io.Reader, contentType string, _ ...sharedPorts.UploadOption) (string, error) {
 	return client.Upload(ctx, key, reader, contentType)
 }

@@ -10,6 +10,9 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	"runtime/debug"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,6 +20,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/discovery/adapters/fetcher"
 	discoveryExtractionRepo "github.com/LerianStudio/matcher/internal/discovery/adapters/postgres/extraction"
+	discoveryRedis "github.com/LerianStudio/matcher/internal/discovery/adapters/redis"
 	discoveryCommand "github.com/LerianStudio/matcher/internal/discovery/services/command"
 	discoveryWorker "github.com/LerianStudio/matcher/internal/discovery/services/worker"
 	ingestionCommand "github.com/LerianStudio/matcher/internal/ingestion/services/command"
@@ -85,9 +89,10 @@ type FetcherBridgeAdapters struct {
 	LinkWrite sharedPorts.ExtractionLifecycleLinkWriter
 
 	// T-002 verified-artifact pipeline.
-	ArtifactRetrieval sharedPorts.ArtifactRetrievalGateway
-	ArtifactVerifier  sharedPorts.ArtifactTrustVerifier
-	ArtifactCustody   sharedPorts.ArtifactCustodyStore
+	// The retrieval gateway and trust verifier are held internally by the
+	// orchestrator; only custody is surfaced here because downstream worker
+	// wiring needs it independently.
+	ArtifactCustody sharedPorts.ArtifactCustodyStore
 
 	// VerifiedArtifactOrchestrator is the single entry point the bridge
 	// worker (T-003) will drive. nil when the verified-artifact pipeline
@@ -265,8 +270,6 @@ func wireVerifiedArtifactPipeline(
 		return fmt.Errorf("fetcher bridge: create verified artifact orchestrator: %w", err)
 	}
 
-	bundle.ArtifactRetrieval = retrievalClient
-	bundle.ArtifactVerifier = verifier
 	bundle.ArtifactCustody = custodyStore
 	bundle.VerifiedArtifactOrchestrator = orchestrator
 
@@ -406,19 +409,217 @@ func EnsureBridgeOperational(bundle *FetcherBridgeAdapters) error {
 		)
 	}
 
+	if bundle.ArtifactCustody == nil {
+		return fmt.Errorf("%w: artifact custody store is not wired", ErrFetcherBridgeNotOperational)
+	}
+
 	return nil
 }
 
-// initFetcherBridgeWorker constructs the T-003 bridge worker when all
-// preconditions are satisfied. Returns (nil, nil) when the bridge should
-// not run (Fetcher disabled, bundle incomplete, no source resolver). The
-// soft-disabled branch logs a warning so operators can see why the bridge
-// is idle.
+// bridgeMinMemoryBytes is the minimum pod memory budget we require before
+// letting the Fetcher bridge come up. The verified-artifact verifier
+// currently materializes plaintext in memory at roughly 512 MiB per
+// concurrent artifact; with MaxIdleConnsPerHost=10 the transient worst
+// case lands in multi-GiB territory. 2 GiB is the floor below which
+// OOMKill becomes the dominant failure mode.
 //
-// T-003 P4/P5 hardening: when Fetcher is explicitly enabled but the
-// verified-artifact orchestrator is nil, this function returns an error
-// to refuse starting the bridge worker without crypto. The caller
-// propagates that as a bootstrap failure.
+// This is an interim mitigation while the streaming verification path
+// (T-002 backlog P1) is in flight. Once verifiers stream, this guard and
+// the cgroup probing can be removed.
+const bridgeMinMemoryBytes int64 = 2 << 30 // 2 GiB
+
+// gomemlimitHeadroomPct is the fraction of the detected cgroup limit we
+// hand to GOMEMLIMIT. 85% leaves the remaining 15% for cgo/mmap/stacks
+// and the kernel's own accounting slack, which in practice keeps the
+// runtime soft limit well clear of OOMKill at the cgroup ceiling.
+const gomemlimitHeadroomPct = 0.85
+
+// memoryLimitReader reads the effective memory limit for the current
+// process. Returns (bytesOrZero, source, err):
+//   - bytes  > 0: explicit limit detected.
+//   - bytes == 0, err == nil: cgroup advertised "no limit" (e.g., "max").
+//   - err != nil: the probe could not read cgroup files (dev/macOS, bare
+//     metal, unsupported kernel) — caller should treat as "unknown".
+//
+// Kept as a function type so tests can substitute a deterministic reader.
+type memoryLimitReader func() (int64, string, error)
+
+// defaultMemoryLimitReader is the production implementation: cgroup v2
+// first, cgroup v1 fallback. Any filesystem error is returned so the
+// caller can decide the policy ("unknown = do not block").
+func defaultMemoryLimitReader() (int64, string, error) {
+	return detectMemoryLimit()
+}
+
+// EnsureBridgeMemoryBudget enforces a minimum pod memory budget when
+// Fetcher is enabled. The artifact verifier currently materializes
+// plaintext in memory (~512 MiB peak per concurrent artifact); this
+// guard hard-fails at boot if the container appears to have less than
+// the minimum safe budget.
+//
+// Removed once the streaming verification path lands (project memory P1).
+func EnsureBridgeMemoryBudget(cfg *Config) error {
+	return enforceMemoryBudget(cfg, defaultMemoryLimitReader)
+}
+
+// enforceMemoryBudget is the testable core of EnsureBridgeMemoryBudget.
+// The reader is injected so unit tests can exercise the below/at/above
+// branches without touching /sys/fs/cgroup.
+func enforceMemoryBudget(cfg *Config, reader memoryLimitReader) error {
+	if cfg == nil || !cfg.Fetcher.Enabled {
+		return nil
+	}
+
+	if reader == nil {
+		return nil
+	}
+
+	limit, source, err := reader()
+	if err != nil {
+		// Non-cgroup systems (dev/macOS) surface an error here. We do
+		// not block bootstrap — the guard is meaningless outside the
+		// cgroup-enforced environments it is designed to protect.
+		return nil
+	}
+
+	// A zero limit means the cgroup advertised "no limit" (e.g., "max"
+	// on v2). The container is allowed to use whatever the host grants;
+	// nothing to enforce at boot. If operators want to cap memory on a
+	// hostless runtime they can set GOMEMLIMIT themselves.
+	if limit <= 0 {
+		return nil
+	}
+
+	if limit < bridgeMinMemoryBytes {
+		return fmt.Errorf(
+			"%w: pod memory limit %d bytes (from %s) < minimum %d bytes when FETCHER_ENABLED=true",
+			ErrFetcherBridgeNotOperational, limit, source, bridgeMinMemoryBytes,
+		)
+	}
+
+	return nil
+}
+
+// applyGOMEMLIMIT sets the Go runtime soft memory limit to a fraction of
+// the detected cgroup limit when Fetcher is enabled and the operator has
+// not already provided GOMEMLIMIT explicitly. Returns the limit set (or 0
+// if no action was taken) so the caller can log it once.
+//
+// Respects the operator override: if GOMEMLIMIT is non-empty in the
+// environment we leave it alone, even if we disagree with the value. The
+// Go runtime parses GOMEMLIMIT on startup; this call is only relevant
+// when the runtime defaulted to math.MaxInt64.
+func applyGOMEMLIMIT(cfg *Config, logger libLog.Logger, reader memoryLimitReader) int64 {
+	if cfg == nil || !cfg.Fetcher.Enabled {
+		return 0
+	}
+
+	if strings.TrimSpace(os.Getenv("GOMEMLIMIT")) != "" {
+		// Operator has an explicit opinion. Respect it.
+		return 0
+	}
+
+	if reader == nil {
+		return 0
+	}
+
+	limit, source, err := reader()
+	if err != nil || limit <= 0 {
+		return 0
+	}
+
+	soft := int64(gomemlimitHeadroomPct * float64(limit))
+	if soft <= 0 {
+		return 0
+	}
+
+	previous := debug.SetMemoryLimit(soft)
+
+	if logger != nil {
+		logger.Log(context.Background(), libLog.LevelInfo,
+			fmt.Sprintf(
+				"GOMEMLIMIT set to %d bytes (%.0f%% of %d from %s); previous soft limit %d",
+				soft, gomemlimitHeadroomPct*100, limit, source, previous,
+			),
+		)
+	}
+
+	return soft
+}
+
+// detectMemoryLimit probes the standard cgroup memory control files to
+// discover the effective container memory limit. Tries cgroup v2 first
+// (the unified hierarchy used by modern runtimes) and falls back to
+// cgroup v1. Returns (bytesOrZero, source, err):
+//
+//   - bytes > 0: explicit numeric limit.
+//   - bytes == 0 + err == nil: cgroup advertised "max" (no limit set).
+//   - err != nil: no readable cgroup file found — we cannot decide and
+//     the caller should skip enforcement.
+//
+// This is best-effort. Newer runtimes with nested cgroup namespaces, or
+// rootless containers that rewrite these paths, may produce misleading
+// results. For those cases operators can set GOMEMLIMIT explicitly.
+func detectMemoryLimit() (int64, string, error) {
+	// cgroup v2 unified hierarchy. "max" means no explicit limit.
+	const cgroupV2Path = "/sys/fs/cgroup/memory.max"
+
+	if raw, err := os.ReadFile(cgroupV2Path); err == nil {
+		return parseCgroupMemoryLimit(raw, cgroupV2Path)
+	}
+
+	// cgroup v1 legacy path.
+	const cgroupV1Path = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
+
+	if raw, err := os.ReadFile(cgroupV1Path); err == nil {
+		return parseCgroupMemoryLimit(raw, cgroupV1Path)
+	}
+
+	return 0, "", errCgroupMemoryUnavailable
+}
+
+// errCgroupMemoryUnavailable is returned when neither cgroup v2 nor v1
+// memory control files are readable. Expected on dev/macOS hosts.
+var errCgroupMemoryUnavailable = errors.New("cgroup memory controller not available")
+
+// parseCgroupMemoryLimit decodes a cgroup memory limit value. cgroup v2
+// uses the literal string "max" to indicate no limit; cgroup v1 uses a
+// very large sentinel (commonly 9223372036854771712) that we treat as
+// "no meaningful limit" by mapping anything above the cgroup v1 unlimited
+// threshold back to zero.
+func parseCgroupMemoryLimit(raw []byte, source string) (int64, string, error) {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || trimmed == "max" {
+		return 0, source, nil
+	}
+
+	limit, err := strconv.ParseInt(trimmed, 10, 64)
+	if err != nil {
+		return 0, source, fmt.Errorf("parse %s: %w", source, err)
+	}
+
+	// cgroup v1 unlimited sentinel: values at or above this threshold
+	// mean "no effective limit" (kernel uses a large bitmask). We treat
+	// them as zero so callers do not accidentally interpret them as
+	// multi-exabyte budgets.
+	const cgroupV1UnlimitedThreshold = int64(1) << 62
+	if limit >= cgroupV1UnlimitedThreshold {
+		return 0, source, nil
+	}
+
+	return limit, source, nil
+}
+
+// initFetcherBridgeWorker constructs the T-003 bridge worker when all
+// preconditions are satisfied. Returns (nil, nil) only when Fetcher is
+// disabled (cfg.Fetcher.Enabled=false). When Fetcher is enabled but any
+// upstream dependency (bundle, provider, extraction repo) is nil, this
+// function returns ErrFetcherBridgeNotOperational so operators see the
+// integration bug at startup instead of silently running without a bridge.
+//
+// T-003 P4/P5 hardening: Fetcher-enabled deployments MUST fail loudly
+// when wiring is incomplete. The caller propagates the error as a
+// bootstrap failure.
 func initFetcherBridgeWorker(
 	ctx context.Context,
 	cfg *Config,
@@ -434,10 +635,7 @@ func initFetcherBridgeWorker(
 	}
 
 	if bundle == nil {
-		logger.Log(ctx, libLog.LevelWarn,
-			"fetcher bridge worker not wired: bridge adapter bundle is nil")
-
-		return nil, nil
+		return nil, fmt.Errorf("%w: bridge adapter bundle is nil", ErrFetcherBridgeNotOperational)
 	}
 
 	if err := EnsureBridgeOperational(bundle); err != nil {
@@ -447,17 +645,11 @@ func initFetcherBridgeWorker(
 	}
 
 	if provider == nil {
-		logger.Log(ctx, libLog.LevelWarn,
-			"fetcher bridge worker not wired: infrastructure provider unavailable")
-
-		return nil, nil
+		return nil, fmt.Errorf("%w: infrastructure provider is nil", ErrFetcherBridgeNotOperational)
 	}
 
 	if extractionRepo == nil {
-		logger.Log(ctx, libLog.LevelWarn,
-			"fetcher bridge worker not wired: extraction repository unavailable")
-
-		return nil, nil
+		return nil, fmt.Errorf("%w: extraction repository is nil", ErrFetcherBridgeNotOperational)
 	}
 
 	sourceResolver, err := crossAdapters.NewBridgeSourceResolverAdapter(provider)
@@ -512,6 +704,8 @@ func initFetcherBridgeWorker(
 		return nil, fmt.Errorf("create bridge worker: %w", err)
 	}
 
+	wireBridgeHeartbeatWriter(ctx, provider, worker, logger)
+
 	logger.Log(ctx, libLog.LevelInfo,
 		fmt.Sprintf("fetcher bridge worker wired (interval=%s batch=%d)",
 			cfg.FetcherBridgeInterval(), cfg.FetcherBridgeBatchSize()))
@@ -519,16 +713,81 @@ func initFetcherBridgeWorker(
 	return worker, nil
 }
 
-// initCustodyRetentionWorker constructs the T-006 custody retention sweep
-// worker when all preconditions are satisfied. Returns (nil, nil) when the
-// sweep should not run (Fetcher disabled, bridge bundle incomplete). The
-// soft-disabled branch logs a warning so operators can see why the sweep
-// is idle.
+// wireBridgeHeartbeatWriter resolves the Redis client from the shared
+// infrastructure provider and plumbs a BridgeHeartbeatWriter into the
+// bridge worker. Non-fatal on failure — the bridge must still run when
+// Redis is momentarily unavailable at boot; it will simply not emit
+// heartbeats until the operator addresses the underlying issue. C15.
+func wireBridgeHeartbeatWriter(
+	ctx context.Context,
+	provider sharedPorts.InfrastructureProvider,
+	worker *discoveryWorker.BridgeWorker,
+	logger libLog.Logger,
+) {
+	if worker == nil || provider == nil {
+		return
+	}
+
+	writer, err := resolveBridgeHeartbeat(ctx, provider)
+	if err != nil {
+		logger.Log(ctx, libLog.LevelWarn,
+			fmt.Sprintf("bridge heartbeat writer not wired: %v", err))
+
+		return
+	}
+
+	worker.WithHeartbeatWriter(writer)
+
+	logger.Log(ctx, libLog.LevelInfo, "bridge heartbeat writer wired")
+}
+
+// resolveBridgeHeartbeat constructs the Redis-backed heartbeat adapter.
+// Exported at package level so the query-side wiring (init_discovery.go)
+// can reuse the exact same construction site and key contract.
 //
-// The retention worker is non-critical: failure to start does NOT abort
-// matcher boot because retention is a background housekeeping task, not
-// a serving-path dependency. Orphan custody objects accumulate slowly and
-// are bounded by happy-path bridge throughput.
+// Returns the concrete *discoveryRedis.BridgeHeartbeat which satisfies
+// both BridgeHeartbeatWriter and BridgeHeartbeatReader — callers pick
+// whichever port their dependency needs. Keeping one construction site
+// guarantees the two sides agree on the Redis key and TTL format.
+func resolveBridgeHeartbeat(
+	ctx context.Context,
+	provider sharedPorts.InfrastructureProvider,
+) (*discoveryRedis.BridgeHeartbeat, error) {
+	lease, leaseErr := provider.GetRedisConnection(ctx)
+	if leaseErr != nil {
+		return nil, fmt.Errorf("get redis connection: %w", leaseErr)
+	}
+
+	if lease == nil {
+		return nil, errors.New("redis connection lease is nil")
+	}
+
+	defer lease.Release()
+
+	client, clientErr := lease.GetClient(ctx)
+	if clientErr != nil {
+		return nil, fmt.Errorf("get redis client: %w", clientErr)
+	}
+
+	hb, hbErr := discoveryRedis.NewBridgeHeartbeat(client)
+	if hbErr != nil {
+		return nil, fmt.Errorf("construct bridge heartbeat adapter: %w", hbErr)
+	}
+
+	return hb, nil
+}
+
+// initCustodyRetentionWorker constructs the T-006 custody retention sweep
+// worker when all preconditions are satisfied. Returns (nil, nil) only
+// when Fetcher is disabled (cfg.Fetcher.Enabled=false). When Fetcher is
+// enabled but any upstream dependency (bundle/custody, extraction repo,
+// tenant lister, provider) is nil, this function returns
+// ErrFetcherBridgeNotOperational so operators see the integration bug at
+// startup instead of silently skipping retention.
+//
+// T-003 P4/P5 hardening: Fetcher-enabled deployments MUST fail loudly
+// when wiring is incomplete. Orphan custody objects would otherwise
+// accumulate indefinitely without the operator noticing.
 func initCustodyRetentionWorker(
 	ctx context.Context,
 	cfg *Config,
@@ -543,42 +802,44 @@ func initCustodyRetentionWorker(
 	}
 
 	if bundle == nil || bundle.ArtifactCustody == nil {
-		logger.Log(ctx, libLog.LevelWarn,
-			"custody retention worker not wired: artifact custody store unavailable")
-
-		return nil, nil
+		return nil, fmt.Errorf("%w: artifact custody store is not wired", ErrFetcherBridgeNotOperational)
 	}
 
 	if extractionRepo == nil {
-		logger.Log(ctx, libLog.LevelWarn,
-			"custody retention worker not wired: extraction repository unavailable")
-
-		return nil, nil
+		return nil, fmt.Errorf("%w: extraction repository is nil", ErrFetcherBridgeNotOperational)
 	}
 
 	if tenantLister == nil {
-		logger.Log(ctx, libLog.LevelWarn,
-			"custody retention worker not wired: tenant lister unavailable")
-
-		return nil, nil
+		return nil, fmt.Errorf("%w: tenant lister is nil", ErrFetcherBridgeNotOperational)
 	}
 
 	if provider == nil {
-		logger.Log(ctx, libLog.LevelWarn,
-			"custody retention worker not wired: infrastructure provider unavailable")
+		return nil, fmt.Errorf("%w: infrastructure provider is nil", ErrFetcherBridgeNotOperational)
+	}
 
-		return nil, nil
+	// The custody store wired into bundle.ArtifactCustody already satisfies
+	// CustodyKeyBuilder (compile-time checked in the custody adapter). Pass
+	// it via the dedicated port parameter so the worker never imports the
+	// custody adapter package directly — see the worker-no-adapters
+	// depguard rule.
+	keyBuilder, ok := bundle.ArtifactCustody.(sharedPorts.CustodyKeyBuilder)
+	if !ok {
+		return nil, fmt.Errorf(
+			"%w: artifact custody store does not implement CustodyKeyBuilder",
+			ErrFetcherBridgeNotOperational,
+		)
 	}
 
 	worker, err := discoveryWorker.NewCustodyRetentionWorker(
 		extractionRepo,
 		bundle.ArtifactCustody,
+		keyBuilder,
 		tenantLister,
 		provider,
 		discoveryWorker.CustodyRetentionWorkerConfig{
 			Interval:    cfg.FetcherCustodyRetentionSweepInterval(),
 			GracePeriod: cfg.FetcherCustodyRetentionGracePeriod(),
-			BatchSize:   discoveryWorker.CustodyRetentionDefaultBatchSize(),
+			BatchSize:   discoveryWorker.CustodyRetentionDefaultBatchSize,
 		},
 		logger,
 	)
@@ -598,7 +859,15 @@ func initCustodyRetentionWorker(
 // adapters were wired. Kept compact: operators reading bootstrap logs
 // should see at a glance whether the verified-artifact pipeline is
 // active.
+//
+// A nil bundle is treated as "not wired" rather than panicking — callers
+// guard against this today, but a defensive guard here keeps bootstrap
+// logs readable if a future code path forgets the caller-side check.
 func describeBridgeWiring(bundle *FetcherBridgeAdapters) string {
+	if bundle == nil {
+		return "fetcher bridge adapters not wired (bundle is nil)"
+	}
+
 	components := []string{"intake", "lifecycle link writer"}
 
 	if bundle.VerifiedArtifactOrchestrator != nil {

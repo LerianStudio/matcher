@@ -166,12 +166,27 @@ func TestNormalizeExtractionStatus_Extracting_Passthrough(t *testing.T) {
 func TestNormalizeExtractionStatus_Canceled_MapsToCancelled(t *testing.T) {
 	t.Parallel()
 
-	resp := fetcherExtractionStatusResponse{Status: "canceled"}
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{"lowercase", "canceled"},
+		{"uppercase", "CANCELED"},
+	}
 
-	status, err := normalizeExtractionStatus(resp)
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-	require.NoError(t, err)
-	assert.Equal(t, "CANCELLED", status)
+			resp := fetcherExtractionStatusResponse{Status: tt.input}
+
+			status, err := normalizeExtractionStatus(resp)
+
+			require.NoError(t, err)
+			assert.Equal(t, "CANCELLED", status)
+		})
+	}
 }
 
 func TestNormalizeExtractionStatus_Complete_MissingResultPath_ReturnsError(t *testing.T) {

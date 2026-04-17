@@ -28,6 +28,13 @@ var (
 	// a zero extraction UUID. Distinct from ErrNilExtractionLifecycleLinkWriter
 	// so callers can tell a missing input from an unwired dependency.
 	ErrLinkExtractionIDRequired = errors.New("extraction id is required for lifecycle link")
+	// ErrLinkExtractionRequired indicates a lifecycle link was attempted with
+	// a nil *ExtractionRequest. Distinct from ErrLinkExtractionIDRequired so
+	// callers can distinguish a missing entity pointer from a zero-valued id
+	// on a populated entity — the former is a programming error (the
+	// orchestrator must load the entity before calling the link writer), the
+	// latter is a missing input.
+	ErrLinkExtractionRequired = errors.New("extraction is required for lifecycle link")
 	// ErrLinkIngestionJobIDRequired indicates a lifecycle link was attempted
 	// with a zero ingestion-job UUID. Distinct from
 	// ErrNilExtractionLifecycleLinkWriter so callers can tell a missing input
@@ -75,14 +82,37 @@ type FetcherBridgeIntake interface {
 	) (TrustedContentOutcome, error)
 }
 
+// LinkableExtraction is the minimal view of an ExtractionRequest the
+// lifecycle link writer needs: its id (for the atomic UPDATE) and its
+// state-machine LinkToIngestion method (for pre-SQL validation).
+//
+// Declared as a port-local interface rather than the concrete
+// *discoveryEntities.ExtractionRequest so the shared kernel does not
+// pull in the discovery bounded context (which would create an import
+// cycle — the discovery entity imports this package for
+// ErrExtractionAlreadyLinked).
+//
+// The discovery domain's *ExtractionRequest satisfies this interface
+// natively; adapters and orchestrators pass it through unchanged.
+type LinkableExtraction interface {
+	GetID() uuid.UUID
+	LinkToIngestion(ingestionJobID uuid.UUID) error
+}
+
 // ExtractionLifecycleLinkWriter persists the linkage between an extraction
 // lifecycle and the downstream ingestion job it produced. Implementations
 // must be idempotent: a link attempt against an already-linked extraction
 // must return ErrExtractionAlreadyLinked without mutating the record.
+//
+// Callers pass the pre-loaded LinkableExtraction rather than just an id so
+// the adapter can run state-machine validation (LinkToIngestion) against
+// the in-memory entity without issuing a second FindByID — the orchestrator
+// has already loaded the row during eligibility verification, and re-loading
+// is wasted work plus an extra DB round-trip per bridge outcome.
 type ExtractionLifecycleLinkWriter interface {
 	LinkExtractionToIngestion(
 		ctx context.Context,
-		extractionID uuid.UUID,
+		extraction LinkableExtraction,
 		ingestionJobID uuid.UUID,
 	) error
 }

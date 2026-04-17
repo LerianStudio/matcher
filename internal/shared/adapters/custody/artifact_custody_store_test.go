@@ -12,6 +12,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -26,26 +27,36 @@ import (
 )
 
 // fakeObjectStorage is a manual mock of ObjectStorageClient. The custody
-// store only exercises Upload and Delete; the remaining methods return
-// zero values so tests stay focused on the two under test. We tick the
-// interface as small as possible because go.uber.org/mock is overkill for
-// a 5-method port per CLAUDE.md guidance.
+// store exercises UploadIfAbsent, Download, and Delete; the remaining
+// methods return zero values so tests stay focused on the paths under
+// test. We tick the interface as small as possible because go.uber.org/mock
+// is overkill for a ~7-method port per CLAUDE.md guidance.
+//
+// uploadIfAbsentErr controls the UploadIfAbsent branch:
+//   - nil: happy-path success (first write).
+//   - sharedPorts.ErrObjectAlreadyExists wrapped: replay path (object
+//     already exists); custody Store falls through to recoverDigest.
+//   - any other error: transient failure; Store wraps with
+//     ErrCustodyStoreFailed.
 type fakeObjectStorage struct {
-	uploadKey         string
-	uploadContentType string
-	uploadBody        []byte
-	uploadErr         error
-	deleteKey         string
-	deleteErr         error
-	downloadKey       string
-	downloadBody      []byte
-	downloadErr       error
-	existsResult      bool
-	existsErr         error
-	uploadCalls       int
-	deleteCalls       int
-	downloadCalls     int
-	existsCalls       int
+	uploadKey            string
+	uploadContentType    string
+	uploadBody           []byte
+	uploadErr            error
+	uploadIfAbsentErr    error
+	deleteKey            string
+	deleteErr            error
+	downloadKey          string
+	downloadBody         []byte
+	downloadReader       io.ReadCloser // if non-nil, takes precedence over downloadBody
+	downloadErr          error
+	existsResult         bool
+	existsErr            error
+	uploadCalls          int
+	uploadIfAbsentCalls  int
+	deleteCalls          int
+	downloadCalls        int
+	existsCalls          int
 }
 
 func (f *fakeObjectStorage) Upload(
@@ -70,6 +81,40 @@ func (f *fakeObjectStorage) Upload(
 	return key, nil
 }
 
+// UploadIfAbsent models the conditional PUT path used by ArtifactCustodyStore
+// post-C7. When uploadIfAbsentErr is set, the fake returns it verbatim so
+// tests can exercise both the happy path and the ErrObjectAlreadyExists
+// replay branch. On success we ALSO drain the reader (and populate
+// uploadBody / uploadContentType) so assertions about what would have been
+// written stay accurate, mirroring the real S3 PutObject semantics.
+func (f *fakeObjectStorage) UploadIfAbsent(
+	_ context.Context,
+	key string,
+	reader io.Reader,
+	contentType string,
+) (string, error) {
+	f.uploadIfAbsentCalls++
+	f.uploadKey = key
+	f.uploadContentType = contentType
+
+	// The custody store streams plaintext through a TeeReader; we still
+	// need to read it even on the ErrObjectAlreadyExists branch so the
+	// fake mirrors real S3 behaviour (the body is consumed during request
+	// signing before the server responds 412). A test that wants to assert
+	// "upload body was not persisted" should use uploadIfAbsentCalls and
+	// downloadCalls, not uploadBody.
+	if reader != nil {
+		buf, _ := io.ReadAll(reader)
+		f.uploadBody = buf
+	}
+
+	if f.uploadIfAbsentErr != nil {
+		return "", f.uploadIfAbsentErr
+	}
+
+	return key, nil
+}
+
 func (f *fakeObjectStorage) UploadWithOptions(
 	ctx context.Context,
 	key string,
@@ -86,6 +131,10 @@ func (f *fakeObjectStorage) Download(_ context.Context, key string) (io.ReadClos
 
 	if f.downloadErr != nil {
 		return nil, f.downloadErr
+	}
+
+	if f.downloadReader != nil {
+		return f.downloadReader, nil
 	}
 
 	return io.NopCloser(bytes.NewReader(f.downloadBody)), nil
@@ -156,6 +205,9 @@ func TestStore_HappyPath_WritesTenantScopedKey(t *testing.T) {
 	assert.Equal(t, expectedKey, storage.uploadKey, "tenant-scoped key layout")
 	assert.Equal(t, "application/json", storage.uploadContentType)
 	assert.Equal(t, plaintext, storage.uploadBody, "plaintext forwarded to upload")
+	assert.Equal(t, 1, storage.uploadIfAbsentCalls, "conditional upload must run exactly once on happy path")
+	assert.Equal(t, 0, storage.uploadCalls, "non-conditional Upload must NOT be used")
+	assert.Equal(t, 0, storage.existsCalls, "Exists must NOT be probed — condition is enforced server-side")
 
 	assert.Equal(t, expectedKey, ref.Key)
 	assert.Equal(t, URIScheme+"://"+expectedKey, ref.URI)
@@ -207,7 +259,11 @@ func TestStore_UploadError_WrapsSentinel(t *testing.T) {
 	t.Parallel()
 
 	backendErr := errors.New("s3 putobject refused")
-	storage := &fakeObjectStorage{uploadErr: backendErr}
+	// Drive the error through UploadIfAbsent — the conditional-PUT path is
+	// how custody Store now reaches storage. Setting only the legacy
+	// uploadErr field would never fire because Store no longer calls
+	// Upload directly.
+	storage := &fakeObjectStorage{uploadIfAbsentErr: backendErr}
 
 	store, err := NewArtifactCustodyStore(storage)
 	require.NoError(t, err)
@@ -221,6 +277,8 @@ func TestStore_UploadError_WrapsSentinel(t *testing.T) {
 	require.ErrorIs(t, err, sharedPorts.ErrCustodyStoreFailed)
 	// Backend error stays in the chain so operators can diagnose it.
 	require.ErrorIs(t, err, backendErr)
+	// The conditional-upload error must NOT be misread as a replay.
+	require.NotErrorIs(t, err, sharedPorts.ErrObjectAlreadyExists)
 }
 
 func TestStore_TenantWithSlash_IsRejected(t *testing.T) {
@@ -612,23 +670,33 @@ func TestOpen_DownloadError_WrapsSentinel(t *testing.T) {
 	require.ErrorContains(t, err, "s3 timeout")
 }
 
-// TestStore_ReplayPath_RehashesPersistedBytes exercises Fix 7: when the
-// custody key already exists, Store performs one extra Download() to
-// recompute SHA-256 and Size from the persisted bytes, so source_metadata
-// downstream of the bridge orchestrator never carries empty digest fields.
+// TestStore_ReplayPath_RehashesPersistedBytes exercises the
+// ErrObjectAlreadyExists branch of conditional upload: when the custody
+// key already exists, UploadIfAbsent returns ErrObjectAlreadyExists; Store
+// performs one extra Download() to recompute SHA-256 and Size from the
+// persisted bytes so source_metadata downstream of the bridge orchestrator
+// never carries empty digest fields.
 //
-// Pre-fix behavior returned an empty SHA-256 / zero Size on the replay
-// branch; ingestion then propagated empty strings into custody_sha256,
-// breaking audit tooling that uses the digest as a content-identity key.
+// Pre-C7 behavior used Exists + Upload, which was TOCTOU-vulnerable. The
+// test now drives the replay signal through UploadIfAbsent returning a
+// wrapped ErrObjectAlreadyExists (the shape real S3 adapters produce on
+// 412 Precondition Failed responses) and still asserts the audit contract:
+// the returned SHA/Size describe the PERSISTED bytes, not the caller's
+// input bytes.
 func TestStore_ReplayPath_RehashesPersistedBytes(t *testing.T) {
 	t.Parallel()
 
 	persisted := []byte(`{"rows":[{"id":"r1","amount":"1.00"}]}`)
 	expectedSHA := sha256.Sum256(persisted)
 
+	// Wrap the sentinel the same way a real adapter would (fmt.Errorf with
+	// %w), so errors.Is keeps working through the wrapper. This matches
+	// internal/reporting/adapters/storage/s3_client.go:UploadIfAbsent.
+	collisionErr := fmt.Errorf("%w: s3 412 precondition failed", sharedPorts.ErrObjectAlreadyExists)
+
 	storage := &fakeObjectStorage{
-		existsResult: true,
-		downloadBody: persisted,
+		uploadIfAbsentErr: collisionErr,
+		downloadBody:      persisted,
 	}
 
 	store, err := NewArtifactCustodyStore(storage)
@@ -653,8 +721,9 @@ func TestStore_ReplayPath_RehashesPersistedBytes(t *testing.T) {
 
 	expectedKey := tenantID + "/fetcher-artifacts/" + extractionID.String() + ".json"
 
-	assert.Equal(t, 1, storage.existsCalls, "Exists must be probed exactly once")
-	assert.Equal(t, 0, storage.uploadCalls, "Upload MUST NOT run on replay (write-once)")
+	assert.Equal(t, 0, storage.existsCalls, "Exists must NOT be probed — server-side condition replaces it")
+	assert.Equal(t, 1, storage.uploadIfAbsentCalls, "UploadIfAbsent runs exactly once (condition rejects the write)")
+	assert.Equal(t, 0, storage.uploadCalls, "non-conditional Upload MUST NOT run on replay (write-once)")
 	assert.Equal(t, 1, storage.downloadCalls, "Download MUST run for replay digest recovery")
 	assert.Equal(t, expectedKey, storage.downloadKey)
 
@@ -667,17 +736,19 @@ func TestStore_ReplayPath_RehashesPersistedBytes(t *testing.T) {
 }
 
 // TestStore_ReplayPath_DownloadFailureWrapsSentinel exercises the error
-// branch in Fix 7's recoverDigest helper: if Download fails on replay,
-// Store wraps the error with ErrCustodyStoreFailed instead of silently
-// returning an empty digest. Treating the recovery failure as a hard
-// error is correct because the audit contract depends on the digest;
-// an empty SHA would cascade silently into source_metadata.
+// branch in recoverDigest: if Download fails on replay, Store wraps the
+// error with ErrCustodyStoreFailed instead of silently returning an empty
+// digest. Treating the recovery failure as a hard error is correct because
+// the audit contract depends on the digest; an empty SHA would cascade
+// silently into source_metadata.
 func TestStore_ReplayPath_DownloadFailureWrapsSentinel(t *testing.T) {
 	t.Parallel()
 
+	collisionErr := fmt.Errorf("%w: s3 412 precondition failed", sharedPorts.ErrObjectAlreadyExists)
+
 	storage := &fakeObjectStorage{
-		existsResult: true,
-		downloadErr:  errors.New("s3 transient"),
+		uploadIfAbsentErr: collisionErr,
+		downloadErr:       errors.New("s3 transient"),
 	}
 
 	store, err := NewArtifactCustodyStore(storage)
@@ -692,4 +763,211 @@ func TestStore_ReplayPath_DownloadFailureWrapsSentinel(t *testing.T) {
 	require.ErrorIs(t, err, sharedPorts.ErrCustodyStoreFailed)
 	require.ErrorContains(t, err, "replay recovery")
 	require.ErrorContains(t, err, "s3 transient")
+}
+
+// zeroReader is an io.ReadCloser that produces zero bytes up to a fixed
+// total, then returns io.EOF. Used to simulate a storage backend handing
+// back more bytes than the ingest cap would have allowed — exercising the
+// custody store's replay-path LimitReader defence without allocating the
+// full payload in memory.
+type zeroReader struct {
+	remaining int64
+}
+
+func (z *zeroReader) Read(p []byte) (int, error) {
+	if z.remaining <= 0 {
+		return 0, io.EOF
+	}
+
+	n := int64(len(p))
+	if n > z.remaining {
+		n = z.remaining
+	}
+	// p is already zero-valued from the caller's Make; no need to clear.
+	z.remaining -= n
+
+	return int(n), nil
+}
+
+func (z *zeroReader) Close() error { return nil }
+
+// TestStore_ReplayPath_OversizeDownloadIsCapped exercises the
+// defence-in-depth cap on recoverDigest: if a storage backend misreports
+// Exists (or a future caller writes bytes directly), the replay path must
+// not materialise more than sharedPorts.MaxArtifactBytes. Today the ingest
+// verifier rejects oversize ciphertext before custody writes, so this is a
+// backstop rather than a live hazard — but a silent removal of the cap
+// would reopen a DoS window, so we lock the behaviour with a test.
+func TestStore_ReplayPath_OversizeDownloadIsCapped(t *testing.T) {
+	t.Parallel()
+
+	// Produce one byte beyond the cap so io.LimitReader hands recoverDigest
+	// exactly MaxArtifactBytes+1 bytes, which then trips the counter check.
+	oversize := &zeroReader{remaining: int64(sharedPorts.MaxArtifactBytes) + 1}
+
+	collisionErr := fmt.Errorf("%w: s3 412 precondition failed", sharedPorts.ErrObjectAlreadyExists)
+
+	storage := &fakeObjectStorage{
+		uploadIfAbsentErr: collisionErr,
+		downloadReader:    oversize,
+	}
+
+	store, err := NewArtifactCustodyStore(storage)
+	require.NoError(t, err)
+
+	ref, err := store.Store(context.Background(), sharedPorts.ArtifactCustodyWriteInput{
+		ExtractionID: uuid.New(),
+		TenantID:     "tenant-oversize",
+		Content:      bytes.NewReader([]byte(`{"x":1}`)),
+	})
+	require.Nil(t, ref)
+	require.ErrorIs(t, err, sharedPorts.ErrCustodyStoreFailed)
+	require.ErrorContains(t, err, "replay recovery")
+	require.ErrorContains(t, err, "byte cap")
+}
+
+// TestStore_ConditionalUpload_FirstCallPersists is the C7 happy-path
+// shape test: the first Store call for a (tenant, extraction) pair runs
+// exactly one UploadIfAbsent against the storage layer and returns a
+// fully-populated reference. No Exists probe, no Download — a single
+// round-trip. This is the invariant the C7 fix is meant to preserve:
+// closing the TOCTOU window at the storage layer must not add cost on
+// the hot path.
+func TestStore_ConditionalUpload_FirstCallPersists(t *testing.T) {
+	t.Parallel()
+
+	plaintext := []byte(`{"rows":[{"id":"ok-001","amount":"10.00"}]}`)
+	storage := &fakeObjectStorage{}
+
+	store, err := NewArtifactCustodyStore(storage)
+	require.NoError(t, err)
+
+	extractionID := uuid.New()
+	tenantID := "tenant-first"
+
+	ref, err := store.Store(context.Background(), sharedPorts.ArtifactCustodyWriteInput{
+		ExtractionID: extractionID,
+		TenantID:     tenantID,
+		Content:      bytes.NewReader(plaintext),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, ref)
+
+	expectedKey := tenantID + "/fetcher-artifacts/" + extractionID.String() + ".json"
+	assert.Equal(t, expectedKey, ref.Key)
+	assert.Equal(t, URIScheme+"://"+expectedKey, ref.URI)
+	assert.Equal(t, int64(len(plaintext)), ref.Size)
+
+	expectedSHA := sha256.Sum256(plaintext)
+	assert.Equal(t, hex.EncodeToString(expectedSHA[:]), ref.SHA256)
+
+	// Exactly one storage round-trip on the happy path. The C7 fix must
+	// NOT regress into Exists + Upload, so we pin both counts here.
+	assert.Equal(t, 1, storage.uploadIfAbsentCalls,
+		"happy path must call UploadIfAbsent exactly once")
+	assert.Equal(t, 0, storage.existsCalls,
+		"happy path must NOT probe Exists — the condition is server-side")
+	assert.Equal(t, 0, storage.downloadCalls,
+		"happy path must NOT Download — digest comes from the streaming TeeReader")
+	assert.Equal(t, 0, storage.uploadCalls,
+		"happy path must NOT use the non-conditional Upload")
+}
+
+// TestStore_ConditionalUpload_ConcurrentWinner_ReplaysSuccessfully
+// models the race the C7 fix closes. The scenario sequenced:
+//
+//  1. Two writers, A and B, call Store for the same (tenant, extraction).
+//  2. Writer A's UploadIfAbsent lands first and writes the bytes.
+//  3. Writer B's UploadIfAbsent arrives after A's PUT has completed; the
+//     server responds 412 Precondition Failed. The adapter returns
+//     ErrObjectAlreadyExists wrapped.
+//  4. Writer B's Store MUST treat this as a successful replay — it
+//     short-circuits into recoverDigest, reads the persisted bytes
+//     (Writer A's content), and returns a reference populated from THOSE
+//     bytes, not from its own input.
+//
+// The test simulates both arms sequentially on a shared fake backend so
+// it stays deterministic. The fake mirrors the server-side condition:
+// the first UploadIfAbsent succeeds and "persists" its bytes; the second
+// is configured to return ErrObjectAlreadyExists and expose the
+// already-persisted bytes through Download.
+func TestStore_ConditionalUpload_ConcurrentWinner_ReplaysSuccessfully(t *testing.T) {
+	t.Parallel()
+
+	writerAPayload := []byte(`{"winner":true,"rows":[{"id":"A"}]}`)
+	writerBPayload := []byte(`{"winner":false,"rows":[{"id":"B"}]}`)
+	require.NotEqual(t, writerAPayload, writerBPayload,
+		"test setup: the two payloads must differ so we can prove which one won")
+
+	extractionID := uuid.New()
+	tenantID := "tenant-race"
+	expectedKey := tenantID + "/fetcher-artifacts/" + extractionID.String() + ".json"
+
+	// --- Writer A: happy path. Single fake, no collision, no download.
+	storageA := &fakeObjectStorage{}
+	storeA, err := NewArtifactCustodyStore(storageA)
+	require.NoError(t, err)
+
+	refA, err := storeA.Store(context.Background(), sharedPorts.ArtifactCustodyWriteInput{
+		ExtractionID: extractionID,
+		TenantID:     tenantID,
+		Content:      bytes.NewReader(writerAPayload),
+	})
+	require.NoError(t, err, "writer A's conditional upload must succeed")
+	require.NotNil(t, refA)
+	assert.Equal(t, expectedKey, refA.Key)
+	assert.Equal(t, 1, storageA.uploadIfAbsentCalls,
+		"writer A reaches UploadIfAbsent exactly once")
+
+	winnerSHA := refA.SHA256
+	winnerSize := refA.Size
+
+	// --- Writer B: racer. Its fake is configured so UploadIfAbsent returns
+	// ErrObjectAlreadyExists (server-side 412 Precondition Failed) and
+	// Download hands back writer A's bytes — the scenario writer B would
+	// face in production after A won the race.
+	collisionErr := fmt.Errorf("%w: s3 412 precondition failed", sharedPorts.ErrObjectAlreadyExists)
+
+	storageB := &fakeObjectStorage{
+		uploadIfAbsentErr: collisionErr,
+		// Download returns what A persisted — B must read it verbatim for
+		// the audit digest to describe the winning bytes, not B's input.
+		downloadBody: writerAPayload,
+	}
+
+	storeB, err := NewArtifactCustodyStore(storageB)
+	require.NoError(t, err)
+
+	refB, err := storeB.Store(context.Background(), sharedPorts.ArtifactCustodyWriteInput{
+		ExtractionID: extractionID,
+		TenantID:     tenantID,
+		Content:      bytes.NewReader(writerBPayload),
+	})
+	require.NoError(t, err,
+		"writer B's collision MUST resolve as a successful replay, not an error")
+	require.NotNil(t, refB)
+
+	// The replay path MUST point at the same key and carry winner A's
+	// digest/size, not B's input bytes. This is the whole point of the
+	// write-once guarantee: concurrent writers converge on a single
+	// persisted object.
+	assert.Equal(t, expectedKey, refB.Key,
+		"replay reference must point at the persisted key")
+	assert.Equal(t, URIScheme+"://"+expectedKey, refB.URI)
+	assert.Equal(t, winnerSize, refB.Size,
+		"replay Size must match winner A's bytes, not B's input")
+	assert.Equal(t, winnerSHA, refB.SHA256,
+		"replay SHA must match winner A's bytes, not B's input")
+
+	// Storage access pattern on the replay arm: one conditional upload
+	// (rejected server-side), one download for digest recovery, no
+	// non-conditional Upload, no Exists probe.
+	assert.Equal(t, 1, storageB.uploadIfAbsentCalls,
+		"writer B calls UploadIfAbsent exactly once (rejected)")
+	assert.Equal(t, 1, storageB.downloadCalls,
+		"writer B downloads the persisted bytes to recover the audit digest")
+	assert.Equal(t, 0, storageB.existsCalls,
+		"writer B MUST NOT probe Exists — the TOCTOU fix removed that call")
+	assert.Equal(t, 0, storageB.uploadCalls,
+		"writer B MUST NOT fall back to non-conditional Upload")
 }

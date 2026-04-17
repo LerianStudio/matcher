@@ -329,9 +329,12 @@ func TestClassifyArtifactResponse_OversizedBody_IsTerminal(t *testing.T) {
 
 // TestClassifyArtifactResponse_4xxTerminalVsTransient documents the
 // retry policy split: 401/403/413 are terminal (auth expired, IAM
-// revoked, payload rejected — retry cannot fix any of these), while 408
-// Request Timeout and 425 Too Early are the rare 4xx responses where a
-// retry could legitimately succeed.
+// revoked, payload rejected — retry cannot fix any of these), while
+// 408 Request Timeout, 425 Too Early, and 429 Too Many Requests are the
+// 4xx responses where a retry could legitimately succeed. 429 in
+// particular MUST be transient — treating an upstream rate-limit as a
+// terminal integrity failure would let a brief Fetcher throttling
+// window permanently kill every in-flight extraction.
 func TestClassifyArtifactResponse_4xxTerminalVsTransient(t *testing.T) {
 	t.Parallel()
 
@@ -343,7 +346,6 @@ func TestClassifyArtifactResponse_4xxTerminalVsTransient(t *testing.T) {
 		{"403 forbidden", http.StatusForbidden},
 		{"413 payload too large", http.StatusRequestEntityTooLarge},
 		{"400 bad request", http.StatusBadRequest},
-		{"429 too many requests", http.StatusTooManyRequests},
 	}
 	for _, tc := range terminalCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -363,6 +365,7 @@ func TestClassifyArtifactResponse_4xxTerminalVsTransient(t *testing.T) {
 	}{
 		{"408 request timeout", http.StatusRequestTimeout},
 		{"425 too early", http.StatusTooEarly},
+		{"429 too many requests", http.StatusTooManyRequests},
 	}
 	for _, tc := range transientCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -375,6 +378,42 @@ func TestClassifyArtifactResponse_4xxTerminalVsTransient(t *testing.T) {
 				"%s must not masquerade as a terminal failure", tc.name)
 		})
 	}
+}
+
+// TestClassifyArtifactResponse_429_EchoesRetryAfter locks in the bonus
+// hardening: when Fetcher returns 429 with a Retry-After header, the
+// classifier echoes the value into the error message so operators can
+// see the advised delay in logs. The classifier does NOT sleep or
+// schedule — parking is handled by the bridge worker's retry loop.
+func TestClassifyArtifactResponse_429_EchoesRetryAfter(t *testing.T) {
+	t.Parallel()
+
+	resp := newStubResponse(
+		http.StatusTooManyRequests,
+		map[string]string{"Retry-After": "30"},
+		"",
+	)
+
+	_, err := classifyArtifactResponse(resp)
+	require.ErrorIs(t, err, sharedPorts.ErrArtifactRetrievalFailed,
+		"429 must remain transient even when Retry-After is present")
+	require.NotErrorIs(t, err, sharedPorts.ErrIntegrityVerificationFailed,
+		"429 must not be misclassified as an integrity failure")
+	require.Contains(t, err.Error(), "retry-after=30",
+		"operators need the Retry-After value visible in logs")
+}
+
+// TestClassifyArtifactResponse_429_NoRetryAfter confirms the classifier
+// does not fabricate retry-after text when Fetcher omits the header.
+func TestClassifyArtifactResponse_429_NoRetryAfter(t *testing.T) {
+	t.Parallel()
+
+	resp := newStubResponse(http.StatusTooManyRequests, nil, "")
+
+	_, err := classifyArtifactResponse(resp)
+	require.ErrorIs(t, err, sharedPorts.ErrArtifactRetrievalFailed)
+	require.NotContains(t, err.Error(), "retry-after=",
+		"omit retry-after from the message when the header is absent")
 }
 
 // TestIsNilArtifactHTTPClient_TypedNilRejected proves the typed-nil

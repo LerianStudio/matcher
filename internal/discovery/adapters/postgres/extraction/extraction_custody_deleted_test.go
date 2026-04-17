@@ -14,7 +14,6 @@ import (
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
@@ -148,6 +147,12 @@ func TestMarkCustodyDeletedWithTx_NilRepo_ReturnsSentinel(t *testing.T) {
 // TestMarkCustodyDeleted_CoercesToUTC asserts the stored timestamp is
 // normalised to UTC. Without this, a local-timezone time.Now() could be
 // persisted as e.g. PST, creating a subtle cross-DB-row consistency bug.
+//
+// The assertion is load-bearing because sqlmock's WithArgs uses
+// reflect.DeepEqual, and two time.Time values with identical wall clocks
+// but different Locations are NOT DeepEqual. So passing `localTime` (PST)
+// into MarkCustodyDeleted would fail to match the `expectedUTC` arg in
+// the mock unless the repo actually coerces to UTC before the UPDATE.
 func TestMarkCustodyDeleted_CoercesToUTC(t *testing.T) {
 	t.Parallel()
 
@@ -155,12 +160,22 @@ func TestMarkCustodyDeleted_CoercesToUTC(t *testing.T) {
 	defer finish()
 
 	id := uuid.New()
-	// Non-UTC timezone to verify coercion.
-	loc, err := time.LoadLocation("America/Los_Angeles")
+	// Non-UTC timezone to verify coercion. Asia/Tokyo is +09:00 which
+	// straddles a calendar-day boundary from UTC — if coercion were
+	// broken, a naive persist would store the wrong wall clock, not just
+	// the wrong zone.
+	loc, err := time.LoadLocation("Asia/Tokyo")
 	require.NoError(t, err)
 
-	localTime := time.Date(2026, 4, 16, 10, 30, 0, 0, loc)
+	localTime := time.Date(2026, 4, 16, 2, 30, 0, 0, loc) // 02:30 JST = 17:30 previous-day UTC
 	expectedUTC := localTime.UTC()
+
+	// Sanity: the input is NOT in UTC. Without this precondition the
+	// test would be trivially passing when loc somehow resolves to UTC.
+	require.NotEqual(t, time.UTC, localTime.Location(),
+		"test precondition: localTime must be non-UTC to exercise coercion")
+	require.Equal(t, time.UTC, expectedUTC.Location(),
+		"test precondition: expectedUTC must be in UTC")
 
 	mock.ExpectBegin()
 	mock.ExpectExec(regexp.QuoteMeta(
@@ -174,10 +189,8 @@ func TestMarkCustodyDeleted_CoercesToUTC(t *testing.T) {
 	mock.ExpectCommit()
 
 	err = repo.MarkCustodyDeleted(context.Background(), id, localTime)
-	require.NoError(t, err)
-	// Belt-and-suspenders: expected value is UTC (sqlmock matched it
-	// because we passed expectedUTC, so the coercion is verified).
-	assert.Equal(t, time.UTC, expectedUTC.Location())
+	require.NoError(t, err,
+		"pass non-UTC time; repo must coerce to UTC so sqlmock's WithArgs match succeeds")
 }
 
 // Compile-time assertion that the new methods live on the interface

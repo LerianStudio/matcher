@@ -311,6 +311,22 @@ func (er *ExtractionRequest) LinkToIngestion(ingestionJobID uuid.UUID) error {
 	return nil
 }
 
+// GetID returns the extraction's immutable identifier. Satisfies the
+// sharedPorts.LinkableExtraction interface used by the lifecycle link
+// writer so the shared kernel does not need to import discovery entities
+// directly (that would create an import cycle — this package imports
+// shared/ports for ErrExtractionAlreadyLinked).
+//
+// Kept nil-safe so callers that hold a potentially-nil pointer get back
+// uuid.Nil rather than panicking on dereference.
+func (er *ExtractionRequest) GetID() uuid.UUID {
+	if er == nil {
+		return uuid.Nil
+	}
+
+	return er.ID
+}
+
 func cloneMap(src map[string]any) (map[string]any, error) {
 	if src == nil {
 		return make(map[string]any), nil

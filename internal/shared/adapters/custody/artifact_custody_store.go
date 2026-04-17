@@ -77,8 +77,23 @@ type ArtifactCustodyStore struct {
 	now     func() time.Time
 }
 
-// Compile-time interface check.
-var _ sharedPorts.ArtifactCustodyStore = (*ArtifactCustodyStore)(nil)
+// Compile-time interface checks.
+var (
+	_ sharedPorts.ArtifactCustodyStore = (*ArtifactCustodyStore)(nil)
+	_ sharedPorts.CustodyKeyBuilder    = (*ArtifactCustodyStore)(nil)
+)
+
+// BuildObjectKey delegates to the package-level BuildObjectKey so the
+// store value satisfies the sharedPorts.CustodyKeyBuilder port. Workers
+// can then consume the key builder via the port interface instead of
+// importing this adapter package — see the worker-no-adapters depguard
+// rule for the enforcement.
+func (store *ArtifactCustodyStore) BuildObjectKey(
+	tenantID string,
+	extractionID uuid.UUID,
+) (string, error) {
+	return BuildObjectKey(tenantID, extractionID)
+}
 
 // Option is a functional option for customising the custody store at
 // construction time. Currently only NowFunc is overridable; kept as an
@@ -129,25 +144,27 @@ func NewArtifactCustodyStore(
 // libS3.GetObjectStorageKey) so operators have a single mental model for
 // where tenant data lives in object storage.
 //
-// Write-once semantics (T-003 P3 hardening): an existence check runs before
-// upload. If the key already exists, Store returns a reference that points
-// at the existing object without re-uploading. This preserves T-003's
-// idempotency guarantee — replaying the bridge worker against the same
-// extraction cannot produce a different custody copy with a different
-// SHA-256, because the second attempt never overwrites the first.
+// Write-once semantics (C7 hardening): the upload runs through
+// UploadIfAbsent, which issues a conditional PUT (If-None-Match: *) to
+// the underlying object store. If the key already exists, the storage
+// layer returns sharedPorts.ErrObjectAlreadyExists and Store drops into
+// the replay path — recovering digest + size from the persisted bytes
+// instead of re-uploading. This closes the TOCTOU window that a separate
+// Exists + Upload pair left open: two concurrent writers can no longer
+// both observe "absent" and both PUT, because the server-side condition
+// is a single atomic check. The bridge worker's Redis distributed lock
+// stays in place as defense-in-depth (and because not every S3-compatible
+// backend honours the condition header reliably).
 //
-// Replay-recovery cost (T-003 polish Fix 7): on the existed==true branch,
-// Store performs one extra Download() to recompute SHA-256 and Size from
-// the persisted bytes. This costs one round-trip on replays (rare in the
+// Replay-recovery cost: on the ErrObjectAlreadyExists branch, Store
+// performs one extra Download() to recompute SHA-256 and Size from the
+// persisted bytes. This costs one round-trip on replays (rare in the
 // happy path) but preserves the audit contract — source_metadata never
-// carries empty custody_sha256, even after a partial-success retry. The
-// alternative (returning empty SHA/Size on replay) propagated empty hash
-// strings into the ingestion job's source_metadata, breaking downstream
-// audit tooling that relies on the digest as a content-identity key.
+// carries empty custody_sha256, even after a partial-success retry.
 //
-// On failure, the underlying storage error is wrapped with
-// ErrCustodyStoreFailed; callers retry on the wrapped sentinel, not the
-// underlying S3 error.
+// On failure other than ErrObjectAlreadyExists, the underlying storage
+// error is wrapped with ErrCustodyStoreFailed; callers retry on the
+// wrapped sentinel, not the underlying S3 error.
 func (store *ArtifactCustodyStore) Store(
 	ctx context.Context,
 	input sharedPorts.ArtifactCustodyWriteInput,
@@ -178,50 +195,50 @@ func (store *ArtifactCustodyStore) Store(
 		return nil, wrapped
 	}
 
-	// Write-once guard: if the key already exists, treat it as a replay and
-	// return a reference to the existing object without re-uploading. This
-	// keeps custody SHA-256 stable across bridge replays — a critical
-	// invariant for T-003's "no duplicate downstream readiness outcomes"
-	// guarantee.
-	existed, existErr := store.storage.Exists(ctx, key)
-	if existErr != nil {
-		// Treat Exists failure as transient and surface it wrapped. We do
-		// NOT proceed to Upload blindly — doing so would overwrite on
-		// partial-success retries, which is exactly the bug P3 fixes.
-		wrapped := fmt.Errorf("%w: exists probe: %w", sharedPorts.ErrCustodyStoreFailed, existErr)
-		libOpentelemetry.HandleSpanError(span, "custody exists probe failed", wrapped)
-
-		return nil, wrapped
-	}
-
-	if existed {
-		// Replay-recovery: re-hash the persisted bytes so source_metadata
-		// downstream of the bridge orchestrator never carries empty digest
-		// fields. Cost is one extra round-trip per replay (rare in the
-		// happy path); benefit is a stable audit contract.
-		size, sha, recoverErr := store.recoverDigest(ctx, key)
-		if recoverErr != nil {
-			wrapped := fmt.Errorf("%w: replay recovery: %w", sharedPorts.ErrCustodyStoreFailed, recoverErr)
-			libOpentelemetry.HandleSpanError(span, "custody replay recovery failed", wrapped)
-
-			return nil, wrapped
-		}
-
-		return &sharedPorts.ArtifactCustodyReference{
-			URI:      URIScheme + "://" + key,
-			Key:      key,
-			Size:     size,
-			SHA256:   sha,
-			StoredAt: store.now(),
-		}, nil
-	}
-
 	hasher := sha256.New()
 	counter := &counterWriter{}
 	teed := io.TeeReader(io.TeeReader(input.Content, hasher), counter)
 
-	storedKey, err := store.storage.Upload(ctx, key, teed, plaintextContentType)
+	// Conditional PUT: the storage layer issues If-None-Match: * and maps
+	// a 412 Precondition Failed response onto ErrObjectAlreadyExists. This
+	// atomically closes the check-then-act window a separate Exists +
+	// Upload pair left open. Concurrent writers can no longer both succeed
+	// against the same key; at most one wins, the other replays.
+	storedKey, err := store.storage.UploadIfAbsent(ctx, key, teed, plaintextContentType)
 	if err != nil {
+		if errors.Is(err, sharedPorts.ErrObjectAlreadyExists) {
+			// Replay path: the object is already in custody from a prior
+			// successful write. Re-hash the persisted bytes so the returned
+			// reference carries the authoritative digest + size — the
+			// input reader we just streamed through the TeeReader describes
+			// THIS caller's bytes, which may differ from what's persisted
+			// (different crypto nonce, different Fetcher response buffer).
+			// The audit contract says source_metadata must describe the
+			// persisted bytes, so we ignore the teed hash and re-read.
+			size, sha, recoverErr := store.recoverDigest(ctx, key)
+			if recoverErr != nil {
+				wrapped := fmt.Errorf("%w: replay recovery: %w", sharedPorts.ErrCustodyStoreFailed, recoverErr)
+				libOpentelemetry.HandleSpanError(span, "custody replay recovery failed", wrapped)
+
+				return nil, wrapped
+			}
+
+			// StoredAt on the replay path reflects the recovery time (now),
+			// NOT the original upload time. Object storage backends do not
+			// expose the original creation timestamp through our Download
+			// port, so recording "now" is the best we can do without a
+			// second metadata round-trip. Consumers that must distinguish
+			// first-write from replay should not rely on StoredAt alone;
+			// the caller-side dedup hash already provides that signal.
+			return &sharedPorts.ArtifactCustodyReference{
+				URI:      URIScheme + "://" + key,
+				Key:      key,
+				Size:     size,
+				SHA256:   sha,
+				StoredAt: store.now(),
+			}, nil
+		}
+
 		wrapped := fmt.Errorf("%w: upload: %w", sharedPorts.ErrCustodyStoreFailed, err)
 		libOpentelemetry.HandleSpanError(span, "custody upload failed", wrapped)
 
@@ -398,6 +415,13 @@ func validateWriteInput(input sharedPorts.ArtifactCustodyWriteInput) error {
 // counterWriter counts bytes flowing through a writer. Cheaper than
 // wrapping io.Copy because the upload path consumes the reader
 // internally. We drop bytes into the void once we have counted them.
+//
+// Contract: Write always returns (len(p), nil) — it never errors and never
+// short-writes. This is intentional: counterWriter is paired with a
+// sha256.Hash inside an io.MultiWriter (see Store and recoverDigest) so the
+// upload pipeline can compute the content length alongside the streaming
+// hash without a second pass over the bytes. Callers that need an errant-
+// write signal must use a different writer.
 type counterWriter struct {
 	n int64
 }
@@ -413,6 +437,13 @@ func (c *counterWriter) Write(p []byte) (int, error) {
 // populated reference instead of one with empty Size/SHA256. The Download
 // reader is closed eagerly and any close failure is folded into the
 // returned error so the caller never has to worry about leaked handles.
+//
+// Defense-in-depth: the read is capped at sharedPorts.MaxArtifactBytes to
+// mirror the ingest verifier. Today only capped objects reach this path
+// (the ingest verifier would have refused anything larger before persistence),
+// but a storage backend that misreports Exists — or a future caller that
+// writes directly — must not be able to make replay materialise more bytes
+// than the ingest side permits.
 func (store *ArtifactCustodyStore) recoverDigest(ctx context.Context, key string) (int64, string, error) {
 	reader, err := store.storage.Download(ctx, key)
 	if err != nil {
@@ -421,11 +452,18 @@ func (store *ArtifactCustodyStore) recoverDigest(ctx context.Context, key string
 
 	hasher := sha256.New()
 	counter := &counterWriter{}
+	limited := io.LimitReader(reader, sharedPorts.MaxArtifactBytes+1)
 
-	if _, copyErr := io.Copy(io.MultiWriter(hasher, counter), reader); copyErr != nil {
+	if _, copyErr := io.Copy(io.MultiWriter(hasher, counter), limited); copyErr != nil {
 		_ = reader.Close()
 
 		return 0, "", fmt.Errorf("hash persisted custody bytes: %w", copyErr)
+	}
+
+	if counter.n > sharedPorts.MaxArtifactBytes {
+		_ = reader.Close()
+
+		return 0, "", fmt.Errorf("replay recovery exceeded %d byte cap", sharedPorts.MaxArtifactBytes)
 	}
 
 	if closeErr := reader.Close(); closeErr != nil {

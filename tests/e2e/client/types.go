@@ -929,3 +929,39 @@ type DiscoveryExtractionResponse struct {
 	CreatedAt      time.Time                                   `json:"createdAt"`
 	UpdatedAt      time.Time                                   `json:"updatedAt"`
 }
+
+// BridgeReadinessSummaryResponse represents the aggregate readiness counts
+// returned by GET /v1/discovery/extractions/bridge/summary.
+type BridgeReadinessSummaryResponse struct {
+	ReadyCount        int64     `json:"readyCount"`
+	PendingCount      int64     `json:"pendingCount"`
+	StaleCount        int64     `json:"staleCount"`
+	FailedCount       int64     `json:"failedCount"`
+	InFlightCount     int64     `json:"inFlightCount"`
+	TotalCount        int64     `json:"totalCount"`
+	StaleThresholdSec int64     `json:"staleThresholdSec"`
+	GeneratedAt       time.Time `json:"generatedAt"`
+}
+
+// BridgeCandidateResponse represents a single drill-down row from
+// GET /v1/discovery/extractions/bridge/candidates.
+type BridgeCandidateResponse struct {
+	ExtractionID    string    `json:"extractionId"`
+	ConnectionID    string    `json:"connectionId"`
+	Status          string    `json:"status"`
+	ReadinessState  string    `json:"readinessState"`
+	IngestionJobID  *string   `json:"ingestionJobId,omitempty"`
+	FetcherJobID    string    `json:"fetcherJobId,omitempty"`
+	CreatedAt       time.Time `json:"createdAt"`
+	UpdatedAt       time.Time `json:"updatedAt"`
+	AgeSeconds      int64     `json:"ageSeconds"`
+	BridgeLastError string    `json:"bridgeLastError,omitempty"`
+}
+
+// ListBridgeCandidatesResponse wraps a page of bridge candidate drill-down rows.
+type ListBridgeCandidatesResponse struct {
+	Items      []BridgeCandidateResponse `json:"items"`
+	NextCursor string                    `json:"nextCursor,omitempty"`
+	State      string                    `json:"state"`
+	Limit      int                       `json:"limit"`
+}

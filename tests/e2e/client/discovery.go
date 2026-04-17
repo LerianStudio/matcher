@@ -116,3 +116,36 @@ func (c *DiscoveryClient) RefreshDiscovery(ctx context.Context) (*DiscoveryRefre
 	}
 	return &resp, nil
 }
+
+// GetBridgeReadinessSummary retrieves the aggregate readiness counts for the tenant.
+func (c *DiscoveryClient) GetBridgeReadinessSummary(ctx context.Context) (*BridgeReadinessSummaryResponse, error) {
+	var resp BridgeReadinessSummaryResponse
+	err := c.client.DoJSON(ctx, http.MethodGet, "/v1/discovery/extractions/bridge/summary", nil, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("get bridge readiness summary: %w", err)
+	}
+	return &resp, nil
+}
+
+// ListBridgeCandidates retrieves a page of bridge readiness drill-down rows for the given state.
+// state is required ("pending", "ready", "stale", "failed", "in_flight").
+// cursor and limit are optional; pass "" and 0 respectively to use defaults.
+func (c *DiscoveryClient) ListBridgeCandidates(
+	ctx context.Context,
+	state, cursor string,
+	limit int,
+) (*ListBridgeCandidatesResponse, error) {
+	var resp ListBridgeCandidatesResponse
+	path := "/v1/discovery/extractions/bridge/candidates?state=" + state
+	if cursor != "" {
+		path += "&cursor=" + cursor
+	}
+	if limit > 0 {
+		path += fmt.Sprintf("&limit=%d", limit)
+	}
+	err := c.client.DoJSON(ctx, http.MethodGet, path, nil, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("list bridge candidates: %w", err)
+	}
+	return &resp, nil
+}

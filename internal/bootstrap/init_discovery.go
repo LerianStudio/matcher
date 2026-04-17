@@ -49,6 +49,7 @@ type discoveryModuleInitFunc func(
 	configGetter func() *Config,
 	provider sharedPorts.InfrastructureProvider,
 	tenantLister sharedPorts.TenantLister,
+	extractionRepo *discoveryExtractionRepo.Repository,
 	logger libLog.Logger,
 	m2mProvider ...sharedPorts.M2MProvider,
 ) (*discoveryWorker.DiscoveryWorker, error)
@@ -59,6 +60,7 @@ func initOptionalDiscoveryWorker(
 	configGetter func() *Config,
 	provider sharedPorts.InfrastructureProvider,
 	tenantLister sharedPorts.TenantLister,
+	extractionRepo *discoveryExtractionRepo.Repository,
 	logger libLog.Logger,
 	initFn discoveryModuleInitFunc,
 	m2mProvider ...sharedPorts.M2MProvider,
@@ -71,7 +73,7 @@ func initOptionalDiscoveryWorker(
 		return nil, nil
 	}
 
-	worker, err := initFn(routes, cfg, configGetter, provider, tenantLister, logger, m2mProvider...)
+	worker, err := initFn(routes, cfg, configGetter, provider, tenantLister, extractionRepo, logger, m2mProvider...)
 	if err != nil {
 		return nil, fmt.Errorf("initialize discovery module: %w", err)
 	}
@@ -168,6 +170,7 @@ func initDiscoveryModule(
 	configGetter func() *Config,
 	provider sharedPorts.InfrastructureProvider,
 	tenantLister sharedPorts.TenantLister,
+	extractionRepo *discoveryExtractionRepo.Repository,
 	logger libLog.Logger,
 	m2mProvider ...sharedPorts.M2MProvider,
 ) (*discoveryWorker.DiscoveryWorker, error) {
@@ -182,7 +185,6 @@ func initDiscoveryModule(
 
 	connRepo := discoveryConnRepo.NewRepository(provider)
 	schemaRepo := discoverySchemaRepo.NewRepository(provider)
-	extractionRepo := discoveryExtractionRepo.NewRepository(provider)
 
 	cmdUseCase, err := discoveryCommand.NewUseCase(fetcherClient, connRepo, schemaRepo, extractionRepo, logger)
 	if err != nil {
@@ -214,6 +216,13 @@ func initDiscoveryModule(
 
 		return runtimeCfg.FetcherBridgeStaleThreshold()
 	})
+
+	// C15: wire the bridge-worker heartbeat reader so the dashboard summary
+	// can surface "worker last ticked at T" / "worker staleness = Ns" /
+	// "worker healthy" without waiting for staleThreshold to fire. Non-
+	// fatal: if Redis is not reachable, the query use case simply reports
+	// the heartbeat fields as nil and the dashboard renders "unknown".
+	wireBridgeHeartbeatReader(context.Background(), provider, queryUseCase, cfg, configGetter, logger)
 
 	if cfg.Auth.Enabled {
 		logger.Log(context.Background(), libLog.LevelWarn,
@@ -255,6 +264,65 @@ func initDiscoveryModule(
 	wireDiscoverySchemaCacheFromRedis(provider, cmdUseCase, queryUseCase, worker, cfg, configGetter, logger)
 
 	return worker, nil
+}
+
+// bridgeHeartbeatStaleMultiplier scales the bridge poll interval to the
+// threshold beyond which the dashboard's derived WorkerHealthy flag goes
+// false. Must be strictly larger than the worker's
+// bridgeHeartbeatTTLMultiplier (3) so one missed write doesn't flip the
+// flag — 4 leaves a full interval of grace. C15.
+const bridgeHeartbeatStaleMultiplier = 4
+
+// wireBridgeHeartbeatReader installs the Redis-backed heartbeat reader on
+// the discovery query use case. Non-critical: a wiring failure (Redis
+// unreachable at boot, misconfigured client) is logged as a warning and
+// the query use case keeps running without the liveness fields — the
+// dashboard renders "unknown" instead.
+func wireBridgeHeartbeatReader(
+	ctx context.Context,
+	provider sharedPorts.InfrastructureProvider,
+	queryUseCase *discoveryQuery.UseCase,
+	cfg *Config,
+	configGetter func() *Config,
+	logger libLog.Logger,
+) {
+	if queryUseCase == nil || provider == nil {
+		return
+	}
+
+	reader, err := resolveBridgeHeartbeat(ctx, provider)
+	if err != nil {
+		logger.Log(ctx, libLog.LevelWarn,
+			fmt.Sprintf("bridge heartbeat reader not wired: %v", err))
+
+		return
+	}
+
+	staleAfter := computeBridgeHeartbeatStaleAfter(cfg, configGetter)
+	queryUseCase.WithBridgeHeartbeatReader(reader, staleAfter)
+
+	logger.Log(ctx, libLog.LevelInfo,
+		fmt.Sprintf("bridge heartbeat reader wired (stale-after=%s)", staleAfter))
+}
+
+// computeBridgeHeartbeatStaleAfter resolves the healthy-versus-stale
+// threshold the query use case uses when deriving the WorkerHealthy flag.
+// Derived from the current bridge poll interval so the threshold tracks
+// operator config changes without a separate knob.
+func computeBridgeHeartbeatStaleAfter(cfg *Config, configGetter func() *Config) time.Duration {
+	runtimeCfg := cfg
+
+	if configGetter != nil {
+		if currentCfg := configGetter(); currentCfg != nil {
+			runtimeCfg = currentCfg
+		}
+	}
+
+	if runtimeCfg == nil {
+		return 2 * time.Minute
+	}
+
+	return time.Duration(bridgeHeartbeatStaleMultiplier) * runtimeCfg.FetcherBridgeInterval()
 }
 
 // wireDiscoverySchemaCacheFromRedis attempts to create a Redis-backed schema cache and

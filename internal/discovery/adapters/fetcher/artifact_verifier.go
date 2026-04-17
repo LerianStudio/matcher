@@ -50,14 +50,14 @@ const (
 	// key would silently weaken the derived keys below their nominal
 	// security level. 32 bytes matches the Fetcher contract.
 	minMasterKeyLen = 32
-
-	// maxCiphertextBytes caps how much ciphertext the verifier will read
-	// into memory. Fetcher has no documented upper bound, but unbounded
-	// reads invite memory-exhaustion DoS. 256 MiB is well above realistic
-	// extraction output sizes (Fetcher's output is flat JSON, not
-	// multi-shard binary).
-	maxCiphertextBytes = 256 * 1024 * 1024
 )
+
+// maxCiphertextBytes caps how much ciphertext the verifier will read
+// into memory. Delegates to sharedPorts.MaxArtifactBytes so the ingest
+// verifier and the custody replay-recovery path stay in lockstep — any
+// drift between the two would reopen a memory-exhaustion DoS on whichever
+// side forgot the check.
+const maxCiphertextBytes = sharedPorts.MaxArtifactBytes
 
 // Sentinel errors for verifier construction. Runtime verification errors
 // collapse to sharedPorts.ErrIntegrityVerificationFailed so callers see
@@ -186,6 +186,12 @@ func (verifier *ArtifactVerifier) VerifyAndDecrypt(
 ) (io.Reader, error) {
 	_, tracer, _, _ := libCommons.NewTrackingFromContext(ctx) //nolint:dogsled // tracer only
 
+	// ctx underscore on tracer.Start is intentional: no downstream helper
+	// (readBoundedCiphertext, verifyHMAC, decryptAESGCM, HandleSpanError/
+	// BusinessErrorEvent) consumes a span-enriched ctx, so threading the
+	// returned ctx would add noise without any child-span benefit. If a
+	// future helper starts accepting ctx, switch this back to
+	// `ctx, span := tracer.Start(ctx, ...)`.
 	_, span := tracer.Start(ctx, "fetcher.artifact_verifier.verify_and_decrypt")
 	defer span.End()
 

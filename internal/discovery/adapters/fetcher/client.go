@@ -65,16 +65,19 @@ type HTTPFetcherClient struct {
 
 // SetM2MProvider sets the M2M credential provider for multi-tenant authentication.
 // This is safe to call after construction to wire in the provider from bootstrap.
+// A nil provider is ignored (matching WithM2MProvider's nil-guard behavior) so a
+// misconfigured caller cannot silently disable auth on an already-wired client.
 func (client *HTTPFetcherClient) SetM2MProvider(p sharedPorts.M2MProvider) {
-	if client != nil {
+	if client != nil && p != nil {
 		client.m2mProvider = p
 	}
 }
 
 // SetTokenExchanger sets the OAuth2 token exchanger for Bearer authentication.
 // This is safe to call after construction to wire in the exchanger from bootstrap.
+// A nil exchanger is ignored (matching WithTokenExchanger's nil-guard behavior).
 func (client *HTTPFetcherClient) SetTokenExchanger(te discoveryPorts.TokenExchanger) {
-	if client != nil {
+	if client != nil && te != nil {
 		client.tokenExchanger = te
 	}
 }

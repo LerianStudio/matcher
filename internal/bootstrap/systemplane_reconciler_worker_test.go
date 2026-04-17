@@ -628,3 +628,39 @@ func TestWorkerReconciler_ArchivalConfig_Defaults(t *testing.T) {
 	assert.Equal(t, "GLACIER", cfg.Archival.StorageClass)
 	assert.Equal(t, 3, cfg.Archival.PartitionLookahead)
 }
+
+// TestSnapshotToWorkerConfig_HydratesBridgeRetryMaxAttempts is a regression
+// test for the C17 finding: the bridge_retry_max_attempts key is registered
+// with ApplyBehavior=ApplyWorkerReconcile and MutableAtRuntime=true, so the
+// WorkerReconciler MUST carry the operator's override into *Config or
+// runtime PUTs are silently no-ops (audit log succeeds, worker never sees
+// the new value).
+func TestSnapshotToWorkerConfig_HydratesBridgeRetryMaxAttempts(t *testing.T) {
+	t.Parallel()
+
+	snap := domain.Snapshot{
+		Configs: map[string]domain.EffectiveValue{
+			"fetcher.bridge_retry_max_attempts": {Key: "fetcher.bridge_retry_max_attempts", Value: 10},
+		},
+	}
+
+	cfg := snapshotToWorkerConfig(snap)
+
+	require.NotNil(t, cfg)
+	assert.Equal(t, 10, cfg.Fetcher.BridgeRetryMaxAttempts,
+		"snapshot override for fetcher.bridge_retry_max_attempts must hydrate into Config so the reconciler can detect changes")
+}
+
+func TestSnapshotToWorkerConfig_BridgeRetryMaxAttempts_DefaultWhenMissing(t *testing.T) {
+	t.Parallel()
+
+	// Empty snapshot — field must fall back to defaultBridgeRetryMaxAttempts
+	// so an absent key reconciles to the registered default rather than 0.
+	snap := domain.Snapshot{}
+
+	cfg := snapshotToWorkerConfig(snap)
+
+	require.NotNil(t, cfg)
+	assert.Equal(t, defaultBridgeRetryMaxAttempts, cfg.Fetcher.BridgeRetryMaxAttempts,
+		"missing bridge_retry_max_attempts must fall back to defaultBridgeRetryMaxAttempts")
+}

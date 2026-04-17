@@ -117,7 +117,7 @@ func newReadinessTestApp(t *testing.T, repo *readinessHandlerStub, threshold tim
 	return app
 }
 
-func TestGetBridgeReadinessSummary_ReturnsAllFourBuckets(t *testing.T) {
+func TestGetBridgeReadinessSummary_ReturnsAllFiveBuckets(t *testing.T) {
 	t.Parallel()
 
 	repo := &readinessHandlerStub{
@@ -270,6 +270,11 @@ func TestListBridgeCandidates_FullPage_EmitsNextCursor(t *testing.T) {
 	require.NoError(t, json.Unmarshal(decoded, &cursor))
 
 	assert.Equal(t, rows[pageSize-1].ID.String(), cursor.ID)
+	// CreatedAt anchors the keyset paging — a cursor that drops the
+	// timestamp would paginate by ID alone and miss rows with equal
+	// CreatedAt across pages.
+	assert.WithinDuration(t, rows[pageSize-1].CreatedAt, cursor.CreatedAt, time.Microsecond,
+		"cursor.CreatedAt must match the last row's CreatedAt for keyset paging")
 }
 
 func TestListBridgeCandidates_PassesCursorThrough(t *testing.T) {
@@ -534,28 +539,28 @@ func TestResolveStaleThreshold_NilHandler_Default(t *testing.T) {
 	t.Parallel()
 
 	var h *Handler
-	assert.Equal(t, defaultBridgeStaleThreshold, h.resolveStaleThreshold())
+	assert.Equal(t, defaultBridgeStaleThreshold, h.resolveStaleThreshold(context.Background()))
 }
 
 func TestResolveStaleThreshold_NilProvider_Default(t *testing.T) {
 	t.Parallel()
 
 	h := &Handler{}
-	assert.Equal(t, defaultBridgeStaleThreshold, h.resolveStaleThreshold())
+	assert.Equal(t, defaultBridgeStaleThreshold, h.resolveStaleThreshold(context.Background()))
 }
 
 func TestResolveStaleThreshold_ZeroProvider_Default(t *testing.T) {
 	t.Parallel()
 
 	h := &Handler{staleness: func() time.Duration { return 0 }}
-	assert.Equal(t, defaultBridgeStaleThreshold, h.resolveStaleThreshold())
+	assert.Equal(t, defaultBridgeStaleThreshold, h.resolveStaleThreshold(context.Background()))
 }
 
 func TestResolveStaleThreshold_PositiveProvider_Used(t *testing.T) {
 	t.Parallel()
 
 	h := &Handler{staleness: func() time.Duration { return 30 * time.Second }}
-	assert.Equal(t, 30*time.Second, h.resolveStaleThreshold())
+	assert.Equal(t, 30*time.Second, h.resolveStaleThreshold(context.Background()))
 }
 
 func TestWithStalenessProvider_NilHandler_Noop(t *testing.T) {

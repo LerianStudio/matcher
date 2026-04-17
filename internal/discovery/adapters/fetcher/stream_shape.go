@@ -10,7 +10,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"sort"
+	"maps"
+	"slices"
 )
 
 // ErrFetcherShapeMalformed indicates the Fetcher extraction payload could not
@@ -30,12 +31,17 @@ var ErrFetcherPayloadTooLarge = errors.New("fetcher extraction payload exceeds s
 var ErrFetcherPayloadTooDeep = errors.New("fetcher extraction payload nesting too deep")
 
 const (
-	// DefaultMaxExtractionBytes is the conservative default cap on Fetcher
-	// extraction payload size: 2 GiB. Operators can tighten via
-	// FETCHER_MAX_EXTRACTION_BYTES when deployments have smaller working set
-	// budgets. 2 GiB matches Fetcher's S3 single-object limit for the primary
-	// artifact format and leaves headroom for the orchestrator's transient
-	// buffering without OOM-killing the pod.
+	// DefaultMaxExtractionBytes is the fallback cap on Fetcher extraction
+	// payload size when no explicit configuration is supplied: 2 GiB. This
+	// acts as a protective ceiling (bootstrap validation floors at 1 MiB and
+	// ceilings at 16 GiB; see validateFetcherMaxExtractionBytes) — operators
+	// running on small-memory pods should tighten via
+	// FETCHER_MAX_EXTRACTION_BYTES or the systemplane key
+	// `fetcher.max_extraction_bytes` to something like 256 MiB rather than
+	// relying on this default. The 2 GiB value matches Fetcher's S3 single-
+	// object limit for the primary artifact format and leaves headroom for
+	// the orchestrator's transient buffering without OOM-killing a
+	// sufficiently-sized pod.
 	DefaultMaxExtractionBytes int64 = 2 << 30
 
 	// MaxExtractionDepth is the hard cap on nesting depth inside a Fetcher
@@ -44,6 +50,13 @@ const (
 	// object). 1000 is an operations-friendly ceiling that still catches
 	// depth bombs well before encoding/json runs out of stack.
 	MaxExtractionDepth = 1000
+
+	// defaultRowsPerTable seeds decodeRows' row slice. Bulk extractions
+	// typically emit hundreds-to-thousands of rows per table, so a
+	// pre-sized slice avoids several growth copies on the common path.
+	// Tiny tables waste at most a few KB of capacity (json.RawMessage is
+	// a slice header, not the underlying bytes).
+	defaultRowsPerTable = 1024
 )
 
 // FlattenFetcherJSON parses the Fetcher-shaped nested object
@@ -198,7 +211,12 @@ func decodeRows(decoder *json.Decoder, depth int) ([]json.RawMessage, error) {
 		return nil, err
 	}
 
-	rows := make([]json.RawMessage, 0)
+	// Pre-allocate defaultRowsPerTable rows up front: bulk extractions
+	// typically emit hundreds-to-thousands of rows per table, so seeding
+	// the slice avoids several reallocations on the common path. Small
+	// tables waste at most a few KB of capacity; large tables save growth
+	// copies.
+	rows := make([]json.RawMessage, 0, defaultRowsPerTable)
 
 	for decoder.More() {
 		var raw json.RawMessage
@@ -252,26 +270,12 @@ func writeFlatArray(buf *bytes.Buffer, datasources map[string]datasourceRows) er
 
 // sortedKeys returns the datasource keys in lexicographic order.
 func sortedKeys(m map[string]datasourceRows) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-
-	sort.Strings(keys)
-
-	return keys
+	return slices.Sorted(maps.Keys(m))
 }
 
 // sortedTableKeys returns the table keys in lexicographic order.
 func sortedTableKeys(m datasourceRows) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-
-	sort.Strings(keys)
-
-	return keys
+	return slices.Sorted(maps.Keys(m))
 }
 
 // readStringKey consumes the next token expecting it to be an object key
@@ -358,7 +362,12 @@ func (cr *capReader) Read(buf []byte) (int, error) {
 	}
 
 	if cr.remaining <= 0 {
-		// Budget exhausted. Peek one byte to see if the stream wanted more.
+		// Budget exhausted. Peek one byte to distinguish "stream ended at
+		// exactly maxBytes" (legitimate EOF — return io.EOF) from "stream had
+		// more to deliver" (truncation — return errPayloadExceeded). The
+		// peeked byte is intentionally discarded: we only care about whether
+		// a byte exists past the budget, never its value. The stream is not
+		// rewound, so this capReader is single-pass.
 		peek := make([]byte, 1)
 
 		n, err := cr.r.Read(peek)

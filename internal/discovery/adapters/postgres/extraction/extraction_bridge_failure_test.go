@@ -9,6 +9,7 @@ package extraction
 import (
 	"context"
 	"errors"
+	"regexp"
 	"testing"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
 	vo "github.com/LerianStudio/matcher/internal/discovery/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 func newTerminallyFailedExtraction() *entities.ExtractionRequest {
@@ -102,11 +104,95 @@ func TestMarkBridgeFailed_RowMissing_ReturnsNotFound(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE extraction_requests SET").
 		WillReturnResult(sqlmock.NewResult(0, 0))
+	// C21: existence probe disambiguates "row missing" vs "concurrent link won"
+	// when the gated UPDATE matches zero rows.
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT EXISTS(SELECT 1 FROM extraction_requests WHERE id = $1)`,
+	)).WithArgs(extraction.ID).
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
 	mock.ExpectRollback()
 
 	err := repo.MarkBridgeFailed(context.Background(), extraction)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, repositories.ErrExtractionNotFound))
+}
+
+// TestMarkBridgeFailed_ConcurrentLinkWon_ReturnsAlreadyLinked is the C21
+// regression: under a lock-TTL-expiry race, Replica A successfully linked the
+// extraction while Replica B's orchestrator failed downstream and tries to
+// persist a terminal bridge failure. The NULL-guard must cause the UPDATE to
+// match zero rows, the existence probe must confirm the row exists, and the
+// repository must surface ErrExtractionAlreadyLinked so the worker can treat
+// the terminal-failure write as benignly skipped (the link is the
+// authoritative outcome).
+func TestMarkBridgeFailed_ConcurrentLinkWon_ReturnsAlreadyLinked(t *testing.T) {
+	t.Parallel()
+
+	repo, mock, finish := setupMockRepository(t)
+	defer finish()
+
+	extraction := newTerminallyFailedExtraction()
+
+	mock.ExpectBegin()
+	// Gated UPDATE: the `AND ingestion_job_id IS NULL` predicate rejects the
+	// write because a concurrent LinkIfUnlinked already set it — 0 rows.
+	mock.ExpectExec("UPDATE extraction_requests SET").
+		WithArgs(
+			extraction.BridgeAttempts,
+			extraction.BridgeLastError.String(),
+			extraction.BridgeLastErrorMessage,
+			sqlmock.AnyArg(), // bridge_failed_at
+			sqlmock.AnyArg(), // updated_at refreshed inside exec
+			extraction.ID,
+		).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	// Existence probe: the row IS there (concurrent link, not missing).
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT EXISTS(SELECT 1 FROM extraction_requests WHERE id = $1)`,
+	)).WithArgs(extraction.ID).
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectRollback()
+
+	err := repo.MarkBridgeFailed(context.Background(), extraction)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, sharedPorts.ErrExtractionAlreadyLinked),
+		"MarkBridgeFailed must surface ErrExtractionAlreadyLinked so persistTerminalFailure can treat it as benign")
+}
+
+// TestMarkBridgeFailed_ExtractionNotFound_ReturnsNotFound exercises the
+// negative branch of the C21 existence probe: zero rows affected AND the row
+// does not exist → ErrExtractionNotFound. Complements the concurrent-link
+// variant above.
+func TestMarkBridgeFailed_ExtractionNotFound_ReturnsNotFound(t *testing.T) {
+	t.Parallel()
+
+	repo, mock, finish := setupMockRepository(t)
+	defer finish()
+
+	extraction := newTerminallyFailedExtraction()
+
+	mock.ExpectBegin()
+	mock.ExpectExec("UPDATE extraction_requests SET").
+		WithArgs(
+			extraction.BridgeAttempts,
+			extraction.BridgeLastError.String(),
+			extraction.BridgeLastErrorMessage,
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			extraction.ID,
+		).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT EXISTS(SELECT 1 FROM extraction_requests WHERE id = $1)`,
+	)).WithArgs(extraction.ID).
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+	mock.ExpectRollback()
+
+	err := repo.MarkBridgeFailed(context.Background(), extraction)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, repositories.ErrExtractionNotFound))
+	assert.False(t, errors.Is(err, sharedPorts.ErrExtractionAlreadyLinked),
+		"a missing row must NOT be conflated with a concurrent link")
 }
 
 func TestMarkBridgeFailed_DriverError_Wraps(t *testing.T) {

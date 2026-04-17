@@ -16,9 +16,16 @@ import (
 	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/registry"
 )
 
-// expectedTotalKeys is the total number of registered keys.
+// expectedTotalKeys is the total number of registered keys via
 // RegisterMatcherKeys. This constant MUST be updated when keys are added or
 // removed from matcherKeyDefs.
+//
+// Derivation: expectedTotalKeys = expectedConfigKeyCount + expectedSettingKeyCount
+// (128 config + 14 setting = 142). The ApplyBehaviorCountsAddUp and
+// ConfigAndSettingCounts tests below cross-check that the bundle sums
+// remain consistent, so a mis-aligned kind split fails before shipping.
+//
+// Change log:
 // T-003 added 3 fetcher keys: max_extraction_bytes (BootstrapOnly),
 // bridge_interval_sec (WorkerReconcile), bridge_batch_size (WorkerReconcile).
 // T-004 added 1 fetcher key: bridge_stale_threshold_sec (LiveRead).

@@ -16,6 +16,10 @@ func (objectStorageClientStub) Upload(_ context.Context, key string, _ io.Reader
 	return key, nil
 }
 
+func (objectStorageClientStub) UploadIfAbsent(_ context.Context, key string, _ io.Reader, _ string) (string, error) {
+	return key, nil
+}
+
 func (objectStorageClientStub) UploadWithOptions(
 	_ context.Context,
 	key string,

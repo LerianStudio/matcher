@@ -2471,8 +2471,14 @@ func initModulesAndMessaging(
 		return nil, err
 	}
 
+	// Single extraction repo instance shared across the discovery module
+	// and the Fetcher-to-ingestion bridge. Constructed once so any future
+	// stateful change (connection pool, cache) does not silently diverge
+	// between the two consumers.
+	extractionRepo := discoveryExtractionRepo.NewRepository(provider)
+
 	// Discovery module (optional — non-critical, gated by FETCHER_ENABLED).
-	discWorker, err := initOptionalDiscoveryWorker(routes, cfg, configGetter, provider, sharedOutboxRepository, logger, initDiscoveryModule)
+	discWorker, err := initOptionalDiscoveryWorker(routes, cfg, configGetter, provider, sharedOutboxRepository, extractionRepo, logger, initDiscoveryModule)
 	if err != nil {
 		return nil, fmt.Errorf("init optional discovery worker: %w", err)
 	}
@@ -2488,8 +2494,6 @@ func initModulesAndMessaging(
 	// intake path but the bridge worker is not registered — the
 	// verified-artifact pipeline is soft-disabled when APP_ENC_KEY is
 	// empty or when object storage is unavailable.
-	extractionRepo := discoveryExtractionRepo.NewRepository(provider)
-
 	bridgeBundle, err := initFetcherBridgeAdapters(ctx, FetcherBridgeDeps{
 		Config:           cfg,
 		IngestionUseCase: ingestionUseCase,
@@ -2500,6 +2504,21 @@ func initModulesAndMessaging(
 	if err != nil {
 		return nil, fmt.Errorf("init fetcher bridge adapters: %w", err)
 	}
+
+	// Interim memory guard: the verified-artifact verifier currently
+	// materializes plaintext in memory (~512 MiB per concurrent artifact).
+	// Reject boot when the pod memory budget is below the safe floor so
+	// operators see the misconfiguration instead of a silent OOMKill
+	// later. On dev/macOS (no cgroup files) this is a no-op.
+	if err := EnsureBridgeMemoryBudget(cfg); err != nil {
+		return nil, fmt.Errorf("ensure fetcher bridge memory budget: %w", err)
+	}
+
+	// Companion to the guard: set GOMEMLIMIT to 85% of the detected
+	// cgroup limit so the Go runtime garbage collector works harder
+	// before we hit the cgroup ceiling. Skips when GOMEMLIMIT is
+	// already set explicitly by the operator.
+	applyGOMEMLIMIT(cfg, logger, defaultMemoryLimitReader)
 
 	bridgeWorker, err := initFetcherBridgeWorker(
 		ctx,

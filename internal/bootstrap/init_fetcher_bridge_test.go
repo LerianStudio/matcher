@@ -38,6 +38,15 @@ func (s *stubObjectStorage) Upload(
 	return "", nil
 }
 
+func (s *stubObjectStorage) UploadIfAbsent(
+	_ context.Context,
+	_ string,
+	_ io.Reader,
+	_ string,
+) (string, error) {
+	return "", nil
+}
+
 func (s *stubObjectStorage) UploadWithOptions(
 	_ context.Context,
 	_ string,
@@ -203,9 +212,9 @@ func TestInitFetcherBridgeAdapters_HappyPath_WiresFullBundle(t *testing.T) {
 	assert.NotNil(t, bundle.Intake, "trusted intake adapter constructed")
 	assert.NotNil(t, bundle.LinkWrite, "extraction lifecycle link writer constructed")
 
-	// T-002 verified-artifact pipeline wired.
-	assert.NotNil(t, bundle.ArtifactRetrieval, "artifact retrieval gateway constructed")
-	assert.NotNil(t, bundle.ArtifactVerifier, "artifact verifier constructed")
+	// T-002 verified-artifact pipeline wired. The retrieval gateway and
+	// trust verifier are intentionally not exposed on the bundle — the
+	// orchestrator holds them internally — so we assert via its presence.
 	assert.NotNil(t, bundle.ArtifactCustody, "artifact custody store constructed")
 	assert.NotNil(t,
 		bundle.VerifiedArtifactOrchestrator,
@@ -239,8 +248,6 @@ func TestInitFetcherBridgeAdapters_PipelineDisabled_IntakeStillWired(t *testing.
 	assert.NotNil(t, bundle.LinkWrite)
 
 	// …but verified-artifact pipeline is disabled.
-	assert.Nil(t, bundle.ArtifactRetrieval)
-	assert.Nil(t, bundle.ArtifactVerifier)
 	assert.Nil(t, bundle.ArtifactCustody)
 	assert.Nil(t, bundle.VerifiedArtifactOrchestrator)
 }
@@ -322,8 +329,6 @@ func TestWireVerifiedArtifactPipeline_ValidConfig_WiresOrchestrator(t *testing.T
 	})
 	require.NoError(t, err)
 
-	assert.NotNil(t, bundle.ArtifactRetrieval)
-	assert.NotNil(t, bundle.ArtifactVerifier)
 	assert.NotNil(t, bundle.ArtifactCustody)
 	assert.NotNil(t, bundle.VerifiedArtifactOrchestrator)
 }

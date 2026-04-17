@@ -30,7 +30,7 @@ func (uc *UseCase) runTrustedStreamPipeline(
 	// atomically inside the initial INSERT. Previously the stamp was applied
 	// via a follow-up Update — a transient failure on that Update reopened
 	// the orphan-job window the P1 short-circuit was supposed to close.
-	extractionID := canonicalExtractionIDFromMetadata(input.SourceMetadata)
+	extractionID := canonicalExtractionIDFromMetadata(ctx, input.SourceMetadata)
 
 	startInput := StartIngestionInput{
 		ContextID: input.ContextID,

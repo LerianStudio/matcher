@@ -7,25 +7,19 @@ package worker
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
 	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
 	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
 
-	"github.com/LerianStudio/matcher/internal/auth"
-	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
-	vo "github.com/LerianStudio/matcher/internal/discovery/domain/value_objects"
+	discoveryPorts "github.com/LerianStudio/matcher/internal/discovery/ports"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 	"github.com/LerianStudio/matcher/pkg/chanutil"
 )
@@ -55,6 +49,19 @@ const (
 	// per tenant per cycle keeps per-cycle runtime bounded on a busy
 	// deployment while still draining reasonable backlog.
 	bridgeDefaultBatchSize = 50
+
+	// bridgeHeartbeatTTLMultiplier scales the poll interval to derive the
+	// TTL on the liveness heartbeat key. Three cycles is the sweet spot:
+	// one transient Redis or worker stall will NOT blank the dashboard,
+	// but two consecutive misses will. Used only when the optional
+	// heartbeat writer is wired. C15.
+	bridgeHeartbeatTTLMultiplier = 3
+
+	// bridgeMinHeartbeatTTL is the floor applied to the heartbeat TTL. The
+	// minimum deliberately exceeds bridgeMinLockTTL so tests using sub-
+	// second intervals still exercise the happy path without immediate
+	// expiry, while staying small enough to expire cleanly between runs.
+	bridgeMinHeartbeatTTL = 15 * time.Second
 )
 
 // Sentinel errors for bridge worker construction / lifecycle.
@@ -113,6 +120,19 @@ func bridgeLockTTL(interval time.Duration) time.Duration {
 	return ttl
 }
 
+// bridgeHeartbeatTTL returns the heartbeat TTL proportional to the poll
+// interval. Three intervals is chosen deliberately — see the constant's
+// doc comment for the reasoning. A floor keeps the key alive long enough
+// for short-interval test scenarios to observe it.
+func bridgeHeartbeatTTL(interval time.Duration) time.Duration {
+	ttl := time.Duration(bridgeHeartbeatTTLMultiplier) * interval
+	if ttl < bridgeMinHeartbeatTTL {
+		return bridgeMinHeartbeatTTL
+	}
+
+	return ttl
+}
+
 // BridgeWorker periodically scans each tenant for COMPLETE + unlinked
 // extractions and drives them through the bridge orchestrator until linked.
 //
@@ -126,14 +146,15 @@ func bridgeLockTTL(interval time.Duration) time.Duration {
 //     duplicate outcomes — even if two replicas briefly disagree about the
 //     lock, at most one can write the ingestion_job_id.
 type BridgeWorker struct {
-	mu             sync.Mutex
-	orchestrator   sharedPorts.BridgeOrchestrator
-	extractionRepo repositories.ExtractionRepository
-	tenantLister   sharedPorts.TenantLister
-	infraProvider  sharedPorts.InfrastructureProvider
-	cfg            BridgeWorkerConfig
-	logger         libLog.Logger
-	tracer         trace.Tracer
+	mu              sync.Mutex
+	orchestrator    sharedPorts.BridgeOrchestrator
+	extractionRepo  repositories.ExtractionRepository
+	tenantLister    sharedPorts.TenantLister
+	infraProvider   sharedPorts.InfrastructureProvider
+	heartbeatWriter discoveryPorts.BridgeHeartbeatWriter // optional liveness emitter (C15)
+	cfg             BridgeWorkerConfig
+	logger          libLog.Logger
+	tracer          trace.Tracer
 
 	running  atomic.Bool
 	stopOnce sync.Once
@@ -239,6 +260,25 @@ func (worker *BridgeWorker) Done() <-chan struct{} {
 	return worker.doneCh
 }
 
+// WithHeartbeatWriter wires the optional liveness emitter. Called by
+// bootstrap after construction so the bridge worker can keep its
+// NewBridgeWorker signature stable. A nil writer is explicitly permitted
+// and turns the heartbeat path into a no-op — useful for unit tests and
+// for deployments where Redis is momentarily unreachable at boot.
+//
+// Not safe to call while the worker is running; the worker manager always
+// stop→starts on config change so this stays on the cold path. C15.
+func (worker *BridgeWorker) WithHeartbeatWriter(writer discoveryPorts.BridgeHeartbeatWriter) {
+	if worker == nil {
+		return
+	}
+
+	worker.mu.Lock()
+	defer worker.mu.Unlock()
+
+	worker.heartbeatWriter = writer
+}
+
 // UpdateRuntimeConfig swaps the tick interval / batch size for the next
 // start cycle. The worker manager always stop→starts on config change, so
 // we reject updates while running to avoid races with the ticker.
@@ -293,378 +333,6 @@ func (worker *BridgeWorker) run(ctx context.Context) {
 	}
 }
 
-// pollCycle acquires the distributed lock, lists tenants (INCLUDING the
-// default tenant), and drives each tenant's eligible extractions through
-// the orchestrator.
-func (worker *BridgeWorker) pollCycle(ctx context.Context) {
-	logger, tracer := worker.tracking(ctx)
-
-	ctx, span := tracer.Start(ctx, "discovery.bridge.poll_cycle")
-	defer span.End()
-
-	acquired, token, err := worker.acquireLock(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "bridge lock acquire failed", err)
-		logger.With(libLog.String("error", err.Error())).
-			Log(ctx, libLog.LevelWarn, "bridge: lock acquire failed")
-
-		return
-	}
-
-	if !acquired {
-		return
-	}
-
-	defer worker.releaseLock(ctx, token)
-
-	tenants, err := worker.tenantLister.ListTenants(ctx)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "bridge: list tenants failed", err)
-		logger.With(libLog.String("error", err.Error())).
-			Log(ctx, libLog.LevelError, "bridge: failed to list tenants")
-
-		return
-	}
-
-	span.SetAttributes(attribute.Int("bridge.tenant_count", len(tenants)))
-
-	processed := 0
-
-	for _, tenantID := range tenants {
-		if tenantID == "" {
-			continue
-		}
-
-		count := worker.processTenant(ctx, tenantID)
-		processed += count
-	}
-
-	span.SetAttributes(attribute.Int("bridge.extractions_processed", processed))
-}
-
-// processTenant drives bridge work for a single tenant. Returns the number
-// of extractions that completed the pipeline (successfully or with a
-// terminal idempotent signal) so the cycle-level span can report totals.
-func (worker *BridgeWorker) processTenant(parentCtx context.Context, tenantID string) int {
-	ctx := context.WithValue(parentCtx, auth.TenantIDKey, tenantID)
-	logger, tracer := worker.tracking(ctx)
-
-	ctx, span := tracer.Start(ctx, "discovery.bridge.process_tenant")
-	defer span.End()
-
-	span.SetAttributes(attribute.String("tenant.id", tenantID))
-
-	batchSize := worker.cfg.BatchSize
-
-	extractions, err := worker.extractionRepo.FindEligibleForBridge(ctx, batchSize)
-	if err != nil {
-		libOpentelemetry.HandleSpanError(span, "bridge: find eligible extractions failed", err)
-		logger.With(
-			libLog.String("tenant.id", tenantID),
-			libLog.String("error", err.Error()),
-		).Log(ctx, libLog.LevelWarn, "bridge: failed to find eligible extractions")
-
-		return 0
-	}
-
-	span.SetAttributes(attribute.Int("bridge.eligible_count", len(extractions)))
-
-	processed := 0
-
-	for _, extraction := range extractions {
-		if extraction == nil {
-			continue
-		}
-
-		if err := worker.bridgeOne(ctx, extraction, tenantID); err != nil {
-			worker.logBridgeError(ctx, logger, extraction.ID, tenantID, err)
-
-			continue
-		}
-
-		processed++
-	}
-
-	return processed
-}
-
-// bridgeOne runs a single extraction through the orchestrator. Wraps each
-// call in its own span so operators can see per-extraction timing even when
-// the tenant batch is large.
-//
-// T-005 retry semantics:
-//  1. Idempotent signals (already-linked, ineligible) → silent success.
-//  2. Terminal classifications (integrity / 404) → persist
-//     MarkBridgeFailed; the row exits the eligibility queue.
-//  3. Transient classifications (custody / network / source-unresolvable) →
-//     increment bridge_attempts; if attempts ≥ max, escalate to terminal.
-//
-// Backoff strategy: PASSIVE — the worker does NOT sleep between retries and
-// has no exponential-backoff math. Backoff is enforced by
-// FindEligibleForBridge ordering by `updated_at ASC`: every attempt bumps
-// the row's updated_at, pushing it to the tail of the eligibility queue so
-// newer rows drain first. The tick cadence (BridgeWorkerConfig.Interval)
-// IS the retry cadence; MaxAttempts caps total retries before terminal
-// escalation. This is simpler, race-free, and avoids the dual-clock confusion
-// of an in-process backoff timer racing the DB queue ordering.
-func (worker *BridgeWorker) bridgeOne(ctx context.Context, extraction *entities.ExtractionRequest, tenantID string) error {
-	if extraction == nil {
-		return nil
-	}
-
-	_, tracer := worker.tracking(ctx)
-
-	ctx, span := tracer.Start(ctx, "discovery.bridge.bridge_one")
-	defer span.End()
-
-	span.SetAttributes(
-		attribute.String("extraction.id", extraction.ID.String()),
-		attribute.String("tenant.id", tenantID),
-		attribute.Int("bridge.attempts_before", extraction.BridgeAttempts),
-	)
-
-	outcome, bridgeErr := worker.orchestrator.BridgeExtraction(ctx, sharedPorts.BridgeExtractionInput{
-		ExtractionID: extraction.ID,
-		TenantID:     tenantID,
-	})
-
-	classification := ClassifyBridgeError(bridgeErr)
-	span.SetAttributes(attribute.String("bridge.retry_policy", classification.Policy.String()))
-
-	// Wrap once so callers get a traceable error chain while retaining the
-	// original sentinels for errors.Is checks. Nil stays nil.
-	var wrappedErr error
-	if bridgeErr != nil {
-		wrappedErr = fmt.Errorf("bridge extraction: %w", bridgeErr)
-	}
-
-	switch classification.Policy {
-	case RetryIdempotent:
-		// Either no error (happy path) or a benign concurrent-write signal.
-		if outcome != nil {
-			span.SetAttributes(
-				attribute.String("ingestion.job_id", outcome.IngestionJobID.String()),
-				attribute.Int("ingestion.transaction_count", outcome.TransactionCount),
-				attribute.Bool("bridge.custody_deleted", outcome.CustodyDeleted),
-			)
-		}
-
-		return nil
-
-	case RetryTerminal:
-		worker.persistTerminalFailure(ctx, extraction, classification.Class, bridgeErr)
-
-		return wrappedErr
-
-	case RetryTransient:
-		worker.handleTransientFailure(ctx, extraction, bridgeErr)
-
-		return wrappedErr
-	}
-
-	return wrappedErr
-}
-
-// persistTerminalFailure records the BridgeErrorClass on the extraction and
-// removes it from the eligibility queue. The persist failure path itself is
-// best-effort: if the DB write fails, the next tick will pick up the same
-// extraction, classify again, and try the persist again. Logging the persist
-// failure separately so operators can spot a stuck-in-loop pattern.
-func (worker *BridgeWorker) persistTerminalFailure(
-	ctx context.Context,
-	extraction *entities.ExtractionRequest,
-	class vo.BridgeErrorClass,
-	originalErr error,
-) {
-	logger, _ := worker.tracking(ctx)
-
-	extraction.RecordBridgeAttempt()
-
-	message := terminalFailureMessage(originalErr)
-	if markErr := extraction.MarkBridgeFailed(class, message); markErr != nil {
-		logger.With(
-			libLog.String("extraction.id", extraction.ID.String()),
-			libLog.String("class", string(class)),
-			libLog.String("error", markErr.Error()),
-		).Log(ctx, libLog.LevelError, "bridge: domain mark-failed rejected (wiring bug)")
-
-		return
-	}
-
-	if persistErr := worker.extractionRepo.MarkBridgeFailed(ctx, extraction); persistErr != nil {
-		logger.With(
-			libLog.String("extraction.id", extraction.ID.String()),
-			libLog.String("class", string(class)),
-			libLog.String("bridge.class", string(class)),
-			libLog.String("error", persistErr.Error()),
-		).Log(ctx, libLog.LevelError, "bridge: persist terminal failure failed")
-	}
-}
-
-// handleTransientFailure increments bridge_attempts, escalates to terminal
-// if the configured ceiling is reached, otherwise persists just the bumped
-// attempts via the existing Update path.
-func (worker *BridgeWorker) handleTransientFailure(
-	ctx context.Context,
-	extraction *entities.ExtractionRequest,
-	originalErr error,
-) {
-	logger, _ := worker.tracking(ctx)
-
-	attempts := extraction.RecordBridgeAttempt()
-
-	if worker.cfg.Retry.ShouldEscalate(attempts) {
-		escalated := EscalateAfterMaxAttempts(originalErr)
-		message := fmt.Sprintf(
-			"escalated to terminal after %d attempts: %s",
-			attempts,
-			terminalFailureMessage(originalErr),
-		)
-
-		if markErr := extraction.MarkBridgeFailed(escalated, message); markErr != nil {
-			logger.With(
-				libLog.String("extraction.id", extraction.ID.String()),
-				libLog.String("class", string(escalated)),
-				libLog.String("error", markErr.Error()),
-			).Log(ctx, libLog.LevelError, "bridge: domain mark-failed rejected during escalation")
-
-			return
-		}
-
-		if persistErr := worker.extractionRepo.MarkBridgeFailed(ctx, extraction); persistErr != nil {
-			logger.With(
-				libLog.String("extraction.id", extraction.ID.String()),
-				libLog.String("class", string(escalated)),
-				libLog.String("bridge.class", string(escalated)),
-				libLog.String("error", persistErr.Error()),
-			).Log(ctx, libLog.LevelError, "bridge: persist escalated failure failed")
-		}
-
-		return
-	}
-
-	// Below the ceiling: persist ONLY the bumped attempts + updated_at via
-	// the narrow IncrementBridgeAttempts UPDATE (Polish Fix 3). The wide
-	// Update path could otherwise clobber a concurrent link write under a
-	// lock-TTL-expiry edge case — the narrow UPDATE is gated by
-	// `ingestion_job_id IS NULL` so that race produces ErrExtractionAlreadyLinked
-	// (logged at info level, not warn) instead of silent data corruption.
-	persistErr := worker.extractionRepo.IncrementBridgeAttempts(ctx, extraction.ID, attempts)
-	if persistErr == nil {
-		return
-	}
-
-	if errors.Is(persistErr, sharedPorts.ErrExtractionAlreadyLinked) {
-		// Concurrent link won the race. The link itself is the desired
-		// outcome — stop retrying. Log at info because this is benign
-		// concurrency, not an error.
-		logger.With(
-			libLog.String("extraction.id", extraction.ID.String()),
-			libLog.Any("attempts", attempts),
-		).Log(ctx, libLog.LevelInfo, "bridge: transient retry skipped — concurrent link won")
-
-		return
-	}
-
-	logger.With(
-		libLog.String("extraction.id", extraction.ID.String()),
-		libLog.Any("attempts", attempts),
-		libLog.String("error", persistErr.Error()),
-	).Log(ctx, libLog.LevelWarn, "bridge: failed to persist transient attempt counter")
-}
-
-// terminalFailureMessage builds the operator-facing message persisted in
-// bridge_last_error_message. Bounded by the entity's MaxBridgeFailureMessageLength.
-func terminalFailureMessage(err error) string {
-	if err == nil {
-		return "unknown failure"
-	}
-
-	return err.Error()
-}
-
-func (worker *BridgeWorker) logBridgeError(
-	ctx context.Context,
-	logger libLog.Logger,
-	extractionID uuid.UUID,
-	tenantID string,
-	err error,
-) {
-	level := libLog.LevelError
-
-	// Source-unresolvable is a config gap, not a transient failure. Log
-	// at WARN so operators see it without page-worthy urgency.
-	if errors.Is(err, sharedPorts.ErrBridgeSourceUnresolvable) {
-		level = libLog.LevelWarn
-	}
-
-	logger.With(
-		libLog.String("tenant.id", tenantID),
-		libLog.String("extraction.id", extractionID.String()),
-		libLog.String("error", err.Error()),
-	).Log(ctx, level, "bridge: extraction failed")
-}
-
-// acquireLock is a thin wrapper over the infrastructure provider's Redis
-// client. Mirrors the pattern in scheduler/archival/discovery workers.
-func (worker *BridgeWorker) acquireLock(ctx context.Context) (bool, string, error) {
-	connLease, err := worker.infraProvider.GetRedisConnection(ctx)
-	if err != nil {
-		return false, "", fmt.Errorf("get redis connection: %worker", err)
-	}
-	defer connLease.Release()
-
-	conn := connLease.Connection()
-	if conn == nil {
-		return false, "", ErrBridgeRedisConnectionNil
-	}
-
-	rdb, err := conn.GetClient(ctx)
-	if err != nil {
-		return false, "", fmt.Errorf("get redis client: %worker", err)
-	}
-
-	token := uuid.New().String()
-
-	ok, err := rdb.SetNX(ctx, bridgeWorkerLockKey, token, bridgeLockTTL(worker.cfg.Interval)).Result()
-	if err != nil {
-		return false, "", fmt.Errorf("redis setnx for bridge lock: %worker", err)
-	}
-
-	return ok, token, nil
-}
-
-// releaseLock uses a Lua script to avoid releasing a lock that has already
-// expired and been re-acquired by another instance.
-func (worker *BridgeWorker) releaseLock(ctx context.Context, token string) {
-	connLease, err := worker.infraProvider.GetRedisConnection(ctx)
-	if err != nil {
-		worker.logger.With(libLog.String("error", err.Error())).
-			Log(ctx, libLog.LevelWarn, "bridge: failed to get redis connection for lock release")
-
-		return
-	}
-	defer connLease.Release()
-
-	conn := connLease.Connection()
-	if conn == nil {
-		return
-	}
-
-	rdb, clientErr := conn.GetClient(ctx)
-	if clientErr != nil {
-		worker.logger.With(libLog.Any("error", clientErr.Error())).
-			Log(ctx, libLog.LevelWarn, "bridge: failed to get redis client for lock release")
-
-		return
-	}
-
-	if _, err := rdb.Eval(ctx, redisLockReleaseLua, []string{bridgeWorkerLockKey}, token).Result(); err != nil {
-		worker.logger.With(libLog.String("error", err.Error())).
-			Log(ctx, libLog.LevelWarn, "bridge: failed to release lock")
-	}
-}
-
 func (worker *BridgeWorker) tracking(ctx context.Context) (libLog.Logger, trace.Tracer) {
 	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
 
@@ -677,4 +345,22 @@ func (worker *BridgeWorker) tracking(ctx context.Context) (libLog.Logger, trace.
 	}
 
 	return logger, tracer
+}
+
+// writeHeartbeat records the worker's "I ticked at T" signal. Called at
+// the tail of every pollCycle (whether lock was acquired or not) so the
+// dashboard can distinguish "worker is alive but backlog is growing" from
+// "worker is dead". Non-fatal on error — a momentarily unavailable Redis
+// must not prevent the bridge from processing extractions on the next
+// tick. C15.
+func (worker *BridgeWorker) writeHeartbeat(ctx context.Context) {
+	if worker == nil || worker.heartbeatWriter == nil {
+		return
+	}
+
+	ttl := bridgeHeartbeatTTL(worker.cfg.Interval)
+	if err := worker.heartbeatWriter.WriteLastTickAt(ctx, time.Now().UTC(), ttl); err != nil {
+		worker.logger.With(libLog.String("error", err.Error())).
+			Log(ctx, libLog.LevelWarn, "bridge: heartbeat write failed")
+	}
 }

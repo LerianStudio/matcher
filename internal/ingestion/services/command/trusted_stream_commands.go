@@ -14,10 +14,16 @@ import (
 	"github.com/google/uuid"
 
 	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
 )
+
+// malformedExtractionIDLogCap is the maximum number of bytes of a malformed
+// extraction-id value to include in WARN logs. Keeps log lines bounded and
+// prevents attacker-controlled metadata from bloating the logging backend.
+const malformedExtractionIDLogCap = 64
 
 // defaultTrustedStreamFileName is used as the synthetic filename recorded on
 // the IngestionJob when the caller does not supply an explicit filename via
@@ -126,6 +132,11 @@ func (uc *UseCase) IngestFromTrustedStream(
 	// found, return its identity instead of creating a phantom empty job.
 	// This keeps the extraction→ingestion link 1:1 when the bridge retries
 	// after a transient link-write failure (the original orphan-job bug).
+	//
+	// Note: TransactionCount below returns the PRIOR job's persisted TotalRows,
+	// not a re-tabulation of the current input. This is intentional for dedup:
+	// callers already filter unchanged content via hash before reaching this
+	// path, so the prior count is the authoritative count for the extraction.
 	if existing, err := uc.findExistingTrustedStreamJob(ctx, input.SourceMetadata); err != nil {
 		libOpentelemetry.HandleSpanError(span, "trusted stream short-circuit lookup failed", err)
 
@@ -237,7 +248,14 @@ func validateTrustedStreamInput(uc *UseCase, input IngestFromTrustedStreamInput)
 // cases where no stamp should land on the IngestionJob's metadata. Polish
 // Fix 4 + 7: this is the single source of truth so canonicalization stays
 // consistent between the pipeline-stamp path and the short-circuit lookup.
-func canonicalExtractionIDFromMetadata(metadata map[string]string) string {
+//
+// A malformed (non-UUID) value is treated as missing so the short-circuit
+// fails open (ingest proceeds normally), but we emit a WARN log so operators
+// can investigate a misconfigured bridge. The logged value is length-capped
+// and has control bytes redacted to keep log backends safe from attacker-
+// controlled metadata. Pass context.Background() when calling from a test
+// that doesn't exercise the logging path.
+func canonicalExtractionIDFromMetadata(ctx context.Context, metadata map[string]string) string {
 	if len(metadata) == 0 {
 		return ""
 	}
@@ -254,10 +272,48 @@ func canonicalExtractionIDFromMetadata(metadata map[string]string) string {
 
 	parsed, err := uuid.Parse(trimmed)
 	if err != nil {
+		logger, _, _, _ := libCommons.NewTrackingFromContext(ctx)
+		logger.With(
+			libLog.String("raw", sanitizeMalformedExtractionIDForLog(raw)),
+		).Log(ctx, libLog.LevelWarn, "canonicalExtractionIDFromMetadata: malformed UUID in metadata; treating as missing")
+
 		return ""
 	}
 
 	return parsed.String()
+}
+
+// sanitizeMalformedExtractionIDForLog caps the raw value length and replaces
+// non-printable bytes so a malicious metadata payload cannot bloat logs or
+// smuggle control characters (CR/LF injection, ANSI escapes) into them.
+func sanitizeMalformedExtractionIDForLog(raw string) string {
+	capped := raw
+	truncated := false
+
+	if len(capped) > malformedExtractionIDLogCap {
+		capped = capped[:malformedExtractionIDLogCap]
+		truncated = true
+	}
+
+	var sb strings.Builder
+
+	sb.Grow(len(capped))
+
+	for _, ch := range capped {
+		if ch < 0x20 || ch == 0x7f {
+			sb.WriteRune('?')
+
+			continue
+		}
+
+		sb.WriteRune(ch)
+	}
+
+	if truncated {
+		sb.WriteString("...")
+	}
+
+	return sb.String()
 }
 
 // stampExtractionIDOnJob applies a pre-validated extraction id directly to

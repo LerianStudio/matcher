@@ -10,11 +10,15 @@ import (
 	"context"
 	"errors"
 	"io"
+	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
@@ -22,6 +26,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
 	vo "github.com/LerianStudio/matcher/internal/discovery/domain/value_objects"
+	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -54,8 +59,9 @@ func (s *stubRetentionExtractionRepo) FindBridgeRetentionCandidates(
 	_ int,
 ) ([]*entities.ExtractionRequest, error) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	s.observedGracePeriods = append(s.observedGracePeriods, gracePeriod)
-	s.mu.Unlock()
 
 	if s.candidatesErr != nil {
 		return nil, s.candidatesErr
@@ -63,10 +69,7 @@ func (s *stubRetentionExtractionRepo) FindBridgeRetentionCandidates(
 
 	tenantID, _ := ctx.Value(auth.TenantIDKey).(string)
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if !contains(s.observedTenants, tenantID) {
+	if !slices.Contains(s.observedTenants, tenantID) {
 		s.observedTenants = append(s.observedTenants, tenantID)
 	}
 
@@ -131,24 +134,20 @@ func (s *stubRetentionExtractionRepo) MarkCustodyDeleted(
 	return nil
 }
 
-func contains(haystack []string, needle string) bool {
-	for _, v := range haystack {
-		if v == needle {
-			return true
-		}
-	}
-
-	return false
-}
-
 // stubCustodyStore records Delete calls and returns canned responses.
+// It implements both sharedPorts.ArtifactCustodyStore and
+// sharedPorts.CustodyKeyBuilder so the worker can be wired against real
+// port interfaces without importing the custody adapter package.
 type stubCustodyStore struct {
 	mu          sync.Mutex
 	deleteCalls []sharedPorts.ArtifactCustodyReference
 	deleteFn    func(ref sharedPorts.ArtifactCustodyReference) error
 }
 
-var _ sharedPorts.ArtifactCustodyStore = (*stubCustodyStore)(nil)
+var (
+	_ sharedPorts.ArtifactCustodyStore = (*stubCustodyStore)(nil)
+	_ sharedPorts.CustodyKeyBuilder    = (*stubCustodyStore)(nil)
+)
 
 func (s *stubCustodyStore) Store(
 	_ context.Context,
@@ -177,6 +176,44 @@ func (s *stubCustodyStore) Delete(
 	}
 
 	return nil
+}
+
+// BuildObjectKey mirrors the custody adapter's tenant-scoped key layout
+// (including its validation rules) so sweep tests exercise the same
+// rejection paths (empty tenant, '/' in tenant, control bytes, nil
+// extraction id) the production adapter enforces.
+func (s *stubCustodyStore) BuildObjectKey(
+	tenantID string,
+	extractionID uuid.UUID,
+) (string, error) {
+	return stubBuildObjectKey(tenantID, extractionID)
+}
+
+// stubBuildObjectKey replicates custody.BuildObjectKey's validation so the
+// worker unit tests stay independent of the custody adapter package. Any
+// change to the adapter's contract should be reflected here.
+func stubBuildObjectKey(tenantID string, extractionID uuid.UUID) (string, error) {
+	trimmed := strings.TrimSpace(tenantID)
+	if trimmed == "" {
+		return "", sharedPorts.ErrArtifactTenantIDRequired
+	}
+
+	if strings.ContainsRune(trimmed, '/') {
+		return "", sharedPorts.ErrArtifactTenantIDRequired
+	}
+
+	for i := 0; i < len(trimmed); i++ {
+		b := trimmed[i]
+		if b < 0x20 || b == 0x7F {
+			return "", sharedPorts.ErrArtifactTenantIDRequired
+		}
+	}
+
+	if extractionID == uuid.Nil {
+		return "", sharedPorts.ErrArtifactExtractionIDRequired
+	}
+
+	return trimmed + "/fetcher-artifacts/" + extractionID.String() + ".json", nil
 }
 
 // terminalFailedExtraction returns an extraction with a terminal bridge
@@ -232,9 +269,12 @@ func liveExtraction(id, connID uuid.UUID) *entities.ExtractionRequest {
 func TestNewCustodyRetentionWorker_NilExtractionRepo(t *testing.T) {
 	t.Parallel()
 
+	custodyStub := &stubCustodyStore{}
+
 	w, err := NewCustodyRetentionWorker(
 		nil,
-		&stubCustodyStore{},
+		custodyStub,
+		custodyStub,
 		&stubBridgeTenantLister{},
 		&stubInfraProvider{},
 		CustodyRetentionWorkerConfig{},
@@ -251,6 +291,7 @@ func TestNewCustodyRetentionWorker_NilCustody(t *testing.T) {
 	w, err := NewCustodyRetentionWorker(
 		&stubRetentionExtractionRepo{},
 		nil,
+		&stubCustodyStore{},
 		&stubBridgeTenantLister{},
 		&stubInfraProvider{},
 		CustodyRetentionWorkerConfig{},
@@ -261,12 +302,32 @@ func TestNewCustodyRetentionWorker_NilCustody(t *testing.T) {
 	require.ErrorIs(t, err, ErrNilCustodyRetentionCustody)
 }
 
-func TestNewCustodyRetentionWorker_NilTenantLister(t *testing.T) {
+func TestNewCustodyRetentionWorker_NilKeyBuilder(t *testing.T) {
 	t.Parallel()
 
 	w, err := NewCustodyRetentionWorker(
 		&stubRetentionExtractionRepo{},
 		&stubCustodyStore{},
+		nil,
+		&stubBridgeTenantLister{},
+		&stubInfraProvider{},
+		CustodyRetentionWorkerConfig{},
+		nil,
+	)
+
+	assert.Nil(t, w)
+	require.ErrorIs(t, err, ErrNilCustodyRetentionKeyBuilder)
+}
+
+func TestNewCustodyRetentionWorker_NilTenantLister(t *testing.T) {
+	t.Parallel()
+
+	custodyStub := &stubCustodyStore{}
+
+	w, err := NewCustodyRetentionWorker(
+		&stubRetentionExtractionRepo{},
+		custodyStub,
+		custodyStub,
 		nil,
 		&stubInfraProvider{},
 		CustodyRetentionWorkerConfig{},
@@ -280,9 +341,12 @@ func TestNewCustodyRetentionWorker_NilTenantLister(t *testing.T) {
 func TestNewCustodyRetentionWorker_NilInfraProvider(t *testing.T) {
 	t.Parallel()
 
+	custodyStub := &stubCustodyStore{}
+
 	w, err := NewCustodyRetentionWorker(
 		&stubRetentionExtractionRepo{},
-		&stubCustodyStore{},
+		custodyStub,
+		custodyStub,
 		&stubBridgeTenantLister{},
 		nil,
 		CustodyRetentionWorkerConfig{},
@@ -296,9 +360,12 @@ func TestNewCustodyRetentionWorker_NilInfraProvider(t *testing.T) {
 func TestNewCustodyRetentionWorker_NilLoggerCoercedToNop(t *testing.T) {
 	t.Parallel()
 
+	custodyStub := &stubCustodyStore{}
+
 	w, err := NewCustodyRetentionWorker(
 		&stubRetentionExtractionRepo{},
-		&stubCustodyStore{},
+		custodyStub,
+		custodyStub,
 		&stubBridgeTenantLister{},
 		&stubInfraProvider{},
 		CustodyRetentionWorkerConfig{},
@@ -317,7 +384,7 @@ func TestNormalizeCustodyRetentionConfig_AppliesDefaults(t *testing.T) {
 
 	assert.Equal(t, custodyRetentionDefaultInterval, cfg.Interval)
 	assert.Equal(t, custodyRetentionDefaultGracePeriod, cfg.GracePeriod)
-	assert.Equal(t, custodyRetentionDefaultBatchSize, cfg.BatchSize)
+	assert.Equal(t, CustodyRetentionDefaultBatchSize, cfg.BatchSize)
 }
 
 func TestNormalizeCustodyRetentionConfig_PreservesPositiveValues(t *testing.T) {
@@ -668,6 +735,16 @@ func TestCustodyRetentionWorker_MarkerFailureIsNonFatal(t *testing.T) {
 	assert.Equal(t, 1, count,
 		"marker write failure must not un-count a successful Delete")
 
+	// The marker write MUST have been attempted — "non-fatal" means the
+	// failure is swallowed, not that the attempt was skipped. Without this
+	// assertion a regression could silently stop calling MarkCustodyDeleted
+	// entirely and the test would still pass via deleteCalls alone.
+	repo.mu.Lock()
+	markAttempts := len(repo.custodyDeletedCalls)
+	repo.mu.Unlock()
+	assert.Equal(t, 1, markAttempts,
+		"MarkCustodyDeleted must be attempted exactly once even though it fails")
+
 	custody.mu.Lock()
 	defer custody.mu.Unlock()
 	assert.Len(t, custody.deleteCalls, 1, "Delete was called before the marker write")
@@ -744,9 +821,103 @@ func TestCustodyRetentionWorker_NilReceiverGuards(t *testing.T) {
 
 	var w *CustodyRetentionWorker
 
-	require.ErrorIs(t, w.Start(context.Background()), ErrNilCustodyRetentionExtractionRepo)
-	require.ErrorIs(t, w.Stop(), ErrCustodyRetentionWorkerNotRunning)
-	require.ErrorIs(t, w.UpdateRuntimeConfig(CustodyRetentionWorkerConfig{}), ErrCustodyRetentionWorkerNotRunning)
+	// All lifecycle methods on a nil receiver return the worker-nil
+	// sentinel. This distinguishes "worker itself is nil" from "a
+	// dependency was nil at construction" (ErrNilCustodyRetention*) and
+	// from "worker exists but is not running" (ErrCustodyRetentionWorker
+	// NotRunning).
+	require.ErrorIs(t, w.Start(context.Background()), ErrCustodyRetentionWorkerNil)
+	require.ErrorIs(t, w.Stop(), ErrCustodyRetentionWorkerNil)
+	require.ErrorIs(t, w.UpdateRuntimeConfig(CustodyRetentionWorkerConfig{}), ErrCustodyRetentionWorkerNil)
+
+	// Done on a nil receiver returns a pre-closed channel so callers
+	// race-free observe "already done" rather than blocking forever.
+	done := w.Done()
+	require.NotNil(t, done, "Done() on nil receiver must not return nil")
+
+	select {
+	case <-done:
+		// pre-closed as expected
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("Done() on nil receiver must be pre-closed")
+	}
+}
+
+// TestCustodyRetentionWorker_ConstructorSentinelsNotConfusedWithWorkerNil
+// guards against a regression where the nil-receiver sentinel and the
+// nil-dependency sentinels could be confused. Each constructor nil-arg path
+// MUST return its specific dependency sentinel, never ErrCustodyRetention
+// WorkerNil — the worker-nil sentinel is reserved for lifecycle methods
+// called on a nil *CustodyRetentionWorker.
+func TestCustodyRetentionWorker_ConstructorSentinelsNotConfusedWithWorkerNil(t *testing.T) {
+	t.Parallel()
+
+	custodyStub := &stubCustodyStore{}
+
+	// nil extraction repo: must be ErrNilCustodyRetentionExtractionRepo, NOT ErrCustodyRetentionWorkerNil.
+	_, err := NewCustodyRetentionWorker(
+		nil,
+		custodyStub,
+		custodyStub,
+		&stubBridgeTenantLister{},
+		&stubInfraProvider{},
+		CustodyRetentionWorkerConfig{},
+		nil,
+	)
+	require.ErrorIs(t, err, ErrNilCustodyRetentionExtractionRepo)
+	require.NotErrorIs(t, err, ErrCustodyRetentionWorkerNil)
+
+	// nil custody: must be ErrNilCustodyRetentionCustody, NOT ErrCustodyRetentionWorkerNil.
+	_, err = NewCustodyRetentionWorker(
+		&stubRetentionExtractionRepo{},
+		nil,
+		custodyStub,
+		&stubBridgeTenantLister{},
+		&stubInfraProvider{},
+		CustodyRetentionWorkerConfig{},
+		nil,
+	)
+	require.ErrorIs(t, err, ErrNilCustodyRetentionCustody)
+	require.NotErrorIs(t, err, ErrCustodyRetentionWorkerNil)
+
+	// nil key builder: must be ErrNilCustodyRetentionKeyBuilder, NOT ErrCustodyRetentionWorkerNil.
+	_, err = NewCustodyRetentionWorker(
+		&stubRetentionExtractionRepo{},
+		custodyStub,
+		nil,
+		&stubBridgeTenantLister{},
+		&stubInfraProvider{},
+		CustodyRetentionWorkerConfig{},
+		nil,
+	)
+	require.ErrorIs(t, err, ErrNilCustodyRetentionKeyBuilder)
+	require.NotErrorIs(t, err, ErrCustodyRetentionWorkerNil)
+
+	// nil tenant lister: must be ErrNilCustodyRetentionTenantLister, NOT ErrCustodyRetentionWorkerNil.
+	_, err = NewCustodyRetentionWorker(
+		&stubRetentionExtractionRepo{},
+		custodyStub,
+		custodyStub,
+		nil,
+		&stubInfraProvider{},
+		CustodyRetentionWorkerConfig{},
+		nil,
+	)
+	require.ErrorIs(t, err, ErrNilCustodyRetentionTenantLister)
+	require.NotErrorIs(t, err, ErrCustodyRetentionWorkerNil)
+
+	// nil infra provider: must be ErrNilCustodyRetentionInfraProvider, NOT ErrCustodyRetentionWorkerNil.
+	_, err = NewCustodyRetentionWorker(
+		&stubRetentionExtractionRepo{},
+		custodyStub,
+		custodyStub,
+		&stubBridgeTenantLister{},
+		nil,
+		CustodyRetentionWorkerConfig{},
+		nil,
+	)
+	require.ErrorIs(t, err, ErrNilCustodyRetentionInfraProvider)
+	require.NotErrorIs(t, err, ErrCustodyRetentionWorkerNil)
 }
 
 // --- retentionBucket classification tests ---
@@ -779,6 +950,25 @@ func TestRetentionBucket_NilExtraction(t *testing.T) {
 	assert.Equal(t, "unknown", got)
 }
 
+// TestRetentionBucket_TerminalWinsOverLateLinked asserts the implicit
+// priority in retentionBucket: when BOTH BridgeLastError and
+// IngestionJobID are set on the same row, the bucket is "terminal" (the
+// earlier branch). Documents the invariant that a bridge failure
+// followed by a late ingestion link keeps the row classified as
+// terminal, not late_linked.
+func TestRetentionBucket_TerminalWinsOverLateLinked(t *testing.T) {
+	t.Parallel()
+
+	// Start from a terminal extraction (BridgeLastError set) and add an
+	// IngestionJobID so both discriminators are populated simultaneously.
+	extraction := terminalFailedExtraction(uuid.New(), uuid.New())
+	extraction.IngestionJobID = uuid.New()
+
+	got := retentionBucket(extraction)
+	assert.Equal(t, "terminal", got,
+		"terminal must win over late_linked when both discriminators are set")
+}
+
 // --- Test helpers ---
 
 // newTestCustodyRetentionWorker builds a worker bypassing the constructor's
@@ -804,6 +994,7 @@ func newTestCustodyRetentionWorkerWithCfg(
 	w := &CustodyRetentionWorker{
 		extractionRepo: repo,
 		custody:        custody,
+		keyBuilder:     custody,
 		tenantLister:   &stubBridgeTenantLister{},
 		infraProvider:  &stubInfraProvider{},
 		cfg:            cfg,
@@ -812,4 +1003,297 @@ func newTestCustodyRetentionWorkerWithCfg(
 	w.tracer = otel.Tracer("custody_retention_worker_test")
 
 	return w
+}
+
+// newTestCustodyRetentionWorkerFull is a wiring helper for sweepCycle tests.
+// Unlike newTestCustodyRetentionWorker, it accepts the tenantLister and
+// infraProvider so tests can inject miniredis-backed lock stubs and tenant
+// lists. Everything else defaults to the same config the smaller helper
+// uses, so tests only pay attention to the collaborators they care about.
+func newTestCustodyRetentionWorkerFull(
+	repo *stubRetentionExtractionRepo,
+	custody *stubCustodyStore,
+	tenantLister sharedPorts.TenantLister,
+	infraProvider sharedPorts.InfrastructureProvider,
+) *CustodyRetentionWorker {
+	w := &CustodyRetentionWorker{
+		extractionRepo: repo,
+		custody:        custody,
+		keyBuilder:     custody,
+		tenantLister:   tenantLister,
+		infraProvider:  infraProvider,
+		cfg: CustodyRetentionWorkerConfig{
+			Interval:    15 * time.Minute,
+			GracePeriod: time.Hour,
+			BatchSize:   100,
+		},
+	}
+	w.logger = &stubLogger{}
+	w.tracer = otel.Tracer("custody_retention_worker_test")
+
+	return w
+}
+
+// newMiniredisInfraProvider wires a miniredis instance to a testutil
+// MockInfrastructureProvider so sweepCycle's acquireLock path runs against a
+// real (in-process) Redis server. Mirrors the pattern used in
+// internal/matching/adapters/redis/lock_manager_test.go. Returns both the
+// provider and the miniredis handle — the latter lets tests inspect keys or
+// inject failures.
+func newMiniredisInfraProvider(t *testing.T) (*testutil.MockInfrastructureProvider, *miniredis.Miniredis) {
+	t.Helper()
+
+	srv := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: srv.Addr()})
+	conn := testutil.NewRedisClientWithMock(client)
+
+	provider := &testutil.MockInfrastructureProvider{RedisConn: conn}
+
+	return provider, srv
+}
+
+// --- sweepCycle tests ---
+
+// TestSweepCycle_LockNotAcquired_EarlyReturn verifies that when another
+// replica already holds the retention lock, sweepCycle exits without
+// touching tenants. The SetNX call observes the pre-existing key and
+// returns false, short-circuiting tenant iteration. This is the primary
+// coordination property of the worker — without it, N replicas would each
+// run a full sweep cycle every tick.
+func TestSweepCycle_LockNotAcquired_EarlyReturn(t *testing.T) {
+	t.Parallel()
+
+	provider, srv := newMiniredisInfraProvider(t)
+
+	// Pre-seed the lock with a value held by an imaginary peer replica,
+	// with TTL well past the sweepCycle's SetNX TTL. This forces SetNX
+	// from the worker to return false.
+	require.NoError(t, srv.Set(custodyRetentionLockKey, "peer-token"))
+	srv.SetTTL(custodyRetentionLockKey, time.Hour)
+
+	tenantID := uuid.New().String()
+
+	custody := &stubCustodyStore{}
+	repo := &stubRetentionExtractionRepo{
+		candidatesByTenant: map[string][]*entities.ExtractionRequest{
+			tenantID: {terminalFailedExtraction(uuid.New(), uuid.New())},
+		},
+	}
+
+	lister := &stubBridgeTenantLister{tenants: []string{tenantID}}
+
+	w := newTestCustodyRetentionWorkerFull(repo, custody, lister, provider)
+
+	w.sweepCycle(context.Background())
+
+	// Lock was NOT acquired → worker must NOT have iterated tenants and
+	// MUST NOT have issued any custody deletes.
+	custody.mu.Lock()
+	defer custody.mu.Unlock()
+	assert.Empty(t, custody.deleteCalls,
+		"sweepCycle must not call Delete when the distributed lock is held by another replica")
+
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+	assert.Empty(t, repo.observedTenants,
+		"sweepCycle must not reach FindBridgeRetentionCandidates when the lock is held elsewhere")
+}
+
+// TestSweepCycle_LockAcquisitionError_WarnLogNoDeletes verifies that when
+// GetRedisConnection surfaces an error (e.g. infra provider failure),
+// sweepCycle logs a warning and exits without touching tenants. This is
+// the degrade-gracefully posture: a transient Redis hiccup must not crash
+// the worker or trigger a sweep without lock protection.
+func TestSweepCycle_LockAcquisitionError_WarnLogNoDeletes(t *testing.T) {
+	t.Parallel()
+
+	provider := &testutil.MockInfrastructureProvider{
+		RedisErr: errors.New("redis infra down"),
+	}
+
+	tenantID := uuid.New().String()
+
+	custody := &stubCustodyStore{}
+	repo := &stubRetentionExtractionRepo{
+		candidatesByTenant: map[string][]*entities.ExtractionRequest{
+			tenantID: {terminalFailedExtraction(uuid.New(), uuid.New())},
+		},
+	}
+
+	lister := &stubBridgeTenantLister{tenants: []string{tenantID}}
+
+	w := newTestCustodyRetentionWorkerFull(repo, custody, lister, provider)
+
+	// Must not panic — the worker's acquireLock returns the error and
+	// sweepCycle's lock branch logs WARN and returns.
+	w.sweepCycle(context.Background())
+
+	custody.mu.Lock()
+	defer custody.mu.Unlock()
+	assert.Empty(t, custody.deleteCalls,
+		"lock acquisition error must short-circuit the cycle before any tenant work")
+
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+	assert.Empty(t, repo.observedTenants,
+		"lock acquisition error must not reach FindBridgeRetentionCandidates")
+}
+
+// TestSweepCycle_TenantListError_WarnLogNoDeletes verifies that a
+// ListTenants failure is logged but does not crash the cycle and does not
+// sweep any tenants. This matches BridgeWorker.pollCycle's tenant-list
+// error handling. Without this guard, a transient pg_namespace hiccup
+// would take the worker goroutine down with it.
+func TestSweepCycle_TenantListError_WarnLogNoDeletes(t *testing.T) {
+	t.Parallel()
+
+	provider, _ := newMiniredisInfraProvider(t)
+
+	custody := &stubCustodyStore{}
+	repo := &stubRetentionExtractionRepo{}
+
+	lister := &stubBridgeTenantLister{
+		err: errors.New("pg_namespace query failed"),
+	}
+
+	w := newTestCustodyRetentionWorkerFull(repo, custody, lister, provider)
+
+	w.sweepCycle(context.Background())
+
+	custody.mu.Lock()
+	defer custody.mu.Unlock()
+	assert.Empty(t, custody.deleteCalls,
+		"tenant list error must short-circuit the cycle before per-tenant work")
+
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+	assert.Empty(t, repo.observedTenants,
+		"tenant list error must not reach FindBridgeRetentionCandidates")
+}
+
+// TestSweepCycle_MultiTenantAggregation_IncludesDefault is the load-bearing
+// correctness test: sweepCycle must process the default tenant just like
+// any UUID-named tenant. This guards against the 2026-02-06 regression
+// where background workers enumerating via pg_namespace excluded the
+// default tenant (which lives in the public schema, not a UUID schema).
+// auth.DefaultTenantID in the list MUST be swept, and per-tenant counts
+// aggregate correctly across all three tenants.
+func TestSweepCycle_MultiTenantAggregation_IncludesDefault(t *testing.T) {
+	t.Parallel()
+
+	provider, _ := newMiniredisInfraProvider(t)
+
+	defaultTenant := auth.DefaultTenantID
+	tenantA := uuid.New().String()
+	tenantB := uuid.New().String()
+
+	// Each tenant gets a different number of terminal orphans so the
+	// aggregation assertion is meaningful: default=1, A=2, B=3 (total=6).
+	custody := &stubCustodyStore{}
+	repo := &stubRetentionExtractionRepo{
+		candidatesByTenant: map[string][]*entities.ExtractionRequest{
+			defaultTenant: {
+				terminalFailedExtraction(uuid.New(), uuid.New()),
+			},
+			tenantA: {
+				terminalFailedExtraction(uuid.New(), uuid.New()),
+				terminalFailedExtraction(uuid.New(), uuid.New()),
+			},
+			tenantB: {
+				terminalFailedExtraction(uuid.New(), uuid.New()),
+				terminalFailedExtraction(uuid.New(), uuid.New()),
+				terminalFailedExtraction(uuid.New(), uuid.New()),
+			},
+		},
+	}
+
+	lister := &stubBridgeTenantLister{
+		tenants: []string{defaultTenant, tenantA, tenantB},
+	}
+
+	w := newTestCustodyRetentionWorkerFull(repo, custody, lister, provider)
+
+	w.sweepCycle(context.Background())
+
+	// All three tenants must have been observed (meaning the default
+	// tenant was NOT skipped, which is the load-bearing guarantee).
+	repo.mu.Lock()
+	observed := append([]string(nil), repo.observedTenants...)
+	repo.mu.Unlock()
+
+	assert.Contains(t, observed, defaultTenant,
+		"default tenant MUST be processed — regression guard against pg_namespace enumeration excluding public schema")
+	assert.Contains(t, observed, tenantA, "tenantA must be processed")
+	assert.Contains(t, observed, tenantB, "tenantB must be processed")
+	assert.Len(t, observed, 3, "exactly three tenants processed, none skipped")
+
+	// Cross-tenant aggregation: total Delete calls == 1 + 2 + 3 = 6.
+	custody.mu.Lock()
+	defer custody.mu.Unlock()
+	assert.Len(t, custody.deleteCalls, 6,
+		"cross-tenant delete count must aggregate every tenant's orphans")
+
+	// And each tenant's deletes appear in the aggregated key list (the
+	// key prefix is the tenant ID via stubBuildObjectKey).
+	for _, tenant := range []string{defaultTenant, tenantA, tenantB} {
+		found := 0
+
+		for _, call := range custody.deleteCalls {
+			if strings.HasPrefix(call.Key, tenant+"/fetcher-artifacts/") {
+				found++
+			}
+		}
+
+		assert.Positive(t, found,
+			"tenant %s must have at least one delete key prefixed with its id", tenant)
+	}
+}
+
+// TestSweepCycle_EmptyTenantStringSkipped verifies the empty-string tenant
+// guard in sweepCycle. A degenerate list with an empty string entry must
+// not produce a custody sweep for that empty tenant — BuildObjectKey would
+// reject it anyway, but skipping it earlier saves a spurious tracing span.
+func TestSweepCycle_EmptyTenantStringSkipped(t *testing.T) {
+	t.Parallel()
+
+	provider, _ := newMiniredisInfraProvider(t)
+
+	realTenant := uuid.New().String()
+
+	custody := &stubCustodyStore{}
+	repo := &stubRetentionExtractionRepo{
+		candidatesByTenant: map[string][]*entities.ExtractionRequest{
+			realTenant: {terminalFailedExtraction(uuid.New(), uuid.New())},
+		},
+	}
+
+	// List with an empty string in the middle — sweepCycle's `if
+	// tenantID == "" { continue }` must filter it out.
+	lister := &stubBridgeTenantLister{
+		tenants: []string{realTenant, "", realTenant + "-noop"},
+	}
+
+	w := newTestCustodyRetentionWorkerFull(repo, custody, lister, provider)
+
+	w.sweepCycle(context.Background())
+
+	// Only the real tenant had candidates, and the empty string must
+	// never reach FindBridgeRetentionCandidates.
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+
+	for _, tid := range repo.observedTenants {
+		assert.NotEmpty(t, tid,
+			"sweepCycle must skip empty tenant IDs before reaching the repository")
+	}
+
+	custody.mu.Lock()
+	defer custody.mu.Unlock()
+	// Exactly the real tenant's one orphan was deleted; the empty string
+	// contributed nothing.
+	assert.Len(t, custody.deleteCalls, 1,
+		"exactly one delete for the real tenant; empty-string tenant contributes zero work")
+	assert.True(t,
+		strings.HasPrefix(custody.deleteCalls[0].Key, realTenant+"/fetcher-artifacts/"),
+		"the single delete must target the real tenant's key")
 }

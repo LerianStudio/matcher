@@ -226,7 +226,7 @@ func (r *mockExtractionRepo) MarkBridgeFailed(_ context.Context, _ *entities.Ext
 	return nil
 }
 
-func (r *mockExtractionRepo) MarkBridgeFailedWithTx(_ context.Context, _ *sql.Tx, _ *entities.ExtractionRequest) error {
+func (r *mockExtractionRepo) MarkBridgeFailedWithTx(_ context.Context, _ sharedPorts.Tx, _ *entities.ExtractionRequest) error {
 	return nil
 }
 
@@ -234,7 +234,7 @@ func (r *mockExtractionRepo) IncrementBridgeAttempts(_ context.Context, _ uuid.U
 	return nil
 }
 
-func (r *mockExtractionRepo) IncrementBridgeAttemptsWithTx(_ context.Context, _ *sql.Tx, _ uuid.UUID, _ int) error {
+func (r *mockExtractionRepo) IncrementBridgeAttemptsWithTx(_ context.Context, _ sharedPorts.Tx, _ uuid.UUID, _ int) error {
 	return nil
 }
 

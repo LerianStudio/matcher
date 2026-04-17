@@ -56,7 +56,11 @@ func TestIntegration_ExtractionLifecycleLink_HappyPath(t *testing.T) {
 		require.NoError(t, repo.Create(tenantCtx, extraction))
 
 		ingestionJobID := insertIngestionJob(t, tenantCtx, h)
-		require.NoError(t, adapter.LinkExtractionToIngestion(tenantCtx, extraction.ID, ingestionJobID))
+		// Transition the in-memory snapshot to COMPLETE so LinkToIngestion's
+		// state-machine validation passes — the adapter no longer fetches a
+		// fresh row before writing (C9).
+		extraction.Status = discoveryVO.ExtractionStatusComplete
+		require.NoError(t, adapter.LinkExtractionToIngestion(tenantCtx, extraction, ingestionJobID))
 
 		reloaded, err := repo.FindByID(tenantCtx, extraction.ID)
 		require.NoError(t, err)
@@ -94,7 +98,10 @@ func TestIntegration_ExtractionLifecycleLink_Idempotency(t *testing.T) {
 		require.NoError(t, repo.Create(tenantCtx, extraction))
 
 		firstIngestionJobID := insertIngestionJob(t, tenantCtx, h)
-		require.NoError(t, adapter.LinkExtractionToIngestion(tenantCtx, extraction.ID, firstIngestionJobID))
+		// Transition the in-memory snapshot to COMPLETE for the first call —
+		// the state-machine validation requires it.
+		extraction.Status = discoveryVO.ExtractionStatusComplete
+		require.NoError(t, adapter.LinkExtractionToIngestion(tenantCtx, extraction, firstIngestionJobID))
 
 		// Second call with a different ingestion job id must be rejected and
 		// leave the persisted value unchanged. Seed a second row so the FK
@@ -102,7 +109,10 @@ func TestIntegration_ExtractionLifecycleLink_Idempotency(t *testing.T) {
 		secondIngestionJobID := insertIngestionJob(t, tenantCtx, h)
 		require.NotEqual(t, firstIngestionJobID, secondIngestionJobID)
 
-		err = adapter.LinkExtractionToIngestion(tenantCtx, extraction.ID, secondIngestionJobID)
+		// The in-memory snapshot is now linked to firstIngestionJobID;
+		// calling with a different job id triggers the domain cross-job
+		// collision path which wraps ErrExtractionAlreadyLinked.
+		err = adapter.LinkExtractionToIngestion(tenantCtx, extraction, secondIngestionJobID)
 		require.Error(t, err)
 		require.ErrorIs(t, err, sharedPorts.ErrExtractionAlreadyLinked)
 

@@ -6,7 +6,6 @@ package extraction
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"time"
 
@@ -30,7 +29,15 @@ const (
 	defaultBridgeCandidatesPerPage = 50
 )
 
-// CountBridgeReadiness aggregates extraction rows into the four-way readiness
+// bridgeCandidateColumns is the narrow SELECT list for the drilldown query.
+// Projects only the columns the dashboard's BridgeCandidateResponse DTO
+// exposes (plus the scan-required status and bridge_last_error columns), so
+// the hot path avoids the per-row json.Unmarshal cost of the `tables` and
+// `filters` JSONB columns that allColumns carries. Order MUST match
+// scanBridgeCandidateRow.
+const bridgeCandidateColumns = "id, connection_id, ingestion_job_id, fetcher_job_id, status, created_at, updated_at, bridge_attempts, bridge_last_error, bridge_failed_at"
+
+// CountBridgeReadiness aggregates extraction rows into the five-way readiness
 // partition for the tenant resolved from ctx.
 //
 // The query runs as a single SELECT with FILTER clauses so PostgreSQL only
@@ -60,16 +67,23 @@ func (repo *Repository) CountBridgeReadiness(
 	ctx, span := tracer.Start(ctx, "postgres.extraction.count_bridge_readiness")
 	defer span.End()
 
-	result, err := pgcommon.WithTenantTxProvider(ctx, repo.provider, func(tx *sql.Tx) (repositories.BridgeReadinessCounts, error) {
+	result, err := pgcommon.WithTenantReadQuery(ctx, repo.provider, func(qx pgcommon.QueryExecutor) (repositories.BridgeReadinessCounts, error) {
 		// T-005 integration: bridge_last_error participates in the
 		// readiness partition. A row that is COMPLETE+unlinked but has
 		// bridge_last_error set is "failed" (the bridge gave up), not
 		// "pending" or "stale". The pending/stale buckets explicitly
 		// require bridge_last_error IS NULL so they only show retryable
 		// rows the worker is expected to drain.
-		row := tx.QueryRowContext(ctx,
+		//
+		// Defense-in-depth (C14): ready_count also excludes rows with
+		// bridge_last_error IS NOT NULL. Today unreachable via the write
+		// path (FindEligibleForBridge ignores terminally-failed rows), but
+		// without this guard a linked+terminally-failed row would double-
+		// count — landing in ready AND failed — and break the partition's
+		// mutual-exclusion invariant.
+		row := qx.QueryRowContext(ctx,
 			`SELECT
-				COUNT(*) FILTER (WHERE status = $1 AND ingestion_job_id IS NOT NULL) AS ready_count,
+				COUNT(*) FILTER (WHERE status = $1 AND ingestion_job_id IS NOT NULL AND bridge_last_error IS NULL) AS ready_count,
 				COUNT(*) FILTER (WHERE status = $1 AND ingestion_job_id IS NULL
 					AND bridge_last_error IS NULL
 					AND EXTRACT(EPOCH FROM (NOW() - created_at)) <= $2) AS pending_count,
@@ -148,10 +162,10 @@ func (repo *Repository) ListBridgeCandidates(
 	ctx, span := tracer.Start(ctx, "postgres.extraction.list_bridge_candidates")
 	defer span.End()
 
-	result, err := pgcommon.WithTenantTxProvider(ctx, repo.provider, func(tx *sql.Tx) ([]*entities.ExtractionRequest, error) {
+	result, err := pgcommon.WithTenantReadQuery(ctx, repo.provider, func(qx pgcommon.QueryExecutor) ([]*entities.ExtractionRequest, error) {
 		query, args := buildBridgeCandidateQuery(parsedState, thresholdSec, createdAfter, idAfter, pageSize)
 
-		rows, queryErr := tx.QueryContext(ctx, query, args...)
+		rows, queryErr := qx.QueryContext(ctx, query, args...)
 		if queryErr != nil {
 			return nil, fmt.Errorf("query bridge candidates: %w", queryErr)
 		}
@@ -160,7 +174,7 @@ func (repo *Repository) ListBridgeCandidates(
 		extractions := make([]*entities.ExtractionRequest, 0, pageSize)
 
 		for rows.Next() {
-			extraction, scanErr := scanExtraction(rows)
+			extraction, scanErr := scanBridgeCandidateRow(rows)
 			if scanErr != nil {
 				return nil, fmt.Errorf("scan bridge candidate: %w", scanErr)
 			}
@@ -195,7 +209,12 @@ func buildBridgeCandidateQuery(
 	idAfter uuid.UUID,
 	limit int,
 ) (string, []any) {
-	const baseSelect = `SELECT ` + allColumns + ` FROM ` + tableName + ` WHERE `
+	// Narrow projection (C11): the drilldown only surfaces
+	// BridgeCandidateResponse fields, so the hot-path SELECT avoids the
+	// JSONB `tables` and `filters` columns that scanExtraction triggers
+	// json.Unmarshal on for every row. scanBridgeCandidateRow scans exactly
+	// these columns in this order.
+	const baseSelect = `SELECT ` + bridgeCandidateColumns + ` FROM ` + tableName + ` WHERE `
 
 	var (
 		predicate string
@@ -204,7 +223,11 @@ func buildBridgeCandidateQuery(
 
 	switch state {
 	case vo.BridgeReadinessReady:
-		predicate = "status = $1 AND ingestion_job_id IS NOT NULL"
+		// Defense-in-depth (C14): exclude terminally-failed rows so the
+		// drilldown agrees with CountBridgeReadiness. A row with
+		// bridge_last_error IS NOT NULL belongs to the failed bucket; if
+		// it also happens to be linked it must still surface there only.
+		predicate = "status = $1 AND ingestion_job_id IS NOT NULL AND bridge_last_error IS NULL"
 		args = []any{string(vo.ExtractionStatusComplete)}
 	case vo.BridgeReadinessPending:
 		// Pending requires the row to still be retryable: bridge_last_error
@@ -260,4 +283,69 @@ func clampPageLimit(limit int) int {
 	}
 
 	return limit
+}
+
+// scanBridgeCandidateRow scans a narrow bridge-candidate row into an
+// ExtractionRequest populated with only the fields the dashboard drilldown
+// surfaces (via BridgeCandidateResponse). Tables, Filters, StartDate,
+// EndDate, ResultPath, ErrorMessage, BridgeLastErrorMessage, and
+// CustodyDeletedAt are intentionally left zero — the drilldown endpoint does
+// not expose them, and projecting the JSONB columns here would cost a
+// json.Unmarshal per row on a hot dashboard path. Column order MUST match
+// bridgeCandidateColumns.
+func scanBridgeCandidateRow(scanner interface{ Scan(dest ...any) error }) (*entities.ExtractionRequest, error) {
+	var model ExtractionModel
+	if err := scanner.Scan(
+		&model.ID,
+		&model.ConnectionID,
+		&model.IngestionJobID,
+		&model.FetcherJobID,
+		&model.Status,
+		&model.CreatedAt,
+		&model.UpdatedAt,
+		&model.BridgeAttempts,
+		&model.BridgeLastError,
+		&model.BridgeFailedAt,
+	); err != nil {
+		return nil, err
+	}
+
+	status, err := vo.ParseExtractionStatus(model.Status)
+	if err != nil {
+		return nil, fmt.Errorf("parse extraction status %q: %w", model.Status, err)
+	}
+
+	var ingestionJobID uuid.UUID
+	if model.IngestionJobID.Valid {
+		ingestionJobID = model.IngestionJobID.UUID
+	}
+
+	var bridgeLastError vo.BridgeErrorClass
+
+	if model.BridgeLastError.Valid && model.BridgeLastError.String != "" {
+		parsed, parseErr := vo.ParseBridgeErrorClass(model.BridgeLastError.String)
+		if parseErr != nil {
+			return nil, fmt.Errorf("parse bridge_last_error %q: %w", model.BridgeLastError.String, parseErr)
+		}
+
+		bridgeLastError = parsed
+	}
+
+	var bridgeFailedAt time.Time
+	if model.BridgeFailedAt.Valid {
+		bridgeFailedAt = model.BridgeFailedAt.Time
+	}
+
+	return &entities.ExtractionRequest{
+		ID:              model.ID,
+		ConnectionID:    model.ConnectionID,
+		IngestionJobID:  ingestionJobID,
+		FetcherJobID:    nullStringToString(model.FetcherJobID),
+		Status:          status,
+		CreatedAt:       model.CreatedAt,
+		UpdatedAt:       model.UpdatedAt,
+		BridgeAttempts:  model.BridgeAttempts,
+		BridgeLastError: bridgeLastError,
+		BridgeFailedAt:  bridgeFailedAt,
+	}, nil
 }

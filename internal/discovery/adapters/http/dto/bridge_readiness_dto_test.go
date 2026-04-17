@@ -19,7 +19,7 @@ func TestNewBridgeReadinessSummaryResponse_AllFieldsAndTotal(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now().UTC()
-	got := NewBridgeReadinessSummaryResponse(4, 3, 2, 1, 5, 90, now)
+	got := NewBridgeReadinessSummaryResponse(4, 3, 2, 1, 5, 90, now, nil, nil, false)
 
 	assert.Equal(t, int64(4), got.ReadyCount)
 	assert.Equal(t, int64(3), got.PendingCount)
@@ -35,7 +35,7 @@ func TestNewBridgeReadinessSummaryResponse_ZeroCounts(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now().UTC()
-	got := NewBridgeReadinessSummaryResponse(0, 0, 0, 0, 0, 60, now)
+	got := NewBridgeReadinessSummaryResponse(0, 0, 0, 0, 0, 60, now, nil, nil, false)
 
 	assert.Equal(t, int64(0), got.TotalCount)
 }
@@ -58,6 +58,7 @@ func TestNewBridgeCandidateResponse_LinkedRow(t *testing.T) {
 		now.Add(-30*time.Second),
 		now,
 		30,
+		"",
 	)
 
 	assert.Equal(t, extractionID, got.ExtractionID)
@@ -68,6 +69,7 @@ func TestNewBridgeCandidateResponse_LinkedRow(t *testing.T) {
 	assert.Equal(t, jobID, *got.IngestionJobID)
 	assert.Equal(t, "fetcher-99", got.FetcherJobID)
 	assert.Equal(t, int64(30), got.AgeSeconds)
+	assert.Empty(t, got.BridgeLastError, "ready row carries no failure class")
 }
 
 func TestNewBridgeCandidateResponse_UnlinkedRow(t *testing.T) {
@@ -84,8 +86,10 @@ func TestNewBridgeCandidateResponse_UnlinkedRow(t *testing.T) {
 		now,
 		now,
 		5,
+		"",
 	)
 
 	assert.Nil(t, got.IngestionJobID, "unlinked row must keep the job pointer nil")
 	assert.Equal(t, "pending", got.ReadinessState)
+	assert.Empty(t, got.BridgeLastError, "pending row carries no failure class")
 }

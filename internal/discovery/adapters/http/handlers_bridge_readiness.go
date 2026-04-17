@@ -5,6 +5,7 @@
 package http
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -15,6 +16,8 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 
+	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
+	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
 	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/discovery/adapters/http/dto"
@@ -88,7 +91,7 @@ func (handler *Handler) GetBridgeReadinessSummary(fiberCtx *fiber.Ctx) error {
 	ctx, span, logger := startHandlerSpan(fiberCtx, "discovery.http.get_bridge_readiness_summary")
 	defer span.End()
 
-	threshold := handler.resolveStaleThreshold()
+	threshold := handler.resolveStaleThreshold(ctx)
 
 	summary, err := handler.query.CountBridgeReadinessByTenant(ctx, threshold)
 	if err != nil {
@@ -109,6 +112,9 @@ func (handler *Handler) GetBridgeReadinessSummary(fiberCtx *fiber.Ctx) error {
 		summary.Counts.InFlightCount,
 		int64(summary.StaleThreshold.Seconds()),
 		summary.GeneratedAt,
+		summary.WorkerLastTickAt,
+		summary.WorkerStalenessSeconds,
+		summary.WorkerHealthy,
 	)
 
 	return libHTTP.Respond(fiberCtx, fiber.StatusOK, response)
@@ -157,7 +163,7 @@ func (handler *Handler) ListBridgeCandidates(fiberCtx *fiber.Ctx) error {
 		return respondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", "invalid cursor")
 	}
 
-	threshold := handler.resolveStaleThreshold()
+	threshold := handler.resolveStaleThreshold(ctx)
 
 	candidates, err := handler.query.ListBridgeCandidates(
 		ctx,
@@ -185,11 +191,9 @@ func (handler *Handler) ListBridgeCandidates(fiberCtx *fiber.Ctx) error {
 	}
 
 	items := make([]dto.BridgeCandidateResponse, 0, len(candidates))
+	// Use-case ListBridgeCandidates already drops nil rows before returning,
+	// so every candidate here has a non-nil Extraction. No defensive guard.
 	for _, candidate := range candidates {
-		if candidate.Extraction == nil {
-			continue
-		}
-
 		var ingestionJobID *uuid.UUID
 
 		if candidate.Extraction.IngestionJobID != uuid.Nil {
@@ -207,6 +211,7 @@ func (handler *Handler) ListBridgeCandidates(fiberCtx *fiber.Ctx) error {
 			candidate.Extraction.CreatedAt,
 			candidate.Extraction.UpdatedAt,
 			candidate.AgeSeconds,
+			candidate.Extraction.BridgeLastError.String(),
 		))
 	}
 
@@ -229,13 +234,26 @@ func (handler *Handler) ListBridgeCandidates(fiberCtx *fiber.Ctx) error {
 // systemplane provider, falling back to defaultBridgeStaleThreshold when the
 // handler was constructed without one (which only happens in tests) or when
 // the provider hands back a non-positive value (misconfiguration).
-func (handler *Handler) resolveStaleThreshold() time.Duration {
+//
+// A non-positive provider value is still returned by the systemplane (callers
+// mistuned it to 0 or negative). The clamp path is emitted at warn level so
+// operators notice the misconfiguration in logs instead of silently getting
+// the default.
+func (handler *Handler) resolveStaleThreshold(ctx context.Context) time.Duration {
 	if handler == nil || handler.staleness == nil {
 		return defaultBridgeStaleThreshold
 	}
 
 	threshold := handler.staleness()
 	if threshold <= 0 {
+		logger, _, _, _ := libCommons.NewTrackingFromContext(ctx)
+		if logger != nil {
+			logger.With(
+				libLog.String("configured", threshold.String()),
+				libLog.String("clamped_to", defaultBridgeStaleThreshold.String()),
+			).Log(ctx, libLog.LevelWarn, "resolveStaleThreshold: non-positive provider value clamped to default (below 1s sub-unit)")
+		}
+
 		return defaultBridgeStaleThreshold
 	}
 
@@ -287,13 +305,17 @@ func parseBridgeReadinessCursor(raw string) (time.Time, uuid.UUID, error) {
 		return time.Time{}, uuid.Nil, fmt.Errorf("unmarshal cursor: %w", err)
 	}
 
+	// Cheap zero-value check first: a cursor with no CreatedAt cannot
+	// produce a meaningful keyset predicate regardless of the ID field, so
+	// reject before paying the uuid.Parse cost (and avoid emitting a parse-
+	// error log line when the real problem is an empty anchor).
+	if cursor.CreatedAt.IsZero() {
+		return time.Time{}, uuid.Nil, errBridgeReadinessCursorNoCreatedAt
+	}
+
 	id, err := uuid.Parse(cursor.ID)
 	if err != nil {
 		return time.Time{}, uuid.Nil, fmt.Errorf("invalid cursor id: %w", err)
-	}
-
-	if cursor.CreatedAt.IsZero() {
-		return time.Time{}, uuid.Nil, errBridgeReadinessCursorNoCreatedAt
 	}
 
 	return cursor.CreatedAt.UTC(), id, nil
@@ -310,10 +332,10 @@ func computeNextCursor(candidates []discoveryQuery.BridgeCandidate, limit int) (
 		return "", nil
 	}
 
+	// Use-case ListBridgeCandidates guarantees non-nil Extraction on every
+	// returned element, and the handler only reaches this path via that
+	// use case, so skip the nil guard.
 	last := candidates[len(candidates)-1]
-	if last.Extraction == nil {
-		return "", nil
-	}
 
 	cursor := bridgeReadinessCursor{
 		CreatedAt: last.Extraction.CreatedAt.UTC(),
@@ -332,6 +354,12 @@ func computeNextCursor(candidates []discoveryQuery.BridgeCandidate, limit int) (
 // provider to the handler. Exposed so bootstrap can wire the
 // systemplane-backed closure after handler construction without expanding
 // NewHandler's signature.
+//
+// Concurrency: set-once at bootstrap; readers are safe due to publish-before-
+// serve ordering (the HTTP server is not accepting requests until after the
+// provider is wired). The closure assignment is not guarded by a mutex
+// because there is no scenario where two goroutines race to call this
+// method.
 func (handler *Handler) WithStalenessProvider(provider stalenessProvider) {
 	if handler == nil {
 		return

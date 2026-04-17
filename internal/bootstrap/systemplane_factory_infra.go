@@ -153,6 +153,22 @@ func (c *objectStorageCloser) Upload(ctx context.Context, key string, reader io.
 	return result, nil
 }
 
+// UploadIfAbsent performs a conditional PUT on the wrapped S3 client. The
+// S3 client layer is responsible for recognising 412 Precondition Failed
+// and returning a wrapped sharedPorts.ErrObjectAlreadyExists; this wrapper
+// passes that sentinel through unwrapped so callers can use errors.Is.
+func (c *objectStorageCloser) UploadIfAbsent(ctx context.Context, key string, reader io.Reader, contentType string) (string, error) {
+	result, err := c.client.UploadIfAbsent(ctx, key, reader, contentType)
+	if err != nil {
+		// Intentionally not wrapping: ErrObjectAlreadyExists must survive
+		// errors.Is at the caller. Other failure classes already carry
+		// context from the S3 client layer.
+		return "", err
+	}
+
+	return result, nil
+}
+
 // UploadWithOptions stores an object using the wrapped S3 client and upload options.
 func (c *objectStorageCloser) UploadWithOptions(ctx context.Context, key string, reader io.Reader, contentType string, opts ...storageopt.UploadOption) (string, error) {
 	result, err := c.client.UploadWithOptions(ctx, key, reader, contentType, opts...)

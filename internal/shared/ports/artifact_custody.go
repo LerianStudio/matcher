@@ -13,6 +13,23 @@ import (
 	"github.com/google/uuid"
 )
 
+// MaxArtifactBytes caps how many ciphertext/plaintext bytes either the
+// ingest verifier or the custody replay-recovery path will materialise
+// into memory for a single artifact. Fetcher does not advertise an upper
+// bound on its ciphertext, so an unbounded read invites memory-exhaustion
+// DoS on any host in the verify or custody pipeline.
+//
+// 256 MiB is well above realistic extraction output sizes — Fetcher emits
+// flat JSON, not multi-shard binary payloads — while still leaving ample
+// headroom before the process's available heap is threatened.
+//
+// Both the ingest verifier (internal/discovery/adapters/fetcher:
+// maxCiphertextBytes) and the custody store's recoverDigest replay path
+// MUST enforce this cap. Drifting between the two would reopen the
+// exhaustion window on whichever path forgot the check, so the constant
+// lives in the shared ports package where both sides can import it.
+const MaxArtifactBytes = 256 * 1024 * 1024
+
 // Sentinel errors for the verified-artifact pipeline (T-002).
 //
 // The verifier separates two failure classes so callers can drive retry
@@ -252,4 +269,17 @@ type ArtifactCustodyStore interface {
 	Open(ctx context.Context, ref ArtifactCustodyReference) (io.ReadCloser, error)
 
 	Delete(ctx context.Context, ref ArtifactCustodyReference) error
+}
+
+// CustodyKeyBuilder abstracts the tenant-scoped object-key layout used by
+// the custody store. Workers and other non-adapter callers depend on this
+// port instead of importing the custody adapter directly so that the
+// worker-no-adapters depguard rule can stay strict.
+//
+// Implementations must apply the same validation the custody adapter
+// enforces on write (tenant id non-empty, no '/' or control bytes, non-nil
+// extraction id) so a key returned by BuildObjectKey is guaranteed to round-
+// trip through Store/Delete.
+type CustodyKeyBuilder interface {
+	BuildObjectKey(tenantID string, extractionID uuid.UUID) (string, error)
 }

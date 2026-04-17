@@ -25,7 +25,6 @@ import (
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
-	"github.com/LerianStudio/matcher/internal/shared/adapters/custody"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 	"github.com/LerianStudio/matcher/pkg/chanutil"
 )
@@ -56,17 +55,19 @@ const (
 	// cleanupCustody still gets swept within an operational SLO.
 	custodyRetentionDefaultGracePeriod = time.Hour
 
-	// custodyRetentionDefaultBatchSize caps how many retention candidates
+	// CustodyRetentionDefaultBatchSize caps how many retention candidates
 	// the sweep examines per tenant per cycle. Bounded so a single cycle
 	// can't dominate the lock TTL when a tenant has a large orphan
-	// backlog.
-	custodyRetentionDefaultBatchSize = 100
+	// backlog. Exported so the bootstrap wiring can pass it explicitly.
+	CustodyRetentionDefaultBatchSize = 100
 )
 
 // Sentinel errors for custody retention worker construction / lifecycle.
 var (
+	ErrCustodyRetentionWorkerNil          = errors.New("custody retention worker is nil")
 	ErrNilCustodyRetentionExtractionRepo  = errors.New("custody retention worker requires extraction repository")
 	ErrNilCustodyRetentionCustody         = errors.New("custody retention worker requires custody store")
+	ErrNilCustodyRetentionKeyBuilder      = errors.New("custody retention worker requires custody key builder")
 	ErrNilCustodyRetentionTenantLister    = errors.New("custody retention worker requires tenant lister")
 	ErrNilCustodyRetentionInfraProvider   = errors.New("custody retention worker requires infrastructure provider")
 	ErrCustodyRetentionWorkerAlreadyRun   = errors.New("custody retention worker already running")
@@ -89,7 +90,7 @@ type CustodyRetentionWorkerConfig struct {
 	// <= 0.
 	GracePeriod time.Duration
 	// BatchSize caps how many retention candidates are examined per
-	// tenant per cycle. Falls back to custodyRetentionDefaultBatchSize
+	// tenant per cycle. Falls back to CustodyRetentionDefaultBatchSize
 	// when <= 0.
 	BatchSize int
 }
@@ -104,18 +105,10 @@ func normalizeCustodyRetentionConfig(cfg CustodyRetentionWorkerConfig) CustodyRe
 	}
 
 	if cfg.BatchSize <= 0 {
-		cfg.BatchSize = custodyRetentionDefaultBatchSize
+		cfg.BatchSize = CustodyRetentionDefaultBatchSize
 	}
 
 	return cfg
-}
-
-// CustodyRetentionDefaultBatchSize exposes the package-private default
-// batch size to bootstrap so the wiring layer can pass it explicitly. We
-// could leave the field zero (the worker normalises it) but exposing the
-// constant keeps the bootstrap call site self-documenting.
-func CustodyRetentionDefaultBatchSize() int {
-	return custodyRetentionDefaultBatchSize
 }
 
 // custodyRetentionLockTTL returns the lock TTL proportional to the sweep
@@ -151,6 +144,7 @@ type CustodyRetentionWorker struct {
 	mu             sync.Mutex
 	extractionRepo repositories.ExtractionRepository
 	custody        sharedPorts.ArtifactCustodyStore
+	keyBuilder     sharedPorts.CustodyKeyBuilder
 	tenantLister   sharedPorts.TenantLister
 	infraProvider  sharedPorts.InfrastructureProvider
 	cfg            CustodyRetentionWorkerConfig
@@ -167,6 +161,7 @@ type CustodyRetentionWorker struct {
 func NewCustodyRetentionWorker(
 	extractionRepo repositories.ExtractionRepository,
 	custodyStore sharedPorts.ArtifactCustodyStore,
+	keyBuilder sharedPorts.CustodyKeyBuilder,
 	tenantLister sharedPorts.TenantLister,
 	infraProvider sharedPorts.InfrastructureProvider,
 	cfg CustodyRetentionWorkerConfig,
@@ -178,6 +173,10 @@ func NewCustodyRetentionWorker(
 
 	if custodyStore == nil {
 		return nil, ErrNilCustodyRetentionCustody
+	}
+
+	if keyBuilder == nil {
+		return nil, ErrNilCustodyRetentionKeyBuilder
 	}
 
 	if tenantLister == nil {
@@ -197,6 +196,7 @@ func NewCustodyRetentionWorker(
 	return &CustodyRetentionWorker{
 		extractionRepo: extractionRepo,
 		custody:        custodyStore,
+		keyBuilder:     keyBuilder,
 		tenantLister:   tenantLister,
 		infraProvider:  infraProvider,
 		cfg:            cfg,
@@ -212,7 +212,7 @@ func NewCustodyRetentionWorker(
 // the loop per the KeepRunning policy.
 func (worker *CustodyRetentionWorker) Start(ctx context.Context) error {
 	if worker == nil {
-		return ErrNilCustodyRetentionExtractionRepo
+		return ErrCustodyRetentionWorkerNil
 	}
 
 	if !worker.running.CompareAndSwap(false, true) {
@@ -238,7 +238,7 @@ func (worker *CustodyRetentionWorker) Start(ctx context.Context) error {
 // Stop callers cannot both close stopCh.
 func (worker *CustodyRetentionWorker) Stop() error {
 	if worker == nil {
-		return ErrCustodyRetentionWorkerNotRunning
+		return ErrCustodyRetentionWorkerNil
 	}
 
 	if !worker.running.CompareAndSwap(true, false) {
@@ -264,7 +264,17 @@ func (worker *CustodyRetentionWorker) Stop() error {
 // The mutex is taken because prepareRunState may swap worker.doneCh under the
 // same lock during a Stop→Start cycle; reading without the lock could hand
 // callers a stale channel that never closes.
+//
+// A nil receiver returns a pre-closed channel so callers that race against
+// worker construction observe "already done" rather than blocking forever.
 func (worker *CustodyRetentionWorker) Done() <-chan struct{} {
+	if worker == nil {
+		c := make(chan struct{})
+		close(c)
+
+		return c
+	}
+
 	worker.mu.Lock()
 	defer worker.mu.Unlock()
 
@@ -276,7 +286,7 @@ func (worker *CustodyRetentionWorker) Done() <-chan struct{} {
 // change, so we reject updates while running to avoid races with the ticker.
 func (worker *CustodyRetentionWorker) UpdateRuntimeConfig(cfg CustodyRetentionWorkerConfig) error {
 	if worker == nil {
-		return ErrCustodyRetentionWorkerNotRunning
+		return ErrCustodyRetentionWorkerNil
 	}
 
 	worker.mu.Lock()
@@ -438,7 +448,7 @@ func (worker *CustodyRetentionWorker) sweepOne(
 	ctx, span := tracer.Start(ctx, "discovery.custody_retention.sweep_one")
 	defer span.End()
 
-	key, err := custody.BuildObjectKey(tenantID, extraction.ID)
+	key, err := worker.keyBuilder.BuildObjectKey(tenantID, extraction.ID)
 	if err != nil {
 		// Build failure is a config bug (e.g. invalid tenant id), not a
 		// retention concern. Log and skip this candidate; future cycles
@@ -534,7 +544,7 @@ func retentionBucket(extraction *entities.ExtractionRequest) string {
 func (worker *CustodyRetentionWorker) acquireLock(ctx context.Context) (bool, string, error) {
 	connLease, err := worker.infraProvider.GetRedisConnection(ctx)
 	if err != nil {
-		return false, "", fmt.Errorf("get redis connection: %worker", err)
+		return false, "", fmt.Errorf("get redis connection: %w", err)
 	}
 	defer connLease.Release()
 
@@ -545,14 +555,14 @@ func (worker *CustodyRetentionWorker) acquireLock(ctx context.Context) (bool, st
 
 	rdb, err := conn.GetClient(ctx)
 	if err != nil {
-		return false, "", fmt.Errorf("get redis client: %worker", err)
+		return false, "", fmt.Errorf("get redis client: %w", err)
 	}
 
 	token := uuid.New().String()
 
 	ok, err := rdb.SetNX(ctx, custodyRetentionLockKey, token, custodyRetentionLockTTL(worker.cfg.Interval)).Result()
 	if err != nil {
-		return false, "", fmt.Errorf("redis setnx for custody retention lock: %worker", err)
+		return false, "", fmt.Errorf("redis setnx for custody retention lock: %w", err)
 	}
 
 	return ok, token, nil

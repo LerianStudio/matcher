@@ -238,9 +238,22 @@ func (repo *Repository) executeIncrementBridgeAttempts(
 }
 
 // executeMarkBridgeFailed runs the narrow UPDATE that touches only the
-// bridge_* columns + updated_at. Keeping the column list narrow avoids
-// races with concurrent updates on unrelated columns (e.g., a poller bumping
-// status would not be clobbered by this write).
+// bridge_* columns + updated_at, gated by `ingestion_job_id IS NULL`
+// (C21 fix). Keeping the column list narrow avoids races with concurrent
+// updates on unrelated columns (e.g., a poller bumping status would not be
+// clobbered by this write).
+//
+// The NULL-guard predicate preserves the invariant "EITHER linked OR
+// terminally-failed, never both" under a lock-TTL-expiry race where
+// Replica A successfully links an extraction while Replica B's orchestrator
+// fails downstream and calls MarkBridgeFailed. Without the guard the
+// terminal-failure UPDATE would clobber a row already carrying a valid
+// ingestion_job_id. Mirrors the Polish Fix 3 pattern already applied to
+// executeIncrementBridgeAttempts.
+//
+// Returns sharedPorts.ErrExtractionAlreadyLinked when the row was
+// concurrently linked between read and write. Returns ErrExtractionNotFound
+// when no row matches the id. Returns nil on the happy path.
 func (repo *Repository) executeMarkBridgeFailed(ctx context.Context, tx *sql.Tx, req *entities.ExtractionRequest) error {
 	model, err := FromDomain(req)
 	if err != nil {
@@ -257,7 +270,7 @@ func (repo *Repository) executeMarkBridgeFailed(ctx context.Context, tx *sql.Tx,
 			bridge_last_error_message = $3,
 			bridge_failed_at = $4,
 			updated_at = $5
-		WHERE id = $6`,
+		WHERE id = $6 AND ingestion_job_id IS NULL`,
 		model.BridgeAttempts,
 		model.BridgeLastError,
 		model.BridgeLastErrorMessage,
@@ -275,7 +288,22 @@ func (repo *Repository) executeMarkBridgeFailed(ctx context.Context, tx *sql.Tx,
 	}
 
 	if rowsAffected == 0 {
-		return repositories.ErrExtractionNotFound
+		// Zero rows affected means either the row does not exist or a
+		// concurrent link won the race. Disambiguate with a narrow probe
+		// so callers get a precise sentinel.
+		var exists bool
+		if probeErr := tx.QueryRowContext(ctx,
+			`SELECT EXISTS(SELECT 1 FROM `+tableName+` WHERE id = $1)`,
+			model.ID,
+		).Scan(&exists); probeErr != nil {
+			return fmt.Errorf("mark bridge failed existence probe: %w", probeErr)
+		}
+
+		if !exists {
+			return repositories.ErrExtractionNotFound
+		}
+
+		return sharedPorts.ErrExtractionAlreadyLinked
 	}
 
 	// Reflect the persisted updated_at back onto the entity so callers

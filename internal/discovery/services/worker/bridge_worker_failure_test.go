@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
 
+	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
 	vo "github.com/LerianStudio/matcher/internal/discovery/domain/value_objects"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
@@ -232,4 +233,43 @@ func TestBridgeWorker_TransientFailure_ConcurrentLink_LogsAndStops(t *testing.T)
 	err := w.bridgeOne(context.Background(), extraction, "tenant-race")
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, sharedPorts.ErrCustodyStoreFailed))
+}
+
+// TestBridgeWorker_TerminalFailure_ConcurrentLink_BenignSkip is the C21
+// regression counterpart for the terminal-failure path: when a concurrent
+// LinkIfUnlinked wins the race between FindEligibleForBridge and
+// persistTerminalFailure, MarkBridgeFailed's narrow UPDATE misses the row
+// (the NULL-guard rejects the write) and the repository surfaces
+// ErrExtractionAlreadyLinked. persistTerminalFailure must treat this as
+// benign — the link is the authoritative outcome, so the terminal-failure
+// write is correctly skipped. The original terminal-classified error from
+// the orchestrator still bubbles up through bridgeOne unchanged.
+func TestBridgeWorker_TerminalFailure_ConcurrentLink_BenignSkip(t *testing.T) {
+	t.Parallel()
+
+	extraction := completeExtraction(uuid.New(), uuid.New())
+	orch := &stubBridgeOrchestrator{
+		returnFn: func(_ context.Context, _ sharedPorts.BridgeExtractionInput) (*sharedPorts.BridgeExtractionOutcome, error) {
+			return nil, fmt.Errorf("retrieve: %w", sharedPorts.ErrFetcherResourceNotFound)
+		},
+	}
+	repo := &stubBridgeExtractionRepo{
+		markBridgeFailedFn: func(_ *entities.ExtractionRequest) error {
+			return sharedPorts.ErrExtractionAlreadyLinked
+		},
+	}
+	w := newTestWorker(orch, repo, BridgeRetryBackoff{MaxAttempts: 5})
+
+	err := w.bridgeOne(context.Background(), extraction, "tenant-terminal-race")
+	require.Error(t, err)
+	// The original terminal error still bubbles — only the persist of the
+	// terminal-failure row is skipped benignly.
+	assert.True(t, errors.Is(err, sharedPorts.ErrFetcherResourceNotFound))
+	// Entity was mutated (domain-level MarkBridgeFailed ran) and the repo
+	// MarkBridgeFailed was attempted — but the benign sentinel means the
+	// write was rejected and treated as a no-op. The entity still reflects
+	// the terminal classification locally.
+	assert.Equal(t, vo.BridgeErrorClassArtifactNotFound, extraction.BridgeLastError)
+	assert.Equal(t, 1, extraction.BridgeAttempts)
+	assert.True(t, extraction.HasTerminalBridgeFailure())
 }

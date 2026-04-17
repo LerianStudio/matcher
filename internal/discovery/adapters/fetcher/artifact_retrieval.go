@@ -215,8 +215,15 @@ func (client *ArtifactRetrievalClient) Retrieve(
 // Transient (safe to retry):
 //   - ErrArtifactRetrievalFailed wrapping status for 5xx (upstream
 //     crashed or is overloaded).
-//   - ErrArtifactRetrievalFailed wrapping status for 408 Request Timeout
-//     and 425 Too Early — the client may succeed on a second attempt.
+//   - ErrArtifactRetrievalFailed wrapping status for 408 Request Timeout,
+//     425 Too Early, and 429 Too Many Requests — the client may succeed
+//     on a second attempt. 429 is upstream rate-limiting, not a
+//     tamper/integrity event; marking it terminal would let a brief
+//     Fetcher rate-limit window permanently kill every in-flight
+//     extraction. When present, the Retry-After header value is echoed
+//     into the error message so operators can see the advised delay in
+//     logs — the caller's retry scheduler, not this function, decides
+//     when to actually re-attempt.
 //   - ErrArtifactRetrievalFailed for 1xx/3xx (unexpected; might be a
 //     proxy hiccup retry can resolve).
 func classifyArtifactResponse(resp *http.Response) (*sharedPorts.ArtifactRetrievalResult, error) {
@@ -233,12 +240,33 @@ func classifyArtifactResponse(resp *http.Response) (*sharedPorts.ArtifactRetriev
 			sharedPorts.ErrArtifactRetrievalFailed,
 			resp.StatusCode,
 		)
+	case resp.StatusCode == http.StatusTooManyRequests:
+		// 429 is upstream rate-limiting: the same request will succeed once
+		// the window elapses, so it must be transient. Echo Retry-After
+		// into the error message when Fetcher provides it; the retry
+		// scheduler (DB updated_at ASC reorder + worker loop) handles
+		// actual parking — this function just surfaces the hint.
+		retryAfter := strings.TrimSpace(resp.Header.Get("Retry-After"))
+		if retryAfter != "" {
+			return nil, fmt.Errorf(
+				"%w: fetcher returned status %d, retry-after=%s",
+				sharedPorts.ErrArtifactRetrievalFailed,
+				resp.StatusCode,
+				retryAfter,
+			)
+		}
+
+		return nil, fmt.Errorf(
+			"%w: fetcher returned status %d",
+			sharedPorts.ErrArtifactRetrievalFailed,
+			resp.StatusCode,
+		)
 	case resp.StatusCode == http.StatusRequestTimeout,
 		resp.StatusCode == http.StatusTooEarly:
-		// 408 and 425 are the only transient 4xx responses: the request can
-		// succeed on a second attempt without operator intervention. Every
-		// other 4xx signals auth expiry, quota breach, or a payload the
-		// server will keep rejecting.
+		// 408 and 425 are transient 4xx responses: the request can succeed
+		// on a second attempt without operator intervention. Every other
+		// 4xx (except 429, handled above) signals auth expiry, quota
+		// breach, or a payload the server will keep rejecting.
 		return nil, fmt.Errorf(
 			"%w: fetcher returned status %d",
 			sharedPorts.ErrArtifactRetrievalFailed,
@@ -321,8 +349,9 @@ func validateDescriptor(descriptor sharedPorts.ArtifactRetrievalDescriptor) erro
 // typed-nil pointers assigned to the interface — e.g. a
 // `(*http.Client)(nil)` accidentally stored behind an ArtifactHTTPClient
 // interface. This is the same belt-and-braces nil check used elsewhere in
-// the fetcher package (see client.go). reflect is cheap relative to the
-// HTTP round-trip it guards.
+// the fetcher package (see client.go). Called once at construction time
+// (NewArtifactRetriever), so the reflect overhead is negligible and the
+// downstream HTTP round-trip dwarfs it by many orders of magnitude anyway.
 func isNilArtifactHTTPClient(c ArtifactHTTPClient) bool {
 	if c == nil {
 		return true

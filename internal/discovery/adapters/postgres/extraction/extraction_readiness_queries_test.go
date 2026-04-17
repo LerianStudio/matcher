@@ -29,10 +29,9 @@ func TestCountBridgeReadiness_HappyPath(t *testing.T) {
 	repo, mock, finish := setupMockRepository(t)
 	defer finish()
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta(
 		`SELECT
-				COUNT(*) FILTER (WHERE status = $1 AND ingestion_job_id IS NOT NULL) AS ready_count,
+				COUNT(*) FILTER (WHERE status = $1 AND ingestion_job_id IS NOT NULL AND bridge_last_error IS NULL) AS ready_count,
 				COUNT(*) FILTER (WHERE status = $1 AND ingestion_job_id IS NULL
 					AND bridge_last_error IS NULL
 					AND EXTRACT(EPOCH FROM (NOW() - created_at)) <= $2) AS pending_count,
@@ -53,7 +52,6 @@ func TestCountBridgeReadiness_HappyPath(t *testing.T) {
 	).WillReturnRows(sqlmock.NewRows([]string{
 		"ready_count", "pending_count", "stale_count", "failed_count", "in_flight_count",
 	}).AddRow(int64(7), int64(2), int64(3), int64(1), int64(4)))
-	mock.ExpectCommit()
 
 	counts, err := repo.CountBridgeReadiness(context.Background(), time.Hour)
 	require.NoError(t, err)
@@ -64,6 +62,88 @@ func TestCountBridgeReadiness_HappyPath(t *testing.T) {
 	assert.Equal(t, int64(1), counts.Failed)
 	assert.Equal(t, int64(4), counts.InFlightCount)
 	assert.Equal(t, int64(17), counts.Total())
+}
+
+// bridgeCandidateColumnNames returns the narrow column list projected by
+// ListBridgeCandidates (see bridgeCandidateColumns in the production file).
+// Used by the sqlmock-based drilldown tests so the mock's row headers match
+// the narrow SELECT the query emits.
+func bridgeCandidateColumnNames() []string {
+	return []string{
+		"id", "connection_id", "ingestion_job_id", "fetcher_job_id",
+		"status", "created_at", "updated_at",
+		"bridge_attempts", "bridge_last_error", "bridge_failed_at",
+	}
+}
+
+// TestCountBridgeReadiness_ReadyPartitionExcludesTerminallyFailed is the C14
+// regression guard: the ready_count FILTER must carry bridge_last_error IS
+// NULL so a linked-but-terminally-failed row lands only in the failed
+// bucket, never double-counted into both. Pins the predicate via a
+// substring match so the test fails loudly if the guard is ever dropped.
+func TestCountBridgeReadiness_ReadyPartitionExcludesTerminallyFailed(t *testing.T) {
+	t.Parallel()
+
+	repo, mock, finish := setupMockRepository(t)
+	defer finish()
+
+	// Substring match on the exact FILTER clause we require. If the C14
+	// guard ever regresses (e.g., someone drops the bridge_last_error IS
+	// NULL conjunct), the query text no longer contains this fragment and
+	// the test fails with a clear "expected query not met" message.
+	mock.ExpectQuery(
+		regexp.QuoteMeta(`FILTER (WHERE status = $1 AND ingestion_job_id IS NOT NULL AND bridge_last_error IS NULL) AS ready_count`),
+	).WithArgs(
+		string(vo.ExtractionStatusComplete),
+		float64(3600),
+		string(vo.ExtractionStatusFailed),
+		string(vo.ExtractionStatusCancelled),
+		string(vo.ExtractionStatusPending),
+		string(vo.ExtractionStatusSubmitted),
+		string(vo.ExtractionStatusExtracting),
+	).WillReturnRows(sqlmock.NewRows([]string{
+		"ready_count", "pending_count", "stale_count", "failed_count", "in_flight_count",
+		// Simulate the invariant: a linked+terminally-failed row counts
+		// in failed (1) and NOT in ready (0). The SQL-level guard is what
+		// produces this split; the test pins the SQL shape that makes it
+		// possible.
+	}).AddRow(int64(0), int64(0), int64(0), int64(1), int64(0)))
+
+	counts, err := repo.CountBridgeReadiness(context.Background(), time.Hour)
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), counts.Ready,
+		"linked+terminally-failed rows must NOT inflate the ready bucket")
+	assert.Equal(t, int64(1), counts.Failed,
+		"linked+terminally-failed rows must land only in the failed bucket")
+}
+
+// TestListBridgeCandidates_ReadyState_ExcludesTerminallyFailed pins the
+// drilldown half of the C14 guard: the "ready" state predicate requires
+// bridge_last_error IS NULL so the drilldown view agrees with
+// CountBridgeReadiness on which rows are "ready".
+func TestListBridgeCandidates_ReadyState_ExcludesTerminallyFailed(t *testing.T) {
+	t.Parallel()
+
+	repo, mock, finish := setupMockRepository(t)
+	defer finish()
+
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT `+bridgeCandidateColumns+` FROM extraction_requests WHERE status = $1 AND ingestion_job_id IS NOT NULL AND bridge_last_error IS NULL ORDER BY created_at ASC, id ASC LIMIT $2`,
+	)).WithArgs(
+		string(vo.ExtractionStatusComplete),
+		defaultBridgeCandidatesPerPage,
+	).WillReturnRows(sqlmock.NewRows(bridgeCandidateColumnNames()))
+
+	rows, err := repo.ListBridgeCandidates(
+		context.Background(),
+		"ready",
+		time.Hour,
+		time.Time{},
+		uuid.Nil,
+		0,
+	)
+	require.NoError(t, err)
+	assert.Empty(t, rows)
 }
 
 // TestCountBridgeReadiness_NilReceiver asserts the nil-receiver guard fires
@@ -94,9 +174,7 @@ func TestCountBridgeReadiness_QueryError(t *testing.T) {
 	repo, mock, finish := setupMockRepository(t)
 	defer finish()
 
-	mock.ExpectBegin()
 	mock.ExpectQuery("COUNT").WillReturnError(errTestQuery)
-	mock.ExpectRollback()
 
 	_, err := repo.CountBridgeReadiness(context.Background(), time.Hour)
 	require.Error(t, err)
@@ -119,7 +197,6 @@ func TestCountBridgeReadiness_ClampsZeroOrNegativeThreshold(t *testing.T) {
 			repo, mock, finish := setupMockRepository(t)
 			defer finish()
 
-			mock.ExpectBegin()
 			mock.ExpectQuery("COUNT").WithArgs(
 				string(vo.ExtractionStatusComplete),
 				float64(1),
@@ -131,7 +208,6 @@ func TestCountBridgeReadiness_ClampsZeroOrNegativeThreshold(t *testing.T) {
 			).WillReturnRows(sqlmock.NewRows([]string{
 				"ready_count", "pending_count", "stale_count", "failed_count", "in_flight_count",
 			}).AddRow(int64(0), int64(0), int64(0), int64(0), int64(0)))
-			mock.ExpectCommit()
 
 			_, err := repo.CountBridgeReadiness(context.Background(), threshold)
 			require.NoError(t, err)
@@ -147,15 +223,13 @@ func TestListBridgeCandidates_PendingState_NoCursor(t *testing.T) {
 	repo, mock, finish := setupMockRepository(t)
 	defer finish()
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT `+allColumns+` FROM extraction_requests WHERE status = $1 AND ingestion_job_id IS NULL AND bridge_last_error IS NULL AND EXTRACT(EPOCH FROM (NOW() - created_at)) <= $2 ORDER BY created_at ASC, id ASC LIMIT $3`,
+		`SELECT `+bridgeCandidateColumns+` FROM extraction_requests WHERE status = $1 AND ingestion_job_id IS NULL AND bridge_last_error IS NULL AND EXTRACT(EPOCH FROM (NOW() - created_at)) <= $2 ORDER BY created_at ASC, id ASC LIMIT $3`,
 	)).WithArgs(
 		string(vo.ExtractionStatusComplete),
 		float64(3600),
 		defaultBridgeCandidatesPerPage,
-	).WillReturnRows(sqlmock.NewRows(extractionColumns()))
-	mock.ExpectCommit()
+	).WillReturnRows(sqlmock.NewRows(bridgeCandidateColumnNames()))
 
 	rows, err := repo.ListBridgeCandidates(
 		context.Background(),
@@ -180,16 +254,14 @@ func TestListBridgeCandidates_ReadyState_WithCursor(t *testing.T) {
 	cursorTime := time.Now().UTC().Add(-2 * time.Hour)
 	cursorID := uuid.New()
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT `+allColumns+` FROM extraction_requests WHERE status = $1 AND ingestion_job_id IS NOT NULL AND (created_at, id) > ($2, $3) ORDER BY created_at ASC, id ASC LIMIT $4`,
+		`SELECT `+bridgeCandidateColumns+` FROM extraction_requests WHERE status = $1 AND ingestion_job_id IS NOT NULL AND bridge_last_error IS NULL AND (created_at, id) > ($2, $3) ORDER BY created_at ASC, id ASC LIMIT $4`,
 	)).WithArgs(
 		string(vo.ExtractionStatusComplete),
 		cursorTime,
 		cursorID,
 		25,
-	).WillReturnRows(sqlmock.NewRows(extractionColumns()))
-	mock.ExpectCommit()
+	).WillReturnRows(sqlmock.NewRows(bridgeCandidateColumnNames()))
 
 	_, err := repo.ListBridgeCandidates(
 		context.Background(),
@@ -210,15 +282,13 @@ func TestListBridgeCandidates_StaleState(t *testing.T) {
 	repo, mock, finish := setupMockRepository(t)
 	defer finish()
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT `+allColumns+` FROM extraction_requests WHERE status = $1 AND ingestion_job_id IS NULL AND bridge_last_error IS NULL AND EXTRACT(EPOCH FROM (NOW() - created_at)) > $2 ORDER BY created_at ASC, id ASC LIMIT $3`,
+		`SELECT `+bridgeCandidateColumns+` FROM extraction_requests WHERE status = $1 AND ingestion_job_id IS NULL AND bridge_last_error IS NULL AND EXTRACT(EPOCH FROM (NOW() - created_at)) > $2 ORDER BY created_at ASC, id ASC LIMIT $3`,
 	)).WithArgs(
 		string(vo.ExtractionStatusComplete),
 		float64(60),
 		10,
-	).WillReturnRows(sqlmock.NewRows(extractionColumns()))
-	mock.ExpectCommit()
+	).WillReturnRows(sqlmock.NewRows(bridgeCandidateColumnNames()))
 
 	_, err := repo.ListBridgeCandidates(context.Background(), "stale", time.Minute, time.Time{}, uuid.Nil, 10)
 	require.NoError(t, err)
@@ -231,15 +301,13 @@ func TestListBridgeCandidates_FailedState(t *testing.T) {
 	repo, mock, finish := setupMockRepository(t)
 	defer finish()
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT `+allColumns+` FROM extraction_requests WHERE (status IN ($1, $2) OR bridge_last_error IS NOT NULL) ORDER BY created_at ASC, id ASC LIMIT $3`,
+		`SELECT `+bridgeCandidateColumns+` FROM extraction_requests WHERE (status IN ($1, $2) OR bridge_last_error IS NOT NULL) ORDER BY created_at ASC, id ASC LIMIT $3`,
 	)).WithArgs(
 		string(vo.ExtractionStatusFailed),
 		string(vo.ExtractionStatusCancelled),
 		defaultBridgeCandidatesPerPage,
-	).WillReturnRows(sqlmock.NewRows(extractionColumns()))
-	mock.ExpectCommit()
+	).WillReturnRows(sqlmock.NewRows(bridgeCandidateColumnNames()))
 
 	_, err := repo.ListBridgeCandidates(context.Background(), "failed", time.Hour, time.Time{}, uuid.Nil, 0)
 	require.NoError(t, err)
@@ -253,16 +321,14 @@ func TestListBridgeCandidates_InFlightState(t *testing.T) {
 	repo, mock, finish := setupMockRepository(t)
 	defer finish()
 
-	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT `+allColumns+` FROM extraction_requests WHERE status IN ($1, $2, $3) ORDER BY created_at ASC, id ASC LIMIT $4`,
+		`SELECT `+bridgeCandidateColumns+` FROM extraction_requests WHERE status IN ($1, $2, $3) ORDER BY created_at ASC, id ASC LIMIT $4`,
 	)).WithArgs(
 		string(vo.ExtractionStatusPending),
 		string(vo.ExtractionStatusSubmitted),
 		string(vo.ExtractionStatusExtracting),
 		defaultBridgeCandidatesPerPage,
-	).WillReturnRows(sqlmock.NewRows(extractionColumns()))
-	mock.ExpectCommit()
+	).WillReturnRows(sqlmock.NewRows(bridgeCandidateColumnNames()))
 
 	_, err := repo.ListBridgeCandidates(context.Background(), "in_flight", time.Hour, time.Time{}, uuid.Nil, 0)
 	require.NoError(t, err)
@@ -298,12 +364,10 @@ func TestListBridgeCandidates_ClampsLimitAboveMax(t *testing.T) {
 	repo, mock, finish := setupMockRepository(t)
 	defer finish()
 
-	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT").WithArgs(
 		string(vo.ExtractionStatusComplete),
 		maxBridgeCandidatesPerPage,
-	).WillReturnRows(sqlmock.NewRows(extractionColumns()))
-	mock.ExpectCommit()
+	).WillReturnRows(sqlmock.NewRows(bridgeCandidateColumnNames()))
 
 	_, err := repo.ListBridgeCandidates(context.Background(), "ready", time.Hour, time.Time{}, uuid.Nil, 9999)
 	require.NoError(t, err)
@@ -316,9 +380,7 @@ func TestListBridgeCandidates_QueryError(t *testing.T) {
 	repo, mock, finish := setupMockRepository(t)
 	defer finish()
 
-	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT").WillReturnError(errTestQuery)
-	mock.ExpectRollback()
 
 	_, err := repo.ListBridgeCandidates(context.Background(), "ready", time.Hour, time.Time{}, uuid.Nil, 50)
 	require.Error(t, err)

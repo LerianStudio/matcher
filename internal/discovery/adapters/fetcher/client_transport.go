@@ -160,7 +160,7 @@ func (client *HTTPFetcherClient) doRequestWithHeaders(ctx context.Context, metho
 				return nil, 0, cbErr
 			}
 
-			lastErr = fmt.Errorf("%w: %v", ErrFetcherUnreachable, err) //nolint:errorlint // wrapping sentinel with context detail
+			lastErr = fmt.Errorf("%w: %w", ErrFetcherUnreachable, err)
 			libOpentelemetry.HandleSpanError(span, "fetcher http request failed", lastErr)
 
 			if !retryable {
@@ -179,6 +179,12 @@ func (client *HTTPFetcherClient) doRequestWithHeaders(ctx context.Context, metho
 		// legitimate credential rotation). This does NOT consume a 5xx retry slot:
 		// decrement attempt so the for-loop's attempt++ restores it, making the
 		// 401 retry "free" relative to the 5xx budget.
+		//
+		// Safe for POST (which is otherwise non-retryable): Fetcher may issue a
+		// one-shot token that expires between acquisition and use, so a single
+		// retry with a fresh token handles the token race without a user-visible
+		// failure. The POST body is already buffered in `body []byte` above and
+		// re-wrapped in a fresh bytes.Reader each iteration, so replay is safe.
 		if statusCode == http.StatusUnauthorized && !retried401 {
 			retried401 = true
 			attempt-- // compensate for for-loop increment: 401 retry is outside the 5xx budget

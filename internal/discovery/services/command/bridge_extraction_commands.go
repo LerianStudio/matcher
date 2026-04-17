@@ -400,7 +400,7 @@ func (orch *BridgeExtractionOrchestrator) ingestAndLink(
 
 	if err := orch.linkWriter.LinkExtractionToIngestion(
 		ctx,
-		extraction.ID,
+		extraction,
 		outcome.IngestionJobID,
 	); err != nil {
 		// ErrExtractionAlreadyLinked is idempotent: another worker beat us

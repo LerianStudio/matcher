@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/trace"
 
 	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
@@ -43,10 +44,26 @@ var (
 // extractions still running so callers can see a complete picture. The
 // threshold is echoed back so dashboards can render "stale after Nm" labels
 // without needing to re-read config.
+//
+// Worker liveness fields (C15):
+//   - WorkerLastTickAt is the most recent cycle timestamp written by any
+//     bridge worker replica; nil means no heartbeat has been observed yet
+//     (fresh deploy, Fetcher disabled, or all replicas dead long enough for
+//     the Redis key to expire).
+//   - WorkerStalenessSeconds is (now - WorkerLastTickAt) in seconds; nil
+//     when WorkerLastTickAt is nil so the dashboard renders "unknown"
+//     instead of a misleading zero.
+//   - WorkerHealthy is true when staleness is below the configured
+//     threshold. False when the worker is absent or stalled. Populating the
+//     derived field server-side lets every dashboard render the same verdict
+//     without re-implementing the threshold math.
 type BridgeReadinessSummary struct {
-	Counts         repositories.BridgeReadinessCounts
-	StaleThreshold time.Duration
-	GeneratedAt    time.Time
+	Counts                 repositories.BridgeReadinessCounts
+	StaleThreshold         time.Duration
+	GeneratedAt            time.Time
+	WorkerLastTickAt       *time.Time
+	WorkerStalenessSeconds *int64
+	WorkerHealthy          bool
 }
 
 // BridgeCandidate decorates an extraction entity with its derived readiness
@@ -88,11 +105,70 @@ func (uc *UseCase) CountBridgeReadinessByTenant(
 		return nil, fmt.Errorf("count bridge readiness: %w", err)
 	}
 
-	return &BridgeReadinessSummary{
+	generatedAt := time.Now().UTC()
+	summary := &BridgeReadinessSummary{
 		Counts:         counts,
 		StaleThreshold: staleThreshold,
-		GeneratedAt:    time.Now().UTC(),
-	}, nil
+		GeneratedAt:    generatedAt,
+	}
+
+	uc.decorateWorkerHeartbeat(ctx, span, summary, generatedAt)
+
+	return summary, nil
+}
+
+// decorateWorkerHeartbeat populates the WorkerLastTickAt / WorkerStalenessSeconds
+// / WorkerHealthy fields on the summary using the optional heartbeat
+// reader. A missing reader (Fetcher disabled, wiring not completed) leaves
+// every heartbeat field at its zero value so the dashboard renders
+// "unknown" — which is the truthful state when there is nothing to report.
+//
+// Errors from the reader are logged via the span but never propagated: the
+// readiness summary is the primary payload and degrading the adjacent
+// liveness metadata to nil is strictly better than 500-ing the whole
+// dashboard. C15.
+func (uc *UseCase) decorateWorkerHeartbeat(
+	ctx context.Context,
+	span trace.Span,
+	summary *BridgeReadinessSummary,
+	now time.Time,
+) {
+	if uc == nil || summary == nil || uc.heartbeatReader == nil {
+		return
+	}
+
+	lastTickAt, err := uc.heartbeatReader.ReadLastTickAt(ctx)
+	if err != nil {
+		// Non-fatal: dashboard gets "unknown" liveness and a warn log.
+		libOpentelemetry.HandleSpanError(span, "read bridge heartbeat", err)
+
+		return
+	}
+
+	if lastTickAt.IsZero() {
+		// No heartbeat observed. Leave WorkerHealthy false; callers use the
+		// nil timestamp to distinguish "never ticked" from "stale".
+		return
+	}
+
+	// Always report in UTC so clients don't have to normalize.
+	ticked := lastTickAt.UTC()
+	summary.WorkerLastTickAt = &ticked
+
+	staleness := now.Sub(ticked)
+	if staleness < 0 {
+		staleness = 0
+	}
+
+	stalenessSec := int64(staleness.Seconds())
+	summary.WorkerStalenessSeconds = &stalenessSec
+
+	// Healthy when staleness is under the configured threshold. A zero /
+	// negative staleAt disables the derived flag: callers will see the raw
+	// timestamp + seconds and decide for themselves.
+	if uc.heartbeatStaleAt > 0 {
+		summary.WorkerHealthy = staleness <= uc.heartbeatStaleAt
+	}
 }
 
 // ListBridgeCandidates returns extractions in the requested readiness state

@@ -13,9 +13,15 @@ import (
 
 // unknownRetentionBucket is the label used when a candidate extraction does
 // not match either of the known retention buckets (terminal / late-linked).
-// Also used by BridgeRetryPolicy.String for unrecognised enum values so the
-// two layers emit the same text for the degenerate case.
 const unknownRetentionBucket = "unknown"
+
+// unknownBridgeRetryPolicy is the label used by BridgeRetryPolicy.String when
+// an unrecognised enum value is printed. Separate from
+// unknownRetentionBucket because the semantics differ (retry policy vs
+// retention bucket) even though the two layers happen to emit the same text
+// today. Keeping the constants distinct prevents accidental cross-wiring if
+// either layer later needs a more specific label.
+const unknownBridgeRetryPolicy = "unknown"
 
 // redisLockReleaseLua is the Lua script used by the bridge and custody
 // retention workers to release a distributed lock only when the caller still
@@ -65,7 +71,7 @@ func (p BridgeRetryPolicy) String() string {
 	case RetryIdempotent:
 		return "idempotent"
 	default:
-		return unknownRetentionBucket
+		return unknownBridgeRetryPolicy
 	}
 }
 
