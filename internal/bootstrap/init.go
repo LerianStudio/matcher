@@ -2341,6 +2341,38 @@ func initSharedRepositories(provider sharedPorts.InfrastructureProvider) (*share
 	}, nil
 }
 
+// buildAndAttachRabbitMQTenantManager constructs the RabbitMQ tenant manager
+// when multi-tenant mode is enabled and attaches its resources to the
+// infrastructure provider so they're cleaned up on provider.Close().
+// Returns nil when multi-tenancy is disabled.
+//
+// Extracted from initModulesAndMessaging to keep the orchestration function
+// under the gocognit complexity ceiling.
+func buildAndAttachRabbitMQTenantManager(
+	ctx context.Context,
+	cfg *Config,
+	provider sharedPorts.InfrastructureProvider,
+	logger libLog.Logger,
+) *tmrabbitmq.Manager {
+	if !multiTenantModeEnabled(cfg) {
+		return nil
+	}
+
+	rmqTmClient, rmqMgr := buildRabbitMQTenantManagerWithClient(ctx, cfg, logger)
+
+	// Store the RabbitMQ tenant-manager resources on the infrastructure provider
+	// so they are cleaned up on provider.Close(). Without this, the tmClient and
+	// Manager created by buildRabbitMQTenantManagerWithClient would be leaked.
+	if dynProvider, ok := provider.(*dynamicInfrastructureProvider); ok && rmqMgr != nil {
+		dynProvider.mu.Lock()
+		dynProvider.rmqManager = rmqMgr
+		dynProvider.rmqTmClient = rmqTmClient
+		dynProvider.mu.Unlock()
+	}
+
+	return rmqMgr
+}
+
 //nolint:cyclop,gocyclo // module initialization requires sequential dependency setup for all bounded contexts.
 func initModulesAndMessaging(
 	ctx context.Context,
@@ -2369,22 +2401,7 @@ func initModulesAndMessaging(
 
 	// Create RabbitMQ tenant manager when multi-tenant is enabled.
 	// This provides Layer 1 (vhost isolation) for event publishers.
-	var rmqManager *tmrabbitmq.Manager
-
-	if multiTenantModeEnabled(cfg) {
-		rmqTmClient, rmqMgr := buildRabbitMQTenantManagerWithClient(ctx, cfg, logger)
-		rmqManager = rmqMgr
-
-		// Store the RabbitMQ tenant-manager resources on the infrastructure provider
-		// so they are cleaned up on provider.Close(). Without this, the tmClient and
-		// Manager created by buildRabbitMQTenantManagerWithClient would be leaked.
-		if dynProvider, ok := provider.(*dynamicInfrastructureProvider); ok && rmqMgr != nil {
-			dynProvider.mu.Lock()
-			dynProvider.rmqManager = rmqMgr
-			dynProvider.rmqTmClient = rmqTmClient
-			dynProvider.mu.Unlock()
-		}
-	}
+	rmqManager := buildAndAttachRabbitMQTenantManager(ctx, cfg, provider, logger)
 
 	matchingPublisher, ingestionPublisher, err := initEventPublishers(ctx, rabbitMQConnection, logger, rmqManager)
 	if err != nil {

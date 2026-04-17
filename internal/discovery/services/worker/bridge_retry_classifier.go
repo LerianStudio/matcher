@@ -11,6 +11,25 @@ import (
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
+// unknownRetentionBucket is the label used when a candidate extraction does
+// not match either of the known retention buckets (terminal / late-linked).
+// Also used by BridgeRetryPolicy.String for unrecognised enum values so the
+// two layers emit the same text for the degenerate case.
+const unknownRetentionBucket = "unknown"
+
+// redisLockReleaseLua is the Lua script used by the bridge and custody
+// retention workers to release a distributed lock only when the caller still
+// owns the token. Declaring it once here (a) keeps the two workers in lock-
+// step and (b) avoids goconst triple-occurrence flagging from duplicating
+// the script per-worker. KEYS[1] is the lock key; ARGV[1] is the owner token.
+const redisLockReleaseLua = `
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+  return redis.call("DEL", KEYS[1])
+else
+  return 0
+end
+`
+
 // BridgeRetryPolicy enumerates how the worker should respond to a single
 // bridgeOne error.
 type BridgeRetryPolicy int
@@ -46,7 +65,7 @@ func (p BridgeRetryPolicy) String() string {
 	case RetryIdempotent:
 		return "idempotent"
 	default:
-		return "unknown"
+		return unknownRetentionBucket
 	}
 }
 

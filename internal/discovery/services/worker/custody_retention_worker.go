@@ -210,24 +210,24 @@ func NewCustodyRetentionWorker(
 // Start begins the worker loop. The goroutine is supervised by
 // runtime.SafeGoWithContextAndComponent, which recovers panics and restarts
 // the loop per the KeepRunning policy.
-func (w *CustodyRetentionWorker) Start(ctx context.Context) error {
-	if w == nil {
+func (worker *CustodyRetentionWorker) Start(ctx context.Context) error {
+	if worker == nil {
 		return ErrNilCustodyRetentionExtractionRepo
 	}
 
-	if !w.running.CompareAndSwap(false, true) {
+	if !worker.running.CompareAndSwap(false, true) {
 		return ErrCustodyRetentionWorkerAlreadyRun
 	}
 
-	w.prepareRunState()
+	worker.prepareRunState()
 
 	runtime.SafeGoWithContextAndComponent(
 		ctx,
-		w.logger,
+		worker.logger,
 		"discovery",
 		"custody_retention_worker",
 		runtime.KeepRunning,
-		w.run,
+		worker.run,
 	)
 
 	return nil
@@ -236,21 +236,21 @@ func (w *CustodyRetentionWorker) Start(ctx context.Context) error {
 // Stop signals the worker to exit and blocks until the run loop has
 // terminated. Mirrors BridgeWorker.Stop's CAS-at-top pattern so concurrent
 // Stop callers cannot both close stopCh.
-func (w *CustodyRetentionWorker) Stop() error {
-	if w == nil {
+func (worker *CustodyRetentionWorker) Stop() error {
+	if worker == nil {
 		return ErrCustodyRetentionWorkerNotRunning
 	}
 
-	if !w.running.CompareAndSwap(true, false) {
+	if !worker.running.CompareAndSwap(true, false) {
 		return ErrCustodyRetentionWorkerNotRunning
 	}
 
-	w.stopOnce.Do(func() {
-		close(w.stopCh)
+	worker.stopOnce.Do(func() {
+		close(worker.stopCh)
 	})
-	<-w.doneCh
+	<-worker.doneCh
 
-	w.logger.Log(context.Background(), libLog.LevelInfo, "custody retention worker stopped")
+	worker.logger.Log(context.Background(), libLog.LevelInfo, "custody retention worker stopped")
 
 	return nil
 }
@@ -261,83 +261,83 @@ func (w *CustodyRetentionWorker) Stop() error {
 // cycle will remain closed (signalling terminated) even while the next
 // cycle is active.
 //
-// The mutex is taken because prepareRunState may swap w.doneCh under the
+// The mutex is taken because prepareRunState may swap worker.doneCh under the
 // same lock during a Stop→Start cycle; reading without the lock could hand
 // callers a stale channel that never closes.
-func (w *CustodyRetentionWorker) Done() <-chan struct{} {
-	w.mu.Lock()
-	defer w.mu.Unlock()
+func (worker *CustodyRetentionWorker) Done() <-chan struct{} {
+	worker.mu.Lock()
+	defer worker.mu.Unlock()
 
-	return w.doneCh
+	return worker.doneCh
 }
 
 // UpdateRuntimeConfig swaps the tick interval / grace period / batch size
 // for the next start cycle. The worker manager always stop→starts on config
 // change, so we reject updates while running to avoid races with the ticker.
-func (w *CustodyRetentionWorker) UpdateRuntimeConfig(cfg CustodyRetentionWorkerConfig) error {
-	if w == nil {
+func (worker *CustodyRetentionWorker) UpdateRuntimeConfig(cfg CustodyRetentionWorkerConfig) error {
+	if worker == nil {
 		return ErrCustodyRetentionWorkerNotRunning
 	}
 
-	w.mu.Lock()
-	defer w.mu.Unlock()
+	worker.mu.Lock()
+	defer worker.mu.Unlock()
 
-	if w.running.Load() {
+	if worker.running.Load() {
 		return ErrCustodyRetentionRuntimeUpdateBusy
 	}
 
-	w.cfg = normalizeCustodyRetentionConfig(cfg)
+	worker.cfg = normalizeCustodyRetentionConfig(cfg)
 
 	return nil
 }
 
-func (w *CustodyRetentionWorker) prepareRunState() {
-	w.mu.Lock()
-	defer w.mu.Unlock()
+func (worker *CustodyRetentionWorker) prepareRunState() {
+	worker.mu.Lock()
+	defer worker.mu.Unlock()
 
-	w.stopOnce = sync.Once{}
+	worker.stopOnce = sync.Once{}
 
-	if chanutil.ClosedSignalChannel(w.stopCh) {
-		w.stopCh = make(chan struct{})
+	if chanutil.ClosedSignalChannel(worker.stopCh) {
+		worker.stopCh = make(chan struct{})
 	}
 
-	if chanutil.ClosedSignalChannel(w.doneCh) {
-		w.doneCh = make(chan struct{})
+	if chanutil.ClosedSignalChannel(worker.doneCh) {
+		worker.doneCh = make(chan struct{})
 	}
 }
 
-func (w *CustodyRetentionWorker) run(ctx context.Context) {
-	defer runtime.RecoverAndLogWithContext(ctx, w.logger, "discovery", "custody_retention_worker.run")
-	defer close(w.doneCh)
+func (worker *CustodyRetentionWorker) run(ctx context.Context) {
+	defer runtime.RecoverAndLogWithContext(ctx, worker.logger, "discovery", "custody_retention_worker.run")
+	defer close(worker.doneCh)
 
 	// Run one cycle immediately so a freshly-deployed worker does not
 	// wait a full interval before draining accumulated orphans.
-	w.sweepCycle(ctx)
+	worker.sweepCycle(ctx)
 
-	ticker := time.NewTicker(w.cfg.Interval)
+	ticker := time.NewTicker(worker.cfg.Interval)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case <-w.stopCh:
+		case <-worker.stopCh:
 			return
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			w.sweepCycle(ctx)
+			worker.sweepCycle(ctx)
 		}
 	}
 }
 
 // sweepCycle acquires the distributed lock, lists tenants, and sweeps
 // orphan custody objects for each.
-func (w *CustodyRetentionWorker) sweepCycle(ctx context.Context) {
-	logger, tracer := w.tracking(ctx)
+func (worker *CustodyRetentionWorker) sweepCycle(ctx context.Context) {
+	logger, tracer := worker.tracking(ctx)
 
 	ctx, span := tracer.Start(ctx, "discovery.custody_retention.sweep_cycle")
 	defer span.End()
 
-	acquired, token, err := w.acquireLock(ctx)
+	acquired, token, err := worker.acquireLock(ctx)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "custody retention lock acquire failed", err)
 		logger.With(libLog.String("error", err.Error())).
@@ -350,9 +350,9 @@ func (w *CustodyRetentionWorker) sweepCycle(ctx context.Context) {
 		return
 	}
 
-	defer w.releaseLock(ctx, token)
+	defer worker.releaseLock(ctx, token)
 
-	tenants, err := w.tenantLister.ListTenants(ctx)
+	tenants, err := worker.tenantLister.ListTenants(ctx)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "custody retention: list tenants failed", err)
 		logger.With(libLog.String("error", err.Error())).
@@ -370,7 +370,7 @@ func (w *CustodyRetentionWorker) sweepCycle(ctx context.Context) {
 			continue
 		}
 
-		count := w.sweepTenant(ctx, tenantID)
+		count := worker.sweepTenant(ctx, tenantID)
 		deleted += count
 	}
 
@@ -380,16 +380,16 @@ func (w *CustodyRetentionWorker) sweepCycle(ctx context.Context) {
 // sweepTenant runs the retention sweep for a single tenant. Returns the
 // number of custody objects actually deleted (excluding no-op deletes for
 // objects that were already gone).
-func (w *CustodyRetentionWorker) sweepTenant(parentCtx context.Context, tenantID string) int {
+func (worker *CustodyRetentionWorker) sweepTenant(parentCtx context.Context, tenantID string) int {
 	ctx := context.WithValue(parentCtx, auth.TenantIDKey, tenantID)
-	logger, tracer := w.tracking(ctx)
+	logger, tracer := worker.tracking(ctx)
 
 	ctx, span := tracer.Start(ctx, "discovery.custody_retention.sweep_tenant")
 	defer span.End()
 
 	span.SetAttributes(attribute.String("tenant.id", tenantID))
 
-	candidates, err := w.extractionRepo.FindBridgeRetentionCandidates(ctx, w.cfg.GracePeriod, w.cfg.BatchSize)
+	candidates, err := worker.extractionRepo.FindBridgeRetentionCandidates(ctx, worker.cfg.GracePeriod, worker.cfg.BatchSize)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "custody retention: find candidates failed", err)
 		logger.With(
@@ -409,7 +409,7 @@ func (w *CustodyRetentionWorker) sweepTenant(parentCtx context.Context, tenantID
 			continue
 		}
 
-		if w.sweepOne(ctx, tenantID, extraction) {
+		if worker.sweepOne(ctx, tenantID, extraction) {
 			deleted++
 		}
 	}
@@ -428,12 +428,12 @@ func (w *CustodyRetentionWorker) sweepTenant(parentCtx context.Context, tenantID
 // exists is a no-op for the S3-compatible backends Matcher targets. We do
 // not pre-check Exists because the additional round trip doubles cost
 // without changing semantics — Delete is the authoritative outcome.
-func (w *CustodyRetentionWorker) sweepOne(
+func (worker *CustodyRetentionWorker) sweepOne(
 	ctx context.Context,
 	tenantID string,
 	extraction *entities.ExtractionRequest,
 ) bool {
-	logger, tracer := w.tracking(ctx)
+	logger, tracer := worker.tracking(ctx)
 
 	ctx, span := tracer.Start(ctx, "discovery.custody_retention.sweep_one")
 	defer span.End()
@@ -462,7 +462,7 @@ func (w *CustodyRetentionWorker) sweepOne(
 
 	ref := sharedPorts.ArtifactCustodyReference{Key: key}
 
-	if delErr := w.custody.Delete(ctx, ref); delErr != nil {
+	if delErr := worker.custody.Delete(ctx, ref); delErr != nil {
 		// Transient failure: log at warn so next cycle retries. Do not
 		// mark it terminal — retention is a best-effort housekeeping
 		// task.
@@ -484,7 +484,7 @@ func (w *CustodyRetentionWorker) sweepOne(
 	// round-trip per row per tick forever. If the DB write fails, log
 	// WARN and continue: the next sweep will just hit the same already-
 	// missing S3 key again, which is safe (idempotent no-op).
-	if markErr := w.extractionRepo.MarkCustodyDeleted(ctx, extraction.ID, time.Now().UTC()); markErr != nil {
+	if markErr := worker.extractionRepo.MarkCustodyDeleted(ctx, extraction.ID, time.Now().UTC()); markErr != nil {
 		libOpentelemetry.HandleSpanError(span, "mark custody deleted failed", markErr)
 		logger.With(
 			libLog.String("tenant.id", tenantID),
@@ -515,7 +515,7 @@ func (w *CustodyRetentionWorker) sweepOne(
 // treatment.
 func retentionBucket(extraction *entities.ExtractionRequest) string {
 	if extraction == nil {
-		return "unknown"
+		return unknownRetentionBucket
 	}
 
 	if extraction.BridgeLastError != "" {
@@ -526,15 +526,15 @@ func retentionBucket(extraction *entities.ExtractionRequest) string {
 		return "late_linked"
 	}
 
-	return "unknown"
+	return unknownRetentionBucket
 }
 
 // acquireLock is a thin wrapper over the infrastructure provider's Redis
 // client. Mirrors BridgeWorker.acquireLock.
-func (w *CustodyRetentionWorker) acquireLock(ctx context.Context) (bool, string, error) {
-	connLease, err := w.infraProvider.GetRedisConnection(ctx)
+func (worker *CustodyRetentionWorker) acquireLock(ctx context.Context) (bool, string, error) {
+	connLease, err := worker.infraProvider.GetRedisConnection(ctx)
 	if err != nil {
-		return false, "", fmt.Errorf("get redis connection: %w", err)
+		return false, "", fmt.Errorf("get redis connection: %worker", err)
 	}
 	defer connLease.Release()
 
@@ -545,14 +545,14 @@ func (w *CustodyRetentionWorker) acquireLock(ctx context.Context) (bool, string,
 
 	rdb, err := conn.GetClient(ctx)
 	if err != nil {
-		return false, "", fmt.Errorf("get redis client: %w", err)
+		return false, "", fmt.Errorf("get redis client: %worker", err)
 	}
 
 	token := uuid.New().String()
 
-	ok, err := rdb.SetNX(ctx, custodyRetentionLockKey, token, custodyRetentionLockTTL(w.cfg.Interval)).Result()
+	ok, err := rdb.SetNX(ctx, custodyRetentionLockKey, token, custodyRetentionLockTTL(worker.cfg.Interval)).Result()
 	if err != nil {
-		return false, "", fmt.Errorf("redis setnx for custody retention lock: %w", err)
+		return false, "", fmt.Errorf("redis setnx for custody retention lock: %worker", err)
 	}
 
 	return ok, token, nil
@@ -560,10 +560,10 @@ func (w *CustodyRetentionWorker) acquireLock(ctx context.Context) (bool, string,
 
 // releaseLock uses a Lua script to avoid releasing a lock that has already
 // expired and been re-acquired by another instance.
-func (w *CustodyRetentionWorker) releaseLock(ctx context.Context, token string) {
-	connLease, err := w.infraProvider.GetRedisConnection(ctx)
+func (worker *CustodyRetentionWorker) releaseLock(ctx context.Context, token string) {
+	connLease, err := worker.infraProvider.GetRedisConnection(ctx)
 	if err != nil {
-		w.logger.With(libLog.String("error", err.Error())).
+		worker.logger.With(libLog.String("error", err.Error())).
 			Log(ctx, libLog.LevelWarn, "custody retention: failed to get redis connection for lock release")
 
 		return
@@ -577,35 +577,27 @@ func (w *CustodyRetentionWorker) releaseLock(ctx context.Context, token string) 
 
 	rdb, clientErr := conn.GetClient(ctx)
 	if clientErr != nil {
-		w.logger.With(libLog.Any("error", clientErr.Error())).
+		worker.logger.With(libLog.Any("error", clientErr.Error())).
 			Log(ctx, libLog.LevelWarn, "custody retention: failed to get redis client for lock release")
 
 		return
 	}
 
-	script := `
-if redis.call("GET", KEYS[1]) == ARGV[1] then
-  return redis.call("DEL", KEYS[1])
-else
-  return 0
-end
-`
-
-	if _, err := rdb.Eval(ctx, script, []string{custodyRetentionLockKey}, token).Result(); err != nil {
-		w.logger.With(libLog.String("error", err.Error())).
+	if _, err := rdb.Eval(ctx, redisLockReleaseLua, []string{custodyRetentionLockKey}, token).Result(); err != nil {
+		worker.logger.With(libLog.String("error", err.Error())).
 			Log(ctx, libLog.LevelWarn, "custody retention: failed to release lock")
 	}
 }
 
-func (w *CustodyRetentionWorker) tracking(ctx context.Context) (libLog.Logger, trace.Tracer) {
+func (worker *CustodyRetentionWorker) tracking(ctx context.Context) (libLog.Logger, trace.Tracer) {
 	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
 
 	if logger == nil {
-		logger = w.logger
+		logger = worker.logger
 	}
 
 	if tracer == nil {
-		tracer = w.tracer
+		tracer = worker.tracer
 	}
 
 	return logger, tracer

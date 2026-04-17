@@ -188,20 +188,20 @@ func NewBridgeWorker(
 // Start begins the worker loop. The goroutine is supervised by
 // runtime.SafeGoWithContextAndComponent, which recovers panics and restarts
 // the loop per the KeepRunning policy.
-func (w *BridgeWorker) Start(ctx context.Context) error {
-	if !w.running.CompareAndSwap(false, true) {
+func (worker *BridgeWorker) Start(ctx context.Context) error {
+	if !worker.running.CompareAndSwap(false, true) {
 		return ErrBridgeWorkerAlreadyRunning
 	}
 
-	w.prepareRunState()
+	worker.prepareRunState()
 
 	runtime.SafeGoWithContextAndComponent(
 		ctx,
-		w.logger,
+		worker.logger,
 		"discovery",
 		"bridge_worker",
 		runtime.KeepRunning,
-		w.run,
+		worker.run,
 	)
 
 	return nil
@@ -213,82 +213,82 @@ func (w *BridgeWorker) Start(ctx context.Context) error {
 // stopped transition and returns nil. The losers see ErrBridgeWorkerNotRunning
 // without blocking on doneCh, eliminating the load→close→CAS TOCTOU window
 // where two concurrent stops could both close stopCh or both report success.
-func (w *BridgeWorker) Stop() error {
-	if !w.running.CompareAndSwap(true, false) {
+func (worker *BridgeWorker) Stop() error {
+	if !worker.running.CompareAndSwap(true, false) {
 		return ErrBridgeWorkerNotRunning
 	}
 
-	w.stopOnce.Do(func() {
-		close(w.stopCh)
+	worker.stopOnce.Do(func() {
+		close(worker.stopCh)
 	})
-	<-w.doneCh
+	<-worker.doneCh
 
-	w.logger.Log(context.Background(), libLog.LevelInfo, "bridge worker stopped")
+	worker.logger.Log(context.Background(), libLog.LevelInfo, "bridge worker stopped")
 
 	return nil
 }
 
 // Done returns a channel closed when the run loop terminates. The mutex is
-// taken because prepareRunState may swap w.doneCh under the same lock during
+// taken because prepareRunState may swap worker.doneCh under the same lock during
 // a Stop→Start cycle; reading without the lock could hand callers a stale
 // channel that never closes (nil-safety H2).
-func (w *BridgeWorker) Done() <-chan struct{} {
-	w.mu.Lock()
-	defer w.mu.Unlock()
+func (worker *BridgeWorker) Done() <-chan struct{} {
+	worker.mu.Lock()
+	defer worker.mu.Unlock()
 
-	return w.doneCh
+	return worker.doneCh
 }
 
 // UpdateRuntimeConfig swaps the tick interval / batch size for the next
 // start cycle. The worker manager always stop→starts on config change, so
 // we reject updates while running to avoid races with the ticker.
-func (w *BridgeWorker) UpdateRuntimeConfig(cfg BridgeWorkerConfig) error {
-	w.mu.Lock()
-	defer w.mu.Unlock()
+func (worker *BridgeWorker) UpdateRuntimeConfig(cfg BridgeWorkerConfig) error {
+	worker.mu.Lock()
+	defer worker.mu.Unlock()
 
-	if w.running.Load() {
+	if worker.running.Load() {
 		return ErrBridgeRuntimeConfigUpdateRunning
 	}
 
-	w.cfg = normalizeBridgeConfig(cfg)
+	worker.cfg = normalizeBridgeConfig(cfg)
 
 	return nil
 }
 
-func (w *BridgeWorker) prepareRunState() {
-	w.mu.Lock()
-	defer w.mu.Unlock()
+func (worker *BridgeWorker) prepareRunState() {
+	worker.mu.Lock()
+	defer worker.mu.Unlock()
 
-	w.stopOnce = sync.Once{}
+	worker.stopOnce = sync.Once{}
 
-	if chanutil.ClosedSignalChannel(w.stopCh) {
-		w.stopCh = make(chan struct{})
+	if chanutil.ClosedSignalChannel(worker.stopCh) {
+		worker.stopCh = make(chan struct{})
 	}
 
-	if chanutil.ClosedSignalChannel(w.doneCh) {
-		w.doneCh = make(chan struct{})
+	if chanutil.ClosedSignalChannel(worker.doneCh) {
+		worker.doneCh = make(chan struct{})
 	}
 }
 
-func (w *BridgeWorker) run(ctx context.Context) {
-	defer runtime.RecoverAndLogWithContext(ctx, w.logger, "discovery", "bridge_worker.run")
-	defer close(w.doneCh)
+func (worker *BridgeWorker) run(ctx context.Context) {
+	defer runtime.RecoverAndLogWithContext(ctx, worker.logger, "discovery", "bridge_worker.run")
+	defer close(worker.doneCh)
 
 	// Run one cycle immediately so a freshly-deployed worker does not wait a
 	// full interval before draining backlog.
-	w.pollCycle(ctx)
+	worker.pollCycle(ctx)
 
-	ticker := time.NewTicker(w.cfg.Interval)
+	ticker := time.NewTicker(worker.cfg.Interval)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case <-w.stopCh:
+		case <-worker.stopCh:
 			return
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			w.pollCycle(ctx)
+			worker.pollCycle(ctx)
 		}
 	}
 }
@@ -296,13 +296,13 @@ func (w *BridgeWorker) run(ctx context.Context) {
 // pollCycle acquires the distributed lock, lists tenants (INCLUDING the
 // default tenant), and drives each tenant's eligible extractions through
 // the orchestrator.
-func (w *BridgeWorker) pollCycle(ctx context.Context) {
-	logger, tracer := w.tracking(ctx)
+func (worker *BridgeWorker) pollCycle(ctx context.Context) {
+	logger, tracer := worker.tracking(ctx)
 
 	ctx, span := tracer.Start(ctx, "discovery.bridge.poll_cycle")
 	defer span.End()
 
-	acquired, token, err := w.acquireLock(ctx)
+	acquired, token, err := worker.acquireLock(ctx)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "bridge lock acquire failed", err)
 		logger.With(libLog.String("error", err.Error())).
@@ -314,9 +314,10 @@ func (w *BridgeWorker) pollCycle(ctx context.Context) {
 	if !acquired {
 		return
 	}
-	defer w.releaseLock(ctx, token)
 
-	tenants, err := w.tenantLister.ListTenants(ctx)
+	defer worker.releaseLock(ctx, token)
+
+	tenants, err := worker.tenantLister.ListTenants(ctx)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "bridge: list tenants failed", err)
 		logger.With(libLog.String("error", err.Error())).
@@ -334,7 +335,7 @@ func (w *BridgeWorker) pollCycle(ctx context.Context) {
 			continue
 		}
 
-		count := w.processTenant(ctx, tenantID)
+		count := worker.processTenant(ctx, tenantID)
 		processed += count
 	}
 
@@ -344,18 +345,18 @@ func (w *BridgeWorker) pollCycle(ctx context.Context) {
 // processTenant drives bridge work for a single tenant. Returns the number
 // of extractions that completed the pipeline (successfully or with a
 // terminal idempotent signal) so the cycle-level span can report totals.
-func (w *BridgeWorker) processTenant(parentCtx context.Context, tenantID string) int {
+func (worker *BridgeWorker) processTenant(parentCtx context.Context, tenantID string) int {
 	ctx := context.WithValue(parentCtx, auth.TenantIDKey, tenantID)
-	logger, tracer := w.tracking(ctx)
+	logger, tracer := worker.tracking(ctx)
 
 	ctx, span := tracer.Start(ctx, "discovery.bridge.process_tenant")
 	defer span.End()
 
 	span.SetAttributes(attribute.String("tenant.id", tenantID))
 
-	batchSize := w.cfg.BatchSize
+	batchSize := worker.cfg.BatchSize
 
-	extractions, err := w.extractionRepo.FindEligibleForBridge(ctx, batchSize)
+	extractions, err := worker.extractionRepo.FindEligibleForBridge(ctx, batchSize)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "bridge: find eligible extractions failed", err)
 		logger.With(
@@ -375,8 +376,8 @@ func (w *BridgeWorker) processTenant(parentCtx context.Context, tenantID string)
 			continue
 		}
 
-		if err := w.bridgeOne(ctx, extraction, tenantID); err != nil {
-			w.logBridgeError(ctx, logger, extraction.ID, tenantID, err)
+		if err := worker.bridgeOne(ctx, extraction, tenantID); err != nil {
+			worker.logBridgeError(ctx, logger, extraction.ID, tenantID, err)
 
 			continue
 		}
@@ -406,12 +407,12 @@ func (w *BridgeWorker) processTenant(parentCtx context.Context, tenantID string)
 // IS the retry cadence; MaxAttempts caps total retries before terminal
 // escalation. This is simpler, race-free, and avoids the dual-clock confusion
 // of an in-process backoff timer racing the DB queue ordering.
-func (w *BridgeWorker) bridgeOne(ctx context.Context, extraction *entities.ExtractionRequest, tenantID string) error {
+func (worker *BridgeWorker) bridgeOne(ctx context.Context, extraction *entities.ExtractionRequest, tenantID string) error {
 	if extraction == nil {
 		return nil
 	}
 
-	_, tracer := w.tracking(ctx)
+	_, tracer := worker.tracking(ctx)
 
 	ctx, span := tracer.Start(ctx, "discovery.bridge.bridge_one")
 	defer span.End()
@@ -422,13 +423,20 @@ func (w *BridgeWorker) bridgeOne(ctx context.Context, extraction *entities.Extra
 		attribute.Int("bridge.attempts_before", extraction.BridgeAttempts),
 	)
 
-	outcome, err := w.orchestrator.BridgeExtraction(ctx, sharedPorts.BridgeExtractionInput{
+	outcome, bridgeErr := worker.orchestrator.BridgeExtraction(ctx, sharedPorts.BridgeExtractionInput{
 		ExtractionID: extraction.ID,
 		TenantID:     tenantID,
 	})
 
-	classification := ClassifyBridgeError(err)
+	classification := ClassifyBridgeError(bridgeErr)
 	span.SetAttributes(attribute.String("bridge.retry_policy", classification.Policy.String()))
+
+	// Wrap once so callers get a traceable error chain while retaining the
+	// original sentinels for errors.Is checks. Nil stays nil.
+	var wrappedErr error
+	if bridgeErr != nil {
+		wrappedErr = fmt.Errorf("bridge extraction: %w", bridgeErr)
+	}
 
 	switch classification.Policy {
 	case RetryIdempotent:
@@ -444,17 +452,17 @@ func (w *BridgeWorker) bridgeOne(ctx context.Context, extraction *entities.Extra
 		return nil
 
 	case RetryTerminal:
-		w.persistTerminalFailure(ctx, extraction, classification.Class, err)
+		worker.persistTerminalFailure(ctx, extraction, classification.Class, bridgeErr)
 
-		return err
+		return wrappedErr
 
 	case RetryTransient:
-		w.handleTransientFailure(ctx, extraction, err)
+		worker.handleTransientFailure(ctx, extraction, bridgeErr)
 
-		return err
+		return wrappedErr
 	}
 
-	return err
+	return wrappedErr
 }
 
 // persistTerminalFailure records the BridgeErrorClass on the extraction and
@@ -462,13 +470,13 @@ func (w *BridgeWorker) bridgeOne(ctx context.Context, extraction *entities.Extra
 // best-effort: if the DB write fails, the next tick will pick up the same
 // extraction, classify again, and try the persist again. Logging the persist
 // failure separately so operators can spot a stuck-in-loop pattern.
-func (w *BridgeWorker) persistTerminalFailure(
+func (worker *BridgeWorker) persistTerminalFailure(
 	ctx context.Context,
 	extraction *entities.ExtractionRequest,
 	class vo.BridgeErrorClass,
 	originalErr error,
 ) {
-	logger, _ := w.tracking(ctx)
+	logger, _ := worker.tracking(ctx)
 
 	extraction.RecordBridgeAttempt()
 
@@ -483,7 +491,7 @@ func (w *BridgeWorker) persistTerminalFailure(
 		return
 	}
 
-	if persistErr := w.extractionRepo.MarkBridgeFailed(ctx, extraction); persistErr != nil {
+	if persistErr := worker.extractionRepo.MarkBridgeFailed(ctx, extraction); persistErr != nil {
 		logger.With(
 			libLog.String("extraction.id", extraction.ID.String()),
 			libLog.String("class", string(class)),
@@ -496,16 +504,16 @@ func (w *BridgeWorker) persistTerminalFailure(
 // handleTransientFailure increments bridge_attempts, escalates to terminal
 // if the configured ceiling is reached, otherwise persists just the bumped
 // attempts via the existing Update path.
-func (w *BridgeWorker) handleTransientFailure(
+func (worker *BridgeWorker) handleTransientFailure(
 	ctx context.Context,
 	extraction *entities.ExtractionRequest,
 	originalErr error,
 ) {
-	logger, _ := w.tracking(ctx)
+	logger, _ := worker.tracking(ctx)
 
 	attempts := extraction.RecordBridgeAttempt()
 
-	if w.cfg.Retry.ShouldEscalate(attempts) {
+	if worker.cfg.Retry.ShouldEscalate(attempts) {
 		escalated := EscalateAfterMaxAttempts(originalErr)
 		message := fmt.Sprintf(
 			"escalated to terminal after %d attempts: %s",
@@ -523,7 +531,7 @@ func (w *BridgeWorker) handleTransientFailure(
 			return
 		}
 
-		if persistErr := w.extractionRepo.MarkBridgeFailed(ctx, extraction); persistErr != nil {
+		if persistErr := worker.extractionRepo.MarkBridgeFailed(ctx, extraction); persistErr != nil {
 			logger.With(
 				libLog.String("extraction.id", extraction.ID.String()),
 				libLog.String("class", string(escalated)),
@@ -541,7 +549,7 @@ func (w *BridgeWorker) handleTransientFailure(
 	// lock-TTL-expiry edge case — the narrow UPDATE is gated by
 	// `ingestion_job_id IS NULL` so that race produces ErrExtractionAlreadyLinked
 	// (logged at info level, not warn) instead of silent data corruption.
-	persistErr := w.extractionRepo.IncrementBridgeAttempts(ctx, extraction.ID, attempts)
+	persistErr := worker.extractionRepo.IncrementBridgeAttempts(ctx, extraction.ID, attempts)
 	if persistErr == nil {
 		return
 	}
@@ -575,7 +583,7 @@ func terminalFailureMessage(err error) string {
 	return err.Error()
 }
 
-func (w *BridgeWorker) logBridgeError(
+func (worker *BridgeWorker) logBridgeError(
 	ctx context.Context,
 	logger libLog.Logger,
 	extractionID uuid.UUID,
@@ -599,10 +607,10 @@ func (w *BridgeWorker) logBridgeError(
 
 // acquireLock is a thin wrapper over the infrastructure provider's Redis
 // client. Mirrors the pattern in scheduler/archival/discovery workers.
-func (w *BridgeWorker) acquireLock(ctx context.Context) (bool, string, error) {
-	connLease, err := w.infraProvider.GetRedisConnection(ctx)
+func (worker *BridgeWorker) acquireLock(ctx context.Context) (bool, string, error) {
+	connLease, err := worker.infraProvider.GetRedisConnection(ctx)
 	if err != nil {
-		return false, "", fmt.Errorf("get redis connection: %w", err)
+		return false, "", fmt.Errorf("get redis connection: %worker", err)
 	}
 	defer connLease.Release()
 
@@ -613,14 +621,14 @@ func (w *BridgeWorker) acquireLock(ctx context.Context) (bool, string, error) {
 
 	rdb, err := conn.GetClient(ctx)
 	if err != nil {
-		return false, "", fmt.Errorf("get redis client: %w", err)
+		return false, "", fmt.Errorf("get redis client: %worker", err)
 	}
 
 	token := uuid.New().String()
 
-	ok, err := rdb.SetNX(ctx, bridgeWorkerLockKey, token, bridgeLockTTL(w.cfg.Interval)).Result()
+	ok, err := rdb.SetNX(ctx, bridgeWorkerLockKey, token, bridgeLockTTL(worker.cfg.Interval)).Result()
 	if err != nil {
-		return false, "", fmt.Errorf("redis setnx for bridge lock: %w", err)
+		return false, "", fmt.Errorf("redis setnx for bridge lock: %worker", err)
 	}
 
 	return ok, token, nil
@@ -628,10 +636,10 @@ func (w *BridgeWorker) acquireLock(ctx context.Context) (bool, string, error) {
 
 // releaseLock uses a Lua script to avoid releasing a lock that has already
 // expired and been re-acquired by another instance.
-func (w *BridgeWorker) releaseLock(ctx context.Context, token string) {
-	connLease, err := w.infraProvider.GetRedisConnection(ctx)
+func (worker *BridgeWorker) releaseLock(ctx context.Context, token string) {
+	connLease, err := worker.infraProvider.GetRedisConnection(ctx)
 	if err != nil {
-		w.logger.With(libLog.String("error", err.Error())).
+		worker.logger.With(libLog.String("error", err.Error())).
 			Log(ctx, libLog.LevelWarn, "bridge: failed to get redis connection for lock release")
 
 		return
@@ -645,35 +653,27 @@ func (w *BridgeWorker) releaseLock(ctx context.Context, token string) {
 
 	rdb, clientErr := conn.GetClient(ctx)
 	if clientErr != nil {
-		w.logger.With(libLog.Any("error", clientErr.Error())).
+		worker.logger.With(libLog.Any("error", clientErr.Error())).
 			Log(ctx, libLog.LevelWarn, "bridge: failed to get redis client for lock release")
 
 		return
 	}
 
-	script := `
-if redis.call("GET", KEYS[1]) == ARGV[1] then
-  return redis.call("DEL", KEYS[1])
-else
-  return 0
-end
-`
-
-	if _, err := rdb.Eval(ctx, script, []string{bridgeWorkerLockKey}, token).Result(); err != nil {
-		w.logger.With(libLog.String("error", err.Error())).
+	if _, err := rdb.Eval(ctx, redisLockReleaseLua, []string{bridgeWorkerLockKey}, token).Result(); err != nil {
+		worker.logger.With(libLog.String("error", err.Error())).
 			Log(ctx, libLog.LevelWarn, "bridge: failed to release lock")
 	}
 }
 
-func (w *BridgeWorker) tracking(ctx context.Context) (libLog.Logger, trace.Tracer) {
+func (worker *BridgeWorker) tracking(ctx context.Context) (libLog.Logger, trace.Tracer) {
 	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
 
 	if logger == nil {
-		logger = w.logger
+		logger = worker.logger
 	}
 
 	if tracer == nil {
-		tracer = w.tracer
+		tracer = worker.tracer
 	}
 
 	return logger, tracer

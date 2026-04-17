@@ -102,7 +102,7 @@ func snapshotToWorkerConfig(snap domain.Snapshot) *Config {
 			// changes and applyWorkerRuntimeConfig has nothing to push.
 			// MaxExtractionBytes uses snapInt64 because 2 GiB (the
 			// default) overflows snapInt on a 32-bit build target.
-			MaxExtractionBytes:               snapInt64(snap, "fetcher.max_extraction_bytes", int64(2<<30)),
+			MaxExtractionBytes:               snapInt64(snap, "fetcher.max_extraction_bytes", defaultFetcherMaxExtractionBytes),
 			BridgeIntervalSec:                snapInt(snap, "fetcher.bridge_interval_sec", defaultBridgeIntervalSec),
 			BridgeBatchSize:                  snapInt(snap, "fetcher.bridge_batch_size", defaultBridgeBatchSize),
 			CustodyRetentionSweepIntervalSec: snapInt(snap, "fetcher.custody_retention_sweep_interval_sec", defaultCustodyRetentionSweepIntervalSec),

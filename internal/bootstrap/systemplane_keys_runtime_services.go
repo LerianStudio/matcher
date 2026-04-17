@@ -180,7 +180,28 @@ func matcherKeyDefsFetcherCore() []domain.KeyDef {
 	}
 }
 
+// matcherKeyDefsFetcherRuntime concatenates the HTTP/client runtime knobs,
+// the artifact pipeline knobs (app_enc_key + max_extraction_bytes), and the
+// bridge worker knobs. Split to keep each subgroup under the funlen ceiling
+// and to let operators reason about each concern in isolation.
 func matcherKeyDefsFetcherRuntime() []domain.KeyDef {
+	httpRuntime := matcherKeyDefsFetcherHTTPRuntime()
+	artifactPipeline := matcherKeyDefsFetcherArtifactPipeline()
+	bridge := matcherKeyDefsFetcherBridge()
+
+	defs := make([]domain.KeyDef, 0, len(httpRuntime)+len(artifactPipeline)+len(bridge))
+	defs = append(defs, httpRuntime...)
+	defs = append(defs, artifactPipeline...)
+	defs = append(defs, bridge...)
+
+	return defs
+}
+
+// matcherKeyDefsFetcherHTTPRuntime returns the Fetcher HTTP client tunables
+// (request timeout, discovery interval, schema cache TTL, extraction poll,
+// extraction timeout). All entries are bundle-rebuild except
+// discovery_interval_sec which drives a worker reconcile.
+func matcherKeyDefsFetcherHTTPRuntime() []domain.KeyDef {
 	return []domain.KeyDef{
 		{
 			Key:              "fetcher.request_timeout_sec",
@@ -252,6 +273,14 @@ func matcherKeyDefsFetcherRuntime() []domain.KeyDef {
 			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
+	}
+}
+
+// matcherKeyDefsFetcherArtifactPipeline returns the verified-artifact
+// pipeline knobs: the shared master key (app_enc_key) used to derive HMAC/
+// AES keys via HKDF, and the max_extraction_bytes DoS guard.
+func matcherKeyDefsFetcherArtifactPipeline() []domain.KeyDef {
+	return []domain.KeyDef{
 		{
 			// app_enc_key is the raw master key shared with Fetcher. Matcher
 			// derives HMAC-SHA256 and AES-256-GCM keys locally via HKDF
@@ -290,7 +319,7 @@ func matcherKeyDefsFetcherRuntime() []domain.KeyDef {
 			Key:              "fetcher.max_extraction_bytes",
 			Kind:             domain.KindConfig,
 			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
-			DefaultValue:     int64(2 << 30),
+			DefaultValue:     defaultFetcherMaxExtractionBytes,
 			ValueType:        domain.ValueTypeInt,
 			Validator:        validateFetcherMaxExtractionBytes,
 			ApplyBehavior:    domain.ApplyBootstrapOnly,
@@ -300,11 +329,19 @@ func matcherKeyDefsFetcherRuntime() []domain.KeyDef {
 			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
+	}
+}
+
+// matcherKeyDefsFetcherBridge returns the bridge worker runtime knobs:
+// poll interval, per-tenant batch size, stale-threshold for the read model,
+// and the retry max-attempts ceiling.
+func matcherKeyDefsFetcherBridge() []domain.KeyDef {
+	return []domain.KeyDef{
 		{
 			Key:              "fetcher.bridge_interval_sec",
 			Kind:             domain.KindConfig,
 			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
-			DefaultValue:     30,
+			DefaultValue:     defaultBridgeIntervalSec,
 			ValueType:        domain.ValueTypeInt,
 			Validator:        validateBridgeIntervalSec,
 			ApplyBehavior:    domain.ApplyWorkerReconcile,
@@ -318,7 +355,7 @@ func matcherKeyDefsFetcherRuntime() []domain.KeyDef {
 			Key:              "fetcher.bridge_batch_size",
 			Kind:             domain.KindConfig,
 			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
-			DefaultValue:     50,
+			DefaultValue:     defaultBridgeBatchSize,
 			ValueType:        domain.ValueTypeInt,
 			Validator:        validateBridgeBatchSize,
 			ApplyBehavior:    domain.ApplyWorkerReconcile,
@@ -336,7 +373,7 @@ func matcherKeyDefsFetcherRuntime() []domain.KeyDef {
 			Key:              "fetcher.bridge_stale_threshold_sec",
 			Kind:             domain.KindConfig,
 			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
-			DefaultValue:     3600,
+			DefaultValue:     defaultBridgeStaleThresholdSec,
 			ValueType:        domain.ValueTypeInt,
 			Validator:        validateBridgeStaleThresholdSec,
 			ApplyBehavior:    domain.ApplyLiveRead,
@@ -360,7 +397,7 @@ func matcherKeyDefsFetcherRuntime() []domain.KeyDef {
 			Key:              "fetcher.bridge_retry_max_attempts",
 			Kind:             domain.KindConfig,
 			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
-			DefaultValue:     5,
+			DefaultValue:     defaultBridgeRetryMaxAttempts,
 			ValueType:        domain.ValueTypeInt,
 			Validator:        validateBridgeRetryMaxAttempts,
 			ApplyBehavior:    domain.ApplyWorkerReconcile,

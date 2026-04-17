@@ -30,6 +30,20 @@ const (
 	// maxInfraConnectTimeoutSec caps infrastructure startup timeout to prevent
 	// pathological values from causing startup hangs.
 	maxInfraConnectTimeoutSec = 300
+
+	// defaultFetcherMaxExtractionBytes is the 2 GiB default cap on Fetcher
+	// extraction payload size. Mirrors the envDefault tag on
+	// FetcherConfig.MaxExtractionBytes and the systemplane KeyDef DefaultValue
+	// so env-driven and snapshot-driven hydration agree.
+	defaultFetcherMaxExtractionBytes int64 = 2 << 30
+
+	// defaultFetcherBridgeIntervalSec is the default bridge worker poll
+	// cadence in seconds. Mirrors FetcherConfig.BridgeIntervalSec envDefault.
+	defaultFetcherBridgeIntervalSec = 30
+
+	// defaultFetcherBridgeBatchSize is the default per-tenant batch size for
+	// the bridge worker. Mirrors FetcherConfig.BridgeBatchSize envDefault.
+	defaultFetcherBridgeBatchSize = 50
 )
 
 // ErrConfigNil indicates a nil configuration struct was provided.
@@ -287,36 +301,6 @@ type FetcherConfig struct {
 	CustodyRetentionGracePeriodSec int `env:"FETCHER_CUSTODY_RETENTION_GRACE_PERIOD_SEC" envDefault:"3600" mapstructure:"custody_retention_grace_period_sec"`
 }
 
-// FetcherMaxExtractionBytes returns the effective size cap for Fetcher
-// extraction payloads. Falls back to the FlattenFetcherJSON default when
-// the config value is non-positive so misconfiguration can't disable the
-// DoS guard by setting a negative number.
-func (cfg *Config) FetcherMaxExtractionBytes() int64 {
-	if cfg == nil || cfg.Fetcher.MaxExtractionBytes <= 0 {
-		return 2 << 30
-	}
-
-	return cfg.Fetcher.MaxExtractionBytes
-}
-
-// FetcherBridgeInterval returns the poll interval for the bridge worker.
-func (cfg *Config) FetcherBridgeInterval() time.Duration {
-	if cfg == nil || cfg.Fetcher.BridgeIntervalSec <= 0 {
-		return 30 * time.Second
-	}
-
-	return time.Duration(cfg.Fetcher.BridgeIntervalSec) * time.Second
-}
-
-// FetcherBridgeBatchSize returns the per-tenant batch size for the bridge worker.
-func (cfg *Config) FetcherBridgeBatchSize() int {
-	if cfg == nil || cfg.Fetcher.BridgeBatchSize <= 0 {
-		return 50
-	}
-
-	return cfg.Fetcher.BridgeBatchSize
-}
-
 // defaultFetcherBridgeStaleThreshold is the bootstrap-side fallback for the
 // staleness window. Mirrors defaultBridgeStaleThreshold in
 // internal/discovery/adapters/http/handlers_bridge_readiness.go; the two must
@@ -325,19 +309,6 @@ func (cfg *Config) FetcherBridgeBatchSize() int {
 // package here (would create a bootstrap → adapter cycle) so the constant is
 // duplicated with this guardrail comment.
 const defaultFetcherBridgeStaleThreshold = time.Hour
-
-// FetcherBridgeStaleThreshold returns the duration after which a
-// COMPLETE+unlinked extraction shifts from "pending" to "stale" in the
-// operational dashboard. Falls back to defaultFetcherBridgeStaleThreshold
-// when the configured value is non-positive so misconfiguration cannot
-// collapse the partition.
-func (cfg *Config) FetcherBridgeStaleThreshold() time.Duration {
-	if cfg == nil || cfg.Fetcher.BridgeStaleThresholdSec <= 0 {
-		return defaultFetcherBridgeStaleThreshold
-	}
-
-	return time.Duration(cfg.Fetcher.BridgeStaleThresholdSec) * time.Second
-}
 
 // Bridge retry policy default. Mirrors BridgeRetryBackoff.Normalize's
 // fallback so a config-load with a zero MaxAttempts gets the same ceiling
@@ -349,16 +320,6 @@ func (cfg *Config) FetcherBridgeStaleThreshold() time.Duration {
 // cadence (FetcherBridgeInterval) IS the retry cadence.
 const defaultFetcherBridgeRetryMaxAttempts = 5
 
-// FetcherBridgeRetryMaxAttempts returns the max-attempts ceiling for the
-// bridge worker's transient-failure escalation (T-005).
-func (cfg *Config) FetcherBridgeRetryMaxAttempts() int {
-	if cfg == nil || cfg.Fetcher.BridgeRetryMaxAttempts <= 0 {
-		return defaultFetcherBridgeRetryMaxAttempts
-	}
-
-	return cfg.Fetcher.BridgeRetryMaxAttempts
-}
-
 // defaultCustodyRetentionSweepInterval mirrors the worker's
 // custodyRetentionDefaultInterval so the bootstrap-side fallback and the
 // worker-side fallback agree.
@@ -368,30 +329,6 @@ const defaultCustodyRetentionSweepInterval = 15 * time.Minute
 // custodyRetentionDefaultGracePeriod so the bootstrap-side fallback and
 // the worker-side fallback agree.
 const defaultCustodyRetentionGracePeriod = time.Hour
-
-// FetcherCustodyRetentionSweepInterval returns the tick interval for the
-// custody retention sweep worker (T-006). Falls back to a sensible default
-// when the configured value is non-positive so misconfiguration cannot
-// disable the sweep silently.
-func (cfg *Config) FetcherCustodyRetentionSweepInterval() time.Duration {
-	if cfg == nil || cfg.Fetcher.CustodyRetentionSweepIntervalSec <= 0 {
-		return defaultCustodyRetentionSweepInterval
-	}
-
-	return time.Duration(cfg.Fetcher.CustodyRetentionSweepIntervalSec) * time.Second
-}
-
-// FetcherCustodyRetentionGracePeriod returns the grace period applied to
-// LATE-LINKED retention candidates before sweep deletion. Falls back to a
-// sensible default when non-positive so misconfiguration cannot collapse
-// the race protection.
-func (cfg *Config) FetcherCustodyRetentionGracePeriod() time.Duration {
-	if cfg == nil || cfg.Fetcher.CustodyRetentionGracePeriodSec <= 0 {
-		return defaultCustodyRetentionGracePeriod
-	}
-
-	return time.Duration(cfg.Fetcher.CustodyRetentionGracePeriodSec) * time.Second
-}
 
 // M2MConfig configures machine-to-machine credential retrieval from AWS Secrets Manager.
 // Used when multi-tenant mode is enabled and the service needs to authenticate
@@ -510,4 +447,81 @@ type Config struct {
 // Options provides optional configuration overrides for server initialization.
 type Options struct {
 	Logger libLog.Logger
+}
+
+// FetcherMaxExtractionBytes returns the effective size cap for Fetcher
+// extraction payloads. Falls back to the FlattenFetcherJSON default when
+// the config value is non-positive so misconfiguration can't disable the
+// DoS guard by setting a negative number.
+func (cfg *Config) FetcherMaxExtractionBytes() int64 {
+	if cfg == nil || cfg.Fetcher.MaxExtractionBytes <= 0 {
+		return defaultFetcherMaxExtractionBytes
+	}
+
+	return cfg.Fetcher.MaxExtractionBytes
+}
+
+// FetcherBridgeInterval returns the poll interval for the bridge worker.
+func (cfg *Config) FetcherBridgeInterval() time.Duration {
+	if cfg == nil || cfg.Fetcher.BridgeIntervalSec <= 0 {
+		return time.Duration(defaultFetcherBridgeIntervalSec) * time.Second
+	}
+
+	return time.Duration(cfg.Fetcher.BridgeIntervalSec) * time.Second
+}
+
+// FetcherBridgeBatchSize returns the per-tenant batch size for the bridge worker.
+func (cfg *Config) FetcherBridgeBatchSize() int {
+	if cfg == nil || cfg.Fetcher.BridgeBatchSize <= 0 {
+		return defaultFetcherBridgeBatchSize
+	}
+
+	return cfg.Fetcher.BridgeBatchSize
+}
+
+// FetcherBridgeStaleThreshold returns the duration after which a
+// COMPLETE+unlinked extraction shifts from "pending" to "stale" in the
+// operational dashboard. Falls back to defaultFetcherBridgeStaleThreshold
+// when the configured value is non-positive so misconfiguration cannot
+// collapse the partition.
+func (cfg *Config) FetcherBridgeStaleThreshold() time.Duration {
+	if cfg == nil || cfg.Fetcher.BridgeStaleThresholdSec <= 0 {
+		return defaultFetcherBridgeStaleThreshold
+	}
+
+	return time.Duration(cfg.Fetcher.BridgeStaleThresholdSec) * time.Second
+}
+
+// FetcherBridgeRetryMaxAttempts returns the max-attempts ceiling for the
+// bridge worker's transient-failure escalation (T-005).
+func (cfg *Config) FetcherBridgeRetryMaxAttempts() int {
+	if cfg == nil || cfg.Fetcher.BridgeRetryMaxAttempts <= 0 {
+		return defaultFetcherBridgeRetryMaxAttempts
+	}
+
+	return cfg.Fetcher.BridgeRetryMaxAttempts
+}
+
+// FetcherCustodyRetentionSweepInterval returns the tick interval for the
+// custody retention sweep worker (T-006). Falls back to a sensible default
+// when the configured value is non-positive so misconfiguration cannot
+// disable the sweep silently.
+func (cfg *Config) FetcherCustodyRetentionSweepInterval() time.Duration {
+	if cfg == nil || cfg.Fetcher.CustodyRetentionSweepIntervalSec <= 0 {
+		return defaultCustodyRetentionSweepInterval
+	}
+
+	return time.Duration(cfg.Fetcher.CustodyRetentionSweepIntervalSec) * time.Second
+}
+
+// FetcherCustodyRetentionGracePeriod returns the grace period applied to
+// LATE-LINKED retention candidates before sweep deletion. Falls back to a
+// sensible default when non-positive so misconfiguration cannot collapse
+// the race protection.
+func (cfg *Config) FetcherCustodyRetentionGracePeriod() time.Duration {
+	if cfg == nil || cfg.Fetcher.CustodyRetentionGracePeriodSec <= 0 {
+		return defaultCustodyRetentionGracePeriod
+	}
+
+	return time.Duration(cfg.Fetcher.CustodyRetentionGracePeriodSec) * time.Second
 }

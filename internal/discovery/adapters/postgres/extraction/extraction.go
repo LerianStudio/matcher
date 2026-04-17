@@ -79,6 +79,7 @@ func (model *ExtractionModel) ToDomain() (*entities.ExtractionRequest, error) {
 	}
 
 	var bridgeLastError vo.BridgeErrorClass
+
 	if model.BridgeLastError.Valid && model.BridgeLastError.String != "" {
 		parsed, parseErr := vo.ParseBridgeErrorClass(model.BridgeLastError.String)
 		if parseErr != nil {
@@ -94,6 +95,7 @@ func (model *ExtractionModel) ToDomain() (*entities.ExtractionRequest, error) {
 	}
 
 	var custodyDeletedAt *time.Time
+
 	if model.CustodyDeletedAt.Valid {
 		t := model.CustodyDeletedAt.Time
 		custodyDeletedAt = &t

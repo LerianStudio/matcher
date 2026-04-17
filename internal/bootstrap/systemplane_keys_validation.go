@@ -114,6 +114,11 @@ func validatePresignExpirySeconds(value any) error {
 	return validateBoundedPositiveInt(value, maxPresignExpirySec, "presign expiry seconds")
 }
 
+// gibibyte is one binary gigabyte (2^30 bytes) used by the Fetcher extraction
+// payload bounds. Declared as a named constant so mnd does not flag the
+// `1 << 30` shift as a magic number in the ceiling expression below.
+const gibibyte int64 = 1 << 30
+
 // Bounds for the Fetcher bridge knobs (Fix 9).
 //
 // max_extraction_bytes: floor 1 MiB keeps the DoS guard meaningful (anything
@@ -129,8 +134,8 @@ func validatePresignExpirySeconds(value any) error {
 // Ceiling 10 000 keeps per-cycle worst-case latency bounded; operators
 // needing more drain capacity should shorten the interval instead.
 const (
-	minFetcherMaxExtractionBytes int64 = 1 << 20        // 1 MiB
-	maxFetcherMaxExtractionBytes int64 = 16 * (1 << 30) // 16 GiB
+	minFetcherMaxExtractionBytes int64 = 1 << 20       // 1 MiB
+	maxFetcherMaxExtractionBytes int64 = 16 * gibibyte // 16 GiB
 	minBridgeIntervalSec         int64 = 5
 	maxBridgeIntervalSec         int64 = 3600
 	minBridgeBatchSize           int64 = 1

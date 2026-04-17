@@ -352,7 +352,7 @@ func newCapReader(r io.Reader, maxBytes int64) *capReader {
 	return &capReader{r: r, remaining: maxBytes}
 }
 
-func (cr *capReader) Read(p []byte) (int, error) {
+func (cr *capReader) Read(buf []byte) (int, error) {
 	if cr.exceeded {
 		return 0, errPayloadExceeded
 	}
@@ -374,19 +374,27 @@ func (cr *capReader) Read(p []byte) (int, error) {
 		}
 
 		if err != nil {
-			return 0, err
+			return 0, fmt.Errorf("cap reader peek: %w", err)
 		}
 
 		return 0, io.EOF
 	}
 
-	readSize := int64(len(p))
+	readSize := int64(len(buf))
 	if readSize > cr.remaining {
 		readSize = cr.remaining
 	}
 
-	n, err := cr.r.Read(p[:readSize])
-	cr.remaining -= int64(n)
+	bytesRead, err := cr.r.Read(buf[:readSize])
+	cr.remaining -= int64(bytesRead)
 
-	return n, err
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return bytesRead, io.EOF
+		}
+
+		return bytesRead, fmt.Errorf("cap reader read: %w", err)
+	}
+
+	return bytesRead, nil
 }

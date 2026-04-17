@@ -490,67 +490,17 @@ func (repo *Repository) LinkIfUnlinked(
 	defer span.End()
 
 	_, err := pgcommon.WithTenantTxProvider(ctx, repo.provider, func(tx *sql.Tx) (bool, error) {
-		updatedAt := time.Now().UTC()
-
-		result, execErr := tx.ExecContext(ctx,
-			`UPDATE `+tableName+`
-			SET ingestion_job_id = $1, updated_at = $2
-			WHERE id = $3 AND ingestion_job_id IS NULL`,
-			ingestionJobID,
-			updatedAt,
-			id,
-		)
-		if execErr != nil {
-			return false, fmt.Errorf("atomic link extraction: %w", execErr)
-		}
-
-		rowsAffected, raErr := result.RowsAffected()
-		if raErr != nil {
-			return false, fmt.Errorf("atomic link extraction rows affected: %w", raErr)
-		}
-
-		if rowsAffected != 0 {
-			return true, nil
-		}
-
-		// Zero rows affected means either the row does not exist or it is
-		// already linked. Differentiate with a narrow probe so callers get a
-		// precise sentinel.
-		var hasIngestion sql.NullBool
-
-		probeErr := tx.QueryRowContext(ctx,
-			`SELECT ingestion_job_id IS NOT NULL FROM `+tableName+` WHERE id = $1`,
-			id,
-		).Scan(&hasIngestion)
-		if errors.Is(probeErr, sql.ErrNoRows) {
-			return false, repositories.ErrExtractionNotFound
-		}
-
-		if probeErr != nil {
-			return false, fmt.Errorf("atomic link extraction probe: %w", probeErr)
-		}
-
-		if hasIngestion.Valid && hasIngestion.Bool {
-			return false, ports.ErrExtractionAlreadyLinked
-		}
-
-		// Row exists and is NULL but the UPDATE still matched zero rows — this
-		// should be impossible short of a tenant-schema misconfiguration. Surface
-		// it as a conflict so the caller can retry in a new cycle.
-		return false, repositories.ErrExtractionConflict
+		return linkIfUnlinkedTx(ctx, tx, id, ingestionJobID)
 	})
 	if err != nil {
-		// Pass through the domain/port sentinels untouched so callers can
-		// errors.Is on them. Only wrap genuinely unexpected errors.
-		if errors.Is(err, repositories.ErrExtractionNotFound) ||
-			errors.Is(err, ports.ErrExtractionAlreadyLinked) ||
-			errors.Is(err, repositories.ErrExtractionConflict) ||
-			errors.Is(err, ports.ErrLinkExtractionIDRequired) ||
-			errors.Is(err, ports.ErrLinkIngestionJobIDRequired) {
-			return err
+		// Wrap with %w so callers can still errors.Is on the original
+		// sentinel while the error chain carries the repository context.
+		wrappedErr := fmt.Errorf("link extraction if unlinked: %w", err)
+
+		if isLinkSentinelError(err) {
+			return wrappedErr
 		}
 
-		wrappedErr := fmt.Errorf("link extraction if unlinked: %w", err)
 		libOpentelemetry.HandleSpanError(span, "atomic link failed", wrappedErr)
 		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "atomic link failed")
 
@@ -558,6 +508,72 @@ func (repo *Repository) LinkIfUnlinked(
 	}
 
 	return nil
+}
+
+// linkIfUnlinkedTx runs the atomic UPDATE + follow-up probe inside a tenant-
+// scoped transaction. Extracted from LinkIfUnlinked so the caller stays under
+// the gocyclo ceiling; semantics are unchanged.
+func linkIfUnlinkedTx(ctx context.Context, tx *sql.Tx, id, ingestionJobID uuid.UUID) (bool, error) {
+	updatedAt := time.Now().UTC()
+
+	result, execErr := tx.ExecContext(ctx,
+		`UPDATE `+tableName+`
+		SET ingestion_job_id = $1, updated_at = $2
+		WHERE id = $3 AND ingestion_job_id IS NULL`,
+		ingestionJobID,
+		updatedAt,
+		id,
+	)
+	if execErr != nil {
+		return false, fmt.Errorf("atomic link extraction: %w", execErr)
+	}
+
+	rowsAffected, raErr := result.RowsAffected()
+	if raErr != nil {
+		return false, fmt.Errorf("atomic link extraction rows affected: %w", raErr)
+	}
+
+	if rowsAffected != 0 {
+		return true, nil
+	}
+
+	// Zero rows affected means either the row does not exist or it is
+	// already linked. Differentiate with a narrow probe so callers get a
+	// precise sentinel.
+	var hasIngestion sql.NullBool
+
+	probeErr := tx.QueryRowContext(ctx,
+		`SELECT ingestion_job_id IS NOT NULL FROM `+tableName+` WHERE id = $1`,
+		id,
+	).Scan(&hasIngestion)
+	if errors.Is(probeErr, sql.ErrNoRows) {
+		return false, repositories.ErrExtractionNotFound
+	}
+
+	if probeErr != nil {
+		return false, fmt.Errorf("atomic link extraction probe: %w", probeErr)
+	}
+
+	if hasIngestion.Valid && hasIngestion.Bool {
+		return false, ports.ErrExtractionAlreadyLinked
+	}
+
+	// Row exists and is NULL but the UPDATE still matched zero rows — this
+	// should be impossible short of a tenant-schema misconfiguration. Surface
+	// it as a conflict so the caller can retry in a new cycle.
+	return false, repositories.ErrExtractionConflict
+}
+
+// isLinkSentinelError reports whether err matches one of the expected
+// domain/port sentinels surfaced by LinkIfUnlinked. Centralised here so
+// LinkIfUnlinked stays under the gocyclo ceiling and the sentinel set has a
+// single authoritative list.
+func isLinkSentinelError(err error) bool {
+	return errors.Is(err, repositories.ErrExtractionNotFound) ||
+		errors.Is(err, ports.ErrExtractionAlreadyLinked) ||
+		errors.Is(err, repositories.ErrExtractionConflict) ||
+		errors.Is(err, ports.ErrLinkExtractionIDRequired) ||
+		errors.Is(err, ports.ErrLinkIngestionJobIDRequired)
 }
 
 // FindEligibleForBridge returns up to limit COMPLETE extractions with

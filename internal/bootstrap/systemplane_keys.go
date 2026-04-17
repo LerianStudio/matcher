@@ -137,8 +137,10 @@ const (
 	// Fetcher bridge worker defaults (Fix 4): mirror the Config struct
 	// envDefault tags so snapshot-driven hydration falls back to the same
 	// values an env-only deployment would see.
-	defaultBridgeIntervalSec = 30
-	defaultBridgeBatchSize   = 50
+	defaultBridgeIntervalSec       = 30
+	defaultBridgeBatchSize         = 50
+	defaultBridgeStaleThresholdSec = 3600
+	defaultBridgeRetryMaxAttempts  = 5
 
 	// Custody retention sweep worker defaults (T-006). Mirror the Config
 	// struct envDefault tags so snapshot-driven hydration matches env-only

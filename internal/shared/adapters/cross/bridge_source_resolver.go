@@ -33,6 +33,14 @@ var (
 	ErrNilBridgeSourceResolverProvider = errors.New(
 		"bridge source resolver requires infrastructure provider",
 	)
+
+	// ErrBridgeSourceResolverConnectionIDRequired indicates the caller
+	// invoked ResolveSourceForConnection with the zero UUID. Exported so
+	// callers can discriminate the validation error from genuine resolver
+	// failures via errors.Is.
+	ErrBridgeSourceResolverConnectionIDRequired = errors.New(
+		"connection id is required for bridge source resolution",
+	)
 )
 
 // BridgeSourceResolverAdapter implements sharedPorts.BridgeSourceResolver.
@@ -98,7 +106,7 @@ func (adapter *BridgeSourceResolverAdapter) ResolveSourceForConnection(
 	}
 
 	if connectionID == uuid.Nil {
-		err := errors.New("connection id is required for bridge source resolution")
+		err := ErrBridgeSourceResolverConnectionIDRequired
 		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "missing connection id", err)
 
 		return sharedPorts.BridgeSourceTarget{}, err
@@ -140,13 +148,14 @@ func (adapter *BridgeSourceResolverAdapter) ResolveSourceForConnection(
 		}, nil
 	})
 	if err != nil {
+		wrapped := fmt.Errorf("resolve source for connection: %w", err)
+
 		if errors.Is(err, sharedPorts.ErrBridgeSourceUnresolvable) {
 			libOpentelemetry.HandleSpanBusinessErrorEvent(span, "no fetcher source for connection", err)
 
-			return sharedPorts.BridgeSourceTarget{}, err
+			return sharedPorts.BridgeSourceTarget{}, wrapped
 		}
 
-		wrapped := fmt.Errorf("resolve source for connection: %w", err)
 		libOpentelemetry.HandleSpanError(span, "source resolver failed", wrapped)
 
 		return sharedPorts.BridgeSourceTarget{}, wrapped

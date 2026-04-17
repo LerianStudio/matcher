@@ -85,15 +85,15 @@ func (c BridgeErrorClass) String() string {
 // "no terminal failure" before calling this); all other unrecognised inputs
 // return ErrInvalidBridgeErrorClass so adapters can surface schema drift
 // loudly instead of silently coercing the value.
-func ParseBridgeErrorClass(s string) (BridgeErrorClass, error) {
-	trimmed := strings.TrimSpace(s)
+func ParseBridgeErrorClass(raw string) (BridgeErrorClass, error) {
+	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
 		return "", fmt.Errorf("%w: empty", ErrInvalidBridgeErrorClass)
 	}
 
 	class := BridgeErrorClass(strings.ToLower(trimmed))
 	if !class.IsValid() {
-		return "", fmt.Errorf("%w: %s", ErrInvalidBridgeErrorClass, s)
+		return "", fmt.Errorf("%w: %s", ErrInvalidBridgeErrorClass, raw)
 	}
 
 	return class, nil
