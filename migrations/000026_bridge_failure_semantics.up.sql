@@ -3,7 +3,7 @@
 -- Adds the columns the bridge worker needs to persist a failure classification
 -- for an extraction without conflating it with the discovery-layer status. The
 -- discovery status (PENDING/SUBMITTED/EXTRACTING/COMPLETE/FAILED/CANCELLED)
--- describes the upstream Fetcher pipeline; the bridge_* columns describe the
+-- describes the upstream Fetcher pipeline, while the bridge_* columns describe the
 -- Matcher-side bridging pipeline (retrieve → verify → custody → ingest →
 -- link). Keeping the two state machines separate preserves the invariant that
 -- a COMPLETE+unlinked extraction is the only candidate for the bridge worker
@@ -11,7 +11,7 @@
 --
 --   bridge_attempts          : monotonically increases each time the worker
 --                              touches this extraction. Capped at the
---                              configured max attempts; beyond that the worker
+--                              configured max attempts, beyond which the worker
 --                              upgrades the failure to terminal.
 --   bridge_last_error        : sentinel-coded class string when terminal
 --                              (e.g. "artifact_not_found"). NULL while the

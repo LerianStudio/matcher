@@ -8,7 +8,7 @@
 --
 --   1. ready: COMPLETE+linked rows accumulate forever — without an index
 --      every drilldown forces a sequential scan over the success archive.
---   2. failed: FAILED/CANCELLED rows accumulate too; smaller population, but
+--   2. failed: FAILED/CANCELLED rows accumulate too. Smaller population, but
 --      drilldown pagination still needs an ordered access path.
 --   3. pending/stale: T-003's index is on updated_at, but the drilldown
 --      orders by created_at — a created_at-keyed partial index removes the
@@ -19,7 +19,7 @@
 -- skip the table data entirely for the ORDER BY + LIMIT portion of each query.
 
 -- Ready partition: COMPLETE extractions linked to an ingestion job. Forever-
--- growing partition; without an index, each drilldown scans the full table.
+-- growing partition, so without an index each drilldown scans the full table.
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_extraction_requests_bridge_ready
   ON extraction_requests (created_at, id)
   WHERE status = 'COMPLETE' AND ingestion_job_id IS NOT NULL;
@@ -32,7 +32,7 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_extraction_requests_bridge_failed
 
 -- Pending/stale drilldown: COMPLETE+unlinked rows ordered by created_at.
 -- T-003's idx_extraction_requests_eligible_for_bridge orders by updated_at
--- because the worker drains oldest-update-first; the dashboard orders by
+-- because the worker drains oldest-update-first, but the dashboard orders by
 -- created_at so it matches operator intuition (oldest extraction first).
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_extraction_requests_bridge_unlinked_by_created
   ON extraction_requests (created_at, id)

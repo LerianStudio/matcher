@@ -23,7 +23,7 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_extraction_requests_eligible_for_bri
   WHERE status = 'COMPLETE' AND ingestion_job_id IS NULL;
 
 -- Index for BridgeSourceResolverAdapter.ResolveSourceForConnection JSONB lookup.
--- Partial index on FETCHER sources only; expression index makes O(log n).
+-- Partial index on FETCHER sources only, so the expression index stays O(log n).
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_reconciliation_sources_fetcher_conn
   ON reconciliation_sources ((config->>'connection_id'))
   WHERE type = 'FETCHER';
