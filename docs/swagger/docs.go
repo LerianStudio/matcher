@@ -11220,6 +11220,9 @@ const docTemplate = `{
                 "ageSeconds": {
                     "type": "integer"
                 },
+                "bridgeLastError": {
+                    "type": "string"
+                },
                 "connectionId": {
                     "type": "string"
                 },
@@ -11340,10 +11343,26 @@ const docTemplate = `{
         "github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ExtractionRequestResponse": {
             "type": "object",
             "properties": {
+                "bridgeAttempts": {
+                    "type": "integer"
+                },
+                "bridgeFailedAt": {
+                    "type": "string"
+                },
+                "bridgeLastError": {
+                    "type": "string"
+                },
+                "bridgeLastErrorMessage": {
+                    "description": "appended-history; see type docstring",
+                    "type": "string"
+                },
                 "connectionId": {
                     "type": "string"
                 },
                 "createdAt": {
+                    "type": "string"
+                },
+                "custodyDeletedAt": {
                     "type": "string"
                 },
                 "endDate": {
