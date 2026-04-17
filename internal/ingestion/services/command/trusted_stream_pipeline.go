@@ -25,6 +25,13 @@ func (uc *UseCase) runTrustedStreamPipeline(
 	input IngestFromTrustedStreamInput,
 	fileName string,
 ) (*entities.IngestionJob, int, error) {
+	// Polish Fix 4: extract the canonical extraction id (if any) from
+	// SourceMetadata and pass it via StartIngestionInput so the stamp lands
+	// atomically inside the initial INSERT. Previously the stamp was applied
+	// via a follow-up Update — a transient failure on that Update reopened
+	// the orphan-job window the P1 short-circuit was supposed to close.
+	extractionID := canonicalExtractionIDFromMetadata(input.SourceMetadata)
+
 	startInput := StartIngestionInput{
 		ContextID: input.ContextID,
 		SourceID:  input.SourceID,
@@ -32,9 +39,10 @@ func (uc *UseCase) runTrustedStreamPipeline(
 		// FileSize is zero for streaming intake; the non-streaming parser
 		// threshold warning is the only code path that reads this value and
 		// zero is the correct signal that size is unknown.
-		FileSize: 0,
-		Format:   input.Format,
-		Reader:   input.Content,
+		FileSize:     0,
+		Format:       input.Format,
+		Reader:       input.Content,
+		ExtractionID: extractionID,
 	}
 
 	state, err := uc.prepareIngestion(ctx, startInput, span)

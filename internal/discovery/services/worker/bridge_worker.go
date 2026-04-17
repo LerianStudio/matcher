@@ -23,7 +23,9 @@ import (
 	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
 
 	"github.com/LerianStudio/matcher/internal/auth"
+	"github.com/LerianStudio/matcher/internal/discovery/domain/entities"
 	"github.com/LerianStudio/matcher/internal/discovery/domain/repositories"
+	vo "github.com/LerianStudio/matcher/internal/discovery/domain/value_objects"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 	"github.com/LerianStudio/matcher/pkg/chanutil"
 )
@@ -80,6 +82,10 @@ type BridgeWorkerConfig struct {
 	// BatchSize caps how many extractions we process per tenant per cycle.
 	// Falls back to bridgeDefaultBatchSize when <= 0.
 	BatchSize int
+	// Retry holds the retry-and-backoff schedule the worker applies to
+	// transient bridgeOne failures (T-005). Zero values get sane defaults
+	// from BridgeRetryBackoff.Normalize.
+	Retry BridgeRetryBackoff
 }
 
 func normalizeBridgeConfig(cfg BridgeWorkerConfig) BridgeWorkerConfig {
@@ -90,6 +96,8 @@ func normalizeBridgeConfig(cfg BridgeWorkerConfig) BridgeWorkerConfig {
 	if cfg.BatchSize <= 0 {
 		cfg.BatchSize = bridgeDefaultBatchSize
 	}
+
+	cfg.Retry = cfg.Retry.Normalize()
 
 	return cfg
 }
@@ -367,7 +375,7 @@ func (w *BridgeWorker) processTenant(parentCtx context.Context, tenantID string)
 			continue
 		}
 
-		if err := w.bridgeOne(ctx, extraction.ID, tenantID); err != nil {
+		if err := w.bridgeOne(ctx, extraction, tenantID); err != nil {
 			w.logBridgeError(ctx, logger, extraction.ID, tenantID, err)
 
 			continue
@@ -382,42 +390,189 @@ func (w *BridgeWorker) processTenant(parentCtx context.Context, tenantID string)
 // bridgeOne runs a single extraction through the orchestrator. Wraps each
 // call in its own span so operators can see per-extraction timing even when
 // the tenant batch is large.
-func (w *BridgeWorker) bridgeOne(ctx context.Context, extractionID uuid.UUID, tenantID string) error {
+//
+// T-005 retry semantics:
+//  1. Idempotent signals (already-linked, ineligible) → silent success.
+//  2. Terminal classifications (integrity / 404) → persist
+//     MarkBridgeFailed; the row exits the eligibility queue.
+//  3. Transient classifications (custody / network / source-unresolvable) →
+//     increment bridge_attempts; if attempts ≥ max, escalate to terminal.
+//
+// Backoff strategy: PASSIVE — the worker does NOT sleep between retries and
+// has no exponential-backoff math. Backoff is enforced by
+// FindEligibleForBridge ordering by `updated_at ASC`: every attempt bumps
+// the row's updated_at, pushing it to the tail of the eligibility queue so
+// newer rows drain first. The tick cadence (BridgeWorkerConfig.Interval)
+// IS the retry cadence; MaxAttempts caps total retries before terminal
+// escalation. This is simpler, race-free, and avoids the dual-clock confusion
+// of an in-process backoff timer racing the DB queue ordering.
+func (w *BridgeWorker) bridgeOne(ctx context.Context, extraction *entities.ExtractionRequest, tenantID string) error {
+	if extraction == nil {
+		return nil
+	}
+
 	_, tracer := w.tracking(ctx)
 
 	ctx, span := tracer.Start(ctx, "discovery.bridge.bridge_one")
 	defer span.End()
 
 	span.SetAttributes(
-		attribute.String("extraction.id", extractionID.String()),
+		attribute.String("extraction.id", extraction.ID.String()),
 		attribute.String("tenant.id", tenantID),
+		attribute.Int("bridge.attempts_before", extraction.BridgeAttempts),
 	)
 
 	outcome, err := w.orchestrator.BridgeExtraction(ctx, sharedPorts.BridgeExtractionInput{
-		ExtractionID: extractionID,
+		ExtractionID: extraction.ID,
 		TenantID:     tenantID,
 	})
-	if err != nil {
-		// Idempotent signals are not logged at ERROR level: they mean a
-		// concurrent worker (or a replay of this one) already handled the
-		// extraction.
-		if errors.Is(err, sharedPorts.ErrBridgeExtractionIneligible) ||
-			errors.Is(err, sharedPorts.ErrExtractionAlreadyLinked) {
-			return nil
+
+	classification := ClassifyBridgeError(err)
+	span.SetAttributes(attribute.String("bridge.retry_policy", classification.Policy.String()))
+
+	switch classification.Policy {
+	case RetryIdempotent:
+		// Either no error (happy path) or a benign concurrent-write signal.
+		if outcome != nil {
+			span.SetAttributes(
+				attribute.String("ingestion.job_id", outcome.IngestionJobID.String()),
+				attribute.Int("ingestion.transaction_count", outcome.TransactionCount),
+				attribute.Bool("bridge.custody_deleted", outcome.CustodyDeleted),
+			)
 		}
+
+		return nil
+
+	case RetryTerminal:
+		w.persistTerminalFailure(ctx, extraction, classification.Class, err)
+
+		return err
+
+	case RetryTransient:
+		w.handleTransientFailure(ctx, extraction, err)
 
 		return err
 	}
 
-	if outcome != nil {
-		span.SetAttributes(
-			attribute.String("ingestion.job_id", outcome.IngestionJobID.String()),
-			attribute.Int("ingestion.transaction_count", outcome.TransactionCount),
-			attribute.Bool("bridge.custody_deleted", outcome.CustodyDeleted),
-		)
+	return err
+}
+
+// persistTerminalFailure records the BridgeErrorClass on the extraction and
+// removes it from the eligibility queue. The persist failure path itself is
+// best-effort: if the DB write fails, the next tick will pick up the same
+// extraction, classify again, and try the persist again. Logging the persist
+// failure separately so operators can spot a stuck-in-loop pattern.
+func (w *BridgeWorker) persistTerminalFailure(
+	ctx context.Context,
+	extraction *entities.ExtractionRequest,
+	class vo.BridgeErrorClass,
+	originalErr error,
+) {
+	logger, _ := w.tracking(ctx)
+
+	extraction.RecordBridgeAttempt()
+
+	message := terminalFailureMessage(originalErr)
+	if markErr := extraction.MarkBridgeFailed(class, message); markErr != nil {
+		logger.With(
+			libLog.String("extraction.id", extraction.ID.String()),
+			libLog.String("class", string(class)),
+			libLog.String("error", markErr.Error()),
+		).Log(ctx, libLog.LevelError, "bridge: domain mark-failed rejected (wiring bug)")
+
+		return
 	}
 
-	return nil
+	if persistErr := w.extractionRepo.MarkBridgeFailed(ctx, extraction); persistErr != nil {
+		logger.With(
+			libLog.String("extraction.id", extraction.ID.String()),
+			libLog.String("class", string(class)),
+			libLog.String("bridge.class", string(class)),
+			libLog.String("error", persistErr.Error()),
+		).Log(ctx, libLog.LevelError, "bridge: persist terminal failure failed")
+	}
+}
+
+// handleTransientFailure increments bridge_attempts, escalates to terminal
+// if the configured ceiling is reached, otherwise persists just the bumped
+// attempts via the existing Update path.
+func (w *BridgeWorker) handleTransientFailure(
+	ctx context.Context,
+	extraction *entities.ExtractionRequest,
+	originalErr error,
+) {
+	logger, _ := w.tracking(ctx)
+
+	attempts := extraction.RecordBridgeAttempt()
+
+	if w.cfg.Retry.ShouldEscalate(attempts) {
+		escalated := EscalateAfterMaxAttempts(originalErr)
+		message := fmt.Sprintf(
+			"escalated to terminal after %d attempts: %s",
+			attempts,
+			terminalFailureMessage(originalErr),
+		)
+
+		if markErr := extraction.MarkBridgeFailed(escalated, message); markErr != nil {
+			logger.With(
+				libLog.String("extraction.id", extraction.ID.String()),
+				libLog.String("class", string(escalated)),
+				libLog.String("error", markErr.Error()),
+			).Log(ctx, libLog.LevelError, "bridge: domain mark-failed rejected during escalation")
+
+			return
+		}
+
+		if persistErr := w.extractionRepo.MarkBridgeFailed(ctx, extraction); persistErr != nil {
+			logger.With(
+				libLog.String("extraction.id", extraction.ID.String()),
+				libLog.String("class", string(escalated)),
+				libLog.String("bridge.class", string(escalated)),
+				libLog.String("error", persistErr.Error()),
+			).Log(ctx, libLog.LevelError, "bridge: persist escalated failure failed")
+		}
+
+		return
+	}
+
+	// Below the ceiling: persist ONLY the bumped attempts + updated_at via
+	// the narrow IncrementBridgeAttempts UPDATE (Polish Fix 3). The wide
+	// Update path could otherwise clobber a concurrent link write under a
+	// lock-TTL-expiry edge case — the narrow UPDATE is gated by
+	// `ingestion_job_id IS NULL` so that race produces ErrExtractionAlreadyLinked
+	// (logged at info level, not warn) instead of silent data corruption.
+	persistErr := w.extractionRepo.IncrementBridgeAttempts(ctx, extraction.ID, attempts)
+	if persistErr == nil {
+		return
+	}
+
+	if errors.Is(persistErr, sharedPorts.ErrExtractionAlreadyLinked) {
+		// Concurrent link won the race. The link itself is the desired
+		// outcome — stop retrying. Log at info because this is benign
+		// concurrency, not an error.
+		logger.With(
+			libLog.String("extraction.id", extraction.ID.String()),
+			libLog.Any("attempts", attempts),
+		).Log(ctx, libLog.LevelInfo, "bridge: transient retry skipped — concurrent link won")
+
+		return
+	}
+
+	logger.With(
+		libLog.String("extraction.id", extraction.ID.String()),
+		libLog.Any("attempts", attempts),
+		libLog.String("error", persistErr.Error()),
+	).Log(ctx, libLog.LevelWarn, "bridge: failed to persist transient attempt counter")
+}
+
+// terminalFailureMessage builds the operator-facing message persisted in
+// bridge_last_error_message. Bounded by the entity's MaxBridgeFailureMessageLength.
+func terminalFailureMessage(err error) string {
+	if err == nil {
+		return "unknown failure"
+	}
+
+	return err.Error()
 }
 
 func (w *BridgeWorker) logBridgeError(

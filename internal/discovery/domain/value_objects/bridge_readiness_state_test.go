@@ -48,26 +48,6 @@ func TestBridgeReadinessState_IsValid(t *testing.T) {
 	}
 }
 
-func TestBridgeReadinessState_IsTerminal(t *testing.T) {
-	t.Parallel()
-
-	assert.True(t, vo.BridgeReadinessReady.IsTerminal(), "ready is terminal")
-	assert.True(t, vo.BridgeReadinessFailed.IsTerminal(), "failed is terminal")
-	assert.False(t, vo.BridgeReadinessPending.IsTerminal(), "pending is in-flight")
-	assert.False(t, vo.BridgeReadinessStale.IsTerminal(), "stale is in-flight (worker may still succeed)")
-	assert.False(t, vo.BridgeReadinessInFlight.IsTerminal(), "in_flight is upstream-pending, not terminal")
-}
-
-func TestBridgeReadinessState_IsActionable(t *testing.T) {
-	t.Parallel()
-
-	assert.True(t, vo.BridgeReadinessStale.IsActionable(), "stale needs operator attention")
-	assert.True(t, vo.BridgeReadinessFailed.IsActionable(), "failed needs operator attention")
-	assert.False(t, vo.BridgeReadinessPending.IsActionable(), "pending is normal flow")
-	assert.False(t, vo.BridgeReadinessReady.IsActionable(), "ready is happy-path")
-	assert.False(t, vo.BridgeReadinessInFlight.IsActionable(), "in_flight is normal upstream flow")
-}
-
 func TestParseBridgeReadinessState_Valid(t *testing.T) {
 	t.Parallel()
 

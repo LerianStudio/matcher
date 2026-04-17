@@ -33,20 +33,33 @@ const SanitizedExtractionFailureMessage = "extraction failed"
 
 // ExtractionRequest tracks a data extraction request to Fetcher.
 // IngestionJobID is optional and reserved for downstream ingestion linkage.
+//
+// The bridge_* fields (T-005) describe the Matcher-side bridging pipeline's
+// retry-and-failure state. They are independent of Status — Status describes
+// the upstream Fetcher pipeline (PENDING → SUBMITTED → EXTRACTING → COMPLETE
+// or FAILED/CANCELLED), while BridgeAttempts/BridgeLastError/BridgeFailedAt
+// describe what happened when the Matcher worker tried to retrieve, verify,
+// custody, ingest, and link the extraction's output. A row can be
+// Status=COMPLETE with BridgeLastError set: the upstream succeeded but the
+// downstream bridge gave up.
 type ExtractionRequest struct {
-	ID             uuid.UUID
-	ConnectionID   uuid.UUID
-	IngestionJobID uuid.UUID // Nullable: linked to downstream ingestion when available
-	FetcherJobID   string
-	Tables         map[string]any
-	StartDate      string
-	EndDate        string
-	Filters        map[string]any
-	Status         vo.ExtractionStatus
-	ResultPath     string
-	ErrorMessage   string
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	ID                     uuid.UUID
+	ConnectionID           uuid.UUID
+	IngestionJobID         uuid.UUID // Nullable: linked to downstream ingestion when available
+	FetcherJobID           string
+	Tables                 map[string]any
+	StartDate              string
+	EndDate                string
+	Filters                map[string]any
+	Status                 vo.ExtractionStatus
+	ResultPath             string
+	ErrorMessage           string
+	CreatedAt              time.Time
+	UpdatedAt              time.Time
+	BridgeAttempts         int
+	BridgeLastError        vo.BridgeErrorClass // empty when no terminal bridge failure
+	BridgeLastErrorMessage string
+	BridgeFailedAt         time.Time // zero when no terminal bridge failure
 }
 
 // NewExtractionRequest creates a new ExtractionRequest with validated invariants.

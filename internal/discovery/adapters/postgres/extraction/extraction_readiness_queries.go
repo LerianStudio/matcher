@@ -61,14 +61,22 @@ func (repo *Repository) CountBridgeReadiness(
 	defer span.End()
 
 	result, err := pgcommon.WithTenantTxProvider(ctx, repo.provider, func(tx *sql.Tx) (repositories.BridgeReadinessCounts, error) {
+		// T-005 integration: bridge_last_error participates in the
+		// readiness partition. A row that is COMPLETE+unlinked but has
+		// bridge_last_error set is "failed" (the bridge gave up), not
+		// "pending" or "stale". The pending/stale buckets explicitly
+		// require bridge_last_error IS NULL so they only show retryable
+		// rows the worker is expected to drain.
 		row := tx.QueryRowContext(ctx,
 			`SELECT
 				COUNT(*) FILTER (WHERE status = $1 AND ingestion_job_id IS NOT NULL) AS ready_count,
 				COUNT(*) FILTER (WHERE status = $1 AND ingestion_job_id IS NULL
+					AND bridge_last_error IS NULL
 					AND EXTRACT(EPOCH FROM (NOW() - created_at)) <= $2) AS pending_count,
 				COUNT(*) FILTER (WHERE status = $1 AND ingestion_job_id IS NULL
+					AND bridge_last_error IS NULL
 					AND EXTRACT(EPOCH FROM (NOW() - created_at)) > $2) AS stale_count,
-				COUNT(*) FILTER (WHERE status IN ($3, $4)) AS failed_count,
+				COUNT(*) FILTER (WHERE status IN ($3, $4) OR bridge_last_error IS NOT NULL) AS failed_count,
 				COUNT(*) FILTER (WHERE status IN ($5, $6, $7)) AS in_flight_count
 			FROM `+tableName,
 			string(vo.ExtractionStatusComplete),
@@ -199,13 +207,20 @@ func buildBridgeCandidateQuery(
 		predicate = "status = $1 AND ingestion_job_id IS NOT NULL"
 		args = []any{string(vo.ExtractionStatusComplete)}
 	case vo.BridgeReadinessPending:
-		predicate = "status = $1 AND ingestion_job_id IS NULL AND EXTRACT(EPOCH FROM (NOW() - created_at)) <= $2"
+		// Pending requires the row to still be retryable: bridge_last_error
+		// IS NULL filters out rows the worker has terminally failed.
+		predicate = "status = $1 AND ingestion_job_id IS NULL AND bridge_last_error IS NULL AND EXTRACT(EPOCH FROM (NOW() - created_at)) <= $2"
 		args = []any{string(vo.ExtractionStatusComplete), thresholdSec}
 	case vo.BridgeReadinessStale:
-		predicate = "status = $1 AND ingestion_job_id IS NULL AND EXTRACT(EPOCH FROM (NOW() - created_at)) > $2"
+		// Same retryable filter for stale — terminal-failed rows belong in
+		// the failed bucket, not stale.
+		predicate = "status = $1 AND ingestion_job_id IS NULL AND bridge_last_error IS NULL AND EXTRACT(EPOCH FROM (NOW() - created_at)) > $2"
 		args = []any{string(vo.ExtractionStatusComplete), thresholdSec}
 	case vo.BridgeReadinessFailed:
-		predicate = "status IN ($1, $2)"
+		// T-005: failed bucket now includes bridge-failed rows in addition
+		// to discovery-side FAILED/CANCELLED rows. Operators see both
+		// failure classes in one drilldown.
+		predicate = "(status IN ($1, $2) OR bridge_last_error IS NOT NULL)"
 		args = []any{string(vo.ExtractionStatusFailed), string(vo.ExtractionStatusCancelled)}
 	case vo.BridgeReadinessInFlight:
 		predicate = "status IN ($1, $2, $3)"

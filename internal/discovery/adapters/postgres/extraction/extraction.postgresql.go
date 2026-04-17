@@ -24,8 +24,11 @@ import (
 var _ repositories.ExtractionRepository = (*Repository)(nil)
 
 const (
-	tableName  = "extraction_requests"
-	allColumns = "id, connection_id, ingestion_job_id, fetcher_job_id, tables, start_date, end_date, filters, status, result_path, error_message, created_at, updated_at"
+	tableName = "extraction_requests"
+	// allColumns is the canonical SELECT list. Order MUST match scanExtraction.
+	// Bridge* columns added in migration 000026 (T-005) live at the tail so
+	// adding them did not perturb existing column ordinals.
+	allColumns = "id, connection_id, ingestion_job_id, fetcher_job_id, tables, start_date, end_date, filters, status, result_path, error_message, created_at, updated_at, bridge_attempts, bridge_last_error, bridge_last_error_message, bridge_failed_at"
 )
 
 // Repository provides PostgreSQL operations for ExtractionRequest entities.
@@ -117,7 +120,7 @@ func (repo *Repository) executeCreate(ctx context.Context, tx *sql.Tx, req *enti
 
 	_, err = tx.ExecContext(ctx,
 		`INSERT INTO `+tableName+` (`+allColumns+`)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
 		model.ID,
 		model.ConnectionID,
 		model.IngestionJobID,
@@ -131,6 +134,10 @@ func (repo *Repository) executeCreate(ctx context.Context, tx *sql.Tx, req *enti
 		model.ErrorMessage,
 		model.CreatedAt,
 		model.UpdatedAt,
+		model.BridgeAttempts,
+		model.BridgeLastError,
+		model.BridgeLastErrorMessage,
+		model.BridgeFailedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("insert extraction request: %w", err)
@@ -304,8 +311,12 @@ func (repo *Repository) executeUpdate(ctx context.Context, tx *sql.Tx, req *enti
 			status = $8,
 			result_path = $9,
 			error_message = $10,
-			updated_at = $11
-		WHERE id = $12`,
+			updated_at = $11,
+			bridge_attempts = $12,
+			bridge_last_error = $13,
+			bridge_last_error_message = $14,
+			bridge_failed_at = $15
+		WHERE id = $16`,
 		model.ConnectionID,
 		model.IngestionJobID,
 		model.FetcherJobID,
@@ -317,6 +328,10 @@ func (repo *Repository) executeUpdate(ctx context.Context, tx *sql.Tx, req *enti
 		model.ResultPath,
 		model.ErrorMessage,
 		model.UpdatedAt,
+		model.BridgeAttempts,
+		model.BridgeLastError,
+		model.BridgeLastErrorMessage,
+		model.BridgeFailedAt,
 		model.ID,
 	)
 	if err != nil {
@@ -353,8 +368,12 @@ func (repo *Repository) executeConditionalUpdate(ctx context.Context, tx *sql.Tx
 			status = $8,
 			result_path = $9,
 			error_message = $10,
-			updated_at = $11
-		WHERE id = $12 AND updated_at = $13`,
+			updated_at = $11,
+			bridge_attempts = $12,
+			bridge_last_error = $13,
+			bridge_last_error_message = $14,
+			bridge_failed_at = $15
+		WHERE id = $16 AND updated_at = $17`,
 		model.ConnectionID,
 		model.IngestionJobID,
 		model.FetcherJobID,
@@ -366,6 +385,10 @@ func (repo *Repository) executeConditionalUpdate(ctx context.Context, tx *sql.Tx
 		model.ResultPath,
 		model.ErrorMessage,
 		model.UpdatedAt,
+		model.BridgeAttempts,
+		model.BridgeLastError,
+		model.BridgeLastErrorMessage,
+		model.BridgeFailedAt,
 		model.ID,
 		expectedUpdatedAt,
 	)
@@ -552,9 +575,15 @@ func (repo *Repository) FindEligibleForBridge(
 	defer span.End()
 
 	result, err := pgcommon.WithTenantTxProvider(ctx, repo.provider, func(tx *sql.Tx) ([]*entities.ExtractionRequest, error) {
+		// T-005 P2: exclude rows that have already been terminally failed
+		// by the bridge worker. Without this filter, the worker would
+		// re-pick failed rows on every cycle and hit the same terminal
+		// error forever (livelock).
 		rows, queryErr := tx.QueryContext(ctx,
 			`SELECT `+allColumns+` FROM `+tableName+`
-			WHERE status = $1 AND ingestion_job_id IS NULL
+			WHERE status = $1
+			  AND ingestion_job_id IS NULL
+			  AND bridge_last_error IS NULL
 			ORDER BY updated_at ASC
 			LIMIT $2`,
 			string(vo.ExtractionStatusComplete),
@@ -594,6 +623,8 @@ func (repo *Repository) FindEligibleForBridge(
 }
 
 // scanExtraction scans a SQL row into an ExtractionRequest domain entity.
+// Column order MUST match allColumns; the bridge_* columns are at the tail
+// because they were added in migration 000026.
 func scanExtraction(scanner interface{ Scan(dest ...any) error }) (*entities.ExtractionRequest, error) {
 	var model ExtractionModel
 	if err := scanner.Scan(
@@ -610,6 +641,10 @@ func scanExtraction(scanner interface{ Scan(dest ...any) error }) (*entities.Ext
 		&model.ErrorMessage,
 		&model.CreatedAt,
 		&model.UpdatedAt,
+		&model.BridgeAttempts,
+		&model.BridgeLastError,
+		&model.BridgeLastErrorMessage,
+		&model.BridgeFailedAt,
 	); err != nil {
 		return nil, err
 	}

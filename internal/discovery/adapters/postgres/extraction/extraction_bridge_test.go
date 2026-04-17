@@ -179,8 +179,10 @@ func TestFindEligibleForBridge_Empty(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, connection_id, ingestion_job_id, fetcher_job_id, tables, start_date, end_date, filters, status, result_path, error_message, created_at, updated_at FROM extraction_requests
-			WHERE status = $1 AND ingestion_job_id IS NULL
+		`SELECT id, connection_id, ingestion_job_id, fetcher_job_id, tables, start_date, end_date, filters, status, result_path, error_message, created_at, updated_at, bridge_attempts, bridge_last_error, bridge_last_error_message, bridge_failed_at FROM extraction_requests
+			WHERE status = $1
+			  AND ingestion_job_id IS NULL
+			  AND bridge_last_error IS NULL
 			ORDER BY updated_at ASC
 			LIMIT $2`,
 	)).WithArgs("COMPLETE", 50).WillReturnRows(sqlmock.NewRows(extractionColumns()))
@@ -220,13 +222,21 @@ func TestFindEligibleForBridge_ReturnsRows(t *testing.T) {
 			"",
 			now.Add(-time.Duration(i)*time.Minute),
 			now.Add(-time.Duration(i)*time.Minute),
+			// T-005 bridge_* columns: untouched extractions have attempts=0,
+			// nullable failure fields stay NULL.
+			0,
+			nil,
+			nil,
+			nil,
 		)
 	}
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, connection_id, ingestion_job_id, fetcher_job_id, tables, start_date, end_date, filters, status, result_path, error_message, created_at, updated_at FROM extraction_requests
-			WHERE status = $1 AND ingestion_job_id IS NULL
+		`SELECT id, connection_id, ingestion_job_id, fetcher_job_id, tables, start_date, end_date, filters, status, result_path, error_message, created_at, updated_at, bridge_attempts, bridge_last_error, bridge_last_error_message, bridge_failed_at FROM extraction_requests
+			WHERE status = $1
+			  AND ingestion_job_id IS NULL
+			  AND bridge_last_error IS NULL
 			ORDER BY updated_at ASC
 			LIMIT $2`,
 	)).WithArgs("COMPLETE", 10).WillReturnRows(rows)
@@ -264,8 +274,10 @@ func TestFindEligibleForBridge_QueryError_WrapsUnderlying(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, connection_id, ingestion_job_id, fetcher_job_id, tables, start_date, end_date, filters, status, result_path, error_message, created_at, updated_at FROM extraction_requests
-			WHERE status = $1 AND ingestion_job_id IS NULL
+		`SELECT id, connection_id, ingestion_job_id, fetcher_job_id, tables, start_date, end_date, filters, status, result_path, error_message, created_at, updated_at, bridge_attempts, bridge_last_error, bridge_last_error_message, bridge_failed_at FROM extraction_requests
+			WHERE status = $1
+			  AND ingestion_job_id IS NULL
+			  AND bridge_last_error IS NULL
 			ORDER BY updated_at ASC
 			LIMIT $2`,
 	)).WithArgs("COMPLETE", 50).WillReturnError(errTestQuery)

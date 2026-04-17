@@ -263,6 +263,13 @@ type FetcherConfig struct {
 	// model uses this threshold; the bridge worker itself does not read
 	// it. Bounded validator caps the value at one day.
 	BridgeStaleThresholdSec int `env:"FETCHER_BRIDGE_STALE_THRESHOLD_SEC" envDefault:"3600" mapstructure:"bridge_stale_threshold_sec"`
+
+	// BridgeRetryMaxAttempts caps how many transient failures a single
+	// extraction may accumulate before the bridge worker escalates the
+	// failure to terminal (T-005). Once the cap is reached the worker
+	// persists max_attempts_exceeded (or source_unresolved when applicable)
+	// and the extraction exits the eligibility queue.
+	BridgeRetryMaxAttempts int `env:"FETCHER_BRIDGE_RETRY_MAX_ATTEMPTS" envDefault:"5" mapstructure:"bridge_retry_max_attempts"`
 }
 
 // FetcherMaxExtractionBytes returns the effective size cap for Fetcher
@@ -315,6 +322,26 @@ func (cfg *Config) FetcherBridgeStaleThreshold() time.Duration {
 	}
 
 	return time.Duration(cfg.Fetcher.BridgeStaleThresholdSec) * time.Second
+}
+
+// Bridge retry policy default. Mirrors BridgeRetryBackoff.Normalize's
+// fallback so a config-load with a zero MaxAttempts gets the same ceiling
+// operators expect from the worker.
+//
+// Polish Fix 2: the prior Initial/Max-Backoff defaults were deleted along
+// with the dead exponential-backoff helpers. The worker enforces backoff
+// passively via FindEligibleForBridge ordering by updated_at — the tick
+// cadence (FetcherBridgeInterval) IS the retry cadence.
+const defaultFetcherBridgeRetryMaxAttempts = 5
+
+// FetcherBridgeRetryMaxAttempts returns the max-attempts ceiling for the
+// bridge worker's transient-failure escalation (T-005).
+func (cfg *Config) FetcherBridgeRetryMaxAttempts() int {
+	if cfg == nil || cfg.Fetcher.BridgeRetryMaxAttempts <= 0 {
+		return defaultFetcherBridgeRetryMaxAttempts
+	}
+
+	return cfg.Fetcher.BridgeRetryMaxAttempts
 }
 
 // M2MConfig configures machine-to-machine credential retrieval from AWS Secrets Manager.

@@ -105,6 +105,22 @@ func (m *stubExtractionRepo) LinkIfUnlinked(_ context.Context, _ uuid.UUID, _ uu
 	return nil
 }
 
+func (m *stubExtractionRepo) MarkBridgeFailed(_ context.Context, _ *entities.ExtractionRequest) error {
+	return nil
+}
+
+func (m *stubExtractionRepo) MarkBridgeFailedWithTx(_ context.Context, _ *sql.Tx, _ *entities.ExtractionRequest) error {
+	return nil
+}
+
+func (m *stubExtractionRepo) IncrementBridgeAttempts(_ context.Context, _ uuid.UUID, _ int) error {
+	return nil
+}
+
+func (m *stubExtractionRepo) IncrementBridgeAttemptsWithTx(_ context.Context, _ *sql.Tx, _ uuid.UUID, _ int) error {
+	return nil
+}
+
 func (m *stubExtractionRepo) FindEligibleForBridge(_ context.Context, _ int) ([]*entities.ExtractionRequest, error) {
 	return nil, nil
 }

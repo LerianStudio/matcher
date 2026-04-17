@@ -57,6 +57,22 @@ func (m *mockExtractionRepoForQuery) LinkIfUnlinked(_ context.Context, _ uuid.UU
 	return nil
 }
 
+func (m *mockExtractionRepoForQuery) MarkBridgeFailed(_ context.Context, _ *entities.ExtractionRequest) error {
+	return nil
+}
+
+func (m *mockExtractionRepoForQuery) MarkBridgeFailedWithTx(_ context.Context, _ sharedPorts.Tx, _ *entities.ExtractionRequest) error {
+	return nil
+}
+
+func (m *mockExtractionRepoForQuery) IncrementBridgeAttempts(_ context.Context, _ uuid.UUID, _ int) error {
+	return nil
+}
+
+func (m *mockExtractionRepoForQuery) IncrementBridgeAttemptsWithTx(_ context.Context, _ sharedPorts.Tx, _ uuid.UUID, _ int) error {
+	return nil
+}
+
 func (m *mockExtractionRepoForQuery) FindEligibleForBridge(_ context.Context, _ int) ([]*entities.ExtractionRequest, error) {
 	return nil, nil
 }

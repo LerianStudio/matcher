@@ -104,3 +104,18 @@ func (mr *MockJobRepositoryMockRecorder) Update(ctx, job any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockJobRepository)(nil).Update), ctx, job)
 }
+
+// FindLatestByExtractionID mocks base method.
+func (m *MockJobRepository) FindLatestByExtractionID(ctx context.Context, extractionID uuid.UUID) (*entities.IngestionJob, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindLatestByExtractionID", ctx, extractionID)
+	ret0, _ := ret[0].(*entities.IngestionJob)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindLatestByExtractionID indicates an expected call of FindLatestByExtractionID.
+func (mr *MockJobRepositoryMockRecorder) FindLatestByExtractionID(ctx, extractionID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindLatestByExtractionID", reflect.TypeOf((*MockJobRepository)(nil).FindLatestByExtractionID), ctx, extractionID)
+}

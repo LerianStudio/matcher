@@ -22,9 +22,13 @@ import (
 // T-003 added 3 fetcher keys: max_extraction_bytes (BootstrapOnly),
 // bridge_interval_sec (WorkerReconcile), bridge_batch_size (WorkerReconcile).
 // T-004 added 1 fetcher key: bridge_stale_threshold_sec (LiveRead).
-const expectedTotalKeys = 139
+// T-005 added 1 fetcher key: bridge_retry_max_attempts (WorkerReconcile).
+// Polish Fix 2 deleted bridge_retry_initial_backoff_sec and
+// bridge_retry_max_backoff_sec along with the dead exponential-backoff
+// helpers (the worker enforces backoff passively via updated_at reordering).
+const expectedTotalKeys = 140
 
-const expectedConfigKeyCount = 125
+const expectedConfigKeyCount = 126
 
 const expectedSettingKeyCount = 14
 
@@ -35,7 +39,9 @@ const expectedBootstrapOnlyCount = 25
 const expectedLiveReadCount = 22
 
 // expectedWorkerReconcileCount is the count of keys with ApplyWorkerReconcile.
-const expectedWorkerReconcileCount = 15
+// Polish Fix 2 reduced this from 18 to 16 by deleting the two dead
+// bridge-retry-backoff knobs.
+const expectedWorkerReconcileCount = 16
 
 // expectedBundleRebuildCount is the count of keys with ApplyBundleRebuild.
 const expectedBundleRebuildCount = 70

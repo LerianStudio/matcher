@@ -100,6 +100,38 @@ func (repo *fakeExtractionRepo) LinkIfUnlinked(
 	return repo.linkErr
 }
 
+func (repo *fakeExtractionRepo) MarkBridgeFailed(
+	_ context.Context,
+	_ *discoveryEntities.ExtractionRequest,
+) error {
+	return nil
+}
+
+func (repo *fakeExtractionRepo) MarkBridgeFailedWithTx(
+	_ context.Context,
+	_ sharedPorts.Tx,
+	_ *discoveryEntities.ExtractionRequest,
+) error {
+	return nil
+}
+
+func (repo *fakeExtractionRepo) IncrementBridgeAttempts(
+	_ context.Context,
+	_ uuid.UUID,
+	_ int,
+) error {
+	return nil
+}
+
+func (repo *fakeExtractionRepo) IncrementBridgeAttemptsWithTx(
+	_ context.Context,
+	_ sharedPorts.Tx,
+	_ uuid.UUID,
+	_ int,
+) error {
+	return nil
+}
+
 func (repo *fakeExtractionRepo) FindEligibleForBridge(
 	_ context.Context,
 	_ int,

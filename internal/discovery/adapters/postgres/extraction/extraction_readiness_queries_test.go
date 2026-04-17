@@ -34,10 +34,12 @@ func TestCountBridgeReadiness_HappyPath(t *testing.T) {
 		`SELECT
 				COUNT(*) FILTER (WHERE status = $1 AND ingestion_job_id IS NOT NULL) AS ready_count,
 				COUNT(*) FILTER (WHERE status = $1 AND ingestion_job_id IS NULL
+					AND bridge_last_error IS NULL
 					AND EXTRACT(EPOCH FROM (NOW() - created_at)) <= $2) AS pending_count,
 				COUNT(*) FILTER (WHERE status = $1 AND ingestion_job_id IS NULL
+					AND bridge_last_error IS NULL
 					AND EXTRACT(EPOCH FROM (NOW() - created_at)) > $2) AS stale_count,
-				COUNT(*) FILTER (WHERE status IN ($3, $4)) AS failed_count,
+				COUNT(*) FILTER (WHERE status IN ($3, $4) OR bridge_last_error IS NOT NULL) AS failed_count,
 				COUNT(*) FILTER (WHERE status IN ($5, $6, $7)) AS in_flight_count
 			FROM extraction_requests`,
 	)).WithArgs(
@@ -147,7 +149,7 @@ func TestListBridgeCandidates_PendingState_NoCursor(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT `+allColumns+` FROM extraction_requests WHERE status = $1 AND ingestion_job_id IS NULL AND EXTRACT(EPOCH FROM (NOW() - created_at)) <= $2 ORDER BY created_at ASC, id ASC LIMIT $3`,
+		`SELECT `+allColumns+` FROM extraction_requests WHERE status = $1 AND ingestion_job_id IS NULL AND bridge_last_error IS NULL AND EXTRACT(EPOCH FROM (NOW() - created_at)) <= $2 ORDER BY created_at ASC, id ASC LIMIT $3`,
 	)).WithArgs(
 		string(vo.ExtractionStatusComplete),
 		float64(3600),
@@ -210,7 +212,7 @@ func TestListBridgeCandidates_StaleState(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT `+allColumns+` FROM extraction_requests WHERE status = $1 AND ingestion_job_id IS NULL AND EXTRACT(EPOCH FROM (NOW() - created_at)) > $2 ORDER BY created_at ASC, id ASC LIMIT $3`,
+		`SELECT `+allColumns+` FROM extraction_requests WHERE status = $1 AND ingestion_job_id IS NULL AND bridge_last_error IS NULL AND EXTRACT(EPOCH FROM (NOW() - created_at)) > $2 ORDER BY created_at ASC, id ASC LIMIT $3`,
 	)).WithArgs(
 		string(vo.ExtractionStatusComplete),
 		float64(60),
@@ -231,7 +233,7 @@ func TestListBridgeCandidates_FailedState(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT `+allColumns+` FROM extraction_requests WHERE status IN ($1, $2) ORDER BY created_at ASC, id ASC LIMIT $3`,
+		`SELECT `+allColumns+` FROM extraction_requests WHERE (status IN ($1, $2) OR bridge_last_error IS NOT NULL) ORDER BY created_at ASC, id ASC LIMIT $3`,
 	)).WithArgs(
 		string(vo.ExtractionStatusFailed),
 		string(vo.ExtractionStatusCancelled),

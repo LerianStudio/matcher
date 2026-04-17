@@ -80,3 +80,10 @@ func (m *mockJobRepository) Update(
 ) (*entities.IngestionJob, error) {
 	return nil, nil
 }
+
+func (m *mockJobRepository) FindLatestByExtractionID(
+	_ context.Context,
+	_ uuid.UUID,
+) (*entities.IngestionJob, error) {
+	return nil, nil
+}

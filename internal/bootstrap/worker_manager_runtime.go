@@ -70,9 +70,15 @@ type discoveryWorkerRuntimeConfig struct {
 // the scheduler / archival / cleanup / export comparable structs: only the
 // fields that gate a worker restart get included so reflect.DeepEqual
 // returns false ONLY when one of the runtime knobs actually moved.
+//
+// T-005 added the retry-attempts knob — it goes through worker reconcile
+// (restart) because the worker reads it once at construction. Polish Fix 2
+// removed the dead Initial/Max-Backoff knobs along with the inert
+// exponential-backoff helpers.
 type fetcherBridgeWorkerComparableConfig struct {
-	IntervalSec int
-	BatchSize   int
+	IntervalSec      int
+	BatchSize        int
+	RetryMaxAttempts int
 }
 
 // reconcileSlotLocked handles a single worker slot: starts, stops, or restarts
@@ -461,6 +467,9 @@ func applyFetcherBridgeRuntimeConfig(worker WorkerLifecycle, cfg *Config) error 
 	if err := bridgeWorker.UpdateRuntimeConfig(discoveryWorker.BridgeWorkerConfig{
 		Interval:  cfg.FetcherBridgeInterval(),
 		BatchSize: cfg.FetcherBridgeBatchSize(),
+		Retry: discoveryWorker.BridgeRetryBackoff{
+			MaxAttempts: cfg.FetcherBridgeRetryMaxAttempts(),
+		},
 	}); err != nil {
 		return fmt.Errorf("update fetcher bridge runtime config: %w", err)
 	}
@@ -531,8 +540,9 @@ func extractWorkerConfig(name string, cfg *Config) any {
 		return discoveryWorkerRuntimeConfig{Interval: cfg.FetcherDiscoveryInterval()}
 	case workerNameFetcherBridge:
 		return fetcherBridgeWorkerComparableConfig{
-			IntervalSec: cfg.Fetcher.BridgeIntervalSec,
-			BatchSize:   cfg.Fetcher.BridgeBatchSize,
+			IntervalSec:      cfg.Fetcher.BridgeIntervalSec,
+			BatchSize:        cfg.Fetcher.BridgeBatchSize,
+			RetryMaxAttempts: cfg.Fetcher.BridgeRetryMaxAttempts,
 		}
 	default:
 		return nil

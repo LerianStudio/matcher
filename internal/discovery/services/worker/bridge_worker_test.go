@@ -72,11 +72,26 @@ func (s *stubBridgeTenantLister) ListTenants(_ context.Context) ([]string, error
 // stubBridgeExtractionRepo provides FindEligibleForBridge hits. Other
 // methods are satisfied with zero values since the worker only invokes the
 // eligible-find path directly.
+// incrementCall records an IncrementBridgeAttempts call (Polish Fix 3).
+// transient-failure tests assert against this counter rather than the
+// pre-fix .updatedExtractions slice, because the worker no longer takes the
+// wide Update path for transient retries.
+type incrementCall struct {
+	ID       uuid.UUID
+	Attempts int
+}
+
 type stubBridgeExtractionRepo struct {
-	eligibleByTenant map[string][]*entities.ExtractionRequest
-	eligibleErr      error
-	mu               sync.Mutex
-	observedTenants  []string
+	eligibleByTenant   map[string][]*entities.ExtractionRequest
+	eligibleErr        error
+	mu                 sync.Mutex
+	observedTenants    []string
+	markedFailures     []entities.ExtractionRequest
+	markBridgeFailedFn func(req *entities.ExtractionRequest) error
+	updatedExtractions []entities.ExtractionRequest
+	updateFn           func(req *entities.ExtractionRequest) error
+	incrementCalls     []incrementCall
+	incrementFn        func(id uuid.UUID, attempts int) error
 }
 
 func (s *stubBridgeExtractionRepo) FindEligibleForBridge(
@@ -105,7 +120,18 @@ func (s *stubBridgeExtractionRepo) CreateWithTx(_ context.Context, _ sharedPorts
 	return nil
 }
 
-func (s *stubBridgeExtractionRepo) Update(_ context.Context, _ *entities.ExtractionRequest) error {
+func (s *stubBridgeExtractionRepo) Update(_ context.Context, req *entities.ExtractionRequest) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.updateFn != nil {
+		return s.updateFn(req)
+	}
+
+	if req != nil {
+		s.updatedExtractions = append(s.updatedExtractions, *req)
+	}
+
 	return nil
 }
 
@@ -127,6 +153,42 @@ func (s *stubBridgeExtractionRepo) FindByID(_ context.Context, _ uuid.UUID) (*en
 
 func (s *stubBridgeExtractionRepo) LinkIfUnlinked(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
 	return nil
+}
+
+func (s *stubBridgeExtractionRepo) MarkBridgeFailed(_ context.Context, req *entities.ExtractionRequest) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.markBridgeFailedFn != nil {
+		return s.markBridgeFailedFn(req)
+	}
+
+	if req != nil {
+		s.markedFailures = append(s.markedFailures, *req)
+	}
+
+	return nil
+}
+
+func (s *stubBridgeExtractionRepo) MarkBridgeFailedWithTx(_ context.Context, _ sharedPorts.Tx, req *entities.ExtractionRequest) error {
+	return s.MarkBridgeFailed(context.Background(), req)
+}
+
+func (s *stubBridgeExtractionRepo) IncrementBridgeAttempts(_ context.Context, id uuid.UUID, attempts int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.incrementFn != nil {
+		return s.incrementFn(id, attempts)
+	}
+
+	s.incrementCalls = append(s.incrementCalls, incrementCall{ID: id, Attempts: attempts})
+
+	return nil
+}
+
+func (s *stubBridgeExtractionRepo) IncrementBridgeAttemptsWithTx(_ context.Context, _ sharedPorts.Tx, id uuid.UUID, attempts int) error {
+	return s.IncrementBridgeAttempts(context.Background(), id, attempts)
 }
 
 func (s *stubBridgeExtractionRepo) CountBridgeReadiness(_ context.Context, _ time.Duration) (repositories.BridgeReadinessCounts, error) {

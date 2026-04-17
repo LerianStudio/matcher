@@ -26,9 +26,9 @@ var ErrInvalidBridgeReadinessState = errors.New("invalid bridge readiness state"
 //	any       → FAILED  (when extraction's own pipeline fails at discovery
 //	                     layer — status IN ('FAILED','CANCELLED'))
 //
-// T-005 will introduce explicit terminal-fail semantics for *bridge* failures
-// (currently absent); for now, FAILED here corresponds to the original
-// extraction failure, not a bridge-specific failure.
+// T-005 introduced explicit terminal-fail semantics for *bridge* failures
+// (extraction_requests.bridge_last_error); the FAILED bucket now covers BOTH
+// original-extraction failures and bridge-pipeline give-ups.
 //
 // @Description Observable bridge readiness state derived from extraction lifecycle
 // @Enum pending,ready,stale,failed,in_flight
@@ -70,27 +70,6 @@ func (b BridgeReadinessState) IsValid() bool {
 // String returns the lowercase string representation suitable for API output.
 func (b BridgeReadinessState) String() string {
 	return string(b)
-}
-
-// IsTerminal reports whether the readiness state represents a final outcome
-// from the bridge pipeline's perspective. READY and FAILED are terminal;
-// PENDING, STALE, and IN_FLIGHT are still in flight.
-//
-// Reserved for T-005's bridge-failure classifier; T-004 does not call this in
-// production code. Kept on the value object because the staging implementation
-// will need it without changing the type's exported surface.
-func (b BridgeReadinessState) IsTerminal() bool {
-	return b == BridgeReadinessReady || b == BridgeReadinessFailed
-}
-
-// IsActionable reports whether operators should investigate this state.
-// STALE and FAILED are actionable; PENDING, READY, and IN_FLIGHT are not.
-//
-// Reserved for T-005's alerting integration; T-004 does not call this in
-// production code. Kept on the value object so the alerting layer can rely on
-// the same predicate the dashboard documents.
-func (b BridgeReadinessState) IsActionable() bool {
-	return b == BridgeReadinessStale || b == BridgeReadinessFailed
 }
 
 // ParseBridgeReadinessState parses a string into a BridgeReadinessState.

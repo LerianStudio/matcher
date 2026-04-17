@@ -120,6 +120,38 @@ func (m *mockExtractionRepository) LinkIfUnlinked(
 	return nil
 }
 
+func (m *mockExtractionRepository) MarkBridgeFailed(
+	_ context.Context,
+	_ *entities.ExtractionRequest,
+) error {
+	return nil
+}
+
+func (m *mockExtractionRepository) MarkBridgeFailedWithTx(
+	_ context.Context,
+	_ *sql.Tx,
+	_ *entities.ExtractionRequest,
+) error {
+	return nil
+}
+
+func (m *mockExtractionRepository) IncrementBridgeAttempts(
+	_ context.Context,
+	_ uuid.UUID,
+	_ int,
+) error {
+	return nil
+}
+
+func (m *mockExtractionRepository) IncrementBridgeAttemptsWithTx(
+	_ context.Context,
+	_ *sql.Tx,
+	_ uuid.UUID,
+	_ int,
+) error {
+	return nil
+}
+
 func (m *mockExtractionRepository) FindEligibleForBridge(
 	_ context.Context,
 	_ int,

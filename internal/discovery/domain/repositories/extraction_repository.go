@@ -35,6 +35,35 @@ type ExtractionRepository interface {
 	UpdateWithTx(ctx context.Context, tx sharedPorts.Tx, req *entities.ExtractionRequest) error
 	// FindByID retrieves an ExtractionRequest by its internal ID.
 	FindByID(ctx context.Context, id uuid.UUID) (*entities.ExtractionRequest, error)
+	// MarkBridgeFailed persists a terminal bridge failure on the extraction
+	// row identified by req.ID. Updates bridge_attempts, bridge_last_error,
+	// bridge_last_error_message, bridge_failed_at, and updated_at — leaves
+	// the discovery-side status untouched. Implementations MUST be
+	// idempotent on (id, bridge_last_error): calling twice with the same
+	// class persists the latest message+timestamp without churning the row
+	// out of its current eligibility state. Once persisted, the row is
+	// excluded from FindEligibleForBridge by virtue of bridge_last_error
+	// being non-NULL.
+	MarkBridgeFailed(ctx context.Context, req *entities.ExtractionRequest) error
+	// MarkBridgeFailedWithTx is the WithTx variant of MarkBridgeFailed,
+	// for callers that need to coordinate the failure write with other
+	// state updates inside one transaction.
+	MarkBridgeFailedWithTx(ctx context.Context, tx sharedPorts.Tx, req *entities.ExtractionRequest) error
+	// IncrementBridgeAttempts narrowly persists the bumped attempts counter
+	// + updated_at on the extraction row identified by id, gated by the
+	// `ingestion_job_id IS NULL` predicate (Polish Fix 3).
+	//
+	// Implementations MUST use a SQL UPDATE that touches ONLY bridge_attempts
+	// and updated_at — never the wide column list — so a concurrent link
+	// write is never clobbered by a transient-retry attempt under a
+	// lock-TTL-expiry edge case. Returns sharedPorts.ErrExtractionAlreadyLinked
+	// when the WHERE clause filters the row out (already linked); returns
+	// nil on the happy path.
+	IncrementBridgeAttempts(ctx context.Context, id uuid.UUID, attempts int) error
+	// IncrementBridgeAttemptsWithTx is the WithTx variant for callers that
+	// need to coordinate the increment with other writes inside a single
+	// transaction.
+	IncrementBridgeAttemptsWithTx(ctx context.Context, tx sharedPorts.Tx, id uuid.UUID, attempts int) error
 	// LinkIfUnlinked atomically sets ingestion_job_id on the extraction row
 	// identified by id, but only when the existing ingestion_job_id is NULL.
 	// Returns sharedPorts.ErrExtractionAlreadyLinked when the row is already

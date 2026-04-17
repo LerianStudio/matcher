@@ -172,7 +172,11 @@ func TestExtractWorkerConfig_AllNames(t *testing.T) {
 		{"archival", false, archivalWorkerComparableConfig{IntervalHours: cfg.Archival.IntervalHours, HotRetentionDays: cfg.Archival.HotRetentionDays, WarmRetentionMonths: cfg.Archival.WarmRetentionMonths, ColdRetentionMonths: cfg.Archival.ColdRetentionMonths, BatchSize: cfg.Archival.BatchSize, StorageBucket: cfg.Archival.StorageBucket, StoragePrefix: cfg.Archival.StoragePrefix, StorageClass: cfg.Archival.StorageClass, PartitionLookahead: cfg.Archival.PartitionLookahead, StorageEndpoint: cfg.ObjectStorage.Endpoint, StorageRegion: cfg.ObjectStorage.Region, StorageAccessKeyID: cfg.ObjectStorage.AccessKeyID, StorageSecretKey: cfg.ObjectStorage.SecretAccessKey, StorageUsePathStyle: cfg.ObjectStorage.UsePathStyle}},
 		{"scheduler", false, schedulerWorkerComparableConfig{IntervalSec: cfg.Scheduler.IntervalSec}},
 		{"discovery", false, discoveryWorkerRuntimeConfig{Interval: cfg.FetcherDiscoveryInterval()}},
-		{"fetcher_bridge", false, fetcherBridgeWorkerComparableConfig{IntervalSec: cfg.Fetcher.BridgeIntervalSec, BatchSize: cfg.Fetcher.BridgeBatchSize}},
+		{"fetcher_bridge", false, fetcherBridgeWorkerComparableConfig{
+			IntervalSec:      cfg.Fetcher.BridgeIntervalSec,
+			BatchSize:        cfg.Fetcher.BridgeBatchSize,
+			RetryMaxAttempts: cfg.Fetcher.BridgeRetryMaxAttempts,
+		}},
 		{"unknown", true, nil},
 	}
 

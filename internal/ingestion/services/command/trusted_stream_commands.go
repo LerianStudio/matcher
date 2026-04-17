@@ -15,6 +15,8 @@ import (
 
 	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+
+	"github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
 )
 
 // defaultTrustedStreamFileName is used as the synthetic filename recorded on
@@ -26,6 +28,12 @@ const defaultTrustedStreamFileName = "fetcher-stream"
 // trustedStreamFileNameKey is the canonical SourceMetadata key that a bridge
 // can use to override the synthetic filename persisted on the IngestionJob.
 const trustedStreamFileNameKey = "filename"
+
+// trustedStreamExtractionIDKey is the canonical SourceMetadata key carrying
+// the originating Fetcher extraction id (T-005 P1). When present, the intake
+// short-circuits on retry — see IngestFromTrustedStream for the lookup-then-
+// reuse path.
+const trustedStreamExtractionIDKey = "extraction_id"
 
 // Sentinel errors for IngestFromTrustedStream input validation. These are
 // returned unwrapped so callers can use errors.Is to distinguish caller-side
@@ -113,6 +121,22 @@ func (uc *UseCase) IngestFromTrustedStream(
 		return nil, err
 	}
 
+	// T-005 P1 short-circuit: when the bridge stamps an extraction_id in
+	// SourceMetadata, look up any prior IngestionJob for the same id. If
+	// found, return its identity instead of creating a phantom empty job.
+	// This keeps the extraction→ingestion link 1:1 when the bridge retries
+	// after a transient link-write failure (the original orphan-job bug).
+	if existing, err := uc.findExistingTrustedStreamJob(ctx, input.SourceMetadata); err != nil {
+		libOpentelemetry.HandleSpanError(span, "trusted stream short-circuit lookup failed", err)
+
+		return nil, err
+	} else if existing != nil {
+		return &IngestFromTrustedStreamOutput{
+			IngestionJobID:   existing.ID,
+			TransactionCount: existing.Metadata.TotalRows,
+		}, nil
+	}
+
 	fileName := resolveTrustedStreamFileName(input.SourceMetadata)
 
 	job, txCount, err := uc.runTrustedStreamPipeline(ctx, span, input, fileName)
@@ -126,6 +150,58 @@ func (uc *UseCase) IngestFromTrustedStream(
 		IngestionJobID:   job.ID,
 		TransactionCount: txCount,
 	}, nil
+}
+
+// findExistingTrustedStreamJob looks up a prior IngestionJob for the given
+// extraction_id (when present in SourceMetadata). Returns (nil, nil) when
+// the extraction_id is missing, malformed, or no prior job exists — the
+// caller treats either case as "proceed with normal ingest".
+//
+// Per T-005 P1: this is the orphan-job prevention path. Without it, a
+// transient link-write failure causes Tick 2 to create a second
+// IngestionJob (empty, because dedup ate all rows in Tick 1) and link the
+// extraction to the empty job. Looking up by extraction_id ensures Tick 2
+// re-uses Tick 1's job.
+func (uc *UseCase) findExistingTrustedStreamJob(
+	ctx context.Context,
+	metadata map[string]string,
+) (*entities.IngestionJob, error) {
+	if uc == nil || uc.jobRepo == nil {
+		return nil, nil
+	}
+
+	if len(metadata) == 0 {
+		return nil, nil
+	}
+
+	raw, ok := metadata[trustedStreamExtractionIDKey]
+	if !ok {
+		return nil, nil
+	}
+
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil, nil
+	}
+
+	extractionID, parseErr := uuid.Parse(trimmed)
+	if parseErr != nil {
+		// Malformed extraction_id is a wiring bug at the bridge side, but
+		// we return nil to allow ingest to proceed. The bridge's
+		// classifier will pick up the resulting non-idempotent linkage
+		// failure on retry. Intentionally swallow the parse error to keep
+		// the short-circuit fail-open: a malformed metadata key must not
+		// block legitimate ingestion of the trusted-stream content.
+		//nolint:nilerr // intentional: malformed metadata is non-fatal
+		return nil, nil
+	}
+
+	job, err := uc.jobRepo.FindLatestByExtractionID(ctx, extractionID)
+	if err != nil {
+		return nil, fmt.Errorf("trusted stream short-circuit lookup: %w", err)
+	}
+
+	return job, nil
 }
 
 // validateTrustedStreamInput enforces the domain invariants of a trusted
@@ -153,6 +229,62 @@ func validateTrustedStreamInput(uc *UseCase, input IngestFromTrustedStreamInput)
 	}
 
 	return nil
+}
+
+// canonicalExtractionIDFromMetadata extracts and canonicalizes the extraction
+// id from SourceMetadata for the trusted-stream pipeline. Returns the empty
+// string when the key is missing, blank, or unparseable — those are the
+// cases where no stamp should land on the IngestionJob's metadata. Polish
+// Fix 4 + 7: this is the single source of truth so canonicalization stays
+// consistent between the pipeline-stamp path and the short-circuit lookup.
+func canonicalExtractionIDFromMetadata(metadata map[string]string) string {
+	if len(metadata) == 0 {
+		return ""
+	}
+
+	raw, ok := metadata[trustedStreamExtractionIDKey]
+	if !ok {
+		return ""
+	}
+
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+
+	parsed, err := uuid.Parse(trimmed)
+	if err != nil {
+		return ""
+	}
+
+	return parsed.String()
+}
+
+// stampExtractionIDOnJob applies a pre-validated extraction id directly to
+// the job entity. Used by createAndStartJob (Polish Fix 4) so the stamp lands
+// atomically inside the initial INSERT rather than via a follow-up Update.
+//
+// The input string is expected to be either the canonical lowercase UUID
+// form OR an unparseable value (in which case we silently skip — the caller
+// is the trusted-stream pipeline which has already filtered upstream). We
+// re-parse defensively so direct (non-trusted-stream) callers cannot bypass
+// the canonical-form invariant.
+func stampExtractionIDOnJob(job *entities.IngestionJob, extractionID string) {
+	if job == nil {
+		return
+	}
+
+	trimmed := strings.TrimSpace(extractionID)
+	if trimmed == "" {
+		return
+	}
+
+	parsed, err := uuid.Parse(trimmed)
+	if err != nil {
+		return
+	}
+
+	job.Metadata.ExtractionID = parsed.String()
 }
 
 // resolveTrustedStreamFileName picks a filename for the synthetic ingestion

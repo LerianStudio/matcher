@@ -222,6 +222,22 @@ func (r *mockExtractionRepo) LinkIfUnlinked(_ context.Context, _ uuid.UUID, _ uu
 	return nil
 }
 
+func (r *mockExtractionRepo) MarkBridgeFailed(_ context.Context, _ *entities.ExtractionRequest) error {
+	return nil
+}
+
+func (r *mockExtractionRepo) MarkBridgeFailedWithTx(_ context.Context, _ *sql.Tx, _ *entities.ExtractionRequest) error {
+	return nil
+}
+
+func (r *mockExtractionRepo) IncrementBridgeAttempts(_ context.Context, _ uuid.UUID, _ int) error {
+	return nil
+}
+
+func (r *mockExtractionRepo) IncrementBridgeAttemptsWithTx(_ context.Context, _ *sql.Tx, _ uuid.UUID, _ int) error {
+	return nil
+}
+
 func (r *mockExtractionRepo) FindEligibleForBridge(_ context.Context, _ int) ([]*entities.ExtractionRequest, error) {
 	return nil, nil
 }

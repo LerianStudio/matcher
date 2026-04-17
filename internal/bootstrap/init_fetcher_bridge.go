@@ -502,6 +502,9 @@ func initFetcherBridgeWorker(
 		discoveryWorker.BridgeWorkerConfig{
 			Interval:  cfg.FetcherBridgeInterval(),
 			BatchSize: cfg.FetcherBridgeBatchSize(),
+			Retry: discoveryWorker.BridgeRetryBackoff{
+				MaxAttempts: cfg.FetcherBridgeRetryMaxAttempts(),
+			},
 		},
 		logger,
 	)

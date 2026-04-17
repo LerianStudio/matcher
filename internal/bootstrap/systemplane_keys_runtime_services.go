@@ -345,6 +345,30 @@ func matcherKeyDefsFetcherRuntime() []domain.KeyDef {
 			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,
 		},
+		{
+			// T-005 retry policy: max attempts before terminal escalation.
+			// ApplyWorkerReconcile because the bridge worker reads it on
+			// startup and the reconciler restarts the worker on change.
+			//
+			// Polish Fix 2: the sibling `bridge_retry_initial_backoff_sec`
+			// and `bridge_retry_max_backoff_sec` keys were deleted along
+			// with the dead exponential-backoff helpers. The worker enforces
+			// backoff passively via FindEligibleForBridge ordering by
+			// updated_at; the tick cadence (bridge_interval_sec) IS the
+			// retry cadence.
+			Key:              "fetcher.bridge_retry_max_attempts",
+			Kind:             domain.KindConfig,
+			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+			DefaultValue:     5,
+			ValueType:        domain.ValueTypeInt,
+			Validator:        validateBridgeRetryMaxAttempts,
+			ApplyBehavior:    domain.ApplyWorkerReconcile,
+			MutableAtRuntime: true,
+			Description:      "Bridge worker retry max attempts before terminal escalation (bounds [1, 100])",
+			Group:            "fetcher",
+			Component:        domain.ComponentNone,
+			RedactPolicy:     domain.RedactNone,
+		},
 	}
 }
 

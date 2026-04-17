@@ -219,8 +219,10 @@ func TestMatcherKeyDefsFetcherRuntime_KeyProperties(t *testing.T) {
 	// 5 original runtime integer knobs + 1 bootstrap-only secret (app_enc_key)
 	// + 1 bootstrap-only DoS guard (max_extraction_bytes, T-003 P2-T001)
 	// + 2 runtime bridge knobs (bridge_interval_sec, bridge_batch_size, T-003)
-	// + 1 read-model knob (bridge_stale_threshold_sec, T-004).
-	require.Len(t, defs, 10)
+	// + 1 read-model knob (bridge_stale_threshold_sec, T-004)
+	// + 1 runtime retry knob (bridge_retry_max_attempts, T-005). Polish
+	// Fix 2 deleted the two dead Initial/Max-Backoff knobs.
+	require.Len(t, defs, 11)
 
 	expectedKeys := []string{
 		"fetcher.request_timeout_sec",

@@ -116,6 +116,22 @@ func (r *bridgeFakeExtractionRepo) LinkIfUnlinked(
 	return r.linkErr
 }
 
+func (r *bridgeFakeExtractionRepo) MarkBridgeFailed(_ context.Context, _ *entities.ExtractionRequest) error {
+	return nil
+}
+
+func (r *bridgeFakeExtractionRepo) MarkBridgeFailedWithTx(_ context.Context, _ sharedPorts.Tx, _ *entities.ExtractionRequest) error {
+	return nil
+}
+
+func (r *bridgeFakeExtractionRepo) IncrementBridgeAttempts(_ context.Context, _ uuid.UUID, _ int) error {
+	return nil
+}
+
+func (r *bridgeFakeExtractionRepo) IncrementBridgeAttemptsWithTx(_ context.Context, _ sharedPorts.Tx, _ uuid.UUID, _ int) error {
+	return nil
+}
+
 // Other methods are unused by the orchestrator directly.
 func (r *bridgeFakeExtractionRepo) Create(_ context.Context, _ *entities.ExtractionRequest) error {
 	return nil

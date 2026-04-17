@@ -142,6 +142,15 @@ const (
 	// forget" misuse.
 	minBridgeStaleThresholdSec int64 = 60
 	maxBridgeStaleThresholdSec int64 = 86400
+	// T-005 bridge retry bound. Floor keeps the worker meaningful under
+	// misconfiguration; ceiling prevents operators from disabling the
+	// terminal-escalation path with absurd values.
+	//
+	// Polish Fix 2: the InitialBackoff/MaxBackoff bounds were deleted along
+	// with the dead exponential-backoff helpers (the worker enforces backoff
+	// passively via updated_at reordering, not via in-process timers).
+	minBridgeRetryMaxAttempts int64 = 1
+	maxBridgeRetryMaxAttempts int64 = 100
 )
 
 // validateBoundedRangeInt rejects values outside [minValue, maxValue].
@@ -198,6 +207,15 @@ func validateBridgeStaleThresholdSec(value any) error {
 		minBridgeStaleThresholdSec,
 		maxBridgeStaleThresholdSec,
 		"fetcher bridge stale threshold seconds",
+	)
+}
+
+func validateBridgeRetryMaxAttempts(value any) error {
+	return validateBoundedRangeInt(
+		value,
+		minBridgeRetryMaxAttempts,
+		maxBridgeRetryMaxAttempts,
+		"fetcher bridge retry max attempts",
 	)
 }
 
