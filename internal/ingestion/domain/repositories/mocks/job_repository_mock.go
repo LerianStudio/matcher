@@ -90,21 +90,6 @@ func (mr *MockJobRepositoryMockRecorder) FindByID(ctx, id any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindByID", reflect.TypeOf((*MockJobRepository)(nil).FindByID), ctx, id)
 }
 
-// Update mocks base method.
-func (m *MockJobRepository) Update(ctx context.Context, job *entities.IngestionJob) (*entities.IngestionJob, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Update", ctx, job)
-	ret0, _ := ret[0].(*entities.IngestionJob)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Update indicates an expected call of Update.
-func (mr *MockJobRepositoryMockRecorder) Update(ctx, job any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockJobRepository)(nil).Update), ctx, job)
-}
-
 // FindLatestByExtractionID mocks base method.
 func (m *MockJobRepository) FindLatestByExtractionID(ctx context.Context, extractionID uuid.UUID) (*entities.IngestionJob, error) {
 	m.ctrl.T.Helper()
@@ -118,4 +103,19 @@ func (m *MockJobRepository) FindLatestByExtractionID(ctx context.Context, extrac
 func (mr *MockJobRepositoryMockRecorder) FindLatestByExtractionID(ctx, extractionID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindLatestByExtractionID", reflect.TypeOf((*MockJobRepository)(nil).FindLatestByExtractionID), ctx, extractionID)
+}
+
+// Update mocks base method.
+func (m *MockJobRepository) Update(ctx context.Context, job *entities.IngestionJob) (*entities.IngestionJob, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Update", ctx, job)
+	ret0, _ := ret[0].(*entities.IngestionJob)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Update indicates an expected call of Update.
+func (mr *MockJobRepositoryMockRecorder) Update(ctx, job any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockJobRepository)(nil).Update), ctx, job)
 }
