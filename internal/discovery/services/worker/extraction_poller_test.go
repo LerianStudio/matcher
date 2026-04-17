@@ -140,6 +140,31 @@ func (m *stubExtractionRepo) ListBridgeCandidates(
 	return nil, nil
 }
 
+func (m *stubExtractionRepo) FindBridgeRetentionCandidates(
+	_ context.Context,
+	_ time.Duration,
+	_ int,
+) ([]*entities.ExtractionRequest, error) {
+	return nil, nil
+}
+
+func (m *stubExtractionRepo) MarkCustodyDeleted(
+	_ context.Context,
+	_ uuid.UUID,
+	_ time.Time,
+) error {
+	return nil
+}
+
+func (m *stubExtractionRepo) MarkCustodyDeletedWithTx(
+	_ context.Context,
+	_ sharedPorts.Tx,
+	_ uuid.UUID,
+	_ time.Time,
+) error {
+	return nil
+}
+
 // --- NewExtractionPoller tests ---
 
 func TestNewExtractionPoller_NilFetcherClient(t *testing.T) {

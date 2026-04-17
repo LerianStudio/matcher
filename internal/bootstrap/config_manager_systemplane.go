@@ -166,6 +166,8 @@ func configFromSnapshot(snap domain.Snapshot) *Config {
 	cfg.Fetcher.BridgeBatchSize = snapInt(snap, "fetcher.bridge_batch_size", 50)
 	cfg.Fetcher.BridgeStaleThresholdSec = snapInt(snap, "fetcher.bridge_stale_threshold_sec", 3600)
 	cfg.Fetcher.BridgeRetryMaxAttempts = snapInt(snap, "fetcher.bridge_retry_max_attempts", 5)
+	cfg.Fetcher.CustodyRetentionSweepIntervalSec = snapInt(snap, "fetcher.custody_retention_sweep_interval_sec", 900)
+	cfg.Fetcher.CustodyRetentionGracePeriodSec = snapInt(snap, "fetcher.custody_retention_grace_period_sec", 3600)
 
 	// M2M.
 	cfg.M2M.M2MTargetService = snapString(snap, "m2m.m2m_target_service", defaultM2MTargetService)

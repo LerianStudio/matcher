@@ -13,6 +13,7 @@ func matcherKeyDefsInfrastructure() []domain.KeyDef {
 		matcherKeyDefsCallbackRateLimit(),
 		matcherKeyDefsFetcherCore(),
 		matcherKeyDefsFetcherRuntime(),
+		matcherKeyDefsFetcherCustodyRetention(),
 		matcherKeyDefsM2M(),
 	)
 }
@@ -365,6 +366,50 @@ func matcherKeyDefsFetcherRuntime() []domain.KeyDef {
 			ApplyBehavior:    domain.ApplyWorkerReconcile,
 			MutableAtRuntime: true,
 			Description:      "Bridge worker retry max attempts before terminal escalation (bounds [1, 100])",
+			Group:            "fetcher",
+			Component:        domain.ComponentNone,
+			RedactPolicy:     domain.RedactNone,
+		},
+	}
+}
+
+// matcherKeyDefsFetcherCustodyRetention holds the T-006 custody retention
+// sweep worker knobs. Split from matcherKeyDefsFetcherRuntime to keep the
+// fetcher runtime defs under the funlen ceiling; functionally equivalent
+// (matcherKeyDefsInfrastructure concatenates both).
+func matcherKeyDefsFetcherCustodyRetention() []domain.KeyDef {
+	return []domain.KeyDef{
+		{
+			// T-006 custody retention sweep cadence. ApplyWorkerReconcile
+			// because the worker reads the interval at construction and
+			// the reconciler restarts the worker on change.
+			Key:              "fetcher.custody_retention_sweep_interval_sec",
+			Kind:             domain.KindConfig,
+			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+			DefaultValue:     defaultCustodyRetentionSweepIntervalSec,
+			ValueType:        domain.ValueTypeInt,
+			Validator:        validateCustodyRetentionSweepIntervalSec,
+			ApplyBehavior:    domain.ApplyWorkerReconcile,
+			MutableAtRuntime: true,
+			Description:      "Custody retention sweep worker tick interval in seconds (bounds [60, 86400])",
+			Group:            "fetcher",
+			Component:        domain.ComponentNone,
+			RedactPolicy:     domain.RedactNone,
+		},
+		{
+			// T-006 grace period for LATE-LINKED retention candidates.
+			// ApplyWorkerReconcile because the worker reads the grace
+			// period at construction and the reconciler restarts the
+			// worker on change.
+			Key:              "fetcher.custody_retention_grace_period_sec",
+			Kind:             domain.KindConfig,
+			AllowedScopes:    []domain.Scope{domain.ScopeGlobal},
+			DefaultValue:     defaultCustodyRetentionGracePeriodSec,
+			ValueType:        domain.ValueTypeInt,
+			Validator:        validateCustodyRetentionGracePeriodSec,
+			ApplyBehavior:    domain.ApplyWorkerReconcile,
+			MutableAtRuntime: true,
+			Description:      "Custody retention grace period in seconds for LATE-LINKED candidates (bounds [0, 604800])",
 			Group:            "fetcher",
 			Component:        domain.ComponentNone,
 			RedactPolicy:     domain.RedactNone,

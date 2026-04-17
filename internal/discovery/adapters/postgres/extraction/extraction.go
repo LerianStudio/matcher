@@ -41,6 +41,10 @@ type ExtractionModel struct {
 	BridgeLastError        sql.NullString `db:"bridge_last_error"`         // Nullable
 	BridgeLastErrorMessage sql.NullString `db:"bridge_last_error_message"` // Nullable
 	BridgeFailedAt         sql.NullTime   `db:"bridge_failed_at"`          // Nullable
+	// CustodyDeletedAt records when the custody object was deleted (either by
+	// the orchestrator's happy-path hook or the retention worker's sweep).
+	// Nullable: NULL means the custody object may still exist.
+	CustodyDeletedAt sql.NullTime `db:"custody_deleted_at"` // Nullable
 }
 
 // ToDomain converts the PostgreSQL model to a domain entity.
@@ -89,6 +93,12 @@ func (model *ExtractionModel) ToDomain() (*entities.ExtractionRequest, error) {
 		bridgeFailedAt = model.BridgeFailedAt.Time
 	}
 
+	var custodyDeletedAt *time.Time
+	if model.CustodyDeletedAt.Valid {
+		t := model.CustodyDeletedAt.Time
+		custodyDeletedAt = &t
+	}
+
 	return &entities.ExtractionRequest{
 		ID:                     model.ID,
 		ConnectionID:           model.ConnectionID,
@@ -107,6 +117,7 @@ func (model *ExtractionModel) ToDomain() (*entities.ExtractionRequest, error) {
 		BridgeLastError:        bridgeLastError,
 		BridgeLastErrorMessage: nullStringToString(model.BridgeLastErrorMessage),
 		BridgeFailedAt:         bridgeFailedAt,
+		CustodyDeletedAt:       custodyDeletedAt,
 	}, nil
 }
 
@@ -142,6 +153,11 @@ func FromDomain(entity *entities.ExtractionRequest) (*ExtractionModel, error) {
 		bridgeFailedAt = sql.NullTime{Time: entity.BridgeFailedAt, Valid: true}
 	}
 
+	var custodyDeletedAt sql.NullTime
+	if entity.CustodyDeletedAt != nil && !entity.CustodyDeletedAt.IsZero() {
+		custodyDeletedAt = sql.NullTime{Time: *entity.CustodyDeletedAt, Valid: true}
+	}
+
 	return &ExtractionModel{
 		ID:                     entity.ID,
 		ConnectionID:           entity.ConnectionID,
@@ -160,6 +176,7 @@ func FromDomain(entity *entities.ExtractionRequest) (*ExtractionModel, error) {
 		BridgeLastError:        bridgeLastError,
 		BridgeLastErrorMessage: pgcommon.StringToNullString(entity.BridgeLastErrorMessage),
 		BridgeFailedAt:         bridgeFailedAt,
+		CustodyDeletedAt:       custodyDeletedAt,
 	}, nil
 }
 

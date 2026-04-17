@@ -105,6 +105,47 @@ type ExtractionRepository interface {
 		idAfter uuid.UUID,
 		limit int,
 	) ([]*entities.ExtractionRequest, error)
+	// MarkCustodyDeleted persists the terminal "custody object is gone" marker
+	// on the extraction row identified by id (T-006 polish, migration 000027).
+	// Narrow UPDATE touches ONLY custody_deleted_at — the discovery status,
+	// bridge_* columns, ingestion link, and updated_at are all left alone so
+	// this write is race-safe against every other path that may touch the
+	// same row.
+	//
+	// Used by both the bridge orchestrator's happy-path cleanupCustody hook
+	// and the custody retention worker's sweep. Once persisted, the row drops
+	// out of FindBridgeRetentionCandidates (which gates on custody_deleted_at
+	// IS NULL) so the sweep converges to idle instead of re-scanning cleaned
+	// rows forever. Returns ErrExtractionNotFound when no row matches the id.
+	MarkCustodyDeleted(ctx context.Context, id uuid.UUID, deletedAt time.Time) error
+	// MarkCustodyDeletedWithTx is the WithTx variant of MarkCustodyDeleted
+	// (repositorytx linter requirement).
+	MarkCustodyDeletedWithTx(ctx context.Context, tx sharedPorts.Tx, id uuid.UUID, deletedAt time.Time) error
+	// FindBridgeRetentionCandidates returns extraction rows whose custody
+	// object MAY still be sitting in object storage despite the extraction
+	// no longer needing it (T-006 retention sweep).
+	//
+	// Two populations are returned:
+	//
+	//  1. TERMINAL: rows with bridge_last_error IS NOT NULL — these never
+	//     went through the happy-path cleanupCustody hook in
+	//     BridgeExtractionOrchestrator, so their custody object is
+	//     guaranteed orphaned.
+	//
+	//  2. LATE-LINKED: rows with ingestion_job_id IS NOT NULL whose
+	//     updated_at is older than gracePeriod — these SHOULD have had
+	//     custody deleted by the orchestrator's happy-path hook, but if
+	//     that delete failed (network blip, S3 outage), the custody object
+	//     leaks. The grace period prevents the sweep from racing the
+	//     orchestrator on freshly-linked rows.
+	//
+	// Results are ordered by updated_at ASC so older orphans get processed
+	// first (drain-the-backlog fairness). limit is clamped by the caller.
+	FindBridgeRetentionCandidates(
+		ctx context.Context,
+		gracePeriod time.Duration,
+		limit int,
+	) ([]*entities.ExtractionRequest, error)
 }
 
 // BridgeReadinessCounts captures the five-way partition of extractions for a

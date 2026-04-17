@@ -96,6 +96,13 @@ type bridgeFakeExtractionRepo struct {
 	linkErr     error
 	linkCalls   int
 	linkedJobID uuid.UUID
+	// custodyDeletedCalls records MarkCustodyDeleted invocations so
+	// orchestrator tests can assert the happy-path cleanup is persisted
+	// (Polish Fix 1, T-006).
+	custodyDeletedCalls   int
+	lastCustodyDeletedID  uuid.UUID
+	lastCustodyDeletedAt  time.Time
+	markCustodyDeletedErr error
 }
 
 func (r *bridgeFakeExtractionRepo) FindByID(
@@ -171,6 +178,35 @@ func (r *bridgeFakeExtractionRepo) ListBridgeCandidates(
 	_ time.Duration,
 	_ time.Time,
 	_ uuid.UUID,
+	_ int,
+) ([]*entities.ExtractionRequest, error) {
+	return nil, nil
+}
+
+func (r *bridgeFakeExtractionRepo) MarkCustodyDeleted(
+	_ context.Context,
+	id uuid.UUID,
+	deletedAt time.Time,
+) error {
+	r.custodyDeletedCalls++
+	r.lastCustodyDeletedID = id
+	r.lastCustodyDeletedAt = deletedAt
+
+	return r.markCustodyDeletedErr
+}
+
+func (r *bridgeFakeExtractionRepo) MarkCustodyDeletedWithTx(
+	_ context.Context,
+	_ sharedPorts.Tx,
+	id uuid.UUID,
+	deletedAt time.Time,
+) error {
+	return r.MarkCustodyDeleted(context.Background(), id, deletedAt)
+}
+
+func (r *bridgeFakeExtractionRepo) FindBridgeRetentionCandidates(
+	_ context.Context,
+	_ time.Duration,
 	_ int,
 ) ([]*entities.ExtractionRequest, error) {
 	return nil, nil
@@ -371,7 +407,7 @@ func TestBridgeExtraction_HappyPath_LinksAndDeletesCustody(t *testing.T) {
 
 	extraction := completeExtractionForBridge(extractionID, connID)
 
-	orch, _, cust, intake, lw, resolver := stageOrchestrator(t, extraction, ingestionID)
+	orch, repo, cust, intake, lw, resolver := stageOrchestrator(t, extraction, ingestionID)
 
 	outcome, err := orch.BridgeExtraction(context.Background(), sharedPorts.BridgeExtractionInput{
 		ExtractionID: extractionID,
@@ -391,6 +427,16 @@ func TestBridgeExtraction_HappyPath_LinksAndDeletesCustody(t *testing.T) {
 	assert.Equal(t, extractionID, lw.calls[0].extractionID)
 	assert.Equal(t, 1, cust.openCalls)
 	assert.Equal(t, 1, cust.deleteCalls)
+
+	// Polish Fix 1 (T-006): the happy-path cleanupCustody hook MUST persist
+	// the convergence marker so the retention sweep stops re-examining
+	// this row.
+	assert.Equal(t, 1, repo.custodyDeletedCalls,
+		"happy-path must call MarkCustodyDeleted exactly once")
+	assert.Equal(t, extractionID, repo.lastCustodyDeletedID,
+		"marker must target the bridged extraction's ID")
+	assert.False(t, repo.lastCustodyDeletedAt.IsZero(),
+		"marker timestamp must be a real value, not zero-time")
 }
 
 func TestBridgeExtraction_MissingExtractionID_ReturnsSentinel(t *testing.T) {

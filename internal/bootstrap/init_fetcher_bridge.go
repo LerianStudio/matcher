@@ -519,6 +519,81 @@ func initFetcherBridgeWorker(
 	return worker, nil
 }
 
+// initCustodyRetentionWorker constructs the T-006 custody retention sweep
+// worker when all preconditions are satisfied. Returns (nil, nil) when the
+// sweep should not run (Fetcher disabled, bridge bundle incomplete). The
+// soft-disabled branch logs a warning so operators can see why the sweep
+// is idle.
+//
+// The retention worker is non-critical: failure to start does NOT abort
+// matcher boot because retention is a background housekeeping task, not
+// a serving-path dependency. Orphan custody objects accumulate slowly and
+// are bounded by happy-path bridge throughput.
+func initCustodyRetentionWorker(
+	ctx context.Context,
+	cfg *Config,
+	extractionRepo *discoveryExtractionRepo.Repository,
+	tenantLister sharedPorts.TenantLister,
+	provider sharedPorts.InfrastructureProvider,
+	bundle *FetcherBridgeAdapters,
+	logger libLog.Logger,
+) (*discoveryWorker.CustodyRetentionWorker, error) {
+	if cfg == nil || !cfg.Fetcher.Enabled {
+		return nil, nil
+	}
+
+	if bundle == nil || bundle.ArtifactCustody == nil {
+		logger.Log(ctx, libLog.LevelWarn,
+			"custody retention worker not wired: artifact custody store unavailable")
+
+		return nil, nil
+	}
+
+	if extractionRepo == nil {
+		logger.Log(ctx, libLog.LevelWarn,
+			"custody retention worker not wired: extraction repository unavailable")
+
+		return nil, nil
+	}
+
+	if tenantLister == nil {
+		logger.Log(ctx, libLog.LevelWarn,
+			"custody retention worker not wired: tenant lister unavailable")
+
+		return nil, nil
+	}
+
+	if provider == nil {
+		logger.Log(ctx, libLog.LevelWarn,
+			"custody retention worker not wired: infrastructure provider unavailable")
+
+		return nil, nil
+	}
+
+	worker, err := discoveryWorker.NewCustodyRetentionWorker(
+		extractionRepo,
+		bundle.ArtifactCustody,
+		tenantLister,
+		provider,
+		discoveryWorker.CustodyRetentionWorkerConfig{
+			Interval:    cfg.FetcherCustodyRetentionSweepInterval(),
+			GracePeriod: cfg.FetcherCustodyRetentionGracePeriod(),
+			BatchSize:   discoveryWorker.CustodyRetentionDefaultBatchSize(),
+		},
+		logger,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create custody retention worker: %w", err)
+	}
+
+	logger.Log(ctx, libLog.LevelInfo,
+		fmt.Sprintf("custody retention worker wired (interval=%s grace=%s)",
+			cfg.FetcherCustodyRetentionSweepInterval(),
+			cfg.FetcherCustodyRetentionGracePeriod()))
+
+	return worker, nil
+}
+
 // describeBridgeWiring produces a single log line summarising which
 // adapters were wired. Kept compact: operators reading bootstrap logs
 // should see at a glance whether the verified-artifact pipeline is

@@ -60,6 +60,12 @@ type ExtractionRequest struct {
 	BridgeLastError        vo.BridgeErrorClass // empty when no terminal bridge failure
 	BridgeLastErrorMessage string
 	BridgeFailedAt         time.Time // zero when no terminal bridge failure
+	// CustodyDeletedAt is the UTC timestamp when the custody object for this
+	// extraction was deleted (either by the bridge orchestrator's happy-path
+	// cleanupCustody hook or by the custody retention worker's sweep). It is
+	// a pointer so NULL (custody object may still exist) is distinguishable
+	// from a zero-value time. See migration 000027.
+	CustodyDeletedAt *time.Time
 }
 
 // NewExtractionRequest creates a new ExtractionRequest with validated invariants.

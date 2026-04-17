@@ -26,9 +26,11 @@ import (
 // Polish Fix 2 deleted bridge_retry_initial_backoff_sec and
 // bridge_retry_max_backoff_sec along with the dead exponential-backoff
 // helpers (the worker enforces backoff passively via updated_at reordering).
-const expectedTotalKeys = 140
+// T-006 added 2 fetcher keys: custody_retention_sweep_interval_sec and
+// custody_retention_grace_period_sec (both WorkerReconcile).
+const expectedTotalKeys = 142
 
-const expectedConfigKeyCount = 126
+const expectedConfigKeyCount = 128
 
 const expectedSettingKeyCount = 14
 
@@ -40,8 +42,9 @@ const expectedLiveReadCount = 22
 
 // expectedWorkerReconcileCount is the count of keys with ApplyWorkerReconcile.
 // Polish Fix 2 reduced this from 18 to 16 by deleting the two dead
-// bridge-retry-backoff knobs.
-const expectedWorkerReconcileCount = 16
+// bridge-retry-backoff knobs. T-006 bumped it to 18 with the two
+// custody-retention knobs.
+const expectedWorkerReconcileCount = 18
 
 // expectedBundleRebuildCount is the count of keys with ApplyBundleRebuild.
 const expectedBundleRebuildCount = 70

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -217,7 +218,7 @@ func (orch *BridgeExtractionOrchestrator) BridgeExtraction(
 		return nil, err
 	}
 
-	orch.cleanupCustody(ctx, logger, custodyRef, outcome)
+	orch.cleanupCustody(ctx, logger, extraction.ID, custodyRef, outcome)
 
 	return outcome, nil
 }
@@ -433,12 +434,16 @@ func (orch *BridgeExtractionOrchestrator) ingestAndLink(
 	}, nil
 }
 
-// cleanupCustody removes the custody copy after successful ingestion. Failure
-// is logged but non-fatal — a background retention sweep (T-006) picks up
-// orphaned custody objects.
+// cleanupCustody removes the custody copy after successful ingestion and
+// persists the convergence marker so the retention sweep stops re-examining
+// this row. Failure of either step is logged but non-fatal — the background
+// retention sweep (T-006) is the safety net for both the S3 delete and the
+// marker write: a missing marker eventually re-appears in the sweep, a
+// missing delete eventually runs in the sweep.
 func (orch *BridgeExtractionOrchestrator) cleanupCustody(
 	ctx context.Context,
 	logger libLog.Logger,
+	extractionID uuid.UUID,
 	ref *sharedPorts.ArtifactCustodyReference,
 	outcome *sharedPorts.BridgeExtractionOutcome,
 ) {
@@ -456,6 +461,21 @@ func (orch *BridgeExtractionOrchestrator) cleanupCustody(
 		}
 
 		return
+	}
+
+	// Persist the convergence marker (Polish Fix 1, T-006). If this write
+	// fails (DB blip, network), log WARN but keep the outcome successful:
+	// custody is already gone, so the retention sweep will pick the row
+	// back up on a later cycle and persist the marker then. We'd rather
+	// have the retry than roll back a successful S3 delete.
+	if markErr := orch.extractionRepo.MarkCustodyDeleted(ctx, extractionID, time.Now().UTC()); markErr != nil {
+		if logger != nil {
+			logger.With(
+				libLog.String("extraction_id", extractionID.String()),
+				libLog.String("custody_key", ref.Key),
+				libLog.Any("error", markErr.Error()),
+			).Log(ctx, libLog.LevelWarn, "bridge orchestrator: mark custody deleted failed (non-fatal, retention sweep will retry)")
+		}
 	}
 
 	if outcome != nil {

@@ -257,6 +257,31 @@ func (r *mockExtractionRepo) ListBridgeCandidates(
 	return nil, nil
 }
 
+func (r *mockExtractionRepo) FindBridgeRetentionCandidates(
+	_ context.Context,
+	_ time.Duration,
+	_ int,
+) ([]*entities.ExtractionRequest, error) {
+	return nil, nil
+}
+
+func (r *mockExtractionRepo) MarkCustodyDeleted(
+	_ context.Context,
+	_ uuid.UUID,
+	_ time.Time,
+) error {
+	return nil
+}
+
+func (r *mockExtractionRepo) MarkCustodyDeletedWithTx(
+	_ context.Context,
+	_ sharedPorts.Tx,
+	_ uuid.UUID,
+	_ time.Time,
+) error {
+	return nil
+}
+
 // --- Test Helpers ---
 
 type handlerFixture struct {

@@ -27,8 +27,9 @@ const (
 	tableName = "extraction_requests"
 	// allColumns is the canonical SELECT list. Order MUST match scanExtraction.
 	// Bridge* columns added in migration 000026 (T-005) live at the tail so
-	// adding them did not perturb existing column ordinals.
-	allColumns = "id, connection_id, ingestion_job_id, fetcher_job_id, tables, start_date, end_date, filters, status, result_path, error_message, created_at, updated_at, bridge_attempts, bridge_last_error, bridge_last_error_message, bridge_failed_at"
+	// adding them did not perturb existing column ordinals; custody_deleted_at
+	// from migration 000027 (T-006 polish) is appended for the same reason.
+	allColumns = "id, connection_id, ingestion_job_id, fetcher_job_id, tables, start_date, end_date, filters, status, result_path, error_message, created_at, updated_at, bridge_attempts, bridge_last_error, bridge_last_error_message, bridge_failed_at, custody_deleted_at"
 )
 
 // Repository provides PostgreSQL operations for ExtractionRequest entities.
@@ -120,7 +121,7 @@ func (repo *Repository) executeCreate(ctx context.Context, tx *sql.Tx, req *enti
 
 	_, err = tx.ExecContext(ctx,
 		`INSERT INTO `+tableName+` (`+allColumns+`)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
 		model.ID,
 		model.ConnectionID,
 		model.IngestionJobID,
@@ -138,6 +139,7 @@ func (repo *Repository) executeCreate(ctx context.Context, tx *sql.Tx, req *enti
 		model.BridgeLastError,
 		model.BridgeLastErrorMessage,
 		model.BridgeFailedAt,
+		model.CustodyDeletedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("insert extraction request: %w", err)
@@ -315,8 +317,9 @@ func (repo *Repository) executeUpdate(ctx context.Context, tx *sql.Tx, req *enti
 			bridge_attempts = $12,
 			bridge_last_error = $13,
 			bridge_last_error_message = $14,
-			bridge_failed_at = $15
-		WHERE id = $16`,
+			bridge_failed_at = $15,
+			custody_deleted_at = $16
+		WHERE id = $17`,
 		model.ConnectionID,
 		model.IngestionJobID,
 		model.FetcherJobID,
@@ -332,6 +335,7 @@ func (repo *Repository) executeUpdate(ctx context.Context, tx *sql.Tx, req *enti
 		model.BridgeLastError,
 		model.BridgeLastErrorMessage,
 		model.BridgeFailedAt,
+		model.CustodyDeletedAt,
 		model.ID,
 	)
 	if err != nil {
@@ -372,8 +376,9 @@ func (repo *Repository) executeConditionalUpdate(ctx context.Context, tx *sql.Tx
 			bridge_attempts = $12,
 			bridge_last_error = $13,
 			bridge_last_error_message = $14,
-			bridge_failed_at = $15
-		WHERE id = $16 AND updated_at = $17`,
+			bridge_failed_at = $15,
+			custody_deleted_at = $16
+		WHERE id = $17 AND updated_at = $18`,
 		model.ConnectionID,
 		model.IngestionJobID,
 		model.FetcherJobID,
@@ -389,6 +394,7 @@ func (repo *Repository) executeConditionalUpdate(ctx context.Context, tx *sql.Tx
 		model.BridgeLastError,
 		model.BridgeLastErrorMessage,
 		model.BridgeFailedAt,
+		model.CustodyDeletedAt,
 		model.ID,
 		expectedUpdatedAt,
 	)
@@ -622,9 +628,106 @@ func (repo *Repository) FindEligibleForBridge(
 	return result, nil
 }
 
+// FindBridgeRetentionCandidates returns extractions whose custody object
+// is potentially orphaned in object storage and needs retention sweeping.
+// See ExtractionRepository.FindBridgeRetentionCandidates for the full
+// contract.
+//
+// SQL semantics:
+//   - TERMINAL bucket: bridge_last_error IS NOT NULL — happy-path
+//     cleanupCustody never ran for these.
+//   - LATE-LINKED bucket: ingestion_job_id IS NOT NULL AND updated_at <
+//     now() - gracePeriod — happy-path cleanup may have failed; sweep
+//     waits gracePeriod to avoid racing the orchestrator.
+//
+// The two buckets are unioned via OR. Both share an `updated_at ASC`
+// ordering so older orphans drain first. Rows that are still actively
+// being bridged (COMPLETE + unlinked + no terminal error) are explicitly
+// excluded — those belong to the bridge worker, not the retention sweep.
+func (repo *Repository) FindBridgeRetentionCandidates(
+	ctx context.Context,
+	gracePeriod time.Duration,
+	limit int,
+) ([]*entities.ExtractionRequest, error) {
+	if repo == nil || repo.provider == nil {
+		return nil, ErrRepoNotInitialized
+	}
+
+	if limit <= 0 {
+		return nil, nil
+	}
+
+	if gracePeriod < 0 {
+		gracePeriod = 0
+	}
+
+	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
+
+	ctx, span := tracer.Start(ctx, "postgres.extraction.find_bridge_retention_candidates")
+	defer span.End()
+
+	// gracePeriodSeconds is computed in Go (rather than using PostgreSQL
+	// `INTERVAL`) so the query plan is parameter-friendly and the unit
+	// math stays in one place.
+	gracePeriodSeconds := int64(gracePeriod.Seconds())
+
+	result, err := pgcommon.WithTenantTxProvider(ctx, repo.provider, func(tx *sql.Tx) ([]*entities.ExtractionRequest, error) {
+		// custody_deleted_at IS NULL is the convergence guard (migration 000027):
+		// once a row has been swept (or cleaned up on the happy path), it drops
+		// out of both buckets so the sweep converges to idle instead of
+		// re-scanning the same rows forever.
+		rows, queryErr := tx.QueryContext(ctx,
+			`SELECT `+allColumns+` FROM `+tableName+`
+			WHERE custody_deleted_at IS NULL
+			  AND (
+			        (bridge_last_error IS NOT NULL)
+			     OR (
+			          ingestion_job_id IS NOT NULL
+			          AND updated_at < (NOW() - ($1 || ' seconds')::INTERVAL)
+			        )
+			      )
+			ORDER BY updated_at ASC
+			LIMIT $2`,
+			gracePeriodSeconds,
+			limit,
+		)
+		if queryErr != nil {
+			return nil, fmt.Errorf("query bridge retention candidates: %w", queryErr)
+		}
+		defer rows.Close()
+
+		extractions := make([]*entities.ExtractionRequest, 0, limit)
+
+		for rows.Next() {
+			extraction, scanErr := scanExtraction(rows)
+			if scanErr != nil {
+				return nil, fmt.Errorf("scan bridge retention candidate: %w", scanErr)
+			}
+
+			extractions = append(extractions, extraction)
+		}
+
+		if iterErr := rows.Err(); iterErr != nil {
+			return nil, fmt.Errorf("iterate bridge retention candidates: %w", iterErr)
+		}
+
+		return extractions, nil
+	})
+	if err != nil {
+		wrappedErr := fmt.Errorf("find bridge retention candidates: %w", err)
+		libOpentelemetry.HandleSpanError(span, "find bridge retention candidates failed", wrappedErr)
+		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "find bridge retention candidates failed")
+
+		return nil, wrappedErr
+	}
+
+	return result, nil
+}
+
 // scanExtraction scans a SQL row into an ExtractionRequest domain entity.
 // Column order MUST match allColumns; the bridge_* columns are at the tail
-// because they were added in migration 000026.
+// because they were added in migration 000026, and custody_deleted_at is at
+// the very tail because it was added in migration 000027.
 func scanExtraction(scanner interface{ Scan(dest ...any) error }) (*entities.ExtractionRequest, error) {
 	var model ExtractionModel
 	if err := scanner.Scan(
@@ -645,6 +748,7 @@ func scanExtraction(scanner interface{ Scan(dest ...any) error }) (*entities.Ext
 		&model.BridgeLastError,
 		&model.BridgeLastErrorMessage,
 		&model.BridgeFailedAt,
+		&model.CustodyDeletedAt,
 	); err != nil {
 		return nil, err
 	}

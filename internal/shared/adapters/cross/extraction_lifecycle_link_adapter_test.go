@@ -157,6 +157,31 @@ func (repo *fakeExtractionRepo) ListBridgeCandidates(
 	return nil, nil
 }
 
+func (repo *fakeExtractionRepo) FindBridgeRetentionCandidates(
+	_ context.Context,
+	_ time.Duration,
+	_ int,
+) ([]*discoveryEntities.ExtractionRequest, error) {
+	return nil, nil
+}
+
+func (repo *fakeExtractionRepo) MarkCustodyDeleted(
+	_ context.Context,
+	_ uuid.UUID,
+	_ time.Time,
+) error {
+	return nil
+}
+
+func (repo *fakeExtractionRepo) MarkCustodyDeletedWithTx(
+	_ context.Context,
+	_ sharedPorts.Tx,
+	_ uuid.UUID,
+	_ time.Time,
+) error {
+	return nil
+}
+
 // completeExtraction builds a COMPLETE extraction suitable for linking.
 // Domain validation requires Status=COMPLETE, so tests that want the link
 // path to succeed must stage one.

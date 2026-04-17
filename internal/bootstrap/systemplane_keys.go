@@ -140,6 +140,12 @@ const (
 	defaultBridgeIntervalSec = 30
 	defaultBridgeBatchSize   = 50
 
+	// Custody retention sweep worker defaults (T-006). Mirror the Config
+	// struct envDefault tags so snapshot-driven hydration matches env-only
+	// deployments. 900s = 15 min sweep cadence, 3600s = 1 h grace period.
+	defaultCustodyRetentionSweepIntervalSec = 900
+	defaultCustodyRetentionGracePeriodSec   = 3600
+
 	// M2M defaults.
 	defaultM2MTargetService      = "fetcher"
 	defaultM2MCredentialCacheTTL = 300

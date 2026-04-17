@@ -270,6 +270,21 @@ type FetcherConfig struct {
 	// persists max_attempts_exceeded (or source_unresolved when applicable)
 	// and the extraction exits the eligibility queue.
 	BridgeRetryMaxAttempts int `env:"FETCHER_BRIDGE_RETRY_MAX_ATTEMPTS" envDefault:"5" mapstructure:"bridge_retry_max_attempts"`
+
+	// CustodyRetentionSweepIntervalSec governs how often the custody
+	// retention sweep worker (T-006) iterates orphan custody objects.
+	// Default 900s (15 minutes) balances orphan-drain responsiveness
+	// against log/metric noise on idle deployments. Bounded validator
+	// caps the value at one day. Runtime-mutable.
+	CustodyRetentionSweepIntervalSec int `env:"FETCHER_CUSTODY_RETENTION_SWEEP_INTERVAL_SEC" envDefault:"900" mapstructure:"custody_retention_sweep_interval_sec"`
+
+	// CustodyRetentionGracePeriodSec is the delay applied to LATE-LINKED
+	// retention candidates before the sweep deletes their custody object
+	// (T-006). Protects the bridge orchestrator's happy-path
+	// cleanupCustody hook from racing the sweep on freshly-linked
+	// extractions. Default 3600s (1 hour) tolerates a typical S3 outage
+	// while keeping orphan window bounded. Runtime-mutable.
+	CustodyRetentionGracePeriodSec int `env:"FETCHER_CUSTODY_RETENTION_GRACE_PERIOD_SEC" envDefault:"3600" mapstructure:"custody_retention_grace_period_sec"`
 }
 
 // FetcherMaxExtractionBytes returns the effective size cap for Fetcher
@@ -342,6 +357,40 @@ func (cfg *Config) FetcherBridgeRetryMaxAttempts() int {
 	}
 
 	return cfg.Fetcher.BridgeRetryMaxAttempts
+}
+
+// defaultCustodyRetentionSweepInterval mirrors the worker's
+// custodyRetentionDefaultInterval so the bootstrap-side fallback and the
+// worker-side fallback agree.
+const defaultCustodyRetentionSweepInterval = 15 * time.Minute
+
+// defaultCustodyRetentionGracePeriod mirrors the worker's
+// custodyRetentionDefaultGracePeriod so the bootstrap-side fallback and
+// the worker-side fallback agree.
+const defaultCustodyRetentionGracePeriod = time.Hour
+
+// FetcherCustodyRetentionSweepInterval returns the tick interval for the
+// custody retention sweep worker (T-006). Falls back to a sensible default
+// when the configured value is non-positive so misconfiguration cannot
+// disable the sweep silently.
+func (cfg *Config) FetcherCustodyRetentionSweepInterval() time.Duration {
+	if cfg == nil || cfg.Fetcher.CustodyRetentionSweepIntervalSec <= 0 {
+		return defaultCustodyRetentionSweepInterval
+	}
+
+	return time.Duration(cfg.Fetcher.CustodyRetentionSweepIntervalSec) * time.Second
+}
+
+// FetcherCustodyRetentionGracePeriod returns the grace period applied to
+// LATE-LINKED retention candidates before sweep deletion. Falls back to a
+// sensible default when non-positive so misconfiguration cannot collapse
+// the race protection.
+func (cfg *Config) FetcherCustodyRetentionGracePeriod() time.Duration {
+	if cfg == nil || cfg.Fetcher.CustodyRetentionGracePeriodSec <= 0 {
+		return defaultCustodyRetentionGracePeriod
+	}
+
+	return time.Duration(cfg.Fetcher.CustodyRetentionGracePeriodSec) * time.Second
 }
 
 // M2MConfig configures machine-to-machine credential retrieval from AWS Secrets Manager.

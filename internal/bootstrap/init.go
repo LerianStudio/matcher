@@ -873,6 +873,22 @@ func buildWorkerManager(modules *modulesResult, existing *WorkerManager, configM
 		)
 	}
 
+	// Custody retention sweep worker (T-006) — runs only when Fetcher is
+	// enabled AND the verified-artifact pipeline is operational (which
+	// means the custody store is available to delete from). Non-critical
+	// because retention is a background housekeeping task: orphan
+	// accumulation rates are bounded by happy-path bridge throughput so a
+	// short sweep outage is operationally tolerable.
+	if modules.custodyRetentionWorker != nil {
+		w := modules.custodyRetentionWorker
+
+		wm.Register("custody_retention",
+			func(_ *Config) (WorkerLifecycle, error) { return w, nil },
+			func(cfg *Config) bool { return cfg != nil && cfg.Fetcher.Enabled },
+			nil, // never critical
+		)
+	}
+
 	return wm
 }
 
@@ -2254,15 +2270,16 @@ func applySQLPoolSettings(dbs []*sql.DB, maxLifetime, maxIdle time.Duration) {
 }
 
 type modulesResult struct {
-	outboxDispatcher *outboxServices.Dispatcher
-	ingestionEvents  *swappableIngestionPublisher
-	matchingEvents   *swappableMatchPublisher
-	exportWorker     *reportingWorker.ExportWorker
-	cleanupWorker    *reportingWorker.CleanupWorker
-	archivalWorker   *governanceWorker.ArchivalWorker
-	schedulerWorker  *configWorker.SchedulerWorker
-	discoveryWorker  *discoveryWorker.DiscoveryWorker
-	bridgeWorker     *discoveryWorker.BridgeWorker
+	outboxDispatcher       *outboxServices.Dispatcher
+	ingestionEvents        *swappableIngestionPublisher
+	matchingEvents         *swappableMatchPublisher
+	exportWorker           *reportingWorker.ExportWorker
+	cleanupWorker          *reportingWorker.CleanupWorker
+	archivalWorker         *governanceWorker.ArchivalWorker
+	schedulerWorker        *configWorker.SchedulerWorker
+	discoveryWorker        *discoveryWorker.DiscoveryWorker
+	bridgeWorker           *discoveryWorker.BridgeWorker
+	custodyRetentionWorker *discoveryWorker.CustodyRetentionWorker
 }
 
 // errRabbitMQConnectionNil is returned when attempting to open a channel on a nil connection.
@@ -2481,6 +2498,24 @@ func initModulesAndMessaging(
 		return nil, fmt.Errorf("init fetcher bridge worker: %w", err)
 	}
 
+	// T-006 custody retention sweep worker. Runs only when Fetcher is
+	// enabled AND the verified-artifact pipeline is operational (the
+	// custody store is part of the same bundle). Sweeps orphan custody
+	// objects left behind by terminally-failed bridge attempts and by
+	// happy-path cleanupCustody hook failures.
+	custodyRetentionWorker, err := initCustodyRetentionWorker(
+		ctx,
+		cfg,
+		extractionRepo,
+		sharedOutboxRepository,
+		provider,
+		bridgeBundle,
+		logger,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("init custody retention worker: %w", err)
+	}
+
 	// Create governance audit consumer for processing audit events from the outbox.
 	// Audit publishing is compliance-critical (SOX) — the system MUST NOT start without it.
 	// If the audit consumer fails to initialize, the entire startup is aborted to prevent
@@ -2534,14 +2569,15 @@ func initModulesAndMessaging(
 	}
 
 	return &modulesResult{
-		outboxDispatcher: dispatcher,
-		ingestionEvents:  runtimeIngestionPublisher,
-		matchingEvents:   runtimeMatchingPublisher,
-		exportWorker:     exportWorker,
-		cleanupWorker:    cleanupWorker,
-		schedulerWorker:  schedulerWorker,
-		discoveryWorker:  discWorker,
-		bridgeWorker:     bridgeWorker,
+		outboxDispatcher:       dispatcher,
+		ingestionEvents:        runtimeIngestionPublisher,
+		matchingEvents:         runtimeMatchingPublisher,
+		exportWorker:           exportWorker,
+		cleanupWorker:          cleanupWorker,
+		schedulerWorker:        schedulerWorker,
+		discoveryWorker:        discWorker,
+		bridgeWorker:           bridgeWorker,
+		custodyRetentionWorker: custodyRetentionWorker,
 	}, nil
 }
 

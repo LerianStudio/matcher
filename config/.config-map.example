@@ -110,13 +110,15 @@ INFRA_CONNECT_TIMEOUT_SEC=30
 # Bounded validator: must be between 1 MiB (1048576) and 16 GiB (17179869184).
 # FETCHER_MAX_EXTRACTION_BYTES=2147483648
 
-# NOTE: FETCHER_BRIDGE_INTERVAL_SEC, FETCHER_BRIDGE_BATCH_SIZE, and
-# FETCHER_BRIDGE_STALE_THRESHOLD_SEC are NOT listed here because they are
+# NOTE: The following Fetcher tunables are NOT listed here because they are
 # runtime-mutable via the systemplane (ApplyWorkerReconcile or ApplyLiveRead
 # + MutableAtRuntime=true). Operate them via:
-#   PUT /v1/system/configs/fetcher.bridge_interval_sec        (bounds [5, 3600])
-#   PUT /v1/system/configs/fetcher.bridge_batch_size          (bounds [1, 10000])
-#   PUT /v1/system/configs/fetcher.bridge_stale_threshold_sec (bounds [60, 86400])
+#   PUT /v1/system/configs/fetcher.bridge_interval_sec                  (bounds [5, 3600])
+#   PUT /v1/system/configs/fetcher.bridge_batch_size                    (bounds [1, 10000])
+#   PUT /v1/system/configs/fetcher.bridge_stale_threshold_sec           (bounds [60, 86400])
+#   PUT /v1/system/configs/fetcher.bridge_retry_max_attempts            (bounds [1, 100])
+#   PUT /v1/system/configs/fetcher.custody_retention_sweep_interval_sec (bounds [60, 86400])
+#   PUT /v1/system/configs/fetcher.custody_retention_grace_period_sec   (bounds [0, 604800])
 # .config-map.example only documents BOOTSTRAP-only env vars (those that
 # require a service restart). The TestConfigMapExample_SyncWithNonHotReload
 # EnvVars guard fails the build if a hot-reloadable key sneaks in here.

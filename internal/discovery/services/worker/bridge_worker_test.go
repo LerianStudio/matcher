@@ -92,6 +92,17 @@ type stubBridgeExtractionRepo struct {
 	updateFn           func(req *entities.ExtractionRequest) error
 	incrementCalls     []incrementCall
 	incrementFn        func(id uuid.UUID, attempts int) error
+	// custodyDeletedCalls records MarkCustodyDeleted invocations so tests
+	// can assert convergence behavior (Polish Fix 1, T-006).
+	custodyDeletedCalls []custodyDeletedCall
+	custodyDeletedFn    func(id uuid.UUID, deletedAt time.Time) error
+}
+
+// custodyDeletedCall captures a single MarkCustodyDeleted invocation for
+// test assertions.
+type custodyDeletedCall struct {
+	ID        uuid.UUID
+	DeletedAt time.Time
 }
 
 func (s *stubBridgeExtractionRepo) FindEligibleForBridge(
@@ -204,6 +215,43 @@ func (s *stubBridgeExtractionRepo) ListBridgeCandidates(
 	_ int,
 ) ([]*entities.ExtractionRequest, error) {
 	return nil, nil
+}
+
+func (s *stubBridgeExtractionRepo) FindBridgeRetentionCandidates(
+	_ context.Context,
+	_ time.Duration,
+	_ int,
+) ([]*entities.ExtractionRequest, error) {
+	return nil, nil
+}
+
+func (s *stubBridgeExtractionRepo) MarkCustodyDeleted(
+	_ context.Context,
+	id uuid.UUID,
+	deletedAt time.Time,
+) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.custodyDeletedFn != nil {
+		return s.custodyDeletedFn(id, deletedAt)
+	}
+
+	s.custodyDeletedCalls = append(s.custodyDeletedCalls, custodyDeletedCall{
+		ID:        id,
+		DeletedAt: deletedAt,
+	})
+
+	return nil
+}
+
+func (s *stubBridgeExtractionRepo) MarkCustodyDeletedWithTx(
+	_ context.Context,
+	_ sharedPorts.Tx,
+	id uuid.UUID,
+	deletedAt time.Time,
+) error {
+	return s.MarkCustodyDeleted(context.Background(), id, deletedAt)
 }
 
 // completeExtraction builds a COMPLETE, unlinked extraction for the worker

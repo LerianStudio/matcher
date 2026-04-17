@@ -177,6 +177,31 @@ func (m *mockExtractionRepository) ListBridgeCandidates(
 	return nil, nil
 }
 
+func (m *mockExtractionRepository) FindBridgeRetentionCandidates(
+	_ context.Context,
+	_ time.Duration,
+	_ int,
+) ([]*entities.ExtractionRequest, error) {
+	return nil, nil
+}
+
+func (m *mockExtractionRepository) MarkCustodyDeleted(
+	_ context.Context,
+	_ uuid.UUID,
+	_ time.Time,
+) error {
+	return nil
+}
+
+func (m *mockExtractionRepository) MarkCustodyDeletedWithTx(
+	_ context.Context,
+	_ *sql.Tx,
+	_ uuid.UUID,
+	_ time.Time,
+) error {
+	return nil
+}
+
 func TestMockExtractionRepositoryOperations(t *testing.T) {
 	t.Parallel()
 

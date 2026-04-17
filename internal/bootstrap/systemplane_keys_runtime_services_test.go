@@ -31,11 +31,13 @@ func TestMatcherKeyDefsInfrastructure_CombinesAllSubGroups(t *testing.T) {
 	callbackRL := matcherKeyDefsCallbackRateLimit()
 	fetcherCore := matcherKeyDefsFetcherCore()
 	fetcherRuntime := matcherKeyDefsFetcherRuntime()
+	fetcherCustodyRetention := matcherKeyDefsFetcherCustodyRetention()
 	m2m := matcherKeyDefsM2M()
 
 	combined := matcherKeyDefsInfrastructure()
 
-	expected := len(runtime) + len(idempotency) + len(callbackRL) + len(fetcherCore) + len(fetcherRuntime) + len(m2m)
+	expected := len(runtime) + len(idempotency) + len(callbackRL) +
+		len(fetcherCore) + len(fetcherRuntime) + len(fetcherCustodyRetention) + len(m2m)
 	assert.Len(t, combined, expected,
 		"matcherKeyDefsInfrastructure must combine all sub-group key defs")
 }
@@ -222,6 +224,10 @@ func TestMatcherKeyDefsFetcherRuntime_KeyProperties(t *testing.T) {
 	// + 1 read-model knob (bridge_stale_threshold_sec, T-004)
 	// + 1 runtime retry knob (bridge_retry_max_attempts, T-005). Polish
 	// Fix 2 deleted the two dead Initial/Max-Backoff knobs.
+	// T-006 custody-retention knobs are returned by a sibling function
+	// (matcherKeyDefsFetcherCustodyRetention) to keep this defs list
+	// under the funlen ceiling; TestMatcherKeyDefsFetcherCustodyRetention_KeyProperties
+	// covers them.
 	require.Len(t, defs, 11)
 
 	expectedKeys := []string{
@@ -292,4 +298,39 @@ func TestMatcherKeyDefsFetcherRuntime_AppEncKeyIsBootstrapSecret(t *testing.T) {
 	assert.Equal(t, "", appEncKey.DefaultValue,
 		"empty default soft-disables verified-artifact retrieval")
 	assert.NotEmpty(t, appEncKey.Description)
+}
+
+// TestMatcherKeyDefsFetcherCustodyRetention_KeyProperties covers the T-006
+// custody retention sweep tunables. Split from the main runtime defs
+// function to keep matcherKeyDefsFetcherRuntime under the funlen ceiling.
+func TestMatcherKeyDefsFetcherCustodyRetention_KeyProperties(t *testing.T) {
+	t.Parallel()
+
+	defs := matcherKeyDefsFetcherCustodyRetention()
+
+	require.Len(t, defs, 2,
+		"T-006 introduced exactly two custody retention knobs: sweep_interval_sec and grace_period_sec")
+
+	expectedKeys := []string{
+		"fetcher.custody_retention_sweep_interval_sec",
+		"fetcher.custody_retention_grace_period_sec",
+	}
+
+	for i, expKey := range expectedKeys {
+		t.Run(expKey, func(t *testing.T) {
+			t.Parallel()
+
+			def := defs[i]
+			assert.Equal(t, expKey, def.Key)
+			assert.Equal(t, domain.KindConfig, def.Kind)
+			assert.Equal(t, "fetcher", def.Group)
+			assert.Equal(t, domain.ValueTypeInt, def.ValueType)
+			assert.NotNil(t, def.Validator, "integer key %q must have a validator", def.Key)
+			assert.True(t, def.MutableAtRuntime,
+				"T-006 retention knobs are runtime-mutable via PUT /v1/system/configs")
+			assert.Equal(t, domain.ApplyWorkerReconcile, def.ApplyBehavior,
+				"worker reads retention config at construction — reconciler restarts on change")
+			assert.NotEmpty(t, def.Description)
+		})
+	}
 }

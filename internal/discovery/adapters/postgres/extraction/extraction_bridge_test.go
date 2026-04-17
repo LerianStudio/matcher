@@ -179,7 +179,7 @@ func TestFindEligibleForBridge_Empty(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, connection_id, ingestion_job_id, fetcher_job_id, tables, start_date, end_date, filters, status, result_path, error_message, created_at, updated_at, bridge_attempts, bridge_last_error, bridge_last_error_message, bridge_failed_at FROM extraction_requests
+		`SELECT id, connection_id, ingestion_job_id, fetcher_job_id, tables, start_date, end_date, filters, status, result_path, error_message, created_at, updated_at, bridge_attempts, bridge_last_error, bridge_last_error_message, bridge_failed_at, custody_deleted_at FROM extraction_requests
 			WHERE status = $1
 			  AND ingestion_job_id IS NULL
 			  AND bridge_last_error IS NULL
@@ -228,12 +228,14 @@ func TestFindEligibleForBridge_ReturnsRows(t *testing.T) {
 			nil,
 			nil,
 			nil,
+			// T-006 custody_deleted_at (migration 000027) NULL for in-flight rows.
+			nil,
 		)
 	}
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, connection_id, ingestion_job_id, fetcher_job_id, tables, start_date, end_date, filters, status, result_path, error_message, created_at, updated_at, bridge_attempts, bridge_last_error, bridge_last_error_message, bridge_failed_at FROM extraction_requests
+		`SELECT id, connection_id, ingestion_job_id, fetcher_job_id, tables, start_date, end_date, filters, status, result_path, error_message, created_at, updated_at, bridge_attempts, bridge_last_error, bridge_last_error_message, bridge_failed_at, custody_deleted_at FROM extraction_requests
 			WHERE status = $1
 			  AND ingestion_job_id IS NULL
 			  AND bridge_last_error IS NULL
@@ -274,7 +276,7 @@ func TestFindEligibleForBridge_QueryError_WrapsUnderlying(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, connection_id, ingestion_job_id, fetcher_job_id, tables, start_date, end_date, filters, status, result_path, error_message, created_at, updated_at, bridge_attempts, bridge_last_error, bridge_last_error_message, bridge_failed_at FROM extraction_requests
+		`SELECT id, connection_id, ingestion_job_id, fetcher_job_id, tables, start_date, end_date, filters, status, result_path, error_message, created_at, updated_at, bridge_attempts, bridge_last_error, bridge_last_error_message, bridge_failed_at, custody_deleted_at FROM extraction_requests
 			WHERE status = $1
 			  AND ingestion_job_id IS NULL
 			  AND bridge_last_error IS NULL
@@ -307,6 +309,157 @@ func TestLinkIfUnlinked_NilRepo_ReturnsSentinel(t *testing.T) {
 	var repo *Repository
 
 	err := repo.LinkIfUnlinked(context.Background(), uuid.New(), uuid.New())
+	require.ErrorIs(t, err, ErrRepoNotInitialized)
+}
+
+// --- FindBridgeRetentionCandidates (T-006) ---
+
+// TestFindBridgeRetentionCandidates_Empty returns no rows.
+func TestFindBridgeRetentionCandidates_Empty(t *testing.T) {
+	t.Parallel()
+
+	repo, mock, finish := setupMockRepository(t)
+	defer finish()
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT id, connection_id, ingestion_job_id, fetcher_job_id, tables, start_date, end_date, filters, status, result_path, error_message, created_at, updated_at, bridge_attempts, bridge_last_error, bridge_last_error_message, bridge_failed_at, custody_deleted_at FROM extraction_requests
+			WHERE custody_deleted_at IS NULL
+			  AND (
+			        (bridge_last_error IS NOT NULL)
+			     OR (
+			          ingestion_job_id IS NOT NULL
+			          AND updated_at < (NOW() - ($1 || ' seconds')::INTERVAL)
+			        )
+			      )
+			ORDER BY updated_at ASC
+			LIMIT $2`,
+	)).WithArgs(int64(3600), 100).WillReturnRows(sqlmock.NewRows(extractionColumns()))
+	mock.ExpectCommit()
+
+	results, err := repo.FindBridgeRetentionCandidates(context.Background(), time.Hour, 100)
+	require.NoError(t, err)
+	assert.Empty(t, results)
+}
+
+// TestFindBridgeRetentionCandidates_ZeroLimit_ReturnsImmediately asserts
+// limit<=0 short-circuits without hitting the DB.
+func TestFindBridgeRetentionCandidates_ZeroLimit_ReturnsImmediately(t *testing.T) {
+	t.Parallel()
+
+	repo, mock, _ := setupMockRepository(t)
+
+	results, err := repo.FindBridgeRetentionCandidates(context.Background(), time.Hour, 0)
+	require.NoError(t, err)
+	assert.Nil(t, results)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// TestFindBridgeRetentionCandidates_NegativeGracePeriod_CoercedToZero
+// asserts a negative grace period (operator misconfiguration) is coerced to
+// zero so the SQL math stays sane.
+func TestFindBridgeRetentionCandidates_NegativeGracePeriod_CoercedToZero(t *testing.T) {
+	t.Parallel()
+
+	repo, mock, finish := setupMockRepository(t)
+	defer finish()
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT id, connection_id, ingestion_job_id, fetcher_job_id, tables, start_date, end_date, filters, status, result_path, error_message, created_at, updated_at, bridge_attempts, bridge_last_error, bridge_last_error_message, bridge_failed_at, custody_deleted_at FROM extraction_requests
+			WHERE custody_deleted_at IS NULL
+			  AND (
+			        (bridge_last_error IS NOT NULL)
+			     OR (
+			          ingestion_job_id IS NOT NULL
+			          AND updated_at < (NOW() - ($1 || ' seconds')::INTERVAL)
+			        )
+			      )
+			ORDER BY updated_at ASC
+			LIMIT $2`,
+	)).WithArgs(int64(0), 50).WillReturnRows(sqlmock.NewRows(extractionColumns()))
+	mock.ExpectCommit()
+
+	results, err := repo.FindBridgeRetentionCandidates(context.Background(), -10*time.Minute, 50)
+	require.NoError(t, err)
+	assert.Empty(t, results)
+}
+
+// TestFindBridgeRetentionCandidates_QueryError_WrapsUnderlying asserts SQL
+// failures during the retention scan surface wrapped.
+func TestFindBridgeRetentionCandidates_QueryError_WrapsUnderlying(t *testing.T) {
+	t.Parallel()
+
+	repo, mock, finish := setupMockRepository(t)
+	defer finish()
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT id, connection_id, ingestion_job_id, fetcher_job_id, tables, start_date, end_date, filters, status, result_path, error_message, created_at, updated_at, bridge_attempts, bridge_last_error, bridge_last_error_message, bridge_failed_at, custody_deleted_at FROM extraction_requests
+			WHERE custody_deleted_at IS NULL
+			  AND (
+			        (bridge_last_error IS NOT NULL)
+			     OR (
+			          ingestion_job_id IS NOT NULL
+			          AND updated_at < (NOW() - ($1 || ' seconds')::INTERVAL)
+			        )
+			      )
+			ORDER BY updated_at ASC
+			LIMIT $2`,
+	)).WithArgs(int64(3600), 100).WillReturnError(errTestQuery)
+	mock.ExpectRollback()
+
+	_, err := repo.FindBridgeRetentionCandidates(context.Background(), time.Hour, 100)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "find bridge retention candidates")
+}
+
+// TestFindBridgeRetentionCandidates_ExcludesAlreadyCleanedUp asserts the
+// migration 000027 convergence guard: the WHERE clause must include
+// `custody_deleted_at IS NULL` so rows that were previously swept (or
+// cleaned up on the happy path) do NOT re-appear in subsequent candidate
+// scans. Without this predicate, the sweep would rescan the same rows
+// forever. This is the cornerstone test for Polish Fix 1 at the adapter
+// layer.
+func TestFindBridgeRetentionCandidates_ExcludesAlreadyCleanedUp(t *testing.T) {
+	t.Parallel()
+
+	repo, mock, finish := setupMockRepository(t)
+	defer finish()
+
+	// The query must include the new convergence guard clause. sqlmock's
+	// regexp match is strict (QuoteMeta escapes special chars) so any
+	// regression that drops `custody_deleted_at IS NULL` will surface here.
+	mock.ExpectBegin()
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT id, connection_id, ingestion_job_id, fetcher_job_id, tables, start_date, end_date, filters, status, result_path, error_message, created_at, updated_at, bridge_attempts, bridge_last_error, bridge_last_error_message, bridge_failed_at, custody_deleted_at FROM extraction_requests
+			WHERE custody_deleted_at IS NULL
+			  AND (
+			        (bridge_last_error IS NOT NULL)
+			     OR (
+			          ingestion_job_id IS NOT NULL
+			          AND updated_at < (NOW() - ($1 || ' seconds')::INTERVAL)
+			        )
+			      )
+			ORDER BY updated_at ASC
+			LIMIT $2`,
+	)).WithArgs(int64(3600), 100).WillReturnRows(sqlmock.NewRows(extractionColumns()))
+	mock.ExpectCommit()
+
+	results, err := repo.FindBridgeRetentionCandidates(context.Background(), time.Hour, 100)
+	require.NoError(t, err)
+	assert.Empty(t, results,
+		"a row with custody_deleted_at IS NOT NULL must be excluded — the new WHERE clause is the convergence guard")
+}
+
+// TestFindBridgeRetentionCandidates_NilRepo_ReturnsSentinel guards the
+// defensive nil-receiver path.
+func TestFindBridgeRetentionCandidates_NilRepo_ReturnsSentinel(t *testing.T) {
+	t.Parallel()
+
+	var repo *Repository
+
+	_, err := repo.FindBridgeRetentionCandidates(context.Background(), time.Hour, 100)
 	require.ErrorIs(t, err, ErrRepoNotInitialized)
 }
 

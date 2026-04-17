@@ -151,6 +151,17 @@ const (
 	// passively via updated_at reordering, not via in-process timers).
 	minBridgeRetryMaxAttempts int64 = 1
 	maxBridgeRetryMaxAttempts int64 = 100
+	// Custody retention sweep bounds (T-006). Floor 60s prevents the
+	// sweep from hammering Postgres + S3 on tight intervals; ceiling 1
+	// day matches typical operational SLOs.
+	minCustodyRetentionSweepIntervalSec int64 = 60
+	maxCustodyRetentionSweepIntervalSec int64 = 86400
+	// Custody retention grace period bounds (T-006). Zero is allowed so
+	// operators can opt out of the LATE-LINKED race protection (rare
+	// but legitimate for single-replica deployments). Ceiling 7 days
+	// caps how long a leaked custody object can sit in storage.
+	minCustodyRetentionGracePeriodSec int64 = 0
+	maxCustodyRetentionGracePeriodSec int64 = 604800
 )
 
 // validateBoundedRangeInt rejects values outside [minValue, maxValue].
@@ -216,6 +227,24 @@ func validateBridgeRetryMaxAttempts(value any) error {
 		minBridgeRetryMaxAttempts,
 		maxBridgeRetryMaxAttempts,
 		"fetcher bridge retry max attempts",
+	)
+}
+
+func validateCustodyRetentionSweepIntervalSec(value any) error {
+	return validateBoundedRangeInt(
+		value,
+		minCustodyRetentionSweepIntervalSec,
+		maxCustodyRetentionSweepIntervalSec,
+		"fetcher custody retention sweep interval seconds",
+	)
+}
+
+func validateCustodyRetentionGracePeriodSec(value any) error {
+	return validateBoundedRangeInt(
+		value,
+		minCustodyRetentionGracePeriodSec,
+		maxCustodyRetentionGracePeriodSec,
+		"fetcher custody retention grace period seconds",
 	)
 }
 
