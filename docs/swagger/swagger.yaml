@@ -989,6 +989,12 @@ definitions:
         type: integer
       totalCount:
         type: integer
+      workerHealthy:
+        type: boolean
+      workerLastTickAt:
+        type: string
+      workerStalenessSeconds:
+        type: integer
     type: object
   github_com_LerianStudio_matcher_internal_discovery_adapters_http_dto.ConnectionListResponse:
     properties:

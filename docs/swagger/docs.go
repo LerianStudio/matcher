@@ -11275,6 +11275,15 @@ const docTemplate = `{
                 },
                 "totalCount": {
                     "type": "integer"
+                },
+                "workerHealthy": {
+                    "type": "boolean"
+                },
+                "workerLastTickAt": {
+                    "type": "string"
+                },
+                "workerStalenessSeconds": {
+                    "type": "integer"
                 }
             }
         },
