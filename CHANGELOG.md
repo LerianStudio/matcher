@@ -1,3 +1,22 @@
+## [1.3.0-beta.16](https://github.com/LerianStudio/matcher/compare/v1.3.0-beta.15...v1.3.0-beta.16) (2026-04-17)
+
+
+### Features
+
+* **fetcher-bridge:** add trusted stream intake boundary (T-001) ([7a74051](https://github.com/LerianStudio/matcher/commit/7a74051dea2735500aaad6b53495e0576c8ebbe2))
+* **fetcher-bridge:** automatic completed-extraction bridging worker (T-003) ([efa0bbe](https://github.com/LerianStudio/matcher/commit/efa0bbeef578390561db8522164846c9122ca4a4))
+* **fetcher-bridge:** retention operations with converging sweep (T-006) ([b148cee](https://github.com/LerianStudio/matcher/commit/b148cee9ad30fd626b7e66f07d4a20f41f5ee130))
+* **fetcher-bridge:** retry-safe failure and staleness control (T-005) ([15daeb8](https://github.com/LerianStudio/matcher/commit/15daeb8068c5bba985b22f38fae0cdbdbe859d6d))
+* **migrations:** tighten bridge eligibility index and reindex concurrently ([51bb683](https://github.com/LerianStudio/matcher/commit/51bb6831a9ec65d2fb844359889371b7ffcf1986))
+* **fetcher-bridge:** truthful operational readiness projection (T-004) ([f0f32ca](https://github.com/LerianStudio/matcher/commit/f0f32ca81a695469cbdaea35876cd6ddb967bc2c))
+* **fetcher-bridge:** verified artifact retrieval and custody (T-002) ([6e2dad0](https://github.com/LerianStudio/matcher/commit/6e2dad0f0356a7b4cb04debb212f19d827a76fc3))
+
+
+### Bug Fixes
+
+* **fetcher-bridge:** remediate Gate 4 review findings across T-001..T-006 ([1a290ba](https://github.com/LerianStudio/matcher/commit/1a290bafdd946e6cb840a3d0fdec61a00d5203f9))
+* **migrations:** strip semicolons from SQL comments ([047da45](https://github.com/LerianStudio/matcher/commit/047da457d1341bcb8d9ddef48ec97395439bf860))
+
 ## [1.3.0-beta.15](https://github.com/LerianStudio/matcher/compare/v1.3.0-beta.14...v1.3.0-beta.15) (2026-04-15)
 
 
