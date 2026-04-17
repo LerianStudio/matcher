@@ -142,6 +142,7 @@ func ExtractionRequestFromEntity(entity *entities.ExtractionRequest) ExtractionR
 	// bridge failure) but a pointer in the DTO so omitempty keeps the field
 	// out of the response for extractions with no bridge state.
 	var bridgeFailedAt *time.Time
+
 	if !entity.BridgeFailedAt.IsZero() {
 		failedAt := entity.BridgeFailedAt
 		bridgeFailedAt = &failedAt

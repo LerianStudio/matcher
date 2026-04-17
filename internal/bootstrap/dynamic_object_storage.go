@@ -64,7 +64,7 @@ func (client *dynamicObjectStorageClient) UploadIfAbsent(ctx context.Context, ke
 	// second fmt.Errorf("...: %w") layer only adds noise. The underlying
 	// error already carries the sentinel; other failure classes are passed
 	// through verbatim so operator diagnostics stay useful.
-	return delegate.UploadIfAbsent(ctx, key, reader, contentType)
+	return delegate.UploadIfAbsent(ctx, key, reader, contentType) //nolint:wrapcheck // intentional passthrough to preserve ErrObjectAlreadyExists sentinel
 }
 
 // UploadWithOptions delegates object upload with options to the current runtime storage client.

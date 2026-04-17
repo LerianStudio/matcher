@@ -273,6 +273,13 @@ func initDiscoveryModule(
 // flag — 4 leaves a full interval of grace. C15.
 const bridgeHeartbeatStaleMultiplier = 4
 
+// defaultBridgeHeartbeatStaleAfter is the fallback staleness threshold used
+// when no runtime config is available (e.g., systemplane bootstrap has not
+// completed yet). Chosen to match bridgeHeartbeatStaleMultiplier × a
+// nominal 30s poll interval so the dashboard behaviour stays consistent
+// with a healthy default.
+const defaultBridgeHeartbeatStaleAfter = 2 * time.Minute
+
 // wireBridgeHeartbeatReader installs the Redis-backed heartbeat reader on
 // the discovery query use case. Non-critical: a wiring failure (Redis
 // unreachable at boot, misconfigured client) is logged as a warning and
@@ -319,7 +326,7 @@ func computeBridgeHeartbeatStaleAfter(cfg *Config, configGetter func() *Config) 
 	}
 
 	if runtimeCfg == nil {
-		return 2 * time.Minute
+		return defaultBridgeHeartbeatStaleAfter
 	}
 
 	return time.Duration(bridgeHeartbeatStaleMultiplier) * runtimeCfg.FetcherBridgeInterval()

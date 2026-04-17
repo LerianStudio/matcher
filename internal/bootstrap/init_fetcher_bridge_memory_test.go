@@ -164,7 +164,7 @@ func TestApplyGOMEMLIMIT_FetcherDisabled_NoOp(t *testing.T) {
 
 	reader := fixedMemoryLimitReader(4<<30, "/sys/fs/cgroup/memory.max", nil)
 
-	got := applyGOMEMLIMIT(cfg, nil, reader)
+	got := applyGOMEMLIMIT(t.Context(), cfg, nil, reader)
 	assert.Equal(t, int64(0), got, "must not set GOMEMLIMIT when Fetcher disabled")
 }
 
@@ -180,7 +180,7 @@ func TestApplyGOMEMLIMIT_OperatorOverride_Respected(t *testing.T) {
 
 	reader := fixedMemoryLimitReader(4<<30, "/sys/fs/cgroup/memory.max", nil)
 
-	got := applyGOMEMLIMIT(cfg, nil, reader)
+	got := applyGOMEMLIMIT(t.Context(), cfg, nil, reader)
 	assert.Equal(t, int64(0), got, "must not overwrite an operator-set GOMEMLIMIT")
 }
 
@@ -196,7 +196,7 @@ func TestApplyGOMEMLIMIT_ReaderError_NoOp(t *testing.T) {
 
 	reader := fixedMemoryLimitReader(0, "", errors.New("no cgroup"))
 
-	got := applyGOMEMLIMIT(cfg, nil, reader)
+	got := applyGOMEMLIMIT(t.Context(), cfg, nil, reader)
 	assert.Equal(t, int64(0), got)
 }
 
@@ -210,7 +210,7 @@ func TestApplyGOMEMLIMIT_UnlimitedCgroup_NoOp(t *testing.T) {
 
 	reader := fixedMemoryLimitReader(0, "/sys/fs/cgroup/memory.max", nil)
 
-	got := applyGOMEMLIMIT(cfg, nil, reader)
+	got := applyGOMEMLIMIT(t.Context(), cfg, nil, reader)
 	assert.Equal(t, int64(0), got)
 }
 
@@ -230,7 +230,7 @@ func TestApplyGOMEMLIMIT_SetsHeadroom(t *testing.T) {
 
 	reader := fixedMemoryLimitReader(fourGiB, "/sys/fs/cgroup/memory.max", nil)
 
-	got := applyGOMEMLIMIT(cfg, nil, reader)
+	got := applyGOMEMLIMIT(t.Context(), cfg, nil, reader)
 
 	// Mirror the production calculation. Forcing the float multiplication
 	// through an intermediate variable avoids the constant-expression

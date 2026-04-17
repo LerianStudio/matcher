@@ -2518,7 +2518,7 @@ func initModulesAndMessaging(
 	// cgroup limit so the Go runtime garbage collector works harder
 	// before we hit the cgroup ceiling. Skips when GOMEMLIMIT is
 	// already set explicitly by the operator.
-	applyGOMEMLIMIT(cfg, logger, defaultMemoryLimitReader)
+	applyGOMEMLIMIT(ctx, cfg, logger, defaultMemoryLimitReader)
 
 	bridgeWorker, err := initFetcherBridgeWorker(
 		ctx,

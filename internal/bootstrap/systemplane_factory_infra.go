@@ -163,7 +163,7 @@ func (c *objectStorageCloser) UploadIfAbsent(ctx context.Context, key string, re
 		// Intentionally not wrapping: ErrObjectAlreadyExists must survive
 		// errors.Is at the caller. Other failure classes already carry
 		// context from the S3 client layer.
-		return "", err
+		return "", err //nolint:wrapcheck // intentional passthrough to preserve ErrObjectAlreadyExists sentinel
 	}
 
 	return result, nil

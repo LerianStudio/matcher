@@ -57,6 +57,12 @@ var (
 	// reference. The custody URI or key is the only handle Delete has; we
 	// refuse to guess.
 	ErrCustodyRefRequired = errors.New("custody reference is required for delete")
+
+	// ErrReplayRecoveryCapExceeded indicates the persisted custody object
+	// exceeded the ingest-side byte cap (sharedPorts.MaxArtifactBytes)
+	// during replay recovery. Only reachable if Exists misreports or a
+	// non-ingest writer bypasses the verifier — treat as integrity failure.
+	ErrReplayRecoveryCapExceeded = errors.New("replay recovery exceeded artifact byte cap")
 )
 
 // ArtifactCustodyStore implements sharedPorts.ArtifactCustodyStore on top
@@ -463,7 +469,7 @@ func (store *ArtifactCustodyStore) recoverDigest(ctx context.Context, key string
 	if counter.n > sharedPorts.MaxArtifactBytes {
 		_ = reader.Close()
 
-		return 0, "", fmt.Errorf("replay recovery exceeded %d byte cap", sharedPorts.MaxArtifactBytes)
+		return 0, "", fmt.Errorf("%w: %d bytes", ErrReplayRecoveryCapExceeded, sharedPorts.MaxArtifactBytes)
 	}
 
 	if closeErr := reader.Close(); closeErr != nil {

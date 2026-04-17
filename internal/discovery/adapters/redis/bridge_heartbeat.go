@@ -29,6 +29,12 @@ const bridgeHeartbeatKey = "matcher:fetcher_bridge:last_tick_at"
 // signals a runtime (per-request) wiring issue.
 var ErrNilRedisClient = errors.New("bridge heartbeat adapter requires a redis client")
 
+// ErrHeartbeatTTLInvalid indicates WriteLastTickAt was called with a
+// non-positive TTL. SET EX requires a positive expiry; surfacing this as a
+// distinct sentinel keeps config-bug diagnostics out of the generic "redis
+// set" error class.
+var ErrHeartbeatTTLInvalid = errors.New("bridge heartbeat ttl must be positive")
+
 // Compile-time interface compliance checks. Kept side by side so a single
 // signature drift on either interface fails at build time rather than at
 // runtime on the first handler call.
@@ -64,12 +70,12 @@ func NewBridgeHeartbeat(client goredis.UniversalClient) (*BridgeHeartbeat, error
 // Parses the value as a Unix-second integer; anything else is treated as
 // corruption and surfaced as an error so operators can see the bad write
 // on the next dashboard request.
-func (h *BridgeHeartbeat) ReadLastTickAt(ctx context.Context) (time.Time, error) {
-	if h == nil || h.client == nil {
+func (heartbeat *BridgeHeartbeat) ReadLastTickAt(ctx context.Context) (time.Time, error) {
+	if heartbeat == nil || heartbeat.client == nil {
 		return time.Time{}, nil
 	}
 
-	raw, err := h.client.Get(ctx, bridgeHeartbeatKey).Result()
+	raw, err := heartbeat.client.Get(ctx, bridgeHeartbeatKey).Result()
 	if err != nil {
 		if errors.Is(err, goredis.Nil) {
 			return time.Time{}, nil
@@ -94,18 +100,18 @@ func (h *BridgeHeartbeat) ReadLastTickAt(ctx context.Context) (time.Time, error)
 // ttl <= 0 is rejected because SET EX requires a positive expiry — it is
 // better to surface the misconfiguration loudly than to write a
 // never-expiring key that outlives a crashed worker.
-func (h *BridgeHeartbeat) WriteLastTickAt(ctx context.Context, now time.Time, ttl time.Duration) error {
-	if h == nil || h.client == nil {
+func (heartbeat *BridgeHeartbeat) WriteLastTickAt(ctx context.Context, now time.Time, ttl time.Duration) error {
+	if heartbeat == nil || heartbeat.client == nil {
 		return ErrNilRedisClient
 	}
 
 	if ttl <= 0 {
-		return fmt.Errorf("bridge heartbeat ttl must be positive: %s", ttl)
+		return fmt.Errorf("%w: got %s", ErrHeartbeatTTLInvalid, ttl)
 	}
 
 	value := strconv.FormatInt(now.UTC().Unix(), 10)
 
-	if err := h.client.Set(ctx, bridgeHeartbeatKey, value, ttl).Err(); err != nil {
+	if err := heartbeat.client.Set(ctx, bridgeHeartbeatKey, value, ttl).Err(); err != nil {
 		return fmt.Errorf("redis set heartbeat: %w", err)
 	}
 

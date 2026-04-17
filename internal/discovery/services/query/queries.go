@@ -35,10 +35,10 @@ type UseCase struct {
 	schemaRepo       repositories.SchemaRepository
 	extractionRepo   repositories.ExtractionRepository
 	logger           libLog.Logger
-	schemaCache      ports.SchemaCache             // optional cache layer
-	cacheTTL         time.Duration                 // TTL for cached schemas
-	heartbeatReader  ports.BridgeHeartbeatReader   // optional bridge worker liveness source (C15)
-	heartbeatStaleAt time.Duration                 // worker marked unhealthy when staleness > this
+	schemaCache      ports.SchemaCache           // optional cache layer
+	cacheTTL         time.Duration               // TTL for cached schemas
+	heartbeatReader  ports.BridgeHeartbeatReader // optional bridge worker liveness source (C15)
+	heartbeatStaleAt time.Duration               // worker marked unhealthy when staleness > this
 }
 
 // NewUseCase creates a new discovery query use case.

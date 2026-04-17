@@ -231,66 +231,8 @@ func classifyArtifactResponse(resp *http.Response) (*sharedPorts.ArtifactRetriev
 		return nil, fmt.Errorf("%w: nil response", sharedPorts.ErrArtifactRetrievalFailed)
 	}
 
-	switch {
-	case resp.StatusCode == http.StatusNotFound:
-		return nil, sharedPorts.ErrFetcherResourceNotFound
-	case resp.StatusCode >= http.StatusInternalServerError:
-		return nil, fmt.Errorf(
-			"%w: fetcher returned status %d",
-			sharedPorts.ErrArtifactRetrievalFailed,
-			resp.StatusCode,
-		)
-	case resp.StatusCode == http.StatusTooManyRequests:
-		// 429 is upstream rate-limiting: the same request will succeed once
-		// the window elapses, so it must be transient. Echo Retry-After
-		// into the error message when Fetcher provides it; the retry
-		// scheduler (DB updated_at ASC reorder + worker loop) handles
-		// actual parking — this function just surfaces the hint.
-		retryAfter := strings.TrimSpace(resp.Header.Get("Retry-After"))
-		if retryAfter != "" {
-			return nil, fmt.Errorf(
-				"%w: fetcher returned status %d, retry-after=%s",
-				sharedPorts.ErrArtifactRetrievalFailed,
-				resp.StatusCode,
-				retryAfter,
-			)
-		}
-
-		return nil, fmt.Errorf(
-			"%w: fetcher returned status %d",
-			sharedPorts.ErrArtifactRetrievalFailed,
-			resp.StatusCode,
-		)
-	case resp.StatusCode == http.StatusRequestTimeout,
-		resp.StatusCode == http.StatusTooEarly:
-		// 408 and 425 are transient 4xx responses: the request can succeed
-		// on a second attempt without operator intervention. Every other
-		// 4xx (except 429, handled above) signals auth expiry, quota
-		// breach, or a payload the server will keep rejecting.
-		return nil, fmt.Errorf(
-			"%w: fetcher returned status %d",
-			sharedPorts.ErrArtifactRetrievalFailed,
-			resp.StatusCode,
-		)
-	case resp.StatusCode >= http.StatusBadRequest:
-		// Terminal: 401/403/413 and similar non-retryable 4xx. Wrapped
-		// under ErrIntegrityVerificationFailed so the bridge worker
-		// short-circuits retries on deterministic contract violations.
-		// The name is imperfect (auth isn't "integrity"), but it is the
-		// single terminal signal downstream code already honours.
-		return nil, fmt.Errorf(
-			"%w: fetcher returned status %d",
-			sharedPorts.ErrIntegrityVerificationFailed,
-			resp.StatusCode,
-		)
-	case resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices:
-		// 1xx or 3xx on a GET that does not follow redirects is a contract
-		// violation by Fetcher; treat as transient so the caller retries.
-		return nil, fmt.Errorf(
-			"%w: unexpected status %d",
-			sharedPorts.ErrArtifactRetrievalFailed,
-			resp.StatusCode,
-		)
+	if err := classifyArtifactResponseStatus(resp); err != nil {
+		return nil, err
 	}
 
 	hmacValue := strings.TrimSpace(resp.Header.Get(headerArtifactHMAC))
@@ -335,6 +277,76 @@ func classifyArtifactResponse(resp *http.Response) (*sharedPorts.ArtifactRetriev
 		HMAC:          hmacValue,
 		IV:            ivValue,
 	}, nil
+}
+
+// classifyArtifactResponseStatus maps the HTTP status code to the matching
+// sentinel error (or nil for a successful 2xx response). Split out of
+// classifyArtifactResponse to keep cyclomatic complexity under the cyclop
+// threshold; behaviour is identical to the original switch.
+func classifyArtifactResponseStatus(resp *http.Response) error {
+	switch {
+	case resp.StatusCode == http.StatusNotFound:
+		return sharedPorts.ErrFetcherResourceNotFound
+	case resp.StatusCode >= http.StatusInternalServerError:
+		return fmt.Errorf(
+			"%w: fetcher returned status %d",
+			sharedPorts.ErrArtifactRetrievalFailed,
+			resp.StatusCode,
+		)
+	case resp.StatusCode == http.StatusTooManyRequests:
+		// 429 is upstream rate-limiting: the same request will succeed once
+		// the window elapses, so it must be transient. Echo Retry-After
+		// into the error message when Fetcher provides it; the retry
+		// scheduler (DB updated_at ASC reorder + worker loop) handles
+		// actual parking — this function just surfaces the hint.
+		retryAfter := strings.TrimSpace(resp.Header.Get("Retry-After"))
+		if retryAfter != "" {
+			return fmt.Errorf(
+				"%w: fetcher returned status %d, retry-after=%s",
+				sharedPorts.ErrArtifactRetrievalFailed,
+				resp.StatusCode,
+				retryAfter,
+			)
+		}
+
+		return fmt.Errorf(
+			"%w: fetcher returned status %d",
+			sharedPorts.ErrArtifactRetrievalFailed,
+			resp.StatusCode,
+		)
+	case resp.StatusCode == http.StatusRequestTimeout,
+		resp.StatusCode == http.StatusTooEarly:
+		// 408 and 425 are transient 4xx responses: the request can succeed
+		// on a second attempt without operator intervention. Every other
+		// 4xx (except 429, handled above) signals auth expiry, quota
+		// breach, or a payload the server will keep rejecting.
+		return fmt.Errorf(
+			"%w: fetcher returned status %d",
+			sharedPorts.ErrArtifactRetrievalFailed,
+			resp.StatusCode,
+		)
+	case resp.StatusCode >= http.StatusBadRequest:
+		// Terminal: 401/403/413 and similar non-retryable 4xx. Wrapped
+		// under ErrIntegrityVerificationFailed so the bridge worker
+		// short-circuits retries on deterministic contract violations.
+		// The name is imperfect (auth isn't "integrity"), but it is the
+		// single terminal signal downstream code already honours.
+		return fmt.Errorf(
+			"%w: fetcher returned status %d",
+			sharedPorts.ErrIntegrityVerificationFailed,
+			resp.StatusCode,
+		)
+	case resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices:
+		// 1xx or 3xx on a GET that does not follow redirects is a contract
+		// violation by Fetcher; treat as transient so the caller retries.
+		return fmt.Errorf(
+			"%w: unexpected status %d",
+			sharedPorts.ErrArtifactRetrievalFailed,
+			resp.StatusCode,
+		)
+	}
+
+	return nil
 }
 
 func validateDescriptor(descriptor sharedPorts.ArtifactRetrievalDescriptor) error {

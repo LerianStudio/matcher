@@ -68,6 +68,11 @@ var ErrFetcherBridgeNotOperational = errors.New(
 	"fetcher bridge cannot start: verified-artifact pipeline unavailable",
 )
 
+// errRedisConnectionLeaseNil indicates the infrastructure provider returned
+// a nil Redis connection lease without an accompanying error. Package-private
+// sentinel — only resolveBridgeHeartbeat can produce this state.
+var errRedisConnectionLeaseNil = errors.New("redis connection lease is nil")
+
 // artifactRetrievalTimeoutPadSec is the additional allowance we apply on
 // top of the extraction request timeout when sizing the artifact
 // download HTTP client. Downloading a completed artifact is I/O bound;
@@ -434,6 +439,11 @@ const bridgeMinMemoryBytes int64 = 2 << 30 // 2 GiB
 // runtime soft limit well clear of OOMKill at the cgroup ceiling.
 const gomemlimitHeadroomPct = 0.85
 
+// gomemlimitHeadroomPctScale converts the headroom fraction (0..1) into a
+// percent value for log messages only. Factored out as a named constant so
+// the literal 100 does not appear inline (mnd).
+const gomemlimitHeadroomPctScale = 100.0
+
 // memoryLimitReader reads the effective memory limit for the current
 // process. Returns (bytesOrZero, source, err):
 //   - bytes  > 0: explicit limit detected.
@@ -479,7 +489,9 @@ func enforceMemoryBudget(cfg *Config, reader memoryLimitReader) error {
 		// Non-cgroup systems (dev/macOS) surface an error here. We do
 		// not block bootstrap — the guard is meaningless outside the
 		// cgroup-enforced environments it is designed to protect.
-		return nil
+		// Intentional: reader error == "unknown environment", which is
+		// the documented "skip enforcement" case.
+		return nil //nolint:nilerr // intentional degraded-mode: no cgroup host => skip guard
 	}
 
 	// A zero limit means the cgroup advertised "no limit" (e.g., "max"
@@ -509,7 +521,7 @@ func enforceMemoryBudget(cfg *Config, reader memoryLimitReader) error {
 // environment we leave it alone, even if we disagree with the value. The
 // Go runtime parses GOMEMLIMIT on startup; this call is only relevant
 // when the runtime defaulted to math.MaxInt64.
-func applyGOMEMLIMIT(cfg *Config, logger libLog.Logger, reader memoryLimitReader) int64 {
+func applyGOMEMLIMIT(ctx context.Context, cfg *Config, logger libLog.Logger, reader memoryLimitReader) int64 {
 	if cfg == nil || !cfg.Fetcher.Enabled {
 		return 0
 	}
@@ -536,10 +548,10 @@ func applyGOMEMLIMIT(cfg *Config, logger libLog.Logger, reader memoryLimitReader
 	previous := debug.SetMemoryLimit(soft)
 
 	if logger != nil {
-		logger.Log(context.Background(), libLog.LevelInfo,
+		logger.Log(ctx, libLog.LevelInfo,
 			fmt.Sprintf(
 				"GOMEMLIMIT set to %d bytes (%.0f%% of %d from %s); previous soft limit %d",
-				soft, gomemlimitHeadroomPct*100, limit, source, previous,
+				soft, gomemlimitHeadroomPctScale*gomemlimitHeadroomPct, limit, source, previous,
 			),
 		)
 	}
@@ -759,7 +771,7 @@ func resolveBridgeHeartbeat(
 	}
 
 	if lease == nil {
-		return nil, errors.New("redis connection lease is nil")
+		return nil, fmt.Errorf("resolve bridge heartbeat: %w", errRedisConnectionLeaseNil)
 	}
 
 	defer lease.Release()
