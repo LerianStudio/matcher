@@ -612,17 +612,17 @@ linters:
               desc: "Domain purity violation: avoid logging in domain layer."
             - pkg: "go.opentelemetry.io/otel"
               desc: "Domain purity violation: avoid tracing in domain layer."
-            - pkg: "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+            - pkg: "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
               desc: "Domain purity violation: avoid tracing in domain layer."
-            - pkg: "github.com/LerianStudio/lib-commons/v4/commons/log"
+            - pkg: "github.com/LerianStudio/lib-commons/v5/commons/log"
               desc: "Domain purity violation: avoid logging in domain layer."
-            - pkg: "github.com/LerianStudio/lib-commons/v4/commons/zap"
+            - pkg: "github.com/LerianStudio/lib-commons/v5/commons/zap"
               desc: "Domain purity violation: avoid logging in domain layer."
-            - pkg: "github.com/LerianStudio/lib-commons/v4/commons/postgres"
+            - pkg: "github.com/LerianStudio/lib-commons/v5/commons/postgres"
               desc: "Domain purity violation: avoid infrastructure dependencies in domain layer."
-            - pkg: "github.com/LerianStudio/lib-commons/v4/commons/redis"
+            - pkg: "github.com/LerianStudio/lib-commons/v5/commons/redis"
               desc: "Domain purity violation: avoid infrastructure dependencies in domain layer."
-            - pkg: "github.com/LerianStudio/lib-commons/v4/commons/rabbitmq"
+            - pkg: "github.com/LerianStudio/lib-commons/v5/commons/rabbitmq"
               desc: "Domain purity violation: avoid infrastructure dependencies in domain layer."
         # ===========================================
         # Shared Kernel Boundaries
@@ -769,10 +769,10 @@ linters:
         - "func (*github.com/gofiber/fiber/v2.Ctx).SendString(body string) error"
         - "func (*github.com/gofiber/fiber/v2.App).Listen(addr string) error"
         # lib-commons HTTP response helpers - terminal operations in handlers
-        - "func github.com/LerianStudio/lib-commons/v4/commons/net/http.Respond(c *github.com/gofiber/fiber/v2.Ctx, status int, payload any) error"
-        - "func github.com/LerianStudio/lib-commons/v4/commons/net/http.RespondStatus(c *github.com/gofiber/fiber/v2.Ctx, status int) error"
-        - "func github.com/LerianStudio/lib-commons/v4/commons/net/http.RespondError(c *github.com/gofiber/fiber/v2.Ctx, status int, title string, message string) error"
-        - "func github.com/LerianStudio/lib-commons/v4/commons/net/http.RenderError(ctx *github.com/gofiber/fiber/v2.Ctx, err error) error"
+        - "func github.com/LerianStudio/lib-commons/v5/commons/net/http.Respond(c *github.com/gofiber/fiber/v2.Ctx, status int, payload any) error"
+        - "func github.com/LerianStudio/lib-commons/v5/commons/net/http.RespondStatus(c *github.com/gofiber/fiber/v2.Ctx, status int) error"
+        - "func github.com/LerianStudio/lib-commons/v5/commons/net/http.RespondError(c *github.com/gofiber/fiber/v2.Ctx, status int, title string, message string) error"
+        - "func github.com/LerianStudio/lib-commons/v5/commons/net/http.RenderError(ctx *github.com/gofiber/fiber/v2.Ctx, err error) error"
         # pkg/http error response helpers - terminal HTTP operations
         - "func github.com/LerianStudio/matcher/pkg/http.WriteError(c *github.com/gofiber/fiber/v2.Ctx, status int, title string, message string) error"
         - "func github.com/LerianStudio/matcher/pkg/http.BadRequestError(c *github.com/gofiber/fiber/v2.Ctx, title string, message string) error"
@@ -797,7 +797,7 @@ linters:
         - "func (*database/sql.Rows).Err() error"
         - "func (database/sql.Result).RowsAffected() (int64, error)"
         # InfrastructureProvider interface methods - thin wrapper for tenant-aware connection resolution
-        - "func (github.com/LerianStudio/matcher/internal/shared/ports.InfrastructureProvider).GetRedisConnection(ctx context.Context) (*github.com/LerianStudio/lib-commons/v4/commons/redis.Client, error)"
+        - "func (github.com/LerianStudio/matcher/internal/shared/ports.InfrastructureProvider).GetRedisConnection(ctx context.Context) (*github.com/LerianStudio/matcher/internal/shared/ports.RedisConnectionLease, error)"
         # Interface Scan method
         - "func (interface).Scan(dest ...any) error"
         # Additional lib-commons HTTP helpers
