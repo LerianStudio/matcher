@@ -114,9 +114,9 @@ func newChaosHarness(ctx context.Context) (*ChaosHarness, error) {
 			wait.ForAll(
 				wait.ForLog("database system is ready to accept connections").
 					WithOccurrence(2).
-					WithStartupTimeout(60*time.Second),
+					WithStartupTimeout(120*time.Second),
 				wait.ForListeningPort("5432/tcp"),
-			).WithStartupTimeout(60*time.Second)),
+			).WithStartupTimeout(120*time.Second)),
 	)
 	if err != nil {
 		return cleanupOnError(fmt.Errorf("start postgres: %w", err))
@@ -132,7 +132,7 @@ func newChaosHarness(ctx context.Context) (*ChaosHarness, error) {
 			wait.ForAll(
 				wait.ForListeningPort("6379/tcp"),
 				wait.ForLog("Ready to accept connections"),
-			).WithStartupTimeout(30*time.Second)),
+			).WithStartupTimeout(120*time.Second)),
 	)
 	if err != nil {
 		return cleanupOnError(fmt.Errorf("start redis: %w", err))

@@ -76,9 +76,9 @@ func NewTestHarness(ctx context.Context, t *testing.T) (*TestHarness, error) {
 			wait.ForAll(
 				wait.ForLog("database system is ready to accept connections").
 					WithOccurrence(2).
-					WithStartupTimeout(60*time.Second),
+					WithStartupTimeout(120*time.Second),
 				wait.ForListeningPort("5432/tcp"),
-			).WithStartupTimeout(60*time.Second)),
+			).WithStartupTimeout(120*time.Second)),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start postgres: %w", err)
@@ -107,7 +107,7 @@ func NewTestHarness(ctx context.Context, t *testing.T) (*TestHarness, error) {
 			wait.ForAll(
 				wait.ForListeningPort("6379/tcp"),
 				wait.ForLog("Ready to accept connections"),
-			).WithStartupTimeout(30*time.Second)),
+			).WithStartupTimeout(120*time.Second)),
 	)
 	if err != nil {
 		if terminateErr := terminateContainer(ctx, pgContainer); terminateErr != nil {
