@@ -38,8 +38,27 @@ func TestValidateSystemplaneSecrets_DevDefaultInProd(t *testing.T) {
 	err := ValidateSystemplaneSecrets("production")
 
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, errSystemplaneDevMasterKeyInProd),
-		"expected errSystemplaneDevMasterKeyInProd, got: %v", err)
+	assert.True(t, errors.Is(err, errSystemplaneDevMasterKeyInNonDev),
+		"expected errSystemplaneDevMasterKeyInNonDev, got: %v", err)
+}
+
+// TestValidateSystemplaneSecrets_DevDefaultRejectedOutsideDev asserts the
+// well-known dev key is rejected in every environment that is not explicitly
+// "development" or "test". Staging, UAT, QA, preview, and any unknown value
+// must all reject — they can hold real data, so the publicly-known key would
+// be a credential leak.
+func TestValidateSystemplaneSecrets_DevDefaultRejectedOutsideDev(t *testing.T) {
+	for _, envName := range []string{"staging", "uat", "qa", "preview", "sandbox", "", "Production"} {
+		t.Run(envName, func(t *testing.T) {
+			t.Setenv("SYSTEMPLANE_SECRET_MASTER_KEY", wellKnownDevMasterKey)
+
+			err := ValidateSystemplaneSecrets(envName)
+
+			require.Error(t, err, "env %q must reject the dev default key", envName)
+			assert.True(t, errors.Is(err, errSystemplaneDevMasterKeyInNonDev),
+				"env %q: expected errSystemplaneDevMasterKeyInNonDev, got: %v", envName, err)
+		})
+	}
 }
 
 // TestValidateSystemplaneSecrets_ValidKeyInProd asserts a non-default key in
@@ -53,15 +72,20 @@ func TestValidateSystemplaneSecrets_ValidKeyInProd(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-// TestValidateSystemplaneSecrets_NonProdSkipsDevKeyCheck asserts that the dev
-// default is explicitly allowed outside production. Non-prod still requires
-// *some* key (empty is rejected), but the dev default is fine.
-func TestValidateSystemplaneSecrets_NonProdSkipsDevKeyCheck(t *testing.T) {
-	t.Setenv("SYSTEMPLANE_SECRET_MASTER_KEY", wellKnownDevMasterKey)
+// TestValidateSystemplaneSecrets_DevDefaultAllowedInDevAndTest asserts the
+// dev default is allowed in exactly two environments: "development" and
+// "test" (case-insensitive). Local developers and unit-test harnesses need
+// this path; everything else goes through the rejection branch above.
+func TestValidateSystemplaneSecrets_DevDefaultAllowedInDevAndTest(t *testing.T) {
+	for _, envName := range []string{"development", "test", "DEVELOPMENT", "Test"} {
+		t.Run(envName, func(t *testing.T) {
+			t.Setenv("SYSTEMPLANE_SECRET_MASTER_KEY", wellKnownDevMasterKey)
 
-	err := ValidateSystemplaneSecrets("development")
+			err := ValidateSystemplaneSecrets(envName)
 
-	assert.NoError(t, err, "dev default must be allowed in non-production")
+			assert.NoError(t, err, "env %q must accept the dev default key", envName)
+		})
+	}
 }
 
 // TestValidateSystemplaneSecrets_NonProdMissingKey asserts that non-production

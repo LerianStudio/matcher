@@ -21,9 +21,9 @@ import (
 
 // Sentinel errors for systemplane initialization.
 var (
-	errSystemplaneSecretMasterKey    = errors.New("validate systemplane config: SYSTEMPLANE_SECRET_MASTER_KEY is required")
-	errSystemplaneDevMasterKeyInProd = errors.New("validate systemplane config: SYSTEMPLANE_SECRET_MASTER_KEY must not use the well-known development default in production")
-	errSystemplanePostgresDBRequired = errors.New("init systemplane: postgres db is required")
+	errSystemplaneSecretMasterKey      = errors.New("validate systemplane config: SYSTEMPLANE_SECRET_MASTER_KEY is required")
+	errSystemplaneDevMasterKeyInNonDev = errors.New("validate systemplane config: SYSTEMPLANE_SECRET_MASTER_KEY must not use the well-known development default outside development or test environments")
+	errSystemplanePostgresDBRequired   = errors.New("init systemplane: postgres db is required")
 )
 
 // wellKnownDevMasterKey is the development-mode default for the systemplane
@@ -107,8 +107,12 @@ func buildSystemplaneDSN(cfg *Config) string {
 }
 
 // ValidateSystemplaneSecrets checks systemplane secret configuration.
-// In production, the master key must be set and must not be the well-known
-// development default.
+//
+// The master key must always be set. The well-known development default
+// (committed in docker-compose.yml) is ONLY accepted in explicit
+// development or test environments — staging, UAT, QA, preview, and any
+// unknown environment all reject it. This prevents a publicly-known key
+// from guarding any environment that may hold real data.
 func ValidateSystemplaneSecrets(envName string) error {
 	masterKey := strings.TrimSpace(os.Getenv("SYSTEMPLANE_SECRET_MASTER_KEY"))
 
@@ -116,8 +120,8 @@ func ValidateSystemplaneSecrets(envName string) error {
 		return errSystemplaneSecretMasterKey
 	}
 
-	if IsProductionEnvironment(envName) && masterKey == wellKnownDevMasterKey {
-		return errSystemplaneDevMasterKeyInProd
+	if masterKey == wellKnownDevMasterKey && !IsDevelopmentOrTestEnvironment(envName) {
+		return errSystemplaneDevMasterKeyInNonDev
 	}
 
 	return nil
