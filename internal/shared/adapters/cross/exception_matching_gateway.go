@@ -88,22 +88,35 @@ func (gateway *ExceptionMatchingGateway) CreateForceMatch(
 	contextID, err := gateway.resolveContextIDByTransactionID(ctx, input.TransactionID)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to resolve context ID", err)
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("force match: failed to resolve context ID for transaction %s: %v",
-			input.TransactionID, err))
+		logger.With(
+			libLog.String("operation", "force_match"),
+			libLog.String("transaction_id", input.TransactionID.String()),
+		).Log(ctx, libLog.LevelError, "failed to resolve context ID")
 
 		return fmt.Errorf("resolve context ID: %w", err)
 	}
 
 	if err := gateway.transactionRepo.MarkMatched(ctx, contextID, []uuid.UUID{input.TransactionID}); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to mark transaction as matched", err)
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("force match: failed to mark transaction %s as matched: %v",
-			input.TransactionID, err))
+		logger.With(
+			libLog.String("operation", "force_match"),
+			libLog.String("transaction_id", input.TransactionID.String()),
+			libLog.String("context_id", contextID.String()),
+		).Log(ctx, libLog.LevelError, "failed to mark transaction as matched")
 
 		return fmt.Errorf("mark transaction matched: %w", err)
 	}
 
-	logger.Log(ctx, libLog.LevelInfo, fmt.Sprintf("force match created: transaction=%s, context=%s, reason=%s, actor=%s",
-		input.TransactionID, contextID, input.OverrideReason, input.Actor))
+	// input.OverrideReason and input.Actor are user-controlled; they must
+	// never be interpolated into the log message template. The structured
+	// fields are escaped by the logger and safe against CRLF injection.
+	logger.With(
+		libLog.String("operation", "force_match"),
+		libLog.String("transaction_id", input.TransactionID.String()),
+		libLog.String("context_id", contextID.String()),
+		libLog.String("override_reason", input.OverrideReason),
+		libLog.String("actor", input.Actor),
+	).Log(ctx, libLog.LevelInfo, "force match created")
 
 	return nil
 }
@@ -121,8 +134,10 @@ func (gateway *ExceptionMatchingGateway) CreateAdjustment(
 	contextID, err := gateway.resolveContextIDByTransactionID(ctx, input.TransactionID)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to resolve context ID", err)
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("adjust entry: failed to resolve context ID for transaction %s: %v",
-			input.TransactionID, err))
+		logger.With(
+			libLog.String("operation", "adjust_entry"),
+			libLog.String("transaction_id", input.TransactionID.String()),
+		).Log(ctx, libLog.LevelError, "failed to resolve context ID")
 
 		return fmt.Errorf("resolve context ID: %w", err)
 	}
@@ -133,8 +148,11 @@ func (gateway *ExceptionMatchingGateway) CreateAdjustment(
 	direction := matchingEntities.AdjustmentDirection(input.Direction)
 	if !direction.IsValid() {
 		libOpentelemetry.HandleSpanError(span, "invalid adjustment direction", ErrInvalidDirection)
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("adjust entry: invalid direction %q for transaction %s",
-			input.Direction, input.TransactionID))
+		logger.With(
+			libLog.String("operation", "adjust_entry"),
+			libLog.String("transaction_id", input.TransactionID.String()),
+			libLog.String("direction", input.Direction),
+		).Log(ctx, libLog.LevelError, "invalid adjustment direction")
 
 		return fmt.Errorf("validate direction: %w", ErrInvalidDirection)
 	}
@@ -154,20 +172,37 @@ func (gateway *ExceptionMatchingGateway) CreateAdjustment(
 	)
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to create adjustment entity", err)
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("adjust entry: failed to create adjustment entity: %v", err))
+		logger.With(
+			libLog.String("operation", "adjust_entry"),
+			libLog.String("transaction_id", input.TransactionID.String()),
+		).Log(ctx, libLog.LevelError, "failed to create adjustment entity")
 
 		return fmt.Errorf("create adjustment entity: %w", err)
 	}
 
 	if _, err := gateway.adjustmentRepo.Create(ctx, adjustment); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to persist adjustment", err)
-		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("adjust entry: failed to persist adjustment: %v", err))
+		logger.With(
+			libLog.String("operation", "adjust_entry"),
+			libLog.String("transaction_id", input.TransactionID.String()),
+			libLog.String("adjustment_id", adjustment.ID.String()),
+		).Log(ctx, libLog.LevelError, "failed to persist adjustment")
 
 		return fmt.Errorf("persist adjustment: %w", err)
 	}
 
-	logger.Log(ctx, libLog.LevelInfo, fmt.Sprintf("adjustment created: adjustment=%s, transaction=%s, amount=%s %s, reason=%s",
-		adjustment.ID, input.TransactionID, input.Amount.String(), input.Currency, input.Reason))
+	// input.Reason, input.Notes and input.Actor are user-controlled; pass
+	// them only as structured fields so the logger escapes them and they
+	// cannot forge new log lines via CRLF injection.
+	logger.With(
+		libLog.String("operation", "adjust_entry"),
+		libLog.String("adjustment_id", adjustment.ID.String()),
+		libLog.String("transaction_id", input.TransactionID.String()),
+		libLog.String("amount", input.Amount.String()),
+		libLog.String("currency", input.Currency),
+		libLog.String("reason", input.Reason),
+		libLog.String("actor", input.Actor),
+	).Log(ctx, libLog.LevelInfo, "adjustment created")
 
 	return nil
 }
