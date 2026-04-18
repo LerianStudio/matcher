@@ -118,6 +118,11 @@ func (cm *ConfigManager) WatchSystemplane(client *systemplane.Client) error {
 		}
 	}
 
+	// Client.Start() hydrates persisted values before WatchSystemplane is called,
+	// so perform one eager reload to make the initial snapshot visible before any
+	// future OnChange callbacks arrive.
+	reload(context.Background(), "initial_hydrate")
+
 	// Register one subscription per runtime-mutable key that feeds the Config
 	// struct. These mirror the keys resolved in applySystemplaneOverrides.
 	watched := watchedSystemplaneKeys()
@@ -163,8 +168,6 @@ func watchedSystemplaneKeys() []string {
 		"server.trusted_proxies",
 
 		// Tenancy
-		"tenancy.default_tenant_id",
-		"tenancy.default_tenant_slug",
 		"tenancy.multi_tenant_enabled",
 		"tenancy.multi_tenant_url",
 		"tenancy.multi_tenant_environment",
@@ -193,11 +196,6 @@ func watchedSystemplaneKeys() []string {
 		"redis.min_idle_conns",
 		"redis.read_timeout_ms",
 		"redis.write_timeout_ms",
-
-		// Auth
-		"auth.enabled",
-		"auth.host",
-		"auth.token_secret",
 
 		// Telemetry
 		"telemetry.enabled",
@@ -230,10 +228,6 @@ func watchedSystemplaneKeys() []string {
 		"idempotency.retry_window_sec",
 		"idempotency.success_ttl_hours",
 		"idempotency.hmac_secret",
-
-		// Outbox
-		"outbox.retry_window_sec",
-		"outbox.dispatch_interval_sec",
 
 		// Deduplication
 		"deduplication.ttl_sec",
@@ -340,8 +334,6 @@ func applySystemplaneOverrides(base Config, client *systemplane.Client) Config {
 	base.Server.TrustedProxies = SystemplaneGetString(client, "server.trusted_proxies", base.Server.TrustedProxies)
 
 	// --- Tenancy ---
-	base.Tenancy.DefaultTenantID = SystemplaneGetString(client, "tenancy.default_tenant_id", base.Tenancy.DefaultTenantID)
-	base.Tenancy.DefaultTenantSlug = SystemplaneGetString(client, "tenancy.default_tenant_slug", base.Tenancy.DefaultTenantSlug)
 	base.Tenancy.MultiTenantEnabled = SystemplaneGetBool(client, "tenancy.multi_tenant_enabled", base.Tenancy.MultiTenantEnabled)
 	base.Tenancy.MultiTenantURL = SystemplaneGetString(client, "tenancy.multi_tenant_url", base.Tenancy.MultiTenantURL)
 	base.Tenancy.MultiTenantEnvironment = SystemplaneGetString(client, "tenancy.multi_tenant_environment", base.Tenancy.MultiTenantEnvironment)
@@ -370,11 +362,6 @@ func applySystemplaneOverrides(base Config, client *systemplane.Client) Config {
 	base.Redis.MinIdleConn = SystemplaneGetInt(client, "redis.min_idle_conns", base.Redis.MinIdleConn)
 	base.Redis.ReadTimeoutMs = SystemplaneGetInt(client, "redis.read_timeout_ms", base.Redis.ReadTimeoutMs)
 	base.Redis.WriteTimeoutMs = SystemplaneGetInt(client, "redis.write_timeout_ms", base.Redis.WriteTimeoutMs)
-
-	// --- Auth ---
-	base.Auth.Enabled = SystemplaneGetBool(client, "auth.enabled", base.Auth.Enabled)
-	base.Auth.Host = SystemplaneGetString(client, "auth.host", base.Auth.Host)
-	base.Auth.TokenSecret = SystemplaneGetString(client, "auth.token_secret", base.Auth.TokenSecret)
 
 	// --- Telemetry ---
 	base.Telemetry.Enabled = SystemplaneGetBool(client, "telemetry.enabled", base.Telemetry.Enabled)
@@ -407,10 +394,6 @@ func applySystemplaneOverrides(base Config, client *systemplane.Client) Config {
 	base.Idempotency.RetryWindowSec = SystemplaneGetInt(client, "idempotency.retry_window_sec", base.Idempotency.RetryWindowSec)
 	base.Idempotency.SuccessTTLHours = SystemplaneGetInt(client, "idempotency.success_ttl_hours", base.Idempotency.SuccessTTLHours)
 	base.Idempotency.HMACSecret = SystemplaneGetString(client, "idempotency.hmac_secret", base.Idempotency.HMACSecret)
-
-	// --- Outbox ---
-	base.Outbox.RetryWindowSec = SystemplaneGetInt(client, "outbox.retry_window_sec", base.Outbox.RetryWindowSec)
-	base.Outbox.DispatchIntervalSec = SystemplaneGetInt(client, "outbox.dispatch_interval_sec", base.Outbox.DispatchIntervalSec)
 
 	// --- Deduplication ---
 	base.Dedupe.TTLSec = SystemplaneGetInt(client, "deduplication.ttl_sec", base.Dedupe.TTLSec)

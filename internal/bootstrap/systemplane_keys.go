@@ -368,9 +368,11 @@ func matcherKeyDefs(cfg *Config) []matcherKeyDef {
 	)
 
 	// --- Tenancy ---
+	// Default-tenant values are bootstrap-only because buildTenantExtractor wires
+	// them into auth globals once at startup. Multi-tenant manager knobs remain
+	// registered because dynamicInfrastructureProvider re-reads configGetter and
+	// rebuilds the canonical manager when manager-shaping values change.
 	defs = append(defs,
-		matcherKeyDef{key: "tenancy.default_tenant_id", defaultValue: cfg.Tenancy.DefaultTenantID, description: "Default tenant ID for single-tenant mode"},
-		matcherKeyDef{key: "tenancy.default_tenant_slug", defaultValue: cfg.Tenancy.DefaultTenantSlug, description: "Default tenant slug for single-tenant mode"},
 		matcherKeyDef{key: "tenancy.multi_tenant_enabled", defaultValue: cfg.Tenancy.MultiTenantEnabled, description: "Enable multi-tenant mode"},
 		matcherKeyDef{key: "tenancy.multi_tenant_url", defaultValue: cfg.Tenancy.MultiTenantURL, description: "Multi-tenant service URL"},
 		matcherKeyDef{key: "tenancy.multi_tenant_environment", defaultValue: cfg.Tenancy.MultiTenantEnvironment, description: "Multi-tenant environment identifier"},
@@ -421,11 +423,8 @@ func matcherKeyDefs(cfg *Config) []matcherKeyDef {
 	// environment variables.
 
 	// --- Auth ---
-	defs = append(defs,
-		matcherKeyDef{key: "auth.enabled", defaultValue: cfg.Auth.Enabled, description: "Enable authentication"},
-		matcherKeyDef{key: "auth.host", defaultValue: cfg.Auth.Host, description: "Auth service host"},
-		matcherKeyDef{key: "auth.token_secret", defaultValue: cfg.Auth.TokenSecret, description: "JWT token signing secret", redact: systemplane.RedactFull},
-	)
+	// Auth middleware and tenant extraction are constructed once at startup, so
+	// these values remain bootstrap-only to avoid misleading operators.
 
 	// --- Telemetry ---
 	defs = append(defs,
@@ -470,20 +469,8 @@ func matcherKeyDefs(cfg *Config) []matcherKeyDef {
 	)
 
 	// --- Outbox Dispatcher ---
-	defs = append(defs,
-		matcherKeyDef{
-			key:          "outbox.retry_window_sec",
-			defaultValue: cfg.Outbox.RetryWindowSec,
-			description:  "Outbox dispatcher retry cooldown in seconds",
-			validator:    validatePositiveInt,
-		},
-		matcherKeyDef{
-			key:          "outbox.dispatch_interval_sec",
-			defaultValue: cfg.Outbox.DispatchIntervalSec,
-			description:  "Outbox dispatcher poll interval in seconds",
-			validator:    validatePositiveInt,
-		},
-	)
+	// Outbox dispatcher timing is wired once during bootstrap. Leave these as
+	// restart-only until the dispatcher supports live reconfiguration.
 
 	// --- Deduplication ---
 	defs = append(defs,

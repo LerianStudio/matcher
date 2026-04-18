@@ -247,16 +247,14 @@ func TestApplySystemplaneOverrides_ObjectStorage(t *testing.T) {
 	assert.True(t, got.ObjectStorage.AllowInsecure)
 }
 
-// TestApplySystemplaneOverrides_Tenancy covers a large block of mixed
-// string/int/bool keys.
+// TestApplySystemplaneOverrides_Tenancy covers the live-reloadable multi-tenant
+// manager settings. Default-tenant identity stays bootstrap-only.
 func TestApplySystemplaneOverrides_Tenancy(t *testing.T) {
 	t.Parallel()
 
 	base := defaultConfig()
 	client := newStartedTestClient(t, base)
 
-	setMatcherKey(t, client, "tenancy.default_tenant_id", "99999999-9999-9999-9999-999999999999")
-	setMatcherKey(t, client, "tenancy.default_tenant_slug", "override")
 	setMatcherKey(t, client, "tenancy.multi_tenant_enabled", true)
 	setMatcherKey(t, client, "tenancy.multi_tenant_url", "https://tm.internal")
 	setMatcherKey(t, client, "tenancy.multi_tenant_environment", "staging")
@@ -275,8 +273,6 @@ func TestApplySystemplaneOverrides_Tenancy(t *testing.T) {
 
 	got := applySystemplaneOverrides(*base, client)
 
-	assert.Equal(t, "99999999-9999-9999-9999-999999999999", got.Tenancy.DefaultTenantID)
-	assert.Equal(t, "override", got.Tenancy.DefaultTenantSlug)
 	assert.True(t, got.Tenancy.MultiTenantEnabled)
 	assert.Equal(t, "https://tm.internal", got.Tenancy.MultiTenantURL)
 	assert.Equal(t, "staging", got.Tenancy.MultiTenantEnvironment)
@@ -358,18 +354,13 @@ func TestApplySystemplaneOverrides_PoolKnobs(t *testing.T) {
 	assert.Equal(t, 4000, got.Redis.WriteTimeoutMs)
 }
 
-// TestApplySystemplaneOverrides_MiscAreas covers auth, telemetry, swagger,
-// deduplication, callback_rate_limit, webhook, m2m, infrastructure, outbox.
+// TestApplySystemplaneOverrides_MiscAreas covers telemetry, swagger,
+// deduplication, callback_rate_limit, webhook, m2m, and infrastructure.
 func TestApplySystemplaneOverrides_MiscAreas(t *testing.T) {
 	t.Parallel()
 
 	base := defaultConfig()
 	client := newStartedTestClient(t, base)
-
-	// Auth.
-	setMatcherKey(t, client, "auth.enabled", true)
-	setMatcherKey(t, client, "auth.host", "https://auth.override.example")
-	setMatcherKey(t, client, "auth.token_secret", "rotated-jwt-secret")
 
 	// Telemetry.
 	setMatcherKey(t, client, "telemetry.enabled", true)
@@ -389,10 +380,6 @@ func TestApplySystemplaneOverrides_MiscAreas(t *testing.T) {
 	setMatcherKey(t, client, "infrastructure.connect_timeout_sec", 45)
 	setMatcherKey(t, client, "infrastructure.health_check_timeout_sec", 10)
 
-	// Outbox.
-	setMatcherKey(t, client, "outbox.retry_window_sec", 600)
-	setMatcherKey(t, client, "outbox.dispatch_interval_sec", 5)
-
 	// Deduplication.
 	setMatcherKey(t, client, "deduplication.ttl_sec", 7200)
 
@@ -409,10 +396,6 @@ func TestApplySystemplaneOverrides_MiscAreas(t *testing.T) {
 
 	got := applySystemplaneOverrides(*base, client)
 
-	assert.True(t, got.Auth.Enabled)
-	assert.Equal(t, "https://auth.override.example", got.Auth.Host)
-	assert.Equal(t, "rotated-jwt-secret", got.Auth.TokenSecret)
-
 	assert.True(t, got.Telemetry.Enabled)
 	assert.Equal(t, "matcher-override", got.Telemetry.ServiceName)
 	assert.Equal(t, "github.com/example/override", got.Telemetry.LibraryName)
@@ -428,9 +411,6 @@ func TestApplySystemplaneOverrides_MiscAreas(t *testing.T) {
 	assert.Equal(t, 45, got.Infrastructure.ConnectTimeoutSec)
 	assert.Equal(t, 10, got.Infrastructure.HealthCheckTimeoutSec)
 
-	assert.Equal(t, 600, got.Outbox.RetryWindowSec)
-	assert.Equal(t, 5, got.Outbox.DispatchIntervalSec)
-
 	assert.Equal(t, 7200, got.Dedupe.TTLSec)
 	assert.Equal(t, 120, got.CallbackRateLimit.PerMinute)
 	assert.Equal(t, 45, got.Webhook.TimeoutSec)
@@ -438,6 +418,30 @@ func TestApplySystemplaneOverrides_MiscAreas(t *testing.T) {
 	assert.Equal(t, "override-service", got.M2M.M2MTargetService)
 	assert.Equal(t, 900, got.M2M.M2MCredentialCacheTTLSec)
 	assert.Equal(t, "ap-southeast-2", got.M2M.AWSRegion)
+}
+
+func TestApplySystemplaneOverrides_BootstrapOnlyKeysRemainStatic(t *testing.T) {
+	t.Parallel()
+
+	base := defaultConfig()
+	base.Tenancy.DefaultTenantID = "11111111-1111-1111-1111-111111111111"
+	base.Tenancy.DefaultTenantSlug = "default"
+	base.Auth.Enabled = false
+	base.Auth.Host = "https://auth.initial.example"
+	base.Auth.TokenSecret = "initial-secret"
+	base.Outbox.RetryWindowSec = 300
+	base.Outbox.DispatchIntervalSec = 2
+
+	client := newStartedTestClient(t, base)
+	got := applySystemplaneOverrides(*base, client)
+
+	assert.Equal(t, base.Tenancy.DefaultTenantID, got.Tenancy.DefaultTenantID)
+	assert.Equal(t, base.Tenancy.DefaultTenantSlug, got.Tenancy.DefaultTenantSlug)
+	assert.Equal(t, base.Auth.Enabled, got.Auth.Enabled)
+	assert.Equal(t, base.Auth.Host, got.Auth.Host)
+	assert.Equal(t, base.Auth.TokenSecret, got.Auth.TokenSecret)
+	assert.Equal(t, base.Outbox.RetryWindowSec, got.Outbox.RetryWindowSec)
+	assert.Equal(t, base.Outbox.DispatchIntervalSec, got.Outbox.DispatchIntervalSec)
 }
 
 // TestWatchedSystemplaneKeys_CoversMatcherDefs ensures every key in

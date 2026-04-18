@@ -228,6 +228,22 @@ func TestConfigManager_BootstrapWiring(t *testing.T) {
 	})
 }
 
+func TestConfigManager_WatchSystemplane_InitialHydrateAppliesOverrides(t *testing.T) {
+	t.Parallel()
+
+	base := defaultConfig()
+	base.RateLimit.Max = 100
+
+	client := newStartedTestClient(t, base)
+	setMatcherKey(t, client, "rate_limit.max", 777)
+
+	cm := newTestConfigManager(t, base, &testLogger{})
+	require.Equal(t, 100, cm.Get().RateLimit.Max)
+
+	require.NoError(t, cm.WatchSystemplane(client))
+	require.Equal(t, 777, cm.Get().RateLimit.Max)
+}
+
 func TestRestoreZeroedFields_RestoresBlankString(t *testing.T) {
 	// Not parallel: clearConfigEnvVars manipulates process env.
 	clearConfigEnvVars(t)

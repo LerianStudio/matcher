@@ -58,6 +58,13 @@ func TestMatcherKeyDefs_NoBootstrapOnlyKeys(t *testing.T) {
 		"app.log_level",
 		"postgres.connect_timeout_sec",
 		"postgres.migrations_path",
+		"tenancy.default_tenant_id",
+		"tenancy.default_tenant_slug",
+		"auth.enabled",
+		"auth.host",
+		"auth.token_secret",
+		"outbox.retry_window_sec",
+		"outbox.dispatch_interval_sec",
 	}
 
 	for _, d := range matcherKeyDefs(defaultConfig()) {
