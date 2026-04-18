@@ -1,6 +1,12 @@
 //go:build integration
 
-package integration
+// Package ratelimit hosts integration-test helpers that need to touch the
+// bootstrap Service directly. It lives in its own subpackage so that
+// tests/integration can be imported by test files inside internal/* without
+// dragging bootstrap (and therefore the full module graph) with it, which
+// would otherwise create an import cycle through packages like
+// internal/discovery/services/worker.
+package ratelimit
 
 import (
 	"context"

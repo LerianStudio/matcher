@@ -13,12 +13,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/LerianStudio/matcher/internal/bootstrap"
 	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/LerianStudio/matcher/internal/bootstrap"
+	"github.com/LerianStudio/matcher/tests/integration/ratelimit"
 )
 
 func TestConfigurationFlow_Integration(t *testing.T) {
@@ -74,7 +76,7 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 		// values. Without this, the registered compile-time defaults
 		// (rate_limit.max=100) mask the env-based RATE_LIMIT_MAX=1000 and cause
 		// sequential test requests to 429 after ~100 calls.
-		require.NoError(t, OverrideRateLimitsForTests(context.Background(), service))
+		require.NoError(t, ratelimit.OverrideRateLimitsForTests(context.Background(), service))
 
 		runErr := make(chan error, 1)
 
