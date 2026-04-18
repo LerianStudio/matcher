@@ -41,6 +41,15 @@ SERVER_ADDRESS=:4018
 
 # Maximum HTTP request body size is runtime-managed via systemplane.
 # Configure `server.body_limit_bytes` via PUT /system/matcher/server.body_limit_bytes instead.
+#
+# Rate limiting is runtime-managed via systemplane. Tier keys (all under
+# /system/matcher):
+#   rate_limit.max / .expiry_sec                — global tier (tenant API)
+#   rate_limit.export_max / .export_expiry_sec  — export endpoints
+#   rate_limit.dispatch_max / .dispatch_expiry_sec — dispatch endpoints
+#   rate_limit.admin_max / .admin_expiry_sec    — admin plane (/system)
+# The admin tier is scoped separately so admin traffic and tenant traffic
+# cannot starve each other under fail-open Redis outage.
 
 # TLS — only needed when terminating TLS at the application level.
 # Most deployments terminate TLS at the ingress/load balancer.

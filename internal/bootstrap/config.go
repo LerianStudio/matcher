@@ -179,7 +179,13 @@ type TelemetryConfig struct {
 	DBMetricsIntervalSec int `env:"DB_METRICS_INTERVAL_SEC"              envDefault:"15"                             mapstructure:"db_metrics_interval_sec"`
 }
 
-// RateLimitConfig configures global and export rate limiting.
+// RateLimitConfig configures global, export, dispatch, and admin rate limiting.
+//
+// AdminMax / AdminExpirySec apply to the /system admin plane ONLY. Before this
+// tier existed, /system shared the global quota — which, combined with
+// fail-open behavior on Redis outage, meant an admin action storm could starve
+// tenant traffic (and vice versa). The admin tier defaults are intentionally
+// low because this surface is operator-only.
 type RateLimitConfig struct {
 	Enabled           bool `env:"RATE_LIMIT_ENABLED"             envDefault:"true" mapstructure:"enabled"`
 	Max               int  `env:"RATE_LIMIT_MAX"                 envDefault:"100"  mapstructure:"max"`
@@ -188,6 +194,8 @@ type RateLimitConfig struct {
 	ExportExpirySec   int  `env:"EXPORT_RATE_LIMIT_EXPIRY_SEC"   envDefault:"60"   mapstructure:"export_expiry_sec"`
 	DispatchMax       int  `env:"DISPATCH_RATE_LIMIT_MAX"        envDefault:"50"   mapstructure:"dispatch_max"`
 	DispatchExpirySec int  `env:"DISPATCH_RATE_LIMIT_EXPIRY_SEC" envDefault:"60"   mapstructure:"dispatch_expiry_sec"`
+	AdminMax          int  `env:"ADMIN_RATE_LIMIT_MAX"           envDefault:"30"   mapstructure:"admin_max"`
+	AdminExpirySec    int  `env:"ADMIN_RATE_LIMIT_EXPIRY_SEC"    envDefault:"60"   mapstructure:"admin_expiry_sec"`
 }
 
 // InfrastructureConfig configures infrastructure-level behavior.

@@ -376,6 +376,26 @@ func (cfg *Config) validateActiveRateLimitConfig(ctx context.Context, asserter *
 		return fmt.Errorf("config validation: %w", err)
 	}
 
+	if err := asserter.That(ctx, cfg.RateLimit.AdminMax > 0, "ADMIN_RATE_LIMIT_MAX must be positive", "admin_rate_limit_max", cfg.RateLimit.AdminMax); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+
+	if err := asserter.That(ctx, cfg.RateLimit.AdminMax <= maxRateLimitRequestsPerWindow,
+		"ADMIN_RATE_LIMIT_MAX must not exceed 1000000",
+		"admin_rate_limit_max", cfg.RateLimit.AdminMax); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+
+	if err := asserter.That(ctx, cfg.RateLimit.AdminExpirySec > 0, "ADMIN_RATE_LIMIT_EXPIRY_SEC must be positive", "admin_rate_limit_expiry", cfg.RateLimit.AdminExpirySec); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+
+	if err := asserter.That(ctx, cfg.RateLimit.AdminExpirySec <= maxRateLimitWindowSeconds,
+		"ADMIN_RATE_LIMIT_EXPIRY_SEC must not exceed 86400",
+		"admin_rate_limit_expiry", cfg.RateLimit.AdminExpirySec); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+
 	return nil
 }
 

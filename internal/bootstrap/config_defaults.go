@@ -100,6 +100,8 @@ func defaultConfig() *Config {
 			ExportExpirySec:   defaultRateLimitExportExpiry,
 			DispatchMax:       defaultRateLimitDispatchMax,
 			DispatchExpirySec: defaultRateLimitDispatchExp,
+			AdminMax:          defaultRateLimitAdminMax,
+			AdminExpirySec:    defaultRateLimitAdminExp,
 		},
 		Infrastructure: InfrastructureConfig{
 			ConnectTimeoutSec:     defaultInfraConnectTimeout,

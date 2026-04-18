@@ -80,7 +80,7 @@ func MountSystemplaneAPI(
 		useArgs = append(useArgs, h)
 	}
 
-	useArgs = append(useArgs, NewGlobalRateLimit(rateLimiterGetter, cfg, configGetter, settingsResolver))
+	useArgs = append(useArgs, NewAdminRateLimit(rateLimiterGetter, cfg, configGetter, settingsResolver))
 
 	app.Use(useArgs...)
 

@@ -113,7 +113,14 @@ func TestMountSystemplaneAPI_NilExtractorRejected(t *testing.T) {
 	}
 }
 
-func TestMountSystemplaneAPI_AppliesGlobalRateLimit(t *testing.T) {
+// TestMountSystemplaneAPI_AppliesAdminRateLimit asserts /system routes
+// are rate-limited by the admin-tier quota specifically, not the global
+// tier. This prevents admin traffic from sharing a bucket with tenant
+// traffic (either side's storm would starve the other under fail-open
+// Redis outage). The test uses a 1-req/window admin tier and a very
+// generous global tier; if /system were still on the global tier it
+// would pass two requests in a row.
+func TestMountSystemplaneAPI_AppliesAdminRateLimit(t *testing.T) {
 	t.Parallel()
 
 	server := miniredis.RunT(t)
@@ -127,8 +134,14 @@ func TestMountSystemplaneAPI_AppliesGlobalRateLimit(t *testing.T) {
 	base := defaultConfig()
 	client := newStartedTestClient(t, base)
 	cfg := &Config{
-		App:       AppConfig{EnvName: "test"},
-		RateLimit: RateLimitConfig{Enabled: true, Max: 1, ExpirySec: 60},
+		App: AppConfig{EnvName: "test"},
+		RateLimit: RateLimitConfig{
+			Enabled:        true,
+			Max:            1_000_000, // generous: proves the admin-tier limit is doing the throttling
+			ExpirySec:      60,
+			AdminMax:       1,
+			AdminExpirySec: 60,
+		},
 	}
 
 	extractor, err := auth.NewTenantExtractor(false, false, auth.DefaultTenantID, auth.DefaultTenantSlug, "", "test")
@@ -155,5 +168,6 @@ func TestMountSystemplaneAPI_AppliesGlobalRateLimit(t *testing.T) {
 	resp2, err := app.Test(httptest.NewRequest(http.MethodGet, "/system/matcher", http.NoBody))
 	require.NoError(t, err)
 	defer resp2.Body.Close()
-	assert.Equal(t, http.StatusTooManyRequests, resp2.StatusCode)
+	assert.Equal(t, http.StatusTooManyRequests, resp2.StatusCode,
+		"second /system request must be throttled by the admin tier")
 }

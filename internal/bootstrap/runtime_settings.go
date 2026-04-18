@@ -36,6 +36,8 @@ func (resolver *runtimeSettingsResolver) rateLimit(fallback RateLimitConfig) Rat
 	fallback.ExportExpirySec = SystemplaneGetInt(resolver.client, "rate_limit.export_expiry_sec", fallback.ExportExpirySec)
 	fallback.DispatchMax = SystemplaneGetInt(resolver.client, "rate_limit.dispatch_max", fallback.DispatchMax)
 	fallback.DispatchExpirySec = SystemplaneGetInt(resolver.client, "rate_limit.dispatch_expiry_sec", fallback.DispatchExpirySec)
+	fallback.AdminMax = SystemplaneGetInt(resolver.client, "rate_limit.admin_max", fallback.AdminMax)
+	fallback.AdminExpirySec = SystemplaneGetInt(resolver.client, "rate_limit.admin_expiry_sec", fallback.AdminExpirySec)
 
 	return fallback
 }

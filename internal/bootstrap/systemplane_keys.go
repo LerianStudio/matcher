@@ -121,6 +121,11 @@ const (
 	defaultRateLimitExportExpiry = 60
 	defaultRateLimitDispatchMax  = 50
 	defaultRateLimitDispatchExp  = 60
+	// Admin plane (/system) tier defaults. Intentionally low — operator-only
+	// surface. Enforced per-tier so admin traffic cannot starve tenant traffic
+	// even under the shared fail-open mode.
+	defaultRateLimitAdminMax = 30
+	defaultRateLimitAdminExp = 60
 
 	// Infrastructure defaults.
 	defaultInfraConnectTimeout     = 30
@@ -212,7 +217,7 @@ const (
 	// matcherKeyDefsCapacity is the total number of keys returned by
 	// matcherKeyDefs(). Kept in sync manually (no strict upper bound — serves
 	// only as a preallocation hint to avoid repeated slice growth).
-	matcherKeyDefsCapacity = 105
+	matcherKeyDefsCapacity = 107
 )
 
 // validatePositiveInt validates that the value is a positive integer.
@@ -517,6 +522,8 @@ func matcherKeyDefs(cfg *Config) []matcherKeyDef {
 		matcherKeyDef{key: "rate_limit.export_expiry_sec", defaultValue: cfg.RateLimit.ExportExpirySec, description: "Export rate limit window in seconds"},
 		matcherKeyDef{key: "rate_limit.dispatch_max", defaultValue: cfg.RateLimit.DispatchMax, description: "Dispatch endpoint rate limit"},
 		matcherKeyDef{key: "rate_limit.dispatch_expiry_sec", defaultValue: cfg.RateLimit.DispatchExpirySec, description: "Dispatch rate limit window in seconds"},
+		matcherKeyDef{key: "rate_limit.admin_max", defaultValue: cfg.RateLimit.AdminMax, description: "Admin plane (/system) rate limit max requests", validator: validatePositiveInt},
+		matcherKeyDef{key: "rate_limit.admin_expiry_sec", defaultValue: cfg.RateLimit.AdminExpirySec, description: "Admin plane (/system) rate limit window in seconds", validator: validatePositiveInt},
 	)
 
 	// --- Infrastructure ---

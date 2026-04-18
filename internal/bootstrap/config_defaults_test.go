@@ -155,6 +155,8 @@ func TestDefaultConfig_RateLimitEnabled(t *testing.T) {
 	assert.Equal(t, 60, cfg.RateLimit.ExportExpirySec)
 	assert.Equal(t, 50, cfg.RateLimit.DispatchMax)
 	assert.Equal(t, 60, cfg.RateLimit.DispatchExpirySec)
+	assert.Equal(t, 30, cfg.RateLimit.AdminMax)
+	assert.Equal(t, 60, cfg.RateLimit.AdminExpirySec)
 }
 
 func TestDefaultConfig_ExportWorkerEnabled(t *testing.T) {

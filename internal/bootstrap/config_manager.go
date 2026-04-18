@@ -219,6 +219,8 @@ func watchedSystemplaneKeys() []string {
 		"rate_limit.export_expiry_sec",
 		"rate_limit.dispatch_max",
 		"rate_limit.dispatch_expiry_sec",
+		"rate_limit.admin_max",
+		"rate_limit.admin_expiry_sec",
 
 		// Infrastructure
 		"infrastructure.connect_timeout_sec",
@@ -385,6 +387,8 @@ func applySystemplaneOverrides(base Config, client *systemplane.Client) Config {
 	base.RateLimit.ExportExpirySec = SystemplaneGetInt(client, "rate_limit.export_expiry_sec", base.RateLimit.ExportExpirySec)
 	base.RateLimit.DispatchMax = SystemplaneGetInt(client, "rate_limit.dispatch_max", base.RateLimit.DispatchMax)
 	base.RateLimit.DispatchExpirySec = SystemplaneGetInt(client, "rate_limit.dispatch_expiry_sec", base.RateLimit.DispatchExpirySec)
+	base.RateLimit.AdminMax = SystemplaneGetInt(client, "rate_limit.admin_max", base.RateLimit.AdminMax)
+	base.RateLimit.AdminExpirySec = SystemplaneGetInt(client, "rate_limit.admin_expiry_sec", base.RateLimit.AdminExpirySec)
 
 	// --- Infrastructure ---
 	base.Infrastructure.ConnectTimeoutSec = SystemplaneGetInt(client, "infrastructure.connect_timeout_sec", base.Infrastructure.ConnectTimeoutSec)
