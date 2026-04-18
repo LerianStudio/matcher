@@ -5,7 +5,6 @@ package matching
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"net/url"
 	"strings"
@@ -21,6 +20,7 @@ import (
 	"go.opentelemetry.io/otel/trace/noop"
 
 	"github.com/LerianStudio/matcher/internal/auth"
+	bootstrap "github.com/LerianStudio/matcher/internal/bootstrap"
 	configContextRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/context"
 	configFeeRuleRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/fee_rule"
 	configFieldMapRepo "github.com/LerianStudio/matcher/internal/configuration/adapters/postgres/field_map"
@@ -56,6 +56,7 @@ import (
 	sharedCross "github.com/LerianStudio/matcher/internal/shared/adapters/cross"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 
 	"github.com/LerianStudio/matcher/tests/integration"
 )
@@ -313,9 +314,34 @@ func countInt(
 
 type capturePublishers struct {
 	matchConfirmed int
+	matchUnmatched int
 	last           *shared.MatchConfirmedEvent
 	tenantIDs      []uuid.UUID
 }
+
+func (cap *capturePublishers) PublishMatchConfirmed(_ context.Context, event *shared.MatchConfirmedEvent) error {
+	cap.matchConfirmed++
+	cap.last = event
+	cap.tenantIDs = append(cap.tenantIDs, event.TenantID)
+	return nil
+}
+
+func (cap *capturePublishers) PublishMatchUnmatched(_ context.Context, _ *shared.MatchUnmatchedEvent) error {
+	cap.matchUnmatched++
+	return nil
+}
+
+type noopAuditPublisher struct{}
+
+func (noopAuditPublisher) PublishAuditLogCreated(context.Context, *shared.AuditLogCreatedEvent) error {
+	return nil
+}
+
+var (
+	_ shared.MatchEventPublisher          = (*capturePublishers)(nil)
+	_ sharedPorts.IngestionEventPublisher = (*noopIngestionPublisher)(nil)
+	_ shared.AuditEventPublisher          = noopAuditPublisher{}
+)
 
 func newDispatcher(
 	t *testing.T,
@@ -327,18 +353,7 @@ func newDispatcher(
 
 	repo := integration.NewTestOutboxRepository(t, h.Connection)
 	registry := outboxServices.NewHandlerRegistry()
-	err := registry.Register(shared.EventTypeMatchConfirmed,
-		func(_ context.Context, event *outboxServices.OutboxEvent) error {
-			var ev shared.MatchConfirmedEvent
-			if jsonErr := json.Unmarshal(event.Payload, &ev); jsonErr != nil {
-				return jsonErr
-			}
-			cap.matchConfirmed++
-			cap.last = &ev
-			cap.tenantIDs = append(cap.tenantIDs, ev.TenantID)
-			return nil
-		},
-	)
+	err := bootstrap.RegisterOutboxHandlers(registry, &noopIngestionPublisher{}, cap, noopAuditPublisher{})
 	require.NoError(t, err)
 
 	dispatcher, err := outboxServices.NewDispatcher(

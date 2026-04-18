@@ -136,14 +136,7 @@ func TestOutboxDispatcher_ResetsStuckProcessing(t *testing.T) {
 
 // TestOutboxDispatcher_MarksInvalidOnBadPayload verifies that an event with
 // invalid payload is classified as non-retryable and marked INVALID.
-//
-// NOTE: Skipped — semantic payload validation is covered at the unit level by
-// outbox_wiring_test.go (bootstrap package) and JSON-level validation is
-// enforced by the canonical NewOutboxEvent constructor.
 func TestOutboxDispatcher_MarksInvalidOnBadPayload(t *testing.T) {
-	t.Skip("Semantic payload validation is now covered by outbox_wiring_test.go " +
-		"TestValidate*Payload_* (bootstrap package, unit tag). JSON-level validation is enforced " +
-		"at NewOutboxEvent constructor time (see internal/shared/domain/outbox_event_test.go).")
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := e4t9Ctx(t, h)
 		repo := integration.NewTestOutboxRepository(t, h.Connection)
@@ -190,14 +183,7 @@ func TestOutboxDispatcher_MarksInvalidOnBadPayload(t *testing.T) {
 
 // TestOutboxDispatcher_SkipsRecentlyFailedEvents verifies that a FAILED event
 // with a recent updated_at timestamp is NOT retried within the retry window.
-//
-// NOTE: Skipped — retry-window skip behavior is owned by lib-commons/v5 and
-// tested upstream. Matcher-specific harness quirks around MarkFailed state in
-// a shared-DB reset context are not regression-critical.
 func TestOutboxDispatcher_SkipsRecentlyFailedEvents(t *testing.T) {
-	t.Skip("Retry-window skip behavior is owned by lib-commons/v5/commons/outbox " +
-		"(see WithRetryWindow option). Upstream tests cover TestDispatcher_SkipsRecentlyFailed. " +
-		"Matcher-specific harness quirks (MarkFailed state in shared DB reset) are not regression-critical.")
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := e4t9Ctx(t, h)
 		repo := integration.NewTestOutboxRepository(t, h.Connection)
@@ -235,15 +221,7 @@ func TestOutboxDispatcher_SkipsRecentlyFailedEvents(t *testing.T) {
 	})
 }
 
-// NOTE: Skipped — multi-tenant dispatch default-tenant injection is covered at
-// unit level by TestDefaultTenantDiscoverer_* in outbox_wiring_test.go
-// (bootstrap package). The canonical outbox's SchemaResolver is tested upstream
-// in lib-commons/v5. This test is retained only as documentation of the
-// previous DB-backed behaviour.
 func TestOutboxDispatcher_DispatchOnce_MultiTenantDBBacked(t *testing.T) {
-	t.Skip("Multi-tenant dispatch default-tenant injection is now covered at unit level " +
-		"by TestDefaultTenantDiscoverer_* in outbox_wiring_test.go (bootstrap package). " +
-		"The canonical outbox's SchemaResolver is tested upstream in lib-commons/v5.")
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := integration.NewTestOutboxRepository(t, h.Connection)
 
@@ -252,8 +230,8 @@ func TestOutboxDispatcher_DispatchOnce_MultiTenantDBBacked(t *testing.T) {
 		require.NoError(t, ensureTenantOutboxSchema(t, h, tenantA.String()))
 		require.NoError(t, ensureTenantOutboxSchema(t, h, tenantB.String()))
 
-		ctxA := context.WithValue(context.Background(), auth.TenantIDKey, tenantA.String())
-		ctxB := context.WithValue(context.Background(), auth.TenantIDKey, tenantB.String())
+		ctxA := outboxEntities.ContextWithTenantID(context.Background(), tenantA.String())
+		ctxB := outboxEntities.ContextWithTenantID(context.Background(), tenantB.String())
 
 		payloadA := validMatchConfirmedPayload(tenantA)
 		eventA, err := outboxEntities.NewOutboxEvent(ctxA, shared.EventTypeMatchConfirmed, payloadA.MatchID, mustJSON(t, payloadA))

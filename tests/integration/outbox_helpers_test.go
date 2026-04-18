@@ -6,22 +6,94 @@
 
 package integration
 
-import "testing"
+import (
+	"testing"
+	"time"
 
-// TestNewTestOutboxRepository_Smoke is a placeholder test that documents the
-// existence of outbox_helpers.go and satisfies `make check-tests`.
-//
-// The full integration behavior of NewTestOutboxRepository (schema resolution,
-// tenant isolation via WithAllowEmptyTenant, repository wiring) is exercised
-// indirectly by every integration test that consumes the helper — see
-// configuration_flow_test.go, cross_domain_flow_test.go, rabbitmq_test.go,
-// and shared_harness.go.
-//
-// Testing the helper here in isolation would require spinning up a real
-// testcontainers-backed Postgres client, which duplicates the setup those
-// consumer tests already perform. We skip rather than duplicate.
-func TestNewTestOutboxRepository_Smoke(t *testing.T) {
-	t.Parallel()
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 
-	t.Skip("full coverage via consumer tests; this file exists to satisfy make check-tests")
+	outbox "github.com/LerianStudio/lib-commons/v5/commons/outbox"
+)
+
+func TestNewTestOutboxRepository_PublicSchemaLifecycle(t *testing.T) {
+	RunWithDatabase(t, func(t *testing.T, h *TestHarness) {
+		repo := NewTestOutboxRepository(t, h.Connection)
+		ctx := h.Ctx()
+
+		event, err := outbox.NewOutboxEvent(ctx, "test.public.lifecycle", uuid.New(), []byte(`{"ok":true}`))
+		require.NoError(t, err)
+
+		created, err := repo.Create(ctx, event)
+		require.NoError(t, err)
+		require.Equal(t, outbox.OutboxStatusPending, created.Status)
+
+		pending, err := repo.ListPending(ctx, 10)
+		require.NoError(t, err)
+		require.Len(t, pending, 1)
+		require.Equal(t, created.ID, pending[0].ID)
+
+		processing, err := repo.GetByID(ctx, created.ID)
+		require.NoError(t, err)
+		require.Equal(t, outbox.OutboxStatusProcessing, processing.Status)
+
+		publishedAt := time.Now().UTC()
+		require.NoError(t, repo.MarkPublished(ctx, created.ID, publishedAt))
+
+		published, err := repo.GetByID(ctx, created.ID)
+		require.NoError(t, err)
+		require.Equal(t, outbox.OutboxStatusPublished, published.Status)
+		require.NotNil(t, published.PublishedAt)
+	})
+}
+
+func TestNewTestOutboxRepository_ResetForRetry(t *testing.T) {
+	RunWithDatabase(t, func(t *testing.T, h *TestHarness) {
+		repo := NewTestOutboxRepository(t, h.Connection)
+		ctx := h.Ctx()
+
+		event, err := outbox.NewOutboxEvent(ctx, "test.retry", uuid.New(), []byte(`{"retry":true}`))
+		require.NoError(t, err)
+
+		created, err := repo.Create(ctx, event)
+		require.NoError(t, err)
+
+		_, err = repo.ListPending(ctx, 10)
+		require.NoError(t, err)
+
+		require.NoError(t, repo.MarkFailed(ctx, created.ID, "temporary failure", 5))
+
+		reset, err := repo.ResetForRetry(ctx, 10, time.Now().UTC().Add(time.Minute), 5)
+		require.NoError(t, err)
+		require.Len(t, reset, 1)
+		require.Equal(t, created.ID, reset[0].ID)
+		require.Equal(t, outbox.OutboxStatusProcessing, reset[0].Status)
+	})
+}
+
+func TestNewTestOutboxRepository_MarkInvalidRemovesPending(t *testing.T) {
+	RunWithDatabase(t, func(t *testing.T, h *TestHarness) {
+		repo := NewTestOutboxRepository(t, h.Connection)
+		ctx := h.Ctx()
+
+		event, err := outbox.NewOutboxEvent(ctx, "test.invalid", uuid.New(), []byte(`{"invalid":true}`))
+		require.NoError(t, err)
+
+		created, err := repo.Create(ctx, event)
+		require.NoError(t, err)
+
+		_, err = repo.ListPending(ctx, 10)
+		require.NoError(t, err)
+
+		require.NoError(t, repo.MarkInvalid(ctx, created.ID, "validation failed"))
+
+		stored, err := repo.GetByID(ctx, created.ID)
+		require.NoError(t, err)
+		require.Equal(t, outbox.OutboxStatusInvalid, stored.Status)
+		require.Contains(t, stored.LastError, "validation failed")
+
+		pending, err := repo.ListPending(ctx, 10)
+		require.NoError(t, err)
+		require.Empty(t, pending)
+	})
 }
