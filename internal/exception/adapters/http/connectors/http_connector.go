@@ -282,6 +282,23 @@ func (conn *HTTPConnector) dispatchToWebhook(
 	}
 
 	webhookConfig := conn.config.Webhook
+
+	// SEC-27: fail closed when the deployment has opted in to signed
+	// payloads but has not configured a shared secret. Without this check
+	// the earlier warn-log path would silently dispatch unsigned payloads
+	// — the whole point of RequireSignedPayloads is to make that
+	// combination refuse to send rather than only log about it.
+	if webhookConfig.RequireSignedPayloads && strings.TrimSpace(webhookConfig.SharedSecret) == "" {
+		err := ErrWebhookMissingSharedSecret
+		libOpentelemetry.HandleSpanError(span, "webhook missing shared secret", err)
+		logger.With(
+			libLog.String("exception_id", exceptionID),
+			libLog.String("target", string(decision.Target)),
+		).Log(ctx, libLog.LevelError, "refusing unsigned webhook dispatch: RequireSignedPayloads is true but SharedSecret is empty")
+
+		return ports.DispatchResult{}, fmt.Errorf("dispatch to webhook: %w", err)
+	}
+
 	timeout := webhookConfig.TimeoutOrDefault()
 
 	if conn.webhookTimeoutResolver != nil {

@@ -354,6 +354,43 @@ func TestHTTPConnector_WebhookNotConfigured(t *testing.T) {
 	require.ErrorIs(t, err, connectors.ErrConnectorNotConfigured)
 }
 
+// TestHTTPConnector_Webhook_RequireSignedPayloads_NoSecret is a regression
+// test for SEC-27: when a deployment opts in to signed payloads but has
+// not supplied a shared secret, the connector must refuse to send
+// rather than warn and proceed. Previously the dispatch path logged a
+// warning and sent the request unsigned, which defeated the purpose of
+// the toggle.
+func TestHTTPConnector_Webhook_RequireSignedPayloads_NoSecret(t *testing.T) {
+	t.Parallel()
+
+	timeout := 10 * time.Second
+	maxRetries := 0
+	backoff := time.Nanosecond
+	config := connectors.ConnectorConfig{
+		AllowPrivateIPs: true,
+		Webhook: &connectors.WebhookConnectorConfig{
+			BaseConnectorConfig: connectors.BaseConnectorConfig{
+				Timeout:      &timeout,
+				MaxRetries:   &maxRetries,
+				RetryBackoff: &backoff,
+			},
+			URL:                   "http://127.0.0.1:1/unused",
+			SharedSecret:          "",
+			RequireSignedPayloads: true,
+		},
+	}
+
+	connector, err := connectors.NewHTTPConnector(config)
+	require.NoError(t, err)
+
+	decision := services.RoutingDecision{Target: services.RoutingTargetWebhook}
+
+	_, err = connector.Dispatch(context.Background(), "exc-sec-27", decision, []byte(`{}`))
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, connectors.ErrWebhookMissingSharedSecret)
+}
+
 func TestHTTPConnector_RetryStopsOnContextCancel(t *testing.T) {
 	t.Parallel()
 

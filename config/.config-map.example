@@ -150,6 +150,20 @@ M2M_TARGET_SERVICE=fetcher
 # default chain (env, config file, instance metadata).
 # AWS_REGION=
 
+# ── Exception Dispatch (webhook) ─────────────────────────────────────────────
+# Webhook signing. Matcher signs outgoing exception-dispatch webhooks with an
+# HMAC-SHA256 shared secret delivered in the X-Signature-256 header. In
+# production deployments (ENV_NAME=production), the dispatcher refuses to send
+# unsigned payloads: if a shared secret has not been configured, the dispatch
+# returns ErrWebhookMissingSharedSecret instead of warning and proceeding.
+#
+# Migration note (SEC-27): the pre-v5-lib-commons behaviour warned but sent
+# unsigned. Deployments upgrading to this build must either configure a shared
+# secret before routing webhook dispatches, or — if still in rollout — keep
+# webhook destinations disabled until signing is wired in. There is no env-var
+# override of this default; the intent is that misconfiguration is visible
+# from the first dispatch attempt rather than hidden behind a log line.
+
 # ── Systemplane ──────────────────────────────────────────────────────────────
 # Backend store for runtime configuration. Default: postgres (reuses the
 # application Postgres DSN). Set to "mongodb" for a Mongo-backed store.

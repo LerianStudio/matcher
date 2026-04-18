@@ -3296,12 +3296,24 @@ func initExceptionUseCases(
 
 	webhookDispatchTimeout := configuredWebhookTimeout(ctx, cfg)
 
+	// SEC-27: RequireSignedPayloads defaults to true in production so an
+	// unsigned webhook configuration fails validation at startup rather
+	// than silently dispatching unsigned payloads to downstream systems.
+	// Development and test environments retain the permissive default
+	// (false) so local tooling can exercise the dispatch path without a
+	// shared secret. Operators who deploy webhook dispatch to production
+	// without a signing secret must explicitly opt out in code; there is
+	// no runtime toggle because the whole point of the default is that
+	// misconfiguration is visible from the first run.
+	isProduction := IsProductionEnvironment(cfg.App.EnvName)
+
 	httpConnector, err := exceptionConnectors.NewHTTPConnector(
 		exceptionConnectors.ConnectorConfig{
 			Webhook: &exceptionConnectors.WebhookConnectorConfig{
 				BaseConnectorConfig: exceptionConnectors.BaseConnectorConfig{
 					Timeout: &webhookDispatchTimeout,
 				},
+				RequireSignedPayloads: isProduction,
 			},
 		},
 	)
