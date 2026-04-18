@@ -23,6 +23,7 @@ import (
 var (
 	errSystemplaneSecretMasterKey    = errors.New("validate systemplane config: SYSTEMPLANE_SECRET_MASTER_KEY is required")
 	errSystemplaneDevMasterKeyInProd = errors.New("validate systemplane config: SYSTEMPLANE_SECRET_MASTER_KEY must not use the well-known development default in production")
+	errSystemplanePostgresDBRequired = errors.New("init systemplane: postgres db is required")
 )
 
 // wellKnownDevMasterKey is the development-mode default for the systemplane
@@ -48,8 +49,12 @@ func InitSystemplane(
 		return nil, fmt.Errorf("init systemplane: %w", ErrConfigNil)
 	}
 
+	if err := ValidateSystemplaneSecrets(cfg.App.EnvName); err != nil {
+		return nil, fmt.Errorf("init systemplane: %w", err)
+	}
+
 	if db == nil {
-		return nil, fmt.Errorf("init systemplane: postgres db is required")
+		return nil, errSystemplanePostgresDBRequired
 	}
 
 	listenDSN := buildSystemplaneDSN(cfg)
@@ -67,7 +72,7 @@ func InitSystemplane(
 		return nil, fmt.Errorf("init systemplane: create client: %w", err)
 	}
 
-	if err := RegisterMatcherKeys(client); err != nil {
+	if err := RegisterMatcherKeys(client, cfg); err != nil {
 		_ = client.Close()
 		return nil, fmt.Errorf("init systemplane: %w", err)
 	}
@@ -126,12 +131,17 @@ func SystemplaneGetString(client *systemplane.Client, key, fallback string) stri
 		return fallback
 	}
 
-	value := client.GetString(systemplaneNamespace, key)
-	if value == "" {
+	value, ok := client.Get(systemplaneNamespace, key)
+	if !ok {
 		return fallback
 	}
 
-	return value
+	s, isString := value.(string)
+	if !isString {
+		return fallback
+	}
+
+	return s
 }
 
 // SystemplaneGetInt reads an int from the systemplane Client with the

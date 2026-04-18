@@ -449,10 +449,9 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 	}
 
 	var (
-		modules          *modulesResult
-		wm               = NewWorkerManager(logger, configManager)
-		spClient         *systemplane.Client
-		settingsResolver *runtimeSettingsResolver // populated after systemplane init
+		modules  *modulesResult
+		wm       = NewWorkerManager(logger, configManager)
+		spClient *systemplane.Client
 	)
 
 	// Configure runtime for production mode (redacts sensitive data in error reports)
@@ -498,12 +497,6 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 	// Cleanup accumulator: collects cleanup functions to run on failure
 	var cleanups []func()
 
-	cleanups = append(cleanups, func() {
-		if spClient != nil {
-			_ = spClient.Close()
-		}
-	})
-
 	var infraConnectionManager connectionCloser
 
 	runCleanups := func() {
@@ -537,6 +530,59 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 
 	done()
 
+	// Initialize v5 systemplane client (register keys + start + subscribe).
+	// Must happen before settings-resolver consumers (idempotency repo, rate limiter,
+	// webhook timeout closure, etc.) to ensure runtime config reaches them.
+	// Requires postgres to be connected. In production, failures are fatal because
+	// runtime-config is compliance/operational-critical; in non-production we
+	// continue with the static Config from env vars.
+	done = timer.track("systemplane_init")
+
+	primaryDB, dbErr := postgresConnection.Primary()
+	switch {
+	case dbErr != nil || primaryDB == nil:
+		if IsProductionEnvironment(cfg.App.EnvName) {
+			return nil, fmt.Errorf("systemplane init: postgres primary unavailable: %w", dbErr)
+		}
+
+		logger.Log(ctx, libLog.LevelWarn, "systemplane skipped (no postgres primary); running with static config only")
+	default:
+		spClient, err = InitSystemplane(ctx, cfg, primaryDB, logger, telemetry)
+		if err != nil {
+			if IsProductionEnvironment(cfg.App.EnvName) {
+				return nil, fmt.Errorf("systemplane initialization required: %w", err)
+			}
+
+			logger.Log(ctx, libLog.LevelWarn, "systemplane initialization failed, continuing with static config",
+				libLog.String("error", err.Error()))
+
+			spClient = nil
+		}
+	}
+
+	// Wire OnChange to keep ConfigManager in sync with systemplane writes.
+	if spClient != nil {
+		if watchErr := configManager.WatchSystemplane(spClient); watchErr != nil {
+			logger.Log(ctx, libLog.LevelWarn, "systemplane watch failed, runtime config hot-reload disabled",
+				libLog.String("error", watchErr.Error()))
+		}
+	}
+
+	settingsResolver := newRuntimeSettingsResolver(spClient)
+
+	// Register systemplane client for graceful shutdown on startup failure.
+	// Close is idempotent; the Service also closes spClient on regular shutdown.
+	cleanups = append(cleanups, func() {
+		if spClient != nil {
+			if closeErr := spClient.Close(); closeErr != nil {
+				logger.Log(ctx, libLog.LevelWarn, "systemplane close failed",
+					libLog.String("error", closeErr.Error()))
+			}
+		}
+	})
+
+	done()
+
 	done = timer.track("auth_and_routes")
 
 	authClient := createAuthClient(ctx, cfg, logger)
@@ -562,11 +608,11 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 	app := NewFiberApp(cfg, logger, telemetry, configManager.Get)
 
 	rlProvider := newRateLimiterProvider(func() *libRedis.Client {
-		return currentRedisClient(redisConnection)
+		return redisConnection
 	}, logger)
 	rateLimiterGetter := rlProvider.Get
 
-	infraProvider, connectionManager, tenantDBHandler := createInfraProviderWithBundleState(
+	infraProvider, connectionManager, tenantDBHandler := createInfraProvider(
 		cfg,
 		configManager.Get,
 		postgresConnection,
@@ -665,31 +711,16 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 
 	done()
 
-	// WorkerManager is created after modules, but systemplane is already active.
-	// Runtime worker updates are applied from the reload observer once the
-	// manager exists.
+	// WorkerManager is created after modules; systemplane is already active
+	// (initialized earlier, before module wiring). Runtime worker updates are
+	// applied from the reload observer once the manager exists.
 	done = timer.track("systemplane_runtime")
 
 	wm = buildWorkerManager(modules, wm, configManager, logger)
 
-	// Initialize v5 systemplane client (register keys + start + subscribe).
-	// Requires postgres to be connected. If it fails, we continue without
-	// runtime config — the static Config from env vars remains authoritative.
-	primaryDB, dbErr := postgresConnection.Primary()
-	if dbErr == nil && primaryDB != nil {
-		spClient, err = InitSystemplane(ctx, cfg, primaryDB, logger, telemetry)
-		if err != nil {
-			logger.Log(ctx, libLog.LevelWarn, "systemplane initialization failed, continuing with static config",
-				libLog.String("error", err.Error()))
-
-			spClient = nil
-		}
-	}
-
-	settingsResolver = newRuntimeSettingsResolver(spClient)
-
 	// Mount systemplane admin HTTP routes.
-	if mountErr := MountSystemplaneAPI(app, spClient, cfg.Auth.Enabled, logger); mountErr != nil {
+	// spClient was initialized earlier; if nil, MountSystemplaneAPI is a no-op.
+	if mountErr := MountSystemplaneAPI(app, spClient, authClient, tenantExtractor, logger); mountErr != nil {
 		logger.Log(ctx, libLog.LevelWarn, "systemplane API mount failed",
 			libLog.String("error", mountErr.Error()))
 	}
@@ -966,28 +997,6 @@ func assignReplicaHealthCheck(
 	appendCleanup(cleanups, cleanup)
 }
 
-func currentPostgresClient(
-	fallback *libPostgres.Client,
-) (*libPostgres.Client, error) {
-	if fallback == nil {
-		return nil, errPostgresPrimaryNil
-	}
-
-	return fallback, nil
-}
-
-func currentRedisClient(
-	fallback *libRedis.Client,
-) *libRedis.Client {
-	return fallback
-}
-
-func currentRabbitMQConnection(
-	fallback *libRabbitmq.RabbitMQConnection,
-) *libRabbitmq.RabbitMQConnection {
-	return fallback
-}
-
 func resolvePrimaryDB(checkCtx context.Context, postgres *libPostgres.Client) (*sql.DB, error) {
 	resolver, err := postgres.Resolver(checkCtx)
 	if err != nil {
@@ -1028,12 +1037,11 @@ func newPostgresHealthCheck(
 	postgres *libPostgres.Client,
 ) HealthCheckFunc {
 	return func(checkCtx context.Context) error {
-		postgresClient, err := currentPostgresClient(postgres)
-		if err != nil {
-			return err
+		if postgres == nil {
+			return errPostgresPrimaryNil
 		}
 
-		primaryDB, err := resolvePrimaryDB(checkCtx, postgresClient)
+		primaryDB, err := resolvePrimaryDB(checkCtx, postgres)
 		if err != nil {
 			return err
 		}
@@ -1046,12 +1054,11 @@ func newRedisHealthCheck(
 	redis *libRedis.Client,
 ) HealthCheckFunc {
 	return func(checkCtx context.Context) error {
-		redisClient := currentRedisClient(redis)
-		if redisClient == nil {
+		if redis == nil {
 			return errRedisClientNil
 		}
 
-		client, err := redisClient.GetClient(checkCtx)
+		client, err := redis.GetClient(checkCtx)
 		if err != nil {
 			return fmt.Errorf("redis health check: get client failed: %w", err)
 		}
@@ -1072,16 +1079,11 @@ func newPostgresReplicaHealthCheck(
 	postgres *libPostgres.Client,
 ) HealthCheckFunc {
 	return func(checkCtx context.Context) error {
-		postgresClient, err := currentPostgresClient(postgres)
-		if err != nil {
-			if errors.Is(err, errPostgresPrimaryNil) {
-				return errNoReplicasConfigured
-			}
-
-			return err
+		if postgres == nil {
+			return errNoReplicasConfigured
 		}
 
-		replicaDB, err := resolveReplicaDB(checkCtx, postgresClient)
+		replicaDB, err := resolveReplicaDB(checkCtx, postgres)
 		if err != nil {
 			return err
 		}
@@ -1094,7 +1096,7 @@ func newRabbitMQHealthCheck(
 	rabbitmq *libRabbitmq.RabbitMQConnection,
 ) HealthCheckFunc {
 	return func(checkCtx context.Context) error {
-		conn := currentRabbitMQConnection(rabbitmq)
+		conn := rabbitmq
 		if conn == nil {
 			return errRabbitMQConnectionNil
 		}
@@ -1281,7 +1283,7 @@ func createObjectStorageForHealth(
 	return client, nil
 }
 
-func createInfraProviderWithBundleState(
+func createInfraProvider(
 	cfg *Config,
 	configGetter func() *Config,
 	postgres *libPostgres.Client,
@@ -1971,8 +1973,6 @@ func applySQLPoolSettings(dbs []*sql.DB, maxLifetime, maxIdle time.Duration) {
 
 type modulesResult struct {
 	outboxDispatcher *outbox.Dispatcher
-	ingestionEvents  *swappableIngestionPublisher
-	matchingEvents   *swappableMatchPublisher
 	exportWorker     *reportingWorker.ExportWorker
 	cleanupWorker    *reportingWorker.CleanupWorker
 	archivalWorker   *governanceWorker.ArchivalWorker
@@ -2131,6 +2131,13 @@ func initModulesAndMessaging(
 		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("Object storage not available, reporting background workers disabled: %v", err))
 	}
 
+	// Wrap storage in a dynamic client that always exposes a non-nil interface,
+	// so reporting handlers/workers can be constructed even when object storage
+	// is unconfigured (e.g. in tests with EXPORT_WORKER_ENABLED=false). Actual
+	// calls on an unconfigured client return ErrObjectStorageUnavailable at
+	// invocation time.
+	storage = newRuntimeReportingStorageClient(storage)
+
 	//nolint:contextcheck // Reporting config accessors are not context-aware.
 	exportWorker, cleanupWorker, err := initReportingModule(
 		routes,
@@ -2183,7 +2190,7 @@ func initModulesAndMessaging(
 	}
 
 	// Build canonical outbox HandlerRegistry with event-type handlers.
-	// Each handler replaces a case in the old bespoke dispatcher's publishEvent switch.
+	// Each handler dispatches a single event type published via the outbox.
 	handlers := outbox.NewHandlerRegistry()
 
 	if err := registerOutboxHandlers(handlers, runtimeIngestionPublisher, runtimeMatchingPublisher, auditConsumer); err != nil {
@@ -2198,8 +2205,8 @@ func initModulesAndMessaging(
 		handlers,
 		logger,
 		otel.Tracer(constants.ApplicationName),
-		outbox.WithDispatchInterval(2*time.Second),
-		outbox.WithRetryWindow(cfg.IdempotencyRetryWindow()),
+		outbox.WithDispatchInterval(cfg.OutboxDispatchInterval()),
+		outbox.WithRetryWindow(cfg.OutboxRetryWindow()),
 		outbox.WithRetryClassifier(classifier),
 		outbox.WithPriorityEventTypes(sharedDomain.EventTypeAuditLogCreated),
 	)
@@ -2222,8 +2229,6 @@ func initModulesAndMessaging(
 
 	return &modulesResult{
 		outboxDispatcher: dispatcher,
-		ingestionEvents:  runtimeIngestionPublisher,
-		matchingEvents:   runtimeMatchingPublisher,
 		exportWorker:     exportWorker,
 		cleanupWorker:    cleanupWorker,
 		schedulerWorker:  schedulerWorker,
@@ -2534,6 +2539,27 @@ func reportingStorageRequired(cfg *Config) bool {
 	}
 
 	return cfg.ExportWorker.Enabled || cfg.CleanupWorker.Enabled
+}
+
+// newRuntimeReportingStorageClient wraps the startup-time reporting storage
+// client in a dynamic delegate that always exposes a non-nil interface to the
+// reporting handlers and workers. When no storage is configured, calls fail at
+// invocation time with ErrObjectStorageUnavailable rather than preventing
+// startup.
+//
+// This mirrors newRuntimeArchivalStorageClient and allows the reporting module
+// to register its routes and workers unconditionally, even when the export and
+// cleanup workers are disabled or the object-storage endpoint is empty.
+func newRuntimeReportingStorageClient(
+	fallback sharedPorts.ObjectStorageClient,
+) sharedPorts.ObjectStorageClient {
+	// A trivial non-nil getter guarantees newDynamicObjectStorageClient returns
+	// a non-nil wrapper. The wrapper's current() method defers to the fallback
+	// and, if that is also nil, returns ErrObjectStorageUnavailable at call
+	// time instead of panicking.
+	return newDynamicObjectStorageClient(func() sharedPorts.ObjectStorageClient {
+		return fallback
+	}, fallback)
 }
 
 func initConfigurationModule(

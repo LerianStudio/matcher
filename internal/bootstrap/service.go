@@ -85,6 +85,19 @@ func (svc *Service) GetOutboxRunner() libCommons.App {
 	return svc.outboxRunner
 }
 
+// GetSystemplaneClient returns the systemplane client used for runtime
+// configuration management. May be nil if systemplane initialization failed
+// (graceful degradation to static config). Primarily used by integration test
+// harnesses to override runtime-mutable settings (e.g., rate limits) whose
+// registered defaults would otherwise mask env-based overrides.
+func (svc *Service) GetSystemplaneClient() *systemplane.Client {
+	if svc == nil {
+		return nil
+	}
+
+	return svc.spClient
+}
+
 // Run starts the service with all configured components using the launcher.
 // Returns an error if the service is nil or encounters a fatal error during startup.
 func (svc *Service) Run() error {

@@ -182,6 +182,17 @@ type InfrastructureConfig struct {
 	HealthCheckTimeoutSec int `env:"HEALTH_CHECK_TIMEOUT_SEC"   envDefault:"5"  mapstructure:"health_check_timeout_sec"`
 }
 
+// OutboxConfig configures the outbox dispatcher behavior.
+type OutboxConfig struct {
+	// RetryWindowSec configures the cooldown window before failed outbox events
+	// are retried by the dispatcher. Default: 300 seconds (5 minutes).
+	RetryWindowSec int `env:"OUTBOX_RETRY_WINDOW_SEC" envDefault:"300" mapstructure:"retry_window_sec"`
+
+	// DispatchIntervalSec configures how frequently the outbox dispatcher polls
+	// for new events to dispatch. Default: 2 seconds.
+	DispatchIntervalSec int `env:"OUTBOX_DISPATCH_INTERVAL_SEC" envDefault:"2" mapstructure:"dispatch_interval_sec"`
+}
+
 // IdempotencyConfig configures idempotency behavior.
 type IdempotencyConfig struct {
 	// RetryWindowSec configures how long failed idempotency keys remain blocked before allowing retry.
@@ -315,6 +326,7 @@ type Config struct {
 	RateLimit         RateLimitConfig         `mapstructure:"rate_limit"`
 	Infrastructure    InfrastructureConfig    `mapstructure:"infrastructure"`
 	Idempotency       IdempotencyConfig       `mapstructure:"idempotency"`
+	Outbox            OutboxConfig            `mapstructure:"outbox"`
 	Dedupe            DedupeConfig            `mapstructure:"deduplication"`
 	ObjectStorage     ObjectStorageConfig     `mapstructure:"object_storage"`
 	ExportWorker      ExportWorkerConfig      `mapstructure:"export_worker"`

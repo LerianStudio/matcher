@@ -16,7 +16,6 @@ import (
 // LoggerBundle holds a rebuilt logger and its configured level.
 type LoggerBundle struct {
 	Logger libLog.Logger
-	Level  string
 }
 
 func buildLoggerBundle(envName, level string) (*LoggerBundle, error) {
@@ -34,7 +33,6 @@ func buildLoggerBundle(envName, level string) (*LoggerBundle, error) {
 
 	return &LoggerBundle{
 		Logger: logger,
-		Level:  resolvedLevel,
 	}, nil
 }
 

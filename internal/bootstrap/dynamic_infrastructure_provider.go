@@ -47,7 +47,7 @@ var (
 // dynamicInfrastructureProvider resolves connections for the tenant in ctx.
 // In single-tenant mode, it delegates to singleton PG/Redis connections.
 // In multi-tenant mode, it delegates to a canonical tmpostgres.Manager from
-// lib-commons/v4/commons/tenant-manager/postgres.
+// lib-commons/v5/commons/tenant-manager/postgres.
 type dynamicInfrastructureProvider struct {
 	mu           sync.Mutex
 	initialCfg   *Config

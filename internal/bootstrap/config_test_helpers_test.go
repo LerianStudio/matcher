@@ -175,6 +175,10 @@ var configEnvVarKeys = []string{
 	"IDEMPOTENCY_SUCCESS_TTL_HOURS",
 	"IDEMPOTENCY_HMAC_SECRET",
 
+	// OutboxConfig
+	"OUTBOX_RETRY_WINDOW_SEC",
+	"OUTBOX_DISPATCH_INTERVAL_SEC",
+
 	// DedupeConfig
 	"DEDUPE_TTL_SEC",
 

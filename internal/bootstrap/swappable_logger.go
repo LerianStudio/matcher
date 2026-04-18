@@ -35,24 +35,6 @@ func NewSwappableLogger(initial libLog.Logger) *SwappableLogger {
 	return &SwappableLogger{state: state}
 }
 
-// Swap replaces the underlying logger implementation.
-func (logger *SwappableLogger) Swap(next libLog.Logger) {
-	if logger == nil || logger.state == nil {
-		return
-	}
-
-	logger.state.swap(next)
-}
-
-// Current returns the currently active logger implementation.
-func (logger *SwappableLogger) Current() libLog.Logger {
-	if logger == nil || logger.state == nil {
-		return &libLog.NopLogger{}
-	}
-
-	return logger.state.currentLogger()
-}
-
 // Log writes a structured log entry using the current logger delegate.
 func (logger *SwappableLogger) Log(ctx context.Context, level libLog.Level, msg string, fields ...libLog.Field) {
 	logger.effective().Log(ctx, level, msg, fields...)

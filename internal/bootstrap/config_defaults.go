@@ -10,6 +10,8 @@ package bootstrap
 //
 // Logger and ShutdownGracePeriod are left as zero values; they are set
 // during bootstrap.
+//
+//nolint:funlen // pre-existing: large struct-literal builder; splitting across helpers hurts readability without reducing complexity.
 func defaultConfig() *Config {
 	return &Config{
 		App: AppConfig{
@@ -106,6 +108,10 @@ func defaultConfig() *Config {
 		Idempotency: IdempotencyConfig{
 			RetryWindowSec:  defaultIdempotencyRetryWindow,
 			SuccessTTLHours: defaultIdempotencySuccessTTL,
+		},
+		Outbox: OutboxConfig{
+			RetryWindowSec:      defaultOutboxRetryWindow,
+			DispatchIntervalSec: defaultOutboxDispatchIntervalSec,
 		},
 		Dedupe: DedupeConfig{
 			TTLSec: defaultDedupeTTLSec,

@@ -28,17 +28,6 @@ func newSwappableIngestionPublisher(current sharedPorts.IngestionEventPublisher)
 	return &swappableIngestionPublisher{current: current}
 }
 
-// Swap replaces the active ingestion publisher and returns the previous delegate.
-func (publisher *swappableIngestionPublisher) Swap(next sharedPorts.IngestionEventPublisher) sharedPorts.IngestionEventPublisher {
-	publisher.mu.Lock()
-	defer publisher.mu.Unlock()
-
-	previous := publisher.current
-	publisher.current = next
-
-	return previous
-}
-
 // PublishIngestionCompleted forwards the completion event to the current delegate.
 func (publisher *swappableIngestionPublisher) PublishIngestionCompleted(ctx context.Context, event *sharedDomain.IngestionCompletedEvent) error {
 	publisher.mu.RLock()
@@ -80,17 +69,6 @@ type swappableMatchPublisher struct {
 
 func newSwappableMatchPublisher(current sharedDomain.MatchEventPublisher) *swappableMatchPublisher {
 	return &swappableMatchPublisher{current: current}
-}
-
-// Swap replaces the active match publisher and returns the previous delegate.
-func (publisher *swappableMatchPublisher) Swap(next sharedDomain.MatchEventPublisher) sharedDomain.MatchEventPublisher {
-	publisher.mu.Lock()
-	defer publisher.mu.Unlock()
-
-	previous := publisher.current
-	publisher.current = next
-
-	return previous
 }
 
 // PublishMatchConfirmed forwards the confirmed event to the current delegate.

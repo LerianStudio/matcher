@@ -39,26 +39,40 @@ var (
 	_ sharedDomain.MatchEventPublisher    = (*stubMatchPublisher)(nil)
 )
 
-func TestSwappableIngestionPublisher_SwapReturnsPreviousAndDelegates(t *testing.T) {
+func TestSwappableIngestionPublisher_DelegatesPublishCalls(t *testing.T) {
 	t.Parallel()
 
-	first := &stubIngestionPublisher{}
-	second := &stubIngestionPublisher{err: errors.New("new publisher")}
-	publisher := newSwappableIngestionPublisher(first)
+	delegateErr := errors.New("delegate failure")
+	publisher := newSwappableIngestionPublisher(&stubIngestionPublisher{err: delegateErr})
 
-	previous := publisher.Swap(second)
-	assert.Same(t, first, previous)
-	require.Error(t, publisher.PublishIngestionCompleted(context.Background(), nil))
+	require.ErrorIs(t, publisher.PublishIngestionCompleted(context.Background(), nil), delegateErr)
+	require.ErrorIs(t, publisher.PublishIngestionFailed(context.Background(), nil), delegateErr)
 }
 
-func TestSwappableMatchPublisher_SwapReturnsPreviousAndDelegates(t *testing.T) {
+func TestSwappableIngestionPublisher_NilDelegateReturnsSentinel(t *testing.T) {
 	t.Parallel()
 
-	first := &stubMatchPublisher{}
-	second := &stubMatchPublisher{err: errors.New("new publisher")}
-	publisher := newSwappableMatchPublisher(first)
+	publisher := newSwappableIngestionPublisher(nil)
 
-	previous := publisher.Swap(second)
-	assert.Same(t, first, previous)
-	require.Error(t, publisher.PublishMatchConfirmed(context.Background(), nil))
+	assert.ErrorIs(t, publisher.PublishIngestionCompleted(context.Background(), nil), errIngestionPublisherUnavailable)
+	assert.ErrorIs(t, publisher.PublishIngestionFailed(context.Background(), nil), errIngestionPublisherUnavailable)
+}
+
+func TestSwappableMatchPublisher_DelegatesPublishCalls(t *testing.T) {
+	t.Parallel()
+
+	delegateErr := errors.New("delegate failure")
+	publisher := newSwappableMatchPublisher(&stubMatchPublisher{err: delegateErr})
+
+	require.ErrorIs(t, publisher.PublishMatchConfirmed(context.Background(), nil), delegateErr)
+	require.ErrorIs(t, publisher.PublishMatchUnmatched(context.Background(), nil), delegateErr)
+}
+
+func TestSwappableMatchPublisher_NilDelegateReturnsSentinel(t *testing.T) {
+	t.Parallel()
+
+	publisher := newSwappableMatchPublisher(nil)
+
+	assert.ErrorIs(t, publisher.PublishMatchConfirmed(context.Background(), nil), errMatchPublisherUnavailable)
+	assert.ErrorIs(t, publisher.PublishMatchUnmatched(context.Background(), nil), errMatchPublisherUnavailable)
 }

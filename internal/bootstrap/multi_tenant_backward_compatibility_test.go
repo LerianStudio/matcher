@@ -30,7 +30,7 @@ func TestMultiTenant_BackwardCompatibility(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.Tenancy.MultiTenantEnabled = false
 
-	provider, manager, tenantDBHandler := createInfraProviderWithBundleState(cfg, nil, postgresConn, redisConn)
+	provider, manager, tenantDBHandler := createInfraProvider(cfg, nil, postgresConn, redisConn)
 	require.NotNil(t, manager)
 	assert.Nil(t, tenantDBHandler, "single-tenant mode should not create tenant DB middleware")
 
@@ -77,7 +77,7 @@ func TestMultiTenant_BackwardCompatibility_NoTenantManagerRequired(t *testing.T)
 	cfg := defaultConfig()
 	cfg.Tenancy.MultiTenantEnabled = false
 
-	provider, manager, tenantDBHandler := createInfraProviderWithBundleState(cfg, nil, postgresConn, redisConn)
+	provider, manager, tenantDBHandler := createInfraProvider(cfg, nil, postgresConn, redisConn)
 	require.NotNil(t, manager, "config manager should be created in single-tenant mode")
 	assert.Nil(t, tenantDBHandler, "no tenant DB handler in single-tenant mode")
 
@@ -100,7 +100,7 @@ func TestMultiTenant_BackwardCompatibility_ConnectionResolutionWithoutTenantCont
 	cfg := defaultConfig()
 	cfg.Tenancy.MultiTenantEnabled = false
 
-	provider, _, _ := createInfraProviderWithBundleState(cfg, nil, postgresConn, redisConn)
+	provider, _, _ := createInfraProvider(cfg, nil, postgresConn, redisConn)
 
 	tests := []struct {
 		name string
@@ -190,7 +190,7 @@ func TestCreateInfraProvider_MultiTenantEnabled_CreatesCanonicalManager(t *testi
 	cfg.Tenancy.MultiTenantCircuitBreakerThreshold = 5
 	cfg.Tenancy.MultiTenantCircuitBreakerTimeoutSec = 30
 
-	provider, manager, tenantDBHandler := createInfraProviderWithBundleState(cfg, nil, nil, nil)
+	provider, manager, tenantDBHandler := createInfraProvider(cfg, nil, nil, nil)
 	require.NotNil(t, manager)
 	assert.NotNil(t, tenantDBHandler, "multi-tenant mode should create tenant DB middleware")
 

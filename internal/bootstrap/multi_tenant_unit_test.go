@@ -420,7 +420,7 @@ func TestBuildCanonicalTenantManager_EmptyURL_Fails(t *testing.T) {
 	require.Contains(t, err.Error(), "create tenant manager client")
 }
 
-// Section 8: createInfraProviderWithBundleState — Integration of all pieces.
+// Section 8: createInfraProvider — Integration of all pieces.
 
 func TestCreateInfraProvider_SingleTenant_ReturnsNilTenantDBHandler(t *testing.T) {
 	t.Parallel()
@@ -430,7 +430,7 @@ func TestCreateInfraProvider_SingleTenant_ReturnsNilTenantDBHandler(t *testing.T
 	cfg := defaultConfig()
 	cfg.Tenancy.MultiTenantEnabled = false
 
-	provider, closer, tenantDBHandler := createInfraProviderWithBundleState(cfg, nil, pg, redis)
+	provider, closer, tenantDBHandler := createInfraProvider(cfg, nil, pg, redis)
 	require.NotNil(t, provider)
 	require.NotNil(t, closer)
 	assert.Nil(t, tenantDBHandler, "single-tenant mode must return nil tenant DB handler")
@@ -453,7 +453,7 @@ func TestCreateInfraProvider_MultiTenant_ReturnsTenantDBHandler(t *testing.T) {
 	cfg.Tenancy.MultiTenantURL = server.URL
 	cfg.Tenancy.MultiTenantServiceAPIKey = "test-key"
 
-	provider, closer, tenantDBHandler := createInfraProviderWithBundleState(cfg, nil, nil, nil)
+	provider, closer, tenantDBHandler := createInfraProvider(cfg, nil, nil, nil)
 	require.NotNil(t, provider)
 	require.NotNil(t, closer)
 	assert.NotNil(t, tenantDBHandler, "multi-tenant mode must return non-nil tenant DB handler")

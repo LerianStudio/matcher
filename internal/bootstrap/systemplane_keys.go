@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"strings"
 
 	"github.com/LerianStudio/lib-commons/v5/commons/systemplane"
 )
@@ -17,6 +16,8 @@ var (
 	errFetcherURLMustBeString      = errors.New("fetcher url must be a string")
 	errFetcherURLMustBeAbsolute    = errors.New("fetcher url must be an absolute URL")
 	errFetcherURLMustUseHTTPScheme = errors.New("fetcher url must use http or https")
+	errValueNotPositive            = errors.New("value must be positive")
+	errValueNotNumeric             = errors.New("value must be numeric")
 )
 
 // Default values for Matcher configuration keys. These constants match the
@@ -121,6 +122,10 @@ const (
 	defaultIdempotencyRetryWindow = 300
 	defaultIdempotencySuccessTTL  = 168
 
+	// Outbox dispatcher defaults.
+	defaultOutboxRetryWindow         = 300 // seconds (5 minutes, matches lib-commons default)
+	defaultOutboxDispatchIntervalSec = 2   // seconds
+
 	// Callback rate limit defaults.
 	defaultCallbackPerMinute = 60
 
@@ -181,64 +186,59 @@ const (
 	defaultArchivalPartitionLA   = 3
 	defaultArchivalPresignExpiry = 3600
 	maxPresignExpirySec          = 604800
+
+	// matcherKeyDefsCapacity is the total number of keys returned by
+	// matcherKeyDefs(). Kept in sync manually (no strict upper bound — serves
+	// only as a preallocation hint to avoid repeated slice growth).
+	matcherKeyDefsCapacity = 105
 )
 
-// validateLogLevel validates that the value is a supported log level string.
-func validateLogLevel(v any) error {
-	s, ok := v.(string)
-	if !ok {
-		return fmt.Errorf("log level must be a string, got %T", v)
-	}
-
-	switch strings.ToLower(s) {
-	case "debug", "info", "warn", "error":
-		return nil
-	default:
-		return fmt.Errorf("unsupported log level: %q (must be debug, info, warn, or error)", s)
-	}
-}
-
 // validatePositiveInt validates that the value is a positive integer.
-func validatePositiveInt(v any) error {
-	switch n := v.(type) {
+func validatePositiveInt(value any) error {
+	switch typed := value.(type) {
 	case int:
-		if n <= 0 {
-			return fmt.Errorf("value must be positive, got %d", n)
+		if typed <= 0 {
+			return fmt.Errorf("%w, got %d", errValueNotPositive, typed)
 		}
 
 		return nil
 	case float64:
-		if n <= 0 {
-			return fmt.Errorf("value must be positive, got %v", n)
+		if typed <= 0 {
+			return fmt.Errorf("%w, got %v", errValueNotPositive, typed)
 		}
 
 		return nil
 	default:
-		return fmt.Errorf("value must be numeric, got %T", v)
+		return fmt.Errorf("%w, got %T", errValueNotNumeric, value)
 	}
 }
 
 // validateFetcherURL validates that the value is a well-formed HTTP(S) URL.
-func validateFetcherURL(v any) error {
-	s, ok := v.(string)
+func validateFetcherURL(value any) error {
+	str, ok := value.(string)
 	if !ok {
 		return errFetcherURLMustBeString
 	}
 
-	if s == "" {
-		return nil // empty is allowed (disabled)
+	if str == "" {
+		// Empty URL is permitted because the Fetcher integration is gated by
+		// the separate `fetcher.enabled` key (default false). When
+		// `fetcher.enabled=true`, an empty URL will fail fast at Fetcher client
+		// construction via dynamic_fetcher_client.go. See also init.go gating
+		// at cfg.Fetcher.Enabled check sites.
+		return nil
 	}
 
-	u, err := url.Parse(s)
+	parsedURL, err := url.Parse(str)
 	if err != nil {
 		return fmt.Errorf("fetcher url parse: %w", err)
 	}
 
-	if !u.IsAbs() {
+	if !parsedURL.IsAbs() {
 		return errFetcherURLMustBeAbsolute
 	}
 
-	if u.Scheme != "http" && u.Scheme != "https" {
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
 		return errFetcherURLMustUseHTTPScheme
 	}
 
@@ -256,9 +256,21 @@ const systemplaneNamespace = "matcher"
 // the Config struct and its sub-structs, using dotted mapstructure tag
 // paths as key names.
 //
+// The registered default for each key is derived from `cfg`, which must be
+// the env-resolved Config snapshot produced by LoadConfig/LoadConfigWithLogger.
+// This seeds systemplane with operator intent so that env overrides like
+// MATCHER_RATE_LIMIT_MAX=10000 propagate as the initial runtime value rather
+// than being overridden by compile-time constants. Admin PUTs replace the
+// stored value, and OnChange callbacks push updates back into *Config via
+// applySystemplaneOverrides.
+//
 // Must be called before Client.Start().
-func RegisterMatcherKeys(client *systemplane.Client) error {
-	defs := matcherKeyDefs()
+func RegisterMatcherKeys(client *systemplane.Client, cfg *Config) error {
+	if cfg == nil {
+		return fmt.Errorf("register matcher keys: %w", ErrConfigNil)
+	}
+
+	defs := matcherKeyDefs(cfg)
 	for _, def := range defs {
 		opts := []systemplane.KeyOption{
 			systemplane.WithDescription(def.description),
@@ -289,231 +301,256 @@ type matcherKeyDef struct {
 	redact       systemplane.RedactPolicy
 }
 
-// matcherKeyDefs returns all Matcher configuration key definitions.
-// The definitions are the canonical source of truth for all default values.
-func matcherKeyDefs() []matcherKeyDef {
-	var defs []matcherKeyDef
+// matcherKeyDefs returns the list of runtime-mutable systemplane keys.
+//
+// PRINCIPLE: Only keys with live reload paths belong here. Keys that require a
+// process restart to take effect (connection strings, bootstrap credentials,
+// replica host/port/user/password) must NOT be registered here — they belong in
+// environment variables and config/.config-map.example.
+//
+// Registering a bootstrap-only key would be a footgun: the admin API would
+// appear to accept changes, but the running process would continue using the
+// boot-time value. Operators would rotate a password, see GET return the new
+// value, and trust it — while live traffic still uses the old secret. This was
+// the H5 regression addressed on feat/lib-commons-v5.
+//
+// DEFAULT-VALUE PRINCIPLE: the registered default for every key is read from
+// `cfg` (the env-resolved Config snapshot). This ensures env-var overrides like
+// MATCHER_RATE_LIMIT_MAX=10000 beat the compile-time constants; the env-seeded
+// defaults become the systemplane baseline, admin PUTs overwrite it, and
+// OnChange callbacks push changes back into *Config.
+//
+// Callers that need defs before Config is built (e.g., test fixtures) can pass
+// defaultConfig() — the return value will match the compile-time constants.
+//
+//nolint:funlen // pre-existing: large list-builder function; splitting across helpers hurts readability without reducing complexity.
+func matcherKeyDefs(cfg *Config) []matcherKeyDef {
+	if cfg == nil {
+		cfg = defaultConfig()
+	}
+
+	defs := make([]matcherKeyDef, 0, matcherKeyDefsCapacity)
 
 	// --- App ---
+	// app.log_level intentionally NOT registered: LOG_LEVEL is bootstrap-only.
+	// Runtime log-level swapping would require re-wiring SwappableLogger.Swap to
+	// systemplane OnChange, which is not implemented. Set LOG_LEVEL via env var
+	// and restart to change.
 	defs = append(defs,
-		matcherKeyDef{key: "app.env_name", defaultValue: defaultEnvName, description: "Application environment name (e.g., development, staging, production)"},
-		matcherKeyDef{key: "app.log_level", defaultValue: defaultLogLevel, description: "Application log level (debug, info, warn, error)", validator: validateLogLevel},
+		matcherKeyDef{key: "app.env_name", defaultValue: cfg.App.EnvName, description: "Application environment name (e.g., development, staging, production)"},
 	)
 
 	// --- Server ---
 	defs = append(defs,
-		matcherKeyDef{key: "server.address", defaultValue: defaultServerAddress, description: "HTTP server listen address (e.g., :4018)"},
-		matcherKeyDef{key: "server.body_limit_bytes", defaultValue: defaultKeyBodyLimitBytes, description: "Maximum HTTP request body size in bytes", validator: validatePositiveInt},
-		matcherKeyDef{key: "cors.allowed_origins", defaultValue: defaultCORSAllowedOrigins, description: "Comma-separated list of allowed CORS origins"},
-		matcherKeyDef{key: "cors.allowed_methods", defaultValue: defaultCORSAllowedMethods, description: "Comma-separated list of allowed CORS methods"},
-		matcherKeyDef{key: "cors.allowed_headers", defaultValue: defaultCORSAllowedHeaders, description: "Comma-separated list of allowed CORS headers"},
-		matcherKeyDef{key: "server.tls_cert_file", defaultValue: defaultServerTLSCertFile, description: "Path to TLS certificate file"},
-		matcherKeyDef{key: "server.tls_key_file", defaultValue: defaultServerTLSKeyFile, description: "Path to TLS private key file"},
-		matcherKeyDef{key: "server.tls_terminated_upstream", defaultValue: defaultTLSTerminatedUpstream, description: "Whether TLS is terminated by an upstream proxy"},
-		matcherKeyDef{key: "server.trusted_proxies", defaultValue: defaultServerTrustedProxies, description: "Comma-separated list of trusted proxy CIDRs"},
+		matcherKeyDef{key: "server.address", defaultValue: cfg.Server.Address, description: "HTTP server listen address (e.g., :4018)"},
+		matcherKeyDef{key: "server.body_limit_bytes", defaultValue: cfg.Server.BodyLimitBytes, description: "Maximum HTTP request body size in bytes", validator: validatePositiveInt},
+		matcherKeyDef{key: "cors.allowed_origins", defaultValue: cfg.Server.CORSAllowedOrigins, description: "Comma-separated list of allowed CORS origins"},
+		matcherKeyDef{key: "cors.allowed_methods", defaultValue: cfg.Server.CORSAllowedMethods, description: "Comma-separated list of allowed CORS methods"},
+		matcherKeyDef{key: "cors.allowed_headers", defaultValue: cfg.Server.CORSAllowedHeaders, description: "Comma-separated list of allowed CORS headers"},
+		matcherKeyDef{key: "server.tls_cert_file", defaultValue: cfg.Server.TLSCertFile, description: "Path to TLS certificate file"},
+		matcherKeyDef{key: "server.tls_key_file", defaultValue: cfg.Server.TLSKeyFile, description: "Path to TLS private key file"},
+		matcherKeyDef{key: "server.tls_terminated_upstream", defaultValue: cfg.Server.TLSTerminatedUpstream, description: "Whether TLS is terminated by an upstream proxy"},
+		matcherKeyDef{key: "server.trusted_proxies", defaultValue: cfg.Server.TrustedProxies, description: "Comma-separated list of trusted proxy CIDRs"},
 	)
 
 	// --- Tenancy ---
 	defs = append(defs,
-		matcherKeyDef{key: "tenancy.default_tenant_id", defaultValue: defaultTenantID, description: "Default tenant ID for single-tenant mode"},
-		matcherKeyDef{key: "tenancy.default_tenant_slug", defaultValue: defaultTenantSlug, description: "Default tenant slug for single-tenant mode"},
-		matcherKeyDef{key: "tenancy.multi_tenant_enabled", defaultValue: defaultMultiTenantEnabled, description: "Enable multi-tenant mode"},
-		matcherKeyDef{key: "tenancy.multi_tenant_url", defaultValue: "", description: "Multi-tenant service URL"},
-		matcherKeyDef{key: "tenancy.multi_tenant_environment", defaultValue: "", description: "Multi-tenant environment identifier"},
-		matcherKeyDef{key: "tenancy.multi_tenant_redis_host", defaultValue: "", description: "Multi-tenant Redis host"},
-		matcherKeyDef{key: "tenancy.multi_tenant_redis_port", defaultValue: defaultMultiTenantRedisPort, description: "Multi-tenant Redis port"},
-		matcherKeyDef{key: "tenancy.multi_tenant_redis_password", defaultValue: "", description: "Multi-tenant Redis password", redact: systemplane.RedactFull},
-		matcherKeyDef{key: "tenancy.multi_tenant_redis_tls", defaultValue: defaultMultiTenantRedisTLS, description: "Multi-tenant Redis TLS enabled"},
-		matcherKeyDef{key: "tenancy.multi_tenant_max_tenant_pools", defaultValue: defaultMultiTenantMaxTenantPools, description: "Maximum number of tenant connection pools"},
-		matcherKeyDef{key: "tenancy.multi_tenant_idle_timeout_sec", defaultValue: defaultMultiTenantIdleTimeoutSec, description: "Tenant pool idle timeout in seconds"},
-		matcherKeyDef{key: "tenancy.multi_tenant_timeout", defaultValue: defaultMultiTenantTimeout, description: "Multi-tenant operation timeout in seconds"},
-		matcherKeyDef{key: "tenancy.multi_tenant_circuit_breaker_threshold", defaultValue: defaultMultiTenantCircuitBreakerThresh, description: "Multi-tenant circuit breaker threshold"},
-		matcherKeyDef{key: "tenancy.multi_tenant_circuit_breaker_timeout_sec", defaultValue: defaultMultiTenantCircuitBreakerSec, description: "Multi-tenant circuit breaker timeout in seconds"},
-		matcherKeyDef{key: "tenancy.multi_tenant_service_api_key", defaultValue: "", description: "Multi-tenant service API key", redact: systemplane.RedactFull},
-		matcherKeyDef{key: "tenancy.multi_tenant_cache_ttl_sec", defaultValue: defaultMultiTenantCacheTTLSec, description: "Multi-tenant cache TTL in seconds"},
-		matcherKeyDef{key: "tenancy.multi_tenant_connections_check_interval_sec", defaultValue: defaultMultiTenantConnsCheckIntervalSec, description: "Multi-tenant connections check interval in seconds"},
+		matcherKeyDef{key: "tenancy.default_tenant_id", defaultValue: cfg.Tenancy.DefaultTenantID, description: "Default tenant ID for single-tenant mode"},
+		matcherKeyDef{key: "tenancy.default_tenant_slug", defaultValue: cfg.Tenancy.DefaultTenantSlug, description: "Default tenant slug for single-tenant mode"},
+		matcherKeyDef{key: "tenancy.multi_tenant_enabled", defaultValue: cfg.Tenancy.MultiTenantEnabled, description: "Enable multi-tenant mode"},
+		matcherKeyDef{key: "tenancy.multi_tenant_url", defaultValue: cfg.Tenancy.MultiTenantURL, description: "Multi-tenant service URL"},
+		matcherKeyDef{key: "tenancy.multi_tenant_environment", defaultValue: cfg.Tenancy.MultiTenantEnvironment, description: "Multi-tenant environment identifier"},
+		matcherKeyDef{key: "tenancy.multi_tenant_redis_host", defaultValue: cfg.Tenancy.MultiTenantRedisHost, description: "Multi-tenant Redis host"},
+		matcherKeyDef{key: "tenancy.multi_tenant_redis_port", defaultValue: cfg.Tenancy.MultiTenantRedisPort, description: "Multi-tenant Redis port"},
+		matcherKeyDef{key: "tenancy.multi_tenant_redis_password", defaultValue: cfg.Tenancy.MultiTenantRedisPassword, description: "Multi-tenant Redis password", redact: systemplane.RedactFull},
+		matcherKeyDef{key: "tenancy.multi_tenant_redis_tls", defaultValue: cfg.Tenancy.MultiTenantRedisTLS, description: "Multi-tenant Redis TLS enabled"},
+		matcherKeyDef{key: "tenancy.multi_tenant_max_tenant_pools", defaultValue: cfg.Tenancy.MultiTenantMaxTenantPools, description: "Maximum number of tenant connection pools"},
+		matcherKeyDef{key: "tenancy.multi_tenant_idle_timeout_sec", defaultValue: cfg.Tenancy.MultiTenantIdleTimeoutSec, description: "Tenant pool idle timeout in seconds"},
+		matcherKeyDef{key: "tenancy.multi_tenant_timeout", defaultValue: cfg.Tenancy.MultiTenantTimeout, description: "Multi-tenant operation timeout in seconds"},
+		matcherKeyDef{key: "tenancy.multi_tenant_circuit_breaker_threshold", defaultValue: cfg.Tenancy.MultiTenantCircuitBreakerThreshold, description: "Multi-tenant circuit breaker threshold"},
+		matcherKeyDef{key: "tenancy.multi_tenant_circuit_breaker_timeout_sec", defaultValue: cfg.Tenancy.MultiTenantCircuitBreakerTimeoutSec, description: "Multi-tenant circuit breaker timeout in seconds"},
+		matcherKeyDef{key: "tenancy.multi_tenant_service_api_key", defaultValue: cfg.Tenancy.MultiTenantServiceAPIKey, description: "Multi-tenant service API key", redact: systemplane.RedactFull},
+		matcherKeyDef{key: "tenancy.multi_tenant_cache_ttl_sec", defaultValue: cfg.Tenancy.MultiTenantCacheTTLSec, description: "Multi-tenant cache TTL in seconds"},
+		matcherKeyDef{key: "tenancy.multi_tenant_connections_check_interval_sec", defaultValue: cfg.Tenancy.MultiTenantConnectionsCheckIntervalSec, description: "Multi-tenant connections check interval in seconds"},
 	)
 
 	// --- PostgreSQL ---
+	// Connection identity and credentials (host, port, user, password, db,
+	// ssl_mode, connect_timeout_sec, migrations_path, replica_*) are
+	// bootstrap-only — omitted here per the principle above. Only pool tunables
+	// with live reload paths are registered.
 	defs = append(defs,
-		matcherKeyDef{key: "postgres.primary_host", defaultValue: defaultPGHost, description: "Primary PostgreSQL host"},
-		matcherKeyDef{key: "postgres.primary_port", defaultValue: defaultPGPort, description: "Primary PostgreSQL port"},
-		matcherKeyDef{key: "postgres.primary_user", defaultValue: defaultPGUser, description: "Primary PostgreSQL user"},
-		matcherKeyDef{key: "postgres.primary_password", defaultValue: defaultPGPassword, description: "Primary PostgreSQL password", redact: systemplane.RedactFull},
-		matcherKeyDef{key: "postgres.primary_db", defaultValue: defaultPGDB, description: "Primary PostgreSQL database"},
-		matcherKeyDef{key: "postgres.primary_ssl_mode", defaultValue: defaultPGSSLMode, description: "Primary PostgreSQL SSL mode"},
-		matcherKeyDef{key: "postgres.replica_host", defaultValue: "", description: "Replica PostgreSQL host"},
-		matcherKeyDef{key: "postgres.replica_port", defaultValue: "", description: "Replica PostgreSQL port"},
-		matcherKeyDef{key: "postgres.replica_user", defaultValue: "", description: "Replica PostgreSQL user"},
-		matcherKeyDef{key: "postgres.replica_password", defaultValue: "", description: "Replica PostgreSQL password", redact: systemplane.RedactFull},
-		matcherKeyDef{key: "postgres.replica_db", defaultValue: "", description: "Replica PostgreSQL database"},
-		matcherKeyDef{key: "postgres.replica_ssl_mode", defaultValue: "", description: "Replica PostgreSQL SSL mode"},
-		matcherKeyDef{key: "postgres.max_open_conns", defaultValue: defaultPGMaxOpenConns, description: "Maximum open database connections", validator: validatePositiveInt},
-		matcherKeyDef{key: "postgres.max_idle_conns", defaultValue: defaultPGMaxIdleConns, description: "Maximum idle database connections"},
-		matcherKeyDef{key: "postgres.conn_max_lifetime_mins", defaultValue: defaultPGConnMaxLifeMins, description: "Connection max lifetime in minutes"},
-		matcherKeyDef{key: "postgres.conn_max_idle_time_mins", defaultValue: defaultPGConnMaxIdleMins, description: "Connection max idle time in minutes"},
-		matcherKeyDef{key: "postgres.connect_timeout_sec", defaultValue: defaultPGConnectTimeout, description: "Database connect timeout in seconds"},
-		matcherKeyDef{key: "postgres.query_timeout_sec", defaultValue: defaultPGQueryTimeout, description: "Database query timeout in seconds"},
-		matcherKeyDef{key: "postgres.migrations_path", defaultValue: defaultPGMigrationsPath, description: "Path to database migrations"},
+		matcherKeyDef{key: "postgres.max_open_conns", defaultValue: cfg.Postgres.MaxOpenConnections, description: "Maximum open database connections", validator: validatePositiveInt},
+		matcherKeyDef{key: "postgres.max_idle_conns", defaultValue: cfg.Postgres.MaxIdleConnections, description: "Maximum idle database connections"},
+		matcherKeyDef{key: "postgres.conn_max_lifetime_mins", defaultValue: cfg.Postgres.ConnMaxLifetimeMins, description: "Connection max lifetime in minutes"},
+		matcherKeyDef{key: "postgres.conn_max_idle_time_mins", defaultValue: cfg.Postgres.ConnMaxIdleTimeMins, description: "Connection max idle time in minutes"},
+		matcherKeyDef{key: "postgres.query_timeout_sec", defaultValue: cfg.Postgres.QueryTimeoutSec, description: "Database query timeout in seconds"},
 	)
 
 	// --- Redis ---
+	// Connection identity and credentials (host, master_name, password, db,
+	// protocol, tls, ca_cert, dial_timeout_ms) are bootstrap-only — omitted
+	// here per the principle above. Only pool/timeout tunables with live
+	// reload paths are registered.
 	defs = append(defs,
-		matcherKeyDef{key: "redis.host", defaultValue: defaultRedisHost, description: "Redis host"},
-		matcherKeyDef{key: "redis.master_name", defaultValue: "", description: "Redis Sentinel master name"},
-		matcherKeyDef{key: "redis.password", defaultValue: "", description: "Redis password", redact: systemplane.RedactFull},
-		matcherKeyDef{key: "redis.db", defaultValue: defaultRedisDB, description: "Redis database number"},
-		matcherKeyDef{key: "redis.protocol", defaultValue: defaultRedisProtocol, description: "Redis protocol version"},
-		matcherKeyDef{key: "redis.tls", defaultValue: defaultRedisTLS, description: "Redis TLS enabled"},
-		matcherKeyDef{key: "redis.ca_cert", defaultValue: "", description: "Redis CA certificate path"},
-		matcherKeyDef{key: "redis.pool_size", defaultValue: defaultRedisPoolSize, description: "Redis connection pool size"},
-		matcherKeyDef{key: "redis.min_idle_conns", defaultValue: defaultRedisMinIdleConn, description: "Redis minimum idle connections"},
-		matcherKeyDef{key: "redis.read_timeout_ms", defaultValue: defaultRedisReadTimeout, description: "Redis read timeout in milliseconds"},
-		matcherKeyDef{key: "redis.write_timeout_ms", defaultValue: defaultRedisWriteTimeout, description: "Redis write timeout in milliseconds"},
-		matcherKeyDef{key: "redis.dial_timeout_ms", defaultValue: defaultRedisDialTimeout, description: "Redis dial timeout in milliseconds"},
+		matcherKeyDef{key: "redis.pool_size", defaultValue: cfg.Redis.PoolSize, description: "Redis connection pool size"},
+		matcherKeyDef{key: "redis.min_idle_conns", defaultValue: cfg.Redis.MinIdleConn, description: "Redis minimum idle connections"},
+		matcherKeyDef{key: "redis.read_timeout_ms", defaultValue: cfg.Redis.ReadTimeoutMs, description: "Redis read timeout in milliseconds"},
+		matcherKeyDef{key: "redis.write_timeout_ms", defaultValue: cfg.Redis.WriteTimeoutMs, description: "Redis write timeout in milliseconds"},
 	)
 
 	// --- RabbitMQ ---
-	defs = append(defs,
-		matcherKeyDef{key: "rabbitmq.url", defaultValue: defaultRabbitURI, description: "RabbitMQ URI scheme"},
-		matcherKeyDef{key: "rabbitmq.host", defaultValue: defaultRabbitHost, description: "RabbitMQ host"},
-		matcherKeyDef{key: "rabbitmq.port", defaultValue: defaultRabbitPort, description: "RabbitMQ port"},
-		matcherKeyDef{key: "rabbitmq.user", defaultValue: defaultRabbitUser, description: "RabbitMQ user"},
-		matcherKeyDef{key: "rabbitmq.password", defaultValue: defaultRabbitPassword, description: "RabbitMQ password", redact: systemplane.RedactFull},
-		matcherKeyDef{key: "rabbitmq.vhost", defaultValue: defaultRabbitVHost, description: "RabbitMQ virtual host"},
-		matcherKeyDef{key: "rabbitmq.health_url", defaultValue: defaultRabbitHealthURL, description: "RabbitMQ health check URL"},
-		matcherKeyDef{key: "rabbitmq.allow_insecure_health_check", defaultValue: defaultRabbitAllowInsecureHealth, description: "Allow insecure RabbitMQ health check"},
-	)
+	// All RabbitMQ keys (url, host, port, user, password, vhost, health_url,
+	// allow_insecure_health_check) are bootstrap-only. The broker connection
+	// is created once at startup; changing any of these at runtime would
+	// mislead operators without reconnecting live traffic. Manage these via
+	// environment variables.
 
 	// --- Auth ---
 	defs = append(defs,
-		matcherKeyDef{key: "auth.enabled", defaultValue: defaultAuthEnabled, description: "Enable authentication"},
-		matcherKeyDef{key: "auth.host", defaultValue: "", description: "Auth service host"},
-		matcherKeyDef{key: "auth.token_secret", defaultValue: "", description: "JWT token signing secret", redact: systemplane.RedactFull},
+		matcherKeyDef{key: "auth.enabled", defaultValue: cfg.Auth.Enabled, description: "Enable authentication"},
+		matcherKeyDef{key: "auth.host", defaultValue: cfg.Auth.Host, description: "Auth service host"},
+		matcherKeyDef{key: "auth.token_secret", defaultValue: cfg.Auth.TokenSecret, description: "JWT token signing secret", redact: systemplane.RedactFull},
 	)
 
 	// --- Telemetry ---
 	defs = append(defs,
-		matcherKeyDef{key: "telemetry.enabled", defaultValue: defaultTelemetryEnabled, description: "Enable OpenTelemetry"},
-		matcherKeyDef{key: "telemetry.service_name", defaultValue: defaultTelemetryServiceName, description: "OTel service name"},
-		matcherKeyDef{key: "telemetry.library_name", defaultValue: defaultTelemetryLibraryName, description: "OTel library name"},
-		matcherKeyDef{key: "telemetry.service_version", defaultValue: defaultTelemetryServiceVersion, description: "OTel service version"},
-		matcherKeyDef{key: "telemetry.deployment_env", defaultValue: defaultTelemetryDeploymentEnv, description: "OTel deployment environment"},
-		matcherKeyDef{key: "telemetry.collector_endpoint", defaultValue: defaultTelemetryCollectorEP, description: "OTel collector endpoint"},
-		matcherKeyDef{key: "telemetry.db_metrics_interval_sec", defaultValue: defaultTelemetryDBMetricsIntSec, description: "Database metrics collection interval in seconds"},
+		matcherKeyDef{key: "telemetry.enabled", defaultValue: cfg.Telemetry.Enabled, description: "Enable OpenTelemetry"},
+		matcherKeyDef{key: "telemetry.service_name", defaultValue: cfg.Telemetry.ServiceName, description: "OTel service name"},
+		matcherKeyDef{key: "telemetry.library_name", defaultValue: cfg.Telemetry.LibraryName, description: "OTel library name"},
+		matcherKeyDef{key: "telemetry.service_version", defaultValue: cfg.Telemetry.ServiceVersion, description: "OTel service version"},
+		matcherKeyDef{key: "telemetry.deployment_env", defaultValue: cfg.Telemetry.DeploymentEnv, description: "OTel deployment environment"},
+		matcherKeyDef{key: "telemetry.collector_endpoint", defaultValue: cfg.Telemetry.CollectorEndpoint, description: "OTel collector endpoint"},
+		matcherKeyDef{key: "telemetry.db_metrics_interval_sec", defaultValue: cfg.Telemetry.DBMetricsIntervalSec, description: "Database metrics collection interval in seconds"},
 	)
 
 	// --- Swagger ---
 	defs = append(defs,
-		matcherKeyDef{key: "swagger.enabled", defaultValue: defaultSwaggerEnabled, description: "Enable Swagger UI"},
-		matcherKeyDef{key: "swagger.host", defaultValue: "", description: "Swagger host override"},
-		matcherKeyDef{key: "swagger.schemes", defaultValue: defaultSwaggerSchemes, description: "Swagger URL schemes"},
+		matcherKeyDef{key: "swagger.enabled", defaultValue: cfg.Swagger.Enabled, description: "Enable Swagger UI"},
+		matcherKeyDef{key: "swagger.host", defaultValue: cfg.Swagger.Host, description: "Swagger host override"},
+		matcherKeyDef{key: "swagger.schemes", defaultValue: cfg.Swagger.Schemes, description: "Swagger URL schemes"},
 	)
 
 	// --- Rate Limit ---
 	defs = append(defs,
-		matcherKeyDef{key: "rate_limit.enabled", defaultValue: defaultRateLimitEnabled, description: "Enable rate limiting"},
-		matcherKeyDef{key: "rate_limit.max", defaultValue: defaultRateLimitMax, description: "Rate limit max requests", validator: validatePositiveInt},
-		matcherKeyDef{key: "rate_limit.expiry_sec", defaultValue: defaultRateLimitExpirySec, description: "Rate limit window in seconds", validator: validatePositiveInt},
-		matcherKeyDef{key: "rate_limit.export_max", defaultValue: defaultRateLimitExportMax, description: "Export endpoint rate limit"},
-		matcherKeyDef{key: "rate_limit.export_expiry_sec", defaultValue: defaultRateLimitExportExpiry, description: "Export rate limit window in seconds"},
-		matcherKeyDef{key: "rate_limit.dispatch_max", defaultValue: defaultRateLimitDispatchMax, description: "Dispatch endpoint rate limit"},
-		matcherKeyDef{key: "rate_limit.dispatch_expiry_sec", defaultValue: defaultRateLimitDispatchExp, description: "Dispatch rate limit window in seconds"},
+		matcherKeyDef{key: "rate_limit.enabled", defaultValue: cfg.RateLimit.Enabled, description: "Enable rate limiting"},
+		matcherKeyDef{key: "rate_limit.max", defaultValue: cfg.RateLimit.Max, description: "Rate limit max requests", validator: validatePositiveInt},
+		matcherKeyDef{key: "rate_limit.expiry_sec", defaultValue: cfg.RateLimit.ExpirySec, description: "Rate limit window in seconds", validator: validatePositiveInt},
+		matcherKeyDef{key: "rate_limit.export_max", defaultValue: cfg.RateLimit.ExportMax, description: "Export endpoint rate limit"},
+		matcherKeyDef{key: "rate_limit.export_expiry_sec", defaultValue: cfg.RateLimit.ExportExpirySec, description: "Export rate limit window in seconds"},
+		matcherKeyDef{key: "rate_limit.dispatch_max", defaultValue: cfg.RateLimit.DispatchMax, description: "Dispatch endpoint rate limit"},
+		matcherKeyDef{key: "rate_limit.dispatch_expiry_sec", defaultValue: cfg.RateLimit.DispatchExpirySec, description: "Dispatch rate limit window in seconds"},
 	)
 
 	// --- Infrastructure ---
 	defs = append(defs,
-		matcherKeyDef{key: "infrastructure.connect_timeout_sec", defaultValue: defaultInfraConnectTimeout, description: "Infrastructure connect timeout in seconds"},
-		matcherKeyDef{key: "infrastructure.health_check_timeout_sec", defaultValue: defaultInfraHealthCheckTimeout, description: "Health check timeout in seconds"},
+		matcherKeyDef{key: "infrastructure.connect_timeout_sec", defaultValue: cfg.Infrastructure.ConnectTimeoutSec, description: "Infrastructure connect timeout in seconds"},
+		matcherKeyDef{key: "infrastructure.health_check_timeout_sec", defaultValue: cfg.Infrastructure.HealthCheckTimeoutSec, description: "Health check timeout in seconds"},
 	)
 
 	// --- Idempotency ---
 	defs = append(defs,
-		matcherKeyDef{key: "idempotency.retry_window_sec", defaultValue: defaultIdempotencyRetryWindow, description: "Idempotency retry window in seconds"},
-		matcherKeyDef{key: "idempotency.success_ttl_hours", defaultValue: defaultIdempotencySuccessTTL, description: "Idempotency success TTL in hours"},
-		matcherKeyDef{key: "idempotency.hmac_secret", defaultValue: "", description: "Idempotency HMAC signing secret", redact: systemplane.RedactFull},
+		matcherKeyDef{key: "idempotency.retry_window_sec", defaultValue: cfg.Idempotency.RetryWindowSec, description: "Idempotency retry window in seconds"},
+		matcherKeyDef{key: "idempotency.success_ttl_hours", defaultValue: cfg.Idempotency.SuccessTTLHours, description: "Idempotency success TTL in hours"},
+		matcherKeyDef{key: "idempotency.hmac_secret", defaultValue: cfg.Idempotency.HMACSecret, description: "Idempotency HMAC signing secret", redact: systemplane.RedactFull},
+	)
+
+	// --- Outbox Dispatcher ---
+	defs = append(defs,
+		matcherKeyDef{
+			key:          "outbox.retry_window_sec",
+			defaultValue: cfg.Outbox.RetryWindowSec,
+			description:  "Outbox dispatcher retry cooldown in seconds",
+			validator:    validatePositiveInt,
+		},
+		matcherKeyDef{
+			key:          "outbox.dispatch_interval_sec",
+			defaultValue: cfg.Outbox.DispatchIntervalSec,
+			description:  "Outbox dispatcher poll interval in seconds",
+			validator:    validatePositiveInt,
+		},
 	)
 
 	// --- Deduplication ---
 	defs = append(defs,
-		matcherKeyDef{key: "deduplication.ttl_sec", defaultValue: defaultDedupeTTLSec, description: "Deduplication TTL in seconds"},
+		matcherKeyDef{key: "deduplication.ttl_sec", defaultValue: cfg.Dedupe.TTLSec, description: "Deduplication TTL in seconds"},
 	)
 
 	// --- Callback Rate Limit ---
 	defs = append(defs,
-		matcherKeyDef{key: "callback_rate_limit.per_minute", defaultValue: defaultCallbackPerMinute, description: "Callback rate limit per minute"},
+		matcherKeyDef{key: "callback_rate_limit.per_minute", defaultValue: cfg.CallbackRateLimit.PerMinute, description: "Callback rate limit per minute"},
 	)
 
 	// --- Webhook ---
 	defs = append(defs,
-		matcherKeyDef{key: "webhook.timeout_sec", defaultValue: defaultWebhookTimeout, description: "Webhook timeout in seconds"},
+		matcherKeyDef{key: "webhook.timeout_sec", defaultValue: cfg.Webhook.TimeoutSec, description: "Webhook timeout in seconds"},
 	)
 
 	// --- Fetcher ---
 	defs = append(defs,
-		matcherKeyDef{key: "fetcher.enabled", defaultValue: defaultFetcherEnabled, description: "Enable Fetcher integration"},
-		matcherKeyDef{key: "fetcher.url", defaultValue: defaultFetcherURL, description: "Fetcher service URL", validator: validateFetcherURL},
-		matcherKeyDef{key: "fetcher.allow_private_ips", defaultValue: defaultFetcherAllowPrivateIPs, description: "Allow Fetcher to use private IPs"},
-		matcherKeyDef{key: "fetcher.health_timeout_sec", defaultValue: defaultKeyFetcherHealthTimeout, description: "Fetcher health check timeout in seconds"},
-		matcherKeyDef{key: "fetcher.request_timeout_sec", defaultValue: defaultKeyFetcherRequestTimeout, description: "Fetcher request timeout in seconds"},
-		matcherKeyDef{key: "fetcher.discovery_interval_sec", defaultValue: defaultFetcherDiscoveryInt, description: "Fetcher discovery interval in seconds"},
-		matcherKeyDef{key: "fetcher.schema_cache_ttl_sec", defaultValue: defaultKeyFetcherSchemaCacheTTL, description: "Fetcher schema cache TTL in seconds"},
-		matcherKeyDef{key: "fetcher.extraction_poll_sec", defaultValue: defaultFetcherExtractionPoll, description: "Fetcher extraction poll interval in seconds"},
-		matcherKeyDef{key: "fetcher.extraction_timeout_sec", defaultValue: defaultFetcherExtractionTO, description: "Fetcher extraction timeout in seconds"},
+		matcherKeyDef{key: "fetcher.enabled", defaultValue: cfg.Fetcher.Enabled, description: "Enable Fetcher integration"},
+		matcherKeyDef{key: "fetcher.url", defaultValue: cfg.Fetcher.URL, description: "Fetcher service URL", validator: validateFetcherURL},
+		matcherKeyDef{key: "fetcher.allow_private_ips", defaultValue: cfg.Fetcher.AllowPrivateIPs, description: "Allow Fetcher to use private IPs"},
+		matcherKeyDef{key: "fetcher.health_timeout_sec", defaultValue: cfg.Fetcher.HealthTimeoutSec, description: "Fetcher health check timeout in seconds"},
+		matcherKeyDef{key: "fetcher.request_timeout_sec", defaultValue: cfg.Fetcher.RequestTimeoutSec, description: "Fetcher request timeout in seconds"},
+		matcherKeyDef{key: "fetcher.discovery_interval_sec", defaultValue: cfg.Fetcher.DiscoveryIntervalSec, description: "Fetcher discovery interval in seconds"},
+		matcherKeyDef{key: "fetcher.schema_cache_ttl_sec", defaultValue: cfg.Fetcher.SchemaCacheTTLSec, description: "Fetcher schema cache TTL in seconds"},
+		matcherKeyDef{key: "fetcher.extraction_poll_sec", defaultValue: cfg.Fetcher.ExtractionPollSec, description: "Fetcher extraction poll interval in seconds"},
+		matcherKeyDef{key: "fetcher.extraction_timeout_sec", defaultValue: cfg.Fetcher.ExtractionTimeoutSec, description: "Fetcher extraction timeout in seconds"},
 	)
 
 	// --- M2M ---
 	defs = append(defs,
-		matcherKeyDef{key: "m2m.m2m_target_service", defaultValue: defaultM2MTargetService, description: "M2M target service name"},
-		matcherKeyDef{key: "m2m.m2m_credential_cache_ttl_sec", defaultValue: defaultM2MCredentialCacheTTL, description: "M2M credential cache TTL in seconds"},
-		matcherKeyDef{key: "m2m.aws_region", defaultValue: "", description: "M2M AWS region"},
+		matcherKeyDef{key: "m2m.m2m_target_service", defaultValue: cfg.M2M.M2MTargetService, description: "M2M target service name"},
+		matcherKeyDef{key: "m2m.m2m_credential_cache_ttl_sec", defaultValue: cfg.M2M.M2MCredentialCacheTTLSec, description: "M2M credential cache TTL in seconds"},
+		matcherKeyDef{key: "m2m.aws_region", defaultValue: cfg.M2M.AWSRegion, description: "M2M AWS region"},
 	)
 
 	// --- Object Storage ---
 	defs = append(defs,
-		matcherKeyDef{key: "object_storage.endpoint", defaultValue: defaultObjStorageEndpoint, description: "Object storage endpoint"},
-		matcherKeyDef{key: "object_storage.region", defaultValue: defaultObjStorageRegion, description: "Object storage region"},
-		matcherKeyDef{key: "object_storage.bucket", defaultValue: defaultObjStorageBucket, description: "Object storage bucket"},
-		matcherKeyDef{key: "object_storage.access_key_id", defaultValue: "", description: "Object storage access key ID", redact: systemplane.RedactFull},
-		matcherKeyDef{key: "object_storage.secret_access_key", defaultValue: "", description: "Object storage secret access key", redact: systemplane.RedactFull},
-		matcherKeyDef{key: "object_storage.use_path_style", defaultValue: defaultObjStoragePathStyle, description: "Use path-style S3 addressing"},
-		matcherKeyDef{key: "object_storage.allow_insecure_endpoint", defaultValue: defaultObjStorageAllowInsecure, description: "Allow insecure object storage endpoint"},
+		matcherKeyDef{key: "object_storage.endpoint", defaultValue: cfg.ObjectStorage.Endpoint, description: "Object storage endpoint"},
+		matcherKeyDef{key: "object_storage.region", defaultValue: cfg.ObjectStorage.Region, description: "Object storage region"},
+		matcherKeyDef{key: "object_storage.bucket", defaultValue: cfg.ObjectStorage.Bucket, description: "Object storage bucket"},
+		matcherKeyDef{key: "object_storage.access_key_id", defaultValue: cfg.ObjectStorage.AccessKeyID, description: "Object storage access key ID", redact: systemplane.RedactFull},
+		matcherKeyDef{key: "object_storage.secret_access_key", defaultValue: cfg.ObjectStorage.SecretAccessKey, description: "Object storage secret access key", redact: systemplane.RedactFull},
+		matcherKeyDef{key: "object_storage.use_path_style", defaultValue: cfg.ObjectStorage.UsePathStyle, description: "Use path-style S3 addressing"},
+		matcherKeyDef{key: "object_storage.allow_insecure_endpoint", defaultValue: cfg.ObjectStorage.AllowInsecure, description: "Allow insecure object storage endpoint"},
 	)
 
 	// --- Export Worker ---
 	defs = append(defs,
-		matcherKeyDef{key: "export_worker.enabled", defaultValue: defaultExportEnabled, description: "Enable export worker"},
-		matcherKeyDef{key: "export_worker.poll_interval_sec", defaultValue: defaultExportPollInt, description: "Export worker poll interval in seconds"},
-		matcherKeyDef{key: "export_worker.page_size", defaultValue: defaultExportPageSize, description: "Export worker page size"},
-		matcherKeyDef{key: "export_worker.presign_expiry_sec", defaultValue: defaultExportPresignExp, description: "Export presigned URL expiry in seconds"},
+		matcherKeyDef{key: "export_worker.enabled", defaultValue: cfg.ExportWorker.Enabled, description: "Enable export worker"},
+		matcherKeyDef{key: "export_worker.poll_interval_sec", defaultValue: cfg.ExportWorker.PollIntervalSec, description: "Export worker poll interval in seconds"},
+		matcherKeyDef{key: "export_worker.page_size", defaultValue: cfg.ExportWorker.PageSize, description: "Export worker page size"},
+		matcherKeyDef{key: "export_worker.presign_expiry_sec", defaultValue: cfg.ExportWorker.PresignExpirySec, description: "Export presigned URL expiry in seconds"},
 	)
 
 	// --- Cleanup Worker ---
 	defs = append(defs,
-		matcherKeyDef{key: "cleanup_worker.enabled", defaultValue: defaultCleanupEnabled, description: "Enable cleanup worker"},
-		matcherKeyDef{key: "cleanup_worker.interval_sec", defaultValue: defaultCleanupInterval, description: "Cleanup worker interval in seconds"},
-		matcherKeyDef{key: "cleanup_worker.batch_size", defaultValue: defaultCleanupBatchSize, description: "Cleanup worker batch size"},
-		matcherKeyDef{key: "cleanup_worker.grace_period_sec", defaultValue: defaultCleanupGracePeriod, description: "Cleanup worker grace period in seconds"},
+		matcherKeyDef{key: "cleanup_worker.enabled", defaultValue: cfg.CleanupWorker.Enabled, description: "Enable cleanup worker"},
+		matcherKeyDef{key: "cleanup_worker.interval_sec", defaultValue: cfg.CleanupWorker.IntervalSec, description: "Cleanup worker interval in seconds"},
+		matcherKeyDef{key: "cleanup_worker.batch_size", defaultValue: cfg.CleanupWorker.BatchSize, description: "Cleanup worker batch size"},
+		matcherKeyDef{key: "cleanup_worker.grace_period_sec", defaultValue: cfg.CleanupWorker.GracePeriodSec, description: "Cleanup worker grace period in seconds"},
 	)
 
 	// --- Scheduler ---
 	defs = append(defs,
-		matcherKeyDef{key: "scheduler.interval_sec", defaultValue: defaultSchedulerInterval, description: "Scheduler interval in seconds"},
+		matcherKeyDef{key: "scheduler.interval_sec", defaultValue: cfg.Scheduler.IntervalSec, description: "Scheduler interval in seconds"},
 	)
 
 	// --- Archival ---
 	defs = append(defs,
-		matcherKeyDef{key: "archival.enabled", defaultValue: defaultArchivalEnabled, description: "Enable archival worker"},
-		matcherKeyDef{key: "archival.interval_hours", defaultValue: defaultArchivalInterval, description: "Archival interval in hours"},
-		matcherKeyDef{key: "archival.hot_retention_days", defaultValue: defaultArchivalHotDays, description: "Hot retention in days"},
-		matcherKeyDef{key: "archival.warm_retention_months", defaultValue: defaultArchivalWarmMonths, description: "Warm retention in months"},
-		matcherKeyDef{key: "archival.cold_retention_months", defaultValue: defaultArchivalColdMonths, description: "Cold retention in months"},
-		matcherKeyDef{key: "archival.batch_size", defaultValue: defaultArchivalBatchSize, description: "Archival batch size"},
-		matcherKeyDef{key: "archival.partition_lookahead", defaultValue: defaultArchivalPartitionLA, description: "Archival partition lookahead"},
-		matcherKeyDef{key: "archival.storage_bucket", defaultValue: defaultArchivalStorageBucket, description: "Archival storage bucket"},
-		matcherKeyDef{key: "archival.storage_prefix", defaultValue: defaultArchivalStoragePrefix, description: "Archival storage prefix"},
-		matcherKeyDef{key: "archival.storage_class", defaultValue: defaultArchivalStorageClass, description: "Archival storage class"},
-		matcherKeyDef{key: "archival.presign_expiry_sec", defaultValue: defaultArchivalPresignExpiry, description: "Archival presigned URL expiry in seconds"},
+		matcherKeyDef{key: "archival.enabled", defaultValue: cfg.Archival.Enabled, description: "Enable archival worker"},
+		matcherKeyDef{key: "archival.interval_hours", defaultValue: cfg.Archival.IntervalHours, description: "Archival interval in hours"},
+		matcherKeyDef{key: "archival.hot_retention_days", defaultValue: cfg.Archival.HotRetentionDays, description: "Hot retention in days"},
+		matcherKeyDef{key: "archival.warm_retention_months", defaultValue: cfg.Archival.WarmRetentionMonths, description: "Warm retention in months"},
+		matcherKeyDef{key: "archival.cold_retention_months", defaultValue: cfg.Archival.ColdRetentionMonths, description: "Cold retention in months"},
+		matcherKeyDef{key: "archival.batch_size", defaultValue: cfg.Archival.BatchSize, description: "Archival batch size"},
+		matcherKeyDef{key: "archival.partition_lookahead", defaultValue: cfg.Archival.PartitionLookahead, description: "Archival partition lookahead"},
+		matcherKeyDef{key: "archival.storage_bucket", defaultValue: cfg.Archival.StorageBucket, description: "Archival storage bucket"},
+		matcherKeyDef{key: "archival.storage_prefix", defaultValue: cfg.Archival.StoragePrefix, description: "Archival storage prefix"},
+		matcherKeyDef{key: "archival.storage_class", defaultValue: cfg.Archival.StorageClass, description: "Archival storage class"},
+		matcherKeyDef{key: "archival.presign_expiry_sec", defaultValue: cfg.Archival.PresignExpirySec, description: "Archival presigned URL expiry in seconds"},
 	)
 
 	return defs
