@@ -30,6 +30,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	configWorker "github.com/LerianStudio/matcher/internal/configuration/services/worker"
+	discoveryExtractionRepo "github.com/LerianStudio/matcher/internal/discovery/adapters/postgres/extraction"
 	discoveryWorker "github.com/LerianStudio/matcher/internal/discovery/services/worker"
 	governanceWorker "github.com/LerianStudio/matcher/internal/governance/services/worker"
 	ingestionRabbitmq "github.com/LerianStudio/matcher/internal/ingestion/adapters/rabbitmq"
@@ -1557,8 +1558,9 @@ func TestInitOptionalDiscoveryWorker(t *testing.T) {
 			nil,
 			nil,
 			nil,
+			nil,
 			logger,
-			func(_ *Routes, _ *Config, _ func() *Config, _ sharedPorts.InfrastructureProvider, _ sharedPorts.TenantLister, _ libLog.Logger, _ ...sharedPorts.M2MProvider) (*discoveryWorker.DiscoveryWorker, error) {
+			func(_ *Routes, _ *Config, _ func() *Config, _ sharedPorts.InfrastructureProvider, _ sharedPorts.TenantLister, _ *discoveryExtractionRepo.Repository, _ libLog.Logger, _ ...sharedPorts.M2MProvider) (*discoveryWorker.DiscoveryWorker, error) {
 				called = true
 				return expectedWorker, nil
 			},
@@ -1585,8 +1587,9 @@ func TestInitOptionalDiscoveryWorker(t *testing.T) {
 			nil,
 			nil,
 			nil,
+			nil,
 			logger,
-			func(_ *Routes, _ *Config, _ func() *Config, _ sharedPorts.InfrastructureProvider, _ sharedPorts.TenantLister, _ libLog.Logger, _ ...sharedPorts.M2MProvider) (*discoveryWorker.DiscoveryWorker, error) {
+			func(_ *Routes, _ *Config, _ func() *Config, _ sharedPorts.InfrastructureProvider, _ sharedPorts.TenantLister, _ *discoveryExtractionRepo.Repository, _ libLog.Logger, _ ...sharedPorts.M2MProvider) (*discoveryWorker.DiscoveryWorker, error) {
 				called = true
 				return expectedWorker, nil
 			},
@@ -1610,8 +1613,9 @@ func TestInitOptionalDiscoveryWorker(t *testing.T) {
 			nil,
 			nil,
 			nil,
+			nil,
 			logger,
-			func(_ *Routes, _ *Config, _ func() *Config, _ sharedPorts.InfrastructureProvider, _ sharedPorts.TenantLister, _ libLog.Logger, _ ...sharedPorts.M2MProvider) (*discoveryWorker.DiscoveryWorker, error) {
+			func(_ *Routes, _ *Config, _ func() *Config, _ sharedPorts.InfrastructureProvider, _ sharedPorts.TenantLister, _ *discoveryExtractionRepo.Repository, _ libLog.Logger, _ ...sharedPorts.M2MProvider) (*discoveryWorker.DiscoveryWorker, error) {
 				return nil, errors.New("fetcher bootstrap failed")
 			},
 		)

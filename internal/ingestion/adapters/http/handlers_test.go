@@ -226,6 +226,13 @@ func (a *jobRepoAdapter) Update(
 	return result, nil
 }
 
+func (a *jobRepoAdapter) FindLatestByExtractionID(
+	_ context.Context,
+	_ uuid.UUID,
+) (*entities.IngestionJob, error) {
+	return nil, nil
+}
+
 func (a *jobRepoAdapter) WithTx(ctx context.Context, fn func(*sql.Tx) error) error {
 	return fn(nil)
 }

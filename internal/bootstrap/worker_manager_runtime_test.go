@@ -172,6 +172,11 @@ func TestExtractWorkerConfig_AllNames(t *testing.T) {
 		{"archival", false, archivalWorkerComparableConfig{IntervalHours: cfg.Archival.IntervalHours, HotRetentionDays: cfg.Archival.HotRetentionDays, WarmRetentionMonths: cfg.Archival.WarmRetentionMonths, ColdRetentionMonths: cfg.Archival.ColdRetentionMonths, BatchSize: cfg.Archival.BatchSize, StorageBucket: cfg.Archival.StorageBucket, StoragePrefix: cfg.Archival.StoragePrefix, StorageClass: cfg.Archival.StorageClass, PartitionLookahead: cfg.Archival.PartitionLookahead, StorageEndpoint: cfg.ObjectStorage.Endpoint, StorageRegion: cfg.ObjectStorage.Region, StorageAccessKeyID: cfg.ObjectStorage.AccessKeyID, StorageSecretKey: cfg.ObjectStorage.SecretAccessKey, StorageUsePathStyle: cfg.ObjectStorage.UsePathStyle}},
 		{"scheduler", false, schedulerWorkerComparableConfig{IntervalSec: cfg.Scheduler.IntervalSec}},
 		{"discovery", false, discoveryWorkerRuntimeConfig{Interval: cfg.FetcherDiscoveryInterval()}},
+		{"fetcher_bridge", false, fetcherBridgeWorkerComparableConfig{
+			IntervalSec:      cfg.Fetcher.BridgeIntervalSec,
+			BatchSize:        cfg.Fetcher.BridgeBatchSize,
+			RetryMaxAttempts: cfg.Fetcher.BridgeRetryMaxAttempts,
+		}},
 		{"unknown", true, nil},
 	}
 
@@ -376,4 +381,63 @@ func TestApplyWorkerRuntimeConfig_WrongInterface_IsNoop(t *testing.T) {
 	assert.NotPanics(t, func() {
 		require.NoError(t, applyWorkerRuntimeConfig(context.Background(), "export", worker, cfg))
 	})
+}
+
+// --- Fetcher bridge runtime reconciliation (Fix 4) ---
+
+// runtimeAwareFetcherBridgeWorker is a test double satisfying the bridge
+// worker's UpdateRuntimeConfig contract. Captures every call so the test
+// can assert that applyFetcherBridgeRuntimeConfig forwards the cfg knobs
+// faithfully.
+type runtimeAwareFetcherBridgeWorker struct {
+	mockWorker
+	mu      sync.Mutex
+	updates []discoveryWorker.BridgeWorkerConfig
+	err     error
+}
+
+func (w *runtimeAwareFetcherBridgeWorker) UpdateRuntimeConfig(cfg discoveryWorker.BridgeWorkerConfig) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	w.updates = append(w.updates, cfg)
+
+	return w.err
+}
+
+func (w *runtimeAwareFetcherBridgeWorker) lastUpdate() *discoveryWorker.BridgeWorkerConfig {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if len(w.updates) == 0 {
+		return nil
+	}
+
+	u := w.updates[len(w.updates)-1]
+
+	return &u
+}
+
+// TestApplyFetcherBridgeRuntimeConfig_UpdatesWorkerOnMutation exercises Fix 4:
+// when the systemplane reconciler hands a Config carrying new bridge knobs
+// to applyWorkerRuntimeConfig, the call must reach UpdateRuntimeConfig with
+// the corresponding values. Pre-fix this code path was missing the
+// "fetcher_bridge" case and operators changing the keys via systemplane saw
+// audit logs but the worker silently kept its old values.
+func TestApplyFetcherBridgeRuntimeConfig_UpdatesWorkerOnMutation(t *testing.T) {
+	t.Parallel()
+
+	worker := &runtimeAwareFetcherBridgeWorker{}
+	cfg := defaultConfig()
+	cfg.Fetcher.BridgeIntervalSec = 75
+	cfg.Fetcher.BridgeBatchSize = 25
+
+	require.NoError(t, applyWorkerRuntimeConfig(context.Background(), workerNameFetcherBridge, worker, cfg))
+
+	last := worker.lastUpdate()
+	require.NotNil(t, last, "applyFetcherBridgeRuntimeConfig must forward to UpdateRuntimeConfig")
+	assert.Equal(t, cfg.FetcherBridgeInterval(), last.Interval,
+		"interval must be derived via FetcherBridgeInterval helper for default-coalescing")
+	assert.Equal(t, cfg.FetcherBridgeBatchSize(), last.BatchSize,
+		"batch size must be derived via FetcherBridgeBatchSize helper for default-coalescing")
 }

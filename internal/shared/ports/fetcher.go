@@ -68,29 +68,37 @@ type ExtractionJobInput struct {
 // ExtractionJobStatus represents the status of a running extraction job.
 type ExtractionJobStatus struct {
 	ID     string
-	Status string // pending, running, completed, failed
+	Status string // canonical uppercase status, e.g. PENDING, SUBMITTED, RUNNING, EXTRACTING, COMPLETE, FAILED, CANCELLED
+	// MappedFields echoes the submitted MappedFields, potentially with
+	// server-side transformation (e.g. unqualified table names auto-qualified
+	// to schema.table). Nil when Fetcher does not echo these fields.
+	MappedFields map[string]map[string][]string
 	// ResultPath is the S3 object key where Fetcher stored the (encrypted) extraction output.
 	ResultPath string
-	// ResultHmac is the HMAC-SHA256 hex digest that Fetcher's worker computed over the
-	// plaintext JSON result *before* AES-GCM encryption and storage. Fetcher signs the
-	// document using a key derived via HKDF from its master key (APP_ENC_KEY) with context
-	// "fetcher-external-hmac-v1".
+	// ResultHmac is the hex-encoded HMAC-SHA256 digest the trusted
+	// bridge uses to verify artifact integrity end-to-end.
 	//
-	// Matcher currently stores this value but does NOT verify it because:
-	//  1. The Matcher does not download or decrypt the extraction result data — it only
-	//     tracks the ResultPath as metadata. The ingestion context receives data through
-	//     separate upload flows, not by reading from Fetcher's S3 bucket.
-	//  2. Verification requires the external HMAC key, which is derived from Fetcher's
-	//     APP_ENC_KEY via `make derive-key`. Sharing this key requires operational
-	//     coordination (e.g., a shared secret in AWS Secrets Manager or a new env var
-	//     FETCHER_EXTERNAL_HMAC_KEY provisioned during deployment).
-	//  3. Even with the key, the stored data is AES-GCM encrypted — verification would
-	//     also require the storage encryption derived key to first decrypt, then HMAC-check.
+	// Contract (locked in FETCHER_MATCHER.md, design decision D4):
+	//   - The HMAC is computed over the ciphertext produced by AES-256-GCM
+	//     encryption of the extraction result. Both sides verify ciphertext
+	//     because that is what reaches the wire: HMAC-then-verify gives us
+	//     an integrity check before we ever hand bytes to the AES tag.
+	//   - The HMAC key is derived locally (no remote key exchange) via
+	//     HKDF-SHA256 from the shared master key APP_ENC_KEY, using the
+	//     contract-locked context string "fetcher-external-hmac-v1".
 	//
-	// To enable end-to-end verification, the following would be needed:
-	//  - Fetcher's external HMAC key shared with Matcher (env var or secret manager).
-	//  - Matcher downloading and decrypting the result (requires the storage encryption key too).
-	//  - Or: Fetcher providing a verification endpoint that accepts a hash and confirms integrity.
+	// Matcher's artifact verifier
+	// (internal/discovery/adapters/fetcher/artifact_verifier.go) recomputes
+	// this digest in constant time (hmac.Equal) and refuses to decrypt
+	// anything that fails the check. Mismatches collapse to
+	// sharedPorts.ErrIntegrityVerificationFailed so bridge callers never
+	// retry a tampered or corrupted artifact.
+	//
+	// Open item: Fetcher's published external contract documents HMAC over
+	// the *plaintext* in some historical notes. FETCHER_MATCHER.md records
+	// the ciphertext-HMAC alignment as the single source of truth; any
+	// drift must be resolved before T-003 connects to a real Fetcher
+	// instance.
 	ResultHmac  string
 	RequestHash string
 	Metadata    map[string]any

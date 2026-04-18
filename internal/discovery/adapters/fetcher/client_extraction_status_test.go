@@ -68,7 +68,7 @@ func TestGetExtractionJobStatus_Success_Failed(t *testing.T) {
 	assert.Equal(t, "connection lost during extraction", status.Metadata["error"])
 }
 
-func TestGetExtractionJobStatus_CanceledNormalizedToCancelled(t *testing.T) {
+func TestGetExtractionJobStatus_Canceled_MapsToCancelled(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -81,7 +81,7 @@ func TestGetExtractionJobStatus_CanceledNormalizedToCancelled(t *testing.T) {
 	client := newTestClient(t, srv.URL)
 	status, err := client.GetExtractionJobStatus(context.Background(), "job-4")
 	require.NoError(t, err)
-	require.NotNil(t, status)
+	assert.Equal(t, "job-4", status.ID)
 	assert.Equal(t, "CANCELLED", status.Status)
 }
 
@@ -184,4 +184,58 @@ func TestGetExtractionJobStatus_NotFound(t *testing.T) {
 	require.Error(t, err)
 	assert.Nil(t, status)
 	assert.ErrorIs(t, err, ErrFetcherNotFound)
+}
+
+func TestGetExtractionJobStatus_PopulatesMappedFields(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{
+			"id": "job-echo-1",
+			"status": "RUNNING",
+			"mappedFields": {
+				"prod-db": {
+					"public.transactions": ["id", "amount", "currency"]
+				}
+			},
+			"filters": {
+				"prod-db": {
+					"public.transactions": {
+						"currency": {"eq": ["USD"]},
+						"amount":   {"gt": [100], "lte": [9999]}
+					}
+				}
+			}
+		}`))
+	}))
+	defer srv.Close()
+
+	client := newTestClient(t, srv.URL)
+	status, err := client.GetExtractionJobStatus(context.Background(), "job-echo-1")
+
+	require.NoError(t, err)
+	assert.Equal(t, "job-echo-1", status.ID)
+	assert.Equal(t, "RUNNING", status.Status)
+
+	require.Contains(t, status.MappedFields, "prod-db")
+	require.Contains(t, status.MappedFields["prod-db"], "public.transactions")
+	assert.Equal(t, []string{"id", "amount", "currency"}, status.MappedFields["prod-db"]["public.transactions"])
+}
+
+func TestGetExtractionJobStatus_NilMappedFields(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		resp := fetcherExtractionStatusResponse{ID: "job-noecho", Status: "RUNNING"}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(resp) //nolint:errcheck,errchkjson // test helper
+	}))
+	defer srv.Close()
+
+	client := newTestClient(t, srv.URL)
+	status, err := client.GetExtractionJobStatus(context.Background(), "job-noecho")
+
+	require.NoError(t, err)
+	assert.Nil(t, status.MappedFields)
 }

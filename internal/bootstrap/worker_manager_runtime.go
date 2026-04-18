@@ -53,15 +53,43 @@ type schedulerWorkerComparableConfig struct {
 }
 
 const (
-	workerNameExport    = "export"
-	workerNameCleanup   = "cleanup"
-	workerNameArchival  = "archival"
-	workerNameScheduler = "scheduler"
-	workerNameDiscovery = "discovery"
+	workerNameExport           = "export"
+	workerNameCleanup          = "cleanup"
+	workerNameArchival         = "archival"
+	workerNameScheduler        = "scheduler"
+	workerNameDiscovery        = "discovery"
+	workerNameFetcherBridge    = "fetcher_bridge"
+	workerNameCustodyRetention = "custody_retention"
 )
 
 type discoveryWorkerRuntimeConfig struct {
 	Interval time.Duration
+}
+
+// fetcherBridgeWorkerComparableConfig is the workerConfigChanged-comparable
+// projection of BridgeWorkerConfig. Mirrors the canonical pattern used by
+// the scheduler / archival / cleanup / export comparable structs: only the
+// fields that gate a worker restart get included so reflect.DeepEqual
+// returns false ONLY when one of the runtime knobs actually moved.
+//
+// T-005 added the retry-attempts knob — it goes through worker reconcile
+// (restart) because the worker reads it once at construction. Polish Fix 2
+// removed the dead Initial/Max-Backoff knobs along with the inert
+// exponential-backoff helpers.
+type fetcherBridgeWorkerComparableConfig struct {
+	IntervalSec      int
+	BatchSize        int
+	RetryMaxAttempts int
+}
+
+// custodyRetentionWorkerComparableConfig (T-006) is the
+// workerConfigChanged-comparable projection of CustodyRetentionWorkerConfig.
+// Same pattern as fetcherBridgeWorkerComparableConfig: fields that gate a
+// restart get included so the reconciler restarts the worker when (and only
+// when) operators change a tunable.
+type custodyRetentionWorkerComparableConfig struct {
+	SweepIntervalSec int
+	GracePeriodSec   int
 }
 
 // reconcileSlotLocked handles a single worker slot: starts, stops, or restarts
@@ -310,6 +338,10 @@ func applyWorkerRuntimeConfig(ctx context.Context, name string, worker WorkerLif
 		return applySchedulerRuntimeConfig(worker, cfg)
 	case workerNameDiscovery:
 		return applyDiscoveryRuntimeConfig(worker, cfg)
+	case workerNameFetcherBridge:
+		return applyFetcherBridgeRuntimeConfig(worker, cfg)
+	case workerNameCustodyRetention:
+		return applyCustodyRetentionRuntimeConfig(worker, cfg)
 	default:
 		return nil
 	}
@@ -426,6 +458,62 @@ func applyDiscoveryRuntimeConfig(worker WorkerLifecycle, cfg *Config) error {
 	return nil
 }
 
+// applyFetcherBridgeRuntimeConfig pushes new tick interval / batch size
+// values into the bridge worker after a systemplane mutation. The bridge
+// worker rejects updates while running (returns ErrBridgeRuntimeConfig
+// UpdateRunning), which is fine — the WorkerManager always stop→starts on
+// config change so this method always observes a stopped worker.
+//
+// Wired here as part of Fix 4: prior to this fix the systemplane keys
+// `fetcher.bridge_interval_sec` / `fetcher.bridge_batch_size` were
+// registered with ApplyWorkerReconcile + MutableAtRuntime=true, so an
+// operator changing them via PUT /v1/system/configs saw audit logs but
+// the worker silently kept its old values.
+func applyFetcherBridgeRuntimeConfig(worker WorkerLifecycle, cfg *Config) error {
+	bridgeWorker, ok := worker.(interface {
+		UpdateRuntimeConfig(discoveryWorker.BridgeWorkerConfig) error
+	})
+	if !ok {
+		return nil
+	}
+
+	if err := bridgeWorker.UpdateRuntimeConfig(discoveryWorker.BridgeWorkerConfig{
+		Interval:  cfg.FetcherBridgeInterval(),
+		BatchSize: cfg.FetcherBridgeBatchSize(),
+		Retry: discoveryWorker.BridgeRetryBackoff{
+			MaxAttempts: cfg.FetcherBridgeRetryMaxAttempts(),
+		},
+	}); err != nil {
+		return fmt.Errorf("update fetcher bridge runtime config: %w", err)
+	}
+
+	return nil
+}
+
+// applyCustodyRetentionRuntimeConfig pushes new tick interval / grace
+// period to the custody retention sweep worker (T-006). Mirrors
+// applyFetcherBridgeRuntimeConfig: type-asserts on a structural interface
+// so the test-side fake implementation is interchangeable with the real
+// worker.
+func applyCustodyRetentionRuntimeConfig(worker WorkerLifecycle, cfg *Config) error {
+	retentionWorker, ok := worker.(interface {
+		UpdateRuntimeConfig(discoveryWorker.CustodyRetentionWorkerConfig) error
+	})
+	if !ok {
+		return nil
+	}
+
+	if err := retentionWorker.UpdateRuntimeConfig(discoveryWorker.CustodyRetentionWorkerConfig{
+		Interval:    cfg.FetcherCustodyRetentionSweepInterval(),
+		GracePeriod: cfg.FetcherCustodyRetentionGracePeriod(),
+		BatchSize:   discoveryWorker.CustodyRetentionDefaultBatchSize,
+	}); err != nil {
+		return fmt.Errorf("update custody retention runtime config: %w", err)
+	}
+
+	return nil
+}
+
 // workerConfigChanged checks whether the config section relevant to a worker
 // has changed between two configs. Uses reflect.DeepEqual on the relevant
 // sub-struct for simplicity — this runs at most once per config reload per worker,
@@ -487,6 +575,17 @@ func extractWorkerConfig(name string, cfg *Config) any {
 		}
 	case workerNameDiscovery:
 		return discoveryWorkerRuntimeConfig{Interval: cfg.FetcherDiscoveryInterval()}
+	case workerNameFetcherBridge:
+		return fetcherBridgeWorkerComparableConfig{
+			IntervalSec:      cfg.Fetcher.BridgeIntervalSec,
+			BatchSize:        cfg.Fetcher.BridgeBatchSize,
+			RetryMaxAttempts: cfg.Fetcher.BridgeRetryMaxAttempts,
+		}
+	case workerNameCustodyRetention:
+		return custodyRetentionWorkerComparableConfig{
+			SweepIntervalSec: cfg.Fetcher.CustodyRetentionSweepIntervalSec,
+			GracePeriodSec:   cfg.Fetcher.CustodyRetentionGracePeriodSec,
+		}
 	default:
 		return nil
 	}

@@ -230,6 +230,15 @@ linters:
         # ===========================================
         - pattern: 'fmt\.Errorf\([^)]*%v[^)]*err\)'
           msg: 'Use %w instead of %v for error wrapping to preserve error chain for errors.Is() checks'
+        # ===========================================
+        # %worker Typo Prevention
+        # A find/replace renaming receiver `w` to `worker` can clobber the %w
+        # error-wrap verb into %worker (or the intermediate %wo/%wor/%worke).
+        # fmt parses %w and treats the trailing letters as literal text, which
+        # corrupts error messages and breaks errors.Is on nil errors.
+        # ===========================================
+        - pattern: '%w(orker|orke|or|o)\b'
+          msg: 'Use %w for error wrapping — %worker/%wo/%wor/%worke is a find/replace typo from renaming a `w` receiver; fmt treats the trailing letters as literal text'
     depguard:
       rules:
         main:
@@ -525,6 +534,8 @@ linters:
               desc: "Workers must not import redis adapters directly. Inject via port interface."
             - pkg: "github.com/LerianStudio/matcher/internal/shared/adapters/rabbitmq"
               desc: "Workers must not import rabbitmq adapters directly. Inject via port interface."
+            - pkg: "github.com/LerianStudio/matcher/internal/shared/adapters/custody"
+              desc: "Workers must not import the custody adapter directly. Inject via sharedPorts.ArtifactCustodyStore / sharedPorts.CustodyKeyBuilder."
         # ===========================================
         # CQRS Enforcement
         # Commands and Queries must be strictly separated.

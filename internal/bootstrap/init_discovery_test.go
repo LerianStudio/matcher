@@ -44,7 +44,7 @@ func TestInitOptionalDiscoveryWorker_DisabledConfig_ReturnsNil(t *testing.T) {
 	cfg := &Config{Fetcher: FetcherConfig{Enabled: false}}
 
 	worker, err := initOptionalDiscoveryWorker(
-		nil, cfg, nil, nil, nil, nil, nil,
+		nil, cfg, nil, nil, nil, nil, nil, nil,
 	)
 
 	assert.NoError(t, err)
@@ -55,7 +55,7 @@ func TestInitOptionalDiscoveryWorker_NilConfig_ReturnsNil(t *testing.T) {
 	t.Parallel()
 
 	worker, err := initOptionalDiscoveryWorker(
-		nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil, nil,
 	)
 
 	assert.NoError(t, err)

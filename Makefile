@@ -344,32 +344,32 @@ test-unit:
 
 test-int:
 	$(call print_title,Running integration tests)
-	@$(TEST_RUNNER) -tags=integration -coverprofile=$(COVER_PROFILE_INT) -race -cover ./tests/integration/...
+	@TESTCONTAINERS_RYUK_DISABLED=$${TESTCONTAINERS_RYUK_DISABLED:-true} $(TEST_RUNNER) -tags=integration -coverprofile=$(COVER_PROFILE_INT) -race -cover ./tests/integration/...
 	$(call show_coverage,$(COVER_PROFILE_INT))
 	@echo "[ok] Integration tests passed"
 
 test-e2e:
 	$(call print_title,Running e2e tests against local stack)
 	@echo "Requires: $(DOCKER_CMD) up -d (ensure full stack is running)"
-	@$(TEST_RUNNER) -tags=e2e -timeout=10m -v -p 1 -coverprofile=$(COVER_PROFILE_E2E) -race -cover ./tests/e2e/...
+	@TESTCONTAINERS_RYUK_DISABLED=$${TESTCONTAINERS_RYUK_DISABLED:-true} $(TEST_RUNNER) -tags=e2e -timeout=10m -v -p 1 -coverprofile=$(COVER_PROFILE_E2E) -race -cover ./tests/e2e/...
 	$(call show_coverage,$(COVER_PROFILE_E2E))
 	@echo "[ok] E2E tests passed"
 
 test-e2e-fast:
 	$(call print_title,Running e2e tests - quick mode)
-	@$(TEST_RUNNER) -tags=e2e -timeout=5m -short -p 1 -coverprofile=$(COVER_PROFILE_E2E) -race -cover ./tests/e2e/...
+	@TESTCONTAINERS_RYUK_DISABLED=$${TESTCONTAINERS_RYUK_DISABLED:-true} $(TEST_RUNNER) -tags=e2e -timeout=5m -short -p 1 -coverprofile=$(COVER_PROFILE_E2E) -race -cover ./tests/e2e/...
 	$(call show_coverage,$(COVER_PROFILE_E2E))
 	@echo "[ok] E2E tests passed (quick mode)"
 
 test-e2e-journeys:
 	$(call print_title,Running e2e journey tests only)
-	@$(TEST_RUNNER) -tags=e2e -timeout=10m -v -coverprofile=$(COVER_PROFILE_E2E) -race -cover ./tests/e2e/journeys/...
+	@TESTCONTAINERS_RYUK_DISABLED=$${TESTCONTAINERS_RYUK_DISABLED:-true} $(TEST_RUNNER) -tags=e2e -timeout=10m -v -coverprofile=$(COVER_PROFILE_E2E) -race -cover ./tests/e2e/journeys/...
 	$(call show_coverage,$(COVER_PROFILE_E2E))
 	@echo "[ok] Journey tests passed"
 
 test-e2e-discovery:
 	$(call print_title,Running Discovery E2E tests with mock Fetcher)
-	@E2E_REQUIRE_FETCHER_MOCK=1 $(TEST_RUNNER) -tags=e2e -timeout=5m -v -p 1 -coverprofile=$(COVER_PROFILE_E2E) -race -cover -run TestDiscovery ./tests/e2e/journeys/...
+	@TESTCONTAINERS_RYUK_DISABLED=$${TESTCONTAINERS_RYUK_DISABLED:-true} E2E_REQUIRE_FETCHER_MOCK=1 $(TEST_RUNNER) -tags=e2e -timeout=5m -v -p 1 -coverprofile=$(COVER_PROFILE_E2E) -race -cover -run TestDiscovery ./tests/e2e/journeys/...
 	@echo "[ok] Discovery E2E tests passed"
 
 test-e2e-dashboard:
@@ -377,14 +377,14 @@ test-e2e-dashboard:
 	@echo "This test generates ~5k transactions and keeps data for dashboard viewing."
 	@echo "To clean up later, delete the context 'dashboard-stress-5k' via API."
 	@echo ""
-	E2E_KEEP_DATA=1 $(TEST_RUNNER) -tags=e2e -timeout=30m -v -count=1 -race -run TestDashboardStresser_HighVolume ./tests/e2e/journeys/...
+	TESTCONTAINERS_RYUK_DISABLED=$${TESTCONTAINERS_RYUK_DISABLED:-true} E2E_KEEP_DATA=1 $(TEST_RUNNER) -tags=e2e -timeout=30m -v -count=1 -race -run TestDashboardStresser_HighVolume ./tests/e2e/journeys/...
 	@echo ""
 	@echo "[ok] Dashboard stresser completed - data preserved in database"
 
 test-chaos:
 	$(call print_title,Running chaos/resilience tests)
 	@echo "Requires Docker for testcontainers (PostgreSQL + Redis + RabbitMQ + Toxiproxy)"
-	@$(TEST_RUNNER) -tags=chaos -timeout=15m -v -count=1 -p 1 -race ./tests/chaos/...
+	@TESTCONTAINERS_RYUK_DISABLED=$${TESTCONTAINERS_RYUK_DISABLED:-true} $(TEST_RUNNER) -tags=chaos -timeout=15m -v -count=1 -p 1 -race ./tests/chaos/...
 	@echo "[ok] Chaos tests passed"
 
 test-all:

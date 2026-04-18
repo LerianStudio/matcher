@@ -1,6 +1,6 @@
 -- Restore external_system_type enum and revert column type.
--- Rollback must fail if rows contain values not representable in the original enum;
--- silently coercing them would corrupt historical provenance.
+-- Rollback must fail if rows contain values not representable in the original enum.
+-- Silently coercing them would corrupt historical provenance.
 
 DO $$
 BEGIN

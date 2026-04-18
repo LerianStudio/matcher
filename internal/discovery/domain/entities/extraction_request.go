@@ -15,6 +15,7 @@ import (
 
 	vo "github.com/LerianStudio/matcher/internal/discovery/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
 // Sentinel errors for extraction state transitions.
@@ -32,20 +33,39 @@ const SanitizedExtractionFailureMessage = "extraction failed"
 
 // ExtractionRequest tracks a data extraction request to Fetcher.
 // IngestionJobID is optional and reserved for downstream ingestion linkage.
+//
+// The bridge_* fields (T-005) describe the Matcher-side bridging pipeline's
+// retry-and-failure state. They are independent of Status — Status describes
+// the upstream Fetcher pipeline (PENDING → SUBMITTED → EXTRACTING → COMPLETE
+// or FAILED/CANCELLED), while BridgeAttempts/BridgeLastError/BridgeFailedAt
+// describe what happened when the Matcher worker tried to retrieve, verify,
+// custody, ingest, and link the extraction's output. A row can be
+// Status=COMPLETE with BridgeLastError set: the upstream succeeded but the
+// downstream bridge gave up.
 type ExtractionRequest struct {
-	ID             uuid.UUID
-	ConnectionID   uuid.UUID
-	IngestionJobID uuid.UUID // Nullable: linked to downstream ingestion when available
-	FetcherJobID   string
-	Tables         map[string]any
-	StartDate      string
-	EndDate        string
-	Filters        map[string]any
-	Status         vo.ExtractionStatus
-	ResultPath     string
-	ErrorMessage   string
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	ID                     uuid.UUID
+	ConnectionID           uuid.UUID
+	IngestionJobID         uuid.UUID // Nullable: linked to downstream ingestion when available
+	FetcherJobID           string
+	Tables                 map[string]any
+	StartDate              string
+	EndDate                string
+	Filters                map[string]any
+	Status                 vo.ExtractionStatus
+	ResultPath             string
+	ErrorMessage           string
+	CreatedAt              time.Time
+	UpdatedAt              time.Time
+	BridgeAttempts         int
+	BridgeLastError        vo.BridgeErrorClass // empty when no terminal bridge failure
+	BridgeLastErrorMessage string
+	BridgeFailedAt         time.Time // zero when no terminal bridge failure
+	// CustodyDeletedAt is the UTC timestamp when the custody object for this
+	// extraction was deleted (either by the bridge orchestrator's happy-path
+	// cleanupCustody hook or by the custody retention worker's sweep). It is
+	// a pointer so NULL (custody object may still exist) is distinguishable
+	// from a zero-value time. See migration 000027.
+	CustodyDeletedAt *time.Time
 }
 
 // NewExtractionRequest creates a new ExtractionRequest with validated invariants.
@@ -236,6 +256,75 @@ func (er *ExtractionRequest) MarkCancelled() error {
 	er.UpdatedAt = time.Now().UTC()
 
 	return nil
+}
+
+// LinkToIngestion records the downstream ingestion job id that consumed the
+// extraction's output. Valid only when the extraction is COMPLETE: linking a
+// non-COMPLETE extraction is a state-machine violation.
+//
+// This method protects the invariants that the raw-field-assign adapter form
+// bypassed:
+//   - Extractions in PENDING/SUBMITTED/EXTRACTING have no output to link to.
+//   - Extractions in FAILED/CANCELLED have no trustworthy output.
+//   - Re-linking an already-linked extraction is rejected so the 1:1
+//     extraction→ingestion invariant is enforced at the domain layer (in
+//     addition to the adapter's atomic SQL guard).
+//
+// UpdatedAt is bumped so UpdateIfUnchanged-style optimistic concurrency sees
+// a real state change. Callers wanting idempotent behavior across retries
+// should rely on the adapter's atomic UPDATE ... WHERE ingestion_job_id IS
+// NULL guard rather than mutate the entity twice.
+func (er *ExtractionRequest) LinkToIngestion(ingestionJobID uuid.UUID) error {
+	if er == nil {
+		return nil
+	}
+
+	if ingestionJobID == uuid.Nil {
+		return fmt.Errorf("%w: ingestion job id required", ErrInvalidTransition)
+	}
+
+	if er.Status != vo.ExtractionStatusComplete {
+		return fmt.Errorf(
+			"%w: cannot link ingestion job to extraction in state %s",
+			ErrInvalidTransition,
+			er.Status,
+		)
+	}
+
+	if er.IngestionJobID != uuid.Nil && er.IngestionJobID != ingestionJobID {
+		// Cross-job collision: extraction is already linked to a DIFFERENT
+		// ingestion job. Surface the canonical 1:1 invariant sentinel
+		// (sharedPorts.ErrExtractionAlreadyLinked) rather than the generic
+		// state-machine sentinel so adapters can errors.Is for it without
+		// having to re-classify the cross-job case downstream of the
+		// atomic SQL guard.
+		return fmt.Errorf(
+			"%w: extraction is already linked to ingestion job %s",
+			sharedPorts.ErrExtractionAlreadyLinked,
+			er.IngestionJobID,
+		)
+	}
+
+	er.IngestionJobID = ingestionJobID
+	er.UpdatedAt = time.Now().UTC()
+
+	return nil
+}
+
+// GetID returns the extraction's immutable identifier. Satisfies the
+// sharedPorts.LinkableExtraction interface used by the lifecycle link
+// writer so the shared kernel does not need to import discovery entities
+// directly (that would create an import cycle — this package imports
+// shared/ports for ErrExtractionAlreadyLinked).
+//
+// Kept nil-safe so callers that hold a potentially-nil pointer get back
+// uuid.Nil rather than panicking on dereference.
+func (er *ExtractionRequest) GetID() uuid.UUID {
+	if er == nil {
+		return uuid.Nil
+	}
+
+	return er.ID
 }
 
 func cloneMap(src map[string]any) (map[string]any, error) {

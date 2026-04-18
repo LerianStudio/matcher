@@ -351,7 +351,7 @@ func (cfg *Config) WebhookTimeout() time.Duration {
 // FetcherHealthTimeout returns the fetcher health-check timeout.
 // Returns a default of 5 seconds if configured value is non-positive.
 func (cfg *Config) FetcherHealthTimeout() time.Duration {
-	if cfg.Fetcher.HealthTimeoutSec <= 0 {
+	if cfg == nil || cfg.Fetcher.HealthTimeoutSec <= 0 {
 		return defaultFetcherHealthTimeout
 	}
 
@@ -361,7 +361,7 @@ func (cfg *Config) FetcherHealthTimeout() time.Duration {
 // FetcherRequestTimeout returns the fetcher request timeout.
 // Returns a default of 30 seconds if configured value is non-positive.
 func (cfg *Config) FetcherRequestTimeout() time.Duration {
-	if cfg.Fetcher.RequestTimeoutSec <= 0 {
+	if cfg == nil || cfg.Fetcher.RequestTimeoutSec <= 0 {
 		return defaultFetcherRequestTimeout
 	}
 
@@ -371,7 +371,7 @@ func (cfg *Config) FetcherRequestTimeout() time.Duration {
 // FetcherDiscoveryInterval returns the discovery worker interval.
 // Returns a default of 1 minute if configured value is non-positive.
 func (cfg *Config) FetcherDiscoveryInterval() time.Duration {
-	if cfg.Fetcher.DiscoveryIntervalSec <= 0 {
+	if cfg == nil || cfg.Fetcher.DiscoveryIntervalSec <= 0 {
 		return time.Minute
 	}
 
@@ -381,7 +381,7 @@ func (cfg *Config) FetcherDiscoveryInterval() time.Duration {
 // FetcherSchemaCacheTTL returns the schema cache TTL.
 // Returns a default of 5 minutes if configured value is non-positive.
 func (cfg *Config) FetcherSchemaCacheTTL() time.Duration {
-	if cfg.Fetcher.SchemaCacheTTLSec <= 0 {
+	if cfg == nil || cfg.Fetcher.SchemaCacheTTLSec <= 0 {
 		return defaultFetcherSchemaCacheTTL
 	}
 
@@ -391,7 +391,7 @@ func (cfg *Config) FetcherSchemaCacheTTL() time.Duration {
 // FetcherExtractionPollInterval returns the extraction poll interval.
 // Returns a default of 5 seconds if configured value is non-positive.
 func (cfg *Config) FetcherExtractionPollInterval() time.Duration {
-	if cfg.Fetcher.ExtractionPollSec <= 0 {
+	if cfg == nil || cfg.Fetcher.ExtractionPollSec <= 0 {
 		return defaultFetcherExtractionPollPeriod
 	}
 
@@ -401,7 +401,7 @@ func (cfg *Config) FetcherExtractionPollInterval() time.Duration {
 // FetcherExtractionTimeout returns the extraction timeout.
 // Returns a default of 10 minutes if configured value is non-positive.
 func (cfg *Config) FetcherExtractionTimeout() time.Duration {
-	if cfg.Fetcher.ExtractionTimeoutSec <= 0 {
+	if cfg == nil || cfg.Fetcher.ExtractionTimeoutSec <= 0 {
 		return defaultFetcherExtractionTimeout
 	}
 

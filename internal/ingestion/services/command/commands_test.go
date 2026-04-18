@@ -149,11 +149,14 @@ func (f *fakePublisher) PublishIngestionFailed(
 }
 
 type fakeJobRepo struct {
-	createErr error
-	created   *entities.IngestionJob
-	withTxErr error
-	updateErr error
-	updated   *entities.IngestionJob
+	createErr            error
+	created              *entities.IngestionJob
+	withTxErr            error
+	updateErr            error
+	updated              *entities.IngestionJob
+	byExtraction         map[string]*entities.IngestionJob
+	findByExtractionErr  error
+	findByExtractionCall int
 }
 
 func (jobRepo *fakeJobRepo) Create(
@@ -182,6 +185,27 @@ func (jobRepo *fakeJobRepo) Update(
 	_ context.Context,
 	_ *entities.IngestionJob,
 ) (*entities.IngestionJob, error) {
+	return nil, nil
+}
+
+func (jobRepo *fakeJobRepo) FindLatestByExtractionID(
+	_ context.Context,
+	extractionID uuid.UUID,
+) (*entities.IngestionJob, error) {
+	jobRepo.findByExtractionCall++
+
+	if jobRepo.findByExtractionErr != nil {
+		return nil, jobRepo.findByExtractionErr
+	}
+
+	if jobRepo.byExtraction == nil {
+		return nil, nil
+	}
+
+	if existing, ok := jobRepo.byExtraction[extractionID.String()]; ok {
+		return existing, nil
+	}
+
 	return nil, nil
 }
 
@@ -558,6 +582,13 @@ func (noTxJobRepo) FindByContextID(
 func (noTxJobRepo) Update(
 	_ context.Context,
 	_ *entities.IngestionJob,
+) (*entities.IngestionJob, error) {
+	return nil, nil
+}
+
+func (noTxJobRepo) FindLatestByExtractionID(
+	_ context.Context,
+	_ uuid.UUID,
 ) (*entities.IngestionJob, error) {
 	return nil, nil
 }

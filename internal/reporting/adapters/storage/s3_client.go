@@ -16,6 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	smithyhttp "github.com/aws/smithy-go/transport/http"
 
 	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
@@ -204,6 +205,81 @@ func (client *S3Client) Upload(
 	}
 
 	logger.Log(ctx, libLog.LevelInfo, fmt.Sprintf("uploaded object %s to bucket %s", key, client.bucket))
+
+	return key, nil
+}
+
+// UploadIfAbsent performs a conditional PutObject with If-None-Match: *
+// so the write only succeeds when no object currently exists at key. On a
+// collision, S3 (and S3-compatible backends that honour the header)
+// returns HTTP 412 Precondition Failed; the adapter maps that response
+// onto sharedPorts.ErrObjectAlreadyExists so callers can recognise the
+// replay path.
+//
+// Why this matters: a separate Exists() + Upload() pair is check-then-act
+// and therefore TOCTOU-vulnerable. Two concurrent writers — or a single
+// writer whose distributed lock TTL expired mid-operation — can both
+// observe "absent" and both PUT, producing last-write-wins semantics. The
+// custody store relies on write-once, so it calls through here and treats
+// ErrObjectAlreadyExists as the legitimate replay signal.
+//
+// Compatibility note: AWS S3 supports If-None-Match: * since 2024. Many
+// S3-compatible backends (SeaweedFS, older MinIO releases) honour the
+// header but may not enforce it strictly under all code paths. If a
+// backend silently ignores the header, this method degrades to normal PUT
+// semantics (last-write-wins); the caller's distributed lock then becomes
+// the sole serialisation mechanism. Production AWS S3 is the authoritative
+// enforcement point.
+func (client *S3Client) UploadIfAbsent(
+	ctx context.Context,
+	key string,
+	reader io.Reader,
+	contentType string,
+) (string, error) {
+	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
+	ctx, span := tracer.Start(ctx, "s3.upload_if_absent")
+
+	defer span.End()
+
+	if key == "" {
+		return "", ErrKeyRequired
+	}
+
+	if err := client.ensureReady(); err != nil {
+		return "", err
+	}
+
+	input := &s3.PutObjectInput{
+		Bucket:               aws.String(client.bucket),
+		Key:                  aws.String(key),
+		Body:                 reader,
+		ContentType:          aws.String(contentType),
+		ServerSideEncryption: types.ServerSideEncryption(defaultServerSideEncryption),
+		// Conditional write: "*" asks the server to accept the PUT only if
+		// no object currently exists at the key. On a collision the server
+		// responds 412 Precondition Failed, which we fold into
+		// sharedPorts.ErrObjectAlreadyExists below.
+		IfNoneMatch: aws.String("*"),
+	}
+
+	if _, err := client.s3.PutObject(ctx, input); err != nil {
+		if isPreconditionFailed(err) {
+			// 412 is the "object already exists" signal when If-None-Match
+			// is set. This is not a hard failure — callers use this path to
+			// detect replays and short-circuit to their recovery logic.
+			// Wrap the underlying err so operators can still see the raw
+			// smithy/AWS error if they need to triage.
+			return "", fmt.Errorf("%w: %w", sharedPorts.ErrObjectAlreadyExists, err)
+		}
+
+		libOpentelemetry.HandleSpanError(span, "failed to upload object conditionally", err)
+
+		logger.Log(ctx, libLog.LevelError, fmt.Sprintf("failed to conditionally upload object %s: %v", key, err))
+
+		return "", fmt.Errorf("uploading object (conditional): %w", err)
+	}
+
+	logger.Log(ctx, libLog.LevelInfo, fmt.Sprintf("uploaded object %s to bucket %s (conditional)", key, client.bucket))
 
 	return key, nil
 }
@@ -411,6 +487,40 @@ func (client *S3Client) Exists(ctx context.Context, key string) (bool, error) {
 	}
 
 	return true, nil
+}
+
+// isPreconditionFailed returns true when the AWS SDK error chain indicates
+// a 412 Precondition Failed response. S3 does not expose a modelled error
+// type for this status, so we walk the chain to the smithy HTTP response
+// error and check the status code directly.
+//
+// We also honour the "PreconditionFailed" error code that S3-compatible
+// backends sometimes surface via the smithy generic API error shape — some
+// MinIO builds and SeaweedFS 3.x report 412 this way instead of through
+// the response error.
+func isPreconditionFailed(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	var respErr *smithyhttp.ResponseError
+	if errors.As(err, &respErr) && respErr.HTTPStatusCode() == 412 {
+		return true
+	}
+
+	// Fallback: some backends surface 412 as a generic API error with
+	// ErrorCode "PreconditionFailed". errors.As into the smithy.APIError
+	// interface covers that case without dragging in a direct dep; we
+	// already import smithyhttp which transitively exposes the generic
+	// smithy.APIError contract through a thin wrapper. Keeping this
+	// string-matched is intentional: the SDK does not model a concrete
+	// PreconditionFailed type, so we have no canonical type to errors.As
+	// into.
+	if strings.Contains(err.Error(), "PreconditionFailed") {
+		return true
+	}
+
+	return false
 }
 
 // Compile-time interface check.

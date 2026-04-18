@@ -69,6 +69,51 @@ func TestFetcherConnectionResponse_Unmarshal(t *testing.T) {
 	assert.Equal(t, "2026-01-16T12:00:00Z", resp.UpdatedAt)
 }
 
+func TestFetcherConnectionResponse_Unmarshal_IgnoresSSLObject(t *testing.T) {
+	t.Parallel()
+
+	raw := `{
+		"id": "conn-ssl",
+		"configName": "prod-pg",
+		"type": "POSTGRESQL",
+		"host": "db.example.com",
+		"port": 5432,
+		"databaseName": "production",
+		"userName": "admin",
+		"productName": "PostgreSQL 16.2",
+		"ssl": {"mode": "require"}
+	}`
+
+	var resp fetcherConnectionResponse
+
+	err := json.Unmarshal([]byte(raw), &resp)
+
+	require.NoError(t, err)
+	assert.Equal(t, "conn-ssl", resp.ID)
+}
+
+func TestFetcherConnectionResponse_Unmarshal_IgnoresLegacySSLBoolean(t *testing.T) {
+	t.Parallel()
+
+	raw := `{
+		"id": "conn-nossl",
+		"configName": "dev-pg",
+		"type": "POSTGRESQL",
+		"host": "localhost",
+		"port": 5432,
+		"databaseName": "dev",
+		"userName": "dev",
+		"ssl": false
+	}`
+
+	var resp fetcherConnectionResponse
+
+	err := json.Unmarshal([]byte(raw), &resp)
+
+	require.NoError(t, err)
+	assert.Equal(t, "conn-nossl", resp.ID)
+}
+
 func TestFetcherConnectionListResponse_Unmarshal(t *testing.T) {
 	t.Parallel()
 
@@ -211,128 +256,4 @@ func TestFetcherTestResponse_OmitsEmptyMessage(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.NotContains(t, string(data), "message")
-}
-
-func TestFetcherExtractionSubmitRequest_Marshal(t *testing.T) {
-	t.Parallel()
-
-	req := fetcherExtractionSubmitRequest{
-		DataRequest: fetcherDataRequest{
-			MappedFields: map[string]map[string][]string{
-				"prod-db": {
-					"transactions": {"id", "amount"},
-				},
-			},
-			Filters: map[string]map[string]map[string]any{
-				"prod-db": {
-					"transactions": {"currency": "USD"},
-				},
-			},
-		},
-		Metadata: map[string]any{"source": "src-1"},
-	}
-
-	data, err := json.Marshal(req)
-
-	require.NoError(t, err)
-
-	var roundTrip fetcherExtractionSubmitRequest
-
-	err = json.Unmarshal(data, &roundTrip)
-
-	require.NoError(t, err)
-	require.Contains(t, roundTrip.DataRequest.MappedFields, "prod-db")
-	assert.Equal(t, []string{"id", "amount"}, roundTrip.DataRequest.MappedFields["prod-db"]["transactions"])
-	assert.Equal(t, "src-1", roundTrip.Metadata["source"])
-}
-
-func TestFetcherExtractionSubmitRequest_OmitsEmptyFilters(t *testing.T) {
-	t.Parallel()
-
-	req := fetcherExtractionSubmitRequest{
-		DataRequest: fetcherDataRequest{
-			MappedFields: map[string]map[string][]string{},
-		},
-		Metadata: map[string]any{"source": "src-1"},
-	}
-
-	data, err := json.Marshal(req)
-
-	require.NoError(t, err)
-	assert.NotContains(t, string(data), "filters")
-}
-
-func TestFetcherExtractionSubmitResponse_Unmarshal(t *testing.T) {
-	t.Parallel()
-
-	raw := `{"jobId": "job-12345"}`
-
-	var resp fetcherExtractionSubmitResponse
-
-	err := json.Unmarshal([]byte(raw), &resp)
-
-	require.NoError(t, err)
-	assert.Equal(t, "job-12345", resp.JobID)
-}
-
-func TestFetcherExtractionStatusResponse_Unmarshal_Running(t *testing.T) {
-	t.Parallel()
-
-	raw := `{"id": "job-1", "status": "RUNNING"}`
-
-	var resp fetcherExtractionStatusResponse
-
-	err := json.Unmarshal([]byte(raw), &resp)
-
-	require.NoError(t, err)
-	assert.Equal(t, "job-1", resp.ID)
-	assert.Equal(t, "RUNNING", resp.Status)
-	assert.Empty(t, resp.ResultPath)
-}
-
-func TestFetcherExtractionStatusResponse_Unmarshal_Complete(t *testing.T) {
-	t.Parallel()
-
-	raw := `{"id": "job-2", "status": "COMPLETE", "resultPath": "/data/job-2.json", "resultHmac": "abc", "requestHash": "xyz"}`
-
-	var resp fetcherExtractionStatusResponse
-
-	err := json.Unmarshal([]byte(raw), &resp)
-
-	require.NoError(t, err)
-	assert.Equal(t, "COMPLETE", resp.Status)
-	assert.Equal(t, "/data/job-2.json", resp.ResultPath)
-	assert.Equal(t, "abc", resp.ResultHmac)
-	assert.Equal(t, "xyz", resp.RequestHash)
-}
-
-func TestFetcherExtractionStatusResponse_Unmarshal_Failed(t *testing.T) {
-	t.Parallel()
-
-	raw := `{"id": "job-3", "status": "FAILED", "metadata": {"error": "timeout"}}`
-
-	var resp fetcherExtractionStatusResponse
-
-	err := json.Unmarshal([]byte(raw), &resp)
-
-	require.NoError(t, err)
-	assert.Equal(t, "FAILED", resp.Status)
-	assert.Equal(t, "timeout", resp.Metadata["error"])
-	assert.Empty(t, resp.ResultPath)
-}
-
-func TestFetcherExtractionStatusResponse_OmitsEmptyOptionalFields(t *testing.T) {
-	t.Parallel()
-
-	resp := fetcherExtractionStatusResponse{
-		ID:     "job-1",
-		Status: "RUNNING",
-	}
-
-	data, err := json.Marshal(resp)
-
-	require.NoError(t, err)
-	assert.NotContains(t, string(data), "resultPath")
-	assert.NotContains(t, string(data), "resultHmac")
-	assert.NotContains(t, string(data), "completedAt")
 }

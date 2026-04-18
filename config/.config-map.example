@@ -90,6 +90,48 @@ INFRA_CONNECT_TIMEOUT_SEC=30
 # SECURITY: Use a strong random secret (minimum 32 bytes) in production.
 # IDEMPOTENCY_HMAC_SECRET=
 
+# ── Fetcher Bridge (verified-artifact retrieval) ─────────────────────────────
+# Master key shared with the Fetcher service. Matcher derives two keys
+# locally via HKDF-SHA256 using the contract-locked contexts
+# "fetcher-external-hmac-v1" and "fetcher-external-aes-v1" to verify
+# completed-artifact integrity and decrypt their payloads. Must be
+# base64-encoded and decode to at least 32 bytes.
+#
+# Generate a unique value per environment:
+#   openssl rand -base64 32 | tr -d '\n'
+#
+# Empty soft-disables verified-artifact retrieval — the T-001 trusted
+# stream intake path still works, but the T-002 pipeline
+# (retrieve → verify → custody) is skipped. Populate before enabling the
+# Fetcher bridge worker (T-003) against a real Fetcher instance.
+#
+# SECURITY: treat as a secret. Never log, never commit. Bootstrap-only:
+# rotation requires a service restart because derived keys are cached
+# for the process lifetime.
+# APP_ENC_KEY=
+
+# ── Fetcher Bridge (T-003 DoS guard) ─────────────────────────────────────────
+# Maximum Fetcher extraction payload size in bytes. Caps FlattenFetcherJSON
+# materialisation so a malformed or hostile Fetcher cannot OOM the matcher
+# pod with a multi-GB response. Default 2 GiB (2147483648). Tighten for
+# smaller working-set deployments. Bootstrap-only: changing mid-flight while
+# a long-running flatten is in progress would create ambiguous behaviour.
+# Bounded validator: must be between 1 MiB (1048576) and 16 GiB (17179869184).
+# FETCHER_MAX_EXTRACTION_BYTES=2147483648
+
+# NOTE: The following Fetcher tunables are NOT listed here because they are
+# runtime-mutable via the systemplane (ApplyWorkerReconcile or ApplyLiveRead
+# + MutableAtRuntime=true). Operate them via:
+#   PUT /v1/system/configs/fetcher.bridge_interval_sec                  (bounds [5, 3600])
+#   PUT /v1/system/configs/fetcher.bridge_batch_size                    (bounds [1, 10000])
+#   PUT /v1/system/configs/fetcher.bridge_stale_threshold_sec           (bounds [60, 86400])
+#   PUT /v1/system/configs/fetcher.bridge_retry_max_attempts            (bounds [1, 100])
+#   PUT /v1/system/configs/fetcher.custody_retention_sweep_interval_sec (bounds [60, 86400])
+#   PUT /v1/system/configs/fetcher.custody_retention_grace_period_sec   (bounds [0, 604800])
+# .config-map.example only documents BOOTSTRAP-only env vars (those that
+# require a service restart). The TestConfigMapExample_SyncWithNonHotReload
+# EnvVars guard fails the build if a hot-reloadable key sneaks in here.
+
 # ── M2M (Machine-to-Machine) ─────────────────────────────────────────────────
 # Target service name for Secrets Manager M2M credential path.
 # Path: tenants/{env}/{tenantOrgID}/{applicationName}/m2m/{targetService}/credentials

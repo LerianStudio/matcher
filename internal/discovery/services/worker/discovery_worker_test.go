@@ -203,11 +203,23 @@ func (m *stubSchemaRepo) DeleteByConnectionIDWithTx(ctx context.Context, tx *sql
 }
 
 // stubInfraProvider implements sharedPorts.InfrastructureProvider.
-type stubInfraProvider struct{}
+//
+// The zero-value stub returns (nil, nil) for every accessor — this matches
+// the original behavior every existing caller relies on. Tests that need
+// richer behavior (e.g. custody_retention_worker sweepCycle tests, which
+// drive the Redis lock path) set the optional fn fields, which take
+// precedence when non-nil.
+type stubInfraProvider struct {
+	getRedisConnectionFn func(ctx context.Context) (*sharedPorts.RedisConnectionLease, error)
+}
 
 var _ sharedPorts.InfrastructureProvider = (*stubInfraProvider)(nil)
 
-func (m *stubInfraProvider) GetRedisConnection(_ context.Context) (*sharedPorts.RedisConnectionLease, error) {
+func (m *stubInfraProvider) GetRedisConnection(ctx context.Context) (*sharedPorts.RedisConnectionLease, error) {
+	if m.getRedisConnectionFn != nil {
+		return m.getRedisConnectionFn(ctx)
+	}
+
 	return nil, nil
 }
 

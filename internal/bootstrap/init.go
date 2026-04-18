@@ -60,6 +60,7 @@ import (
 	configCommand "github.com/LerianStudio/matcher/internal/configuration/services/command"
 	configQuery "github.com/LerianStudio/matcher/internal/configuration/services/query"
 	configWorker "github.com/LerianStudio/matcher/internal/configuration/services/worker"
+	discoveryExtractionRepo "github.com/LerianStudio/matcher/internal/discovery/adapters/postgres/extraction"
 	discoveryWorker "github.com/LerianStudio/matcher/internal/discovery/services/worker"
 	exceptionAdapters "github.com/LerianStudio/matcher/internal/exception/adapters"
 	exceptionAudit "github.com/LerianStudio/matcher/internal/exception/adapters/audit"
@@ -827,6 +828,37 @@ func buildWorkerManager(modules *modulesResult, existing *WorkerManager, configM
 		w := modules.discoveryWorker
 
 		wm.Register("discovery",
+			func(_ *Config) (WorkerLifecycle, error) { return w, nil },
+			func(cfg *Config) bool { return cfg != nil && cfg.Fetcher.Enabled },
+			nil, // never critical
+		)
+	}
+
+	// Fetcher bridge worker (T-003) — runs only when Fetcher is enabled
+	// AND the verified-artifact pipeline is operational. Non-critical:
+	// startup failure to Start does NOT abort matcher boot because the
+	// bridge worker's absence only affects Fetcher-sourced data; other
+	// reconciliation flows continue.
+	if modules.bridgeWorker != nil {
+		w := modules.bridgeWorker
+
+		wm.Register("fetcher_bridge",
+			func(_ *Config) (WorkerLifecycle, error) { return w, nil },
+			func(cfg *Config) bool { return cfg != nil && cfg.Fetcher.Enabled },
+			nil, // never critical
+		)
+	}
+
+	// Custody retention sweep worker (T-006) — runs only when Fetcher is
+	// enabled AND the verified-artifact pipeline is operational (which
+	// means the custody store is available to delete from). Non-critical
+	// because retention is a background housekeeping task: orphan
+	// accumulation rates are bounded by happy-path bridge throughput so a
+	// short sweep outage is operationally tolerable.
+	if modules.custodyRetentionWorker != nil {
+		w := modules.custodyRetentionWorker
+
+		wm.Register("custody_retention",
 			func(_ *Config) (WorkerLifecycle, error) { return w, nil },
 			func(cfg *Config) bool { return cfg != nil && cfg.Fetcher.Enabled },
 			nil, // never critical
@@ -1972,12 +2004,16 @@ func applySQLPoolSettings(dbs []*sql.DB, maxLifetime, maxIdle time.Duration) {
 }
 
 type modulesResult struct {
-	outboxDispatcher *outbox.Dispatcher
-	exportWorker     *reportingWorker.ExportWorker
-	cleanupWorker    *reportingWorker.CleanupWorker
-	archivalWorker   *governanceWorker.ArchivalWorker
-	schedulerWorker  *configWorker.SchedulerWorker
-	discoveryWorker  *discoveryWorker.DiscoveryWorker
+	outboxDispatcher       *outbox.Dispatcher
+	ingestionEvents        *swappableIngestionPublisher
+	matchingEvents         *swappableMatchPublisher
+	exportWorker           *reportingWorker.ExportWorker
+	cleanupWorker          *reportingWorker.CleanupWorker
+	archivalWorker         *governanceWorker.ArchivalWorker
+	schedulerWorker        *configWorker.SchedulerWorker
+	discoveryWorker        *discoveryWorker.DiscoveryWorker
+	bridgeWorker           *discoveryWorker.BridgeWorker
+	custodyRetentionWorker *discoveryWorker.CustodyRetentionWorker
 }
 
 // errRabbitMQConnectionNil is returned when attempting to open a channel on a nil connection.
@@ -2039,6 +2075,38 @@ func initSharedRepositories(provider sharedPorts.InfrastructureProvider) (*share
 	}, nil
 }
 
+// buildAndAttachRabbitMQTenantManager constructs the RabbitMQ tenant manager
+// when multi-tenant mode is enabled and attaches its resources to the
+// infrastructure provider so they're cleaned up on provider.Close().
+// Returns nil when multi-tenancy is disabled.
+//
+// Extracted from initModulesAndMessaging to keep the orchestration function
+// under the gocognit complexity ceiling.
+func buildAndAttachRabbitMQTenantManager(
+	ctx context.Context,
+	cfg *Config,
+	provider sharedPorts.InfrastructureProvider,
+	logger libLog.Logger,
+) *tmrabbitmq.Manager {
+	if !multiTenantModeEnabled(cfg) {
+		return nil
+	}
+
+	rmqTmClient, rmqMgr := buildRabbitMQTenantManagerWithClient(ctx, cfg, logger)
+
+	// Store the RabbitMQ tenant-manager resources on the infrastructure provider
+	// so they are cleaned up on provider.Close(). Without this, the tmClient and
+	// Manager created by buildRabbitMQTenantManagerWithClient would be leaked.
+	if dynProvider, ok := provider.(*dynamicInfrastructureProvider); ok && rmqMgr != nil {
+		dynProvider.mu.Lock()
+		dynProvider.rmqManager = rmqMgr
+		dynProvider.rmqTmClient = rmqTmClient
+		dynProvider.mu.Unlock()
+	}
+
+	return rmqMgr
+}
+
 //nolint:cyclop,gocyclo // module initialization requires sequential dependency setup for all bounded contexts.
 func initModulesAndMessaging(
 	ctx context.Context,
@@ -2088,22 +2156,7 @@ func initModulesAndMessaging(
 
 	// Create RabbitMQ tenant manager when multi-tenant is enabled.
 	// This provides Layer 1 (vhost isolation) for event publishers.
-	var rmqManager *tmrabbitmq.Manager
-
-	if multiTenantModeEnabled(cfg) {
-		rmqTmClient, rmqMgr := buildRabbitMQTenantManagerWithClient(ctx, cfg, logger)
-		rmqManager = rmqMgr
-
-		// Store the RabbitMQ tenant-manager resources on the infrastructure provider
-		// so they are cleaned up on provider.Close(). Without this, the tmClient and
-		// Manager created by buildRabbitMQTenantManagerWithClient would be leaked.
-		if dynProvider, ok := provider.(*dynamicInfrastructureProvider); ok && rmqMgr != nil {
-			dynProvider.mu.Lock()
-			dynProvider.rmqManager = rmqMgr
-			dynProvider.rmqTmClient = rmqTmClient
-			dynProvider.mu.Unlock()
-		}
-	}
+	rmqManager := buildAndAttachRabbitMQTenantManager(ctx, cfg, provider, logger)
 
 	matchingPublisher, ingestionPublisher, err := initEventPublishers(ctx, rabbitMQConnection, logger, rmqManager)
 	if err != nil {
@@ -2118,7 +2171,8 @@ func initModulesAndMessaging(
 		return nil, err
 	}
 
-	if err := initIngestionModule(cfg, configGetter, settingsResolver, routes, provider, sharedOutboxRepository, runtimeIngestionPublisher, matchingUseCase, sharedRepos, isProduction); err != nil {
+	ingestionUseCase, err := initIngestionModule(cfg, configGetter, settingsResolver, routes, provider, sharedOutboxRepository, runtimeIngestionPublisher, matchingUseCase, sharedRepos, isProduction)
+	if err != nil {
 		return nil, err
 	}
 
@@ -2165,10 +2219,85 @@ func initModulesAndMessaging(
 		return nil, err
 	}
 
+	// Single extraction repo instance shared across the discovery module
+	// and the Fetcher-to-ingestion bridge. Constructed once so any future
+	// stateful change (connection pool, cache) does not silently diverge
+	// between the two consumers.
+	extractionRepo := discoveryExtractionRepo.NewRepository(provider)
+
 	// Discovery module (optional — non-critical, gated by FETCHER_ENABLED).
-	discWorker, err := initOptionalDiscoveryWorker(routes, cfg, configGetter, provider, sharedOutboxRepository, logger, initDiscoveryModule)
+	discWorker, err := initOptionalDiscoveryWorker(routes, cfg, configGetter, provider, sharedOutboxRepository, extractionRepo, logger, initDiscoveryModule)
 	if err != nil {
 		return nil, fmt.Errorf("init optional discovery worker: %w", err)
+	}
+
+	// Fetcher-to-ingestion trusted bridge (T-001 intake + T-002 verified
+	// artifact pipeline + T-003 automatic bridging). Wired here so the
+	// adapters are reachable once the ingestion command use case,
+	// discovery extraction repository, and object storage all exist.
+	//
+	// T-003: when all preconditions are met (Fetcher enabled, bridge
+	// bundle operational, source resolver available), the bridge worker
+	// is constructed. Otherwise, the bundle is kept around for the
+	// intake path but the bridge worker is not registered — the
+	// verified-artifact pipeline is soft-disabled when APP_ENC_KEY is
+	// empty or when object storage is unavailable.
+	bridgeBundle, err := initFetcherBridgeAdapters(ctx, FetcherBridgeDeps{
+		Config:           cfg,
+		IngestionUseCase: ingestionUseCase,
+		ExtractionRepo:   extractionRepo,
+		ObjectStorage:    storage,
+		Logger:           logger,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("init fetcher bridge adapters: %w", err)
+	}
+
+	// Interim memory guard: the verified-artifact verifier currently
+	// materializes plaintext in memory (~512 MiB per concurrent artifact).
+	// Reject boot when the pod memory budget is below the safe floor so
+	// operators see the misconfiguration instead of a silent OOMKill
+	// later. On dev/macOS (no cgroup files) this is a no-op.
+	if err := EnsureBridgeMemoryBudget(cfg); err != nil {
+		return nil, fmt.Errorf("ensure fetcher bridge memory budget: %w", err)
+	}
+
+	// Companion to the guard: set GOMEMLIMIT to 85% of the detected
+	// cgroup limit so the Go runtime garbage collector works harder
+	// before we hit the cgroup ceiling. Skips when GOMEMLIMIT is
+	// already set explicitly by the operator.
+	applyGOMEMLIMIT(ctx, cfg, logger, defaultMemoryLimitReader)
+
+	bridgeWorker, err := initFetcherBridgeWorker(
+		ctx,
+		cfg,
+		configGetter,
+		provider,
+		extractionRepo,
+		sharedOutboxRepository,
+		bridgeBundle,
+		logger,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("init fetcher bridge worker: %w", err)
+	}
+
+	// T-006 custody retention sweep worker. Runs only when Fetcher is
+	// enabled AND the verified-artifact pipeline is operational (the
+	// custody store is part of the same bundle). Sweeps orphan custody
+	// objects left behind by terminally-failed bridge attempts and by
+	// happy-path cleanupCustody hook failures.
+	custodyRetentionWorker, err := initCustodyRetentionWorker(
+		ctx,
+		cfg,
+		extractionRepo,
+		sharedOutboxRepository,
+		provider,
+		bridgeBundle,
+		logger,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("init custody retention worker: %w", err)
 	}
 
 	// Create governance audit consumer for processing audit events from the outbox.
@@ -2228,11 +2357,15 @@ func initModulesAndMessaging(
 	}
 
 	return &modulesResult{
-		outboxDispatcher: dispatcher,
-		exportWorker:     exportWorker,
-		cleanupWorker:    cleanupWorker,
-		schedulerWorker:  schedulerWorker,
-		discoveryWorker:  discWorker,
+		outboxDispatcher:       dispatcher,
+		ingestionEvents:        runtimeIngestionPublisher,
+		matchingEvents:         runtimeMatchingPublisher,
+		exportWorker:           exportWorker,
+		cleanupWorker:          cleanupWorker,
+		schedulerWorker:        schedulerWorker,
+		discoveryWorker:        discWorker,
+		bridgeWorker:           bridgeWorker,
+		custodyRetentionWorker: custodyRetentionWorker,
 	}, nil
 }
 
@@ -2629,7 +2762,7 @@ func initIngestionModule(
 	matchingUseCase *matchingCommand.UseCase,
 	repos *sharedRepositories,
 	production bool,
-) error {
+) (*ingestionCommand.UseCase, error) {
 	ingestionRegistry := ingestionParser.NewParserRegistry()
 	ingestionRegistry.Register(ingestionParser.NewCSVParser())
 	ingestionRegistry.Register(ingestionParser.NewJSONParser())
@@ -2639,12 +2772,12 @@ func initIngestionModule(
 
 	fieldMapAdapter, err := crossAdapters.NewFieldMapRepositoryAdapter(repos.configFieldMap)
 	if err != nil {
-		return fmt.Errorf("create field map repository adapter: %w", err)
+		return nil, fmt.Errorf("create field map repository adapter: %w", err)
 	}
 
 	sourceAdapter, err := crossAdapters.NewSourceRepositoryAdapter(repos.configSource)
 	if err != nil {
-		return fmt.Errorf("create source repository adapter: %w", err)
+		return nil, fmt.Errorf("create source repository adapter: %w", err)
 	}
 
 	contextAdapter := crossAdapters.NewContextAccessProviderAdapter(repos.configContext)
@@ -2652,7 +2785,7 @@ func initIngestionModule(
 	// Auto-match on upload: create adapters to check context config and trigger matching
 	autoMatchContextProvider, err := crossAdapters.NewAutoMatchContextProviderAdapter(repos.configContext)
 	if err != nil {
-		return fmt.Errorf("create auto-match context provider adapter: %w", err)
+		return nil, fmt.Errorf("create auto-match context provider adapter: %w", err)
 	}
 
 	var matchTriggerAdapter *crossAdapters.MatchTriggerAdapter
@@ -2662,7 +2795,7 @@ func initIngestionModule(
 
 		matchTriggerAdapter, triggerErr = crossAdapters.NewMatchTriggerAdapter(matchingUseCase)
 		if triggerErr != nil {
-			return fmt.Errorf("create match trigger adapter: %w", triggerErr)
+			return nil, fmt.Errorf("create match trigger adapter: %w", triggerErr)
 		}
 	}
 
@@ -2691,7 +2824,7 @@ func initIngestionModule(
 		ContextProvider: autoMatchContextProvider,
 	})
 	if err != nil {
-		return fmt.Errorf("create ingestion command use case: %w", err)
+		return nil, fmt.Errorf("create ingestion command use case: %w", err)
 	}
 
 	ingestionQueryUseCase, err := ingestionQuery.NewUseCase(
@@ -2699,7 +2832,7 @@ func initIngestionModule(
 		repos.ingestionTx,
 	)
 	if err != nil {
-		return fmt.Errorf("create ingestion query use case: %w", err)
+		return nil, fmt.Errorf("create ingestion query use case: %w", err)
 	}
 
 	ingestionHandler, err := ingestionHTTP.NewHandlers(
@@ -2709,14 +2842,14 @@ func initIngestionModule(
 		production,
 	)
 	if err != nil {
-		return fmt.Errorf("create ingestion handler: %w", err)
+		return nil, fmt.Errorf("create ingestion handler: %w", err)
 	}
 
 	if err := ingestionHTTP.RegisterRoutes(routes.Protected, ingestionHandler); err != nil {
-		return fmt.Errorf("register ingestion routes: %w", err)
+		return nil, fmt.Errorf("register ingestion routes: %w", err)
 	}
 
-	return nil
+	return ingestionCommandUseCase, nil
 }
 
 func initMatchingModule(

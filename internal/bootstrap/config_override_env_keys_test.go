@@ -112,6 +112,17 @@ var matcherOverrideEnvVarKeys = []string{
 	"MATCHER_FETCHER_SCHEMA_CACHE_TTL_SEC",
 	"MATCHER_FETCHER_EXTRACTION_POLL_SEC",
 	"MATCHER_FETCHER_EXTRACTION_TIMEOUT_SEC",
+	// fetcher.app_enc_key is intentionally bootstrap-only and NOT registered in
+	// matcherKeyDefs: rotating the HKDF master key at runtime would orphan
+	// in-flight custody ciphertexts. Operators must restart the process to
+	// rotate APP_ENC_KEY. Excluded here so the sync invariant holds.
+	"MATCHER_FETCHER_MAX_EXTRACTION_BYTES",
+	"MATCHER_FETCHER_BRIDGE_INTERVAL_SEC",
+	"MATCHER_FETCHER_BRIDGE_BATCH_SIZE",
+	"MATCHER_FETCHER_BRIDGE_STALE_THRESHOLD_SEC",
+	"MATCHER_FETCHER_BRIDGE_RETRY_MAX_ATTEMPTS",
+	"MATCHER_FETCHER_CUSTODY_RETENTION_SWEEP_INTERVAL_SEC",
+	"MATCHER_FETCHER_CUSTODY_RETENTION_GRACE_PERIOD_SEC",
 	"MATCHER_M2M_M2M_TARGET_SERVICE",
 	"MATCHER_M2M_M2M_CREDENTIAL_CACHE_TTL_SEC",
 	"MATCHER_M2M_AWS_REGION",

@@ -140,6 +140,20 @@ const (
 	defaultFetcherExtractionPoll    = 5
 	defaultFetcherExtractionTO      = 600
 
+	// Fetcher bridge worker defaults (Fix 4): mirror the Config struct
+	// envDefault tags so snapshot-driven hydration falls back to the same
+	// values an env-only deployment would see.
+	defaultBridgeIntervalSec       = 30
+	defaultBridgeBatchSize         = 50
+	defaultBridgeStaleThresholdSec = 3600
+	defaultBridgeRetryMaxAttempts  = 5
+
+	// Custody retention sweep worker defaults (T-006). Mirror the Config
+	// struct envDefault tags so snapshot-driven hydration matches env-only
+	// deployments. 900s = 15 min sweep cadence, 3600s = 1 h grace period.
+	defaultCustodyRetentionSweepIntervalSec = 900
+	defaultCustodyRetentionGracePeriodSec   = 3600
+
 	// M2M defaults.
 	defaultM2MTargetService      = "fetcher"
 	defaultM2MCredentialCacheTTL = 300
@@ -497,6 +511,13 @@ func matcherKeyDefs(cfg *Config) []matcherKeyDef {
 		matcherKeyDef{key: "fetcher.schema_cache_ttl_sec", defaultValue: cfg.Fetcher.SchemaCacheTTLSec, description: "Fetcher schema cache TTL in seconds"},
 		matcherKeyDef{key: "fetcher.extraction_poll_sec", defaultValue: cfg.Fetcher.ExtractionPollSec, description: "Fetcher extraction poll interval in seconds"},
 		matcherKeyDef{key: "fetcher.extraction_timeout_sec", defaultValue: cfg.Fetcher.ExtractionTimeoutSec, description: "Fetcher extraction timeout in seconds"},
+		matcherKeyDef{key: "fetcher.max_extraction_bytes", defaultValue: cfg.Fetcher.MaxExtractionBytes, description: "Max Fetcher extraction payload size in bytes"},
+		matcherKeyDef{key: "fetcher.bridge_interval_sec", defaultValue: cfg.Fetcher.BridgeIntervalSec, description: "Fetcher bridge worker poll cadence in seconds"},
+		matcherKeyDef{key: "fetcher.bridge_batch_size", defaultValue: cfg.Fetcher.BridgeBatchSize, description: "Fetcher bridge worker per-tenant batch size"},
+		matcherKeyDef{key: "fetcher.bridge_stale_threshold_sec", defaultValue: cfg.Fetcher.BridgeStaleThresholdSec, description: "Fetcher bridge stale extraction dashboard threshold in seconds"},
+		matcherKeyDef{key: "fetcher.bridge_retry_max_attempts", defaultValue: cfg.Fetcher.BridgeRetryMaxAttempts, description: "Fetcher bridge max retry attempts per extraction"},
+		matcherKeyDef{key: "fetcher.custody_retention_sweep_interval_sec", defaultValue: cfg.Fetcher.CustodyRetentionSweepIntervalSec, description: "Custody retention sweep worker interval in seconds"},
+		matcherKeyDef{key: "fetcher.custody_retention_grace_period_sec", defaultValue: cfg.Fetcher.CustodyRetentionGracePeriodSec, description: "Custody retention grace period for LATE-LINKED extractions in seconds"},
 	)
 
 	// --- M2M ---

@@ -30,13 +30,15 @@ var (
 
 // UseCase orchestrates discovery read operations.
 type UseCase struct {
-	fetcherClient  sharedPorts.FetcherClient
-	connRepo       repositories.ConnectionRepository
-	schemaRepo     repositories.SchemaRepository
-	extractionRepo repositories.ExtractionRepository
-	logger         libLog.Logger
-	schemaCache    ports.SchemaCache // optional cache layer
-	cacheTTL       time.Duration     // TTL for cached schemas
+	fetcherClient    sharedPorts.FetcherClient
+	connRepo         repositories.ConnectionRepository
+	schemaRepo       repositories.SchemaRepository
+	extractionRepo   repositories.ExtractionRepository
+	logger           libLog.Logger
+	schemaCache      ports.SchemaCache           // optional cache layer
+	cacheTTL         time.Duration               // TTL for cached schemas
+	heartbeatReader  ports.BridgeHeartbeatReader // optional bridge worker liveness source (C15)
+	heartbeatStaleAt time.Duration               // worker marked unhealthy when staleness > this
 }
 
 // NewUseCase creates a new discovery query use case.
@@ -80,4 +82,20 @@ func NewUseCase(
 func (uc *UseCase) WithSchemaCache(cache ports.SchemaCache, ttl time.Duration) {
 	uc.schemaCache = cache
 	uc.cacheTTL = ttl
+}
+
+// WithBridgeHeartbeatReader wires the optional liveness source consumed by
+// CountBridgeReadinessByTenant. staleAfter is the threshold beyond which a
+// missing / old heartbeat flips the dashboard's worker-healthy indicator
+// to false; callers typically pass 3 × bridgeInterval to stay consistent
+// with the worker's write TTL. A non-positive staleAfter disables the
+// derived-healthy computation — the timestamp and staleness seconds are
+// still reported. C15.
+func (uc *UseCase) WithBridgeHeartbeatReader(reader ports.BridgeHeartbeatReader, staleAfter time.Duration) {
+	if uc == nil {
+		return
+	}
+
+	uc.heartbeatReader = reader
+	uc.heartbeatStaleAt = staleAfter
 }

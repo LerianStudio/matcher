@@ -102,6 +102,13 @@ func (r *concurrentJobRepo) Update(
 	return job, nil
 }
 
+func (r *concurrentJobRepo) FindLatestByExtractionID(
+	_ context.Context,
+	_ uuid.UUID,
+) (*entities.IngestionJob, error) {
+	return nil, nil
+}
+
 func (r *concurrentJobRepo) WithTx(_ context.Context, fn func(*sql.Tx) error) error {
 	return fn(&sql.Tx{})
 }

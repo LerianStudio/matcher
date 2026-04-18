@@ -35,8 +35,9 @@ var productionMode atomic.Bool
 
 // Handler handles discovery HTTP requests.
 type Handler struct {
-	command *discoveryCommand.UseCase
-	query   *discoveryQuery.UseCase
+	command   *discoveryCommand.UseCase
+	query     *discoveryQuery.UseCase
+	staleness stalenessProvider
 }
 
 // NewHandler creates a new discovery HTTP handler.

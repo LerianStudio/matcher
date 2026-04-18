@@ -254,13 +254,20 @@ type ingestionState struct {
 }
 
 // StartIngestionInput contains the data required to start an ingestion.
+//
+// ExtractionID is the optional originating Fetcher extraction id (T-005 P1 +
+// Polish Fix 4). When non-empty, the ingestion job's metadata is stamped with
+// this id atomically as part of the initial INSERT — closing the orphan-job
+// window where a follow-up Update could fail and leave a stamp-less job.
+// Empty string is the upload path (no bridge involved).
 type StartIngestionInput struct {
-	ContextID uuid.UUID
-	SourceID  uuid.UUID
-	FileName  string
-	FileSize  int64
-	Format    string
-	Reader    io.Reader
+	ContextID    uuid.UUID
+	SourceID     uuid.UUID
+	FileName     string
+	FileSize     int64
+	Format       string
+	Reader       io.Reader
+	ExtractionID string
 }
 
 // StartIngestion begins the ingestion process for a file.
@@ -379,6 +386,7 @@ func (uc *UseCase) prepareIngestion(
 		input.SourceID,
 		input.FileName,
 		input.FileSize,
+		input.ExtractionID,
 	)
 	if err != nil {
 		return nil, err
@@ -432,11 +440,21 @@ func (uc *UseCase) loadFieldMap(
 }
 
 // createAndStartJob creates a new ingestion job and starts it.
+//
+// extractionID, when non-empty, is stamped onto the job's metadata BEFORE the
+// Create round-trip so the INSERT carries the extraction-id link atomically
+// (Polish Fix 4). Stamping atomically (not via a follow-up Update) closes the
+// orphan-job window where a transient Update failure on Tick 1 would cause
+// Tick 2's FindLatestByExtractionID to miss and create a duplicate job.
+//
+// Empty extractionID is the upload path — the metadata is left clean and the
+// JSONB index's partial WHERE predicate excludes the row.
 func (uc *UseCase) createAndStartJob(
 	ctx context.Context,
 	contextID, sourceID uuid.UUID,
 	fileName string,
 	fileSize int64,
+	extractionID string,
 ) (*entities.IngestionJob, error) {
 	job, err := entities.NewIngestionJob(ctx, contextID, sourceID, fileName, fileSize)
 	if err != nil {
@@ -445,6 +463,11 @@ func (uc *UseCase) createAndStartJob(
 
 	if err := job.Start(ctx); err != nil {
 		return nil, fmt.Errorf("failed to start job: %w", err)
+	}
+
+	// Polish Fix 4: stamp extraction id atomically with the INSERT.
+	if extractionID != "" {
+		stampExtractionIDOnJob(job, extractionID)
 	}
 
 	createdJob, err := uc.jobRepo.Create(ctx, job)

@@ -167,6 +167,33 @@ func SystemplaneGetInt(client *systemplane.Client, key string, fallback int) int
 	}
 }
 
+// SystemplaneGetInt64 reads an int64 from the systemplane Client with the
+// Matcher namespace. Returns the fallback if the client is nil or the key
+// is not found. Accepts int, int64, and float64 representations so callers
+// storing large byte counts (e.g., FETCHER_MAX_EXTRACTION_BYTES) get the
+// same JSON-number tolerance as SystemplaneGetInt.
+func SystemplaneGetInt64(client *systemplane.Client, key string, fallback int64) int64 {
+	if client == nil {
+		return fallback
+	}
+
+	value, ok := client.Get(systemplaneNamespace, key)
+	if !ok {
+		return fallback
+	}
+
+	switch n := value.(type) {
+	case int64:
+		return n
+	case int:
+		return int64(n)
+	case float64:
+		return int64(n)
+	default:
+		return fallback
+	}
+}
+
 // SystemplaneGetBool reads a bool from the systemplane Client with the
 // Matcher namespace. Returns the fallback if the client is nil or the key
 // is not found.

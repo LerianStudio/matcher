@@ -28,6 +28,15 @@ func (m *mockObjectStorageClient) Upload(
 	return "", nil
 }
 
+func (m *mockObjectStorageClient) UploadIfAbsent(
+	_ context.Context,
+	_ string,
+	_ io.Reader,
+	_ string,
+) (string, error) {
+	return "", nil
+}
+
 func (m *mockObjectStorageClient) UploadWithOptions(
 	_ context.Context,
 	_ string,

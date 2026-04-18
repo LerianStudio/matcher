@@ -41,6 +41,7 @@ import (
 	configEntities "github.com/LerianStudio/matcher/internal/configuration/domain/entities"
 	configVO "github.com/LerianStudio/matcher/internal/configuration/domain/value_objects"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
+	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	infraTestutil "github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 	embeddedmigrations "github.com/LerianStudio/matcher/migrations"
@@ -113,9 +114,9 @@ func newChaosHarness(ctx context.Context) (*ChaosHarness, error) {
 			wait.ForAll(
 				wait.ForLog("database system is ready to accept connections").
 					WithOccurrence(2).
-					WithStartupTimeout(60*time.Second),
+					WithStartupTimeout(120*time.Second),
 				wait.ForListeningPort("5432/tcp"),
-			).WithStartupTimeout(60*time.Second)),
+			).WithStartupTimeout(120*time.Second)),
 	)
 	if err != nil {
 		return cleanupOnError(fmt.Errorf("start postgres: %w", err))
@@ -131,7 +132,7 @@ func newChaosHarness(ctx context.Context) (*ChaosHarness, error) {
 			wait.ForAll(
 				wait.ForListeningPort("6379/tcp"),
 				wait.ForLog("Ready to accept connections"),
-			).WithStartupTimeout(30*time.Second)),
+			).WithStartupTimeout(120*time.Second)),
 	)
 	if err != nil {
 		return cleanupOnError(fmt.Errorf("start redis: %w", err))
@@ -568,6 +569,7 @@ func setupChaosSeedData(connection *libPostgres.Client) (SeedData, error) {
 		configEntities.CreateReconciliationSourceInput{
 			Name:   "Chaos Test Source",
 			Type:   configVO.SourceTypeLedger,
+			Side:   sharedfee.MatchingSideLeft,
 			Config: map[string]any{},
 		},
 	)

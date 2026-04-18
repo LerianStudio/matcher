@@ -141,6 +141,13 @@ func (s *stubJobRepo) Update(
 	return nil, nil
 }
 
+func (s *stubJobRepo) FindLatestByExtractionID(
+	_ context.Context,
+	_ uuid.UUID,
+) (*entities.IngestionJob, error) {
+	return nil, nil
+}
+
 func TestSearchTransactions_NilUseCase(t *testing.T) {
 	t.Parallel()
 

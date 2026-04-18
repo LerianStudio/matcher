@@ -295,4 +295,3 @@ func (s *MockFetcherServer) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/management/connections/{id}/test", s.handleTestConnection)
 	mux.HandleFunc("GET /v1/fetcher/{jobId}", s.handleGetExtractionStatus)
 }
-

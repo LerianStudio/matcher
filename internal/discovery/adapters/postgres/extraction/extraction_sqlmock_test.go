@@ -69,6 +69,10 @@ func extractionColumns() []string {
 		"id", "connection_id", "ingestion_job_id", "fetcher_job_id",
 		"tables", "start_date", "end_date", "filters", "status", "result_path", "error_message",
 		"created_at", "updated_at",
+		// T-005 bridge failure columns (migration 000026).
+		"bridge_attempts", "bridge_last_error", "bridge_last_error_message", "bridge_failed_at",
+		// T-006 polish custody convergence marker (migration 000027).
+		"custody_deleted_at",
 	}
 }
 
@@ -151,6 +155,14 @@ func TestRepository_Create(t *testing.T) {
 				sqlmock.AnyArg(),
 				sqlmock.AnyArg(),
 				sqlmock.AnyArg(),
+				// T-005 bridge_* columns: bridge_attempts, bridge_last_error,
+				// bridge_last_error_message, bridge_failed_at.
+				0,
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				// T-006 custody_deleted_at (migration 000027).
+				sqlmock.AnyArg(),
 			).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 		mock.ExpectCommit()
@@ -185,6 +197,12 @@ func TestRepository_Create(t *testing.T) {
 				sqlmock.AnyArg(),
 				sqlmock.AnyArg(),
 				sqlmock.AnyArg(),
+				0,
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				// T-006 custody_deleted_at (migration 000027).
+				sqlmock.AnyArg(),
 			).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 		mock.ExpectCommit()
@@ -217,6 +235,12 @@ func TestRepository_Create(t *testing.T) {
 				req.ResultPath,
 				sqlmock.AnyArg(),
 				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				0,
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				// T-006 custody_deleted_at (migration 000027).
 				sqlmock.AnyArg(),
 			).
 			WillReturnError(errTestExec)
@@ -275,6 +299,13 @@ func TestRepository_Update(t *testing.T) {
 				sqlmock.AnyArg(),
 				sqlmock.AnyArg(),
 				sqlmock.AnyArg(),
+				// T-005 bridge_* columns.
+				0,
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				// T-006 custody_deleted_at (migration 000027).
+				sqlmock.AnyArg(),
 				req.ID,
 			).
 			WillReturnResult(sqlmock.NewResult(0, 1))
@@ -306,6 +337,12 @@ func TestRepository_Update(t *testing.T) {
 				req.Status.String(),
 				sqlmock.AnyArg(),
 				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				0,
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				// T-006 custody_deleted_at (migration 000027).
 				sqlmock.AnyArg(),
 				req.ID,
 			).
@@ -359,6 +396,13 @@ func TestRepository_FindByID(t *testing.T) {
 				sql.NullString{String: req.ErrorMessage, Valid: req.ErrorMessage != ""},
 				req.CreatedAt,
 				req.UpdatedAt,
+				// T-005 bridge_* columns.
+				0,
+				sql.NullString{},
+				sql.NullString{},
+				sql.NullTime{},
+				// T-006 custody_deleted_at (migration 000027).
+				sql.NullTime{},
 			)
 
 		mock.ExpectBegin()
@@ -424,7 +468,16 @@ func TestRepository_CreateWithTx_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	mock.ExpectExec("INSERT INTO extraction_requests").
-		WithArgs(req.ID, req.ConnectionID, req.IngestionJobID, req.FetcherJobID, tablesJSON, sqlmock.AnyArg(), sqlmock.AnyArg(), filtersJSON, req.Status.String(), req.ResultPath, sqlmock.AnyArg(), req.CreatedAt, req.UpdatedAt).
+		WithArgs(
+			req.ID, req.ConnectionID, req.IngestionJobID, req.FetcherJobID,
+			tablesJSON, sqlmock.AnyArg(), sqlmock.AnyArg(), filtersJSON,
+			req.Status.String(), req.ResultPath, sqlmock.AnyArg(),
+			req.CreatedAt, req.UpdatedAt,
+			// T-005 bridge_* columns.
+			0, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(),
+			// T-006 custody_deleted_at (migration 000027).
+			sqlmock.AnyArg(),
+		).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectRollback()
 
@@ -465,7 +518,16 @@ func TestRepository_UpdateWithTx_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	mock.ExpectExec("UPDATE extraction_requests SET").
-		WithArgs(req.ConnectionID, req.IngestionJobID, req.FetcherJobID, tablesJSON, sqlmock.AnyArg(), sqlmock.AnyArg(), filtersJSON, req.Status.String(), req.ResultPath, sqlmock.AnyArg(), req.UpdatedAt, req.ID).
+		WithArgs(
+			req.ConnectionID, req.IngestionJobID, req.FetcherJobID, tablesJSON,
+			sqlmock.AnyArg(), sqlmock.AnyArg(), filtersJSON,
+			req.Status.String(), req.ResultPath, sqlmock.AnyArg(), req.UpdatedAt,
+			// T-005 bridge_* columns.
+			0, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(),
+			// T-006 custody_deleted_at (migration 000027).
+			sqlmock.AnyArg(),
+			req.ID,
+		).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectRollback()
 
@@ -502,6 +564,13 @@ func TestRepository_UpdateIfUnchanged(t *testing.T) {
 				nil,
 				nil,
 				req.UpdatedAt,
+				// T-005 bridge_* columns.
+				0,
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				// T-006 custody_deleted_at (migration 000027).
+				sqlmock.AnyArg(),
 				req.ID,
 				expectedUpdatedAt,
 			).
@@ -593,6 +662,13 @@ func TestRepository_UpdateIfUnchangedWithTx_Success(t *testing.T) {
 			nil,
 			nil,
 			req.UpdatedAt,
+			// T-005 bridge_* columns.
+			0,
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			// T-006 custody_deleted_at (migration 000027).
+			sqlmock.AnyArg(),
 			req.ID,
 			expectedUpdatedAt,
 		).
