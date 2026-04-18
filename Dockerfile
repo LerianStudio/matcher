@@ -55,6 +55,19 @@ USER nonroot:nonroot
 
 EXPOSE 4018
 
+# Go runtime memory hint. Not set here — must be configured per-deployment as
+# approximately 90% of the container memory limit (e.g., GOMEMLIMIT=450MiB for
+# a 500MiB pod). Leave unset in the image so operators must consciously size
+# it. Example Kubernetes env:
+#   env:
+#     - name: GOMEMLIMIT
+#       valueFrom:
+#         resourceFieldRef:
+#           resource: limits.memory
+#           divisor: "1"
+# Go 1.26 auto-detects cgroup CPU via GOMAXPROCS but does NOT auto-detect
+# cgroup memory; setting GOMEMLIMIT avoids OOM-kills from uncapped Go heap.
+
 # Health probe defaults to http://localhost:4018/health.
 # Override at runtime via HEALTH_PROBE_URL env var for non-default ports.
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=10s \
