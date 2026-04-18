@@ -12,6 +12,7 @@ import (
 
 	authMiddleware "github.com/LerianStudio/lib-auth/v3/auth/middleware"
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	"github.com/LerianStudio/lib-commons/v5/commons/net/http/ratelimit"
 	"github.com/LerianStudio/lib-commons/v5/commons/systemplane"
 	"github.com/LerianStudio/lib-commons/v5/commons/systemplane/admin"
 
@@ -39,8 +40,12 @@ var (
 func MountSystemplaneAPI(
 	app *fiber.App,
 	client *systemplane.Client,
+	cfg *Config,
+	configGetter func() *Config,
+	settingsResolver *runtimeSettingsResolver,
 	authClient *authMiddleware.AuthClient,
 	tenantExtractor *auth.TenantExtractor,
+	rateLimiterGetter func() *ratelimit.RateLimiter,
 	logger libLog.Logger,
 ) error {
 	if app == nil {
@@ -57,12 +62,14 @@ func MountSystemplaneAPI(
 	// wires the actual systemplane routes, so they run first on every request.
 	handlers := buildSystemplaneAuthChain(authClient, tenantExtractor)
 
-	useArgs := make([]any, 0, len(handlers)+1)
+	useArgs := make([]any, 0, len(handlers)+2)
 	useArgs = append(useArgs, "/system")
 
 	for _, h := range handlers {
 		useArgs = append(useArgs, h)
 	}
+
+	useArgs = append(useArgs, NewGlobalRateLimit(rateLimiterGetter, cfg, configGetter, settingsResolver))
 
 	app.Use(useArgs...)
 

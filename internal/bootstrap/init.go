@@ -721,7 +721,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 
 	// Mount systemplane admin HTTP routes.
 	// spClient was initialized earlier; if nil, MountSystemplaneAPI is a no-op.
-	if mountErr := MountSystemplaneAPI(app, spClient, authClient, tenantExtractor, logger); mountErr != nil {
+	if mountErr := MountSystemplaneAPI(app, spClient, cfg, configManager.Get, settingsResolver, authClient, tenantExtractor, rateLimiterGetter, logger); mountErr != nil {
 		logger.Log(ctx, libLog.LevelWarn, "systemplane API mount failed",
 			libLog.String("error", mountErr.Error()))
 	}

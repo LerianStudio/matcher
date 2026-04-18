@@ -8,11 +8,20 @@ package bootstrap
 
 import (
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/gofiber/fiber/v2"
+	goredis "github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	authMiddleware "github.com/LerianStudio/lib-auth/v3/auth/middleware"
+	"github.com/LerianStudio/lib-commons/v5/commons/net/http/ratelimit"
+	"github.com/LerianStudio/matcher/internal/auth"
+	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 )
 
 // TestMountSystemplaneAPI_NilAppReturnsError asserts that passing a nil fiber
@@ -21,7 +30,7 @@ import (
 func TestMountSystemplaneAPI_NilAppReturnsError(t *testing.T) {
 	t.Parallel()
 
-	err := MountSystemplaneAPI(nil, nil, nil, nil, nil)
+	err := MountSystemplaneAPI(nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errMountSystemplaneAppRequired),
@@ -38,7 +47,7 @@ func TestMountSystemplaneAPI_NilClientNoOp(t *testing.T) {
 	app := fiber.New()
 	defer func() { _ = app.Shutdown() }()
 
-	err := MountSystemplaneAPI(app, nil, nil, nil, nil)
+	err := MountSystemplaneAPI(app, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	require.NoError(t, err)
 
@@ -60,8 +69,53 @@ func TestMountSystemplaneAPI_NilClientNoOp(t *testing.T) {
 func TestMountSystemplaneAPI_NilAppWithClient(t *testing.T) {
 	t.Parallel()
 
-	err := MountSystemplaneAPI(nil, nil, nil, nil, nil)
+	err := MountSystemplaneAPI(nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errMountSystemplaneAppRequired))
+}
+
+func TestMountSystemplaneAPI_AppliesGlobalRateLimit(t *testing.T) {
+	t.Parallel()
+
+	server := miniredis.RunT(t)
+	redisClient := goredis.NewClient(&goredis.Options{Addr: server.Addr()})
+	redisConn := testutil.NewRedisClientWithMock(redisClient)
+	rl := ratelimit.New(redisConn, ratelimit.WithFailOpen(false))
+
+	app := fiber.New()
+	defer func() { _ = app.Shutdown() }()
+
+	base := defaultConfig()
+	client := newStartedTestClient(t, base)
+	cfg := &Config{
+		App:       AppConfig{EnvName: "test"},
+		RateLimit: RateLimitConfig{Enabled: true, Max: 1, ExpirySec: 60},
+	}
+
+	extractor, err := auth.NewTenantExtractor(false, false, auth.DefaultTenantID, auth.DefaultTenantSlug, "", "test")
+	require.NoError(t, err)
+
+	err = MountSystemplaneAPI(
+		app,
+		client,
+		cfg,
+		func() *Config { return cfg },
+		nil,
+		authMiddleware.NewAuthClient("", false, nil),
+		extractor,
+		func() *ratelimit.RateLimiter { return rl },
+		nil,
+	)
+	require.NoError(t, err)
+
+	resp1, err := app.Test(httptest.NewRequest(http.MethodGet, "/system/matcher", http.NoBody))
+	require.NoError(t, err)
+	defer resp1.Body.Close()
+	assert.Equal(t, http.StatusOK, resp1.StatusCode)
+
+	resp2, err := app.Test(httptest.NewRequest(http.MethodGet, "/system/matcher", http.NoBody))
+	require.NoError(t, err)
+	defer resp2.Body.Close()
+	assert.Equal(t, http.StatusTooManyRequests, resp2.StatusCode)
 }
