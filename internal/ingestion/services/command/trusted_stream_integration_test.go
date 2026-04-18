@@ -22,7 +22,6 @@ import (
 	ingestionEntities "github.com/LerianStudio/matcher/internal/ingestion/domain/entities"
 	ingestionVO "github.com/LerianStudio/matcher/internal/ingestion/domain/value_objects"
 	ingestionCommand "github.com/LerianStudio/matcher/internal/ingestion/services/command"
-	outboxPostgres "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/outbox"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
@@ -38,7 +37,7 @@ func TestIntegration_UseCase_IngestFromTrustedStream(t *testing.T) {
 		provider := h.Provider()
 		jobRepo := ingestionJobRepo.NewRepository(provider)
 		txRepo := ingestionTransactionRepo.NewRepository(provider)
-		outboxRepo := outboxPostgres.NewRepository(provider)
+		outboxRepo := integration.NewTestOutboxRepository(t, h.Connection)
 
 		// Minimal field map covering the canonical columns; matches the
 		// pattern established by use_case_test.go in tests/integration/ingestion.
@@ -122,7 +121,7 @@ func TestIntegration_UseCase_IngestFile_UploadPathStillWorks(t *testing.T) {
 		provider := h.Provider()
 		jobRepo := ingestionJobRepo.NewRepository(provider)
 		txRepo := ingestionTransactionRepo.NewRepository(provider)
-		outboxRepo := outboxPostgres.NewRepository(provider)
+		outboxRepo := integration.NewTestOutboxRepository(t, h.Connection)
 
 		fieldMap := &shared.FieldMap{Mapping: map[string]any{
 			"external_id": "id",

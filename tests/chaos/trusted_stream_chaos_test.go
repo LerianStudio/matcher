@@ -28,12 +28,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	outboxpg "github.com/LerianStudio/lib-commons/v5/commons/outbox/postgres"
+
 	"github.com/LerianStudio/matcher/internal/ingestion/adapters/parsers"
 	ingestionJobRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/job"
 	ingestionTransactionRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/transaction"
 	ingestionPorts "github.com/LerianStudio/matcher/internal/ingestion/ports"
 	ingestionCommand "github.com/LerianStudio/matcher/internal/ingestion/services/command"
-	outboxPostgres "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/outbox"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
@@ -198,7 +199,16 @@ func buildTrustedStreamUseCase(t *testing.T, h *ChaosHarness) *ingestionCommand.
 	provider := h.Provider()
 	jobRepo := ingestionJobRepo.NewRepository(provider)
 	txRepo := ingestionTransactionRepo.NewRepository(provider)
-	outboxRepo := outboxPostgres.NewRepository(provider)
+
+	// Inline the canonical outbox repository directly. Build-tag isolation
+	// (chaos vs integration) prevents importing tests/integration's
+	// NewTestOutboxRepository helper, so we replicate the minimal wiring
+	// here. WithAllowEmptyTenant mirrors the integration helper because the
+	// chaos harness also runs in the public schema.
+	schemaResolver, err := outboxpg.NewSchemaResolver(h.Connection, outboxpg.WithAllowEmptyTenant())
+	require.NoError(t, err, "create outbox schema resolver for chaos harness")
+	outboxRepo, err := outboxpg.NewRepository(h.Connection, schemaResolver, schemaResolver)
+	require.NoError(t, err, "create outbox repository for chaos harness")
 
 	fieldMap := &shared.FieldMap{Mapping: map[string]any{
 		"external_id": "id",

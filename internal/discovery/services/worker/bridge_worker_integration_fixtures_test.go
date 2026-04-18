@@ -43,7 +43,6 @@ import (
 	ingestionCommand "github.com/LerianStudio/matcher/internal/ingestion/services/command"
 	cross "github.com/LerianStudio/matcher/internal/shared/adapters/cross"
 	custodyAdapter "github.com/LerianStudio/matcher/internal/shared/adapters/custody"
-	outboxPostgres "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/outbox"
 	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedFee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
@@ -309,7 +308,7 @@ func buildBridgeWorker(
 	// --- Ingestion plumbing -------------------------------------------------
 	jobRepo := ingestionJobRepoPkg.NewRepository(provider)
 	txRepo := ingestionTxRepoPkg.NewRepository(provider)
-	outboxRepo := outboxPostgres.NewRepository(provider)
+	outboxRepo := integration.NewTestOutboxRepository(t, h.Connection)
 
 	fieldMap := &bridgeTestFieldMapStub{mapping: map[string]any{
 		"external_id": "id",
