@@ -121,17 +121,40 @@ func TestDecodeMasterKey_HappyPathStdEncoding(t *testing.T) {
 	require.Len(t, decoded, 32)
 }
 
-func TestDecodeMasterKey_HappyPathURLEncoding(t *testing.T) {
+// TestDecodeMasterKey_RejectsURLSafeEncoding documents that URL-safe
+// base64 (`-`/`_` alphabet) is rejected. The reasoning is in
+// decodeMasterKey's doc comment: accepting both encodings lets
+// environments silently end up with divergent derived keys when a
+// distribution pipeline re-encodes `+`/`/` into `-`/`_`.
+//
+// This test picks a raw 32-byte value whose standard base64 output
+// contains `+` and/or `/`, so the URL-safe re-encoding genuinely
+// differs from the standard encoding. Using a value that happens to be
+// alphabet-stable would silently pass regardless of implementation.
+func TestDecodeMasterKey_RejectsURLSafeEncoding(t *testing.T) {
 	t.Parallel()
 
+	// Pick bytes that force `+`/`/` in the standard base64 output.
+	// 0xff and 0xfb, repeated, produce alphabet divergence between
+	// StdEncoding and URLEncoding.
 	raw := make([]byte, 32)
 	for i := range raw {
-		raw[i] = byte(i * 3)
+		if i%2 == 0 {
+			raw[i] = 0xff
+		} else {
+			raw[i] = 0xfb
+		}
 	}
 
-	decoded, err := decodeMasterKey(base64.URLEncoding.EncodeToString(raw))
-	require.NoError(t, err)
-	require.Equal(t, raw, decoded)
+	stdEncoded := base64.StdEncoding.EncodeToString(raw)
+	urlEncoded := base64.URLEncoding.EncodeToString(raw)
+	require.NotEqual(t, stdEncoded, urlEncoded,
+		"test precondition: raw bytes must produce different std vs url base64 output")
+
+	_, err := decodeMasterKey(urlEncoded)
+	require.ErrorIs(t, err, ErrFetcherBridgeMasterKeyInvalid)
+	require.Contains(t, err.Error(), "URL-safe",
+		"error must explicitly flag URL-safe base64 so operators fix the distribution pipeline")
 }
 
 func TestInitFetcherBridgeAdapters_RejectsNilLogger(t *testing.T) {

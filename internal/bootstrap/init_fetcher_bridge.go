@@ -285,6 +285,13 @@ func wireVerifiedArtifactPipeline(
 // that it meets the Fetcher contract length (at least 32 bytes). Empty
 // input returns ErrFetcherBridgeMasterKeyRequired so the caller can
 // distinguish "disabled" from "misconfigured".
+//
+// Only standard base64 (RFC 4648 §4) is accepted. URL-safe base64 is
+// rejected so operators cannot end up with two environments silently
+// holding different derived keys because the distribution channel
+// re-encoded `+`/`/` into `-`/`_`. If a URL-safe value is provided,
+// the error points the operator at the distribution pipeline rather
+// than at the service config.
 func decodeMasterKey(raw string) ([]byte, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
@@ -293,15 +300,21 @@ func decodeMasterKey(raw string) ([]byte, error) {
 
 	decoded, err := base64.StdEncoding.DecodeString(trimmed)
 	if err != nil {
-		// Also try URL-safe encoding so operators are not punished for
-		// sharing a key through a URL-compatible channel.
-		decoded, err = base64.URLEncoding.DecodeString(trimmed)
-		if err != nil {
+		// Detect the common foot-gun: the value is URL-safe base64. If so,
+		// tell operators explicitly to re-encode as standard base64 at the
+		// distribution source rather than silently accepting both encodings
+		// and risking divergent derived keys across environments.
+		if _, urlErr := base64.URLEncoding.DecodeString(trimmed); urlErr == nil {
 			return nil, fmt.Errorf(
-				"%w: not base64 (std or url)",
+				"%w: value is URL-safe base64; re-encode as standard base64 (RFC 4648 §4) at the distribution source so every environment shares the same canonical bytes",
 				ErrFetcherBridgeMasterKeyInvalid,
 			)
 		}
+
+		return nil, fmt.Errorf(
+			"%w: not standard base64",
+			ErrFetcherBridgeMasterKeyInvalid,
+		)
 	}
 
 	// 32-byte minimum matches fetcher.minMasterKeyLen. We re-check here
