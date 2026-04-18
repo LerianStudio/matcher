@@ -65,18 +65,30 @@ func TestSwaggerSpec_ContainsRenamedBusinessPaths(t *testing.T) {
 	}
 }
 
+// TestSwaggerSpec_ContainsSystemplanePaths verifies that the generated Swagger spec
+// does NOT expose the systemplane admin routes. In v5, the systemplane admin API is
+// mounted directly by lib-commons at /system/:namespace/:key and is intentionally
+// excluded from the public OpenAPI spec (it is a management-plane API, not a
+// business API). The v4 /v1/system/configs and /v1/system/settings paths are removed.
 func TestSwaggerSpec_ContainsSystemplanePaths(t *testing.T) {
 	t.Parallel()
 
 	files := []string{"swagger.json", "swagger.yaml"}
 
 	for _, file := range files {
-		data, err := os.ReadFile(file)
-		require.NoError(t, err)
+		file := file
 
-		content := string(data)
+		t.Run(file, func(t *testing.T) {
+			t.Parallel()
 
-		assert.Contains(t, content, "/v1/system/configs", "expected systemplane config routes in %s", file)
-		assert.Contains(t, content, "/v1/system/settings", "expected systemplane settings routes in %s", file)
+			data, err := os.ReadFile(file)
+			require.NoError(t, err)
+
+			content := string(data)
+
+			// v4 systemplane paths must not appear in the v5 spec.
+			assert.NotContains(t, content, "/v1/system/configs", "v4 systemplane path must not appear in %s", file)
+			assert.NotContains(t, content, "/v1/system/settings", "v4 systemplane path must not appear in %s", file)
+		})
 	}
 }
