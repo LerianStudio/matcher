@@ -124,9 +124,14 @@ func NewTenantExtractor(
 		}
 	}
 
-	// SECURITY: Treat empty envName as production-safe (reject X-User-ID headers).
-	// Case-insensitive check for "production" to handle Production, PRODUCTION, etc.
-	isDev := envName != "" && !strings.EqualFold(envName, "production")
+	// SECURITY: Only accept the X-User-ID dev header in explicit development or
+	// test environments. Staging, UAT, QA, preview, and any unknown env are all
+	// treated as production-adjacent because they may hold real data — allowing
+	// a client to assert any user id via a plain HTTP header would be a trivial
+	// impersonation vector. Match "development" or "test" case-insensitively;
+	// everything else rejects.
+	normalizedEnv := strings.ToLower(strings.TrimSpace(envName))
+	isDev := normalizedEnv == "development" || normalizedEnv == "test"
 
 	return &TenantExtractor{
 		authEnabled:         authEnabled,

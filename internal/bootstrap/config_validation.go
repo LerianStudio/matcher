@@ -411,6 +411,19 @@ func (cfg *Config) validateProductionCoreConfig(ctx context.Context, asserter *a
 		return fmt.Errorf("production config validation: %w", err)
 	}
 
+	// When rate limiting is enabled in production, TRUSTED_PROXIES must be set
+	// so Fiber resolves the correct client IP. Behind an ingress that terminates
+	// TLS for us (the common prod topology), c.IP() without trusted proxies
+	// returns the ingress address — so every request shares one identity and
+	// the rate limiter throttles the ingress itself instead of real clients.
+	if cfg.RateLimit.Enabled {
+		if err := asserter.NotEmpty(ctx, strings.TrimSpace(cfg.Server.TrustedProxies),
+			"TRUSTED_PROXIES is required in production when rate limiting is enabled",
+			"rate_limit_hint", "set TRUSTED_PROXIES to the CIDR(s) of your ingress/load balancer so client IPs resolve correctly"); err != nil {
+			return fmt.Errorf("production config validation: %w", err)
+		}
+	}
+
 	return nil
 }
 
