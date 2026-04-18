@@ -720,10 +720,12 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 	wm = buildWorkerManager(modules, wm, configManager, logger)
 
 	// Mount systemplane admin HTTP routes.
-	// spClient was initialized earlier; if nil, MountSystemplaneAPI is a no-op.
+	// spClient was initialized earlier; if nil, MountSystemplaneAPI is a graceful
+	// no-op. Any other failure (missing tenant extractor, nil app) is fatal —
+	// we must not continue bootstrap with the admin plane partially wired or
+	// the /system surface running without its guard chain.
 	if mountErr := MountSystemplaneAPI(app, spClient, cfg, configManager.Get, settingsResolver, authClient, tenantExtractor, rateLimiterGetter, logger); mountErr != nil {
-		logger.Log(ctx, libLog.LevelWarn, "systemplane API mount failed",
-			libLog.String("error", mountErr.Error()))
+		return nil, fmt.Errorf("mount systemplane api: %w", mountErr)
 	}
 
 	done()

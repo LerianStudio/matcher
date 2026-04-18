@@ -20,8 +20,9 @@ import (
 )
 
 var (
-	errMountSystemplaneAppRequired           = errors.New("mount systemplane api: app is required")
-	errMountSystemplaneAuthorizationRequired = errors.New("mount systemplane api: authorization required")
+	errMountSystemplaneAppRequired               = errors.New("mount systemplane api: app is required")
+	errMountSystemplaneTenantExtractorRequired   = errors.New("mount systemplane api: tenant extractor is required — admin plane cannot start without tenant context propagation")
+	errMountSystemplaneAuthorizationRequired     = errors.New("mount systemplane api: authorization required")
 )
 
 // MountSystemplaneAPI mounts the v5 systemplane admin HTTP routes on the
@@ -54,6 +55,16 @@ func MountSystemplaneAPI(
 
 	if client == nil {
 		return nil // graceful no-op: systemplane not initialized
+	}
+
+	// Hard-require a tenant extractor. Without it, the admin plane would
+	// mount without the middleware that propagates tenant/user context
+	// into UserContext — meaning the admin.Mount authorizer would see an
+	// empty user id on every request when auth is disabled, and even with
+	// auth enabled, admin actions would run without a materialized tenant.
+	// There is no sensible fallback that still protects the /system surface.
+	if tenantExtractor == nil {
+		return errMountSystemplaneTenantExtractorRequired
 	}
 
 	// Guard all /system requests behind JWT + RBAC. app.Use accepts a variadic
@@ -112,6 +123,11 @@ func MountSystemplaneAPI(
 // buildSystemplaneAuthChain returns the ordered list of Fiber middleware that
 // guards /system requests before they reach the admin router.
 //
+// Caller guarantees extractor != nil (MountSystemplaneAPI rejects a nil
+// extractor before calling this). The admin plane cannot start without
+// a real extractor — there is no "no-op fallback" that still protects
+// the /system surface, so we fail the mount loudly instead.
+//
 // When auth is enabled the chain is:
 //  1. Authorize(system, admin) — RBAC check via the lib-auth plugin, which
 //     extracts and validates the bearer token and enforces the permission
@@ -125,14 +141,6 @@ func buildSystemplaneAuthChain(
 	authClient *authMiddleware.AuthClient,
 	extractor *auth.TenantExtractor,
 ) []fiber.Handler {
-	if extractor == nil {
-		// No extractor configured — fall back to a no-op so the mount still
-		// succeeds. Without an extractor we cannot populate tenant context, but
-		// the admin authorizer below will still reject requests missing a user
-		// ID when auth is enabled.
-		return []fiber.Handler{func(c *fiber.Ctx) error { return c.Next() }}
-	}
-
 	if authClient == nil || !authClient.Enabled {
 		return []fiber.Handler{extractor.ExtractTenant()}
 	}

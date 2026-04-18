@@ -75,6 +75,44 @@ func TestMountSystemplaneAPI_NilAppWithClient(t *testing.T) {
 	assert.True(t, errors.Is(err, errMountSystemplaneAppRequired))
 }
 
+// TestMountSystemplaneAPI_NilExtractorRejected asserts the admin plane
+// refuses to mount without a real tenant extractor. The previous no-op
+// fallback silently wired /system without a tenant-context middleware —
+// with auth disabled that meant admin actions ran fully anonymous; with
+// auth enabled the admin.Mount authorizer could not see any user id.
+// Neither mode is acceptable, so the mount must fail fatally instead.
+func TestMountSystemplaneAPI_NilExtractorRejected(t *testing.T) {
+	t.Parallel()
+
+	app := fiber.New()
+	defer func() { _ = app.Shutdown() }()
+
+	base := defaultConfig()
+	client := newStartedTestClient(t, base)
+
+	err := MountSystemplaneAPI(
+		app,
+		client,
+		base,
+		func() *Config { return base },
+		nil,
+		authMiddleware.NewAuthClient("", false, nil),
+		nil, // the failure trigger
+		nil,
+		nil,
+	)
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errMountSystemplaneTenantExtractorRequired),
+		"expected errMountSystemplaneTenantExtractorRequired, got: %v", err)
+
+	// Defense-in-depth: no /system routes should have been registered.
+	for _, r := range app.GetRoutes() {
+		assert.NotContains(t, r.Path, "/system",
+			"failed mount must not leave /system routes behind")
+	}
+}
+
 func TestMountSystemplaneAPI_AppliesGlobalRateLimit(t *testing.T) {
 	t.Parallel()
 
