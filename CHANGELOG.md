@@ -1,3 +1,10 @@
+## [1.3.0-beta.17](https://github.com/LerianStudio/matcher/compare/v1.3.0-beta.16...v1.3.0-beta.17) (2026-04-18)
+
+
+### Bug Fixes
+
+* **ci, tests:** Improve stability of integration and E2E tests ([37d6e74](https://github.com/LerianStudio/matcher/commit/37d6e74f3a243f6cac19fb55857a5ea5e2275abb))
+
 ## [1.3.0-beta.16](https://github.com/LerianStudio/matcher/compare/v1.3.0-beta.15...v1.3.0-beta.16) (2026-04-17)
 
 
