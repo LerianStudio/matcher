@@ -22,6 +22,11 @@ import (
 
 var _ = sharedhttp.ErrorResponse{}
 
+// errAdjustmentUnauthenticated is returned when CreateAdjustment is invoked
+// without an authenticated user in the request context. The HTTP surface
+// fails closed rather than silently attributing the write to "system".
+var errAdjustmentUnauthenticated = errors.New("unauthenticated adjustment request")
+
 // CreateAdjustment creates a balancing journal entry to resolve variance.
 // @Summary Create an adjustment
 // @Description Creates a balancing journal entry (e.g., bank fee, FX difference) to resolve variance between matched transactions or on a single transaction.
@@ -89,7 +94,16 @@ func (handler *Handler) CreateAdjustment(fiberCtx *fiber.Ctx) error {
 
 	createdBy := getUserFromRequest(fiberCtx)
 	if createdBy == "" {
-		createdBy = "system"
+		// Adjustments reach the HTTP surface only through authenticated
+		// tenant traffic; a missing user ID means auth middleware is
+		// misconfigured or bypassed. Fail closed — never attribute the
+		// write to a generic "system" principal. Any genuinely
+		// background-initiated adjustment must go through the cross-context
+		// gateway (internal/shared/adapters/cross/exception_matching_gateway.go),
+		// which carries its own actor.
+		handler.logSpanError(ctx, span, logger, "adjustment rejected: missing authenticated user", errAdjustmentUnauthenticated)
+
+		return respondError(fiberCtx, fiber.StatusUnauthorized, "unauthorized", "authenticated user required")
 	}
 
 	adjustment, err := handler.command.CreateAdjustment(ctx, command.CreateAdjustmentInput{

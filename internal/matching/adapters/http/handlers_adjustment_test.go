@@ -151,6 +151,7 @@ func TestCreateAdjustmentHandlerRouting(t *testing.T) {
 		noop.NewTracerProvider().Tracer("test"),
 	)
 	ctx = context.WithValue(ctx, auth.TenantIDKey, tenantID.String())
+	ctx = context.WithValue(ctx, auth.UserIDKey, "test-user")
 	app := newFiberTestApp(ctx)
 
 	ctxProv := &stubContextProvider{
@@ -202,6 +203,7 @@ func TestCreateAdjustmentMissingTargets(t *testing.T) {
 		noop.NewTracerProvider().Tracer("test"),
 	)
 	ctx = context.WithValue(ctx, auth.TenantIDKey, tenantID.String())
+	ctx = context.WithValue(ctx, auth.UserIDKey, "test-user")
 	app := newFiberTestApp(ctx)
 
 	ctxProv := &stubContextProvider{
@@ -329,6 +331,7 @@ func TestCreateAdjustmentMissingRequiredFields(t *testing.T) {
 				noop.NewTracerProvider().Tracer("test"),
 			)
 			ctx = context.WithValue(ctx, auth.TenantIDKey, tenantID.String())
+			ctx = context.WithValue(ctx, auth.UserIDKey, "test-user")
 			app := newFiberTestApp(ctx)
 
 			ctxProv := &stubContextProvider{
@@ -376,6 +379,7 @@ func TestCreateAdjustmentInvalidAmountFormat(t *testing.T) {
 		noop.NewTracerProvider().Tracer("test"),
 	)
 	ctx = context.WithValue(ctx, auth.TenantIDKey, tenantID.String())
+	ctx = context.WithValue(ctx, auth.UserIDKey, "test-user")
 	app := newFiberTestApp(ctx)
 
 	ctxProv := &stubContextProvider{
@@ -431,6 +435,7 @@ func TestCreateAdjustmentContextNotFound(t *testing.T) {
 		noop.NewTracerProvider().Tracer("test"),
 	)
 	ctx = context.WithValue(ctx, auth.TenantIDKey, tenantID.String())
+	ctx = context.WithValue(ctx, auth.UserIDKey, "test-user")
 	app := newFiberTestApp(ctx)
 
 	// Context provider returns nil (not found)
@@ -488,6 +493,7 @@ func TestCreateAdjustmentContextNotActive(t *testing.T) {
 		noop.NewTracerProvider().Tracer("test"),
 	)
 	ctx = context.WithValue(ctx, auth.TenantIDKey, tenantID.String())
+	ctx = context.WithValue(ctx, auth.UserIDKey, "test-user")
 	app := newFiberTestApp(ctx)
 
 	ctxProv := &stubContextProvider{
@@ -542,6 +548,7 @@ func TestCreateAdjustmentInvalidPayload(t *testing.T) {
 		noop.NewTracerProvider().Tracer("test"),
 	)
 	ctx = context.WithValue(ctx, auth.TenantIDKey, tenantID.String())
+	ctx = context.WithValue(ctx, auth.UserIDKey, "test-user")
 	app := newFiberTestApp(ctx)
 
 	ctxProv := &stubContextProvider{
@@ -584,6 +591,7 @@ func TestCreateAdjustmentInvalidMatchGroupID(t *testing.T) {
 		noop.NewTracerProvider().Tracer("test"),
 	)
 	ctx = context.WithValue(ctx, auth.TenantIDKey, tenantID.String())
+	ctx = context.WithValue(ctx, auth.UserIDKey, "test-user")
 	app := newFiberTestApp(ctx)
 
 	ctxProv := &stubContextProvider{
@@ -638,6 +646,7 @@ func TestCreateAdjustmentInvalidTransactionID(t *testing.T) {
 		noop.NewTracerProvider().Tracer("test"),
 	)
 	ctx = context.WithValue(ctx, auth.TenantIDKey, tenantID.String())
+	ctx = context.WithValue(ctx, auth.UserIDKey, "test-user")
 	app := newFiberTestApp(ctx)
 
 	ctxProv := &stubContextProvider{
@@ -691,6 +700,7 @@ func TestCreateAdjustmentMissingContextID(t *testing.T) {
 		noop.NewTracerProvider().Tracer("test"),
 	)
 	ctx = context.WithValue(ctx, auth.TenantIDKey, tenantID.String())
+	ctx = context.WithValue(ctx, auth.UserIDKey, "test-user")
 	app := newFiberTestApp(ctx)
 
 	ctxProv := &stubContextProvider{info: nil}
@@ -745,6 +755,7 @@ func TestCreateAdjustmentServiceError(t *testing.T) {
 		noop.NewTracerProvider().Tracer("test"),
 	)
 	ctx = context.WithValue(ctx, auth.TenantIDKey, tenantID.String())
+	ctx = context.WithValue(ctx, auth.UserIDKey, "test-user")
 	app := newFiberTestApp(ctx)
 
 	ctxProv := &stubContextProvider{
@@ -788,4 +799,61 @@ func TestCreateAdjustmentServiceError(t *testing.T) {
 
 	require.Equal(t, fiber.StatusInternalServerError, resp.StatusCode)
 	require.Equal(t, "an unexpected error occurred", errResp.Message)
+}
+
+// TestCreateAdjustmentMissingUserFailsClosed is a regression test for a
+// previous behaviour in which CreateAdjustment attributed the write to
+// "system" when the auth context carried no user ID. That silently turned
+// auth-middleware misconfiguration into a self-inflicted audit gap. The
+// handler now returns 401 and refuses to persist the adjustment.
+func TestCreateAdjustmentMissingUserFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	tenantID := uuid.New()
+	contextID := uuid.New()
+	matchGroupID := uuid.New()
+	ctx := libCommons.ContextWithTracer(
+		context.Background(),
+		noop.NewTracerProvider().Tracer("test"),
+	)
+	ctx = context.WithValue(ctx, auth.TenantIDKey, tenantID.String())
+	// Intentionally omit auth.UserIDKey to simulate middleware misconfiguration.
+	app := newFiberTestApp(ctx)
+
+	ctxProv := &stubContextProvider{
+		info: &ports.ReconciliationContextInfo{ID: contextID, Active: true},
+	}
+	uc := newRunMatchUseCase(t, ctxProv, []*shared.Transaction{}, nil)
+
+	handler, err := NewHandler(uc, newQueryUseCase(t, &stubMatchRunRepo{}, &stubMatchGroupRepo{}), ctxProv, false)
+	require.NoError(t, err)
+
+	app.Post("/v1/matching/adjustments", handler.CreateAdjustment)
+
+	payload := CreateAdjustmentRequest{
+		MatchGroupID: matchGroupID.String(),
+		Type:         "BANK_FEE",
+		Direction:    "DEBIT",
+		Amount:       "10.50",
+		Currency:     "USD",
+		Description:  "Bank wire fee adjustment",
+		Reason:       "Variance due to bank processing fee",
+	}
+
+	body, err := json.Marshal(payload)
+	require.NoError(t, err)
+
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/v1/matching/adjustments?contextId="+contextID.String(),
+		bytes.NewBuffer(body),
+	)
+	request.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(request)
+	require.NoError(t, err)
+
+	defer resp.Body.Close()
+
+	require.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
 }
