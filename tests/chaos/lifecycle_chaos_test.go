@@ -16,8 +16,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/LerianStudio/matcher/internal/bootstrap"
 	outboxServices "github.com/LerianStudio/lib-commons/v5/commons/outbox"
+	"github.com/LerianStudio/matcher/internal/bootstrap"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 )
 

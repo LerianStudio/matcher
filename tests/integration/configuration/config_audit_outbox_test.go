@@ -12,9 +12,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	outboxEntities "github.com/LerianStudio/lib-commons/v5/commons/outbox"
 	configAudit "github.com/LerianStudio/matcher/internal/configuration/adapters/audit"
 	configPorts "github.com/LerianStudio/matcher/internal/configuration/ports"
-	outboxEntities "github.com/LerianStudio/lib-commons/v5/commons/outbox"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/tests/integration"

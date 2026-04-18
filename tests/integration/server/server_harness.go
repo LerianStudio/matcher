@@ -10,8 +10,8 @@ import (
 
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 
-	"github.com/LerianStudio/matcher/internal/bootstrap"
 	outboxServices "github.com/LerianStudio/lib-commons/v5/commons/outbox"
+	"github.com/LerianStudio/matcher/internal/bootstrap"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 

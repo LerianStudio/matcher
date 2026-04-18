@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace/noop"
 
+	outboxServices "github.com/LerianStudio/lib-commons/v5/commons/outbox"
 	"github.com/LerianStudio/matcher/internal/ingestion/adapters/parsers"
 	ingestionJobRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/job"
 	ingestionTransactionRepo "github.com/LerianStudio/matcher/internal/ingestion/adapters/postgres/transaction"
@@ -21,7 +22,6 @@ import (
 	ingestionVO "github.com/LerianStudio/matcher/internal/ingestion/domain/value_objects"
 	"github.com/LerianStudio/matcher/internal/ingestion/ports"
 	ingestionCommand "github.com/LerianStudio/matcher/internal/ingestion/services/command"
-	outboxServices "github.com/LerianStudio/lib-commons/v5/commons/outbox"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 	"github.com/LerianStudio/matcher/tests/integration"

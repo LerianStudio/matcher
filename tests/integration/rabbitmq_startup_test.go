@@ -437,6 +437,7 @@ func (*fakeStartedContainer) Host(context.Context) (string, error) { return "", 
 func (*fakeStartedContainer) Inspect(context.Context) (*container.InspectResponse, error) {
 	return &container.InspectResponse{}, nil
 }
+
 func (*fakeStartedContainer) MappedPort(context.Context, string) (network.Port, error) {
 	return network.Port{}, nil
 }
@@ -453,10 +454,10 @@ func (*fakeStartedContainer) FollowOutput(testcontainers.LogConsumer)     {}
 func (*fakeStartedContainer) StartLogProducer(context.Context, ...testcontainers.LogProductionOption) error {
 	return nil
 }
-func (*fakeStartedContainer) StopLogProducer() error                               { return nil }
-func (*fakeStartedContainer) Name(context.Context) (string, error)                 { return "", nil }
-func (*fakeStartedContainer) State(context.Context) (*container.State, error)       { return nil, nil }
-func (*fakeStartedContainer) Networks(context.Context) ([]string, error)            { return nil, nil }
+func (*fakeStartedContainer) StopLogProducer() error                          { return nil }
+func (*fakeStartedContainer) Name(context.Context) (string, error)            { return "", nil }
+func (*fakeStartedContainer) State(context.Context) (*container.State, error) { return nil, nil }
+func (*fakeStartedContainer) Networks(context.Context) ([]string, error)      { return nil, nil }
 func (*fakeStartedContainer) NetworkAliases(context.Context) (map[string][]string, error) {
 	return nil, nil
 }

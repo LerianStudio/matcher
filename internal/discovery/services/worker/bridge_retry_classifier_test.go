@@ -139,7 +139,8 @@ func TestEscalateAfterMaxAttempts(t *testing.T) {
 	}{
 		{"nil", nil, vo.BridgeErrorClassMaxAttemptsExceeded},
 		{"source unresolvable", sharedPorts.ErrBridgeSourceUnresolvable, vo.BridgeErrorClassSourceUnresolved},
-		{"wrapped source unresolvable",
+		{
+			"wrapped source unresolvable",
 			fmt.Errorf("ctx: %w", sharedPorts.ErrBridgeSourceUnresolvable),
 			vo.BridgeErrorClassSourceUnresolved,
 		},

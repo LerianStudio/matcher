@@ -21,8 +21,8 @@ import (
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
 
-	"github.com/LerianStudio/matcher/internal/auth"
 	outboxServices "github.com/LerianStudio/lib-commons/v5/commons/outbox"
+	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 

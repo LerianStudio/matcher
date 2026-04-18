@@ -316,7 +316,6 @@ func FuzzValidateFetcherResultPath(f *testing.F) {
 		}()
 
 		err := validateFetcherResultPath(resultPath)
-
 		// Rejection is the main defense mechanism; any of the four
 		// documented sentinels is acceptable. We don't over-assert
 		// which one — unit tests already do that. Here we only care

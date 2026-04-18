@@ -235,7 +235,6 @@ func TestNewGlobalRateLimit_DynamicNilConfig_ReturnsPassthrough(t *testing.T) {
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
-
 func TestSafeExpiry_ClampsToMinimumOne(t *testing.T) {
 	t.Parallel()
 

@@ -18,8 +18,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/LerianStudio/matcher/internal/bootstrap"
 	outboxServices "github.com/LerianStudio/lib-commons/v5/commons/outbox"
+	"github.com/LerianStudio/matcher/internal/bootstrap"
 )
 
 // ChaosServer wraps a fully bootstrapped Matcher service whose infrastructure

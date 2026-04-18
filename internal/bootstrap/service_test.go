@@ -42,7 +42,6 @@ func (closer *orderingCloser) Close() error {
 	return closer.err
 }
 
-
 func TestServiceRun(t *testing.T) {
 	t.Parallel()
 
@@ -137,7 +136,6 @@ func TestServiceShutdown(t *testing.T) {
 		assert.NoError(t, err)
 	})
 }
-
 
 func TestServiceShutdownWithWorkers(t *testing.T) {
 	t.Parallel()

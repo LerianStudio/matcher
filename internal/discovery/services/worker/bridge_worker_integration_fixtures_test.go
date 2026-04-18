@@ -152,6 +152,7 @@ type bridgeTestIngestionPublisher struct{}
 func (*bridgeTestIngestionPublisher) PublishIngestionCompleted(_ context.Context, _ *sharedDomain.IngestionCompletedEvent) error {
 	return nil
 }
+
 func (*bridgeTestIngestionPublisher) PublishIngestionFailed(_ context.Context, _ *sharedDomain.IngestionFailedEvent) error {
 	return nil
 }

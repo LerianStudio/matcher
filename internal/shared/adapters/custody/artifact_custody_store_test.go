@@ -39,24 +39,24 @@ import (
 //   - any other error: transient failure; Store wraps with
 //     ErrCustodyStoreFailed.
 type fakeObjectStorage struct {
-	uploadKey            string
-	uploadContentType    string
-	uploadBody           []byte
-	uploadErr            error
-	uploadIfAbsentErr    error
-	deleteKey            string
-	deleteErr            error
-	downloadKey          string
-	downloadBody         []byte
-	downloadReader       io.ReadCloser // if non-nil, takes precedence over downloadBody
-	downloadErr          error
-	existsResult         bool
-	existsErr            error
-	uploadCalls          int
-	uploadIfAbsentCalls  int
-	deleteCalls          int
-	downloadCalls        int
-	existsCalls          int
+	uploadKey           string
+	uploadContentType   string
+	uploadBody          []byte
+	uploadErr           error
+	uploadIfAbsentErr   error
+	deleteKey           string
+	deleteErr           error
+	downloadKey         string
+	downloadBody        []byte
+	downloadReader      io.ReadCloser // if non-nil, takes precedence over downloadBody
+	downloadErr         error
+	existsResult        bool
+	existsErr           error
+	uploadCalls         int
+	uploadIfAbsentCalls int
+	deleteCalls         int
+	downloadCalls       int
+	existsCalls         int
 }
 
 func (f *fakeObjectStorage) Upload(

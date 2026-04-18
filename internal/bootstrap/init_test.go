@@ -40,10 +40,10 @@ import (
 	reportingWorker "github.com/LerianStudio/matcher/internal/reporting/services/worker"
 	"go.uber.org/mock/gomock"
 
-	outboxMocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
 	sharedRabbitmq "github.com/LerianStudio/matcher/internal/shared/adapters/rabbitmq"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
+	outboxMocks "github.com/LerianStudio/matcher/internal/shared/ports/mocks"
 )
 
 // errMatchRuleAdapterRequired is a test-only sentinel used to verify error handling paths.
@@ -2504,4 +2504,3 @@ func TestResolveRuntimeIntSetting_UsesResolverFallbackFromRuntimeConfig(t *testi
 
 	assert.Equal(t, 100, resolved)
 }
-
