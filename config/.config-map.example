@@ -3,12 +3,17 @@
 # Common settings that require a container/pod restart to take effect.
 # For the full list of bootstrap-only keys, see the systemplane key definitions
 # in internal/bootstrap/systemplane_keys_*.go (any key with ApplyBootstrapOnly).
-# Everything else is hot-reloadable at runtime via the systemplane API:
+# Everything else is hot-reloadable at runtime via the canonical lib-commons v5
+# systemplane admin API (management-plane surface, intentionally excluded from
+# the public OpenAPI spec):
 #
-#   GET  /v1/system/configs          — view current runtime config
-#   PATCH /v1/system/configs         — change any runtime-managed key
-#   GET  /v1/system/configs/schema   — see all keys, types, and mutability
-#   GET  /v1/system/configs/history  — audit trail of changes
+#   GET  /system/matcher             — list all keys (inline schema metadata)
+#   GET  /system/matcher/:key        — read a single key
+#   PUT  /system/matcher/:key        — write a single key
+#
+# See github.com/LerianStudio/lib-commons/v5/commons/systemplane/admin for the
+# full HTTP surface. The v4 /v1/system/configs[...] paths and the /schema,
+# /history, /reload sub-endpoints were removed in the v5 migration.
 #
 # For local development with docker-compose, you don't need this file at all.
 # All defaults are baked into the binary and match the docker-compose setup.
@@ -21,6 +26,10 @@
 # forces rate limiting). Values: development, staging, production.
 ENV_NAME=development
 
+# Log level. BOOTSTRAP-ONLY — runtime swapping is NOT implemented; changing
+# this requires a process restart. Values: debug, info, warn, error.
+LOG_LEVEL=info
+
 # ── Tenancy ─────────────────────────────────────────────────────────────────
 # Default tenant identity used when auth is disabled or claims are unavailable.
 DEFAULT_TENANT_ID=11111111-1111-1111-1111-111111111111
@@ -31,7 +40,7 @@ DEFAULT_TENANT_SLUG=default
 SERVER_ADDRESS=:4018
 
 # Maximum HTTP request body size is runtime-managed via systemplane.
-# Configure `server.body_limit_bytes` through /v1/system/configs instead.
+# Configure `server.body_limit_bytes` via PUT /system/matcher/server.body_limit_bytes instead.
 
 # TLS — only needed when terminating TLS at the application level.
 # Most deployments terminate TLS at the ingress/load balancer.

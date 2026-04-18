@@ -384,7 +384,7 @@ Split into `handlers_{feature}.go` when a context has 3+ distinct feature areas.
 
 7. **Outbox pattern** — All async communication via outbox (no direct context-to-context messaging). Dispatcher polls with configurable interval (~2s). `ConfirmablePublisher` with broker confirmation and automatic channel recovery.
 
-8. **Systemplane is runtime config authority** — Viper + env vars are bootstrap-only. After startup, `systemplane` owns all runtime config. Use `configManager.Get()` for values. API: `GET /v1/system/configs`, schema: `GET /v1/system/configs/schema`, history: `GET /v1/system/configs/history`.
+8. **Systemplane is runtime config authority** — Viper + env vars are bootstrap-only. After startup, `systemplane` owns all runtime config. Use `configManager.Get()` for values. v5 admin surface (management-plane, intentionally excluded from public OpenAPI): `GET /system/:namespace` (list with inline schema metadata), `GET /system/:namespace/:key` (read a single key), `PUT /system/:namespace/:key` (write a single key). The matcher namespace is `matcher`. The v4 `/v1/system/configs[...]` paths and the `/schema`, `/history`, `/reload` sub-endpoints are REMOVED — schema metadata is returned inline in list responses, history is available only via audit logs, and reload is no longer exposed (v5 auto-subscribes to changes).
 
 9. **Docker Compose auto-detection** — Makefile auto-detects `docker compose` vs `docker-compose` via `$(DOCKER_CMD)`.
 
@@ -405,8 +405,10 @@ Matcher uses zero-config defaults — all configuration has sensible defaults ba
 | Bootstrap (require restart) | Runtime (hot-reloadable) |
 |----------------------------|--------------------------|
 | `SERVER_ADDRESS`, TLS, auth settings | Body limit, rate limits, worker intervals |
-| `POSTGRES_HOST`, `REDIS_HOST`, `RABBITMQ_HOST` | Log level, feature flags, timeouts |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | Export settings, archival intervals |
+| `POSTGRES_HOST`, `REDIS_HOST`, `RABBITMQ_HOST` | Feature flags, timeouts |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`, `LOG_LEVEL` | Export settings, archival intervals |
+
+> Note: `LOG_LEVEL` is bootstrap-only. Runtime log-level swapping is **not** implemented — changing `LOG_LEVEL` requires a process restart. The previous `app.log_level` systemplane key was removed in the lib-commons v5 migration because editing it via the admin API had no effect.
 
 See [`config/.config-map.example`](config/.config-map.example) for all bootstrap-only keys.
 
@@ -427,10 +429,10 @@ See [`config/.config-map.example`](config/.config-map.example) for all bootstrap
 
 ### Lerian-Specific
 
-- **lib-auth/v2** (`v2.5.0`): JWT extraction, RBAC authorization, tenant schema application
+- **lib-auth/v3** (`v3.0.0-20260415175119-1568b252d48a`): JWT extraction, RBAC authorization, tenant schema application. This is a pre-release pseudo-version pending upstream tag — see the `lib-auth/v3 Pseudo-version Tracking` appendix below for action items.
   - `auth.GetTenantID(ctx)`, `auth.GetTenantSlug(ctx)`, `auth.ApplyTenantSchema(ctx, tx)`
 
-- **lib-commons/v4** (`v4.6.0-beta.5`): Common utilities, telemetry, infrastructure
+- **lib-commons/v5** (`v5.0.0`): Common utilities, telemetry, infrastructure
   - Tracking: `libCommons.NewTrackingFromContext(ctx)` → logger, tracer, headerID
   - OpenTelemetry: `libOpentelemetry.HandleSpanError(span, "msg", err)`
   - Database: `libPostgres.New()` / `libPostgres.NewPrimaryReplica()`
@@ -586,6 +588,21 @@ All CI uses shared workflows from `LerianStudio/github-actions-shared-workflows`
 | [`internal/bootstrap/`](internal/bootstrap/) | Composition root (config, DI, server) |
 | [`internal/shared/`](internal/shared/) | Shared kernel (cross-context types) |
 | [`docs/swagger/swagger.json`](docs/swagger/swagger.json) | OpenAPI specification |
+
+## lib-auth/v3 Pseudo-version Tracking
+
+go.mod currently pins `github.com/LerianStudio/lib-auth/v3` at pseudo-version
+`v3.0.0-20260415175119-1568b252d48a`. A tagged v3.0.0 does not yet exist
+upstream. This is intentional during the lib-commons v5 + lib-auth v3
+migration window.
+
+**Action items before production deploy:**
+- [ ] Confirm LerianStudio/lib-auth has published v3.0.0 (or v3.0.0-rc.N)
+- [ ] Bump `go.mod` to the tagged version
+- [ ] Run `go mod tidy && make test`
+- [ ] Remove this tracking entry
+
+**Monitoring:** `git ls-remote --tags https://github.com/LerianStudio/lib-auth | grep v3`
 
 ---
 

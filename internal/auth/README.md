@@ -61,7 +61,7 @@ if err := auth.ApplyTenantSchema(ctx, tx); err != nil {
 
 ```go
 import (
-    "github.com/LerianStudio/lib-auth/v2/auth/middleware"
+    "github.com/LerianStudio/lib-auth/v3/auth/middleware"
     "github.com/LerianStudio/matcher/internal/auth"
     "github.com/gofiber/fiber/v2"
 )
