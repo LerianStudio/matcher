@@ -124,15 +124,24 @@ func (uc *CommentUseCase) AddComment(
 	return result, nil
 }
 
-// DeleteComment deletes a comment by ID.
+// DeleteComment deletes a comment scoped to a specific exception.
+//
+// Both exceptionID and commentID are mandatory: the delete SQL filters on
+// both columns, so a comment that belongs to exception A cannot be deleted
+// by submitting its commentID under exception B's URL. The handler already
+// verifies tenant ownership of the exception before reaching this method.
 func (uc *CommentUseCase) DeleteComment(
 	ctx context.Context,
-	commentID uuid.UUID,
+	exceptionID, commentID uuid.UUID,
 ) error {
 	_, tracer, _, _ := libCommons.NewTrackingFromContext(ctx) //nolint:dogsled // only tracer needed
 	ctx, span := tracer.Start(ctx, "command.comment.delete")
 
 	defer span.End()
+
+	if exceptionID == uuid.Nil {
+		return ErrExceptionIDRequired
+	}
 
 	if commentID == uuid.Nil {
 		return ErrCommentIDRequired
@@ -143,7 +152,12 @@ func (uc *CommentUseCase) DeleteComment(
 		return ErrActorRequired
 	}
 
-	// Load the comment to verify ownership before deletion.
+	// Load the comment to verify ownership before deletion. FindByID
+	// returns the comment regardless of its exception, but the actor
+	// check below ensures the caller authored it. The DeleteByExceptionAndID
+	// call then enforces that the comment still belongs to the exception
+	// whose ownership the HTTP handler just verified — so the URL path
+	// cannot lie about which exception the comment lives under.
 	comment, err := uc.commentRepo.FindByID(ctx, commentID)
 	if err != nil {
 		if errors.Is(err, entities.ErrCommentNotFound) {
@@ -159,11 +173,20 @@ func (uc *CommentUseCase) DeleteComment(
 		return entities.ErrCommentNotFound
 	}
 
+	if comment.ExceptionID != exceptionID {
+		// URL lied about the comment's parent exception. Return the same
+		// not-found sentinel as a genuinely missing comment to avoid
+		// leaking existence of comments under other exceptions.
+		libOpentelemetry.HandleSpanBusinessErrorEvent(span, "comment does not belong to the provided exception", entities.ErrCommentNotFound)
+
+		return entities.ErrCommentNotFound
+	}
+
 	if comment.Author != actor {
 		return ErrNotCommentAuthor
 	}
 
-	if err := uc.commentRepo.Delete(ctx, commentID); err != nil {
+	if err := uc.commentRepo.DeleteByExceptionAndID(ctx, exceptionID, commentID); err != nil {
 		libOpentelemetry.HandleSpanError(span, "delete comment", err)
 
 		return fmt.Errorf("delete comment: %w", err)

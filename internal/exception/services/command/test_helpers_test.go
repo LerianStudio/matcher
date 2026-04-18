@@ -301,7 +301,7 @@ func (m *mockCommentRepository) FindByExceptionID(
 	return nil, nil
 }
 
-func (m *mockCommentRepository) Delete(_ context.Context, _ uuid.UUID) error {
+func (m *mockCommentRepository) DeleteByExceptionAndID(_ context.Context, _, _ uuid.UUID) error {
 	return nil
 }
 
@@ -347,7 +347,7 @@ func (s *stubCommentRepository) FindByExceptionID(
 	return s.comments, nil
 }
 
-func (s *stubCommentRepository) Delete(_ context.Context, _ uuid.UUID) error {
+func (s *stubCommentRepository) DeleteByExceptionAndID(_ context.Context, _, _ uuid.UUID) error {
 	return s.deleteErr
 }
 

@@ -182,7 +182,7 @@ func (handler *Handlers) DeleteComment(fiberCtx *fiber.Ctx) error {
 		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid comment id", ErrInvalidParameter)
 	}
 
-	if err := handler.commentUC.DeleteComment(ctx, commentID); err != nil {
+	if err := handler.commentUC.DeleteComment(ctx, exceptionID, commentID); err != nil {
 		return handler.handleCommentError(ctx, fiberCtx, span, logger, err)
 	}
 

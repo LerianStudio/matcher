@@ -246,12 +246,13 @@ func TestAddComment_EmptyContentReturnsError(t *testing.T) {
 func TestDeleteComment_OwnCommentSucceeds(t *testing.T) {
 	t.Parallel()
 
+	exceptionID := uuid.New()
 	commentID := uuid.New()
 	now := time.Now().UTC()
 
 	existingComment := &entities.ExceptionComment{
 		ID:          commentID,
-		ExceptionID: uuid.New(),
+		ExceptionID: exceptionID,
 		Author:      "analyst@example.com",
 		Content:     "My comment",
 		CreatedAt:   now,
@@ -265,7 +266,7 @@ func TestDeleteComment_OwnCommentSucceeds(t *testing.T) {
 	uc, err := NewCommentUseCase(commentRepo, exceptionRepo, actor)
 	require.NoError(t, err)
 
-	err = uc.DeleteComment(context.Background(), commentID)
+	err = uc.DeleteComment(context.Background(), exceptionID, commentID)
 
 	require.NoError(t, err)
 }
@@ -273,12 +274,13 @@ func TestDeleteComment_OwnCommentSucceeds(t *testing.T) {
 func TestDeleteComment_OtherUsersCommentReturnsError(t *testing.T) {
 	t.Parallel()
 
+	exceptionID := uuid.New()
 	commentID := uuid.New()
 	now := time.Now().UTC()
 
 	existingComment := &entities.ExceptionComment{
 		ID:          commentID,
-		ExceptionID: uuid.New(),
+		ExceptionID: exceptionID,
 		Author:      "original-author@example.com",
 		Content:     "Someone else's comment",
 		CreatedAt:   now,
@@ -292,7 +294,7 @@ func TestDeleteComment_OtherUsersCommentReturnsError(t *testing.T) {
 	uc, err := NewCommentUseCase(commentRepo, exceptionRepo, actor)
 	require.NoError(t, err)
 
-	err = uc.DeleteComment(context.Background(), commentID)
+	err = uc.DeleteComment(context.Background(), exceptionID, commentID)
 
 	require.ErrorIs(t, err, ErrNotCommentAuthor)
 }
@@ -307,7 +309,7 @@ func TestDeleteComment_CommentNotFoundReturnsError(t *testing.T) {
 	uc, err := NewCommentUseCase(commentRepo, exceptionRepo, actor)
 	require.NoError(t, err)
 
-	err = uc.DeleteComment(context.Background(), uuid.New())
+	err = uc.DeleteComment(context.Background(), uuid.New(), uuid.New())
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "find comment")
@@ -323,7 +325,7 @@ func TestDeleteComment_NilCommentIDReturnsError(t *testing.T) {
 	uc, err := NewCommentUseCase(commentRepo, exceptionRepo, actor)
 	require.NoError(t, err)
 
-	err = uc.DeleteComment(context.Background(), uuid.Nil)
+	err = uc.DeleteComment(context.Background(), uuid.New(), uuid.Nil)
 
 	require.ErrorIs(t, err, ErrCommentIDRequired)
 }
@@ -338,7 +340,7 @@ func TestDeleteComment_EmptyActorReturnsError(t *testing.T) {
 	uc, err := NewCommentUseCase(commentRepo, exceptionRepo, actor)
 	require.NoError(t, err)
 
-	err = uc.DeleteComment(context.Background(), uuid.New())
+	err = uc.DeleteComment(context.Background(), uuid.New(), uuid.New())
 
 	require.ErrorIs(t, err, ErrActorRequired)
 }
@@ -346,12 +348,13 @@ func TestDeleteComment_EmptyActorReturnsError(t *testing.T) {
 func TestDeleteComment_DeleteRepoErrorReturnsError(t *testing.T) {
 	t.Parallel()
 
+	exceptionID := uuid.New()
 	commentID := uuid.New()
 	now := time.Now().UTC()
 
 	existingComment := &entities.ExceptionComment{
 		ID:          commentID,
-		ExceptionID: uuid.New(),
+		ExceptionID: exceptionID,
 		Author:      "analyst@example.com",
 		Content:     "My comment",
 		CreatedAt:   now,
@@ -368,8 +371,42 @@ func TestDeleteComment_DeleteRepoErrorReturnsError(t *testing.T) {
 	uc, err := NewCommentUseCase(commentRepo, exceptionRepo, actor)
 	require.NoError(t, err)
 
-	err = uc.DeleteComment(context.Background(), commentID)
+	err = uc.DeleteComment(context.Background(), exceptionID, commentID)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "delete comment")
+}
+
+// TestDeleteComment_CrossExceptionDeletionRejected is a regression test for
+// SEC-15: a caller must not be able to delete a comment belonging to
+// exception A by sending the request to exception B's URL. The repository
+// now filters on both exception_id and comment_id so a mismatch becomes a
+// not-found response without revealing that the comment exists elsewhere.
+func TestDeleteComment_CrossExceptionDeletionRejected(t *testing.T) {
+	t.Parallel()
+
+	ownerExceptionID := uuid.New()
+	victimURLExceptionID := uuid.New() // different exception supplied by attacker
+	commentID := uuid.New()
+	now := time.Now().UTC()
+
+	existingComment := &entities.ExceptionComment{
+		ID:          commentID,
+		ExceptionID: ownerExceptionID,
+		Author:      "analyst@example.com",
+		Content:     "My comment",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	commentRepo := &stubCommentRepository{comment: existingComment}
+	exceptionRepo := &stubExceptionRepo{}
+	actor := actorExtractor("analyst@example.com")
+
+	uc, err := NewCommentUseCase(commentRepo, exceptionRepo, actor)
+	require.NoError(t, err)
+
+	err = uc.DeleteComment(context.Background(), victimURLExceptionID, commentID)
+
+	require.ErrorIs(t, err, entities.ErrCommentNotFound)
 }
