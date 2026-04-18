@@ -104,7 +104,7 @@ func (s *MockFetcherServer) StartOnPort(port int) (string, error) {
 	mux := http.NewServeMux()
 	s.registerRoutes(mux)
 
-	addr := fmt.Sprintf("0.0.0.0:%d", port)
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
 
 	var err error
 
