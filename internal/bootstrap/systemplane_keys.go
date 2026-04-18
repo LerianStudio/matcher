@@ -18,7 +18,15 @@ var (
 	errFetcherURLMustUseHTTPScheme = errors.New("fetcher url must use http or https")
 	errValueNotPositive            = errors.New("value must be positive")
 	errValueNotNumeric             = errors.New("value must be numeric")
+	errValueNotString              = errors.New("value must be a string")
+	errCORSWildcardInProd          = errors.New("CORS_ALLOWED_ORIGINS must be restricted in production (exact \"*\" not allowed)")
+	errBodyLimitExceedsCeiling     = errors.New("server.body_limit_bytes must not exceed the application ceiling")
 )
+
+// appBodyLimitCeilingBytes mirrors fiber_server.go's appBodyLimitCeilingBytes
+// constant. Duplicated here (rather than imported) to keep the systemplane
+// validator decoupled from fiber_server.go at package init time.
+const keyBodyLimitCeilingBytes = 128 * 1024 * 1024
 
 // Default values for Matcher configuration keys. These constants match the
 // envDefault tag values in the Config struct hierarchy and serve as the
@@ -227,6 +235,62 @@ func validatePositiveInt(value any) error {
 	}
 }
 
+// corsProductionValidator returns a validator that rejects wildcard CORS
+// origins when envName is production. Used as a runtime guard on the
+// `cors.allowed_origins` systemplane key so an admin PUT cannot widen the
+// CORS policy past what validateProductionConfig enforced at startup.
+//
+// The envName is captured at registration time (from the bootstrap Config
+// snapshot). This matches the semantics of the startup validator:
+// ENV_NAME is bootstrap-only, so freezing it here does not race with
+// runtime edits.
+func corsProductionValidator(envName string) func(any) error {
+	if !IsProductionEnvironment(envName) {
+		return nil // no-op outside production; keep validator list lean
+	}
+
+	return func(value any) error {
+		str, ok := value.(string)
+		if !ok {
+			return errValueNotString
+		}
+
+		if corsContainsWildcard(str) {
+			return fmt.Errorf("%w: got %q", errCORSWildcardInProd, str)
+		}
+
+		return nil
+	}
+}
+
+// validateBodyLimitBytes enforces the server.body_limit_bytes invariants:
+// must be a positive integer AND must not exceed appBodyLimitCeilingBytes
+// (128 MiB). An admin PUT beyond the ceiling would silently fail at
+// request time (Fiber caps at the ceiling regardless), so we reject
+// early with a clear error.
+func validateBodyLimitBytes(value any) error {
+	if err := validatePositiveInt(value); err != nil {
+		return err
+	}
+
+	var n int
+
+	switch typed := value.(type) {
+	case int:
+		n = typed
+	case float64:
+		n = int(typed)
+	default:
+		return fmt.Errorf("%w, got %T", errValueNotNumeric, value)
+	}
+
+	if n > keyBodyLimitCeilingBytes {
+		return fmt.Errorf("%w: got %d, ceiling %d", errBodyLimitExceedsCeiling, n, keyBodyLimitCeilingBytes)
+	}
+
+	return nil
+}
+
 // validateFetcherURL validates that the value is a well-formed HTTP(S) URL.
 func validateFetcherURL(value any) error {
 	str, ok := value.(string)
@@ -357,8 +421,8 @@ func matcherKeyDefs(cfg *Config) []matcherKeyDef {
 	// --- Server ---
 	defs = append(defs,
 		matcherKeyDef{key: "server.address", defaultValue: cfg.Server.Address, description: "HTTP server listen address (e.g., :4018)"},
-		matcherKeyDef{key: "server.body_limit_bytes", defaultValue: cfg.Server.BodyLimitBytes, description: "Maximum HTTP request body size in bytes", validator: validatePositiveInt},
-		matcherKeyDef{key: "cors.allowed_origins", defaultValue: cfg.Server.CORSAllowedOrigins, description: "Comma-separated list of allowed CORS origins"},
+		matcherKeyDef{key: "server.body_limit_bytes", defaultValue: cfg.Server.BodyLimitBytes, description: "Maximum HTTP request body size in bytes (must be positive and not exceed 128 MiB ceiling)", validator: validateBodyLimitBytes},
+		matcherKeyDef{key: "cors.allowed_origins", defaultValue: cfg.Server.CORSAllowedOrigins, description: "Comma-separated list of allowed CORS origins", validator: corsProductionValidator(cfg.App.EnvName)},
 		matcherKeyDef{key: "cors.allowed_methods", defaultValue: cfg.Server.CORSAllowedMethods, description: "Comma-separated list of allowed CORS methods"},
 		matcherKeyDef{key: "cors.allowed_headers", defaultValue: cfg.Server.CORSAllowedHeaders, description: "Comma-separated list of allowed CORS headers"},
 		matcherKeyDef{key: "server.tls_cert_file", defaultValue: cfg.Server.TLSCertFile, description: "Path to TLS certificate file"},

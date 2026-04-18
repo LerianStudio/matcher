@@ -109,6 +109,122 @@ func TestValidatePositiveInt_Int64Rejected(t *testing.T) {
 	require.Error(t, validatePositiveInt(int64(5000)))
 }
 
+// --- validateBodyLimitBytes ---
+
+func TestValidateBodyLimitBytes_AcceptsWithinCeiling(t *testing.T) {
+	t.Parallel()
+
+	require.NoError(t, validateBodyLimitBytes(1))
+	require.NoError(t, validateBodyLimitBytes(1024))
+	require.NoError(t, validateBodyLimitBytes(keyBodyLimitCeilingBytes))
+	require.NoError(t, validateBodyLimitBytes(float64(32*1024*1024)))
+}
+
+func TestValidateBodyLimitBytes_RejectsZeroOrNegative(t *testing.T) {
+	t.Parallel()
+
+	for _, v := range []any{0, -1, -1024, float64(0), float64(-5.5)} {
+		require.Errorf(t, validateBodyLimitBytes(v), "value %v must fail positive-int check", v)
+	}
+}
+
+func TestValidateBodyLimitBytes_RejectsAboveCeiling(t *testing.T) {
+	t.Parallel()
+
+	err := validateBodyLimitBytes(keyBodyLimitCeilingBytes + 1)
+	require.Error(t, err)
+	require.ErrorIs(t, err, errBodyLimitExceedsCeiling)
+}
+
+func TestValidateBodyLimitBytes_RejectsWrongType(t *testing.T) {
+	t.Parallel()
+
+	for _, v := range []any{"128", nil, []int{1}, int64(1024)} {
+		require.Errorf(t, validateBodyLimitBytes(v), "value %T must fail type check", v)
+	}
+}
+
+// --- corsProductionValidator ---
+
+// TestCORSProductionValidator_NilOutsideProduction asserts the factory
+// returns nil for every non-production env, so the registration loop
+// attaches no validator at all (keeping the validator list lean in dev/
+// staging/uat/etc., matching the original no-validator behaviour).
+func TestCORSProductionValidator_NilOutsideProduction(t *testing.T) {
+	t.Parallel()
+
+	for _, envName := range []string{"development", "staging", "uat", "qa", "test", ""} {
+		t.Run(envName, func(t *testing.T) {
+			t.Parallel()
+			assert.Nil(t, corsProductionValidator(envName), "env %q must get a nil validator", envName)
+		})
+	}
+}
+
+// TestCORSProductionValidator_RejectsWildcardInProd asserts an admin PUT
+// of "*" (or a comma-separated list containing an exact "*" entry) is
+// rejected at validation time, matching the startup policy in
+// validateProductionCoreConfig so the admin API cannot widen CORS past
+// what the startup validator enforced.
+func TestCORSProductionValidator_RejectsWildcardInProd(t *testing.T) {
+	t.Parallel()
+
+	validator := corsProductionValidator("production")
+	require.NotNil(t, validator)
+
+	for _, origins := range []string{
+		"*",
+		"  *  ",
+		"https://app.example.com,*",
+		"*,https://app.example.com",
+	} {
+		t.Run(origins, func(t *testing.T) {
+			t.Parallel()
+
+			err := validator(origins)
+			require.Error(t, err)
+			require.ErrorIs(t, err, errCORSWildcardInProd)
+		})
+	}
+}
+
+// TestCORSProductionValidator_AcceptsRestrictedOriginsInProd asserts the
+// validator does NOT reject restricted origin lists (subdomain wildcards
+// like "https://*.example.com" remain allowed — they aren't exact "*").
+func TestCORSProductionValidator_AcceptsRestrictedOriginsInProd(t *testing.T) {
+	t.Parallel()
+
+	validator := corsProductionValidator("production")
+	require.NotNil(t, validator)
+
+	for _, origins := range []string{
+		"https://app.example.com",
+		"https://app.example.com,https://admin.example.com",
+		"https://*.example.com", // subdomain wildcard, not exact "*"
+		"",                      // intentionally allowed: empty means "no origins"
+	} {
+		t.Run(origins, func(t *testing.T) {
+			t.Parallel()
+			assert.NoError(t, validator(origins))
+		})
+	}
+}
+
+// TestCORSProductionValidator_RejectsNonString confirms the validator
+// type-checks the incoming value. systemplane typically hands string
+// values back, but registration uses any, so defensive type checking
+// is worth the one extra test.
+func TestCORSProductionValidator_RejectsNonString(t *testing.T) {
+	t.Parallel()
+
+	validator := corsProductionValidator("production")
+	require.NotNil(t, validator)
+
+	for _, v := range []any{42, nil, []string{"*"}, true} {
+		require.Errorf(t, validator(v), "value %T must fail type check", v)
+	}
+}
+
 // --- validateFetcherURL ---
 
 func TestValidateFetcherURL_EmptyAllowed(t *testing.T) {
