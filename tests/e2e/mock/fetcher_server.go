@@ -12,7 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
 )
 
 // MockFetcherServer is an in-process HTTP server that mimics the Fetcher REST API.

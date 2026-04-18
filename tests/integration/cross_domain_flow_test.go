@@ -28,8 +28,7 @@ import (
 	matchingRepositories "github.com/LerianStudio/matcher/internal/matching/domain/repositories"
 	matchingVO "github.com/LerianStudio/matcher/internal/matching/domain/value_objects"
 	matchingPorts "github.com/LerianStudio/matcher/internal/matching/ports"
-	outboxEntities "github.com/LerianStudio/matcher/internal/outbox/domain/entities"
-	outboxRepo "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/outbox"
+	outboxEntities "github.com/LerianStudio/lib-commons/v5/commons/outbox"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedfee "github.com/LerianStudio/matcher/internal/shared/domain/fee"
 )
@@ -48,7 +47,7 @@ func TestCrossDomainFlow_EndToEndReconciliation(t *testing.T) {
 		groupRepo := matchGroupRepo.NewRepository(provider)
 		itemRepo := matchItemRepo.NewRepository(provider)
 		excRepo := exceptionRepo.NewRepository(provider)
-		obRepo := outboxRepo.NewRepository(provider)
+		obRepo := NewTestOutboxRepository(t, h.Connection)
 
 		ctx := h.Ctx()
 

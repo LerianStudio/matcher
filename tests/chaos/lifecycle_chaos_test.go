@@ -11,13 +11,13 @@ import (
 	"testing"
 	"time"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/LerianStudio/matcher/internal/bootstrap"
-	outboxServices "github.com/LerianStudio/matcher/internal/outbox/services"
+	outboxServices "github.com/LerianStudio/lib-commons/v5/commons/outbox"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 )
 

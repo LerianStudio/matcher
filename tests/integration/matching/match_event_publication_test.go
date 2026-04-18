@@ -12,7 +12,7 @@ import (
 
 	matchingVO "github.com/LerianStudio/matcher/internal/matching/domain/value_objects"
 	matchingCommand "github.com/LerianStudio/matcher/internal/matching/services/command"
-	outboxEntities "github.com/LerianStudio/matcher/internal/outbox/domain/entities"
+	outboxEntities "github.com/LerianStudio/lib-commons/v5/commons/outbox"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/tests/integration"
 )

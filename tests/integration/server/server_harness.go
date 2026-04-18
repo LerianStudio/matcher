@@ -8,10 +8,10 @@ import (
 	"fmt"
 	"testing"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 
 	"github.com/LerianStudio/matcher/internal/bootstrap"
-	outboxServices "github.com/LerianStudio/matcher/internal/outbox/services"
+	outboxServices "github.com/LerianStudio/lib-commons/v5/commons/outbox"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 

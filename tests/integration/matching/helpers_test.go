@@ -5,14 +5,15 @@ package matching
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"strings"
 	"testing"
 	"time"
 
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
-	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
+	libPostgres "github.com/LerianStudio/lib-commons/v5/commons/postgres"
+	libRedis "github.com/LerianStudio/lib-commons/v5/commons/redis"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
@@ -51,11 +52,9 @@ import (
 	matchingPorts "github.com/LerianStudio/matcher/internal/matching/ports"
 	matchingCommand "github.com/LerianStudio/matcher/internal/matching/services/command"
 
-	outboxEntities "github.com/LerianStudio/matcher/internal/outbox/domain/entities"
-	outboxServices "github.com/LerianStudio/matcher/internal/outbox/services"
+	outboxServices "github.com/LerianStudio/lib-commons/v5/commons/outbox"
 	sharedCross "github.com/LerianStudio/matcher/internal/shared/adapters/cross"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
-	outboxRepo "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/outbox"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 
 	"github.com/LerianStudio/matcher/tests/integration"
@@ -213,7 +212,7 @@ func wireE4T9UseCases(t *testing.T, h *integration.TestHarness) e4t9Wired {
 	jobRepo := ingestionJobRepo.NewRepository(provider)
 	txRepo := ingestionTxRepo.NewRepository(provider)
 	dedupe := ingestionRedis.NewDedupeService(provider)
-	outbox := outboxRepo.NewRepository(provider)
+	outbox := integration.NewTestOutboxRepository(t, h.Connection)
 
 	parserRegistry := ingestionParsers.NewParserRegistry()
 	parserRegistry.Register(ingestionParsers.NewCSVParser())
@@ -318,54 +317,36 @@ type capturePublishers struct {
 	tenantIDs      []uuid.UUID
 }
 
-func (c *capturePublishers) PublishIngestionCompleted(
-	_ context.Context,
-	_ *ingestionEntities.IngestionCompletedEvent,
-) error {
-	return nil
-}
-
-func (c *capturePublishers) PublishIngestionFailed(
-	_ context.Context,
-	_ *ingestionEntities.IngestionFailedEvent,
-) error {
-	return nil
-}
-
-func (c *capturePublishers) PublishMatchConfirmed(
-	_ context.Context,
-	event *shared.MatchConfirmedEvent,
-) error {
-	c.matchConfirmed++
-	c.last = event
-	if event != nil {
-		c.tenantIDs = append(c.tenantIDs, event.TenantID)
-	}
-	return nil
-}
-
-func (c *capturePublishers) PublishMatchUnmatched(
-	_ context.Context,
-	_ *shared.MatchUnmatchedEvent,
-) error {
-	return nil
-}
-
 func newDispatcher(
 	t *testing.T,
 	h *integration.TestHarness,
 	cap *capturePublishers,
+	opts ...outboxServices.DispatcherOption,
 ) *outboxServices.Dispatcher {
 	t.Helper()
 
-	provider := h.Provider()
-	repo := outboxRepo.NewRepository(provider)
+	repo := integration.NewTestOutboxRepository(t, h.Connection)
+	registry := outboxServices.NewHandlerRegistry()
+	err := registry.Register(shared.EventTypeMatchConfirmed,
+		func(_ context.Context, event *outboxServices.OutboxEvent) error {
+			var ev shared.MatchConfirmedEvent
+			if jsonErr := json.Unmarshal(event.Payload, &ev); jsonErr != nil {
+				return jsonErr
+			}
+			cap.matchConfirmed++
+			cap.last = &ev
+			cap.tenantIDs = append(cap.tenantIDs, ev.TenantID)
+			return nil
+		},
+	)
+	require.NoError(t, err)
+
 	dispatcher, err := outboxServices.NewDispatcher(
 		repo,
-		cap,
-		cap,
+		registry,
 		nil,
 		noop.NewTracerProvider().Tracer("tests.integration.outbox"),
+		opts...,
 	)
 	require.NoError(t, err)
 
@@ -381,7 +362,7 @@ func assertMatchConfirmedPending(
 	return countInt(t, ctx, h.Connection,
 		"SELECT count(*) FROM outbox_events WHERE event_type=$1 AND status=$2",
 		shared.EventTypeMatchConfirmed,
-		outboxEntities.OutboxStatusPending,
+		outboxServices.OutboxStatusPending,
 	)
 }
 
@@ -502,7 +483,7 @@ func registerFailureDiagnostics(t *testing.T, h *integration.TestHarness, contex
 				diagCtx,
 				h.Connection,
 				"SELECT count(*) FROM outbox_events WHERE status=$1",
-				outboxEntities.OutboxStatusPending,
+				outboxServices.OutboxStatusPending,
 			),
 		)
 	})

@@ -13,13 +13,13 @@ import (
 	"testing"
 	"time"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/LerianStudio/matcher/internal/bootstrap"
-	outboxServices "github.com/LerianStudio/matcher/internal/outbox/services"
+	outboxServices "github.com/LerianStudio/lib-commons/v5/commons/outbox"
 )
 
 // ChaosServer wraps a fully bootstrapped Matcher service whose infrastructure
