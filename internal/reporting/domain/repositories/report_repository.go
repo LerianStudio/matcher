@@ -6,7 +6,7 @@ package repositories
 import (
 	"context"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/reporting/domain/entities"
 )

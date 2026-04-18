@@ -28,26 +28,25 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
-	"github.com/LerianStudio/lib-auth/v2/auth/middleware"
-	"github.com/LerianStudio/lib-commons/v4/commons/assert"
-	"github.com/LerianStudio/lib-commons/v4/commons/errgroup"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	"github.com/LerianStudio/lib-commons/v4/commons/net/http/ratelimit"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
-	libRabbitmq "github.com/LerianStudio/lib-commons/v4/commons/rabbitmq"
-	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
-	"github.com/LerianStudio/lib-commons/v4/commons/runtime"
-	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/adapters/changefeed"
-	systemplaneDomain "github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
-	systemplanePorts "github.com/LerianStudio/lib-commons/v4/commons/systemplane/ports"
-	systemplaneService "github.com/LerianStudio/lib-commons/v4/commons/systemplane/service"
-	tmclient "github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/client"
-	tmmiddleware "github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/middleware"
-	tmpostgres "github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/postgres"
-	tmrabbitmq "github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/rabbitmq"
-	"github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/tenantcache"
-	libZap "github.com/LerianStudio/lib-commons/v4/commons/zap"
+	"github.com/LerianStudio/lib-auth/v3/auth/middleware"
+	"github.com/LerianStudio/lib-commons/v5/commons/assert"
+	"github.com/LerianStudio/lib-commons/v5/commons/errgroup"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	"github.com/LerianStudio/lib-commons/v5/commons/net/http/ratelimit"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
+	"github.com/LerianStudio/lib-commons/v5/commons/outbox"
+	outboxpg "github.com/LerianStudio/lib-commons/v5/commons/outbox/postgres"
+	libPostgres "github.com/LerianStudio/lib-commons/v5/commons/postgres"
+	libRabbitmq "github.com/LerianStudio/lib-commons/v5/commons/rabbitmq"
+	libRedis "github.com/LerianStudio/lib-commons/v5/commons/redis"
+	"github.com/LerianStudio/lib-commons/v5/commons/runtime"
+	"github.com/LerianStudio/lib-commons/v5/commons/systemplane"
+	tmclient "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/client"
+	tmmiddleware "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/middleware"
+	tmpostgres "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/postgres"
+	tmrabbitmq "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/rabbitmq"
+	"github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/tenantcache"
+	libZap "github.com/LerianStudio/lib-commons/v5/commons/zap"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	configAudit "github.com/LerianStudio/matcher/internal/configuration/adapters/audit"
@@ -100,7 +99,6 @@ import (
 	matchLockManager "github.com/LerianStudio/matcher/internal/matching/adapters/redis"
 	matchingCommand "github.com/LerianStudio/matcher/internal/matching/services/command"
 	matchingQuery "github.com/LerianStudio/matcher/internal/matching/services/query"
-	outboxServices "github.com/LerianStudio/matcher/internal/outbox/services"
 	reportingHTTP "github.com/LerianStudio/matcher/internal/reporting/adapters/http"
 	reportDashboard "github.com/LerianStudio/matcher/internal/reporting/adapters/postgres/dashboard"
 	reportExportJob "github.com/LerianStudio/matcher/internal/reporting/adapters/postgres/export_job"
@@ -111,9 +109,9 @@ import (
 	reportingQuery "github.com/LerianStudio/matcher/internal/reporting/services/query"
 	reportingWorker "github.com/LerianStudio/matcher/internal/reporting/services/worker"
 	crossAdapters "github.com/LerianStudio/matcher/internal/shared/adapters/cross"
-	outboxPgRepo "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/outbox"
 	sharedRabbitmq "github.com/LerianStudio/matcher/internal/shared/adapters/rabbitmq"
 	"github.com/LerianStudio/matcher/internal/shared/constants"
+	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
@@ -131,11 +129,6 @@ const (
 	// infraConnectTimeoutDivisor splits the total infra connect timeout evenly between
 	// the two parallel infrastructure goroutines (Postgres and RabbitMQ).
 	infraConnectTimeoutDivisor = 2
-
-	// changeFeedDebounceWindow is the trailing-edge debounce window for systemplane
-	// change feed signals. Rapid signals (e.g., bulk config writes) are coalesced
-	// into fewer supervisor reloads.
-	changeFeedDebounceWindow = 200 * time.Millisecond
 
 	// statusSuccess and statusError are metric attribute values for cleanup recording.
 	statusSuccess = "success"
@@ -455,44 +448,12 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		cfg = managedCfg
 	}
 
-	bundleState := newActiveMatcherBundleState()
-
 	var (
-		runtimeSettingsManager systemplaneService.Manager
-		modules                *modulesResult
-		wm                     = NewWorkerManager(logger, configManager)
-		spComponents           *SystemplaneComponents
-		cancelChangeFeed       context.CancelFunc
+		modules          *modulesResult
+		wm               = NewWorkerManager(logger, configManager)
+		spClient         *systemplane.Client
+		settingsResolver *runtimeSettingsResolver // populated after systemplane init
 	)
-
-	settingsResolver := newRuntimeSettingsResolver(func() systemplaneService.Manager {
-		return runtimeSettingsManager
-	}, logger)
-
-	runtimeReloadObserver := newRuntimeReloadObserver(
-		ctx,
-		logger,
-		settingsResolver,
-		bundleState,
-		configManager,
-		func() *modulesResult { return modules },
-		func() *WorkerManager { return wm },
-	)
-
-	systemplaneDone := timer.track("systemplane")
-
-	spComponents, err = InitSystemplane(ctx, cfg, configManager, wm, logger, runtimeReloadObserver)
-	if err != nil {
-		return nil, fmt.Errorf("systemplane initialization required: %w", err)
-	}
-
-	runtimeSettingsManager = spComponents.Manager
-
-	systemplaneDone()
-
-	if managedCfg := configManager.Get(); managedCfg != nil {
-		cfg = managedCfg
-	}
 
 	// Configure runtime for production mode (redacts sensitive data in error reports)
 	if IsProductionEnvironment(cfg.App.EnvName) {
@@ -538,21 +499,10 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 	var cleanups []func()
 
 	cleanups = append(cleanups, func() {
-		if bundle := bundleState.Current(); bundle != nil {
-			_ = bundle.Close(detachedContext(ctx))
+		if spClient != nil {
+			_ = spClient.Close()
 		}
 	})
-	if spComponents != nil {
-		cleanups = append(cleanups, func() {
-			if cancelChangeFeed != nil {
-				cancelChangeFeed()
-			}
-
-			if spComponents.Backend != nil {
-				_ = spComponents.Backend.Close()
-			}
-		})
-	}
 
 	var infraConnectionManager connectionCloser
 
@@ -603,7 +553,6 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		postgresConnection,
 		redisConnection,
 		rabbitMQConnection,
-		bundleState,
 		&cleanups,
 	)
 	if err != nil {
@@ -613,7 +562,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 	app := NewFiberApp(cfg, logger, telemetry, configManager.Get)
 
 	rlProvider := newRateLimiterProvider(func() *libRedis.Client {
-		return currentRedisClient(bundleState, redisConnection)
+		return currentRedisClient(redisConnection)
 	}, logger)
 	rateLimiterGetter := rlProvider.Get
 
@@ -622,7 +571,6 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		configManager.Get,
 		postgresConnection,
 		redisConnection,
-		bundleState,
 	)
 
 	infraConnectionManager = connectionManager
@@ -668,7 +616,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		moduleConfigGetter,
 		settingsResolver,
 		infraProvider,
-		bundleState,
+		postgresConnection,
 		rabbitMQConnection,
 		rateLimiterGetter,
 		logger,
@@ -697,10 +645,6 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("Failed to create DB metrics collector: %v", err))
 	} else if dbMetricsCollector != nil {
 		dbMetricsCollector.SetResolverGetter(func(ctx context.Context) (dbresolver.DB, error) {
-			if bundle := bundleState.Current(); bundle != nil && bundle.DB() != nil {
-				return bundle.DB().Resolver(ctx)
-			}
-
 			if postgresConnection == nil {
 				return nil, ErrNilResolverWithoutError
 			}
@@ -728,22 +672,24 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 
 	wm = buildWorkerManager(modules, wm, configManager, logger)
 
-	// Start change feed subscriber that triggers supervisor reloads on store changes.
-	// Wrap the raw feed with trailing-edge debounce to coalesce rapid signals
-	// (e.g., bulk config writes) into fewer supervisor reloads.
-	debouncedFeed := changefeed.NewDebouncedFeed(spComponents.ChangeFeed, changefeed.WithWindow(changeFeedDebounceWindow))
+	// Initialize v5 systemplane client (register keys + start + subscribe).
+	// Requires postgres to be connected. If it fails, we continue without
+	// runtime config — the static Config from env vars remains authoritative.
+	primaryDB, dbErr := postgresConnection.Primary()
+	if dbErr == nil && primaryDB != nil {
+		spClient, err = InitSystemplane(ctx, cfg, primaryDB, logger, telemetry)
+		if err != nil {
+			logger.Log(ctx, libLog.LevelWarn, "systemplane initialization failed, continuing with static config",
+				libLog.String("error", err.Error()))
 
-	cancelChangeFeed, err = startChangeFeed(ctx, debouncedFeed, spComponents.Supervisor, logger, runtimeSettingsAwareApplyChangeSignal(spComponents.Manager, settingsResolver))
-	if err != nil {
-		logger.Log(ctx, libLog.LevelWarn, "systemplane change feed start failed",
-			libLog.String("error", err.Error()))
+			spClient = nil
+		}
 	}
 
-	// Mount systemplane HTTP API (replaces the old config API routes).
-	// Pass routes.Protected so systemplane routes go through the same auth
-	// middleware chain (JWT validation, tenant extraction, permission check)
-	// as all other Matcher API routes.
-	if mountErr := MountSystemplaneAPI(app, authClient, routes.Protected, spComponents.Manager, configManager.Get, settingsResolver, cfg.Auth.Enabled, logger); mountErr != nil {
+	settingsResolver = newRuntimeSettingsResolver(spClient)
+
+	// Mount systemplane admin HTTP routes.
+	if mountErr := MountSystemplaneAPI(app, spClient, cfg.Auth.Enabled, logger); mountErr != nil {
 		logger.Log(ctx, libLog.LevelWarn, "systemplane API mount failed",
 			libLog.String("error", mountErr.Error()))
 	}
@@ -773,8 +719,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		connectionManager:  connCloser,
 		cleanupFuncs:       cleanups,
 		readinessState:     readiness,
-		spComponents:       spComponents,
-		cancelChangeFeed:   cancelChangeFeed,
+		spClient:           spClient,
 	}, nil
 }
 
@@ -1022,15 +967,8 @@ func assignReplicaHealthCheck(
 }
 
 func currentPostgresClient(
-	bundleState *activeMatcherBundleState,
 	fallback *libPostgres.Client,
 ) (*libPostgres.Client, error) {
-	if bundleState != nil {
-		if bundle := bundleState.Current(); bundle != nil && bundle.DB() != nil {
-			return bundle.DB(), nil
-		}
-	}
-
 	if fallback == nil {
 		return nil, errPostgresPrimaryNil
 	}
@@ -1039,51 +977,15 @@ func currentPostgresClient(
 }
 
 func currentRedisClient(
-	bundleState *activeMatcherBundleState,
 	fallback *libRedis.Client,
 ) *libRedis.Client {
-	if bundleState != nil {
-		if bundle := bundleState.Current(); bundle != nil && bundle.RedisClient() != nil {
-			return bundle.RedisClient()
-		}
-	}
-
 	return fallback
 }
 
 func currentRabbitMQConnection(
-	bundleState *activeMatcherBundleState,
 	fallback *libRabbitmq.RabbitMQConnection,
 ) *libRabbitmq.RabbitMQConnection {
-	if bundleState != nil {
-		if bundle := bundleState.Current(); bundle != nil && bundle.RabbitMQConn() != nil {
-			return bundle.RabbitMQConn()
-		}
-	}
-
 	return fallback
-}
-
-func currentBundleObjectStorageClient(bundleState *activeMatcherBundleState) (sharedPorts.ObjectStorageClient, error) {
-	if bundleState == nil {
-		return nil, nil
-	}
-
-	bundle := bundleState.Current()
-	if bundle == nil {
-		return nil, nil
-	}
-
-	if bundle.Infra == nil || sharedPorts.IsNilValue(bundle.Infra.ObjectStorage) {
-		return nil, sharedPorts.ErrObjectStorageUnavailable
-	}
-
-	storageClient, ok := bundle.Infra.ObjectStorage.(sharedPorts.ObjectStorageClient)
-	if !ok || storageClient == nil {
-		return nil, sharedPorts.ErrObjectStorageUnavailable
-	}
-
-	return storageClient, nil
 }
 
 func resolvePrimaryDB(checkCtx context.Context, postgres *libPostgres.Client) (*sql.DB, error) {
@@ -1123,11 +1025,10 @@ func pingSQLDB(checkCtx context.Context, db *sql.DB, operation string) error {
 }
 
 func newPostgresHealthCheck(
-	bundleState *activeMatcherBundleState,
 	postgres *libPostgres.Client,
 ) HealthCheckFunc {
 	return func(checkCtx context.Context) error {
-		postgresClient, err := currentPostgresClient(bundleState, postgres)
+		postgresClient, err := currentPostgresClient(postgres)
 		if err != nil {
 			return err
 		}
@@ -1142,11 +1043,10 @@ func newPostgresHealthCheck(
 }
 
 func newRedisHealthCheck(
-	bundleState *activeMatcherBundleState,
 	redis *libRedis.Client,
 ) HealthCheckFunc {
 	return func(checkCtx context.Context) error {
-		redisClient := currentRedisClient(bundleState, redis)
+		redisClient := currentRedisClient(redis)
 		if redisClient == nil {
 			return errRedisClientNil
 		}
@@ -1169,11 +1069,10 @@ func newRedisHealthCheck(
 }
 
 func newPostgresReplicaHealthCheck(
-	bundleState *activeMatcherBundleState,
 	postgres *libPostgres.Client,
 ) HealthCheckFunc {
 	return func(checkCtx context.Context) error {
-		postgresClient, err := currentPostgresClient(bundleState, postgres)
+		postgresClient, err := currentPostgresClient(postgres)
 		if err != nil {
 			if errors.Is(err, errPostgresPrimaryNil) {
 				return errNoReplicasConfigured
@@ -1192,11 +1091,10 @@ func newPostgresReplicaHealthCheck(
 }
 
 func newRabbitMQHealthCheck(
-	bundleState *activeMatcherBundleState,
 	rabbitmq *libRabbitmq.RabbitMQConnection,
 ) HealthCheckFunc {
 	return func(checkCtx context.Context) error {
-		conn := currentRabbitMQConnection(bundleState, rabbitmq)
+		conn := currentRabbitMQConnection(rabbitmq)
 		if conn == nil {
 			return errRabbitMQConnectionNil
 		}
@@ -1218,26 +1116,20 @@ func newRabbitMQHealthCheck(
 
 func attachBundleHealthChecks(
 	deps *HealthDependencies,
-	bundleState *activeMatcherBundleState,
 	postgres *libPostgres.Client,
 	redis *libRedis.Client,
 	rabbitmq *libRabbitmq.RabbitMQConnection,
 ) {
-	if bundleState == nil {
-		return
-	}
-
-	deps.PostgresCheck = newPostgresHealthCheck(bundleState, postgres)
-	deps.RedisCheck = newRedisHealthCheck(bundleState, redis)
-	deps.PostgresReplicaCheck = newPostgresReplicaHealthCheck(bundleState, postgres)
-	deps.RabbitMQCheck = newRabbitMQHealthCheck(bundleState, rabbitmq)
+	deps.PostgresCheck = newPostgresHealthCheck(postgres)
+	deps.RedisCheck = newRedisHealthCheck(redis)
+	deps.PostgresReplicaCheck = newPostgresReplicaHealthCheck(postgres)
+	deps.RabbitMQCheck = newRabbitMQHealthCheck(rabbitmq)
 }
 
 func configureObjectStorageHealthChecks(
 	ctx context.Context,
 	cfg *Config,
 	deps *HealthDependencies,
-	bundleState *activeMatcherBundleState,
 	logger libLog.Logger,
 ) error {
 	objectStorage, err := createObjectStorageForHealth(ctx, cfg)
@@ -1251,25 +1143,7 @@ func configureObjectStorageHealthChecks(
 		deps.ObjectStorage = objectStorage
 	}
 
-	if bundleState == nil {
-		return nil
-	}
-
 	deps.ObjectStorageCheck = func(checkCtx context.Context) error {
-		storageClient, storageErr := currentBundleObjectStorageClient(bundleState)
-		if storageErr != nil {
-			return storageErr
-		}
-
-		if storageClient != nil {
-			_, existsErr := storageClient.Exists(checkCtx, ".health-check")
-			if existsErr != nil {
-				return fmt.Errorf("object storage health check: exists: %w", existsErr)
-			}
-
-			return nil
-		}
-
 		if deps.ObjectStorage == nil {
 			return nil
 		}
@@ -1292,7 +1166,6 @@ func createHealthDependencies(
 	postgres *libPostgres.Client,
 	redis *libRedis.Client,
 	rabbitmq *libRabbitmq.RabbitMQConnection,
-	bundleState *activeMatcherBundleState,
 	cleanups *[]func(),
 ) (*HealthDependencies, error) {
 	deps := NewHealthDependencies(postgres, nil, redis, rabbitmq, nil)
@@ -1304,9 +1177,9 @@ func createHealthDependencies(
 	deps.RedisOptional = false
 
 	assignReplicaHealthCheck(ctx, cfg, logger, deps, cleanups)
-	attachBundleHealthChecks(deps, bundleState, postgres, redis, rabbitmq)
+	attachBundleHealthChecks(deps, postgres, redis, rabbitmq)
 
-	if err := configureObjectStorageHealthChecks(ctx, cfg, deps, bundleState, logger); err != nil {
+	if err := configureObjectStorageHealthChecks(ctx, cfg, deps, logger); err != nil {
 		return nil, err
 	}
 
@@ -1413,7 +1286,6 @@ func createInfraProviderWithBundleState(
 	configGetter func() *Config,
 	postgres *libPostgres.Client,
 	redis *libRedis.Client,
-	bundleState *activeMatcherBundleState,
 ) (sharedPorts.InfrastructureProvider, connectionCloser, fiber.Handler) {
 	mtEnabled := multiTenantModeEnabled(cfg)
 
@@ -1423,7 +1295,7 @@ func createInfraProviderWithBundleState(
 			fmt.Sprintf("multi-tenant metrics not available: %v", metricsErr))
 	}
 
-	provider := newDynamicInfrastructureProvider(cfg, configGetter, bundleState, postgres, redis, cfg.Logger, metrics)
+	provider := newDynamicInfrastructureProvider(cfg, configGetter, postgres, redis, cfg.Logger, metrics)
 
 	// Create the canonical TenantMiddleware when multi-tenant mode is enabled.
 	// The middleware resolves per-tenant database connections from the lib-commons
@@ -1716,146 +1588,6 @@ func initializeAuthBoundaryLogger() (libLog.Logger, error) {
 	return authLogger, nil
 }
 
-func newRuntimeReloadObserver(
-	ctx context.Context,
-	logger libLog.Logger,
-	settingsResolver *runtimeSettingsResolver,
-	bundleState *activeMatcherBundleState,
-	configManager *ConfigManager,
-	modulesProvider func() *modulesResult,
-	workerManagerProvider func() *WorkerManager,
-) func(systemplaneService.ReloadEvent) {
-	reloadLogCtx := detachedContext(ctx)
-
-	return func(event systemplaneService.ReloadEvent) {
-		if settingsResolver != nil {
-			settingsResolver.invalidateAll()
-		}
-
-		bundle, bundleOK := event.Bundle.(*MatcherBundle)
-		if bundleOK && bundle != nil {
-			bundleState.Update(bundle)
-		}
-
-		if configManager != nil {
-			//nolint:contextcheck // ConfigManager runtime bridge does not expose a context-aware variant.
-			if updateErr := updateConfigManagerFromSnapshot(configManager, event.Snapshot); updateErr != nil {
-				logger.Log(reloadLogCtx, libLog.LevelWarn, "systemplane config bridge apply failed",
-					libLog.String("error", updateErr.Error()),
-					libLog.String("reason", event.Reason))
-			}
-		}
-
-		var runtimeCfg *Config
-		if configManager != nil {
-			runtimeCfg = configManager.Get()
-		}
-
-		if err := syncRuntimeLogger(reloadLogCtx, logger, runtimeCfg, bundle); err != nil {
-			logger.Log(reloadLogCtx, libLog.LevelWarn, "systemplane logger sync failed",
-				libLog.String("error", err.Error()),
-				libLog.String("reason", event.Reason))
-		}
-
-		wm := workerManagerProvider()
-		if wm != nil {
-			//nolint:contextcheck // worker manager apply path is currently context-free by design.
-			if applyErr := wm.ApplyConfig(snapshotToWorkerConfig(event.Snapshot)); applyErr != nil {
-				logger.Log(reloadLogCtx, libLog.LevelWarn, "systemplane worker apply failed",
-					libLog.String("error", applyErr.Error()),
-					libLog.String("reason", event.Reason))
-			}
-		}
-
-		modules := modulesProvider()
-		if canSwapRuntimePublishers(bundle, modules) {
-			swapRuntimePublishers(reloadLogCtx, logger, modules, bundle)
-		}
-	}
-}
-
-func runtimeSettingsAwareApplyChangeSignal(
-	manager systemplaneService.Manager,
-	settingsResolver *runtimeSettingsResolver,
-) func(context.Context, systemplanePorts.ChangeSignal) error {
-	if manager == nil {
-		return nil
-	}
-
-	return func(ctx context.Context, signal systemplanePorts.ChangeSignal) error {
-		if err := manager.ApplyChangeSignal(ctx, signal); err != nil {
-			return fmt.Errorf("apply runtime change signal: %w", err)
-		}
-
-		if settingsResolver == nil || signal.Target.Kind != systemplaneDomain.KindSetting {
-			return nil
-		}
-
-		settingsResolver.invalidateSubject(systemplaneService.Subject{
-			Scope:     signal.Target.Scope,
-			SubjectID: signal.Target.SubjectID,
-		})
-
-		return nil
-	}
-}
-
-func canSwapRuntimePublishers(bundle *MatcherBundle, modules *modulesResult) bool {
-	return bundle != nil && modules != nil && modules.ingestionEvents != nil && modules.matchingEvents != nil
-}
-
-func cleanupPreviousRuntimePublisher[PublisherType any](
-	ctx context.Context,
-	logger libLog.Logger,
-	message string,
-	previous any,
-	closeFn func(PublisherType) error,
-) {
-	concrete, ok := previous.(PublisherType)
-	if !ok {
-		return
-	}
-
-	if err := closeFn(concrete); err != nil {
-		logger.Log(ctx, libLog.LevelWarn, message, libLog.String("error", err.Error()))
-	}
-}
-
-func swapRuntimePublishers(
-	ctx context.Context,
-	logger libLog.Logger,
-	modules *modulesResult,
-	bundle *MatcherBundle,
-) {
-	if bundle.StagedMatchingPublisher == nil || bundle.StagedIngestionPublisher == nil {
-		return
-	}
-
-	previousMatching := modules.matchingEvents.Swap(bundle.StagedMatchingPublisher)
-	previousIngestion := modules.ingestionEvents.Swap(bundle.StagedIngestionPublisher)
-	bundle.StagedMatchingPublisher = nil
-	bundle.StagedIngestionPublisher = nil
-
-	cleanupPreviousRuntimePublisher(ctx, logger,
-		"systemplane matching publisher cleanup failed",
-		previousMatching,
-		loadCloseMatchingEventPublisherFn(),
-	)
-	cleanupPreviousRuntimePublisher(ctx, logger,
-		"systemplane ingestion publisher cleanup failed",
-		previousIngestion,
-		loadCloseIngestionEventPublisherFn(),
-	)
-}
-
-func updateConfigManagerFromSnapshot(configManager *ConfigManager, snap systemplaneDomain.Snapshot) error {
-	if configManager == nil {
-		return nil
-	}
-
-	return configManager.UpdateFromSystemplane(snap)
-}
-
 func schedulerInterval(cfg *Config) time.Duration {
 	return cfg.SchedulerInterval()
 }
@@ -1871,12 +1603,12 @@ func runtimeConfigOrFallback(cfg *Config, configGetter func() *Config) *Config {
 }
 
 func resolveRuntimeDurationSetting(
-	ctx context.Context,
+	_ context.Context,
 	cfg *Config,
 	configGetter func() *Config,
 	settingsResolver *runtimeSettingsResolver,
 	fallbackFn func(*Config) time.Duration,
-	resolverFn func(context.Context, time.Duration) time.Duration,
+	resolverFn func(time.Duration) time.Duration,
 ) time.Duration {
 	runtimeCfg := runtimeConfigOrFallback(cfg, configGetter)
 
@@ -1889,16 +1621,16 @@ func resolveRuntimeDurationSetting(
 		return fallback
 	}
 
-	return resolverFn(ctx, fallback)
+	return resolverFn(fallback)
 }
 
 func resolveRuntimeIntSetting(
-	ctx context.Context,
+	_ context.Context,
 	cfg *Config,
 	configGetter func() *Config,
 	settingsResolver *runtimeSettingsResolver,
 	fallbackFn func(*Config) int,
-	resolverFn func(context.Context, int) int,
+	resolverFn func(int) int,
 ) int {
 	runtimeCfg := runtimeConfigOrFallback(cfg, configGetter)
 
@@ -1911,7 +1643,7 @@ func resolveRuntimeIntSetting(
 		return fallback
 	}
 
-	return resolverFn(ctx, fallback)
+	return resolverFn(fallback)
 }
 
 func resolveIdempotencyRetryWindow(ctx context.Context, cfg *Config, configGetter func() *Config, settingsResolver *runtimeSettingsResolver) time.Duration {
@@ -2238,7 +1970,7 @@ func applySQLPoolSettings(dbs []*sql.DB, maxLifetime, maxIdle time.Duration) {
 }
 
 type modulesResult struct {
-	outboxDispatcher *outboxServices.Dispatcher
+	outboxDispatcher *outbox.Dispatcher
 	ingestionEvents  *swappableIngestionPublisher
 	matchingEvents   *swappableMatchPublisher
 	exportWorker     *reportingWorker.ExportWorker
@@ -2315,12 +2047,33 @@ func initModulesAndMessaging(
 	configGetter func() *Config,
 	settingsResolver *runtimeSettingsResolver,
 	provider sharedPorts.InfrastructureProvider,
-	bundleState *activeMatcherBundleState,
+	postgresConnection *libPostgres.Client,
 	rabbitMQConnection *libRabbitmq.RabbitMQConnection,
 	rateLimiterGetter func() *ratelimit.RateLimiter,
 	logger libLog.Logger,
 ) (*modulesResult, error) {
-	sharedOutboxRepository := outboxPgRepo.NewRepository(provider)
+	// Build canonical outbox repository using the lib-commons outbox/postgres package.
+	// SchemaResolver provides both TenantResolver and TenantDiscoverer for schema-per-tenant.
+	// WithAllowEmptyTenant permits the default tenant (public schema) to operate without a UUID schema.
+	// WithDefaultTenantID maps the default tenant to public schema for dispatch.
+	schemaResolver, err := outboxpg.NewSchemaResolver(
+		postgresConnection,
+		outboxpg.WithAllowEmptyTenant(),
+		outboxpg.WithDefaultTenantID(auth.GetDefaultTenantID()),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create outbox schema resolver: %w", err)
+	}
+
+	sharedOutboxRepository, err := outboxpg.NewRepository(
+		postgresConnection,
+		schemaResolver,
+		&defaultTenantDiscoverer{inner: schemaResolver},
+		outboxpg.WithLogger(logger),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create outbox repository: %w", err)
+	}
 
 	sharedRepos, err := initSharedRepositories(provider)
 	if err != nil {
@@ -2378,19 +2131,6 @@ func initModulesAndMessaging(
 		logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf("Object storage not available, reporting background workers disabled: %v", err))
 	}
 
-	if bundleState != nil {
-		storage = newDynamicObjectStorageClient(func() sharedPorts.ObjectStorageClient {
-			bundle := bundleState.Current()
-			if bundle == nil || bundle.Infra == nil || sharedPorts.IsNilValue(bundle.Infra.ObjectStorage) {
-				return nil
-			}
-
-			storageClient, _ := bundle.Infra.ObjectStorage.(sharedPorts.ObjectStorageClient)
-
-			return storageClient
-		}, storage)
-	}
-
 	//nolint:contextcheck // Reporting config accessors are not context-aware.
 	exportWorker, cleanupWorker, err := initReportingModule(
 		routes,
@@ -2412,7 +2152,6 @@ func initModulesAndMessaging(
 		return nil, err
 	}
 
-	//nolint:contextcheck // dispatch limiter resolves request-scoped settings through Fiber user context.
 	dispatchLimiter := NewDispatchRateLimit(rateLimiterGetter, cfg, configGetter, settingsResolver)
 
 	if err := initExceptionModule(ctx, cfg, configGetter, settingsResolver, routes, provider, sharedOutboxRepository, dispatchLimiter, sharedRepos, isProduction); err != nil {
@@ -2443,25 +2182,29 @@ func initModulesAndMessaging(
 		return nil, ErrAuditPublisherRequired
 	}
 
-	dispatcher, err := outboxServices.NewDispatcher(
+	// Build canonical outbox HandlerRegistry with event-type handlers.
+	// Each handler replaces a case in the old bespoke dispatcher's publishEvent switch.
+	handlers := outbox.NewHandlerRegistry()
+
+	if err := registerOutboxHandlers(handlers, runtimeIngestionPublisher, runtimeMatchingPublisher, auditConsumer); err != nil {
+		return nil, fmt.Errorf("register outbox handlers: %w", err)
+	}
+
+	// Build retry classifier: marks validation / payload errors as non-retryable.
+	classifier := outbox.RetryClassifierFunc(isNonRetryableOutboxError)
+
+	dispatcher, err := outbox.NewDispatcher(
 		sharedOutboxRepository,
-		runtimeIngestionPublisher,
-		runtimeMatchingPublisher,
+		handlers,
 		logger,
 		otel.Tracer(constants.ApplicationName),
-		outboxServices.WithAuditPublisher(auditConsumer),
-		outboxServices.WithProduction(isProduction),
+		outbox.WithDispatchInterval(2*time.Second),
+		outbox.WithRetryWindow(cfg.IdempotencyRetryWindow()),
+		outbox.WithRetryClassifier(classifier),
+		outbox.WithPriorityEventTypes(sharedDomain.EventTypeAuditLogCreated),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create outbox dispatcher: %w", err)
-	}
-
-	dispatcher.SetRetryWindow(cfg.IdempotencyRetryWindow())
-
-	if configGetter != nil || settingsResolver != nil {
-		dispatcher.SetRetryWindowResolver(func(ctx context.Context) time.Duration {
-			return resolveIdempotencyRetryWindow(ctx, cfg, configGetter, settingsResolver)
-		})
 	}
 
 	// Create scheduler worker for cron-based matching

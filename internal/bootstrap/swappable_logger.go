@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"sync"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )

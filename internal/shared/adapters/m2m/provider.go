@@ -16,8 +16,8 @@ import (
 	"sync"
 	"time"
 
-	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
-	"github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/valkey"
+	libRedis "github.com/LerianStudio/lib-commons/v5/commons/redis"
+	"github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/valkey"
 
 	"github.com/LerianStudio/matcher/internal/shared/ports"
 )

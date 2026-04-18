@@ -10,7 +10,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
+	libRedis "github.com/LerianStudio/lib-commons/v5/commons/redis"
 )
 
 // ErrRedisLeaseUnavailable indicates the lease has no redis connection.

@@ -7,12 +7,12 @@ import (
 
 	"github.com/google/uuid"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/matching/domain/entities"
 )
 
-//go:generate mockgen -imports=libHTTP=github.com/LerianStudio/lib-commons/v4/commons/net/http -destination=mocks/match_run_repository_mock.go -package=mocks . MatchRunRepository
+//go:generate mockgen -imports=libHTTP=github.com/LerianStudio/lib-commons/v5/commons/net/http -destination=mocks/match_run_repository_mock.go -package=mocks . MatchRunRepository
 
 // MatchRunRepository defines persistence operations for match runs.
 type MatchRunRepository interface {

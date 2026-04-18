@@ -67,7 +67,7 @@ func TestMatcherOverrideEnvVarKeys_SyncWithConfigSchema(t *testing.T) {
 
 	expectedKeys := make(map[string]bool)
 	for _, def := range matcherKeyDefs() {
-		expectedKeys["MATCHER_"+strings.ToUpper(strings.ReplaceAll(def.Key, ".", "_"))] = true
+		expectedKeys["MATCHER_"+strings.ToUpper(strings.ReplaceAll(def.key, ".", "_"))] = true
 	}
 
 	actualKeys := make(map[string]bool, len(matcherOverrideEnvVarKeys))

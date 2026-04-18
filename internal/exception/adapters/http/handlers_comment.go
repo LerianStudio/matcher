@@ -3,13 +3,14 @@ package http
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/exception/adapters/http/dto"
@@ -74,7 +75,11 @@ func (handler *Handlers) AddComment(fiberCtx *fiber.Ctx) error {
 		return handleCommentError(ctx, fiberCtx, span, logger, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.CommentToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.CommentToResponse(result)); err != nil {
+		return fmt.Errorf("respond create comment: %w", err)
+	}
+
+	return nil
 }
 
 // ListComments lists all comments for an exception.
@@ -119,9 +124,13 @@ func (handler *Handlers) ListComments(fiberCtx *fiber.Ctx) error {
 		return handleCommentError(ctx, fiberCtx, span, logger, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ListCommentsResponse{
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ListCommentsResponse{
 		Items: dto.CommentsToResponse(comments),
-	})
+	}); err != nil {
+		return fmt.Errorf("respond list comments: %w", err)
+	}
+
+	return nil
 }
 
 // DeleteComment deletes a comment by ID.
@@ -177,7 +186,11 @@ func (handler *Handlers) DeleteComment(fiberCtx *fiber.Ctx) error {
 		return handleCommentError(ctx, fiberCtx, span, logger, err)
 	}
 
-	return libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent)
+	if err := libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent); err != nil {
+		return fmt.Errorf("respond delete comment: %w", err)
+	}
+
+	return nil
 }
 
 // handleCommentError maps comment use case errors to HTTP responses.

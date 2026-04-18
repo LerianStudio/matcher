@@ -15,7 +15,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 
 	matcherAuth "github.com/LerianStudio/matcher/internal/auth"
 	sharedhttp "github.com/LerianStudio/matcher/internal/shared/adapters/http"

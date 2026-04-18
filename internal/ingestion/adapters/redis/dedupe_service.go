@@ -11,8 +11,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/LerianStudio/lib-commons/v4/commons/backoff"
-	"github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/valkey"
+	"github.com/LerianStudio/lib-commons/v5/commons/backoff"
+	"github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/valkey"
 
 	"github.com/LerianStudio/matcher/internal/ingestion/ports"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"

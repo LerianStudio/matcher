@@ -19,8 +19,8 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/ingestion/adapters/http/dto"
@@ -449,7 +449,11 @@ func (handler *Handlers) GetJob(fiberCtx *fiber.Ctx) error {
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.JobToResponse(job))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.JobToResponse(job)); err != nil {
+		return fmt.Errorf("respond get ingestion job: %w", err)
+	}
+
+	return nil
 }
 
 // ListJobsByContext handles GET /v1/imports/contexts/:contextId/jobs
@@ -549,7 +553,7 @@ func (handler *Handlers) ListJobsByContext(fiberCtx *fiber.Ctx) error {
 
 	items := dto.JobsToResponse(jobs)
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ListJobsResponse{
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ListJobsResponse{
 		Items: items,
 		CursorResponse: sharedhttp.CursorResponse{
 			NextCursor: pagination.Next,
@@ -557,7 +561,11 @@ func (handler *Handlers) ListJobsByContext(fiberCtx *fiber.Ctx) error {
 			Limit:      limit,
 			HasMore:    pagination.Next != "",
 		},
-	})
+	}); err != nil {
+		return fmt.Errorf("respond list ingestion jobs: %w", err)
+	}
+
+	return nil
 }
 
 // ListTransactionsByJob handles GET /v1/imports/contexts/:contextId/jobs/:jobId/transactions
@@ -664,7 +672,7 @@ func (handler *Handlers) ListTransactionsByJob(fiberCtx *fiber.Ctx) error {
 
 	items := dto.TransactionsToResponse(transactions, jobID, contextID)
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ListTransactionsResponse{
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ListTransactionsResponse{
 		Items: items,
 		CursorResponse: sharedhttp.CursorResponse{
 			NextCursor: pagination.Next,
@@ -672,7 +680,11 @@ func (handler *Handlers) ListTransactionsByJob(fiberCtx *fiber.Ctx) error {
 			Limit:      limit,
 			HasMore:    pagination.Next != "",
 		},
-	})
+	}); err != nil {
+		return fmt.Errorf("respond list transactions: %w", err)
+	}
+
+	return nil
 }
 
 // IgnoreTransaction handles POST /v1/imports/contexts/:contextId/transactions/:transactionId/ignore
@@ -734,9 +746,13 @@ func (handler *Handlers) IgnoreTransaction(fiberCtx *fiber.Ctx) error {
 		return handleIgnoreTransactionError(ctx, fiberCtx, span, logger, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.IgnoreTransactionResponse{
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.IgnoreTransactionResponse{
 		TransactionResponse: dto.TransactionToResponse(tx, tx.IngestionJobID, contextID),
-	})
+	}); err != nil {
+		return fmt.Errorf("respond ignore transaction: %w", err)
+	}
+
+	return nil
 }
 
 // SearchTransactions handles GET /v1/imports/contexts/:contextId/transactions/search
@@ -804,12 +820,16 @@ func (handler *Handlers) SearchTransactions(fiberCtx *fiber.Ctx) error {
 
 	items := dto.SearchTransactionsToResponse(transactions, contextID)
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.SearchTransactionsResponse{
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.SearchTransactionsResponse{
 		Items:  items,
 		Total:  total,
 		Limit:  searchParams.Limit,
 		Offset: searchParams.Offset,
-	})
+	}); err != nil {
+		return fmt.Errorf("respond search transactions: %w", err)
+	}
+
+	return nil
 }
 
 //nolint:cyclop // parsing multiple optional search parameters
@@ -991,12 +1011,16 @@ func (handler *Handlers) PreviewFile(fiberCtx *fiber.Ctx) error {
 		return handlePreviewError(ctx, fiberCtx, span, logger, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FilePreviewResponse{
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FilePreviewResponse{
 		Columns:    preview.Columns,
 		SampleRows: preview.SampleRows,
 		RowCount:   preview.RowCount,
 		Format:     preview.Format,
-	})
+	}); err != nil {
+		return fmt.Errorf("respond file preview: %w", err)
+	}
+
+	return nil
 }
 
 // parseMaxRows extracts and clamps the max_rows parameter from query string

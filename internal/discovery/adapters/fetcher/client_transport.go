@@ -13,9 +13,9 @@ import (
 	"github.com/sony/gobreaker"
 	"go.opentelemetry.io/otel/attribute"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libBackoff "github.com/LerianStudio/lib-commons/v4/commons/backoff"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libBackoff "github.com/LerianStudio/lib-commons/v5/commons/backoff"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )

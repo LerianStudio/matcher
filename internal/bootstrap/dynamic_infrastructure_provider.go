@@ -12,13 +12,13 @@ import (
 
 	"github.com/bxcodec/dbresolver/v2"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
-	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
-	"github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/client"
-	"github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/core"
-	tmpostgres "github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/postgres"
-	tmrabbitmq "github.com/LerianStudio/lib-commons/v4/commons/tenant-manager/rabbitmq"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libPostgres "github.com/LerianStudio/lib-commons/v5/commons/postgres"
+	libRedis "github.com/LerianStudio/lib-commons/v5/commons/redis"
+	"github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/client"
+	"github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/core"
+	tmpostgres "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/postgres"
+	tmrabbitmq "github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/rabbitmq"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
@@ -52,7 +52,6 @@ type dynamicInfrastructureProvider struct {
 	mu           sync.Mutex
 	initialCfg   *Config
 	configGetter func() *Config
-	bundleState  *activeMatcherBundleState
 	postgres     *libPostgres.Client
 	redis        *libRedis.Client
 	logger       libLog.Logger
@@ -73,7 +72,6 @@ var _ sharedPorts.InfrastructureProvider = (*dynamicInfrastructureProvider)(nil)
 func newDynamicInfrastructureProvider(
 	initialCfg *Config,
 	configGetter func() *Config,
-	bundleState *activeMatcherBundleState,
 	postgres *libPostgres.Client,
 	redis *libRedis.Client,
 	logger libLog.Logger,
@@ -86,7 +84,6 @@ func newDynamicInfrastructureProvider(
 	return &dynamicInfrastructureProvider{
 		initialCfg:   initialCfg,
 		configGetter: configGetter,
-		bundleState:  bundleState,
 		postgres:     postgres,
 		redis:        redis,
 		logger:       logger,
@@ -360,22 +357,10 @@ func (provider *dynamicInfrastructureProvider) currentConfig() *Config {
 }
 
 func (provider *dynamicInfrastructureProvider) currentPostgres() *libPostgres.Client {
-	if provider.bundleState != nil {
-		if bundle := provider.bundleState.Current(); bundle != nil && bundle.DB() != nil {
-			return bundle.DB()
-		}
-	}
-
 	return provider.postgres
 }
 
 func (provider *dynamicInfrastructureProvider) currentRedis() *libRedis.Client {
-	if provider.bundleState != nil {
-		if bundle := provider.bundleState.Current(); bundle != nil && bundle.RedisClient() != nil {
-			return bundle.RedisClient()
-		}
-	}
-
 	return provider.redis
 }
 

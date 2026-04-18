@@ -4,14 +4,15 @@ package http
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync/atomic"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/discovery/adapters/http/dto"
 	discoveryCommand "github.com/LerianStudio/matcher/internal/discovery/services/command"
@@ -108,7 +109,11 @@ func (handler *Handler) GetDiscoveryStatus(fiberCtx *fiber.Ctx) error {
 		response.LastSyncAt = &lastSyncAt
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, response)
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, response); err != nil {
+		return fmt.Errorf("respond get discovery status: %w", err)
+	}
+
+	return nil
 }
 
 // ListConnections handles GET /v1/discovery/connections.
@@ -141,7 +146,11 @@ func (handler *Handler) ListConnections(fiberCtx *fiber.Ctx) error {
 		responses = append(responses, dto.ConnectionFromEntity(conn))
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ConnectionListResponse{Connections: responses})
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ConnectionListResponse{Connections: responses}); err != nil {
+		return fmt.Errorf("respond list connections: %w", err)
+	}
+
+	return nil
 }
 
 // GetConnection handles GET /v1/discovery/connections/:connectionId.
@@ -185,7 +194,11 @@ func (handler *Handler) GetConnection(fiberCtx *fiber.Ctx) error {
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "failed to get connection")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ConnectionFromEntity(conn))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ConnectionFromEntity(conn)); err != nil {
+		return fmt.Errorf("respond get connection: %w", err)
+	}
+
+	return nil
 }
 
 // GetConnectionSchema handles GET /v1/discovery/connections/:connectionId/schema.
@@ -257,10 +270,14 @@ func (handler *Handler) GetConnectionSchema(fiberCtx *fiber.Ctx) error {
 		})
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ConnectionSchemaResponse{
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ConnectionSchemaResponse{
 		ConnectionID: connID,
 		Tables:       tables,
-	})
+	}); err != nil {
+		return fmt.Errorf("respond get connection schema: %w", err)
+	}
+
+	return nil
 }
 
 // TestConnection handles POST /v1/discovery/connections/:connectionId/test.
@@ -314,12 +331,16 @@ func (handler *Handler) TestConnection(fiberCtx *fiber.Ctx) error {
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "failed to test connection")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.TestConnectionResponse{
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.TestConnectionResponse{
 		ConnectionID: result.ConnectionID,
 		Healthy:      result.Healthy,
 		LatencyMs:    result.LatencyMs,
 		ErrorMessage: sanitizedConnectionTestError(result),
-	})
+	}); err != nil {
+		return fmt.Errorf("respond test connection: %w", err)
+	}
+
+	return nil
 }
 
 func sanitizedConnectionTestError(result *discoveryCommand.ConnectionTestResult) string {
@@ -370,5 +391,9 @@ func (handler *Handler) RefreshDiscovery(fiberCtx *fiber.Ctx) error {
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "failed to refresh discovery")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.RefreshDiscoveryResponse{ConnectionsSynced: synced})
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.RefreshDiscoveryResponse{ConnectionsSynced: synced}); err != nil {
+		return fmt.Errorf("respond refresh discovery: %w", err)
+	}
+
+	return nil
 }

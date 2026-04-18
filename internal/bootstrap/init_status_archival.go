@@ -14,7 +14,7 @@ import (
 
 	"go.opentelemetry.io/otel"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 
 	governanceHTTP "github.com/LerianStudio/matcher/internal/governance/adapters/http"
 	archiveMetadataRepo "github.com/LerianStudio/matcher/internal/governance/adapters/postgres/archive_metadata"
@@ -179,7 +179,7 @@ func newArchivalPresignExpiryResolver(
 			return fallback
 		}
 
-		return settingsResolver.archivalPresignExpiry(ctx, fallback)
+		return settingsResolver.archivalPresignExpiry(fallback)
 	}
 }
 

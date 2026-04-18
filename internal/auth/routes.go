@@ -6,7 +6,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	authMiddleware "github.com/LerianStudio/lib-auth/v2/auth/middleware"
+	authMiddleware "github.com/LerianStudio/lib-auth/v3/auth/middleware"
 )
 
 // Sentinel errors returned at startup when route configuration is invalid.

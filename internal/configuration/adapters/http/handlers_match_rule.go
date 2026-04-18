@@ -3,12 +3,13 @@ package http
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/http/dto"
@@ -78,7 +79,11 @@ func (handler *Handler) CreateMatchRule(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.MatchRuleToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.MatchRuleToResponse(result)); err != nil {
+		return fmt.Errorf("respond create match rule: %w", err)
+	}
+
+	return nil
 }
 
 // ListMatchRules lists match rules.
@@ -162,7 +167,11 @@ func (handler *Handler) ListMatchRules(fiberCtx *fiber.Ctx) error {
 		},
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, response)
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, response); err != nil {
+		return fmt.Errorf("respond list match rules: %w", err)
+	}
+
+	return nil
 }
 
 // GetMatchRule retrieves a match rule.
@@ -219,7 +228,11 @@ func (handler *Handler) GetMatchRule(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.MatchRuleToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.MatchRuleToResponse(result)); err != nil {
+		return fmt.Errorf("respond get match rule: %w", err)
+	}
+
+	return nil
 }
 
 // UpdateMatchRule updates a match rule.
@@ -288,7 +301,11 @@ func (handler *Handler) UpdateMatchRule(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.MatchRuleToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.MatchRuleToResponse(result)); err != nil {
+		return fmt.Errorf("respond update match rule: %w", err)
+	}
+
+	return nil
 }
 
 // DeleteMatchRule deletes a match rule.
@@ -343,7 +360,11 @@ func (handler *Handler) DeleteMatchRule(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent)
+	if err := libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent); err != nil {
+		return fmt.Errorf("respond delete match rule: %w", err)
+	}
+
+	return nil
 }
 
 // ReorderRequest defines the rule ID ordering payload.
@@ -409,5 +430,9 @@ func (handler *Handler) ReorderMatchRules(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent)
+	if err := libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent); err != nil {
+		return fmt.Errorf("respond reorder match rules: %w", err)
+	}
+
+	return nil
 }

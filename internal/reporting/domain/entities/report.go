@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 
-	"github.com/LerianStudio/lib-commons/v4/commons/safe"
+	"github.com/LerianStudio/lib-commons/v5/commons/safe"
 )
 
 // ReportFilter defines criteria for querying reports.

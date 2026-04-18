@@ -2,11 +2,12 @@ package http
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/discovery/adapters/http/dto"
 	discoveryCommand "github.com/LerianStudio/matcher/internal/discovery/services/command"
@@ -82,7 +83,11 @@ func (handler *Handler) StartExtraction(fiberCtx *fiber.Ctx) error {
 		}
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.ExtractionRequestFromEntity(extraction))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.ExtractionRequestFromEntity(extraction)); err != nil {
+		return fmt.Errorf("respond start extraction: %w", err)
+	}
+
+	return nil
 }
 
 // GetExtraction handles GET /v1/discovery/extractions/:extractionId.
@@ -124,7 +129,11 @@ func (handler *Handler) GetExtraction(fiberCtx *fiber.Ctx) error {
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "failed to get extraction")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ExtractionRequestFromEntity(extraction))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ExtractionRequestFromEntity(extraction)); err != nil {
+		return fmt.Errorf("respond get extraction: %w", err)
+	}
+
+	return nil
 }
 
 func rawExtractionTables(tables map[string]dto.ExtractionTableRequest) map[string]any {
@@ -189,5 +198,9 @@ func (handler *Handler) PollExtraction(fiberCtx *fiber.Ctx) error {
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "failed to poll extraction")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ExtractionRequestFromEntity(extraction))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ExtractionRequestFromEntity(extraction)); err != nil {
+		return fmt.Errorf("respond poll extraction: %w", err)
+	}
+
+	return nil
 }

@@ -3,12 +3,13 @@ package http
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/http/dto"
@@ -72,7 +73,11 @@ func (handler *Handler) CreateContext(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.ReconciliationContextToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.ReconciliationContextToResponse(result)); err != nil {
+		return fmt.Errorf("respond create context: %w", err)
+	}
+
+	return nil
 }
 
 // ListContexts lists reconciliation contexts.
@@ -157,7 +162,11 @@ func (handler *Handler) ListContexts(fiberCtx *fiber.Ctx) error {
 		},
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, response)
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, response); err != nil {
+		return fmt.Errorf("respond list contexts: %w", err)
+	}
+
+	return nil
 }
 
 // GetContext retrieves a reconciliation context.
@@ -208,7 +217,11 @@ func (handler *Handler) GetContext(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ReconciliationContextToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ReconciliationContextToResponse(result)); err != nil {
+		return fmt.Errorf("respond get context: %w", err)
+	}
+
+	return nil
 }
 
 // UpdateContext updates a reconciliation context.
@@ -268,7 +281,11 @@ func (handler *Handler) UpdateContext(fiberCtx *fiber.Ctx) error {
 		return mapUpdateContextError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ReconciliationContextToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ReconciliationContextToResponse(result)); err != nil {
+		return fmt.Errorf("respond update context: %w", err)
+	}
+
+	return nil
 }
 
 // DeleteContext deletes a reconciliation context.
@@ -321,7 +338,11 @@ func (handler *Handler) DeleteContext(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent)
+	if err := libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent); err != nil {
+		return fmt.Errorf("respond delete context: %w", err)
+	}
+
+	return nil
 }
 
 // CloneContext creates a deep copy of a reconciliation context with all its configuration.
@@ -396,5 +417,9 @@ func (handler *Handler) CloneContext(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.CloneResultToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.CloneResultToResponse(result)); err != nil {
+		return fmt.Errorf("respond clone context: %w", err)
+	}
+
+	return nil
 }

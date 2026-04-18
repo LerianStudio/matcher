@@ -7,7 +7,7 @@ package bootstrap
 import (
 	"strings"
 
-	libZap "github.com/LerianStudio/lib-commons/v4/commons/zap"
+	libZap "github.com/LerianStudio/lib-commons/v5/commons/zap"
 )
 
 const defaultLoggerLevel = "info"

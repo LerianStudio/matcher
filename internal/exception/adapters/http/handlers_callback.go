@@ -4,14 +4,15 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/exception/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/exception/domain/entities"
@@ -117,7 +118,11 @@ func (handler *Handlers) ProcessCallback(fiberCtx *fiber.Ctx) error {
 		return handleCallbackError(ctx, fiberCtx, span, logger, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ProcessCallbackResponse{Status: "accepted"})
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ProcessCallbackResponse{Status: "accepted"}); err != nil {
+		return fmt.Errorf("respond process callback: %w", err)
+	}
+
+	return nil
 }
 
 // callbackValidationErrors lists all sentinel errors that map to HTTP 400 Bad Request

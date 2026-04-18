@@ -19,9 +19,9 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"go.opentelemetry.io/otel/trace"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
-	libOpentelemetry "github.com/LerianStudio/lib-commons/v4/commons/opentelemetry"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
+	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/exception/adapters/http/dto"
@@ -469,7 +469,11 @@ func (handler *Handlers) ForceMatch(fiberCtx *fiber.Ctx) error {
 		return handleExceptionError(ctx, fiberCtx, span, logger, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ExceptionToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ExceptionToResponse(result)); err != nil {
+		return fmt.Errorf("respond resolve exception: %w", err)
+	}
+
+	return nil
 }
 
 // AdjustEntry resolves an exception by adjusting the related entry.
@@ -531,7 +535,11 @@ func (handler *Handlers) AdjustEntry(fiberCtx *fiber.Ctx) error {
 		return handleExceptionError(ctx, fiberCtx, span, logger, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ExceptionToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ExceptionToResponse(result)); err != nil {
+		return fmt.Errorf("respond adjust entry: %w", err)
+	}
+
+	return nil
 }
 
 // OpenDispute opens a new dispute for an exception.
@@ -589,7 +597,11 @@ func (handler *Handlers) OpenDispute(fiberCtx *fiber.Ctx) error {
 		return handleDisputeError(ctx, fiberCtx, span, logger, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.DisputeToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.DisputeToResponse(result)); err != nil {
+		return fmt.Errorf("respond open dispute: %w", err)
+	}
+
+	return nil
 }
 
 // CloseDispute closes an existing dispute as won or lost.
@@ -648,7 +660,11 @@ func (handler *Handlers) CloseDispute(fiberCtx *fiber.Ctx) error {
 		return handleDisputeError(ctx, fiberCtx, span, logger, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.DisputeToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.DisputeToResponse(result)); err != nil {
+		return fmt.Errorf("respond close dispute: %w", err)
+	}
+
+	return nil
 }
 
 // SubmitEvidence adds evidence to an existing dispute.
@@ -707,7 +723,11 @@ func (handler *Handlers) SubmitEvidence(fiberCtx *fiber.Ctx) error {
 		return handleDisputeError(ctx, fiberCtx, span, logger, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.DisputeToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.DisputeToResponse(result)); err != nil {
+		return fmt.Errorf("respond submit evidence: %w", err)
+	}
+
+	return nil
 }
 
 // ListExceptions lists exceptions with optional filters and pagination.
@@ -767,7 +787,11 @@ func (handler *Handlers) ListExceptions(fiberCtx *fiber.Ctx) error {
 		},
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, response)
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, response); err != nil {
+		return fmt.Errorf("respond list exceptions: %w", err)
+	}
+
+	return nil
 }
 
 // ListDisputes lists disputes with optional filters and pagination.
@@ -825,7 +849,11 @@ func (handler *Handlers) ListDisputes(fiberCtx *fiber.Ctx) error {
 		},
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, response)
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, response); err != nil {
+		return fmt.Errorf("respond list disputes: %w", err)
+	}
+
+	return nil
 }
 
 // GetDispute retrieves a single dispute by ID.
@@ -874,7 +902,11 @@ func (handler *Handlers) GetDispute(fiberCtx *fiber.Ctx) error {
 		return internalError(ctx, fiberCtx, span, logger, "failed to get dispute", err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.DisputeToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.DisputeToResponse(result)); err != nil {
+		return fmt.Errorf("respond get dispute: %w", err)
+	}
+
+	return nil
 }
 
 func parseDisputeListFilters(
@@ -1085,7 +1117,11 @@ func (handler *Handlers) GetException(fiberCtx *fiber.Ctx) error {
 		return internalError(ctx, fiberCtx, span, logger, "failed to get exception", err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ExceptionToResponse(exception))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ExceptionToResponse(exception)); err != nil {
+		return fmt.Errorf("respond get exception: %w", err)
+	}
+
+	return nil
 }
 
 // DispatchToExternal dispatches an exception to an external system.
@@ -1144,13 +1180,17 @@ func (handler *Handlers) DispatchToExternal(fiberCtx *fiber.Ctx) error {
 		return handleDispatchError(ctx, fiberCtx, span, logger, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.DispatchResponse{
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.DispatchResponse{
 		ExceptionID:       result.ExceptionID.String(),
 		Target:            result.Target,
 		ExternalReference: result.ExternalReference,
 		Acknowledged:      result.Acknowledged,
 		DispatchedAt:      result.DispatchedAt.Format(time.RFC3339),
-	})
+	}); err != nil {
+		return fmt.Errorf("respond dispatch exception: %w", err)
+	}
+
+	return nil
 }
 
 // handleDispatchError maps dispatch use case errors to HTTP responses.
@@ -1273,14 +1313,18 @@ func (handler *Handlers) GetHistory(fiberCtx *fiber.Ctx) error {
 		}
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.HistoryResponse{
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.HistoryResponse{
 		Items: items,
 		CursorResponse: sharedhttp.CursorResponse{
 			NextCursor: nextCursor,
 			Limit:      limit,
 			HasMore:    nextCursor != "",
 		},
-	})
+	}); err != nil {
+		return fmt.Errorf("respond exception history: %w", err)
+	}
+
+	return nil
 }
 
 func parseTimestampCursorPagination(fiberCtx *fiber.Ctx) (*libHTTP.TimestampCursor, int, error) {

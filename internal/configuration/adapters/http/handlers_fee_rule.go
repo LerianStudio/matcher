@@ -2,11 +2,12 @@ package http
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/http/dto"
@@ -85,7 +86,11 @@ func (handler *Handler) CreateFeeRule(fiberCtx *fiber.Ctx) error {
 		return mapFeeRuleError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.FeeRuleToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.FeeRuleToResponse(result)); err != nil {
+		return fmt.Errorf("respond create fee rule: %w", err)
+	}
+
+	return nil
 }
 
 // ListFeeRules lists fee rules for a context.
@@ -135,7 +140,11 @@ func (handler *Handler) ListFeeRules(fiberCtx *fiber.Ctx) error {
 		result = []*fee.FeeRule{}
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FeeRulesToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FeeRulesToResponse(result)); err != nil {
+		return fmt.Errorf("respond list fee rules: %w", err)
+	}
+
+	return nil
 }
 
 // GetFeeRule retrieves a fee rule.
@@ -192,7 +201,11 @@ func (handler *Handler) GetFeeRule(fiberCtx *fiber.Ctx) error {
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, result.ContextID)
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FeeRuleToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FeeRuleToResponse(result)); err != nil {
+		return fmt.Errorf("respond get fee rule: %w", err)
+	}
+
+	return nil
 }
 
 // UpdateFeeRule updates a fee rule.
@@ -281,7 +294,11 @@ func (handler *Handler) UpdateFeeRule(fiberCtx *fiber.Ctx) error {
 		return mapFeeRuleError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FeeRuleToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FeeRuleToResponse(result)); err != nil {
+		return fmt.Errorf("respond update fee rule: %w", err)
+	}
+
+	return nil
 }
 
 // DeleteFeeRule deletes a fee rule.
@@ -347,7 +364,11 @@ func (handler *Handler) DeleteFeeRule(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent)
+	if err := libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent); err != nil {
+		return fmt.Errorf("respond delete fee rule: %w", err)
+	}
+
+	return nil
 }
 
 // mapFeeRuleError maps fee rule domain and constraint errors to HTTP responses.

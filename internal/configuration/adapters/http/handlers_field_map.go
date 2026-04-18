@@ -3,10 +3,11 @@ package http
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 
 	"github.com/gofiber/fiber/v2"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/http/dto"
@@ -76,7 +77,11 @@ func (handler *Handler) CreateFieldMap(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.FieldMapToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.FieldMapToResponse(result)); err != nil {
+		return fmt.Errorf("respond create field map: %w", err)
+	}
+
+	return nil
 }
 
 // GetFieldMapBySource retrieves a field map by source.
@@ -137,7 +142,11 @@ func (handler *Handler) GetFieldMapBySource(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FieldMapToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FieldMapToResponse(result)); err != nil {
+		return fmt.Errorf("respond get field map: %w", err)
+	}
+
+	return nil
 }
 
 // UpdateFieldMap updates a field map.
@@ -207,7 +216,11 @@ func (handler *Handler) UpdateFieldMap(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FieldMapToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FieldMapToResponse(result)); err != nil {
+		return fmt.Errorf("respond update field map: %w", err)
+	}
+
+	return nil
 }
 
 // DeleteFieldMap deletes a field map.
@@ -267,5 +280,9 @@ func (handler *Handler) DeleteFieldMap(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent)
+	if err := libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent); err != nil {
+		return fmt.Errorf("respond delete field map: %w", err)
+	}
+
+	return nil
 }

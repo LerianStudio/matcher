@@ -10,8 +10,8 @@ import (
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/exception/adapters/http/dto"
 	"github.com/LerianStudio/matcher/internal/exception/services/command"
@@ -59,7 +59,11 @@ func (handler *Handlers) BulkAssign(fiberCtx *fiber.Ctx) error {
 		return handleBulkError(ctx, fiberCtx, span, logger, "bulk assign failed", err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, toBulkActionResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, toBulkActionResponse(result)); err != nil {
+		return fmt.Errorf("respond bulk assign: %w", err)
+	}
+
+	return nil
 }
 
 // BulkResolve resolves multiple exceptions with the specified resolution.
@@ -102,7 +106,11 @@ func (handler *Handlers) BulkResolve(fiberCtx *fiber.Ctx) error {
 		return handleBulkError(ctx, fiberCtx, span, logger, "bulk resolve failed", err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, toBulkActionResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, toBulkActionResponse(result)); err != nil {
+		return fmt.Errorf("respond bulk resolve: %w", err)
+	}
+
+	return nil
 }
 
 // BulkDispatch dispatches multiple exceptions to an external system.
@@ -145,7 +153,11 @@ func (handler *Handlers) BulkDispatch(fiberCtx *fiber.Ctx) error {
 		return handleBulkError(ctx, fiberCtx, span, logger, "bulk dispatch failed", err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, toBulkActionResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, toBulkActionResponse(result)); err != nil {
+		return fmt.Errorf("respond bulk dispatch: %w", err)
+	}
+
+	return nil
 }
 
 // handleBulkError maps bulk command errors to HTTP responses.

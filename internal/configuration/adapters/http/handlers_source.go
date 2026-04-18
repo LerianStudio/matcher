@@ -3,12 +3,13 @@ package http
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/http/dto"
@@ -74,7 +75,11 @@ func (handler *Handler) CreateSource(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.ReconciliationSourceToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.ReconciliationSourceToResponse(result)); err != nil {
+		return fmt.Errorf("respond create source: %w", err)
+	}
+
+	return nil
 }
 
 // ListSources lists reconciliation sources.
@@ -170,7 +175,11 @@ func (handler *Handler) ListSources(fiberCtx *fiber.Ctx) error {
 		},
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, response)
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, response); err != nil {
+		return fmt.Errorf("respond list sources: %w", err)
+	}
+
+	return nil
 }
 
 // GetSource retrieves a reconciliation source.
@@ -227,7 +236,11 @@ func (handler *Handler) GetSource(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ReconciliationSourceToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ReconciliationSourceToResponse(result)); err != nil {
+		return fmt.Errorf("respond get source: %w", err)
+	}
+
+	return nil
 }
 
 // UpdateSource updates a reconciliation source.
@@ -297,7 +310,11 @@ func (handler *Handler) UpdateSource(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ReconciliationSourceToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ReconciliationSourceToResponse(result)); err != nil {
+		return fmt.Errorf("respond update source: %w", err)
+	}
+
+	return nil
 }
 
 // DeleteSource deletes a reconciliation source.
@@ -356,5 +373,9 @@ func (handler *Handler) DeleteSource(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent)
+	if err := libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent); err != nil {
+		return fmt.Errorf("respond delete source: %w", err)
+	}
+
+	return nil
 }

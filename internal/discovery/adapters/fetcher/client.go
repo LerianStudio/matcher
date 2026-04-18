@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/LerianStudio/lib-commons/v4/commons/circuitbreaker"
+	"github.com/LerianStudio/lib-commons/v5/commons/circuitbreaker"
 
 	discoveryPorts "github.com/LerianStudio/matcher/internal/discovery/ports"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"

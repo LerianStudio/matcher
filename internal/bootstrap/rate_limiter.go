@@ -10,9 +10,9 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/LerianStudio/lib-commons/v4/commons/log"
-	"github.com/LerianStudio/lib-commons/v4/commons/net/http/ratelimit"
-	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
+	"github.com/LerianStudio/lib-commons/v5/commons/log"
+	"github.com/LerianStudio/lib-commons/v5/commons/net/http/ratelimit"
+	libRedis "github.com/LerianStudio/lib-commons/v5/commons/redis"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 )
@@ -270,7 +270,7 @@ func settingsBackedRateLimitHandler(
 	return func(fiberCtx *fiber.Ctx) error {
 		currentCfg := currentRateLimitConfig(cfg, configGetter)
 
-		currentCfg = settingsResolver.rateLimit(fiberCtx.UserContext(), currentCfg)
+		currentCfg = settingsResolver.rateLimit(currentCfg)
 		if !currentCfg.Enabled {
 			return fiberCtx.Next()
 		}

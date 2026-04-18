@@ -20,10 +20,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 
-	"github.com/LerianStudio/lib-commons/v4/commons/systemplane/domain"
 	"github.com/LerianStudio/matcher/internal/shared/infrastructure/testutil"
 )
 
@@ -43,25 +42,6 @@ func (closer *orderingCloser) Close() error {
 	return closer.err
 }
 
-type orderingSupervisor struct {
-	order *[]string
-	err   error
-}
-
-func (supervisor *orderingSupervisor) Current() domain.RuntimeBundle { return nil }
-func (supervisor *orderingSupervisor) Snapshot() domain.Snapshot     { return domain.Snapshot{} }
-func (supervisor *orderingSupervisor) PublishSnapshot(context.Context, domain.Snapshot, string) error {
-	return nil
-}
-
-func (supervisor *orderingSupervisor) ReconcileCurrent(context.Context, domain.Snapshot, string) error {
-	return nil
-}
-func (supervisor *orderingSupervisor) Reload(context.Context, string, ...string) error { return nil }
-func (supervisor *orderingSupervisor) Stop(context.Context) error {
-	*supervisor.order = append(*supervisor.order, "supervisor")
-	return supervisor.err
-}
 
 func TestServiceRun(t *testing.T) {
 	t.Parallel()
@@ -158,21 +138,6 @@ func TestServiceShutdown(t *testing.T) {
 	})
 }
 
-func TestService_stopSystemplane_OrdersCancellationBeforeShutdown(t *testing.T) {
-	t.Parallel()
-
-	order := []string{}
-	svc := &Service{
-		cancelChangeFeed: func() { order = append(order, "cancel") },
-		spComponents: &SystemplaneComponents{
-			Supervisor: &orderingSupervisor{order: &order},
-			Backend:    &orderingCloser{order: &order, name: "backend"},
-		},
-	}
-
-	svc.stopSystemplane(context.Background(), &libLog.NopLogger{})
-	assert.Equal(t, []string{"cancel", "supervisor", "backend"}, order)
-}
 
 func TestServiceShutdownWithWorkers(t *testing.T) {
 	t.Parallel()

@@ -3,10 +3,11 @@ package http
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 
 	"github.com/gofiber/fiber/v2"
 
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/configuration/adapters/http/dto"
@@ -78,7 +79,11 @@ func (handler *Handler) CreateSchedule(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.ScheduleToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusCreated, dto.ScheduleToResponse(result)); err != nil {
+		return fmt.Errorf("respond create schedule: %w", err)
+	}
+
+	return nil
 }
 
 // ListSchedules lists reconciliation schedules for a context.
@@ -124,7 +129,11 @@ func (handler *Handler) ListSchedules(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.SchedulesToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.SchedulesToResponse(result)); err != nil {
+		return fmt.Errorf("respond list schedules: %w", err)
+	}
+
+	return nil
 }
 
 // GetSchedule retrieves a reconciliation schedule.
@@ -186,7 +195,11 @@ func (handler *Handler) GetSchedule(fiberCtx *fiber.Ctx) error {
 		return writeNotFound(fiberCtx, "configuration_schedule_not_found", "schedule not found")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ScheduleToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ScheduleToResponse(result)); err != nil {
+		return fmt.Errorf("respond get schedule: %w", err)
+	}
+
+	return nil
 }
 
 // UpdateSchedule updates a reconciliation schedule.
@@ -257,7 +270,11 @@ func (handler *Handler) UpdateSchedule(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ScheduleToResponse(result))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ScheduleToResponse(result)); err != nil {
+		return fmt.Errorf("respond update schedule: %w", err)
+	}
+
+	return nil
 }
 
 // DeleteSchedule deletes a reconciliation schedule.
@@ -314,7 +331,11 @@ func (handler *Handler) DeleteSchedule(fiberCtx *fiber.Ctx) error {
 		return writeServiceError(fiberCtx, err)
 	}
 
-	return libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent)
+	if err := libHTTP.RespondStatus(fiberCtx, fiber.StatusNoContent); err != nil {
+		return fmt.Errorf("respond delete schedule: %w", err)
+	}
+
+	return nil
 }
 
 // isScheduleClientError returns true for schedule-related client errors.

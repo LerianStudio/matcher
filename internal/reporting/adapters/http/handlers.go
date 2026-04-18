@@ -13,8 +13,8 @@ import (
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libHTTP "github.com/LerianStudio/lib-commons/v4/commons/net/http"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libHTTP "github.com/LerianStudio/lib-commons/v5/commons/net/http"
 
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/reporting/adapters/http/dto"
@@ -278,7 +278,11 @@ func (handler *Handlers) GetVolumeStats(fiberCtx *fiber.Ctx) error {
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.VolumeStatsToResponse(stats))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.VolumeStatsToResponse(stats)); err != nil {
+		return fmt.Errorf("respond volume stats: %w", err)
+	}
+
+	return nil
 }
 
 // GetMatchRateStats handles GET /v1/reports/contexts/:contextId/dashboard/match-rate
@@ -332,7 +336,11 @@ func (handler *Handlers) GetMatchRateStats(fiberCtx *fiber.Ctx) error {
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.MatchRateStatsToResponse(stats))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.MatchRateStatsToResponse(stats)); err != nil {
+		return fmt.Errorf("respond match rate stats: %w", err)
+	}
+
+	return nil
 }
 
 // GetSLAStats handles GET /v1/reports/contexts/:contextId/dashboard/sla
@@ -386,7 +394,11 @@ func (handler *Handlers) GetSLAStats(fiberCtx *fiber.Ctx) error {
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.SLAStatsToResponse(stats))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.SLAStatsToResponse(stats)); err != nil {
+		return fmt.Errorf("respond sla stats: %w", err)
+	}
+
+	return nil
 }
 
 // GetDashboardAggregates handles GET /v1/reports/contexts/:contextId/dashboard
@@ -440,7 +452,11 @@ func (handler *Handlers) GetDashboardAggregates(fiberCtx *fiber.Ctx) error {
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.DashboardAggregatesToResponse(aggregates))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.DashboardAggregatesToResponse(aggregates)); err != nil {
+		return fmt.Errorf("respond dashboard aggregates: %w", err)
+	}
+
+	return nil
 }
 
 // GetMatcherDashboardMetrics handles GET /v1/reports/contexts/:contextId/dashboard/metrics
@@ -497,7 +513,11 @@ func (handler *Handlers) GetMatcherDashboardMetrics(fiberCtx *fiber.Ctx) error {
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.MatcherDashboardMetricsToResponse(metrics))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.MatcherDashboardMetricsToResponse(metrics)); err != nil {
+		return fmt.Errorf("respond dashboard metrics: %w", err)
+	}
+
+	return nil
 }
 
 // GetSourceBreakdown handles GET /v1/reports/contexts/:contextId/dashboard/source-breakdown
@@ -554,7 +574,11 @@ func (handler *Handlers) GetSourceBreakdown(fiberCtx *fiber.Ctx) error {
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.SourceBreakdownToResponse(breakdowns))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.SourceBreakdownToResponse(breakdowns)); err != nil {
+		return fmt.Errorf("respond source breakdown: %w", err)
+	}
+
+	return nil
 }
 
 // GetCashImpactSummary handles GET /v1/reports/contexts/:contextId/dashboard/cash-impact
@@ -611,7 +635,11 @@ func (handler *Handlers) GetCashImpactSummary(fiberCtx *fiber.Ctx) error {
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.CashImpactSummaryToResponse(summary))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.CashImpactSummaryToResponse(summary)); err != nil {
+		return fmt.Errorf("respond cash impact summary: %w", err)
+	}
+
+	return nil
 }
 
 // countFn produces a count for a given report filter.
@@ -653,7 +681,11 @@ func (handler *Handlers) handleCount(
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ExportCountResponse{Count: count})
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ExportCountResponse{Count: count}); err != nil {
+		return fmt.Errorf("respond export count: %w", err)
+	}
+
+	return nil
 }
 
 // CountMatched handles GET /v1/reports/contexts/:contextId/matches/count
@@ -1071,10 +1103,14 @@ func (handler *Handlers) GetMatchedReport(fiberCtx *fiber.Ctx) error {
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ListMatchedReportResponse{
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ListMatchedReportResponse{
 		Items:      dto.MatchedItemsToResponse(items),
 		Pagination: pagination,
-	})
+	}); err != nil {
+		return fmt.Errorf("respond list matched: %w", err)
+	}
+
+	return nil
 }
 
 // GetUnmatchedReport handles GET /v1/reports/contexts/:contextId/unmatched
@@ -1135,10 +1171,14 @@ func (handler *Handlers) GetUnmatchedReport(fiberCtx *fiber.Ctx) error {
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ListUnmatchedReportResponse{
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ListUnmatchedReportResponse{
 		Items:      dto.UnmatchedItemsToResponse(items),
 		Pagination: pagination,
-	})
+	}); err != nil {
+		return fmt.Errorf("respond list unmatched: %w", err)
+	}
+
+	return nil
 }
 
 // GetSummaryReport handles GET /v1/reports/contexts/:contextId/summary
@@ -1192,7 +1232,11 @@ func (handler *Handlers) GetSummaryReport(fiberCtx *fiber.Ctx) error {
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.SummaryReportToResponse(summary))
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.SummaryReportToResponse(summary)); err != nil {
+		return fmt.Errorf("respond summary report: %w", err)
+	}
+
+	return nil
 }
 
 // GetVarianceReport handles GET /v1/reports/contexts/:contextId/variance
@@ -1253,10 +1297,14 @@ func (handler *Handlers) GetVarianceReport(fiberCtx *fiber.Ctx) error {
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
-	return libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ListVarianceReportResponse{
+	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ListVarianceReportResponse{
 		Items:      dto.VarianceRowsToResponse(rows),
 		Pagination: pagination,
-	})
+	}); err != nil {
+		return fmt.Errorf("respond variance report: %w", err)
+	}
+
+	return nil
 }
 
 // CountUnmatched handles GET /v1/reports/contexts/:contextId/unmatched/count

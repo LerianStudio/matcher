@@ -12,11 +12,11 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	sharedhttp "github.com/LerianStudio/lib-commons/v4/commons/net/http"
-	libPostgres "github.com/LerianStudio/lib-commons/v4/commons/postgres"
-	libRabbitmq "github.com/LerianStudio/lib-commons/v4/commons/rabbitmq"
-	libRedis "github.com/LerianStudio/lib-commons/v4/commons/redis"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	sharedhttp "github.com/LerianStudio/lib-commons/v5/commons/net/http"
+	libPostgres "github.com/LerianStudio/lib-commons/v5/commons/postgres"
+	libRabbitmq "github.com/LerianStudio/lib-commons/v5/commons/rabbitmq"
+	libRedis "github.com/LerianStudio/lib-commons/v5/commons/redis"
 )
 
 // HealthCheckFunc is a function type for performing health checks on dependencies.

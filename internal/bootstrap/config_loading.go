@@ -13,9 +13,9 @@ import (
 	"strconv"
 	"strings"
 
-	libCommons "github.com/LerianStudio/lib-commons/v4/commons"
-	libLog "github.com/LerianStudio/lib-commons/v4/commons/log"
-	libZap "github.com/LerianStudio/lib-commons/v4/commons/zap"
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	libZap "github.com/LerianStudio/lib-commons/v5/commons/zap"
 
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
