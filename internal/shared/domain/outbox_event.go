@@ -10,9 +10,9 @@ import (
 	"github.com/LerianStudio/lib-commons/v5/commons/outbox"
 )
 
-// OutboxEvent is a type alias for the canonical lib-commons outbox event.
-// All bounded contexts use this alias so the migration from the bespoke outbox
-// to the canonical package is transparent to callers.
+// OutboxEvent is a type alias for the canonical lib-commons/v5 outbox event.
+// All bounded contexts use this alias so the canonical outbox internals
+// remain transparent to callers.
 type OutboxEvent = outbox.OutboxEvent
 
 // OutboxEventStatus is a type alias for the canonical outbox status type.

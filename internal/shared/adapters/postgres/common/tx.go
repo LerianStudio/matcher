@@ -82,7 +82,7 @@ func WithTenantTxOrExisting[Result any](
 	}
 
 	primaryDBs := db.PrimaryDBs()
-	if len(primaryDBs) == 0 {
+	if len(primaryDBs) == 0 || primaryDBs[0] == nil {
 		return zero, ErrNoPrimaryDB
 	}
 

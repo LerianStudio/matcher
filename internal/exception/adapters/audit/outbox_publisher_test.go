@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -331,4 +332,38 @@ func TestBuildOutboxChangesMap_MinimalFields(t *testing.T) {
 	assert.Nil(t, changes["notes"])
 	assert.Nil(t, changes["reason_code"])
 	assert.Nil(t, changes["metadata"])
+}
+
+// TestOutboxPublisher_PublishExceptionEvent_OversizedChangesTruncated verifies
+// that when an exception audit event's Changes map serializes above the 900 KiB
+// cap the publisher swaps it for a truncation marker instead of failing the
+// triggering business operation.
+func TestOutboxPublisher_PublishExceptionEvent_OversizedChangesTruncated(t *testing.T) {
+	t.Parallel()
+
+	repo := &stubOutboxRepo{}
+	publisher, err := NewOutboxPublisher(repo)
+	require.NoError(t, err)
+
+	tenantID := testutil.MustDeterministicUUID("tenant-oversize")
+	ctx := context.WithValue(context.Background(), auth.TenantIDKey, tenantID.String())
+
+	// Build a ~1.5 MiB payload by packing the Notes field with a large string.
+	oversizedNotes := strings.Repeat("A", 1024*1024+512*1024)
+	event := ports.AuditEvent{
+		ExceptionID: testutil.MustDeterministicUUID("exception-oversize"),
+		Action:      "update",
+		Actor:       "user-oversize",
+		Notes:       oversizedNotes,
+		OccurredAt:  testutil.FixedTime(),
+	}
+
+	err = publisher.PublishExceptionEvent(ctx, event)
+	require.NoError(t, err)
+	require.NotNil(t, repo.created)
+
+	// Truncation marker should be present in the payload; the original huge
+	// value should not be persisted.
+	assert.Contains(t, string(repo.created.Payload), `"_truncated":true`)
+	assert.NotContains(t, string(repo.created.Payload), "AAAAAAAAAAAAAAAA")
 }

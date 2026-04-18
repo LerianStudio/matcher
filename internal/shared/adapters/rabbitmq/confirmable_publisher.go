@@ -29,7 +29,7 @@ const (
 
 // MIGRATION(lib-commons): ConfirmablePublisher Migration Plan
 //
-// This type is a candidate for promotion to lib-commons/v4/commons/rabbitmq so
+// This type is a candidate for promotion to lib-commons/v5/commons/rabbitmq so
 // that all Lerian services (Matcher, Midaz, and future services) can share a
 // single, battle-tested publisher-confirms implementation.
 //
