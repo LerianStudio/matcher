@@ -70,6 +70,12 @@ func TestConfigurationFlow_Integration(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, service)
 
+		// Override systemplane-registered rate-limit defaults with test-friendly
+		// values. Without this, the registered compile-time defaults
+		// (rate_limit.max=100) mask the env-based RATE_LIMIT_MAX=1000 and cause
+		// sequential test requests to 429 after ~100 calls.
+		require.NoError(t, OverrideRateLimitsForTests(context.Background(), service))
+
 		runErr := make(chan error, 1)
 
 		t.Cleanup(func() {

@@ -37,11 +37,15 @@ func TestSystemplaneSettings_TenantRateLimitAffectsProtectedRoute(t *testing.T) 
 
 	t.Cleanup(func() {
 		if maxFound {
-			_ = putSystemplaneValues(cfg.AppBaseURL, map[string]any{"rate_limit.max": origMax})
+			if err := putSystemplaneValues(cfg.AppBaseURL, map[string]any{"rate_limit.max": origMax}); err != nil {
+				t.Errorf("restore rate_limit.max failed: %v (rate_limit.max=1 may persist in systemplane — other tests may be affected)", err)
+			}
 		}
 
 		if expiryFound {
-			_ = putSystemplaneValues(cfg.AppBaseURL, map[string]any{"rate_limit.expiry_sec": origExpiry})
+			if err := putSystemplaneValues(cfg.AppBaseURL, map[string]any{"rate_limit.expiry_sec": origExpiry}); err != nil {
+				t.Errorf("restore rate_limit.expiry_sec failed: %v", err)
+			}
 		}
 	})
 

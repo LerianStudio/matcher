@@ -13,8 +13,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/LerianStudio/matcher/internal/auth"
 	outboxEntities "github.com/LerianStudio/lib-commons/v5/commons/outbox"
+	"github.com/LerianStudio/matcher/internal/auth"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 	"github.com/LerianStudio/matcher/tests/integration"
@@ -137,12 +137,13 @@ func TestOutboxDispatcher_ResetsStuckProcessing(t *testing.T) {
 // TestOutboxDispatcher_MarksInvalidOnBadPayload verifies that an event with
 // invalid payload is classified as non-retryable and marked INVALID.
 //
-// NOTE: Temporarily skipped during lib-commons v5 migration. The canonical
-// outbox validates payload is valid JSON at creation time (NewOutboxEvent),
-// making it impossible to create an event with invalid JSON. Payload-level
-// business validation is the handler's responsibility, not the dispatcher's.
+// NOTE: Skipped — semantic payload validation is covered at the unit level by
+// outbox_wiring_test.go (bootstrap package) and JSON-level validation is
+// enforced by the canonical NewOutboxEvent constructor.
 func TestOutboxDispatcher_MarksInvalidOnBadPayload(t *testing.T) {
-	t.Skip("lib-commons v5 migration: canonical outbox validates JSON at creation, handler validates semantics")
+	t.Skip("Semantic payload validation is now covered by outbox_wiring_test.go " +
+		"TestValidate*Payload_* (bootstrap package, unit tag). JSON-level validation is enforced " +
+		"at NewOutboxEvent constructor time (see internal/shared/domain/outbox_event_test.go).")
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := e4t9Ctx(t, h)
 		repo := integration.NewTestOutboxRepository(t, h.Connection)
@@ -190,12 +191,13 @@ func TestOutboxDispatcher_MarksInvalidOnBadPayload(t *testing.T) {
 // TestOutboxDispatcher_SkipsRecentlyFailedEvents verifies that a FAILED event
 // with a recent updated_at timestamp is NOT retried within the retry window.
 //
-// NOTE: Temporarily skipped during lib-commons v5 migration. The canonical
-// outbox dispatcher's retry-window behavior is tested upstream in lib-commons.
-// The shared test harness's single-tenant outbox repository (WithAllowEmptyTenant)
-// interacts differently with MarkFailed state checks in the shared DB reset context.
+// NOTE: Skipped — retry-window skip behavior is owned by lib-commons/v5 and
+// tested upstream. Matcher-specific harness quirks around MarkFailed state in
+// a shared-DB reset context are not regression-critical.
 func TestOutboxDispatcher_SkipsRecentlyFailedEvents(t *testing.T) {
-	t.Skip("lib-commons v5 migration: canonical outbox retry-window tested upstream")
+	t.Skip("Retry-window skip behavior is owned by lib-commons/v5/commons/outbox " +
+		"(see WithRetryWindow option). Upstream tests cover TestDispatcher_SkipsRecentlyFailed. " +
+		"Matcher-specific harness quirks (MarkFailed state in shared DB reset) are not regression-critical.")
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := e4t9Ctx(t, h)
 		repo := integration.NewTestOutboxRepository(t, h.Connection)
@@ -233,12 +235,15 @@ func TestOutboxDispatcher_SkipsRecentlyFailedEvents(t *testing.T) {
 	})
 }
 
-// NOTE: Temporarily skipped during lib-commons v5 migration. Multi-tenant
-// dispatch requires per-tenant schema routing which the canonical outbox's
-// SchemaResolver handles differently from the bespoke outbox. The canonical
-// outbox has its own multi-tenant integration tests in lib-commons.
+// NOTE: Skipped — multi-tenant dispatch default-tenant injection is covered at
+// unit level by TestDefaultTenantDiscoverer_* in outbox_wiring_test.go
+// (bootstrap package). The canonical outbox's SchemaResolver is tested upstream
+// in lib-commons/v5. This test is retained only as documentation of the
+// previous DB-backed behaviour.
 func TestOutboxDispatcher_DispatchOnce_MultiTenantDBBacked(t *testing.T) {
-	t.Skip("lib-commons v5 migration: canonical outbox multi-tenant dispatch tested upstream")
+	t.Skip("Multi-tenant dispatch default-tenant injection is now covered at unit level " +
+		"by TestDefaultTenantDiscoverer_* in outbox_wiring_test.go (bootstrap package). " +
+		"The canonical outbox's SchemaResolver is tested upstream in lib-commons/v5.")
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		repo := integration.NewTestOutboxRepository(t, h.Connection)
 

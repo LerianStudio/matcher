@@ -85,6 +85,19 @@ func NewServerHarness(ctx context.Context, t *testing.T) (*ServerHarness, error)
 	sh.Service = svc
 	sh.App = svc.GetApp()
 
+	// Override systemplane-registered rate-limit defaults with test-friendly
+	// values. The systemplane `Register` path hardcodes compile-time defaults
+	// (e.g., rate_limit.max=100), which mask env-var overrides because
+	// `client.Get` returns (registeredDefault, true) even when no DB override
+	// exists. Set explicit overrides so integration tests with many sequential
+	// requests from the same test IP do not hit 429.
+	if err := overrideRateLimitsForTests(ctx, svc); err != nil {
+		if cleanupErr := baseHarness.Cleanup(ctx); cleanupErr != nil {
+			t.Logf("cleanup error after rate limit override failure: %v", cleanupErr)
+		}
+		return nil, fmt.Errorf("failed to override rate limits: %w", err)
+	}
+
 	// Extract outbox dispatcher for controlled dispatch
 	if dispatcher, ok := extractOutboxDispatcher(svc); ok {
 		sh.OutboxDispatcher = dispatcher
