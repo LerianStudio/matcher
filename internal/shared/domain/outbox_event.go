@@ -33,6 +33,27 @@ var (
 	ErrOutboxEventPayloadInvalidJSON = outbox.ErrOutboxEventPayloadNotJSON
 )
 
+// ParseOutboxEventStatus validates and converts a raw status string into the
+// typed outbox lifecycle used by lib-commons.
+func ParseOutboxEventStatus(raw string) (OutboxEventStatus, error) {
+	return outbox.ParseOutboxEventStatus(raw)
+}
+
+// ValidateOutboxTransition validates a lifecycle transition using the canonical
+// typed outbox status rules.
+func ValidateOutboxTransition(fromRaw, toRaw string) error {
+	return outbox.ValidateOutboxTransition(fromRaw, toRaw)
+}
+
+// OutboxStatusOf returns the typed lifecycle status for an event.
+func OutboxStatusOf(event *OutboxEvent) (OutboxEventStatus, error) {
+	if event == nil {
+		return "", ErrOutboxEventRequired
+	}
+
+	return ParseOutboxEventStatus(event.Status)
+}
+
 // NewOutboxEvent creates a new OutboxEvent via the canonical lib-commons constructor.
 // This is a thin wrapper that preserves the existing call-site signature used
 // throughout matcher's bounded contexts.

@@ -56,6 +56,24 @@ func TestOutboxEventStatus_IsValid(t *testing.T) {
 	}
 }
 
+func TestParseOutboxEventStatus(t *testing.T) {
+	t.Parallel()
+
+	status, err := ParseOutboxEventStatus(OutboxStatusPublished)
+	require.NoError(t, err)
+	assert.Equal(t, OutboxEventStatus(OutboxStatusPublished), status)
+
+	_, err = ParseOutboxEventStatus("BROKEN")
+	require.Error(t, err)
+}
+
+func TestValidateOutboxTransition(t *testing.T) {
+	t.Parallel()
+
+	require.NoError(t, ValidateOutboxTransition(OutboxStatusPending, OutboxStatusProcessing))
+	require.Error(t, ValidateOutboxTransition(OutboxStatusPublished, OutboxStatusFailed))
+}
+
 func TestNewOutboxEvent_Success(t *testing.T) {
 	t.Parallel()
 
@@ -72,11 +90,30 @@ func TestNewOutboxEvent_Success(t *testing.T) {
 	assert.Equal(t, aggregateID, event.AggregateID)
 	assert.Equal(t, payload, event.Payload)
 	assert.Equal(t, OutboxStatusPending, event.Status)
+	status, statusErr := OutboxStatusOf(event)
+	require.NoError(t, statusErr)
+	assert.Equal(t, OutboxEventStatus(OutboxStatusPending), status)
 	assert.Equal(t, 0, event.Attempts)
 	assert.Nil(t, event.PublishedAt)
 	assert.Empty(t, event.LastError)
 	assert.False(t, event.CreatedAt.IsZero())
 	assert.False(t, event.UpdatedAt.IsZero())
+}
+
+func TestOutboxStatusOf_NilEvent(t *testing.T) {
+	t.Parallel()
+
+	_, err := OutboxStatusOf(nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrOutboxEventRequired)
+}
+
+func TestOutboxStatusOf_InvalidStatus(t *testing.T) {
+	t.Parallel()
+
+	event := &OutboxEvent{Status: "BROKEN"}
+	_, err := OutboxStatusOf(event)
+	require.Error(t, err)
 }
 
 func TestNewOutboxEvent_EmptyEventType(t *testing.T) {
