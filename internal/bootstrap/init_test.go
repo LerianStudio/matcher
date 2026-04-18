@@ -1247,7 +1247,7 @@ func TestInitArchivalComponents_DisabledNoStorage(t *testing.T) {
 		}
 
 		var cleanups []func()
-		worker, err := initArchivalComponents(nil, cfg, nil, nil, nil, &libLog.NopLogger{}, &cleanups)
+		worker, err := initArchivalComponents(nil, cfg, nil, nil, nil, &libLog.NopLogger{}, &cleanups, false)
 
 		assert.NoError(t, err)
 		assert.Nil(t, worker)

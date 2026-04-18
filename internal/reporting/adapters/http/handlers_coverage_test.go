@@ -1924,7 +1924,7 @@ func TestMapJobToResponse_WithErrorField(t *testing.T) {
 	querySvc, err := query.NewExportJobQueryService(repo)
 	require.NoError(t, err)
 
-	handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour)
+	handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour, false)
 	require.NoError(t, err)
 
 	startedAt := time.Now().UTC().Add(-time.Hour)
@@ -1971,7 +1971,7 @@ func TestMapJobToResponse_DownloadableWithFutureExpiry(t *testing.T) {
 	querySvc, err := query.NewExportJobQueryService(repo)
 	require.NoError(t, err)
 
-	handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour)
+	handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour, false)
 	require.NoError(t, err)
 
 	job := &entities.ExportJob{
@@ -2009,7 +2009,7 @@ func TestMapJobToResponse_NilJobReturnsEmptyResponse(t *testing.T) {
 	querySvc, err := query.NewExportJobQueryService(repo)
 	require.NoError(t, err)
 
-	handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour)
+	handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour, false)
 	require.NoError(t, err)
 
 	response := handlers.mapJobToResponse(context.Background(), nil)
@@ -2057,7 +2057,7 @@ func setupListByContextHandlers(
 	querySvc, err := query.NewExportJobQueryService(repo)
 	require.NoError(t, err)
 
-	handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour)
+	handlers, err := NewExportJobHandlers(uc, querySvc, storage, ctxProvider, time.Hour, false)
 	require.NoError(t, err)
 
 	return handlers

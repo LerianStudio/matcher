@@ -95,7 +95,7 @@ func (handler *Handler) GetBridgeReadinessSummary(fiberCtx *fiber.Ctx) error {
 
 	summary, err := handler.query.CountBridgeReadinessByTenant(ctx, threshold)
 	if err != nil {
-		logSpanError(ctx, span, logger, "count bridge readiness", err)
+		handler.logSpanError(ctx, span, logger, "count bridge readiness", err)
 
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "failed to count bridge readiness")
 	}
@@ -149,7 +149,7 @@ func (handler *Handler) ListBridgeCandidates(fiberCtx *fiber.Ctx) error {
 
 	limit, err := parseBridgeReadinessLimit(fiberCtx.Query("limit"))
 	if err != nil {
-		logSpanError(ctx, span, logger, "invalid limit", err)
+		handler.logSpanError(ctx, span, logger, "invalid limit", err)
 
 		// Sentinel chain stays intact for callers; the user-facing string is
 		// stable so dashboard clients can match it without parsing internals.
@@ -158,7 +158,7 @@ func (handler *Handler) ListBridgeCandidates(fiberCtx *fiber.Ctx) error {
 
 	cursorCreatedAt, cursorID, err := parseBridgeReadinessCursor(fiberCtx.Query("cursor"))
 	if err != nil {
-		logSpanError(ctx, span, logger, "invalid cursor", err)
+		handler.logSpanError(ctx, span, logger, "invalid cursor", err)
 
 		return respondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", "invalid cursor")
 	}
@@ -176,16 +176,16 @@ func (handler *Handler) ListBridgeCandidates(fiberCtx *fiber.Ctx) error {
 	if err != nil {
 		switch {
 		case errors.Is(err, discoveryQuery.ErrInvalidReadinessState):
-			logSpanError(ctx, span, logger, "invalid state", err)
+			handler.logSpanError(ctx, span, logger, "invalid state", err)
 			return respondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", "invalid state value")
 		case errors.Is(err, discoveryQuery.ErrReadinessLimitInvalid):
-			logSpanError(ctx, span, logger, "invalid limit", err)
+			handler.logSpanError(ctx, span, logger, "invalid limit", err)
 			return respondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", invalidLimitMessage)
 		case errors.Is(err, discoveryQuery.ErrReadinessThresholdInvalid):
-			logSpanError(ctx, span, logger, "invalid threshold", err)
+			handler.logSpanError(ctx, span, logger, "invalid threshold", err)
 			return respondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", "invalid threshold value")
 		default:
-			logSpanError(ctx, span, logger, "list bridge candidates", err)
+			handler.logSpanError(ctx, span, logger, "list bridge candidates", err)
 			return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "failed to list bridge candidates")
 		}
 	}
@@ -217,7 +217,7 @@ func (handler *Handler) ListBridgeCandidates(fiberCtx *fiber.Ctx) error {
 
 	nextCursor, err := computeNextCursor(candidates, limit)
 	if err != nil {
-		logSpanError(ctx, span, logger, "encode next cursor", err)
+		handler.logSpanError(ctx, span, logger, "encode next cursor", err)
 
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "failed to encode pagination cursor")
 	}

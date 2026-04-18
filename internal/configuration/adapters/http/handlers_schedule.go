@@ -54,19 +54,19 @@ func (handler *Handler) CreateSchedule(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	var req dto.CreateScheduleRequest
 	if err := libHTTP.ParseBodyAndValidate(fiberCtx, &req); err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid schedule payload", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid schedule payload", err)
 	}
 
 	result, err := handler.command.CreateSchedule(ctx, contextID, req.ToDomainInput())
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to create schedule", err)
+		handler.logSpanError(ctx, span, logger, "failed to create schedule", err)
 
 		if isScheduleClientError(err) {
 			return respondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", err.Error())
@@ -118,14 +118,14 @@ func (handler *Handler) ListSchedules(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	result, err := handler.query.ListSchedules(ctx, contextID)
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to list schedules", err)
+		handler.logSpanError(ctx, span, logger, "failed to list schedules", err)
 		return writeServiceError(fiberCtx, err)
 	}
 
@@ -169,19 +169,19 @@ func (handler *Handler) GetSchedule(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	scheduleID, err := parseUUIDParam(fiberCtx, "scheduleId")
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid schedule id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid schedule id", err)
 	}
 
 	result, err := handler.query.GetSchedule(ctx, scheduleID)
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to get schedule", err)
+		handler.logSpanError(ctx, span, logger, "failed to get schedule", err)
 
 		if errors.Is(err, query.ErrScheduleNotFound) || errors.Is(err, sql.ErrNoRows) {
 			return writeNotFound(fiberCtx, "configuration_schedule_not_found", "schedule not found")
@@ -238,24 +238,24 @@ func (handler *Handler) UpdateSchedule(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	scheduleID, err := parseUUIDParam(fiberCtx, "scheduleId")
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid schedule id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid schedule id", err)
 	}
 
 	var req dto.UpdateScheduleRequest
 	if err := libHTTP.ParseBodyAndValidate(fiberCtx, &req); err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid schedule payload", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid schedule payload", err)
 	}
 
 	result, err := handler.command.UpdateSchedule(ctx, contextID, scheduleID, req.ToDomainInput())
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to update schedule", err)
+		handler.logSpanError(ctx, span, logger, "failed to update schedule", err)
 
 		if isScheduleClientError(err) {
 			return respondError(fiberCtx, fiber.StatusBadRequest, "invalid_request", err.Error())
@@ -309,18 +309,18 @@ func (handler *Handler) DeleteSchedule(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	scheduleID, err := parseUUIDParam(fiberCtx, "scheduleId")
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid schedule id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid schedule id", err)
 	}
 
 	if err := handler.command.DeleteSchedule(ctx, contextID, scheduleID); err != nil {
-		logSpanError(ctx, span, logger, "failed to delete schedule", err)
+		handler.logSpanError(ctx, span, logger, "failed to delete schedule", err)
 
 		if errors.Is(err, command.ErrScheduleNotFound) ||
 			errors.Is(err, command.ErrScheduleContextMismatch) ||

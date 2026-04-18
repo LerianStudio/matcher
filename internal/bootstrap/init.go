@@ -672,7 +672,7 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		return nil, err
 	}
 
-	archivalWorker, archivalErr := initArchivalComponents(routes, cfg, configManager.Get, settingsResolver, infraProvider, logger, &cleanups)
+	archivalWorker, archivalErr := initArchivalComponents(routes, cfg, configManager.Get, settingsResolver, infraProvider, logger, &cleanups, IsProductionEnvironment(cfg.App.EnvName))
 	if archivalErr != nil {
 		if cfg.Archival.Enabled {
 			return nil, fmt.Errorf("init archival components: %w", archivalErr)
@@ -3027,6 +3027,7 @@ func initExportWorkers(
 		storage,
 		contextAdapter,
 		configuredExportPresignExpiry(context.Background(), cfg),
+		IsProductionEnvironment(cfg.App.EnvName),
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("create export job handler: %w", err)
@@ -3112,7 +3113,7 @@ func initGovernanceModule(routes *Routes, repos *sharedRepositories, provider sh
 		return fmt.Errorf("create actor mapping query use case: %w", err)
 	}
 
-	actorMappingHandler, err := governanceHTTP.NewActorMappingHandler(actorMappingCommandUC, actorMappingQueryUC)
+	actorMappingHandler, err := governanceHTTP.NewActorMappingHandler(actorMappingCommandUC, actorMappingQueryUC, production)
 	if err != nil {
 		return fmt.Errorf("create actor mapping handler: %w", err)
 	}

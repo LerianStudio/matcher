@@ -2201,7 +2201,7 @@ func TestLogSpanError_WithNilLogger(t *testing.T) {
 	defer span.End()
 
 	require.NotPanics(t, func() {
-		logSpanError(ctx, span, nil, "test message", errors.New("test error"))
+		(&Handlers{}).logSpanError(ctx, span, nil, "test message", errors.New("test error"))
 	})
 }
 
@@ -2214,6 +2214,6 @@ func TestLogSpanError_WithLogger(t *testing.T) {
 	defer span.End()
 
 	mock := &testutil.TestLogger{}
-	logSpanError(ctx, span, mock, "test message", errors.New("test error"))
+	(&Handlers{}).logSpanError(ctx, span, mock, "test message", errors.New("test error"))
 	require.True(t, mock.ErrorCalled)
 }

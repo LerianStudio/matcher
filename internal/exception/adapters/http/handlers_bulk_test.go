@@ -192,7 +192,7 @@ func executeBulkErrorHandler(
 
 		var logger libLog.Logger
 
-		return handleBulkError(spanCtx, c, span, logger, "bulk operation failed", err)
+		return (&Handlers{}).handleBulkError(spanCtx, c, span, logger, "bulk operation failed", err)
 	})
 
 	request := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
@@ -399,8 +399,8 @@ func TestParseUUIDs_NilSlice(t *testing.T) {
 func TestHandleBulkError_Signature(t *testing.T) {
 	t.Parallel()
 
-	// Verify handleBulkError has the expected function signature by type-asserting it.
-	var fn func(context.Context, *fiber.Ctx, trace.Span, libLog.Logger, string, error) error = handleBulkError
+	// Verify handleBulkError has the expected method signature by type-asserting it.
+	var fn func(context.Context, *fiber.Ctx, trace.Span, libLog.Logger, string, error) error = (&Handlers{}).handleBulkError
 
 	assert.NotNil(t, fn)
 }

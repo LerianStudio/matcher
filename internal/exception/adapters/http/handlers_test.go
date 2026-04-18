@@ -579,7 +579,7 @@ func TestHandleExceptionError_Mappings(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			resp := executeErrorHandler(t, handleExceptionError, tt.err)
+			resp := executeErrorHandler(t, (&Handlers{}).handleExceptionError, tt.err)
 			defer resp.Body.Close()
 
 			requireErrorResponse(
@@ -643,7 +643,7 @@ func TestHandleDisputeError_Mappings(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			resp := executeErrorHandler(t, handleDisputeError, tt.err)
+			resp := executeErrorHandler(t, (&Handlers{}).handleDisputeError, tt.err)
 			defer resp.Body.Close()
 
 			requireErrorResponse(
@@ -707,7 +707,7 @@ func TestHandleDispatchError_Mappings(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			resp := executeErrorHandler(t, handleDispatchError, tt.err)
+			resp := executeErrorHandler(t, (&Handlers{}).handleDispatchError, tt.err)
 			defer resp.Body.Close()
 
 			requireErrorResponse(
@@ -1035,7 +1035,7 @@ func TestHandleExceptionVerificationError_AllCases(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			resp := executeErrorHandler(t, handleExceptionVerificationError, tt.err)
+			resp := executeErrorHandler(t, (&Handlers{}).handleExceptionVerificationError, tt.err)
 			defer resp.Body.Close()
 
 			requireErrorResponse(
@@ -1123,7 +1123,7 @@ func TestHandleDisputeVerificationError_AllCases(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			resp := executeErrorHandler(t, handleDisputeVerificationError, tt.err)
+			resp := executeErrorHandler(t, (&Handlers{}).handleDisputeVerificationError, tt.err)
 			defer resp.Body.Close()
 
 			requireErrorResponse(
@@ -1235,7 +1235,7 @@ func TestHandleExceptionError_AllMappings(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			resp := executeErrorHandler(t, handleExceptionError, tt.err)
+			resp := executeErrorHandler(t, (&Handlers{}).handleExceptionError, tt.err)
 			defer resp.Body.Close()
 
 			requireErrorResponse(
@@ -1263,7 +1263,7 @@ func TestForbiddenWithNilError(t *testing.T) {
 
 		defer span.End()
 
-		return forbidden(spanCtx, c, span, &libLog.NopLogger{}, nil)
+		return (&Handlers{}).forbidden(spanCtx, c, span, &libLog.NopLogger{}, nil)
 	})
 
 	request := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
@@ -1287,7 +1287,7 @@ func TestForbiddenWithNilLogger_DoesNotPanic(t *testing.T) {
 		c.SetUserContext(spanCtx)
 		defer span.End()
 
-		return forbidden(spanCtx, c, span, nil, errTest)
+		return (&Handlers{}).forbidden(spanCtx, c, span, nil, errTest)
 	})
 
 	request := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
@@ -1307,7 +1307,7 @@ func TestLogSpanError_WithNilLogger(t *testing.T) {
 	defer span.End()
 
 	require.NotPanics(t, func() {
-		logSpanError(context.Background(), span, nil, "test message", errTest)
+		(&Handlers{}).logSpanError(context.Background(), span, nil, "test message", errTest)
 	})
 }
 
@@ -1322,7 +1322,7 @@ func TestLogSpanError_WithLogger_LogsErrorMessage(t *testing.T) {
 
 	spyLogger := &testutil.TestLogger{}
 
-	logSpanError(ctx, span, spyLogger, "something went wrong", errTest)
+	(&Handlers{}).logSpanError(ctx, span, spyLogger, "something went wrong", errTest)
 
 	require.True(t, spyLogger.ErrorCalled, "expected Log to be called at LevelError")
 	require.Len(t, spyLogger.Messages, 1)
@@ -1340,7 +1340,7 @@ func TestLogSpanError_WithLogger_NilError_DoesNotLog(t *testing.T) {
 
 	spyLogger := &testutil.TestLogger{}
 
-	logSpanError(ctx, span, spyLogger, "should not appear", nil)
+	(&Handlers{}).logSpanError(ctx, span, spyLogger, "should not appear", nil)
 
 	assert.False(t, spyLogger.ErrorCalled, "expected Log NOT to be called when err is nil")
 	assert.Empty(t, spyLogger.Messages)
@@ -1804,7 +1804,7 @@ func TestBadRequest_Response(t *testing.T) {
 
 		defer span.End()
 
-		return badRequest(spanCtx, c, span, &libLog.NopLogger{}, "test message", errTest)
+		return (&Handlers{}).badRequest(spanCtx, c, span, &libLog.NopLogger{}, "test message", errTest)
 	})
 
 	request := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
@@ -1829,7 +1829,7 @@ func TestNotFound_Response(t *testing.T) {
 
 		defer span.End()
 
-		return notFound(spanCtx, c, span, &libLog.NopLogger{}, "resource not found", errTest)
+		return (&Handlers{}).notFound(spanCtx, c, span, &libLog.NopLogger{}, "resource not found", errTest)
 	})
 
 	request := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
@@ -1854,7 +1854,7 @@ func TestUnprocessable_Response(t *testing.T) {
 
 		defer span.End()
 
-		return unprocessable(spanCtx, c, span, &libLog.NopLogger{}, "cannot process", errTest)
+		return (&Handlers{}).unprocessable(spanCtx, c, span, &libLog.NopLogger{}, "cannot process", errTest)
 	})
 
 	request := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
@@ -1886,7 +1886,7 @@ func TestInternalError_Response(t *testing.T) {
 
 		defer span.End()
 
-		return internalError(spanCtx, c, span, &libLog.NopLogger{}, "something went wrong", errTest)
+		return (&Handlers{}).internalError(spanCtx, c, span, &libLog.NopLogger{}, "something went wrong", errTest)
 	})
 
 	request := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
@@ -1918,7 +1918,7 @@ func TestForbidden_WithProvidedError(t *testing.T) {
 
 		defer span.End()
 
-		return forbidden(spanCtx, c, span, &libLog.NopLogger{}, errTest)
+		return (&Handlers{}).forbidden(spanCtx, c, span, &libLog.NopLogger{}, errTest)
 	})
 
 	request := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
@@ -1933,7 +1933,7 @@ func TestForbidden_WithProvidedError(t *testing.T) {
 func TestHandleExceptionError_InvalidCurrencyCode(t *testing.T) {
 	t.Parallel()
 
-	resp := executeErrorHandler(t, handleExceptionError, value_objects.ErrInvalidCurrencyCode)
+	resp := executeErrorHandler(t, (&Handlers{}).handleExceptionError, value_objects.ErrInvalidCurrencyCode)
 	defer resp.Body.Close()
 
 	requireErrorResponse(
@@ -1949,7 +1949,7 @@ func TestHandleExceptionError_InvalidCurrencyCode(t *testing.T) {
 func TestHandleExceptionError_InvalidAdjustmentReason(t *testing.T) {
 	t.Parallel()
 
-	resp := executeErrorHandler(t, handleExceptionError, value_objects.ErrInvalidAdjustmentReason)
+	resp := executeErrorHandler(t, (&Handlers{}).handleExceptionError, value_objects.ErrInvalidAdjustmentReason)
 	defer resp.Body.Close()
 
 	requireErrorResponse(
@@ -1967,7 +1967,7 @@ func TestHandleExceptionError_InvalidResolutionTransition(t *testing.T) {
 
 	resp := executeErrorHandler(
 		t,
-		handleExceptionError,
+		(&Handlers{}).handleExceptionError,
 		value_objects.ErrInvalidResolutionTransition,
 	)
 	defer resp.Body.Close()
@@ -1985,7 +1985,7 @@ func TestHandleExceptionError_InvalidResolutionTransition(t *testing.T) {
 func TestHandleDisputeError_CategoryRequired(t *testing.T) {
 	t.Parallel()
 
-	resp := executeErrorHandler(t, handleDisputeError, command.ErrDisputeCategoryRequired)
+	resp := executeErrorHandler(t, (&Handlers{}).handleDisputeError, command.ErrDisputeCategoryRequired)
 	defer resp.Body.Close()
 
 	requireErrorResponse(
@@ -2001,7 +2001,7 @@ func TestHandleDisputeError_CategoryRequired(t *testing.T) {
 func TestHandleDisputeError_DescriptionRequired(t *testing.T) {
 	t.Parallel()
 
-	resp := executeErrorHandler(t, handleDisputeError, command.ErrDisputeDescriptionRequired)
+	resp := executeErrorHandler(t, (&Handlers{}).handleDisputeError, command.ErrDisputeDescriptionRequired)
 	defer resp.Body.Close()
 
 	requireErrorResponse(
@@ -2017,7 +2017,7 @@ func TestHandleDisputeError_DescriptionRequired(t *testing.T) {
 func TestHandleDisputeError_CommentRequired(t *testing.T) {
 	t.Parallel()
 
-	resp := executeErrorHandler(t, handleDisputeError, command.ErrDisputeCommentRequired)
+	resp := executeErrorHandler(t, (&Handlers{}).handleDisputeError, command.ErrDisputeCommentRequired)
 	defer resp.Body.Close()
 
 	requireErrorResponse(
@@ -2033,7 +2033,7 @@ func TestHandleDisputeError_CommentRequired(t *testing.T) {
 func TestHandleDisputeError_ResolutionRequired(t *testing.T) {
 	t.Parallel()
 
-	resp := executeErrorHandler(t, handleDisputeError, command.ErrDisputeResolutionRequired)
+	resp := executeErrorHandler(t, (&Handlers{}).handleDisputeError, command.ErrDisputeResolutionRequired)
 	defer resp.Body.Close()
 
 	requireErrorResponse(
@@ -2049,7 +2049,7 @@ func TestHandleDisputeError_ResolutionRequired(t *testing.T) {
 func TestHandleDisputeError_InvalidDisputeTransition(t *testing.T) {
 	t.Parallel()
 
-	resp := executeErrorHandler(t, handleDisputeError, dispute.ErrInvalidDisputeTransition)
+	resp := executeErrorHandler(t, (&Handlers{}).handleDisputeError, dispute.ErrInvalidDisputeTransition)
 	defer resp.Body.Close()
 
 	requireErrorResponse(
@@ -2065,7 +2065,7 @@ func TestHandleDisputeError_InvalidDisputeTransition(t *testing.T) {
 func TestHandleDispatchError_ExceptionIDRequired(t *testing.T) {
 	t.Parallel()
 
-	resp := executeErrorHandler(t, handleDispatchError, command.ErrExceptionIDRequired)
+	resp := executeErrorHandler(t, (&Handlers{}).handleDispatchError, command.ErrExceptionIDRequired)
 	defer resp.Body.Close()
 
 	requireErrorResponse(
@@ -2081,7 +2081,7 @@ func TestHandleDispatchError_ExceptionIDRequired(t *testing.T) {
 func TestHandleDispatchError_ActorRequired(t *testing.T) {
 	t.Parallel()
 
-	resp := executeErrorHandler(t, handleDispatchError, command.ErrActorRequired)
+	resp := executeErrorHandler(t, (&Handlers{}).handleDispatchError, command.ErrActorRequired)
 	defer resp.Body.Close()
 
 	requireErrorResponse(
@@ -2099,7 +2099,7 @@ func TestHandleDispatchError_ConnectorNotConfigured(t *testing.T) {
 
 	wrappedErr := fmt.Errorf("dispatch to jira: %w: JIRA", command.ErrDispatchConnectorNotConfigured)
 
-	resp := executeErrorHandler(t, handleDispatchError, wrappedErr)
+	resp := executeErrorHandler(t, (&Handlers{}).handleDispatchError, wrappedErr)
 
 	requireErrorResponse(
 		t,
@@ -2116,7 +2116,7 @@ func TestHandleDispatchError_ExceptionNotFound(t *testing.T) {
 
 	wrappedErr := fmt.Errorf("find exception: %w", entities.ErrExceptionNotFound)
 
-	resp := executeErrorHandler(t, handleDispatchError, wrappedErr)
+	resp := executeErrorHandler(t, (&Handlers{}).handleDispatchError, wrappedErr)
 
 	requireErrorResponse(
 		t,

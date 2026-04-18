@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync/atomic"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -29,19 +28,21 @@ const (
 	minTransactionIDsForManualMatch = 2
 )
 
-// productionMode indicates whether the application is running in production.
-// Set once during handler construction via NewHandler; governs SafeError behavior
-// (suppresses internal error details in client responses when true).
-// Uses atomic.Bool because parallel tests construct handlers concurrently.
-var productionMode atomic.Bool
-
 // Handler handles HTTP requests for matching operations.
+//
+// productionMode governs SafeError behavior (suppresses internal error
+// details in client responses when true). Stored as a per-handler bool
+// rather than a package-level atomic.Bool — the previous shared-global
+// state coupled every test in the package to whichever test last
+// constructed a handler, regardless of the production flag each test
+// wanted to exercise.
 type Handler struct {
 	command                 *command.UseCase
 	query                   *matchingQuery.UseCase
 	contextProvider         contextProvider
 	contextVerifier         libHTTP.TenantOwnershipVerifier
 	resourceContextVerifier libHTTP.ResourceOwnershipVerifier
+	productionMode          bool
 }
 
 type contextProvider interface {
@@ -136,8 +137,6 @@ func NewHandler(
 		return nil, ErrNilContextProvider
 	}
 
-	productionMode.Store(production)
-
 	verifier := NewTenantOwnershipVerifier(ctxProvider)
 	resourceVerifier := NewResourceContextVerifier(ctxProvider, auth.GetTenantID)
 
@@ -147,6 +146,7 @@ func NewHandler(
 		contextProvider:         ctxProvider,
 		contextVerifier:         verifier,
 		resourceContextVerifier: resourceVerifier,
+		productionMode:          production,
 	}, nil
 }
 
@@ -154,8 +154,8 @@ func startHandlerSpan(c *fiber.Ctx, name string) (context.Context, trace.Span, l
 	return sharedhttp.StartHandlerSpan(c, name)
 }
 
-func logSpanError(ctx context.Context, span trace.Span, logger libLog.Logger, message string, err error) {
-	sharedhttp.LogSpanError(ctx, span, logger, productionMode.Load(), message, err)
+func (handler *Handler) logSpanError(ctx context.Context, span trace.Span, logger libLog.Logger, message string, err error) {
+	sharedhttp.LogSpanError(ctx, span, logger, handler.productionMode, message, err)
 }
 
 //nolint:wrapcheck // HTTP transport response is the terminal error boundary.
@@ -169,7 +169,7 @@ func respondContextVerificationError(fiberCtx *fiber.Ctx, err error) error {
 }
 
 //nolint:wrapcheck // HTTP transport response is the terminal error boundary.
-func badRequest(
+func (handler *Handler) badRequest(
 	ctx context.Context,
 	fiberCtx *fiber.Ctx,
 	span trace.Span,
@@ -177,11 +177,11 @@ func badRequest(
 	message string,
 	err error,
 ) error {
-	return sharedhttp.BadRequest(ctx, fiberCtx, span, logger, productionMode.Load(), message, err)
+	return sharedhttp.BadRequest(ctx, fiberCtx, span, logger, handler.productionMode, message, err)
 }
 
 //nolint:wrapcheck // HTTP transport response is the terminal error boundary.
-func writeServiceError(
+func (handler *Handler) writeServiceError(
 	ctx context.Context,
 	fiberCtx *fiber.Ctx,
 	span trace.Span,
@@ -189,7 +189,7 @@ func writeServiceError(
 	message string,
 	err error,
 ) error {
-	return sharedhttp.InternalError(ctx, fiberCtx, span, logger, productionMode.Load(), message, err)
+	return sharedhttp.InternalError(ctx, fiberCtx, span, logger, handler.productionMode, message, err)
 }
 
 func writeNotFound(fiberCtx *fiber.Ctx, message string) error {
@@ -198,7 +198,7 @@ func writeNotFound(fiberCtx *fiber.Ctx, message string) error {
 
 // handleContextVerificationError handles errors from ParseAndVerifyTenantScopedID.
 // Returns (shouldReturn, error) where shouldReturn indicates if the caller should return.
-func handleContextVerificationError(
+func (handler *Handler) handleContextVerificationError(
 	ctx context.Context,
 	fiberCtx *fiber.Ctx,
 	span trace.Span,
@@ -210,7 +210,7 @@ func handleContextVerificationError(
 	}
 
 	if errors.Is(err, libHTTP.ErrMissingContextID) || errors.Is(err, libHTTP.ErrInvalidContextID) {
-		logSpanError(ctx, span, logger, "context verification failed", err)
+		handler.logSpanError(ctx, span, logger, "context verification failed", err)
 
 		return true, respondContextVerificationError(fiberCtx, err)
 	}
@@ -225,14 +225,14 @@ func handleContextVerificationError(
 		return true, respondError(fiberCtx, fiber.StatusForbidden, "context_not_active", "context is not active")
 	}
 
-	logSpanError(ctx, span, logger, "context verification failed", err)
+	handler.logSpanError(ctx, span, logger, "context verification failed", err)
 
 	return true, respondContextVerificationError(fiberCtx, err)
 }
 
 // handleContextQueryVerificationError handles errors from ParseAndVerifyResourceScopedID.
 // Returns (shouldReturn, error) where shouldReturn indicates if the caller should return.
-func handleContextQueryVerificationError(
+func (handler *Handler) handleContextQueryVerificationError(
 	ctx context.Context,
 	fiberCtx *fiber.Ctx,
 	span trace.Span,
@@ -244,7 +244,7 @@ func handleContextQueryVerificationError(
 	}
 
 	if errors.Is(err, libHTTP.ErrMissingContextID) || errors.Is(err, libHTTP.ErrInvalidContextID) {
-		logSpanError(ctx, span, logger, "context query verification failed", err)
+		handler.logSpanError(ctx, span, logger, "context query verification failed", err)
 
 		return true, respondContextVerificationError(fiberCtx, err)
 	}
@@ -259,7 +259,7 @@ func handleContextQueryVerificationError(
 		return true, respondError(fiberCtx, fiber.StatusForbidden, "context_not_active", "context is not active")
 	}
 
-	logSpanError(ctx, span, logger, "context query verification failed", err)
+	handler.logSpanError(ctx, span, logger, "context query verification failed", err)
 
 	return true, respondContextVerificationError(fiberCtx, err)
 }

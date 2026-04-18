@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync/atomic"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -38,15 +37,16 @@ var (
 	ErrInvalidDateFormat  = errors.New("invalid date format")
 )
 
-// productionMode indicates whether the application is running in production.
-// Set once during handler construction via NewHandler; governs SafeError behavior
-// (suppresses internal error details in client responses when true).
-// Uses atomic.Bool because parallel tests construct handlers concurrently.
-var productionMode atomic.Bool
-
 // Handler handles HTTP requests for governance audit logs.
 // It instruments each operation with OpenTelemetry metrics for observability:
 // audit_log_created_total, audit_log_queries_total, and audit_log_query_latency_seconds.
+//
+// productionMode governs SafeError behavior (suppresses internal error
+// details in client responses when true). Stored as a per-handler bool
+// rather than a package-level atomic.Bool — the previous shared-global
+// state coupled every test in the package to whichever test last
+// constructed a handler, regardless of the production flag each test
+// wanted to exercise.
 type Handler struct {
 	repo repositories.AuditLogRepository
 
@@ -54,6 +54,8 @@ type Handler struct {
 	createdTotal     metric.Int64Counter
 	queriesTotal     metric.Int64Counter
 	queryLatencyHist metric.Float64Histogram
+
+	productionMode bool
 }
 
 // NewHandler creates a new governance HTTP handler.
@@ -62,9 +64,7 @@ func NewHandler(repo repositories.AuditLogRepository, production bool) (*Handler
 		return nil, ErrRepoRequired
 	}
 
-	productionMode.Store(production)
-
-	handler := &Handler{repo: repo}
+	handler := &Handler{repo: repo, productionMode: production}
 
 	if err := handler.initMetrics(); err != nil {
 		return nil, fmt.Errorf("init governance handler metrics: %w", err)
@@ -107,17 +107,24 @@ func startHandlerSpan(c *fiber.Ctx, name string) (context.Context, trace.Span, l
 	return sharedhttp.StartHandlerSpanWithFallback(c, name, "governance.http")
 }
 
-func logSpanError(ctx context.Context, span trace.Span, logger libLog.Logger, message string, err error) {
-	sharedhttp.LogSpanError(ctx, span, logger, productionMode.Load(), message, err)
-}
-
 //nolint:wrapcheck // HTTP transport response is the terminal error boundary.
 func respondError(fiberCtx *fiber.Ctx, status int, slug, message string) error {
 	return sharedhttp.RespondError(fiberCtx, status, slug, message)
 }
 
+// The helpers below (logSpanError, badRequest, writeServiceError,
+// writeNotFound) are defined as methods on every handler type in the
+// governance package so they can read productionMode from the receiver.
+// Previously they were package-level free functions reading a shared
+// atomic.Bool, which coupled every test in the package to whichever test
+// last constructed a handler.
+
+func (handler *Handler) logSpanError(ctx context.Context, span trace.Span, logger libLog.Logger, message string, err error) {
+	sharedhttp.LogSpanError(ctx, span, logger, handler.productionMode, message, err)
+}
+
 //nolint:wrapcheck // HTTP transport response is the terminal error boundary.
-func badRequest(
+func (handler *Handler) badRequest(
 	ctx context.Context,
 	fiberCtx *fiber.Ctx,
 	span trace.Span,
@@ -125,11 +132,11 @@ func badRequest(
 	message string,
 	err error,
 ) error {
-	return sharedhttp.BadRequest(ctx, fiberCtx, span, logger, productionMode.Load(), message, err)
+	return sharedhttp.BadRequest(ctx, fiberCtx, span, logger, handler.productionMode, message, err)
 }
 
 //nolint:wrapcheck // HTTP transport response is the terminal error boundary.
-func writeServiceError(
+func (handler *Handler) writeServiceError(
 	ctx context.Context,
 	fiberCtx *fiber.Ctx,
 	span trace.Span,
@@ -137,10 +144,10 @@ func writeServiceError(
 	message string,
 	err error,
 ) error {
-	return sharedhttp.InternalError(ctx, fiberCtx, span, logger, productionMode.Load(), message, err)
+	return sharedhttp.InternalError(ctx, fiberCtx, span, logger, handler.productionMode, message, err)
 }
 
-func writeNotFound(
+func (handler *Handler) writeNotFound(
 	ctx context.Context,
 	fiberCtx *fiber.Ctx,
 	span trace.Span,
@@ -149,7 +156,7 @@ func writeNotFound(
 	message string,
 	err error,
 ) error {
-	sharedhttp.LogSpanError(ctx, span, logger, productionMode.Load(), message, err)
+	sharedhttp.LogSpanError(ctx, span, logger, handler.productionMode, message, err)
 
 	return respondError(fiberCtx, fiber.StatusNotFound, slug, message)
 }
@@ -182,12 +189,12 @@ func (handler *Handler) GetAuditLog(
 
 	idStr := fiberCtx.Params("id")
 	if idStr == "" {
-		return badRequest(ctx, fiberCtx, span, logger, "audit log id is required", ErrMissingAuditLogID)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "audit log id is required", ErrMissingAuditLogID)
 	}
 
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		return badRequest(
+		return handler.badRequest(
 			ctx,
 			fiberCtx,
 			span,
@@ -203,14 +210,14 @@ func (handler *Handler) GetAuditLog(
 
 	if err != nil {
 		if errors.Is(err, governanceErrors.ErrAuditLogNotFound) {
-			return writeNotFound(ctx, fiberCtx, span, logger, "governance_audit_log_not_found", "audit log not found", err)
+			return handler.writeNotFound(ctx, fiberCtx, span, logger, "governance_audit_log_not_found", "audit log not found", err)
 		}
 
-		return writeServiceError(ctx, fiberCtx, span, logger, "failed to get audit log", err)
+		return handler.writeServiceError(ctx, fiberCtx, span, logger, "failed to get audit log", err)
 	}
 
 	if auditLog == nil {
-		return writeNotFound(
+		return handler.writeNotFound(
 			ctx,
 			fiberCtx,
 			span,
@@ -258,17 +265,17 @@ func (handler *Handler) ListAuditLogsByEntity(
 
 	entityType := fiberCtx.Params("entityType")
 	if entityType == "" {
-		return badRequest(ctx, fiberCtx, span, logger, "entity type is required", ErrMissingEntityType)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "entity type is required", ErrMissingEntityType)
 	}
 
 	entityIDStr := fiberCtx.Params("entityId")
 	if entityIDStr == "" {
-		return badRequest(ctx, fiberCtx, span, logger, "entity id is required", ErrMissingEntityID)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "entity id is required", ErrMissingEntityID)
 	}
 
 	entityID, err := uuid.Parse(entityIDStr)
 	if err != nil {
-		return badRequest(
+		return handler.badRequest(
 			ctx,
 			fiberCtx,
 			span,
@@ -280,7 +287,7 @@ func (handler *Handler) ListAuditLogsByEntity(
 
 	cursor, limit, err := parseTimestampCursorPagination(fiberCtx)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
 	}
 
 	logs, nextCursor, err := handler.repo.ListByEntity(ctx, entityType, entityID, cursor, limit)
@@ -288,7 +295,7 @@ func (handler *Handler) ListAuditLogsByEntity(
 	handler.queryLatencyHist.Record(ctx, time.Since(queryStart).Seconds())
 
 	if err != nil {
-		return writeServiceError(ctx, fiberCtx, span, logger, "failed to list audit logs", err)
+		return handler.writeServiceError(ctx, fiberCtx, span, logger, "failed to list audit logs", err)
 	}
 
 	response := dto.ListAuditLogsResponse{
@@ -340,12 +347,12 @@ func (handler *Handler) ListAuditLogs(
 
 	filter, err := parseAuditLogFilter(fiberCtx)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
 	}
 
 	cursor, limit, err := parseTimestampCursorPagination(fiberCtx)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
 	}
 
 	logs, nextCursor, err := handler.repo.List(ctx, filter, cursor, limit)
@@ -353,7 +360,7 @@ func (handler *Handler) ListAuditLogs(
 	handler.queryLatencyHist.Record(ctx, time.Since(queryStart).Seconds())
 
 	if err != nil {
-		return writeServiceError(ctx, fiberCtx, span, logger, "failed to list audit logs", err)
+		return handler.writeServiceError(ctx, fiberCtx, span, logger, "failed to list audit logs", err)
 	}
 
 	response := dto.ListAuditLogsResponse{

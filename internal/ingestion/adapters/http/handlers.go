@@ -10,7 +10,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -93,18 +92,16 @@ type ReconciliationContextInfo = sharedPorts.ContextAccessInfo
 
 type contextProvider = sharedPorts.ContextAccessProvider
 
-// productionMode indicates whether the application is running in production.
-// Set once during handler construction via NewHandler; governs SafeError behavior
-// (suppresses internal error details in client responses when true).
-// Uses atomic.Bool because parallel tests construct handlers concurrently.
-var productionMode atomic.Bool
-
 // Handlers provides HTTP handlers for ingestion operations.
+//
+// productionMode governs SafeError behavior (per-handler bool — see
+// matching/http for the same pattern and rationale).
 type Handlers struct {
 	commandUC       *command.UseCase
 	queryUC         *query.UseCase
 	contextProvider contextProvider
 	contextVerifier libHTTP.TenantOwnershipVerifier
+	productionMode  bool
 }
 
 // NewHandlers creates a new Handlers instance with the given use cases.
@@ -126,8 +123,6 @@ func NewHandlers(
 		return nil, ErrNilContextProvider
 	}
 
-	productionMode.Store(production)
-
 	verifier := NewTenantOwnershipVerifier(ctxProvider)
 
 	return &Handlers{
@@ -135,6 +130,7 @@ func NewHandlers(
 		queryUC:         queryUC,
 		contextProvider: ctxProvider,
 		contextVerifier: verifier,
+		productionMode:  production,
 	}, nil
 }
 
@@ -142,8 +138,8 @@ func startHandlerSpan(c *fiber.Ctx, name string) (context.Context, trace.Span, l
 	return sharedhttp.StartHandlerSpan(c, name)
 }
 
-func logSpanError(ctx context.Context, span trace.Span, logger libLog.Logger, message string, err error) {
-	sharedhttp.LogSpanError(ctx, span, logger, productionMode.Load(), message, err)
+func (handler *Handlers) logSpanError(ctx context.Context, span trace.Span, logger libLog.Logger, message string, err error) {
+	sharedhttp.LogSpanError(ctx, span, logger, handler.productionMode, message, err)
 }
 
 // validateFileContentType checks if the file's content type is valid for the declared format.
@@ -175,7 +171,7 @@ func validateFileContentType(contentType, format string) bool {
 }
 
 //nolint:wrapcheck // HTTP transport response is the terminal error boundary.
-func badRequest(
+func (handler *Handlers) badRequest(
 	ctx context.Context,
 	fiberCtx *fiber.Ctx,
 	span trace.Span,
@@ -183,7 +179,7 @@ func badRequest(
 	message string,
 	err error,
 ) error {
-	return sharedhttp.BadRequest(ctx, fiberCtx, span, logger, productionMode.Load(), message, err)
+	return sharedhttp.BadRequest(ctx, fiberCtx, span, logger, handler.productionMode, message, err)
 }
 
 //nolint:wrapcheck // HTTP transport response is the terminal error boundary.
@@ -196,7 +192,7 @@ func respondContextVerificationError(fiberCtx *fiber.Ctx, err error) error {
 	return sharedhttp.RespondProductError(fiberCtx, sharedhttp.ValidateContextVerificationError(err))
 }
 
-func notFound(
+func (handler *Handlers) notFound(
 	ctx context.Context,
 	fiberCtx *fiber.Ctx,
 	span trace.Span,
@@ -205,13 +201,13 @@ func notFound(
 	message string,
 	err error,
 ) error {
-	sharedhttp.LogSpanError(ctx, span, logger, productionMode.Load(), message, err)
+	sharedhttp.LogSpanError(ctx, span, logger, handler.productionMode, message, err)
 
 	return respondError(fiberCtx, fiber.StatusNotFound, slug, message)
 }
 
 // handleContextVerificationError maps errors from ParseAndVerifyTenantScopedID to HTTP responses.
-func handleContextVerificationError(
+func (handler *Handlers) handleContextVerificationError(
 	ctx context.Context,
 	fiberCtx *fiber.Ctx,
 	span trace.Span,
@@ -219,18 +215,18 @@ func handleContextVerificationError(
 	err error,
 ) error {
 	if errors.Is(err, libHTTP.ErrMissingContextID) || errors.Is(err, libHTTP.ErrInvalidContextID) {
-		logSpanError(ctx, span, logger, "context verification failed", err)
+		handler.logSpanError(ctx, span, logger, "context verification failed", err)
 
 		return respondContextVerificationError(fiberCtx, err)
 	}
 
-	logSpanError(ctx, span, logger, "context verification failed", err)
+	handler.logSpanError(ctx, span, logger, "context verification failed", err)
 
 	return respondContextVerificationError(fiberCtx, err)
 }
 
 // handleIngestionError maps errors from StartIngestion to appropriate HTTP responses.
-func handleIngestionError(
+func (handler *Handlers) handleIngestionError(
 	ctx context.Context,
 	fiberCtx *fiber.Ctx,
 	span trace.Span,
@@ -239,39 +235,39 @@ func handleIngestionError(
 ) error {
 	// Source not found → 404
 	if errors.Is(err, command.ErrSourceNotFound) {
-		return notFound(ctx, fiberCtx, span, logger, "ingestion_source_not_found", "source not found", err)
+		return handler.notFound(ctx, fiberCtx, span, logger, "ingestion_source_not_found", "source not found", err)
 	}
 
 	// Field map not found → 404
 	if errors.Is(err, command.ErrFieldMapNotFound) {
-		return notFound(ctx, fiberCtx, span, logger, "ingestion_field_map_not_found", "field mapping not found for source", err)
+		return handler.notFound(ctx, fiberCtx, span, logger, "ingestion_field_map_not_found", "field mapping not found for source", err)
 	}
 
 	// Empty file (EOF reading headers) → 400
 	if errors.Is(err, io.EOF) || strings.Contains(err.Error(), "failed to read csv headers: EOF") ||
 		strings.Contains(err.Error(), "failed to read json: EOF") ||
 		strings.Contains(err.Error(), "failed to decode xml: EOF") {
-		logSpanError(ctx, span, logger, "file is empty or has no content", err)
+		handler.logSpanError(ctx, span, logger, "file is empty or has no content", err)
 
 		return respondError(fiberCtx, fiber.StatusBadRequest, "ingestion_empty_file", "file is empty or has no content")
 	}
 
 	// Format required → 400
 	if errors.Is(err, command.ErrFormatRequiredUC) {
-		logSpanError(ctx, span, logger, "format is required", err)
+		handler.logSpanError(ctx, span, logger, "format is required", err)
 
 		return respondError(fiberCtx, fiber.StatusBadRequest, "ingestion_format_required", "format is required")
 	}
 
 	// Empty file (no data rows) → 400
 	if errors.Is(err, command.ErrEmptyFile) {
-		logSpanError(ctx, span, logger, "file contains no data rows", err)
+		handler.logSpanError(ctx, span, logger, "file contains no data rows", err)
 
 		return respondError(fiberCtx, fiber.StatusBadRequest, "ingestion_empty_file", "file contains no data rows")
 	}
 
 	// Generic server error
-	logSpanError(ctx, span, logger, "failed to start ingestion", err)
+	handler.logSpanError(ctx, span, logger, "failed to start ingestion", err)
 
 	return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 }
@@ -314,23 +310,23 @@ func (handler *Handlers) UploadFile(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	sourceID, err := uuid.Parse(fiberCtx.Params("sourceId"))
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid source_id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid source_id", err)
 	}
 
 	file, err := fiberCtx.FormFile("file")
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "file is required", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "file is required", err)
 	}
 
 	if file.Size == 0 {
-		logSpanError(ctx, span, logger, "file is empty", ErrEmptyFile)
+		handler.logSpanError(ctx, span, logger, "file is empty", ErrEmptyFile)
 
 		return respondError(fiberCtx, fiber.StatusBadRequest, "ingestion_empty_file", "file is empty")
 	}
@@ -347,14 +343,14 @@ func (handler *Handlers) UploadFile(fiberCtx *fiber.Ctx) error {
 	format := strings.TrimSpace(fiberCtx.FormValue("format"))
 
 	if format == "" {
-		logSpanError(ctx, span, logger, "format is required", ErrFormatRequired)
+		handler.logSpanError(ctx, span, logger, "format is required", ErrFormatRequired)
 
 		return respondError(fiberCtx, fiber.StatusBadRequest, "ingestion_format_required", "format is required")
 	}
 
 	format = strings.ToLower(format)
 	if format != "csv" && format != "json" && format != "xml" {
-		return badRequest(
+		return handler.badRequest(
 			ctx,
 			fiberCtx,
 			span,
@@ -365,12 +361,12 @@ func (handler *Handlers) UploadFile(fiberCtx *fiber.Ctx) error {
 	}
 
 	if !validateFileContentType(file.Header.Get("Content-Type"), format) {
-		return badRequest(ctx, fiberCtx, span, logger, "file content type does not match declared format", ErrInvalidContentType)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "file content type does not match declared format", ErrInvalidContentType)
 	}
 
 	fileReader, err := file.Open()
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to open file", err)
+		handler.logSpanError(ctx, span, logger, "failed to open file", err)
 
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
@@ -386,7 +382,7 @@ func (handler *Handlers) UploadFile(fiberCtx *fiber.Ctx) error {
 		fileReader,
 	)
 	if err != nil {
-		return handleIngestionError(ctx, fiberCtx, span, logger, err)
+		return handler.handleIngestionError(ctx, fiberCtx, span, logger, err)
 	}
 
 	if writeErr := libHTTP.Respond(fiberCtx, fiber.StatusAccepted, dto.JobToResponse(job)); writeErr != nil {
@@ -428,23 +424,23 @@ func (handler *Handlers) GetJob(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	jobID, err := uuid.Parse(fiberCtx.Params("jobId"))
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid job_id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid job_id", err)
 	}
 
 	job, err := handler.queryUC.GetJobByContext(ctx, contextID, jobID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, query.ErrJobNotFound) {
-			return notFound(ctx, fiberCtx, span, logger, "ingestion_job_not_found", "job not found", err)
+			return handler.notFound(ctx, fiberCtx, span, logger, "ingestion_job_not_found", "job not found", err)
 		}
 
-		logSpanError(ctx, span, logger, "failed to get job", err)
+		handler.logSpanError(ctx, span, logger, "failed to get job", err)
 
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
@@ -490,14 +486,14 @@ func (handler *Handlers) ListJobsByContext(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	cursor, limit, err := libHTTP.ParseOpaqueCursorPagination(fiberCtx)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
 	}
 
 	cursor = strings.TrimSpace(cursor)
@@ -509,7 +505,7 @@ func (handler *Handlers) ListJobsByContext(fiberCtx *fiber.Ctx) error {
 
 	sortOrder = strings.ToLower(sortOrder)
 	if sortOrder != "asc" && sortOrder != sortOrderDesc {
-		return badRequest(
+		return handler.badRequest(
 			ctx,
 			fiberCtx,
 			span,
@@ -521,7 +517,7 @@ func (handler *Handlers) ListJobsByContext(fiberCtx *fiber.Ctx) error {
 
 	sortBy := strings.TrimSpace(fiberCtx.Query("sort_by"))
 	if sortBy != "" && !validJobSortColumns[sortBy] {
-		return badRequest(
+		return handler.badRequest(
 			ctx,
 			fiberCtx,
 			span,
@@ -543,10 +539,10 @@ func (handler *Handlers) ListJobsByContext(fiberCtx *fiber.Ctx) error {
 	)
 	if err != nil {
 		if errors.Is(err, libHTTP.ErrInvalidCursor) {
-			return badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
+			return handler.badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
 		}
 
-		logSpanError(ctx, span, logger, "failed to list jobs", err)
+		handler.logSpanError(ctx, span, logger, "failed to list jobs", err)
 
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
@@ -604,31 +600,31 @@ func (handler *Handlers) ListTransactionsByJob(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	jobID, err := uuid.Parse(fiberCtx.Params("jobId"))
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid job_id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid job_id", err)
 	}
 
 	cursor, limit, err := libHTTP.ParseOpaqueCursorPagination(fiberCtx)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
 	}
 
 	cursor = strings.TrimSpace(cursor)
 
 	sortOrder, err := parseSortOrder(fiberCtx)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid sort_order: must be asc or desc", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid sort_order: must be asc or desc", err)
 	}
 
 	sortBy := strings.TrimSpace(fiberCtx.Query("sort_by"))
 	if sortBy != "" && !validTransactionSortColumns[sortBy] {
-		return badRequest(
+		return handler.badRequest(
 			ctx,
 			fiberCtx,
 			span,
@@ -641,10 +637,10 @@ func (handler *Handlers) ListTransactionsByJob(fiberCtx *fiber.Ctx) error {
 	job, err := handler.queryUC.GetJobByContext(ctx, contextID, jobID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, query.ErrJobNotFound) {
-			return notFound(ctx, fiberCtx, span, logger, "ingestion_job_not_found", "job not found", err)
+			return handler.notFound(ctx, fiberCtx, span, logger, "ingestion_job_not_found", "job not found", err)
 		}
 
-		logSpanError(ctx, span, logger, "failed to get job", err)
+		handler.logSpanError(ctx, span, logger, "failed to get job", err)
 
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
@@ -662,10 +658,10 @@ func (handler *Handlers) ListTransactionsByJob(fiberCtx *fiber.Ctx) error {
 	)
 	if err != nil {
 		if errors.Is(err, libHTTP.ErrInvalidCursor) {
-			return badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
+			return handler.badRequest(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
 		}
 
-		logSpanError(ctx, span, logger, "failed to list transactions", err)
+		handler.logSpanError(ctx, span, logger, "failed to list transactions", err)
 
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
@@ -722,19 +718,19 @@ func (handler *Handlers) IgnoreTransaction(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	transactionID, err := uuid.Parse(fiberCtx.Params("transactionId"))
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid transaction_id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid transaction_id", err)
 	}
 
 	var req dto.IgnoreTransactionRequest
 	if err := libHTTP.ParseBodyAndValidate(fiberCtx, &req); err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid request body", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid request body", err)
 	}
 
 	tx, err := handler.commandUC.IgnoreTransaction(ctx, command.IgnoreTransactionInput{
@@ -743,7 +739,7 @@ func (handler *Handlers) IgnoreTransaction(fiberCtx *fiber.Ctx) error {
 		Reason:        req.Reason,
 	})
 	if err != nil {
-		return handleIgnoreTransactionError(ctx, fiberCtx, span, logger, err)
+		return handler.handleIgnoreTransactionError(ctx, fiberCtx, span, logger, err)
 	}
 
 	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.IgnoreTransactionResponse{
@@ -796,24 +792,24 @@ func (handler *Handlers) SearchTransactions(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	var req dto.SearchTransactionsRequest
 	if err := fiberCtx.QueryParser(&req); err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid query parameters", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid query parameters", err)
 	}
 
 	searchParams, err := parseSearchParams(req)
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid search parameters", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid search parameters", err)
 	}
 
 	transactions, total, err := handler.queryUC.SearchTransactions(ctx, contextID, searchParams)
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to search transactions", err)
+		handler.logSpanError(ctx, span, logger, "failed to search transactions", err)
 
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
@@ -961,25 +957,25 @@ func (handler *Handlers) PreviewFile(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	sourceID, err := uuid.Parse(fiberCtx.Params("sourceId"))
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid source_id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid source_id", err)
 	}
 
 	span.SetAttributes(attribute.String("source_id", sourceID.String()))
 
 	file, err := fiberCtx.FormFile("file")
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "file is required", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "file is required", err)
 	}
 
 	if file.Size == 0 {
-		return badRequest(ctx, fiberCtx, span, logger, "file is empty", ErrEmptyFile)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "file is empty", ErrEmptyFile)
 	}
 
 	format := strings.TrimSpace(fiberCtx.FormValue("format"))
@@ -988,27 +984,27 @@ func (handler *Handlers) PreviewFile(fiberCtx *fiber.Ctx) error {
 	}
 
 	if format == "" {
-		return badRequest(ctx, fiberCtx, span, logger, "unsupported file format; allowed: csv, json, xml", ErrFormatRequired)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "unsupported file format; allowed: csv, json, xml", ErrFormatRequired)
 	}
 
 	maxRows := parseMaxRows(fiberCtx, logger)
 
 	fileReader, err := file.Open()
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to open file", err)
+		handler.logSpanError(ctx, span, logger, "failed to open file", err)
 
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 	}
 
 	defer func() {
 		if closeErr := fileReader.Close(); closeErr != nil {
-			logSpanError(ctx, span, logger, "failed to close preview file", closeErr)
+			handler.logSpanError(ctx, span, logger, "failed to close preview file", closeErr)
 		}
 	}()
 
 	preview, err := handler.queryUC.PreviewFile(ctx, fileReader, format, maxRows)
 	if err != nil {
-		return handlePreviewError(ctx, fiberCtx, span, logger, err)
+		return handler.handlePreviewError(ctx, fiberCtx, span, logger, err)
 	}
 
 	if err := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.FilePreviewResponse{
@@ -1081,7 +1077,7 @@ func detectFormatFromFilename(filename string) string {
 	}
 }
 
-func handlePreviewError(
+func (handler *Handlers) handlePreviewError(
 	ctx context.Context,
 	fiberCtx *fiber.Ctx,
 	span trace.Span,
@@ -1092,15 +1088,15 @@ func handlePreviewError(
 		errors.Is(err, query.ErrPreviewFormatRequired) ||
 		errors.Is(err, query.ErrPreviewInvalidFormat) ||
 		errors.Is(err, query.ErrPreviewEmptyFile) {
-		return badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, err.Error(), err)
 	}
 
-	logSpanError(ctx, span, logger, "failed to preview file", err)
+	handler.logSpanError(ctx, span, logger, "failed to preview file", err)
 
 	return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 }
 
-func handleIgnoreTransactionError(
+func (handler *Handlers) handleIgnoreTransactionError(
 	ctx context.Context,
 	fiberCtx *fiber.Ctx,
 	span trace.Span,
@@ -1108,11 +1104,11 @@ func handleIgnoreTransactionError(
 	err error,
 ) error {
 	if errors.Is(err, command.ErrTransactionNotFound) {
-		return notFound(ctx, fiberCtx, span, logger, "not_found", "transaction not found", err)
+		return handler.notFound(ctx, fiberCtx, span, logger, "not_found", "transaction not found", err)
 	}
 
 	if errors.Is(err, command.ErrTransactionNotIgnorable) {
-		logSpanError(ctx, span, logger, "transaction cannot be ignored", err)
+		handler.logSpanError(ctx, span, logger, "transaction cannot be ignored", err)
 
 		return respondError(
 			fiberCtx,
@@ -1123,10 +1119,10 @@ func handleIgnoreTransactionError(
 	}
 
 	if errors.Is(err, command.ErrReasonRequired) {
-		return badRequest(ctx, fiberCtx, span, logger, "reason is required", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "reason is required", err)
 	}
 
-	logSpanError(ctx, span, logger, "failed to ignore transaction", err)
+	handler.logSpanError(ctx, span, logger, "failed to ignore transaction", err)
 
 	return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
 }

@@ -118,7 +118,7 @@ func TestBadRequest(t *testing.T) {
 			c.SetUserContext(spanCtx)
 			defer span.End()
 
-			return badRequest(spanCtx, c, span, &libLog.NopLogger{}, "validation failed", errTestBoom)
+			return (&Handler{}).badRequest(spanCtx, c, span, &libLog.NopLogger{}, "validation failed", errTestBoom)
 		})
 
 		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
@@ -149,7 +149,7 @@ func TestBadRequest(t *testing.T) {
 			c.SetUserContext(spanCtx)
 			defer span.End()
 
-			return badRequest(spanCtx, c, span, mockLog, "test message", errTestBoom)
+			return (&Handler{}).badRequest(spanCtx, c, span, mockLog, "test message", errTestBoom)
 		})
 
 		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
@@ -172,7 +172,7 @@ func TestBadRequest(t *testing.T) {
 			c.SetUserContext(spanCtx)
 			defer span.End()
 
-			return badRequest(spanCtx, c, span, &libLog.NopLogger{}, "test", errTestBoom)
+			return (&Handler{}).badRequest(spanCtx, c, span, &libLog.NopLogger{}, "test", errTestBoom)
 		})
 
 		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
@@ -199,7 +199,7 @@ func TestWriteServiceError(t *testing.T) {
 			c.SetUserContext(spanCtx)
 			defer span.End()
 
-			return writeServiceError(spanCtx, c, span, &libLog.NopLogger{}, "database connection failed", errTestDatabaseError)
+			return (&Handler{}).writeServiceError(spanCtx, c, span, &libLog.NopLogger{}, "database connection failed", errTestDatabaseError)
 		})
 
 		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
@@ -223,7 +223,7 @@ func TestWriteServiceError(t *testing.T) {
 			c.SetUserContext(spanCtx)
 			defer span.End()
 
-			return writeServiceError(spanCtx, c, span, mockLog, "service failure", errTestBoom)
+			return (&Handler{}).writeServiceError(spanCtx, c, span, mockLog, "service failure", errTestBoom)
 		})
 
 		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
@@ -376,7 +376,7 @@ func TestHandleContextVerificationError(t *testing.T) {
 				defer span.End()
 
 				var handlerErr error
-				shouldReturn, handlerErr = handleContextVerificationError(spanCtx, c, span, &libLog.NopLogger{}, tt.err)
+				shouldReturn, handlerErr = (&Handler{}).handleContextVerificationError(spanCtx, c, span, &libLog.NopLogger{}, tt.err)
 				if shouldReturn {
 					return handlerErr
 				}
@@ -417,7 +417,7 @@ func TestHandleContextVerificationError_ContextNotActiveWithNilLogger(t *testing
 		c.SetUserContext(spanCtx)
 		defer span.End()
 
-		shouldReturn, handlerErr := handleContextVerificationError(spanCtx, c, span, nil, libHTTP.ErrContextNotActive)
+		shouldReturn, handlerErr := (&Handler{}).handleContextVerificationError(spanCtx, c, span, nil, libHTTP.ErrContextNotActive)
 		if shouldReturn {
 			return handlerErr
 		}
@@ -555,7 +555,7 @@ func TestHandleContextQueryVerificationError(t *testing.T) {
 				defer span.End()
 
 				var handlerErr error
-				shouldReturn, handlerErr = handleContextQueryVerificationError(spanCtx, c, span, &libLog.NopLogger{}, tt.err)
+				shouldReturn, handlerErr = (&Handler{}).handleContextQueryVerificationError(spanCtx, c, span, &libLog.NopLogger{}, tt.err)
 				if shouldReturn {
 					return handlerErr
 				}
@@ -596,7 +596,7 @@ func TestHandleContextQueryVerificationError_ContextNotActiveWithNilLogger(t *te
 		c.SetUserContext(spanCtx)
 		defer span.End()
 
-		shouldReturn, handlerErr := handleContextQueryVerificationError(spanCtx, c, span, nil, libHTTP.ErrContextNotActive)
+		shouldReturn, handlerErr := (&Handler{}).handleContextQueryVerificationError(spanCtx, c, span, nil, libHTTP.ErrContextNotActive)
 		if shouldReturn {
 			return handlerErr
 		}
@@ -628,7 +628,7 @@ func TestHandleContextVerificationError_WithLogger(t *testing.T) {
 			c.SetUserContext(spanCtx)
 			defer span.End()
 
-			shouldRet, handlerErr := handleContextVerificationError(spanCtx, c, span, mockLog, libHTTP.ErrContextNotActive)
+			shouldRet, handlerErr := (&Handler{}).handleContextVerificationError(spanCtx, c, span, mockLog, libHTTP.ErrContextNotActive)
 			if shouldRet {
 				return handlerErr
 			}
@@ -660,7 +660,7 @@ func TestHandleContextQueryVerificationError_WithLogger(t *testing.T) {
 			c.SetUserContext(spanCtx)
 			defer span.End()
 
-			shouldRet, handlerErr := handleContextQueryVerificationError(spanCtx, c, span, mockLog, libHTTP.ErrContextNotActive)
+			shouldRet, handlerErr := (&Handler{}).handleContextQueryVerificationError(spanCtx, c, span, mockLog, libHTTP.ErrContextNotActive)
 			if shouldRet {
 				return handlerErr
 			}

@@ -52,19 +52,19 @@ func (handler *Handler) CreateFieldMap(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	sourceID, err := parseUUIDParam(fiberCtx, "sourceId")
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid source id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid source id", err)
 	}
 
 	var req dto.CreateFieldMapRequest
 	if err := libHTTP.ParseBodyAndValidate(fiberCtx, &req); err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid field map payload", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid field map payload", err)
 	}
 
 	if err := handler.ensureSourceAccess(ctx, fiberCtx, span, logger, contextID, sourceID); err != nil {
@@ -73,7 +73,7 @@ func (handler *Handler) CreateFieldMap(fiberCtx *fiber.Ctx) error {
 
 	result, err := handler.command.CreateFieldMap(ctx, contextID, sourceID, req.ToDomainInput())
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to create field map", err)
+		handler.logSpanError(ctx, span, logger, "failed to create field map", err)
 		return writeServiceError(fiberCtx, err)
 	}
 
@@ -117,14 +117,14 @@ func (handler *Handler) GetFieldMapBySource(fiberCtx *fiber.Ctx) error {
 		libHTTP.ErrContextAccessDenied,
 	)
 	if err != nil {
-		return handleContextVerificationError(ctx, fiberCtx, span, logger, err)
+		return handler.handleContextVerificationError(ctx, fiberCtx, span, logger, err)
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
 	sourceID, err := parseUUIDParam(fiberCtx, "sourceId")
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid source id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid source id", err)
 	}
 
 	if err := handler.ensureSourceAccess(ctx, fiberCtx, span, logger, contextID, sourceID); err != nil {
@@ -137,7 +137,7 @@ func (handler *Handler) GetFieldMapBySource(fiberCtx *fiber.Ctx) error {
 			return writeNotFound(fiberCtx, "configuration_field_map_not_found", "field map not found")
 		}
 
-		logSpanError(ctx, span, logger, "failed to get field map", err)
+		handler.logSpanError(ctx, span, logger, "failed to get field map", err)
 
 		return writeServiceError(fiberCtx, err)
 	}
@@ -175,17 +175,17 @@ func (handler *Handler) UpdateFieldMap(fiberCtx *fiber.Ctx) error {
 
 	fieldMapID, err := parseUUIDParam(fiberCtx, "fieldMapId")
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid field map id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid field map id", err)
 	}
 
 	var req dto.UpdateFieldMapRequest
 	if err := libHTTP.ParseBodyAndValidate(fiberCtx, &req); err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid field map payload", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid field map payload", err)
 	}
 
 	tenantID, err := tenantIDFromContext(ctx)
 	if err != nil {
-		return unauthorized(ctx, fiberCtx, span, logger, err)
+		return handler.unauthorized(ctx, fiberCtx, span, logger, err)
 	}
 
 	fieldMap, err := handler.query.GetFieldMap(ctx, fieldMapID)
@@ -194,20 +194,20 @@ func (handler *Handler) UpdateFieldMap(fiberCtx *fiber.Ctx) error {
 			return writeNotFound(fiberCtx, "configuration_field_map_not_found", "field map not found")
 		}
 
-		logSpanError(ctx, span, logger, "failed to load field map", err)
+		handler.logSpanError(ctx, span, logger, "failed to load field map", err)
 
 		return writeServiceError(fiberCtx, err)
 	}
 
 	if err := handler.contextVerifier(ctx, tenantID, fieldMap.ContextID); err != nil {
-		return handleOwnershipVerificationError(ctx, fiberCtx, span, logger, err, "configuration_field_map_not_found", "field map not found")
+		return handler.handleOwnershipVerificationError(ctx, fiberCtx, span, logger, err, "configuration_field_map_not_found", "field map not found")
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, fieldMap.ContextID)
 
 	result, err := handler.command.UpdateFieldMap(ctx, fieldMapID, req.ToDomainInput())
 	if err != nil {
-		logSpanError(ctx, span, logger, "failed to update field map", err)
+		handler.logSpanError(ctx, span, logger, "failed to update field map", err)
 
 		if errors.Is(err, sql.ErrNoRows) {
 			return writeNotFound(fiberCtx, "configuration_field_map_not_found", "field map not found")
@@ -245,12 +245,12 @@ func (handler *Handler) DeleteFieldMap(fiberCtx *fiber.Ctx) error {
 
 	fieldMapID, err := parseUUIDParam(fiberCtx, "fieldMapId")
 	if err != nil {
-		return badRequest(ctx, fiberCtx, span, logger, "invalid field map id", err)
+		return handler.badRequest(ctx, fiberCtx, span, logger, "invalid field map id", err)
 	}
 
 	tenantID, err := tenantIDFromContext(ctx)
 	if err != nil {
-		return unauthorized(ctx, fiberCtx, span, logger, err)
+		return handler.unauthorized(ctx, fiberCtx, span, logger, err)
 	}
 
 	fieldMap, err := handler.query.GetFieldMap(ctx, fieldMapID)
@@ -259,19 +259,19 @@ func (handler *Handler) DeleteFieldMap(fiberCtx *fiber.Ctx) error {
 			return writeNotFound(fiberCtx, "configuration_field_map_not_found", "field map not found")
 		}
 
-		logSpanError(ctx, span, logger, "failed to load field map", err)
+		handler.logSpanError(ctx, span, logger, "failed to load field map", err)
 
 		return writeServiceError(fiberCtx, err)
 	}
 
 	if err := handler.contextVerifier(ctx, tenantID, fieldMap.ContextID); err != nil {
-		return handleOwnershipVerificationError(ctx, fiberCtx, span, logger, err, "configuration_field_map_not_found", "field map not found")
+		return handler.handleOwnershipVerificationError(ctx, fiberCtx, span, logger, err, "configuration_field_map_not_found", "field map not found")
 	}
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, fieldMap.ContextID)
 
 	if err := handler.command.DeleteFieldMap(ctx, fieldMapID); err != nil {
-		logSpanError(ctx, span, logger, "failed to delete field map", err)
+		handler.logSpanError(ctx, span, logger, "failed to delete field map", err)
 
 		if errors.Is(err, sql.ErrNoRows) {
 			return writeNotFound(fiberCtx, "configuration_field_map_not_found", "field map not found")

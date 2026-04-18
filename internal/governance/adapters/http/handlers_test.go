@@ -1427,7 +1427,7 @@ func TestBadRequestWithNilLogger(t *testing.T) {
 		_, span := tracer.Start(c.UserContext(), "test")
 		defer span.End()
 
-		return badRequest(c.UserContext(), c, span, &libLog.NopLogger{}, "test error", errors.New("test"))
+		return (&Handler{}).badRequest(c.UserContext(), c, span, &libLog.NopLogger{}, "test error", errors.New("test"))
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
@@ -1453,7 +1453,7 @@ func TestWriteServiceErrorWithNilLogger(t *testing.T) {
 		_, span := tracer.Start(c.UserContext(), "test")
 		defer span.End()
 
-		return writeServiceError(c.UserContext(), c, span, &libLog.NopLogger{}, "test error", errors.New("test"))
+		return (&Handler{}).writeServiceError(c.UserContext(), c, span, &libLog.NopLogger{}, "test error", errors.New("test"))
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
@@ -1479,7 +1479,7 @@ func TestWriteNotFoundWithNilLogger(t *testing.T) {
 		_, span := tracer.Start(c.UserContext(), "test")
 		defer span.End()
 
-		return writeNotFound(c.UserContext(), c, span, &libLog.NopLogger{}, "not_found", "not found", errors.New("test"))
+		return (&Handler{}).writeNotFound(c.UserContext(), c, span, &libLog.NopLogger{}, "not_found", "not found", errors.New("test"))
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)

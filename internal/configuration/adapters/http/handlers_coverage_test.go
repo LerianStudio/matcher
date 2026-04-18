@@ -127,7 +127,7 @@ func TestHandleContextVerificationError_AllBranches(t *testing.T) {
 
 			app := fiber.New()
 			app.Get("/test", func(c *fiber.Ctx) error {
-				return handleContextVerificationError(c.UserContext(), c, span, &libLog.NopLogger{}, tt.err)
+				return (&Handler{}).handleContextVerificationError(c.UserContext(), c, span, &libLog.NopLogger{}, tt.err)
 			})
 
 			resp := performRequest(t, app, http.MethodGet, "/test", nil)
@@ -192,7 +192,7 @@ func TestHandleOwnershipVerificationError_AllBranches(t *testing.T) {
 
 			app := fiber.New()
 			app.Get("/test", func(c *fiber.Ctx) error {
-				return handleOwnershipVerificationError(c.UserContext(), c, span, &libLog.NopLogger{}, tt.err, "configuration_field_map_not_found", "field map not found")
+				return (&Handler{}).handleOwnershipVerificationError(c.UserContext(), c, span, &libLog.NopLogger{}, tt.err, "configuration_field_map_not_found", "field map not found")
 			})
 
 			resp := performRequest(t, app, http.MethodGet, "/test", nil)
