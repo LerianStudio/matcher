@@ -300,6 +300,81 @@ func TestMarkRun_NormalizesToUTC(t *testing.T) {
 		"UpdatedAt should be normalized to UTC")
 }
 
+// --- Minimum interval enforcement tests (SEC-24) ---
+
+func TestNewReconciliationSchedule_PerMinuteIsRejected(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	input := CreateScheduleInput{
+		CronExpression: "* * * * *", // every minute
+	}
+
+	schedule, err := NewReconciliationSchedule(ctx, uuid.New(), input)
+
+	require.Error(t, err)
+	require.Nil(t, schedule)
+	assert.ErrorIs(t, err, ErrScheduleCronExpressionTooFrequent)
+}
+
+func TestNewReconciliationSchedule_EveryTwoMinutesIsRejected(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	input := CreateScheduleInput{
+		CronExpression: "*/2 * * * *", // every 2 minutes
+	}
+
+	schedule, err := NewReconciliationSchedule(ctx, uuid.New(), input)
+
+	require.Error(t, err)
+	require.Nil(t, schedule)
+	assert.ErrorIs(t, err, ErrScheduleCronExpressionTooFrequent)
+}
+
+func TestNewReconciliationSchedule_EveryFiveMinutesIsAccepted(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	input := CreateScheduleInput{
+		CronExpression: "*/5 * * * *", // exactly at the 5-minute floor
+	}
+
+	schedule, err := NewReconciliationSchedule(ctx, uuid.New(), input)
+
+	require.NoError(t, err)
+	require.NotNil(t, schedule)
+}
+
+func TestNewReconciliationSchedule_HourlyIsAccepted(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	input := CreateScheduleInput{
+		CronExpression: "0 * * * *", // top of every hour
+	}
+
+	schedule, err := NewReconciliationSchedule(ctx, uuid.New(), input)
+
+	require.NoError(t, err)
+	require.NotNil(t, schedule)
+}
+
+func TestReconciliationSchedule_Update_RejectsTooFrequentCron(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	schedule := newTestSchedule(t, true)
+
+	tooFrequent := "* * * * *"
+	input := UpdateScheduleInput{CronExpression: &tooFrequent}
+
+	err := schedule.Update(ctx, input)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrScheduleCronExpressionTooFrequent)
+}
+
 // --- Test helpers ---
 
 // newTestSchedule creates a valid ReconciliationSchedule for testing.
