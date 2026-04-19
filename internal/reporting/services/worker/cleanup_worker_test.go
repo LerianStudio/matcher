@@ -1152,3 +1152,84 @@ func TestCleanupWorker_AlreadyExpiredJob_SkipsMarkExpired(t *testing.T) {
 	startAndWaitWorker(t, worker, deleteCalled.Load)
 	assert.True(t, deleteCalled.Load())
 }
+
+// TestCleanupWorker_ParallelCleanupDoesNotShortCircuit asserts the
+// per-batch parallel cleanup behaviour added by PERF-87: even if one job's
+// S3 Delete fails, every other job in the batch must still be processed.
+// This is the contract cleanupJob already honoured (it logs and returns
+// nothing) and the parallel dispatch inherits.
+func TestCleanupWorker_ParallelCleanupDoesNotShortCircuit(t *testing.T) {
+	t.Parallel()
+
+	const jobCount = 15 // > cleanupJobConcurrency to exercise the semaphore
+
+	expiredJobs := make([]*entities.ExportJob, jobCount)
+
+	for i := 0; i < jobCount; i++ {
+		expiredJobs[i] = &entities.ExportJob{
+			ID:        uuid.New(),
+			Status:    entities.ExportJobStatusSucceeded,
+			FileKey:   "exports/file-" + uuid.New().String() + ".csv",
+			ExpiresAt: time.Now().Add(-2 * time.Hour),
+		}
+	}
+
+	ctrl := gomock.NewController(t)
+	jobRepo := repomocks.NewMockExportJobRepository(ctrl)
+	storage := portsmocks.NewMockObjectStorageClient(ctrl)
+	cfg := CleanupWorkerConfig{
+		Interval:              50 * time.Millisecond,
+		BatchSize:             jobCount + 5,
+		FileDeleteGracePeriod: time.Nanosecond,
+	}
+	logger := &libLog.NopLogger{}
+
+	jobRepo.EXPECT().
+		ListExpired(gomock.Any(), cfg.BatchSize).
+		Return(expiredJobs, nil).
+		AnyTimes()
+
+	// Every job gets its MarkExpired Update — 15 total per batch.
+	var updateCount atomic.Int32
+
+	jobRepo.EXPECT().
+		Update(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(context.Context, *entities.ExportJob) error {
+			updateCount.Add(1)
+			return nil
+		}).
+		AnyTimes()
+
+	// Half the Delete calls fail; all Delete calls must still be issued.
+	var deleteCount atomic.Int32
+
+	storage.EXPECT().
+		Delete(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, key string) error {
+			seq := deleteCount.Add(1)
+			if seq%2 == 0 {
+				return errTestStorageError
+			}
+			_ = key
+
+			return nil
+		}).
+		AnyTimes()
+
+	worker, err := NewCleanupWorker(jobRepo, storage, cfg, logger)
+	require.NoError(t, err)
+
+	err = worker.Start(context.Background())
+	require.NoError(t, err)
+
+	waitForCondition(t, 3*time.Second, 10*time.Millisecond, func() bool {
+		return updateCount.Load() >= int32(jobCount) && deleteCount.Load() >= int32(jobCount)
+	})
+
+	require.NoError(t, worker.Stop())
+
+	assert.GreaterOrEqual(t, updateCount.Load(), int32(jobCount),
+		"every job in the batch must be marked expired despite peer Delete failures")
+	assert.GreaterOrEqual(t, deleteCount.Load(), int32(jobCount),
+		"every job's S3 Delete must be attempted despite peer failures")
+}

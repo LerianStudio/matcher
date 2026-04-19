@@ -460,6 +460,14 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 		runtime.SetProductionMode(true)
 	}
 
+	// Emit a one-time startup warning when the process appears to run inside
+	// a container without GOMEMLIMIT configured. Without GOMEMLIMIT the Go
+	// runtime defaults its soft memory limit to math.MaxInt64 — which, on
+	// cgroup-capped pods, lets the heap grow unbounded until the kernel OOM
+	// killer intervenes. The Fetcher bridge sets GOMEMLIMIT itself when it
+	// initializes; this warning is the companion for non-Fetcher deploys.
+	warnOnMissingGOMEMLIMIT(ctx, logger, defaultMemoryLimitReader, os.Getenv("GOMEMLIMIT"))
+
 	configDone()
 
 	done = timer.track("telemetry")
