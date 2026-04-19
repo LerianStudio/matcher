@@ -60,7 +60,9 @@ func BootChaosServer(t *testing.T, h *ChaosHarness) *ChaosServer {
 	}
 
 	t.Cleanup(func() {
-		_ = cs.App.Shutdown()
+		if cs.App != nil {
+			_ = cs.App.Shutdown()
+		}
 	})
 
 	return cs

@@ -139,6 +139,10 @@ func setSharedEnvFromContainers(t *testing.T, sh *SharedServerHarness) error {
 		return fmt.Errorf("failed to parse postgres DSN: %w", err)
 	}
 
+	if pgURL.User == nil {
+		return fmt.Errorf("invalid postgres DSN (missing user info): %q", sh.PostgresDSN)
+	}
+
 	pgHost, pgPort, _ := strings.Cut(pgURL.Host, ":")
 	if pgPort == "" {
 		pgPort = "5432"
@@ -152,6 +156,11 @@ func setSharedEnvFromContainers(t *testing.T, sh *SharedServerHarness) error {
 	if err != nil {
 		return fmt.Errorf("failed to parse redis address: %w", err)
 	}
+
+	if redisURL.Host == "" {
+		return fmt.Errorf("invalid redis DSN (empty host): %q", sh.RedisAddr)
+	}
+
 	redisHost := redisURL.Host
 
 	// Set environment variables using os.Setenv (not t.Setenv) since this is shared

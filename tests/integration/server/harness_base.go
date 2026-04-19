@@ -203,6 +203,10 @@ func (sh *serverHarnessBase) setEnvFromContainers(t *testing.T) error {
 		return fmt.Errorf("failed to parse postgres DSN: %w", err)
 	}
 
+	if pgURL.User == nil {
+		return fmt.Errorf("invalid postgres DSN (missing user info): %q", sh.PostgresDSN)
+	}
+
 	pgHost, pgPort, _ := strings.Cut(pgURL.Host, ":")
 	if pgPort == "" {
 		pgPort = "5432"
@@ -216,6 +220,11 @@ func (sh *serverHarnessBase) setEnvFromContainers(t *testing.T) error {
 	if err != nil {
 		return fmt.Errorf("failed to parse redis address: %w", err)
 	}
+
+	if redisURL.Host == "" {
+		return fmt.Errorf("invalid redis DSN (empty host): %q", sh.RedisAddr)
+	}
+
 	redisHost := redisURL.Host
 
 	// Set environment variables
