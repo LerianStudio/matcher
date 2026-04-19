@@ -27,6 +27,10 @@ type defaultTenantDiscoverer struct {
 // discoverer does not include it. This preserves the invariant that audit
 // events originating in the default tenant are always delivered.
 func (d *defaultTenantDiscoverer) DiscoverTenants(ctx context.Context) ([]string, error) {
+	if d == nil || d.inner == nil {
+		return nil, errDefaultTenantDiscovererUninitialized
+	}
+
 	tenants, err := d.inner.DiscoverTenants(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("discover tenants: %w", err)
@@ -51,21 +55,22 @@ var _ outbox.TenantDiscoverer = (*defaultTenantDiscoverer)(nil)
 
 // Sentinel errors for outbox event validation (non-retryable).
 var (
-	errInvalidPayload              = errors.New("invalid payload format")
-	errMissingJobID                = errors.New("payload missing job id")
-	errMissingContextID            = errors.New("payload missing context id")
-	errMissingSourceID             = errors.New("payload missing source id")
-	errMissingError                = errors.New("payload missing error")
-	errMissingMatchID              = errors.New("payload missing match id")
-	errMissingMatchRunID           = errors.New("payload missing run id")
-	errMissingMatchRuleID          = errors.New("payload missing rule id")
-	errMissingTransactionIDs       = errors.New("payload missing transaction ids")
-	errMissingTenantID             = errors.New("payload missing tenant id")
-	errMissingEntityType           = errors.New("payload missing entity type")
-	errMissingEntityID             = errors.New("payload missing entity id")
-	errMissingAction               = errors.New("payload missing action")
-	errMissingReason               = errors.New("payload missing reason")
-	errAuditPublisherNotConfigured = errors.New("audit publisher not configured")
+	errInvalidPayload                       = errors.New("invalid payload format")
+	errMissingJobID                         = errors.New("payload missing job id")
+	errMissingContextID                     = errors.New("payload missing context id")
+	errMissingSourceID                      = errors.New("payload missing source id")
+	errMissingError                         = errors.New("payload missing error")
+	errMissingMatchID                       = errors.New("payload missing match id")
+	errMissingMatchRunID                    = errors.New("payload missing run id")
+	errMissingMatchRuleID                   = errors.New("payload missing rule id")
+	errMissingTransactionIDs                = errors.New("payload missing transaction ids")
+	errMissingTenantID                      = errors.New("payload missing tenant id")
+	errMissingEntityType                    = errors.New("payload missing entity type")
+	errMissingEntityID                      = errors.New("payload missing entity id")
+	errMissingAction                        = errors.New("payload missing action")
+	errMissingReason                        = errors.New("payload missing reason")
+	errAuditPublisherNotConfigured          = errors.New("audit publisher not configured")
+	errDefaultTenantDiscovererUninitialized = errors.New("default tenant discoverer not initialized")
 )
 
 // nonRetryableErrors lists all errors that indicate permanent validation failures.

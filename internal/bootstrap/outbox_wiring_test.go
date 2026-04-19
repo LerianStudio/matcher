@@ -169,6 +169,26 @@ func TestDefaultTenantDiscoverer_PropagatesInnerError(t *testing.T) {
 	assert.ErrorIs(t, err, innerErr)
 }
 
+func TestDefaultTenantDiscoverer_NilReceiver(t *testing.T) {
+	t.Parallel()
+
+	var wrapper *defaultTenantDiscoverer
+
+	got, err := wrapper.DiscoverTenants(context.Background())
+	require.ErrorIs(t, err, errDefaultTenantDiscovererUninitialized)
+	assert.Nil(t, got)
+}
+
+func TestDefaultTenantDiscoverer_NilInner(t *testing.T) {
+	t.Parallel()
+
+	wrapper := &defaultTenantDiscoverer{inner: nil}
+
+	got, err := wrapper.DiscoverTenants(context.Background())
+	require.ErrorIs(t, err, errDefaultTenantDiscovererUninitialized)
+	assert.Nil(t, got)
+}
+
 // --- isNonRetryableOutboxError tests ---
 
 func TestIsNonRetryableOutboxError_Nil(t *testing.T) {
