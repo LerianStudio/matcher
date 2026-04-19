@@ -44,11 +44,11 @@ func (repo *Repository) FindByID(ctx context.Context, id uuid.UUID) (*entities.E
 
 	defer span.End()
 
-	exception, err := pgcommon.WithTenantTxProvider(
+	exception, err := pgcommon.WithTenantReadQuery(
 		ctx,
 		repo.provider,
-		func(tx *sql.Tx) (*entities.Exception, error) {
-			row := tx.QueryRowContext(ctx, `
+		func(qe pgcommon.QueryExecutor) (*entities.Exception, error) {
+			row := qe.QueryRowContext(ctx, `
 			SELECT id, transaction_id, severity, status, external_system, external_issue_id,
 			       assigned_to, due_at, resolution_notes, resolution_type, resolution_reason,
 			       reason, version, created_at, updated_at
@@ -178,11 +178,11 @@ func (repo *Repository) executeListQuery(
 ) ([]*entities.Exception, libHTTP.CursorPagination, error) {
 	var pagination libHTTP.CursorPagination
 
-	result, err := pgcommon.WithTenantTxProvider(
+	result, err := pgcommon.WithTenantReadQuery(
 		ctx,
 		repo.provider,
-		func(tx *sql.Tx) ([]*entities.Exception, error) {
-			exceptions, cursorDirection, err := queryExceptions(ctx, tx, filter, params, logger)
+		func(qe pgcommon.QueryExecutor) ([]*entities.Exception, error) {
+			exceptions, cursorDirection, err := queryExceptions(ctx, qe, filter, params, logger)
 			if err != nil {
 				return nil, err
 			}
@@ -218,7 +218,7 @@ func (repo *Repository) executeListQuery(
 
 func queryExceptions(
 	ctx context.Context,
-	tx *sql.Tx,
+	qe pgcommon.QueryExecutor,
 	filter repositories.ExceptionFilter,
 	params listQueryParams,
 	logger libLog.Logger,
@@ -228,7 +228,7 @@ func queryExceptions(
 		return nil, "", fmt.Errorf("failed to build SQL: %w", err)
 	}
 
-	rows, err := tx.QueryContext(ctx, query, args...)
+	rows, err := qe.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to query exceptions: %w", err)
 	}
@@ -543,7 +543,7 @@ func (repo *Repository) executeUpdate(
 }
 
 // ExistsForTenant checks if an exception with the given ID exists in the current tenant's schema.
-// This method uses tenant-scoped transactions for schema isolation.
+// This method uses tenant-scoped read queries for schema isolation.
 func (repo *Repository) ExistsForTenant(ctx context.Context, id uuid.UUID) (bool, error) {
 	if repo == nil || repo.provider == nil {
 		return false, ErrRepoNotInitialized
@@ -554,13 +554,13 @@ func (repo *Repository) ExistsForTenant(ctx context.Context, id uuid.UUID) (bool
 
 	defer span.End()
 
-	exists, err := pgcommon.WithTenantTxProvider(
+	exists, err := pgcommon.WithTenantReadQuery(
 		ctx,
 		repo.provider,
-		func(tx *sql.Tx) (bool, error) {
+		func(qe pgcommon.QueryExecutor) (bool, error) {
 			var found bool
 
-			err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM exceptions WHERE id = $1)`, id.String()).
+			err := qe.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM exceptions WHERE id = $1)`, id.String()).
 				Scan(&found)
 			if err != nil {
 				return false, fmt.Errorf("check exception existence: %w", err)

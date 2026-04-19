@@ -146,7 +146,7 @@ func (repo *Repository) executeCreate(
 		return nil, fmt.Errorf("insert dispute: %w", err)
 	}
 
-	return repo.findByIDTx(ctx, tx, disputeEntity.ID)
+	return repo.findByIDExec(ctx, tx, disputeEntity.ID)
 }
 
 // FindByID retrieves a dispute by its ID.
@@ -160,11 +160,11 @@ func (repo *Repository) FindByID(ctx context.Context, id uuid.UUID) (*dispute.Di
 
 	defer span.End()
 
-	result, err := pgcommon.WithTenantTxProvider(
+	result, err := pgcommon.WithTenantReadQuery(
 		ctx,
 		repo.provider,
-		func(tx *sql.Tx) (*dispute.Dispute, error) {
-			return repo.findByIDTx(ctx, tx, id)
+		func(qe pgcommon.QueryExecutor) (*dispute.Dispute, error) {
+			return repo.findByIDExec(ctx, qe, id)
 		},
 	)
 	if err != nil {
@@ -197,11 +197,11 @@ func (repo *Repository) FindByExceptionID(
 
 	defer span.End()
 
-	result, err := pgcommon.WithTenantTxProvider(
+	result, err := pgcommon.WithTenantReadQuery(
 		ctx,
 		repo.provider,
-		func(tx *sql.Tx) (*dispute.Dispute, error) {
-			row := tx.QueryRowContext(ctx, `
+		func(qe pgcommon.QueryExecutor) (*dispute.Dispute, error) {
+			row := qe.QueryRowContext(ctx, `
 			SELECT id, exception_id, category, state, description,
 			       opened_by, resolution, reopen_reason, evidence, created_at, updated_at
 			FROM disputes
@@ -355,15 +355,15 @@ func (repo *Repository) executeUpdate(
 		return nil, ErrDisputeNotFound
 	}
 
-	return repo.findByIDTx(ctx, tx, disputeEntity.ID)
+	return repo.findByIDExec(ctx, tx, disputeEntity.ID)
 }
 
-func (repo *Repository) findByIDTx(
+func (repo *Repository) findByIDExec(
 	ctx context.Context,
-	tx *sql.Tx,
+	qe pgcommon.QueryExecutor,
 	id uuid.UUID,
 ) (*dispute.Dispute, error) {
-	row := tx.QueryRowContext(ctx, `
+	row := qe.QueryRowContext(ctx, `
 		SELECT id, exception_id, category, state, description,
 		       opened_by, resolution, reopen_reason, evidence, created_at, updated_at
 		FROM disputes
@@ -412,11 +412,11 @@ func (repo *Repository) executeDisputeListQuery(
 ) ([]*dispute.Dispute, libHTTP.CursorPagination, error) {
 	var pagination libHTTP.CursorPagination
 
-	result, err := pgcommon.WithTenantTxProvider(
+	result, err := pgcommon.WithTenantReadQuery(
 		ctx,
 		repo.provider,
-		func(tx *sql.Tx) ([]*dispute.Dispute, error) {
-			disputes, cursorDirection, err := queryDisputes(ctx, tx, filter, params, logger)
+		func(qe pgcommon.QueryExecutor) ([]*dispute.Dispute, error) {
+			disputes, cursorDirection, err := queryDisputes(ctx, qe, filter, params, logger)
 			if err != nil {
 				return nil, err
 			}
@@ -450,7 +450,7 @@ func (repo *Repository) executeDisputeListQuery(
 
 func queryDisputes(
 	ctx context.Context,
-	tx *sql.Tx,
+	qe pgcommon.QueryExecutor,
 	filter repositories.DisputeFilter,
 	params disputeListQueryParams,
 	logger libLog.Logger,
@@ -460,7 +460,7 @@ func queryDisputes(
 		return nil, "", fmt.Errorf("failed to build SQL: %w", err)
 	}
 
-	rows, err := tx.QueryContext(ctx, query, args...)
+	rows, err := qe.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to query disputes: %w", err)
 	}
@@ -693,7 +693,7 @@ func disputeSortValue(disp *dispute.Dispute, column string) string {
 }
 
 // ExistsForTenant checks if a dispute with the given ID exists in the current tenant's schema.
-// This method uses tenant-scoped transactions for schema isolation.
+// This method uses tenant-scoped read queries for schema isolation.
 func (repo *Repository) ExistsForTenant(ctx context.Context, id uuid.UUID) (bool, error) {
 	if repo == nil || repo.provider == nil {
 		return false, ErrRepoNotInitialized
@@ -704,13 +704,13 @@ func (repo *Repository) ExistsForTenant(ctx context.Context, id uuid.UUID) (bool
 
 	defer span.End()
 
-	exists, err := pgcommon.WithTenantTxProvider(
+	exists, err := pgcommon.WithTenantReadQuery(
 		ctx,
 		repo.provider,
-		func(tx *sql.Tx) (bool, error) {
+		func(qe pgcommon.QueryExecutor) (bool, error) {
 			var found bool
 
-			err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM disputes WHERE id = $1)`, id.String()).
+			err := qe.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM disputes WHERE id = $1)`, id.String()).
 				Scan(&found)
 			if err != nil {
 				return false, fmt.Errorf("check dispute existence: %w", err)

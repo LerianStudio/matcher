@@ -96,7 +96,6 @@ func TestRepository_List_Success_NoCursor(t *testing.T) {
 		Limit: 10,
 	}
 
-	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT").
 		WillReturnRows(sqlmock.NewRows(disputeColumnList()).
 			AddRow(
@@ -105,7 +104,6 @@ func TestRepository_List_Success_NoCursor(t *testing.T) {
 				"user@test.com", sql.NullString{}, sql.NullString{},
 				[]byte("[]"), now, now,
 			))
-	mock.ExpectCommit()
 
 	result, _, err := repo.List(ctx, filter, cursor)
 
@@ -122,10 +120,8 @@ func TestRepository_List_Empty(t *testing.T) {
 
 	ctx := context.Background()
 
-	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT").
 		WillReturnRows(sqlmock.NewRows(disputeColumnList()))
-	mock.ExpectCommit()
 
 	result, pagination, err := repo.List(ctx, repositories.DisputeFilter{}, repositories.CursorFilter{Limit: 10})
 
@@ -143,10 +139,8 @@ func TestRepository_List_QueryError(t *testing.T) {
 
 	ctx := context.Background()
 
-	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT").
 		WillReturnError(errSqlmockDB)
-	mock.ExpectRollback()
 
 	result, _, err := repo.List(ctx, repositories.DisputeFilter{}, repositories.CursorFilter{Limit: 10})
 
@@ -159,13 +153,10 @@ func TestRepository_List_QueryError(t *testing.T) {
 func TestRepository_List_InvalidCursor(t *testing.T) {
 	t.Parallel()
 
-	repo, mock, finish := setupRepoV2(t)
+	repo, _, finish := setupRepoV2(t)
 	defer finish()
 
 	ctx := context.Background()
-
-	mock.ExpectBegin()
-	mock.ExpectRollback()
 
 	result, _, err := repo.List(
 		ctx,
@@ -196,7 +187,6 @@ func TestRepository_List_WithStateFilter(t *testing.T) {
 	}
 	cursor := repositories.CursorFilter{Limit: 10}
 
-	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT").
 		WillReturnRows(sqlmock.NewRows(disputeColumnList()).
 			AddRow(
@@ -205,7 +195,6 @@ func TestRepository_List_WithStateFilter(t *testing.T) {
 				"user@test.com", sql.NullString{}, sql.NullString{},
 				[]byte("[]"), now, now,
 			))
-	mock.ExpectCommit()
 
 	result, _, err := repo.List(ctx, filter, cursor)
 
@@ -231,7 +220,6 @@ func TestRepository_List_WithCategoryFilter(t *testing.T) {
 	}
 	cursor := repositories.CursorFilter{Limit: 10}
 
-	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT").
 		WillReturnRows(sqlmock.NewRows(disputeColumnList()).
 			AddRow(
@@ -240,7 +228,6 @@ func TestRepository_List_WithCategoryFilter(t *testing.T) {
 				"analyst@test.com", sql.NullString{}, sql.NullString{},
 				[]byte("[]"), now, now,
 			))
-	mock.ExpectCommit()
 
 	result, _, err := repo.List(ctx, filter, cursor)
 
@@ -268,7 +255,6 @@ func TestRepository_List_WithDateFilters(t *testing.T) {
 	}
 	cursor := repositories.CursorFilter{Limit: 10}
 
-	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT").
 		WillReturnRows(sqlmock.NewRows(disputeColumnList()).
 			AddRow(
@@ -277,7 +263,6 @@ func TestRepository_List_WithDateFilters(t *testing.T) {
 				"user@test.com", sql.NullString{}, sql.NullString{},
 				[]byte("[]"), now, now,
 			))
-	mock.ExpectCommit()
 
 	result, _, err := repo.List(ctx, filter, cursor)
 
@@ -303,12 +288,10 @@ func TestRepository_List_SortByCreatedAt(t *testing.T) {
 		SortOrder: "ASC",
 	}
 
-	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT").
 		WillReturnRows(sqlmock.NewRows(disputeColumnList()).
 			AddRow(id1.String(), exceptionID.String(), "OTHER", "OPEN", "First", "u@t.com", sql.NullString{}, sql.NullString{}, []byte("[]"), now, now).
 			AddRow(id2.String(), exceptionID.String(), "OTHER", "DRAFT", "Second", "u@t.com", sql.NullString{}, sql.NullString{}, []byte("[]"), now.Add(time.Minute), now.Add(time.Minute)))
-	mock.ExpectCommit()
 
 	result, _, err := repo.List(ctx, repositories.DisputeFilter{}, cursor)
 
@@ -334,12 +317,10 @@ func TestRepository_List_SortCursorPaginationMetadata(t *testing.T) {
 		SortOrder: "ASC",
 	}
 
-	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT").
 		WillReturnRows(sqlmock.NewRows(disputeColumnList()).
 			AddRow(id1.String(), exceptionID.String(), "OTHER", "OPEN", "First", "u@t.com", sql.NullString{}, sql.NullString{}, []byte("[]"), now, now).
 			AddRow(id2.String(), exceptionID.String(), "OTHER", "OPEN", "Second", "u@t.com", sql.NullString{}, sql.NullString{}, []byte("[]"), now.Add(time.Minute), now.Add(time.Minute)))
-	mock.ExpectCommit()
 
 	result, pagination, err := repo.List(ctx, repositories.DisputeFilter{}, cursor)
 

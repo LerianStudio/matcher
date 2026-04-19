@@ -154,11 +154,11 @@ func (repo *Repository) FindByID(
 
 	defer span.End()
 
-	result, err := pgcommon.WithTenantTxProvider(
+	result, err := pgcommon.WithTenantReadQuery(
 		ctx,
 		repo.provider,
-		func(tx *sql.Tx) (*entities.ExceptionComment, error) {
-			row := tx.QueryRowContext(ctx, `
+		func(qe pgcommon.QueryExecutor) (*entities.ExceptionComment, error) {
+			row := qe.QueryRowContext(ctx, `
 				SELECT id, exception_id, author, content, created_at, updated_at
 				FROM exception_comments
 				WHERE id = $1
@@ -193,11 +193,11 @@ func (repo *Repository) FindByExceptionID(
 
 	defer span.End()
 
-	result, err := pgcommon.WithTenantTxProvider(
+	result, err := pgcommon.WithTenantReadQuery(
 		ctx,
 		repo.provider,
-		func(tx *sql.Tx) ([]*entities.ExceptionComment, error) {
-			rows, queryErr := tx.QueryContext(ctx, `
+		func(qe pgcommon.QueryExecutor) ([]*entities.ExceptionComment, error) {
+			rows, queryErr := qe.QueryContext(ctx, `
 				SELECT id, exception_id, author, content, created_at, updated_at
 				FROM exception_comments
 				WHERE exception_id = $1
