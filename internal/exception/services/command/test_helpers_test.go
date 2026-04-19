@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -282,7 +283,7 @@ type stubInfraProvider struct {
 	redisErr     error
 	txErr        error
 	tx           *sql.Tx
-	beginTxCall  int // number of BeginTx invocations (bulk regression)
+	beginTxCall  atomic.Int64 // number of BeginTx invocations (bulk regression)
 }
 
 func (provider *stubInfraProvider) GetRedisConnection(
@@ -298,7 +299,7 @@ func (provider *stubInfraProvider) GetRedisConnection(
 // BeginTx returns a mock transaction for testing.
 // Uses sqlmock to create a valid *sql.Tx that supports Commit and Rollback.
 func (provider *stubInfraProvider) BeginTx(ctx context.Context) (*sharedPorts.TxLease, error) {
-	provider.beginTxCall++
+	provider.beginTxCall.Add(1)
 
 	if provider.txErr != nil {
 		return nil, provider.txErr

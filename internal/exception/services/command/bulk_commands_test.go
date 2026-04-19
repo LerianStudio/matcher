@@ -340,7 +340,7 @@ func TestBulkResolve_NPlusOne_Regression(t *testing.T) {
 
 	assert.Equal(t, 1, repo.findIDsCall,
 		"BulkResolve must issue exactly one FindByIDs preload (was N before refactor)")
-	assert.Equal(t, batchSize, provider.beginTxCall,
+	assert.Equal(t, int64(batchSize), provider.beginTxCall.Load(),
 		"per-item transactions are preserved: one BeginTx per exception")
 	assert.Equal(t, batchSize, audit.getCallCount(),
 		"one outbox insert per item (inside each per-item tx)")
@@ -384,7 +384,7 @@ func TestBulkAssign_NPlusOne_Regression(t *testing.T) {
 
 	assert.Equal(t, 1, repo.findIDsCall,
 		"BulkAssign must issue exactly one FindByIDs preload")
-	assert.Equal(t, batchSize, provider.beginTxCall,
+	assert.Equal(t, int64(batchSize), provider.beginTxCall.Load(),
 		"per-item transactions preserved")
 	assert.Equal(t, batchSize, audit.getCallCount(),
 		"one outbox insert per item")
@@ -424,6 +424,6 @@ func TestBulkResolve_MissingIDReportedAsNotFound(t *testing.T) {
 	assert.Contains(t, result.Failed[0].Error, "exception not found")
 
 	assert.Equal(t, 1, repo.findIDsCall, "still only one preload")
-	assert.Equal(t, 1, provider.beginTxCall, "only the found item opens a tx")
+	assert.Equal(t, int64(1), provider.beginTxCall.Load(), "only the found item opens a tx")
 	assert.Equal(t, 1, audit.getCallCount(), "only the found item emits audit")
 }
