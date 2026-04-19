@@ -1018,6 +1018,34 @@ linters:
           - gosec
         text: G118
         path: internal/reporting/services/worker/export_worker\.go
+      # G117 false-positive: OAuth2 token endpoint response DTO. `AccessToken` must
+      # be exported with this exact JSON tag per the OAuth2 spec so encoding/json
+      # can unmarshal the token endpoint payload. Transient deserialization target,
+      # not a persisted secret.
+      - linters:
+          - gosec
+        text: 'G117: Exported struct field "AccessToken" \(JSON key "access_token"\)'
+        path: internal/discovery/adapters/m2m/token_exchanger\.go
+      # G117 false-positive: internal Redis cache serialization struct, deliberately
+      # separated from the public M2MCredentials (which uses json:"-" to prevent
+      # API exposure). Marshaled only into the Redis cache — never an API response.
+      - linters:
+          - gosec
+        text: 'G117: Exported struct field "ClientSecret" \(JSON key "clientSecret"\)'
+        path: internal/shared/adapters/m2m/provider\.go
+      # G704 false-positive: authURL is operator-controlled (systemplane/env config),
+      # not request-tainted. Gosec's taint analysis cannot distinguish config-sourced
+      # URLs from user-sourced URLs.
+      - linters:
+          - gosec
+        text: 'G704: SSRF via taint analysis'
+        path: internal/discovery/adapters/m2m/token_exchanger\.go
+      # G704 false-positive: e2e test harness HTTP client. Base URL is controlled
+      # by the test harness, not user input. Test-only code.
+      - linters:
+          - gosec
+        text: 'G704: SSRF via taint analysis'
+        path: tests/e2e/client/client\.go
       - linters:
           - errcheck
           - gosec
