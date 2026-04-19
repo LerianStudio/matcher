@@ -278,6 +278,29 @@ func TestIsNonRetryableOutboxError_PayloadNotJSON(t *testing.T) {
 	assert.True(t, isNonRetryableOutboxError(wrapped))
 }
 
+// TestIsNonRetryableOutboxError_ExportedDelegates pins that the exported
+// wrapper (used by integration tests wiring production-identical
+// dispatchers) delegates identically to the unexported func — a regression
+// that diverged the two would make the integration test use a different
+// classifier than production, masking production failures.
+func TestIsNonRetryableOutboxError_ExportedDelegates(t *testing.T) {
+	t.Parallel()
+
+	require.NotEmpty(t, nonRetryableErrors)
+	for _, sentinel := range nonRetryableErrors {
+		sentinel := sentinel
+		assert.Equal(t,
+			isNonRetryableOutboxError(sentinel),
+			IsNonRetryableOutboxError(sentinel),
+			"exported wrapper must match unexported classifier for sentinel %q", sentinel,
+		)
+	}
+
+	// Non-retryable-unrelated error must also agree.
+	assert.False(t, IsNonRetryableOutboxError(nil))
+	assert.False(t, IsNonRetryableOutboxError(errors.New("unrelated")))
+}
+
 // --- validateIngestionCompletedPayload tests ---
 
 func validIngestionCompletedEvent() sharedDomain.IngestionCompletedEvent {

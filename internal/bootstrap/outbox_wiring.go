@@ -139,6 +139,15 @@ func isNonRetryableOutboxError(err error) bool {
 	return false
 }
 
+// IsNonRetryableOutboxError exposes the production retry classifier so
+// integration tests can wire a dispatcher through the same path the
+// composition root uses. Exported as a wrapper (rather than exporting the
+// unexported func directly) so internal refactors of the sentinel list do
+// not leak through the API surface.
+func IsNonRetryableOutboxError(err error) bool {
+	return isNonRetryableOutboxError(err)
+}
+
 // RegisterOutboxHandlers is the exported entry point used by the composition root
 // and by integration tests that need production wiring. Delegates to the
 // unexported registerOutboxHandlers.

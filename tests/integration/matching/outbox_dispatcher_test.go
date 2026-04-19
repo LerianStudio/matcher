@@ -11,12 +11,16 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/trace/noop"
 
 	outboxEntities "github.com/LerianStudio/lib-commons/v5/commons/outbox"
 	"github.com/LerianStudio/matcher/internal/auth"
+	"github.com/LerianStudio/matcher/internal/bootstrap"
 	pgcommon "github.com/LerianStudio/matcher/internal/shared/adapters/postgres/common"
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
+	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 	"github.com/LerianStudio/matcher/tests/integration"
 )
 
@@ -262,6 +266,300 @@ func TestOutboxDispatcher_DispatchOnce_MultiTenantDBBacked(t *testing.T) {
 		fetchedB, err := repo.GetByID(ctxB, createdB.ID)
 		require.NoError(t, err)
 		require.Equal(t, outboxEntities.OutboxStatusPublished, fetchedB.Status)
+	})
+}
+
+// allEventCapture records calls to every publisher interface the outbox
+// dispatcher can invoke, indexed by concrete event type. Unlike the
+// matching-focused capturePublishers in helpers_test.go, this stub also
+// satisfies sharedPorts.IngestionEventPublisher and
+// shared.AuditEventPublisher — required for the 5-event-type parameterized
+// test below.
+type allEventCapture struct {
+	matchConfirmed     []*shared.MatchConfirmedEvent
+	matchUnmatched     []*shared.MatchUnmatchedEvent
+	ingestionCompleted []*shared.IngestionCompletedEvent
+	ingestionFailed    []*shared.IngestionFailedEvent
+	auditLogCreated    []*shared.AuditLogCreatedEvent
+}
+
+func (c *allEventCapture) PublishMatchConfirmed(_ context.Context, event *shared.MatchConfirmedEvent) error {
+	c.matchConfirmed = append(c.matchConfirmed, event)
+	return nil
+}
+
+func (c *allEventCapture) PublishMatchUnmatched(_ context.Context, event *shared.MatchUnmatchedEvent) error {
+	c.matchUnmatched = append(c.matchUnmatched, event)
+	return nil
+}
+
+func (c *allEventCapture) PublishIngestionCompleted(_ context.Context, event *shared.IngestionCompletedEvent) error {
+	c.ingestionCompleted = append(c.ingestionCompleted, event)
+	return nil
+}
+
+func (c *allEventCapture) PublishIngestionFailed(_ context.Context, event *shared.IngestionFailedEvent) error {
+	c.ingestionFailed = append(c.ingestionFailed, event)
+	return nil
+}
+
+func (c *allEventCapture) PublishAuditLogCreated(_ context.Context, event *shared.AuditLogCreatedEvent) error {
+	c.auditLogCreated = append(c.auditLogCreated, event)
+	return nil
+}
+
+var (
+	_ shared.MatchEventPublisher          = (*allEventCapture)(nil)
+	_ sharedPorts.IngestionEventPublisher = (*allEventCapture)(nil)
+	_ shared.AuditEventPublisher          = (*allEventCapture)(nil)
+)
+
+// newAllEventDispatcher wires a dispatcher with a capture that records
+// every event-type publisher. Used by tests that need to assert a
+// specific event type was delivered without also having to stub the
+// other four no-op publishers inline.
+func newAllEventDispatcher(
+	t *testing.T,
+	h *integration.TestHarness,
+	cap *allEventCapture,
+	opts ...outboxEntities.DispatcherOption,
+) *outboxEntities.Dispatcher {
+	t.Helper()
+
+	repo := integration.NewTestOutboxRepository(t, h.Connection)
+	registry := outboxEntities.NewHandlerRegistry()
+	err := bootstrap.RegisterOutboxHandlers(registry, cap, cap, cap)
+	require.NoError(t, err)
+
+	dispatcher, err := outboxEntities.NewDispatcher(
+		repo,
+		registry,
+		nil,
+		noop.NewTracerProvider().Tracer("tests.integration.outbox.all_events"),
+		opts...,
+	)
+	require.NoError(t, err)
+
+	return dispatcher
+}
+
+// TestOutboxDispatcher_DispatchOnce_AllEventTypes parameterizes the
+// single-happy-path test (which previously covered only
+// EventTypeMatchConfirmed) over every event type registered via
+// bootstrap.RegisterOutboxHandlers. A regression that drops a handler
+// from the registry — or one that swaps publishers for the wrong event
+// type — fails here rather than leaking into production silently.
+func TestOutboxDispatcher_DispatchOnce_AllEventTypes(t *testing.T) {
+	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
+		ctx := e4t9Ctx(t, h)
+		tenantID := h.Seed.TenantID
+
+		cases := []struct {
+			name      string
+			eventType string
+			buildID   uuid.UUID // the event's idempotency ID, used for NewOutboxEvent
+			buildJSON func() []byte
+			assert    func(t *testing.T, cap *allEventCapture)
+		}{
+			{
+				name:      "match_confirmed",
+				eventType: shared.EventTypeMatchConfirmed,
+				buildID:   uuid.New(),
+				buildJSON: func() []byte {
+					p := validMatchConfirmedPayload(tenantID)
+					return mustJSON(t, p)
+				},
+				assert: func(t *testing.T, cap *allEventCapture) {
+					require.Len(t, cap.matchConfirmed, 1, "match_confirmed must produce exactly one publish call")
+					assert.Equal(t, shared.EventTypeMatchConfirmed, cap.matchConfirmed[0].EventType)
+					// No cross-publisher leakage.
+					assert.Empty(t, cap.matchUnmatched)
+					assert.Empty(t, cap.ingestionCompleted)
+					assert.Empty(t, cap.ingestionFailed)
+					assert.Empty(t, cap.auditLogCreated)
+				},
+			},
+			{
+				name:      "match_unmatched",
+				eventType: shared.EventTypeMatchUnmatched,
+				buildID:   uuid.New(),
+				buildJSON: func() []byte {
+					p := shared.MatchUnmatchedEvent{
+						EventType:      shared.EventTypeMatchUnmatched,
+						TenantID:       tenantID,
+						ContextID:      uuid.New(),
+						RunID:          uuid.New(),
+						MatchID:        uuid.New(),
+						RuleID:         uuid.New(),
+						TransactionIDs: []uuid.UUID{uuid.New()},
+						Reason:         "superseded",
+						Timestamp:      time.Now().UTC(),
+					}
+					return mustJSON(t, p)
+				},
+				assert: func(t *testing.T, cap *allEventCapture) {
+					require.Len(t, cap.matchUnmatched, 1)
+					assert.Equal(t, shared.EventTypeMatchUnmatched, cap.matchUnmatched[0].EventType)
+					assert.Equal(t, "superseded", cap.matchUnmatched[0].Reason)
+					assert.Empty(t, cap.matchConfirmed)
+					assert.Empty(t, cap.ingestionCompleted)
+					assert.Empty(t, cap.ingestionFailed)
+					assert.Empty(t, cap.auditLogCreated)
+				},
+			},
+			{
+				name:      "ingestion_completed",
+				eventType: shared.EventTypeIngestionCompleted,
+				buildID:   uuid.New(),
+				buildJSON: func() []byte {
+					p := shared.IngestionCompletedEvent{
+						EventType:   shared.EventTypeIngestionCompleted,
+						JobID:       uuid.New(),
+						ContextID:   uuid.New(),
+						SourceID:    uuid.New(),
+						TotalRows:   100,
+						CompletedAt: time.Now().UTC(),
+						Timestamp:   time.Now().UTC(),
+					}
+					return mustJSON(t, p)
+				},
+				assert: func(t *testing.T, cap *allEventCapture) {
+					require.Len(t, cap.ingestionCompleted, 1)
+					assert.Equal(t, shared.EventTypeIngestionCompleted, cap.ingestionCompleted[0].EventType)
+					assert.Equal(t, 100, cap.ingestionCompleted[0].TotalRows)
+					assert.Empty(t, cap.matchConfirmed)
+					assert.Empty(t, cap.matchUnmatched)
+					assert.Empty(t, cap.ingestionFailed)
+					assert.Empty(t, cap.auditLogCreated)
+				},
+			},
+			{
+				name:      "ingestion_failed",
+				eventType: shared.EventTypeIngestionFailed,
+				buildID:   uuid.New(),
+				buildJSON: func() []byte {
+					p := shared.IngestionFailedEvent{
+						EventType: shared.EventTypeIngestionFailed,
+						JobID:     uuid.New(),
+						ContextID: uuid.New(),
+						SourceID:  uuid.New(),
+						Error:     "parse error: invalid column",
+						Timestamp: time.Now().UTC(),
+					}
+					return mustJSON(t, p)
+				},
+				assert: func(t *testing.T, cap *allEventCapture) {
+					require.Len(t, cap.ingestionFailed, 1)
+					assert.Equal(t, shared.EventTypeIngestionFailed, cap.ingestionFailed[0].EventType)
+					assert.Equal(t, "parse error: invalid column", cap.ingestionFailed[0].Error)
+					assert.Empty(t, cap.matchConfirmed)
+					assert.Empty(t, cap.matchUnmatched)
+					assert.Empty(t, cap.ingestionCompleted)
+					assert.Empty(t, cap.auditLogCreated)
+				},
+			},
+			{
+				name:      "audit_log_created",
+				eventType: shared.EventTypeAuditLogCreated,
+				buildID:   uuid.New(),
+				buildJSON: func() []byte {
+					p := shared.AuditLogCreatedEvent{
+						UniqueID:   uuid.New(),
+						EventType:  shared.EventTypeAuditLogCreated,
+						TenantID:   tenantID,
+						EntityType: "reconciliation_context",
+						EntityID:   uuid.New(),
+						Action:     "CREATE",
+						OccurredAt: time.Now().UTC(),
+						Timestamp:  time.Now().UTC(),
+					}
+					return mustJSON(t, p)
+				},
+				assert: func(t *testing.T, cap *allEventCapture) {
+					require.Len(t, cap.auditLogCreated, 1)
+					assert.Equal(t, shared.EventTypeAuditLogCreated, cap.auditLogCreated[0].EventType)
+					assert.Equal(t, "CREATE", cap.auditLogCreated[0].Action)
+					assert.Empty(t, cap.matchConfirmed)
+					assert.Empty(t, cap.matchUnmatched)
+					assert.Empty(t, cap.ingestionCompleted)
+					assert.Empty(t, cap.ingestionFailed)
+				},
+			},
+		}
+
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				repo := integration.NewTestOutboxRepository(t, h.Connection)
+
+				event, err := outboxEntities.NewOutboxEvent(
+					ctx,
+					tc.eventType,
+					tc.buildID,
+					tc.buildJSON(),
+				)
+				require.NoError(t, err)
+
+				_, err = repo.Create(ctx, event)
+				require.NoError(t, err)
+
+				cap := &allEventCapture{}
+				dispatcher := newAllEventDispatcher(t, h, cap)
+
+				processed := dispatcher.DispatchOnce(ctx)
+				require.GreaterOrEqual(t, processed, 1, "dispatcher must process the pending event")
+
+				tc.assert(t, cap)
+			})
+		}
+	})
+}
+
+// TestOutboxDispatcher_ProductionClassifier_MarksInvalidOnMalformedJSON
+// asserts that when the dispatcher is wired with the ACTUAL production
+// classifier (bootstrap.IsNonRetryableOutboxError), malformed JSON
+// payloads are classified as non-retryable and marked INVALID. This
+// differs from TestOutboxDispatcher_MarksInvalidOnBadPayload above,
+// which uses a bespoke "any-error-is-non-retryable" classifier for
+// demonstration purposes — production's classifier only marks INVALID
+// for specific sentinel errors, and a regression that drops one of
+// those sentinels would make the dispatcher retry malformed payloads
+// forever.
+func TestOutboxDispatcher_ProductionClassifier_MarksInvalidOnMalformedJSON(t *testing.T) {
+	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
+		ctx := e4t9Ctx(t, h)
+		repo := integration.NewTestOutboxRepository(t, h.Connection)
+
+		// Truncated JSON — json.Unmarshal returns *json.SyntaxError, which
+		// bootstrap wraps with errInvalidPayload before bubbling. That
+		// sentinel is in nonRetryableErrors, so the production classifier
+		// classifies it non-retryable.
+		malformed := []byte(`{"eventType": "matching.match_confirmed", "tenantId": `)
+
+		event, err := outboxEntities.NewOutboxEvent(
+			ctx,
+			shared.EventTypeMatchConfirmed,
+			uuid.New(),
+			malformed,
+		)
+		require.NoError(t, err)
+
+		created, err := repo.Create(ctx, event)
+		require.NoError(t, err)
+
+		cap := &allEventCapture{}
+		dispatcher := newAllEventDispatcher(t, h, cap,
+			outboxEntities.WithRetryClassifier(outboxEntities.RetryClassifierFunc(bootstrap.IsNonRetryableOutboxError)),
+		)
+
+		processed := dispatcher.DispatchOnce(ctx)
+		require.Equal(t, 1, processed)
+		assert.Empty(t, cap.matchConfirmed, "malformed payload must not produce a successful publish")
+
+		fetched, err := repo.GetByID(ctx, created.ID)
+		require.NoError(t, err)
+		assert.Equal(t, outboxEntities.OutboxStatusInvalid, fetched.Status,
+			"production classifier must mark malformed JSON as INVALID, not FAILED/PENDING")
+		assert.NotEmpty(t, fetched.LastError, "INVALID event must carry the last error for diagnosis")
 	})
 }
 
