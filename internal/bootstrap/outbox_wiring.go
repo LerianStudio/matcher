@@ -86,6 +86,12 @@ var nonRetryableErrors = []error{
 	errMissingTransactionIDs,
 	errMissingTenantID,
 	outbox.ErrOutboxEventRequired,
+	// Oversized or malformed payloads are structural defects that no amount
+	// of retries can fix; surface them as permanent failures so the
+	// dispatcher marks the event invalid instead of thrashing the retry
+	// queue.
+	outbox.ErrOutboxEventPayloadTooLarge,
+	outbox.ErrOutboxEventPayloadNotJSON,
 	errMissingEntityType,
 	errMissingEntityID,
 	errMissingAction,

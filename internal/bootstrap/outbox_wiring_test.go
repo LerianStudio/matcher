@@ -232,6 +232,24 @@ func TestIsNonRetryableOutboxError_CanonicalOutboxEventRequired(t *testing.T) {
 	assert.True(t, isNonRetryableOutboxError(outbox.ErrOutboxEventRequired))
 }
 
+func TestIsNonRetryableOutboxError_PayloadTooLarge(t *testing.T) {
+	t.Parallel()
+	// v5 outbox enforces a 1 MiB payload cap; callers must treat this as
+	// terminal so an oversized event does not retry forever.
+	assert.True(t, isNonRetryableOutboxError(outbox.ErrOutboxEventPayloadTooLarge))
+	wrapped := fmt.Errorf("persist outbox event: %w", outbox.ErrOutboxEventPayloadTooLarge)
+	assert.True(t, isNonRetryableOutboxError(wrapped))
+}
+
+func TestIsNonRetryableOutboxError_PayloadNotJSON(t *testing.T) {
+	t.Parallel()
+	// JSONB storage requires valid JSON; a malformed payload is a
+	// structural defect no retry will repair.
+	assert.True(t, isNonRetryableOutboxError(outbox.ErrOutboxEventPayloadNotJSON))
+	wrapped := fmt.Errorf("persist outbox event: %w", outbox.ErrOutboxEventPayloadNotJSON)
+	assert.True(t, isNonRetryableOutboxError(wrapped))
+}
+
 // --- validateIngestionCompletedPayload tests ---
 
 func validIngestionCompletedEvent() sharedDomain.IngestionCompletedEvent {
