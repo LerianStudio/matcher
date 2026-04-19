@@ -126,7 +126,7 @@ func (repo *Repository) create(
 		wrappedErr := fmt.Errorf("create match run transaction: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to create match run", wrappedErr)
 
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to create match run")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to create match run")
 
 		return nil, wrappedErr
 	}
@@ -231,7 +231,7 @@ func (repo *Repository) update(
 		if !errors.Is(wrappedErr, sql.ErrNoRows) {
 			libOpentelemetry.HandleSpanError(span, "failed to update match run", wrappedErr)
 
-			logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to update match run")
+			logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to update match run")
 		}
 
 		return nil, wrappedErr
@@ -276,7 +276,7 @@ func (repo *Repository) FindByID(
 
 		libOpentelemetry.HandleSpanError(span, "failed to find match run by id", wrappedErr)
 
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to find match run by id")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to find match run by id")
 
 		return nil, wrappedErr
 	}
@@ -405,7 +405,7 @@ func (repo *Repository) ListByContextID(
 		wrappedErr := fmt.Errorf("list match runs transaction: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to list match runs", wrappedErr)
 
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to list match runs")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to list match runs")
 
 		return nil, libHTTP.CursorPagination{}, wrappedErr
 	}
@@ -439,7 +439,7 @@ func (repo *Repository) WithTx(ctx context.Context, fn func(matchingRepos.Tx) er
 		wrappedErr := fmt.Errorf("match run transaction: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to run match run transaction", wrappedErr)
 
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to run match run transaction")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to run match run transaction")
 
 		return wrappedErr
 	}

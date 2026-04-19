@@ -101,7 +101,7 @@ func (uc *UseCase) CloneContext(ctx context.Context, input CloneContextInput) (*
 		wrappedErr := fmt.Errorf("loading source context: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to load source context", wrappedErr)
 
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to load source context")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to load source context")
 
 		return nil, wrappedErr
 	}
@@ -120,7 +120,7 @@ func (uc *UseCase) CloneContext(ctx context.Context, input CloneContextInput) (*
 		if txErr != nil {
 			libOpentelemetry.HandleSpanError(span, "failed to clone context (transactional)", txErr)
 
-			logger.With(libLog.Any("error", txErr.Error())).Log(ctx, libLog.LevelError, "failed to clone context (transactional)")
+			logger.With(libLog.Err(txErr)).Log(ctx, libLog.LevelError, "failed to clone context (transactional)")
 
 			return nil, txErr
 		}
@@ -136,7 +136,7 @@ func (uc *UseCase) CloneContext(ctx context.Context, input CloneContextInput) (*
 	if cloneErr != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to clone context", cloneErr)
 
-		logger.With(libLog.Any("error", cloneErr.Error())).Log(ctx, libLog.LevelError, "failed to clone context")
+		logger.With(libLog.Err(cloneErr)).Log(ctx, libLog.LevelError, "failed to clone context")
 
 		return nil, cloneErr
 	}

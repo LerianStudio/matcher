@@ -297,7 +297,7 @@ func (aw *ArchivalWorker) archiveCycle(ctx context.Context) {
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to acquire archival lock", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to acquire archival lock")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to acquire archival lock")
 
 		return
 	}
@@ -318,7 +318,7 @@ func (aw *ArchivalWorker) archiveCycle(ctx context.Context) {
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to list tenants", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to list tenants for archival")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to list tenants for archival")
 
 		return
 	}
@@ -350,7 +350,7 @@ func (aw *ArchivalWorker) processTenant(ctx context.Context, tenantID string) {
 	if err := aw.provisionPartitions(ctx); err != nil {
 		logger.With(
 			libLog.String("tenant_id", tenantID),
-			libLog.Any("error", err.Error()),
+			libLog.Err(err),
 		).Log(ctx, libLog.LevelWarn, "failed to provision partitions for tenant")
 	}
 
@@ -359,7 +359,7 @@ func (aw *ArchivalWorker) processTenant(ctx context.Context, tenantID string) {
 	if parseErr != nil {
 		logger.With(
 			libLog.String("tenant_id", tenantID),
-			libLog.Any("error", parseErr.Error()),
+			libLog.Err(parseErr),
 		).Log(ctx, libLog.LevelWarn, "invalid tenant ID, skipping archival")
 
 		return
@@ -368,7 +368,7 @@ func (aw *ArchivalWorker) processTenant(ctx context.Context, tenantID string) {
 	if err := aw.archiveTenant(ctx, tid); err != nil {
 		logger.With(
 			libLog.String("tenant_id", tenantID),
-			libLog.Any("error", err.Error()),
+			libLog.Err(err),
 		).Log(ctx, libLog.LevelWarn, "archival failed for tenant")
 	}
 }
@@ -981,7 +981,7 @@ func (aw *ArchivalWorker) handlePartitionError(
 	if updateErr := aw.archiveRepo.Update(ctx, metadata); updateErr != nil {
 		aw.logger.With(
 			libLog.String("partition_name", metadata.PartitionName),
-			libLog.Any("error", updateErr.Error()),
+			libLog.Err(updateErr),
 		).Log(ctx, libLog.LevelError, "failed to persist error state for partition")
 	}
 
@@ -997,7 +997,7 @@ func (aw *ArchivalWorker) handlePartitionError(
 		case reloadErr != nil && aw.logger != nil:
 			aw.logger.With(
 				libLog.String("partition_name", metadata.PartitionName),
-				libLog.Any("error", reloadErr.Error()),
+				libLog.Err(reloadErr),
 			).Log(ctx, libLog.LevelWarn, "failed to reload metadata for partition after error")
 		}
 	}
@@ -1037,7 +1037,7 @@ func (aw *ArchivalWorker) resumeIncomplete(ctx context.Context) {
 
 	incomplete, err := aw.archiveRepo.ListIncomplete(ctx)
 	if err != nil {
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to list incomplete archives")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to list incomplete archives")
 
 		return
 	}
@@ -1053,7 +1053,7 @@ func (aw *ArchivalWorker) resumeIncomplete(ctx context.Context) {
 		if err := aw.archivePartition(tenantCtx, metadata); err != nil {
 			logger.With(
 				libLog.String("partition_name", metadata.PartitionName),
-				libLog.Any("error", err.Error()),
+				libLog.Err(err),
 			).Log(ctx, libLog.LevelWarn, "failed to resume incomplete archive")
 		}
 	}
@@ -1204,7 +1204,7 @@ func (aw *ArchivalWorker) acquireLock(ctx context.Context) (bool, string, error)
 func (aw *ArchivalWorker) releaseLock(ctx context.Context, token string) {
 	connLease, err := aw.infraProvider.GetRedisConnection(ctx)
 	if err != nil {
-		aw.logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelWarn, "failed to get redis connection for lock release")
+		aw.logger.With(libLog.Err(err)).Log(ctx, libLog.LevelWarn, "failed to get redis connection for lock release")
 
 		return
 	}
@@ -1217,7 +1217,7 @@ func (aw *ArchivalWorker) releaseLock(ctx context.Context, token string) {
 
 	rdb, rdbErr := conn.GetClient(ctx)
 	if rdbErr != nil {
-		aw.logger.With(libLog.Any("error", rdbErr.Error())).Log(ctx, libLog.LevelWarn, "failed to get redis client for lock release")
+		aw.logger.With(libLog.Err(rdbErr)).Log(ctx, libLog.LevelWarn, "failed to get redis client for lock release")
 
 		return
 	}
@@ -1231,7 +1231,7 @@ end
 `
 
 	if _, err := rdb.Eval(ctx, script, []string{lockKey}, token).Result(); err != nil {
-		aw.logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelWarn, "failed to release archival lock")
+		aw.logger.With(libLog.Err(err)).Log(ctx, libLog.LevelWarn, "failed to release archival lock")
 	}
 }
 

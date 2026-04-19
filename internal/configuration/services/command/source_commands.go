@@ -41,7 +41,7 @@ func (uc *UseCase) CreateSource(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to create reconciliation source", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to create reconciliation source")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to create reconciliation source")
 
 		return nil, fmt.Errorf("creating reconciliation source: %w", err)
 	}
@@ -75,7 +75,7 @@ func (uc *UseCase) UpdateSource(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to load reconciliation source", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to load reconciliation source")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to load reconciliation source")
 
 		return nil, fmt.Errorf("finding reconciliation source: %w", err)
 	}
@@ -89,7 +89,7 @@ func (uc *UseCase) UpdateSource(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to update reconciliation source", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to update reconciliation source")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to update reconciliation source")
 
 		return nil, fmt.Errorf("updating reconciliation source: %w", err)
 	}
@@ -130,7 +130,7 @@ func (uc *UseCase) DeleteSource(ctx context.Context, contextID, sourceID uuid.UU
 	if err := uc.sourceRepo.Delete(ctx, contextID, sourceID); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to delete reconciliation source", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to delete reconciliation source")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to delete reconciliation source")
 
 		return fmt.Errorf("deleting reconciliation source: %w", err)
 	}
@@ -151,7 +151,7 @@ func (uc *UseCase) checkSourceHasNoFieldMap(ctx context.Context, span trace.Span
 
 		logger.With(
 			libLog.String("source.id", sourceID.String()),
-			libLog.Any("error", err.Error()),
+			libLog.Err(err),
 		).Log(ctx, libLog.LevelError, "failed to check field map for source")
 
 		return fmt.Errorf("checking source field map: %w", err)

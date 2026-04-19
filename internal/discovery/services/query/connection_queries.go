@@ -198,7 +198,7 @@ func convertFetcherSchemaToEntities(ctx context.Context, connectionID uuid.UUID,
 				logger.With(
 					libLog.Any("table", table.Name),
 					libLog.Any("connectionID", connectionID.String()),
-					libLog.Any("error", err.Error()),
+					libLog.Err(err),
 				).Log(ctx, libLog.LevelWarn, "skipping invalid cached schema entry during conversion")
 			}
 
@@ -244,7 +244,7 @@ func (uc *UseCase) cacheSchemas(ctx context.Context, connectionID uuid.UUID, sch
 	if err := uc.schemaCache.SetSchema(ctx, connectionID.String(), fetcherSchema, uc.cacheTTL); err != nil {
 		uc.logger.Log(ctx, libLog.LevelWarn, "failed to cache schemas in Redis",
 			libLog.String("connectionID", connectionID.String()),
-			libLog.Any("error", err.Error()))
+			libLog.Err(err))
 	}
 }
 

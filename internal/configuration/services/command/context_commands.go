@@ -82,7 +82,7 @@ func (uc *UseCase) publishAudit(
 			libLog.Any("audit.entity_id", entityID.String()),
 			libLog.Any("audit.action", action),
 			libLog.Any("correlation.header_id", headerID),
-			libLog.Any("error.message", err.Error()),
+			libLog.Err(err),
 		).Log(ctx, libLog.LevelError, "failed to publish audit event")
 	}
 }
@@ -139,7 +139,7 @@ func (uc *UseCase) CreateContext(
 
 		logger.With(
 			libLog.String("context.name", input.Name),
-			libLog.Any("error", err.Error()),
+			libLog.Err(err),
 		).Log(ctx, libLog.LevelError, "failed to create reconciliation context")
 
 		return nil, err
@@ -403,7 +403,7 @@ func (uc *UseCase) UpdateContext(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to load reconciliation context", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to load reconciliation context")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to load reconciliation context")
 
 		return nil, fmt.Errorf("finding reconciliation context: %w", err)
 	}
@@ -422,7 +422,7 @@ func (uc *UseCase) UpdateContext(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to update reconciliation context", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to update reconciliation context")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to update reconciliation context")
 
 		return nil, fmt.Errorf("updating reconciliation context: %w", err)
 	}
@@ -482,7 +482,7 @@ func (uc *UseCase) DeleteContext(ctx context.Context, contextID uuid.UUID) error
 	if _, err := uc.contextRepo.FindByID(ctx, contextID); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to load reconciliation context", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to load reconciliation context")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to load reconciliation context")
 
 		return fmt.Errorf("finding reconciliation context: %w", err)
 	}
@@ -498,7 +498,7 @@ func (uc *UseCase) DeleteContext(ctx context.Context, contextID uuid.UUID) error
 	if err := uc.contextRepo.Delete(ctx, contextID); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to delete reconciliation context", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to delete reconciliation context")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to delete reconciliation context")
 
 		return fmt.Errorf("deleting reconciliation context: %w", err)
 	}

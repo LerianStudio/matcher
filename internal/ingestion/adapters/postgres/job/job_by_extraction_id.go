@@ -91,7 +91,7 @@ func (repo *Repository) FindLatestByExtractionID(
 
 		wrappedErr := fmt.Errorf("find ingestion job by extraction id: %w", err)
 		libOpentelemetry.HandleSpanError(span, "find by extraction id failed", wrappedErr)
-		logger.With(libLog.Any("error", wrappedErr.Error())).
+		logger.With(libLog.Err(wrappedErr)).
 			Log(ctx, libLog.LevelError, "find ingestion job by extraction id failed")
 
 		return nil, wrappedErr

@@ -139,7 +139,7 @@ func applyFeeNormalization(
 
 	gross, err := fee.NewMoney(txn.Amount, txn.Currency)
 	if err != nil {
-		logger.With(libLog.Any("tx.id", txn.ID.String()), libLog.Any("error", err.Error())).Log(ctx, libLog.LevelWarn, "fee normalization: failed to create money from transaction amount")
+		logger.With(libLog.Any("tx.id", txn.ID.String()), libLog.Err(err)).Log(ctx, libLog.LevelWarn, "fee normalization: failed to create money from transaction amount")
 
 		return
 	}
@@ -160,7 +160,7 @@ func applyFeeMode(
 	case fee.NormalizationModeNet:
 		breakdown, calcErr := fee.CalculateSchedule(ctx, gross, schedule)
 		if calcErr != nil {
-			logger.With(libLog.Any("tx.id", txn.ID.String()), libLog.Any("error", calcErr.Error())).Log(ctx, libLog.LevelWarn, "fee normalization: failed to calculate net from gross")
+			logger.With(libLog.Any("tx.id", txn.ID.String()), libLog.Err(calcErr)).Log(ctx, libLog.LevelWarn, "fee normalization: failed to calculate net from gross")
 
 			return
 		}
@@ -172,7 +172,7 @@ func applyFeeMode(
 	case fee.NormalizationModeGross:
 		grossMoney, grossBreakdown, grossErr := fee.CalculateGrossFromNet(ctx, gross, schedule)
 		if grossErr != nil {
-			logger.With(libLog.Any("tx.id", txn.ID.String()), libLog.Any("error", grossErr.Error())).Log(ctx, libLog.LevelWarn, "fee normalization: failed to calculate gross from net")
+			logger.With(libLog.Any("tx.id", txn.ID.String()), libLog.Err(grossErr)).Log(ctx, libLog.LevelWarn, "fee normalization: failed to calculate gross from net")
 
 			return
 		}

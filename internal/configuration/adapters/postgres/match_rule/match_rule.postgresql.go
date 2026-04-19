@@ -70,7 +70,7 @@ func (repo *Repository) Create(
 		logger.With(
 			libLog.Any("context.id", entity.ContextID.String()),
 			libLog.Any("priority", entity.Priority),
-			libLog.Any("error.message", err.Error()),
+			libLog.Err(err),
 		).Log(ctx, libLog.LevelError, "failed to create match rule")
 
 		return nil, fmt.Errorf("failed to create match rule: %w", err)
@@ -116,7 +116,7 @@ func (repo *Repository) CreateWithTx(
 		logger.With(
 			libLog.Any("context.id", entity.ContextID.String()),
 			libLog.Any("priority", entity.Priority),
-			libLog.Any("error.message", err.Error()),
+			libLog.Err(err),
 		).Log(ctx, libLog.LevelError, "failed to create match rule")
 
 		return nil, fmt.Errorf("failed to create match rule: %w", err)
@@ -190,7 +190,7 @@ func (repo *Repository) FindByID(
 			logger.With(
 				libLog.Any("context.id", contextID.String()),
 				libLog.Any("match_rule.id", id.String()),
-				libLog.Any("error.message", err.Error()),
+				libLog.Err(err),
 			).Log(ctx, libLog.LevelError, "failed to find match rule by id")
 		}
 
@@ -277,7 +277,7 @@ func (repo *Repository) FindByContextID(
 
 		logger.With(
 			libLog.Any("context.id", contextID.String()),
-			libLog.Any("error.message", err.Error()),
+			libLog.Err(err),
 		).Log(ctx, libLog.LevelError, "failed to list match rules")
 
 		return nil, libHTTP.CursorPagination{}, fmt.Errorf("failed to find match rules by context: %w", err)
@@ -371,7 +371,7 @@ func (repo *Repository) FindByContextIDWithTx(
 
 		logger.With(
 			libLog.Any("context.id", contextID.String()),
-			libLog.Any("error.message", err.Error()),
+			libLog.Err(err),
 		).Log(ctx, libLog.LevelError, "failed to list match rules with tx")
 
 		return nil, libHTTP.CursorPagination{}, fmt.Errorf("failed to find match rules by context with tx: %w", err)
@@ -460,7 +460,7 @@ func (repo *Repository) FindByContextIDAndType(
 		logger.With(
 			libLog.Any("context.id", contextID.String()),
 			libLog.Any("rule.type", ruleType.String()),
-			libLog.Any("error.message", err.Error()),
+			libLog.Err(err),
 		).Log(ctx, libLog.LevelError, "failed to list match rules")
 
 		return nil, libHTTP.CursorPagination{}, fmt.Errorf("failed to find match rules by context and type: %w", err)
@@ -505,7 +505,7 @@ func (repo *Repository) FindByPriority(
 			logger.With(
 				libLog.Any("context.id", contextID.String()),
 				libLog.Any("priority", priority),
-				libLog.Any("error.message", err.Error()),
+				libLog.Err(err),
 			).Log(ctx, libLog.LevelError, "failed to find match rule by priority")
 		}
 
@@ -547,7 +547,7 @@ func (repo *Repository) Update(
 			logger.With(
 				libLog.Any("context.id", entity.ContextID.String()),
 				libLog.Any("match_rule.id", entity.ID.String()),
-				libLog.Any("error.message", err.Error()),
+				libLog.Err(err),
 			).Log(ctx, libLog.LevelError, "failed to update match rule")
 		}
 
@@ -595,7 +595,7 @@ func (repo *Repository) UpdateWithTx(
 			logger.With(
 				libLog.Any("context.id", entity.ContextID.String()),
 				libLog.Any("match_rule.id", entity.ID.String()),
-				libLog.Any("error.message", err.Error()),
+				libLog.Err(err),
 			).Log(ctx, libLog.LevelError, "failed to update match rule")
 		}
 
@@ -666,7 +666,7 @@ func (repo *Repository) Delete(ctx stdctx.Context, contextID, id uuid.UUID) erro
 			logger.With(
 				libLog.Any("context.id", contextID.String()),
 				libLog.Any("match_rule.id", id.String()),
-				libLog.Any("error.message", err.Error()),
+				libLog.Err(err),
 			).Log(ctx, libLog.LevelError, "failed to delete match rule")
 		}
 
@@ -710,7 +710,7 @@ func (repo *Repository) DeleteWithTx(
 			logger.With(
 				libLog.Any("context.id", contextID.String()),
 				libLog.Any("match_rule.id", id.String()),
-				libLog.Any("error.message", err.Error()),
+				libLog.Err(err),
 			).Log(ctx, libLog.LevelError, "failed to delete match rule")
 		}
 
@@ -806,7 +806,7 @@ func (repo *Repository) ReorderPriorities(
 			logger.With(
 				libLog.Any("context.id", contextID.String()),
 				libLog.Any("rule_ids.count", len(ruleIDs)),
-				libLog.Any("error.message", err.Error()),
+				libLog.Err(err),
 			).Log(ctx, libLog.LevelError, "failed to reorder match rule priorities")
 		}
 

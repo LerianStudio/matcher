@@ -114,7 +114,7 @@ func (repo *Repository) CountBridgeReadiness(
 	if err != nil {
 		wrappedErr := fmt.Errorf("count bridge readiness: %w", err)
 		libOpentelemetry.HandleSpanError(span, "count bridge readiness failed", wrappedErr)
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "count bridge readiness failed")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "count bridge readiness failed")
 
 		return repositories.BridgeReadinessCounts{}, wrappedErr
 	}
@@ -191,7 +191,7 @@ func (repo *Repository) ListBridgeCandidates(
 	if err != nil {
 		wrappedErr := fmt.Errorf("list bridge candidates: %w", err)
 		libOpentelemetry.HandleSpanError(span, "list bridge candidates failed", wrappedErr)
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "list bridge candidates failed")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "list bridge candidates failed")
 
 		return nil, wrappedErr
 	}

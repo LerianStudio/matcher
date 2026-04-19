@@ -249,7 +249,7 @@ func (worker *SchedulerWorker) pollCycle(ctx context.Context) {
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to find due schedules", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "scheduler: failed to find due schedules")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "scheduler: failed to find due schedules")
 
 		return
 	}
@@ -304,7 +304,7 @@ func (worker *SchedulerWorker) processSchedule(
 		if _, updateErr := worker.scheduleRepo.Update(lockCtx, schedule); updateErr != nil {
 			logger.With(
 				libLog.String("schedule.id", schedule.ID.String()),
-				libLog.Any("error", updateErr.Error()),
+				libLog.Err(updateErr),
 			).Log(lockCtx, libLog.LevelWarn, "scheduler: failed to update schedule after run")
 		}
 
@@ -318,7 +318,7 @@ func (worker *SchedulerWorker) processSchedule(
 	if lockErr != nil {
 		logger.With(
 			libLog.String("schedule.id", schedule.ID.String()),
-			libLog.Any("error", lockErr.Error()),
+			libLog.Err(lockErr),
 		).Log(ctx, libLog.LevelWarn, "scheduler: lock error for schedule")
 	}
 }

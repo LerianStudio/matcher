@@ -59,7 +59,7 @@ func (repo *Repository) Create(
 		wrappedErr := fmt.Errorf("create schedule: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to create schedule", wrappedErr)
 
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to create schedule")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to create schedule")
 
 		return nil, wrappedErr
 	}
@@ -103,7 +103,7 @@ func (repo *Repository) CreateWithTx(
 		wrappedErr := fmt.Errorf("create schedule with tx: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to create schedule", wrappedErr)
 
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to create schedule")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to create schedule")
 
 		return nil, wrappedErr
 	}
@@ -173,7 +173,7 @@ func (repo *Repository) FindByID(
 		if !errors.Is(err, sql.ErrNoRows) {
 			libOpentelemetry.HandleSpanError(span, "failed to find schedule", err)
 
-			logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to find schedule by id")
+			logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to find schedule by id")
 		}
 
 		return nil, fmt.Errorf("find schedule by id: %w", err)
@@ -232,7 +232,7 @@ func (repo *Repository) FindByContextID(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to list schedules", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to list schedules by context")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to list schedules by context")
 
 		return nil, fmt.Errorf("find schedules by context: %w", err)
 	}
@@ -304,7 +304,7 @@ func (repo *Repository) FindDueSchedules(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to find due schedules", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to find due schedules")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to find due schedules")
 
 		return nil, fmt.Errorf("find due schedules: %w", err)
 	}
@@ -342,7 +342,7 @@ func (repo *Repository) Update(
 			wrappedErr := fmt.Errorf("update schedule: %w", err)
 			libOpentelemetry.HandleSpanError(span, "failed to update schedule", wrappedErr)
 
-			logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to update schedule")
+			logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to update schedule")
 
 			return nil, wrappedErr
 		}
@@ -390,7 +390,7 @@ func (repo *Repository) UpdateWithTx(
 			wrappedErr := fmt.Errorf("update schedule with tx: %w", err)
 			libOpentelemetry.HandleSpanError(span, "failed to update schedule", wrappedErr)
 
-			logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to update schedule")
+			logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to update schedule")
 
 			return nil, wrappedErr
 		}
@@ -458,7 +458,7 @@ func (repo *Repository) Delete(ctx stdctx.Context, id uuid.UUID) error {
 			wrappedErr := fmt.Errorf("delete schedule: %w", err)
 			libOpentelemetry.HandleSpanError(span, "failed to delete schedule", wrappedErr)
 
-			logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to delete schedule")
+			logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to delete schedule")
 
 			return wrappedErr
 		}
@@ -493,7 +493,7 @@ func (repo *Repository) DeleteWithTx(ctx stdctx.Context, tx *sql.Tx, id uuid.UUI
 			wrappedErr := fmt.Errorf("delete schedule with tx: %w", err)
 			libOpentelemetry.HandleSpanError(span, "failed to delete schedule", wrappedErr)
 
-			logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to delete schedule")
+			logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to delete schedule")
 
 			return wrappedErr
 		}

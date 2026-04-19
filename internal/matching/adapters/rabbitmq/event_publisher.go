@@ -338,7 +338,7 @@ func (publisher *EventPublisher) publishEvent(
 		if err := publisher.publishMultiTenant(ctx, tenantID, sharedRabbitmq.ExchangeName, routingKey, msg); err != nil {
 			libOpentelemetry.HandleSpanError(span, "failed to publish event via tenant vhost", err)
 
-			logger.With(libLog.Any("exchange", sharedRabbitmq.ExchangeName), libLog.Any("routing_key", routingKey), libLog.Any("tenant_id", tenantID), libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to publish event via tenant vhost")
+			logger.With(libLog.Any("exchange", sharedRabbitmq.ExchangeName), libLog.Any("routing_key", routingKey), libLog.Any("tenant_id", tenantID), libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to publish event via tenant vhost")
 
 			return fmt.Errorf("failed to publish event via tenant vhost: %w", err)
 		}
@@ -351,7 +351,7 @@ func (publisher *EventPublisher) publishEvent(
 	if err := publisher.confirmablePublisher.Publish(ctx, sharedRabbitmq.ExchangeName, routingKey, false, false, msg); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to publish event with confirm", err)
 
-		logger.With(libLog.Any("exchange", sharedRabbitmq.ExchangeName), libLog.Any("routing_key", routingKey), libLog.Any("message_id", msg.MessageId), libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to publish event")
+		logger.With(libLog.Any("exchange", sharedRabbitmq.ExchangeName), libLog.Any("routing_key", routingKey), libLog.Any("message_id", msg.MessageId), libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to publish event")
 
 		return fmt.Errorf("failed to publish event: %w", err)
 	}

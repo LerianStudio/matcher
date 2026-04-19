@@ -296,7 +296,7 @@ func (dw *DiscoveryWorker) pollCycle(ctx context.Context) {
 
 	acquired, token, err := dw.acquireLock(ctx, discoveryLockKey)
 	if err != nil {
-		logger.With(libLog.Any("error", err.Error())).
+		logger.With(libLog.Err(err)).
 			Log(ctx, libLog.LevelWarn, "discovery: lock error")
 
 		return
@@ -330,7 +330,7 @@ func (dw *DiscoveryWorker) syncConnectionsAndSchemas(ctx context.Context) {
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to list tenants for discovery", err)
 
-		logger.With(libLog.Any("error", err.Error())).
+		logger.With(libLog.Err(err)).
 			Log(ctx, libLog.LevelError, "discovery: failed to list tenants")
 
 		return
@@ -360,7 +360,7 @@ func (dw *DiscoveryWorker) syncTenantConnections(parentCtx context.Context, tena
 
 		logger.With(
 			libLog.String("tenant.id", tenantID),
-			libLog.Any("error", err.Error()),
+			libLog.Err(err),
 		).Log(ctx, libLog.LevelError, "discovery: failed to list tenant connections from fetcher")
 
 		return
@@ -401,7 +401,7 @@ func (dw *DiscoveryWorker) syncConnection(ctx context.Context, fc *sharedPorts.F
 
 		logger.With(
 			libLog.String("fetcher_conn_id", fc.ID),
-			libLog.Any("error", err.Error()),
+			libLog.Err(err),
 		).Log(ctx, libLog.LevelError, "discovery: failed to sync connection")
 
 		return
@@ -419,7 +419,7 @@ func (dw *DiscoveryWorker) markStaleConnections(ctx context.Context, seenFetcher
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to find all connections", err)
 
-		logger.With(libLog.Any("error", err.Error())).
+		logger.With(libLog.Err(err)).
 			Log(ctx, libLog.LevelError, "discovery: failed to find all connections for stale check")
 
 		return
@@ -445,7 +445,7 @@ func (dw *DiscoveryWorker) markStaleConnections(ctx context.Context, seenFetcher
 		if err := dw.syncer.MarkConnectionUnreachable(ctx, conn); err != nil {
 			logger.With(
 				libLog.String("connection.id", conn.ID.String()),
-				libLog.Any("error", err.Error()),
+				libLog.Err(err),
 			).Log(ctx, libLog.LevelWarn, "discovery: failed to mark connection unreachable")
 
 			continue
@@ -503,7 +503,7 @@ func (dw *DiscoveryWorker) releaseLock(ctx context.Context, key, token string) {
 	if rdbErr != nil {
 		dw.logger.With(
 			libLog.String("lock.key", key),
-			libLog.Any("error", rdbErr.Error()),
+			libLog.Err(rdbErr),
 		).Log(ctx, libLog.LevelWarn, "discovery: failed to acquire redis client for lock release")
 
 		return
@@ -519,7 +519,7 @@ end
 	if _, err := rdb.Eval(ctx, script, []string{key}, token).Result(); err != nil {
 		dw.logger.With(
 			libLog.String("lock.key", key),
-			libLog.Any("error", err.Error()),
+			libLog.Err(err),
 		).Log(ctx, libLog.LevelWarn, "discovery: failed to release lock")
 	}
 }

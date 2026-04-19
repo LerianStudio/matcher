@@ -74,7 +74,7 @@ func (uc *UseCase) CreateFeeSchedule(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to create fee schedule", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to create fee schedule")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to create fee schedule")
 
 		return nil, fmt.Errorf("creating fee schedule: %w", err)
 	}
@@ -113,7 +113,7 @@ func (uc *UseCase) UpdateFeeSchedule(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to load fee schedule", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to load fee schedule")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to load fee schedule")
 
 		return nil, fmt.Errorf("finding fee schedule: %w", err)
 	}
@@ -139,7 +139,7 @@ func (uc *UseCase) UpdateFeeSchedule(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to update fee schedule", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to update fee schedule")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to update fee schedule")
 
 		return nil, fmt.Errorf("updating fee schedule: %w", err)
 	}
@@ -165,7 +165,7 @@ func (uc *UseCase) DeleteFeeSchedule(ctx context.Context, scheduleID uuid.UUID) 
 	if _, err := uc.feeScheduleRepo.GetByID(ctx, scheduleID); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to load fee schedule", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to load fee schedule")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to load fee schedule")
 
 		return fmt.Errorf("finding fee schedule: %w", err)
 	}
@@ -183,7 +183,7 @@ func (uc *UseCase) DeleteFeeSchedule(ctx context.Context, scheduleID uuid.UUID) 
 
 		libOpentelemetry.HandleSpanError(span, "failed to delete fee schedule", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to delete fee schedule")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to delete fee schedule")
 
 		return fmt.Errorf("deleting fee schedule: %w", err)
 	}

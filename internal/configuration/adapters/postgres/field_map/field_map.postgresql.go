@@ -67,7 +67,7 @@ func (repo *Repository) Create(
 		wrappedErr := fmt.Errorf("create field map: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to create field map", wrappedErr)
 
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to create field map")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to create field map")
 
 		return nil, wrappedErr
 	}
@@ -110,7 +110,7 @@ func (repo *Repository) CreateWithTx(
 		wrappedErr := fmt.Errorf("create field map with tx: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to create field map", wrappedErr)
 
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to create field map")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to create field map")
 
 		return nil, wrappedErr
 	}
@@ -176,7 +176,7 @@ func (repo *Repository) FindByID(ctx stdctx.Context, id uuid.UUID) (*entities.Fi
 		if !errors.Is(err, sql.ErrNoRows) {
 			libOpentelemetry.HandleSpanError(span, "failed to find field map by id", err)
 
-			logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to find field map by id")
+			logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to find field map by id")
 		}
 
 		return nil, fmt.Errorf("find field map by id: %w", err)
@@ -216,7 +216,7 @@ func (repo *Repository) FindBySourceID(
 		if !errors.Is(err, sql.ErrNoRows) {
 			libOpentelemetry.HandleSpanError(span, "failed to find field map by source", err)
 
-			logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to find field map by source")
+			logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to find field map by source")
 		}
 
 		return nil, fmt.Errorf("find field map by source: %w", err)
@@ -263,7 +263,7 @@ func (repo *Repository) FindBySourceIDWithTx(
 		if !errors.Is(err, sql.ErrNoRows) {
 			libOpentelemetry.HandleSpanError(span, "failed to find field map by source with tx", err)
 
-			logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to find field map by source with tx")
+			logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to find field map by source with tx")
 		}
 
 		return nil, fmt.Errorf("find field map by source with tx: %w", err)
@@ -322,7 +322,7 @@ func (repo *Repository) ExistsBySourceIDsWithTx(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to check field maps existence with tx", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to check field maps existence with tx")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to check field maps existence with tx")
 
 		return nil, fmt.Errorf("check field maps existence by source ids with tx: %w", err)
 	}
@@ -363,7 +363,7 @@ func (repo *Repository) Update(
 		if !errors.Is(err, sql.ErrNoRows) {
 			libOpentelemetry.HandleSpanError(span, "failed to update field map", wrappedErr)
 
-			logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to update field map")
+			logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to update field map")
 		}
 
 		return nil, wrappedErr
@@ -411,7 +411,7 @@ func (repo *Repository) UpdateWithTx(
 		if !errors.Is(err, sql.ErrNoRows) {
 			libOpentelemetry.HandleSpanError(span, "failed to update field map", wrappedErr)
 
-			logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to update field map")
+			logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to update field map")
 		}
 
 		return nil, wrappedErr
@@ -500,7 +500,7 @@ func (repo *Repository) ExistsBySourceIDs(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to check field maps existence", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to check field maps existence")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to check field maps existence")
 
 		return nil, fmt.Errorf("check field maps existence by source ids: %w", err)
 	}
@@ -605,7 +605,7 @@ func (repo *Repository) Delete(ctx stdctx.Context, id uuid.UUID) error {
 		if !errors.Is(err, sql.ErrNoRows) {
 			libOpentelemetry.HandleSpanError(span, "failed to delete field map", wrappedErr)
 
-			logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to delete field map")
+			logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to delete field map")
 		}
 
 		return wrappedErr
@@ -643,7 +643,7 @@ func (repo *Repository) DeleteWithTx(ctx stdctx.Context, tx *sql.Tx, id uuid.UUI
 		if !errors.Is(err, sql.ErrNoRows) {
 			libOpentelemetry.HandleSpanError(span, "failed to delete field map", wrappedErr)
 
-			logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to delete field map")
+			logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to delete field map")
 		}
 
 		return wrappedErr

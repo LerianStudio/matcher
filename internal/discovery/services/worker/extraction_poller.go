@@ -179,7 +179,7 @@ func (ep *ExtractionPoller) handleTimeout(
 	expectedUpdatedAt := extraction.UpdatedAt
 
 	if err := extraction.MarkFailed("extraction timed out"); err != nil {
-		ep.logger.With(libLog.Any("error", err.Error())).
+		ep.logger.With(libLog.Err(err)).
 			Log(ctx, libLog.LevelWarn, "extraction poller: failed to mark extraction as failed on timeout")
 	}
 
@@ -188,7 +188,7 @@ func (ep *ExtractionPoller) handleTimeout(
 			return
 		}
 
-		ep.logger.With(libLog.Any("error", err.Error())).
+		ep.logger.With(libLog.Err(err)).
 			Log(ctx, libLog.LevelWarn, "extraction poller: failed to update extraction on timeout")
 	}
 
@@ -214,7 +214,7 @@ func (ep *ExtractionPoller) pollOnce(
 
 	extraction, err := ep.extractionRepo.FindByID(ctx, extractionID)
 	if err != nil {
-		logger.With(libLog.Any("error", err.Error())).
+		logger.With(libLog.Err(err)).
 			Log(ctx, libLog.LevelWarn, "extraction poller: failed to reload extraction request")
 
 		return false
@@ -250,7 +250,7 @@ func (ep *ExtractionPoller) pollOnce(
 			expectedUpdatedAt := extraction.UpdatedAt
 
 			if cancelErr := extraction.MarkCancelled(); cancelErr != nil {
-				logger.With(libLog.Any("error", cancelErr.Error())).
+				logger.With(libLog.Err(cancelErr)).
 					Log(ctx, libLog.LevelWarn, "extraction poller: failed to mark extraction as cancelled")
 
 				return true
@@ -261,7 +261,7 @@ func (ep *ExtractionPoller) pollOnce(
 					return ep.stopOnConflict(ctx, extraction.ID)
 				}
 
-				logger.With(libLog.Any("error", updateErr.Error())).
+				logger.With(libLog.Err(updateErr)).
 					Log(ctx, libLog.LevelWarn, "extraction poller: failed to persist cancelled extraction")
 
 				return false
@@ -274,7 +274,7 @@ func (ep *ExtractionPoller) pollOnce(
 			return true
 		}
 
-		logger.With(libLog.Any("error", err.Error())).
+		logger.With(libLog.Err(err)).
 			Log(ctx, libLog.LevelWarn,
 				fmt.Sprintf("poll extraction %s: %v", extraction.FetcherJobID, err))
 
@@ -346,7 +346,7 @@ func (ep *ExtractionPoller) handlePollStatus(
 
 		if onComplete != nil {
 			if err := onComplete(ctx, status.ResultPath); err != nil {
-				logger.With(libLog.Any("error", err.Error())).
+				logger.With(libLog.Err(err)).
 					Log(ctx, libLog.LevelWarn, "extraction complete callback failed")
 			}
 		}
@@ -424,7 +424,7 @@ func (ep *ExtractionPoller) handlePollStatus(
 
 		if err := extraction.MarkExtracting(); err != nil {
 			// Non-fatal: log but don't update DB with potentially inconsistent state.
-			logger.With(libLog.Any("error", err.Error())).
+			logger.With(libLog.Err(err)).
 				Log(ctx, libLog.LevelWarn, "extraction poller: failed to mark extraction as extracting")
 
 			return false
@@ -436,7 +436,7 @@ func (ep *ExtractionPoller) handlePollStatus(
 					return ep.stopOnConflict(ctx, extraction.ID)
 				}
 
-				logger.With(libLog.Any("error", err.Error())).
+				logger.With(libLog.Err(err)).
 					Log(ctx, libLog.LevelWarn, "extraction poller: failed to update extraction status")
 			}
 		}

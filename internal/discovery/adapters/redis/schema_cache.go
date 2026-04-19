@@ -207,7 +207,7 @@ func (cache *SchemaCache) SetSchema(ctx context.Context, connID string, schema *
 	if err := cache.client.Set(ctx, key, data, ttl).Err(); err != nil {
 		wrappedErr := fmt.Errorf("set schema in cache: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to set schema in cache", wrappedErr)
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to set schema in cache")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to set schema in cache")
 
 		return wrappedErr
 	}

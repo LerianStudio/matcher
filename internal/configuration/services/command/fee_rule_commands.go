@@ -87,7 +87,7 @@ func (uc *UseCase) CreateFeeRule(
 	if err := uc.feeRuleRepo.Create(ctx, entity); err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to create fee rule", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to create fee rule")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to create fee rule")
 
 		if mappedErr := mapFeeRuleConstraintError(err); mappedErr != nil {
 			return nil, mappedErr
@@ -134,7 +134,7 @@ func (uc *UseCase) UpdateFeeRule(
 
 		libOpentelemetry.HandleSpanError(span, "failed to load fee rule", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to load fee rule")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to load fee rule")
 
 		return nil, fmt.Errorf("finding fee rule: %w", err)
 	}
@@ -161,7 +161,7 @@ func (uc *UseCase) UpdateFeeRule(
 
 		libOpentelemetry.HandleSpanError(span, "failed to update fee rule", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to update fee rule")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to update fee rule")
 
 		if mappedErr := mapFeeRuleConstraintError(err); mappedErr != nil {
 			return nil, mappedErr
@@ -200,7 +200,7 @@ func (uc *UseCase) deleteFeeRule(ctx context.Context, contextID, feeRuleID uuid.
 
 		libOpentelemetry.HandleSpanError(span, "failed to load fee rule", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to load fee rule")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to load fee rule")
 
 		return fmt.Errorf("finding fee rule: %w", err)
 	}
@@ -216,7 +216,7 @@ func (uc *UseCase) deleteFeeRule(ctx context.Context, contextID, feeRuleID uuid.
 
 		libOpentelemetry.HandleSpanError(span, "failed to delete fee rule", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to delete fee rule")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to delete fee rule")
 
 		return fmt.Errorf("deleting fee rule: %w", err)
 	}

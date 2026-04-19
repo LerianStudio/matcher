@@ -77,7 +77,7 @@ func (repo *Repository) Create(
 		wrappedErr := fmt.Errorf("create adjustment transaction: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to create adjustment", wrappedErr)
 
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to create adjustment")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to create adjustment")
 
 		return nil, wrappedErr
 	}
@@ -122,7 +122,7 @@ func (repo *Repository) CreateWithTx(
 		wrappedErr := fmt.Errorf("create adjustment with tx: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to create adjustment with tx", wrappedErr)
 
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to create adjustment with tx")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to create adjustment with tx")
 
 		return nil, wrappedErr
 	}
@@ -162,7 +162,7 @@ func (repo *Repository) CreateWithAuditLog(
 		wrappedErr := fmt.Errorf("create adjustment with audit log: %w", err)
 		libOpentelemetry.HandleSpanError(span, "failed to create adjustment with audit log", wrappedErr)
 
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to create adjustment with audit log")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to create adjustment with audit log")
 
 		return nil, wrappedErr
 	}
@@ -286,7 +286,7 @@ func (repo *Repository) FindByID(
 		if !errors.Is(err, sql.ErrNoRows) {
 			libOpentelemetry.HandleSpanError(span, "failed to find adjustment by id", wrappedErr)
 
-			logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to find adjustment by id")
+			logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to find adjustment by id")
 		}
 
 		return nil, wrappedErr
@@ -441,7 +441,7 @@ func (repo *Repository) ListByContextID(
 		if !errors.Is(err, sql.ErrNoRows) {
 			libOpentelemetry.HandleSpanError(span, "failed to list adjustments", wrappedErr)
 
-			logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to list adjustments")
+			logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to list adjustments")
 		}
 
 		return nil, libHTTP.CursorPagination{}, wrappedErr
@@ -510,7 +510,7 @@ func (repo *Repository) ListByMatchGroupID(
 			wrappedErr,
 		)
 
-		logger.With(libLog.Any("error", wrappedErr.Error())).Log(ctx, libLog.LevelError, "failed to list adjustments by match group")
+		logger.With(libLog.Err(wrappedErr)).Log(ctx, libLog.LevelError, "failed to list adjustments by match group")
 
 		return nil, wrappedErr
 	}

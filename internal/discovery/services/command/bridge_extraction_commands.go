@@ -357,7 +357,7 @@ func (orch *BridgeExtractionOrchestrator) ingestAndLink(
 
 	defer func() {
 		if closeErr := custodyReader.Close(); closeErr != nil && logger != nil {
-			logger.With(libLog.Any("error", closeErr.Error())).
+			logger.With(libLog.Err(closeErr)).
 				Log(ctx, libLog.LevelWarn, "bridge orchestrator: custody reader close failed")
 		}
 	}()
@@ -456,7 +456,7 @@ func (orch *BridgeExtractionOrchestrator) cleanupCustody(
 		if logger != nil {
 			logger.With(
 				libLog.String("custody_key", ref.Key),
-				libLog.Any("error", err.Error()),
+				libLog.Err(err),
 			).Log(ctx, libLog.LevelWarn, "bridge orchestrator: custody delete failed (non-fatal)")
 		}
 
@@ -473,7 +473,7 @@ func (orch *BridgeExtractionOrchestrator) cleanupCustody(
 			logger.With(
 				libLog.String("extraction_id", extractionID.String()),
 				libLog.String("custody_key", ref.Key),
-				libLog.Any("error", markErr.Error()),
+				libLog.Err(markErr),
 			).Log(ctx, libLog.LevelWarn, "bridge orchestrator: mark custody deleted failed (non-fatal, retention sweep will retry)")
 		}
 	}

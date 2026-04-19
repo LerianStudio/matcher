@@ -133,7 +133,7 @@ func (uc *UseCase) loadFeeRulesAndSchedules(
 	rules, err := uc.feeRuleProvider.FindByContextID(ctx, contextID)
 	if err != nil {
 		span.SetAttributes(attribute.Bool("fee_rules_load_error", true))
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to load fee rules")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to load fee rules")
 
 		return nil, nil, nil, fmt.Errorf("loading fee rules: %w", err)
 	}
@@ -173,7 +173,7 @@ func (uc *UseCase) loadFeeRulesAndSchedules(
 	schedules, err := uc.feeScheduleRepo.GetByIDs(ctx, scheduleIDs)
 	if err != nil {
 		span.SetAttributes(attribute.Bool("fee_rules_load_error", true))
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to load fee schedules")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to load fee schedules")
 
 		return nil, nil, nil, fmt.Errorf("loading fee schedules: %w", err)
 	}

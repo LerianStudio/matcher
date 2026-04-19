@@ -36,7 +36,7 @@ func (uc *UseCase) GetFeeSchedule(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to get fee schedule", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to get fee schedule")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to get fee schedule")
 
 		return nil, fmt.Errorf("finding fee schedule: %w", err)
 	}
@@ -60,7 +60,7 @@ func (uc *UseCase) ListFeeSchedules(ctx context.Context, limit int) ([]*fee.FeeS
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to list fee schedules", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to list fee schedules")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to list fee schedules")
 
 		return nil, fmt.Errorf("listing fee schedules: %w", err)
 	}

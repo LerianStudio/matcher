@@ -62,7 +62,7 @@ func (repo *Repository) Create(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to create reconciliation source", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to create reconciliation source")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to create reconciliation source")
 
 		return nil, fmt.Errorf("failed to create reconciliation source: %w", err)
 	}
@@ -105,7 +105,7 @@ func (repo *Repository) CreateWithTx(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to create reconciliation source", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to create reconciliation source")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to create reconciliation source")
 
 		return nil, fmt.Errorf("failed to create reconciliation source: %w", err)
 	}
@@ -175,7 +175,7 @@ func (repo *Repository) Update(
 		if !errors.Is(err, sql.ErrNoRows) {
 			libOpentelemetry.HandleSpanError(span, "failed to update reconciliation source", err)
 
-			logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to update reconciliation source")
+			logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to update reconciliation source")
 		}
 
 		return nil, fmt.Errorf("failed to update reconciliation source: %w", err)
@@ -222,7 +222,7 @@ func (repo *Repository) UpdateWithTx(
 		if !errors.Is(err, sql.ErrNoRows) {
 			libOpentelemetry.HandleSpanError(span, "failed to update reconciliation source", err)
 
-			logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to update reconciliation source")
+			logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to update reconciliation source")
 		}
 
 		return nil, fmt.Errorf("failed to update reconciliation source: %w", err)
@@ -288,7 +288,7 @@ func (repo *Repository) Delete(ctx stdctx.Context, contextID, id uuid.UUID) erro
 		if !errors.Is(err, sql.ErrNoRows) {
 			libOpentelemetry.HandleSpanError(span, "failed to delete reconciliation source", err)
 
-			logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to delete reconciliation source")
+			logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to delete reconciliation source")
 		}
 
 		return fmt.Errorf("failed to delete reconciliation source: %w", err)
@@ -329,7 +329,7 @@ func (repo *Repository) DeleteWithTx(
 		if !errors.Is(err, sql.ErrNoRows) {
 			libOpentelemetry.HandleSpanError(span, "failed to delete reconciliation source", err)
 
-			logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to delete reconciliation source")
+			logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to delete reconciliation source")
 		}
 
 		return fmt.Errorf("failed to delete reconciliation source: %w", err)

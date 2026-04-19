@@ -97,7 +97,7 @@ func (repo *Repository) Create(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to create transaction", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to create transaction")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to create transaction")
 
 		return nil, fmt.Errorf("failed to create transaction: %w", err)
 	}
@@ -280,7 +280,7 @@ func (repo *Repository) createBatch(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to create transaction batch", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to create transaction batch")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to create transaction batch")
 
 		return nil, fmt.Errorf("failed to create batch: %w", err)
 	}
@@ -316,7 +316,7 @@ func (repo *Repository) FindByID(ctx context.Context, id uuid.UUID) (*shared.Tra
 		if !errors.Is(err, sql.ErrNoRows) {
 			libOpentelemetry.HandleSpanError(span, "failed to find transaction", err)
 
-			logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to find transaction")
+			logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to find transaction")
 		}
 
 		return nil, fmt.Errorf("failed to find transaction: %w", err)
@@ -429,7 +429,7 @@ func (repo *Repository) FindByJobID(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to list transactions", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to list transactions")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to list transactions")
 
 		return nil, libHTTP.CursorPagination{}, fmt.Errorf(
 			"failed to list transactions by job: %w",
@@ -545,7 +545,7 @@ func (repo *Repository) FindByJobAndContextID(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to list transactions", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to list transactions")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to list transactions")
 
 		return nil, libHTTP.CursorPagination{}, fmt.Errorf(
 			"failed to list transactions by job and context: %w",
@@ -608,7 +608,7 @@ func (repo *Repository) ListUnmatchedByContext(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to list unmatched transactions", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to list unmatched transactions")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to list unmatched transactions")
 
 		return nil, fmt.Errorf("failed to list unmatched transactions: %w", err)
 	}
@@ -645,7 +645,7 @@ func (repo *Repository) MarkMatched(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to mark transactions matched", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to mark transactions matched")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to mark transactions matched")
 
 		return fmt.Errorf("failed to mark transactions matched: %w", err)
 	}
@@ -732,7 +732,7 @@ func (repo *Repository) MarkPendingReview(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to mark transactions pending review", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to mark transactions pending review")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to mark transactions pending review")
 
 		return fmt.Errorf("failed to mark transactions pending review: %w", err)
 	}
@@ -862,7 +862,7 @@ func (repo *Repository) FindByContextAndIDs(
 			err,
 		)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to find transactions by context and ids")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to find transactions by context and ids")
 
 		return nil, fmt.Errorf("failed to find transactions by context and ids: %w", err)
 	}
@@ -899,7 +899,7 @@ func (repo *Repository) MarkUnmatched(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to mark transactions unmatched", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to mark transactions unmatched")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to mark transactions unmatched")
 
 		return fmt.Errorf("failed to mark transactions unmatched: %w", err)
 	}
@@ -990,7 +990,7 @@ func (repo *Repository) FindBySourceAndExternalID(
 		if !errors.Is(err, sql.ErrNoRows) {
 			libOpentelemetry.HandleSpanError(span, "failed to find transaction", err)
 
-			logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to find transaction")
+			logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to find transaction")
 		}
 
 		return nil, fmt.Errorf("failed to find transaction by external ID: %w", err)
@@ -1037,7 +1037,7 @@ func (repo *Repository) ExistsBySourceAndExternalID(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to check transaction existence", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to check transaction existence")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to check transaction existence")
 
 		return false, fmt.Errorf("failed to check transaction existence: %w", err)
 	}
@@ -1114,7 +1114,7 @@ func (repo *Repository) ExistsBulkBySourceAndExternalID(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to check bulk transaction existence", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to check bulk transaction existence")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to check bulk transaction existence")
 
 		return nil, fmt.Errorf("failed to check bulk transaction existence: %w", err)
 	}
@@ -1334,7 +1334,7 @@ func (repo *Repository) UpdateStatus(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to update transaction status", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to update transaction status")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to update transaction status")
 
 		return nil, fmt.Errorf("failed to update transaction status: %w", err)
 	}
@@ -1537,7 +1537,7 @@ func (repo *Repository) SearchTransactions(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to search transactions", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to search transactions")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to search transactions")
 
 		return nil, 0, fmt.Errorf("failed to search transactions: %w", err)
 	}

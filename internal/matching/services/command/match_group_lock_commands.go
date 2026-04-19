@@ -213,7 +213,7 @@ func (uc *UseCase) startLockRefreshLoop(
 							libOpentelemetry.HandleSpanError(span, "failed to refresh transaction lock", err)
 						}
 
-						logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to refresh transaction lock")
+						logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to refresh transaction lock")
 
 						refreshErrs <- err
 
@@ -269,7 +269,7 @@ func (uc *UseCase) startLockRefreshWatcher(
 						return
 					}
 
-					logger.With(libLog.Any("error", refreshErr.Error())).Log(ctx, libLog.LevelError, "lock refresh failed")
+					logger.With(libLog.Err(refreshErr)).Log(ctx, libLog.LevelError, "lock refresh failed")
 
 					return
 				}
@@ -296,7 +296,7 @@ func (uc *UseCase) releaseMatchLock(
 			libOpentelemetry.HandleSpanError(span, "failed to release transaction lock", releaseErr)
 		}
 
-		logger.With(libLog.Any("error", releaseErr.Error())).Log(ctx, libLog.LevelError, "failed to release transaction lock")
+		logger.With(libLog.Err(releaseErr)).Log(ctx, libLog.LevelError, "failed to release transaction lock")
 	}
 }
 
@@ -317,7 +317,7 @@ func finalizeRunFailure(
 	updateCtx := context.WithoutCancel(ctx)
 	if _, updateErr := uc.matchRunRepo.Update(updateCtx, run); updateErr != nil {
 		logger, _, _, _ := libCommons.NewTrackingFromContext(updateCtx)
-		logger.With(libLog.Any("error", updateErr.Error())).Log(ctx, libLog.LevelError, "failed to update match run after error")
+		logger.With(libLog.Err(updateErr)).Log(ctx, libLog.LevelError, "failed to update match run after error")
 
 		return fmt.Errorf("updating match run failed: %w; original cause: %w", updateErr, cause)
 	}

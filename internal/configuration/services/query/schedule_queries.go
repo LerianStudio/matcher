@@ -39,7 +39,7 @@ func (uc *UseCase) ListSchedules(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to list schedules", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to list schedules")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to list schedules")
 
 		return nil, fmt.Errorf("listing schedules: %w", err)
 	}
@@ -73,7 +73,7 @@ func (uc *UseCase) GetSchedule(
 
 		libOpentelemetry.HandleSpanError(span, "failed to get schedule", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to get schedule")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to get schedule")
 
 		return nil, fmt.Errorf("finding schedule: %w", err)
 	}

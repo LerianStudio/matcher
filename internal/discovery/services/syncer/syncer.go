@@ -180,7 +180,7 @@ func (cs *ConnectionSyncer) SyncSchema(ctx context.Context, conn *entities.Fetch
 				logger.With(
 					libLog.Any("table", tbl.Name),
 					libLog.Any("connectionID", conn.ID.String()),
-					libLog.Any("error", err.Error()),
+					libLog.Err(err),
 				).Log(ctx, libLog.LevelWarn, "skipping invalid table during schema sync")
 			}
 
@@ -237,7 +237,7 @@ func (cs *ConnectionSyncer) refreshSchemaCache(
 		if logger != nil {
 			logger.With(
 				libLog.Any("connectionID", connectionID.String()),
-				libLog.Any("error", err.Error()),
+				libLog.Err(err),
 			).Log(ctx, libLog.LevelWarn, "failed to refresh schema cache after sync")
 		}
 	}

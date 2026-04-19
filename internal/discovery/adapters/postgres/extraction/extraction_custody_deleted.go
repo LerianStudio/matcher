@@ -57,7 +57,7 @@ func (repo *Repository) MarkCustodyDeleted(
 	if err != nil {
 		wrappedErr := fmt.Errorf("mark custody deleted: %w", err)
 		libOpentelemetry.HandleSpanError(span, "mark custody deleted", wrappedErr)
-		logger.With(libLog.Any("error", wrappedErr.Error())).
+		logger.With(libLog.Err(wrappedErr)).
 			Log(ctx, libLog.LevelError, "mark custody deleted")
 
 		return wrappedErr
@@ -97,7 +97,7 @@ func (repo *Repository) MarkCustodyDeletedWithTx(
 	if err != nil {
 		wrappedErr := fmt.Errorf("mark custody deleted with tx: %w", err)
 		libOpentelemetry.HandleSpanError(span, "mark custody deleted", wrappedErr)
-		logger.With(libLog.Any("error", wrappedErr.Error())).
+		logger.With(libLog.Err(wrappedErr)).
 			Log(ctx, libLog.LevelError, "mark custody deleted")
 
 		return wrappedErr

@@ -73,7 +73,7 @@ func (uc *UseCase) RefreshDiscovery(ctx context.Context) (int, error) {
 		if err := uc.syncConnection(ctx, logger, fc); err != nil {
 			logger.With(
 				libLog.Any("fetcherConnID", fc.ID),
-				libLog.Any("error", err.Error()),
+				libLog.Err(err),
 			).Log(ctx, libLog.LevelWarn, "failed to sync connection")
 
 			continue
@@ -193,7 +193,7 @@ func (uc *UseCase) reconcileStaleConnections(ctx context.Context, logger libLog.
 			if logger != nil {
 				logger.With(
 					libLog.String("connection.id", conn.ID.String()),
-					libLog.Any("error", err.Error()),
+					libLog.Err(err),
 				).Log(ctx, libLog.LevelWarn, "failed to mark stale connection unreachable during manual refresh")
 			}
 		}

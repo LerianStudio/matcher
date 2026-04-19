@@ -33,7 +33,7 @@ func (uc *UseCase) GetSource(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to get reconciliation source", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to get reconciliation source")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to get reconciliation source")
 
 		return nil, fmt.Errorf("finding reconciliation source: %w", err)
 	}
@@ -78,7 +78,7 @@ func (uc *UseCase) ListSources(
 	if err != nil {
 		libOpentelemetry.HandleSpanError(span, "failed to list reconciliation sources", err)
 
-		logger.With(libLog.Any("error", err.Error())).Log(ctx, libLog.LevelError, "failed to list reconciliation sources")
+		logger.With(libLog.Err(err)).Log(ctx, libLog.LevelError, "failed to list reconciliation sources")
 
 		return nil, libHTTP.CursorPagination{}, fmt.Errorf("listing reconciliation sources: %w", err)
 	}
