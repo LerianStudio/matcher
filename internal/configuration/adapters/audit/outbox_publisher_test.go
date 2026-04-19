@@ -263,8 +263,9 @@ func TestOutboxPublisher_Publish_WithNilChanges(t *testing.T) {
 }
 
 // TestOutboxPublisher_Publish_OversizedChangesTruncated verifies that when the
-// Changes map serializes above the 900 KiB cap the publisher swaps it for a
-// truncation marker instead of failing the triggering business operation.
+// serialized AuditLogCreatedEvent envelope exceeds the broker's per-event cap
+// the publisher swaps Changes for a truncation marker and re-marshals, rather
+// than failing the triggering business operation.
 func TestOutboxPublisher_Publish_OversizedChangesTruncated(t *testing.T) {
 	t.Parallel()
 
@@ -291,7 +292,167 @@ func TestOutboxPublisher_Publish_OversizedChangesTruncated(t *testing.T) {
 	require.NotNil(t, repo.created)
 
 	// Truncation marker should be present in the payload; the original huge
-	// value should not be persisted.
+	// value should not be persisted, and the final payload must fit under the
+	// broker cap.
 	assert.Contains(t, string(repo.created.Payload), `"_truncated":true`)
 	assert.NotContains(t, string(repo.created.Payload), "AAAAAAAAAAAAAAAA")
+	assert.LessOrEqual(t, len(repo.created.Payload), shared.DefaultOutboxMaxPayloadBytes,
+		"post-truncation payload must fit under broker cap")
+}
+
+// TestOutboxPublisher_Publish_ExactlyAtCap verifies that a payload at or just
+// under the cap is published without truncation (boundary inclusive of cap).
+// Uses a binary search over Changes value length to land at exactly the cap,
+// accounting for JSON encoding overhead (quotes, escapes, key names).
+func TestOutboxPublisher_Publish_ExactlyAtCap(t *testing.T) {
+	t.Parallel()
+
+	repo := &stubOutboxRepo{}
+	publisher, err := NewOutboxPublisher(repo)
+	require.NoError(t, err)
+
+	tenantID := uuid.New()
+	ctx := context.WithValue(context.Background(), auth.TenantIDKey, tenantID.String())
+
+	entityID := uuid.New()
+	// Binary search for the largest Changes value length that lands the
+	// payload at or below the cap.
+	lo, hi := 0, shared.DefaultOutboxMaxPayloadBytes
+	for lo < hi {
+		mid := (lo + hi + 1) / 2
+
+		repo.created = nil
+		event := ports.AuditEvent{
+			EntityType: "context",
+			EntityID:   entityID,
+			Action:     "update",
+			Actor:      "admin",
+			OccurredAt: time.Unix(1_700_000_000, 0).UTC(),
+			Changes:    map[string]any{"field": strings.Repeat("x", mid)},
+		}
+
+		err = publisher.Publish(ctx, event)
+		require.NoError(t, err)
+
+		if len(repo.created.Payload) <= shared.DefaultOutboxMaxPayloadBytes &&
+			!strings.Contains(string(repo.created.Payload), `"_truncated":true`) {
+			lo = mid
+		} else {
+			hi = mid - 1
+		}
+	}
+
+	require.Positive(t, lo, "binary search should find a positive value length")
+
+	repo.created = nil
+	atCapEvent := ports.AuditEvent{
+		EntityType: "context",
+		EntityID:   entityID,
+		Action:     "update",
+		Actor:      "admin",
+		OccurredAt: time.Unix(1_700_000_000, 0).UTC(),
+		Changes:    map[string]any{"field": strings.Repeat("x", lo)},
+	}
+
+	err = publisher.Publish(ctx, atCapEvent)
+	require.NoError(t, err)
+	require.NotNil(t, repo.created)
+
+	assert.NotContains(t, string(repo.created.Payload), `"_truncated":true`)
+	assert.LessOrEqual(t, len(repo.created.Payload), shared.DefaultOutboxMaxPayloadBytes)
+}
+
+// TestOutboxPublisher_Publish_OneByteOverCap verifies the strict ">" boundary:
+// a payload above the cap MUST be truncated. Uses a Changes value ~50 KiB
+// above the cap for robustness against future envelope changes while still
+// exercising the strict inequality.
+func TestOutboxPublisher_Publish_OneByteOverCap(t *testing.T) {
+	t.Parallel()
+
+	repo := &stubOutboxRepo{}
+	publisher, err := NewOutboxPublisher(repo)
+	require.NoError(t, err)
+
+	tenantID := uuid.New()
+	ctx := context.WithValue(context.Background(), auth.TenantIDKey, tenantID.String())
+
+	event := ports.AuditEvent{
+		EntityType: "context",
+		EntityID:   uuid.New(),
+		Action:     "update",
+		Actor:      "admin",
+		OccurredAt: time.Unix(1_700_000_000, 0).UTC(),
+		Changes: map[string]any{
+			"field": strings.Repeat("x", shared.DefaultOutboxMaxPayloadBytes+(50*1024)),
+		},
+	}
+
+	err = publisher.Publish(ctx, event)
+	require.NoError(t, err)
+	require.NotNil(t, repo.created)
+
+	assert.Contains(t, string(repo.created.Payload), `"_truncated":true`)
+	assert.LessOrEqual(t, len(repo.created.Payload), shared.DefaultOutboxMaxPayloadBytes)
+}
+
+// TestOutboxPublisher_Publish_UTF8NearBoundary verifies that a multi-byte
+// UTF-8 string whose byte length crosses the cap triggers truncation even
+// though its rune count would be under the cap.
+func TestOutboxPublisher_Publish_UTF8NearBoundary(t *testing.T) {
+	t.Parallel()
+
+	repo := &stubOutboxRepo{}
+	publisher, err := NewOutboxPublisher(repo)
+	require.NoError(t, err)
+
+	tenantID := uuid.New()
+	ctx := context.WithValue(context.Background(), auth.TenantIDKey, tenantID.String())
+
+	// "日" is three UTF-8 bytes; 400000 runes is ~1.14 MiB — above the cap.
+	multibyte := strings.Repeat("日", 400000)
+	event := ports.AuditEvent{
+		EntityType: "context",
+		EntityID:   uuid.New(),
+		Action:     "update",
+		Actor:      "admin",
+		OccurredAt: time.Now().UTC(),
+		Changes:    map[string]any{"field": multibyte},
+	}
+
+	err = publisher.Publish(ctx, event)
+	require.NoError(t, err)
+	require.NotNil(t, repo.created)
+
+	assert.Contains(t, string(repo.created.Payload), `"_truncated":true`)
+	assert.LessOrEqual(t, len(repo.created.Payload), shared.DefaultOutboxMaxPayloadBytes)
+}
+
+// TestOutboxPublisher_Publish_MarshalFailure verifies that a Changes map
+// containing a type json.Marshal cannot encode surfaces a wrapped error
+// rather than silently dropping the event.
+func TestOutboxPublisher_Publish_MarshalFailure(t *testing.T) {
+	t.Parallel()
+
+	repo := &stubOutboxRepo{}
+	publisher, err := NewOutboxPublisher(repo)
+	require.NoError(t, err)
+
+	tenantID := uuid.New()
+	ctx := context.WithValue(context.Background(), auth.TenantIDKey, tenantID.String())
+
+	// Channels are not JSON-marshalable; json.Marshal returns
+	// *json.UnsupportedTypeError for this Changes shape.
+	event := ports.AuditEvent{
+		EntityType: "context",
+		EntityID:   uuid.New(),
+		Action:     "update",
+		Actor:      "admin",
+		OccurredAt: time.Now().UTC(),
+		Changes:    map[string]any{"field": make(chan int)},
+	}
+
+	err = publisher.Publish(ctx, event)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "marshal audit event")
+	require.Nil(t, repo.created)
 }

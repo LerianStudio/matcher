@@ -167,6 +167,60 @@ func TestEnqueueMatchConfirmedEvents_SkipsNonConfirmed(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestEnqueueGroupEvent_HugeIDListTruncated(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	t.Cleanup(ctrl.Finish)
+	outboxRepo := outboxmocks.NewMockOutboxRepository(ctrl)
+
+	tenantID := uuid.MustParse("00000000-0000-0000-0000-000000220030")
+	confidence, _ := matchingVO.ParseConfidenceScore(100)
+	now := time.Now().UTC()
+
+	// Build a group with ~30k transaction IDs. Each UUID serializes to
+	// 38 bytes + 1 separator; 30k * 39 = 1.17 MiB, comfortably over the
+	// 1 MiB broker cap even before envelope overhead.
+	items := make([]*matchingEntities.MatchItem, 30000)
+	for i := range items {
+		items[i] = &matchingEntities.MatchItem{TransactionID: uuid.New()}
+	}
+
+	group := &matchingEntities.MatchGroup{
+		ID:          uuid.New(),
+		ContextID:   uuid.New(),
+		RunID:       uuid.New(),
+		RuleID:      uuid.New(),
+		Status:      matchingVO.MatchGroupStatusConfirmed,
+		Confidence:  confidence,
+		ConfirmedAt: &now,
+		Items:       items,
+	}
+
+	outboxRepo.EXPECT().CreateWithTx(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, _ *sql.Tx, event *shared.OutboxEvent) (*shared.OutboxEvent, error) {
+			require.LessOrEqual(t, len(event.Payload), shared.DefaultOutboxMaxPayloadBytes,
+				"truncated payload must fit under broker cap")
+
+			var payload shared.MatchConfirmedEvent
+			require.NoError(t, json.Unmarshal(event.Payload, &payload))
+			assert.Equal(t, 30000, payload.TruncatedIDCount,
+				"TruncatedIDCount preserves the original list length")
+			assert.Less(t, len(payload.TransactionIDs), 30000,
+				"TransactionIDs must be trimmed below the original count")
+			assert.Positive(t, len(payload.TransactionIDs),
+				"at least one id should fit under the cap")
+
+			return event, nil
+		},
+	)
+
+	uc := &UseCase{outboxRepoTx: outboxRepo}
+	ctx := context.WithValue(context.Background(), auth.TenantIDKey, tenantID.String())
+	err := uc.enqueueGroupEvent(ctx, new(sql.Tx), group, tenantID, "tenant-slug")
+	require.NoError(t, err)
+}
+
 func TestEnqueueMatchConfirmedEvents_Success(t *testing.T) {
 	t.Parallel()
 

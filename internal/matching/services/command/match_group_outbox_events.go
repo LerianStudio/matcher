@@ -15,6 +15,15 @@ import (
 	shared "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
+// matchEventEnvelopeHeadroomBytes reserves space in the outbox payload
+// cap for the non-ID fields of MatchConfirmedEvent / MatchUnmatchedEvent
+// (tenant id, tenant slug, context id, run id, match id, rule id,
+// timestamps, event type, optional reason up to maxReasonLength). Four
+// KiB is comfortably above the worst-case envelope at ~1 KiB and avoids
+// wire-format cliffs when tenant slugs grow or reason strings are
+// enriched in the future.
+const matchEventEnvelopeHeadroomBytes = 4 * 1024
+
 func (uc *UseCase) enqueueMatchConfirmedEvents(
 	ctx context.Context,
 	tx repositories.Tx,
@@ -68,6 +77,23 @@ func (uc *UseCase) enqueueGroupEvent(
 	)
 	if err != nil {
 		return fmt.Errorf("build match confirmed event: %w", err)
+	}
+
+	// Guard against pathological match groups whose transaction list
+	// alone would overflow the broker's per-event payload cap. Observed
+	// groups are small (<= 10^2 ids); the budget below caps that at the
+	// low six figures and emits a metric when the cutoff fires.
+	truncatedIDs, originalCount := shared.TruncateIDListIfTooLarge(
+		ctx,
+		shared.EventTypeMatchConfirmed,
+		event.MatchID,
+		event.TransactionIDs,
+		shared.DefaultOutboxMaxPayloadBytes-matchEventEnvelopeHeadroomBytes,
+	)
+
+	if len(truncatedIDs) != originalCount {
+		event.TransactionIDs = truncatedIDs
+		event.TruncatedIDCount = originalCount
 	}
 
 	body, err := json.Marshal(event)

@@ -1,0 +1,227 @@
+// Package shared provides shared domain types used across bounded contexts.
+package shared
+
+import (
+	"context"
+
+	"github.com/google/uuid"
+
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
+	"github.com/LerianStudio/lib-commons/v5/commons/opentelemetry/metrics"
+	"github.com/LerianStudio/lib-commons/v5/commons/outbox"
+)
+
+// DefaultOutboxMaxPayloadBytes re-exports lib-commons v5's canonical
+// per-event outbox payload cap so callers in the matcher tree can gate on
+// the broker limit without pulling the outbox package directly for a
+// single constant.
+const DefaultOutboxMaxPayloadBytes = outbox.DefaultMaxPayloadBytes
+
+// Truncation marker keys embedded into the Changes map when an outbox
+// event payload exceeds the broker cap. These are the authoritative
+// constants; the governance DTO converter and both audit publishers
+// reference them so marker shape does not drift between producer and
+// consumer.
+const (
+	// TruncatedMarkerKey is the top-level boolean flag that identifies a
+	// truncated Changes map to downstream consumers.
+	TruncatedMarkerKey = "_truncated"
+
+	// TruncatedOriginalSizeKey is the byte size of the original Changes
+	// payload before truncation, stored alongside TruncatedMarkerKey.
+	TruncatedOriginalSizeKey = "_originalSize"
+
+	// TruncatedNoteKey is a human-readable description of the truncation
+	// event, persisted for operator convenience.
+	TruncatedNoteKey = "_note"
+
+	// TruncatedMaxAllowedKey is the cap that was enforced at truncation
+	// time. Persisted so operators can trace which policy applied to a
+	// given truncation event.
+	TruncatedMaxAllowedKey = "_maxAllowed"
+)
+
+// TruncationNoteAuditDiff is the operator-facing message embedded in an
+// audit event's Changes marker when the serialized envelope exceeded the
+// outbox cap.
+const TruncationNoteAuditDiff = "audit diff exceeded outbox payload cap; original not persisted"
+
+// truncationNoteIDList is the log-line message emitted when a
+// cross-context ID-list event's TransactionIDs field had to be trimmed to
+// fit the broker cap. The marker itself lives on the typed event struct
+// via TruncatedIDCount, not inside a map.
+const truncationNoteIDList = "id list exceeded outbox cap; event published with truncated ids"
+
+// outboxPayloadTruncatedMetric is the OTel counter that records truncation
+// events across all publishers so operators can alert on silent-but-lossy
+// outbox paths. Labels: entity_type.
+var outboxPayloadTruncatedMetric = metrics.Metric{
+	Name:        "outbox_payload_truncated_total",
+	Unit:        "{event}",
+	Description: "Outbox events whose payload exceeded the broker cap and was truncated before publishing.",
+}
+
+// BuildAuditChangesTruncationMarker returns the canonical marker map that
+// replaces an audit event's Changes when its serialized envelope exceeded
+// the outbox cap. originalSize is the byte length of the oversize payload;
+// maxAllowed is the cap that triggered truncation. Both values round-trip
+// through the outbox so the governance DTO layer can surface them as
+// first-class fields.
+//
+// This constructor is kept side-effect free: emission of the truncation
+// log line and metric is the caller's responsibility via
+// RecordOutboxTruncation. Separating the constructor from the effects
+// makes it easy to build a marker at test time without a full tracking
+// context.
+func BuildAuditChangesTruncationMarker(originalSize, maxAllowed int) map[string]any {
+	return map[string]any{
+		TruncatedMarkerKey:       true,
+		TruncatedOriginalSizeKey: originalSize,
+		TruncatedNoteKey:         TruncationNoteAuditDiff,
+		TruncatedMaxAllowedKey:   maxAllowed,
+	}
+}
+
+// RecordOutboxTruncation writes the audit truncation WARN line and
+// increments the outbox_payload_truncated_total counter tagged with
+// entityType. Publishers call this after swapping Changes for the
+// truncation marker so the event is visible to operators even when the
+// downstream consumer is still healthy.
+//
+// entityType SHOULD identify the producer (e.g. "audit_config",
+// "audit_exception", "match_confirmed", "match_unmatched") so alerts can
+// group by publisher rather than by business entity.
+func RecordOutboxTruncation(
+	ctx context.Context,
+	entityType string,
+	entityID uuid.UUID,
+	originalBytes, maxAllowedBytes int,
+) {
+	logger, _, _, metricFactory := libCommons.NewTrackingFromContext(ctx)
+	if logger == nil {
+		logger = &libLog.NopLogger{}
+	}
+
+	logger.Log(ctx, libLog.LevelWarn,
+		"outbox payload truncated due to broker cap",
+		libLog.String("entity_type", entityType),
+		libLog.String("entity_id", entityID.String()),
+		libLog.Int("original_size_bytes", originalBytes),
+		libLog.Int("max_allowed_bytes", maxAllowedBytes),
+	)
+
+	emitTruncationCounter(ctx, metricFactory, entityType)
+}
+
+// TruncateIDListIfTooLarge trims a UUID slice so the surrounding event
+// envelope stays under maxBytes. maxBytes SHOULD be
+// DefaultOutboxMaxPayloadBytes minus a safety margin for the non-ID
+// fields of the event (tenant id, context id, timestamps, reason, etc).
+//
+// When truncation is applied the function emits a WARN log line and
+// increments outbox_payload_truncated_total{entity_type=entityType}.
+// The caller is responsible for persisting the original count on the
+// event (via TruncatedIDCount) so downstream consumers can detect data
+// loss without re-measuring.
+//
+// UUID JSON encoding is fixed-width (36 chars plus quotes) so the
+// serialized size is a closed-form function of the slice length. We use
+// a binary search on that function rather than re-marshaling per trial.
+func TruncateIDListIfTooLarge(
+	ctx context.Context,
+	entityType string,
+	entityID uuid.UUID,
+	ids []uuid.UUID,
+	maxBytes int,
+) (truncated []uuid.UUID, originalCount int) {
+	originalCount = len(ids)
+	if originalCount == 0 || maxBytes <= 0 {
+		return ids, originalCount
+	}
+
+	if idListSerializedSize(originalCount) <= maxBytes {
+		return ids, originalCount
+	}
+
+	// binarySearchMidFactor averages low+high with a +1 tiebreaker so the
+	// search converges upward toward the largest fitting prefix rather
+	// than oscillating around the cutoff.
+	const binarySearchMidFactor = 2
+
+	// Binary search for the largest prefix length whose serialized form
+	// fits within maxBytes. O(log n) in the list size, no allocations.
+	low, high := 0, originalCount
+	for low < high {
+		mid := (low + high + 1) / binarySearchMidFactor
+		if idListSerializedSize(mid) <= maxBytes {
+			low = mid
+		} else {
+			high = mid - 1
+		}
+	}
+
+	truncated = ids[:low]
+
+	logger, _, _, metricFactory := libCommons.NewTrackingFromContext(ctx)
+	if logger == nil {
+		logger = &libLog.NopLogger{}
+	}
+
+	logger.Log(ctx, libLog.LevelWarn,
+		truncationNoteIDList,
+		libLog.String("entity_type", entityType),
+		libLog.String("entity_id", entityID.String()),
+		libLog.Int("original_count", originalCount),
+		libLog.Int("truncated_count", len(truncated)),
+		libLog.Int("max_allowed_bytes", maxBytes),
+	)
+
+	emitTruncationCounter(ctx, metricFactory, entityType)
+
+	return truncated, originalCount
+}
+
+// UUID JSON encoding constants for idListSerializedSize. Canonical UUIDs
+// are 36 characters plus two quotes; JSON array encoding adds a comma
+// between elements and surrounding brackets.
+const (
+	uuidJSONBytes     = 38 // 36 chars + 2 quotes
+	separatorBytes    = 1  // single comma between elements
+	bracketPairBytes  = 2  // leading '[' + trailing ']'
+	emptyArrayJSONLen = 2  // "[]"
+)
+
+// idListSerializedSize returns the byte length of a JSON array containing
+// idCount UUIDs in canonical RFC 4122 textual form.
+//
+//	[]                   -> 2 bytes
+//	["<uuid>"]           -> 2 + 38 = 40 bytes
+//	["<uuid>","<uuid>"]  -> 2 + 38*2 + 1 = 79 bytes
+func idListSerializedSize(idCount int) int {
+	if idCount <= 0 {
+		return emptyArrayJSONLen
+	}
+
+	return bracketPairBytes + idCount*uuidJSONBytes + (idCount-1)*separatorBytes
+}
+
+func emitTruncationCounter(
+	ctx context.Context,
+	factory *metrics.MetricsFactory,
+	entityType string,
+) {
+	if factory == nil {
+		return
+	}
+
+	counter, err := factory.Counter(outboxPayloadTruncatedMetric)
+	if err != nil || counter == nil {
+		return
+	}
+
+	// Best-effort emission — on failure the WARN log above still captures
+	// the event. Surfacing a secondary error would conflate broker-cap
+	// truncation (the real signal) with telemetry-pipeline failures.
+	_ = counter.WithLabels(map[string]string{"entity_type": entityType}).AddOne(ctx)
+}

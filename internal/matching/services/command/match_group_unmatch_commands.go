@@ -261,6 +261,22 @@ func (uc *UseCase) enqueueUnmatchEvent(
 		return fmt.Errorf("build match unmatched event: %w", err)
 	}
 
+	// Guard against pathological groups whose transaction list alone
+	// would overflow the broker cap. See the MatchConfirmedEvent path
+	// for the rationale behind matchEventEnvelopeHeadroomBytes.
+	truncatedIDs, originalCount := shared.TruncateIDListIfTooLarge(
+		ctx,
+		shared.EventTypeMatchUnmatched,
+		event.MatchID,
+		event.TransactionIDs,
+		shared.DefaultOutboxMaxPayloadBytes-matchEventEnvelopeHeadroomBytes,
+	)
+
+	if len(truncatedIDs) != originalCount {
+		event.TransactionIDs = truncatedIDs
+		event.TruncatedIDCount = originalCount
+	}
+
 	body, err := json.Marshal(event)
 	if err != nil {
 		return fmt.Errorf("marshal match unmatched event: %w", err)

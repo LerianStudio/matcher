@@ -5,17 +5,15 @@ import (
 	"time"
 
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
+	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
-// Truncation marker keys embedded by audit publishers when the serialized
-// diff exceeds the outbox payload cap. Kept as local constants to avoid a
-// cross-package dependency cycle (shared/domain is the source of truth and
-// uses the same literal values — see BIZ-36).
-const (
-	auditTruncatedKey    = "_truncated"
-	auditOriginalSizeKey = "_originalSize"
-	auditChangesKey      = "changes"
-)
+// auditChangesKey names the nested object under which the governance
+// consumer stores the caller-supplied Changes map (see
+// internal/governance/adapters/audit/consumer.buildChangesPayload).
+// Truncation markers live one level deeper under
+// sharedDomain.TruncatedMarkerKey.
+const auditChangesKey = "changes"
 
 // AuditLogToResponse converts an AuditLog entity to a response DTO.
 // Returns an empty struct for nil input to ensure consistent JSON structure.
@@ -70,7 +68,7 @@ func extractTruncationMarkers(payload []byte) (truncated bool, originalSize int6
 		return false, 0
 	}
 
-	truncatedRaw, ok := changes[auditTruncatedKey]
+	truncatedRaw, ok := changes[sharedDomain.TruncatedMarkerKey]
 	if !ok {
 		return false, 0
 	}
@@ -79,7 +77,7 @@ func extractTruncationMarkers(payload []byte) (truncated bool, originalSize int6
 		return false, 0
 	}
 
-	sizeRaw, ok := changes[auditOriginalSizeKey]
+	sizeRaw, ok := changes[sharedDomain.TruncatedOriginalSizeKey]
 	if !ok {
 		return true, 0
 	}

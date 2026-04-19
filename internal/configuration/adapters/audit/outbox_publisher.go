@@ -10,9 +10,6 @@ import (
 
 	"github.com/google/uuid"
 
-	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
-	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
-
 	"github.com/LerianStudio/matcher/internal/auth"
 	"github.com/LerianStudio/matcher/internal/configuration/ports"
 	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
@@ -22,12 +19,10 @@ import (
 // ErrNilOutboxRepository is returned when the outbox repository is nil.
 var ErrNilOutboxRepository = errors.New("outbox repository is required")
 
-// maxAuditChangesBytes caps the serialized size of AuditLogCreatedEvent.Changes
-// at 900 KiB to stay under the v5 outbox 1 MiB payload cap while leaving headroom
-// for envelope fields (tenant id, entity id, actor, timestamps, etc.). When
-// Changes exceeds this limit the map is replaced with a truncation marker so
-// the triggering business operation does not fail on audit enqueue.
-const maxAuditChangesBytes = 900 * 1024
+// auditConfigEntityType labels truncation metrics emitted from this
+// publisher so operators can distinguish config-diff truncation from the
+// exception-context publisher.
+const auditConfigEntityType = "audit_config"
 
 // OutboxPublisher publishes configuration audit events to the outbox for asynchronous processing.
 type OutboxPublisher struct {
@@ -43,7 +38,16 @@ func NewOutboxPublisher(repo sharedPorts.OutboxRepository) (*OutboxPublisher, er
 	return &OutboxPublisher{outboxRepo: repo}, nil
 }
 
-// Publish publishes a configuration audit event to the outbox.
+// Publish enqueues a configuration audit event on the outbox.
+//
+// The publisher uses a single-marshal gating strategy: the complete
+// AuditLogCreatedEvent is serialized once, and only if the resulting
+// payload exceeds the broker's per-event cap does Publish swap Changes
+// for a truncation marker and re-marshal. This replaces the prior
+// measure-then-marshal approach (which marshaled Changes separately for
+// a heuristic size check and then marshaled the envelope again) with a
+// cheaper and more accurate gate that measures the exact bytes the broker
+// will receive.
 func (pub *OutboxPublisher) Publish(ctx context.Context, event ports.AuditEvent) error {
 	if pub == nil || pub.outboxRepo == nil {
 		return ErrNilOutboxRepository
@@ -61,8 +65,6 @@ func (pub *OutboxPublisher) Publish(ctx context.Context, event ports.AuditEvent)
 		actor = &event.Actor
 	}
 
-	changes := truncateAuditChangesIfTooLarge(ctx, event.Changes, event.EntityID)
-
 	auditEvent := sharedDomain.AuditLogCreatedEvent{
 		UniqueID:   uuid.New(),
 		EventType:  sharedDomain.EventTypeAuditLogCreated,
@@ -71,14 +73,14 @@ func (pub *OutboxPublisher) Publish(ctx context.Context, event ports.AuditEvent)
 		EntityID:   event.EntityID,
 		Action:     event.Action,
 		Actor:      actor,
-		Changes:    changes,
+		Changes:    event.Changes,
 		OccurredAt: event.OccurredAt,
 		Timestamp:  time.Now().UTC(),
 	}
 
-	payload, err := json.Marshal(auditEvent)
+	payload, err := marshalOrTruncate(ctx, &auditEvent)
 	if err != nil {
-		return fmt.Errorf("marshal audit event: %w", err)
+		return err
 	}
 
 	outboxEvent, err := sharedDomain.NewOutboxEvent(
@@ -100,45 +102,46 @@ func (pub *OutboxPublisher) Publish(ctx context.Context, event ports.AuditEvent)
 
 var _ ports.AuditPublisher = (*OutboxPublisher)(nil)
 
-// truncateAuditChangesIfTooLarge enforces the 1 MiB outbox payload cap on the
-// audit event Changes map. When the serialized size exceeds the cap the map is
-// replaced with a truncation marker that preserves metadata about the original
-// payload so operators can trace truncation events in the audit log. Returning
-// a modified map (rather than failing) ensures that a verbose config diff does
-// not block the triggering business operation.
-func truncateAuditChangesIfTooLarge(
+// marshalOrTruncate serializes the audit event and, if the resulting
+// payload exceeds the broker's cap, replaces Changes with a truncation
+// marker and re-marshals. The final payload is returned or a marshal
+// error wrapped for the caller.
+//
+// This is the single-marshal counterpart of the prior measure-first
+// helper: it gates on the actual outgoing bytes rather than on a
+// Changes-only heuristic.
+func marshalOrTruncate(
 	ctx context.Context,
-	changes map[string]any,
-	entityID uuid.UUID,
-) map[string]any {
-	if len(changes) == 0 {
-		return changes
+	event *sharedDomain.AuditLogCreatedEvent,
+) ([]byte, error) {
+	payload, err := json.Marshal(event)
+	if err != nil {
+		return nil, fmt.Errorf("marshal audit event: %w", err)
 	}
 
-	changesBytes, err := json.Marshal(changes)
-	if err != nil || len(changesBytes) <= maxAuditChangesBytes {
-		return changes
+	if len(payload) <= sharedDomain.DefaultOutboxMaxPayloadBytes {
+		return payload, nil
 	}
 
-	originalSize := len(changesBytes)
+	originalSize := len(payload)
 
-	//nolint:dogsled // only logger needed here; tracer/headerID/metrics are irrelevant for this truncation-warn log line.
-	logger, _, _, _ := libCommons.NewTrackingFromContext(ctx)
-	if logger == nil {
-		logger = &libLog.NopLogger{}
-	}
-
-	logger.Log(ctx, libLog.LevelWarn,
-		"audit payload truncated due to size cap",
-		libLog.String("entity_id", entityID.String()),
-		libLog.Int("original_size_bytes", originalSize),
-		libLog.Int("max_allowed_bytes", maxAuditChangesBytes),
+	sharedDomain.RecordOutboxTruncation(
+		ctx,
+		auditConfigEntityType,
+		event.EntityID,
+		originalSize,
+		sharedDomain.DefaultOutboxMaxPayloadBytes,
 	)
 
-	return map[string]any{
-		"_truncated":    true,
-		"_originalSize": originalSize,
-		"_note":         "audit diff exceeded 1MiB outbox cap; original not persisted",
-		"_maxAllowed":   maxAuditChangesBytes,
+	event.Changes = sharedDomain.BuildAuditChangesTruncationMarker(
+		originalSize,
+		sharedDomain.DefaultOutboxMaxPayloadBytes,
+	)
+
+	payload, err = json.Marshal(event)
+	if err != nil {
+		return nil, fmt.Errorf("marshal truncated audit event: %w", err)
 	}
+
+	return payload, nil
 }
