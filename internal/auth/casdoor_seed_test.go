@@ -25,11 +25,14 @@ func TestBuildCasdoorInitData_ContainsKnownRolesAndPermissions(t *testing.T) {
 	for _, permission := range data.Permissions {
 		permissionNames = append(permissionNames, permission.Name)
 	}
-	assert.Contains(t, permissionNames, "system-config-read")
-	assert.Contains(t, permissionNames, "system-settings-global-write")
-	assert.Contains(t, data.Roles[0].Permissions, "system-settings-global-write")
-	assert.Contains(t, data.Roles[3].Permissions, "system-config-schema-read")
-	assert.NotContains(t, data.Roles[3].Permissions, "system-config-write")
+	// v5 system surface collapses the granular config/settings actions from v4
+	// down to a single coarse system-admin permission. Granular keys are
+	// handled by systemplane RBAC, not Casdoor.
+	assert.Contains(t, permissionNames, "system-admin")
+	assert.Contains(t, data.Roles[0].Permissions, "system-admin")
+	assert.NotContains(t, permissionNames, "system-config-read")
+	assert.NotContains(t, permissionNames, "system-settings-global-write")
+	assert.NotContains(t, data.Roles[3].Permissions, "system-admin")
 }
 
 func TestBuildCasdoorInitData_RolePermissionsMustExist(t *testing.T) {

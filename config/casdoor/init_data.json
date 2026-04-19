@@ -742,144 +742,14 @@
       "isEnabled": true
     },
     {
-      "name": "system-config-read",
-      "displayName": "System Config Read",
-      "description": "Allows config:read on system.",
+      "name": "system-admin",
+      "displayName": "System Admin",
+      "description": "Allows admin on system.",
       "resources": [
         "system"
       ],
       "actions": [
-        "config:read"
-      ],
-      "effect": "Allow",
-      "isEnabled": true
-    },
-    {
-      "name": "system-config-write",
-      "displayName": "System Config Write",
-      "description": "Allows config:write on system.",
-      "resources": [
-        "system"
-      ],
-      "actions": [
-        "config:write"
-      ],
-      "effect": "Allow",
-      "isEnabled": true
-    },
-    {
-      "name": "system-config-schema-read",
-      "displayName": "System Config Schema Read",
-      "description": "Allows config/schema:read on system.",
-      "resources": [
-        "system"
-      ],
-      "actions": [
-        "config/schema:read"
-      ],
-      "effect": "Allow",
-      "isEnabled": true
-    },
-    {
-      "name": "system-config-history-read",
-      "displayName": "System Config History Read",
-      "description": "Allows config/history:read on system.",
-      "resources": [
-        "system"
-      ],
-      "actions": [
-        "config/history:read"
-      ],
-      "effect": "Allow",
-      "isEnabled": true
-    },
-    {
-      "name": "system-config-reload-write",
-      "displayName": "System Config Reload Write",
-      "description": "Allows config/reload:write on system.",
-      "resources": [
-        "system"
-      ],
-      "actions": [
-        "config/reload:write"
-      ],
-      "effect": "Allow",
-      "isEnabled": true
-    },
-    {
-      "name": "system-settings-read",
-      "displayName": "System Settings Read",
-      "description": "Allows settings:read on system.",
-      "resources": [
-        "system"
-      ],
-      "actions": [
-        "settings:read"
-      ],
-      "effect": "Allow",
-      "isEnabled": true
-    },
-    {
-      "name": "system-settings-write",
-      "displayName": "System Settings Write",
-      "description": "Allows settings:write on system.",
-      "resources": [
-        "system"
-      ],
-      "actions": [
-        "settings:write"
-      ],
-      "effect": "Allow",
-      "isEnabled": true
-    },
-    {
-      "name": "system-settings-schema-read",
-      "displayName": "System Settings Schema Read",
-      "description": "Allows settings/schema:read on system.",
-      "resources": [
-        "system"
-      ],
-      "actions": [
-        "settings/schema:read"
-      ],
-      "effect": "Allow",
-      "isEnabled": true
-    },
-    {
-      "name": "system-settings-history-read",
-      "displayName": "System Settings History Read",
-      "description": "Allows settings/history:read on system.",
-      "resources": [
-        "system"
-      ],
-      "actions": [
-        "settings/history:read"
-      ],
-      "effect": "Allow",
-      "isEnabled": true
-    },
-    {
-      "name": "system-settings-global-read",
-      "displayName": "System Settings Global Read",
-      "description": "Allows settings/global:read on system.",
-      "resources": [
-        "system"
-      ],
-      "actions": [
-        "settings/global:read"
-      ],
-      "effect": "Allow",
-      "isEnabled": true
-    },
-    {
-      "name": "system-settings-global-write",
-      "displayName": "System Settings Global Write",
-      "description": "Allows settings/global:write on system.",
-      "resources": [
-        "system"
-      ],
-      "actions": [
-        "settings/global:write"
+        "admin"
       ],
       "effect": "Allow",
       "isEnabled": true
@@ -948,17 +818,7 @@
         "exception-comment-write",
         "discovery-discovery-read",
         "discovery-discovery-write",
-        "system-config-read",
-        "system-config-write",
-        "system-config-schema-read",
-        "system-config-history-read",
-        "system-config-reload-write",
-        "system-settings-read",
-        "system-settings-write",
-        "system-settings-schema-read",
-        "system-settings-history-read",
-        "system-settings-global-read",
-        "system-settings-global-write"
+        "system-admin"
       ]
     },
     {
@@ -1079,9 +939,7 @@
         "reporting-export-job-read",
         "exception-exception-read",
         "exception-dispute-read",
-        "discovery-discovery-read",
-        "system-config-schema-read",
-        "system-settings-schema-read"
+        "discovery-discovery-read"
       ]
     },
     {
@@ -1105,17 +963,7 @@
         "reporting-dashboard-read",
         "reporting-export-read",
         "reporting-export-job-read",
-        "system-config-read",
-        "system-config-write",
-        "system-config-schema-read",
-        "system-config-history-read",
-        "system-config-reload-write",
-        "system-settings-read",
-        "system-settings-write",
-        "system-settings-schema-read",
-        "system-settings-history-read",
-        "system-settings-global-read",
-        "system-settings-global-write"
+        "system-admin"
       ]
     }
   ]

@@ -178,11 +178,7 @@ func matcherCasdoorPermissionSpecs() []casdoorPermissionSpec {
 		permissionSpecs(ResourceDiscovery,
 			ActionDiscoveryRead, ActionDiscoveryWrite,
 		),
-		permissionSpecs(ResourceSystem,
-			ActionConfigRead, ActionConfigWrite, ActionConfigSchemaRead, ActionConfigHistoryRead, ActionConfigReloadWrite,
-			ActionSettingsRead, ActionSettingsWrite, ActionSettingsSchemaRead, ActionSettingsHistoryRead,
-			ActionSettingsGlobalRead, ActionSettingsGlobalWrite,
-		),
+		permissionSpecs(ResourceSystem, ActionAdmin),
 	)
 }
 
@@ -277,9 +273,6 @@ func matcherCasdoorRoleSpecs() []casdoorRoleSpec {
 					ActionExceptionRead, ActionDisputeRead,
 				),
 				permissionSpecs(ResourceDiscovery, ActionDiscoveryRead),
-				permissionSpecs(ResourceSystem,
-					ActionConfigSchemaRead, ActionSettingsSchemaRead,
-				),
 			),
 		},
 		{
@@ -292,11 +285,7 @@ func matcherCasdoorRoleSpecs() []casdoorRoleSpec {
 					ActionAuditRead, ActionArchiveRead, ActionActorMappingRead, ActionActorMappingWrite, ActionActorMappingDelete,
 				),
 				reportingRead,
-				permissionSpecs(ResourceSystem,
-					ActionConfigRead, ActionConfigWrite, ActionConfigSchemaRead, ActionConfigHistoryRead, ActionConfigReloadWrite,
-					ActionSettingsRead, ActionSettingsWrite, ActionSettingsSchemaRead, ActionSettingsHistoryRead,
-					ActionSettingsGlobalRead, ActionSettingsGlobalWrite,
-				),
+				permissionSpecs(ResourceSystem, ActionAdmin),
 			),
 		},
 	}
