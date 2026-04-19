@@ -41,6 +41,16 @@ var (
 	ErrBridgeSourceResolverConnectionIDRequired = errors.New(
 		"connection id is required for bridge source resolution",
 	)
+
+	// ErrMultipleFetcherSourcesForConnection indicates more than one
+	// FETCHER-typed reconciliation source links to the same Fetcher
+	// connection id. Migration 000032 enforces this as a DB-level unique
+	// index; the code-level guard remains as a defense against legacy data
+	// that predates the constraint and to surface the condition with a
+	// typed error instead of silently picking the oldest row.
+	ErrMultipleFetcherSourcesForConnection = errors.New(
+		"multiple FETCHER reconciliation sources for the same connection id",
+	)
 )
 
 // BridgeSourceResolverAdapter implements sharedPorts.BridgeSourceResolver.
@@ -79,16 +89,20 @@ func NewBridgeSourceResolverAdapter(
 //	WHERE type = 'FETCHER'
 //	  AND config->>'connection_id' = $1::text
 //	ORDER BY created_at ASC
-//	LIMIT 1
+//	LIMIT 2
 //
 // runs inside a tenant-scoped transaction via WithTenantTxProvider, so it
 // only sees rows for the tenant resolved from ctx (plus the default tenant
 // when auth is disabled).
 //
 // Returns sharedPorts.ErrBridgeSourceUnresolvable when no match is found.
-// Multiple matches would be a config violation; the ORDER BY+LIMIT 1 keeps
-// behaviour deterministic (oldest wins) until the configuration layer
-// enforces uniqueness explicitly.
+// Multiple matches for a single connection id are a config violation that
+// migration 000032 now prevents at the DB layer via a partial unique index.
+// The code path still reads up to two rows and returns
+// ErrMultipleFetcherSourcesForConnection if a second row is seen — this
+// protects against legacy data that predates the constraint and surfaces
+// the condition with a typed error instead of silently picking the oldest
+// row.
 func (adapter *BridgeSourceResolverAdapter) ResolveSourceForConnection(
 	ctx context.Context,
 	connectionID uuid.UUID,
@@ -113,22 +127,42 @@ func (adapter *BridgeSourceResolverAdapter) ResolveSourceForConnection(
 	}
 
 	result, err := pgcommon.WithTenantTxProvider(ctx, adapter.provider, func(tx *sql.Tx) (sharedPorts.BridgeSourceTarget, error) {
-		row := tx.QueryRowContext(ctx,
+		rows, queryErr := tx.QueryContext(ctx,
 			`SELECT id, context_id
 			FROM reconciliation_sources
 			WHERE type = 'FETCHER' AND config->>'connection_id' = $1::text
 			ORDER BY created_at ASC
-			LIMIT 1`,
+			LIMIT 2`,
 			connectionID.String(),
 		)
+		if queryErr != nil {
+			return sharedPorts.BridgeSourceTarget{}, fmt.Errorf("query bridge source target: %w", queryErr)
+		}
 
-		var sourceIDStr, contextIDStr string
-		if scanErr := row.Scan(&sourceIDStr, &contextIDStr); scanErr != nil {
-			if errors.Is(scanErr, sql.ErrNoRows) {
-				return sharedPorts.BridgeSourceTarget{}, sharedPorts.ErrBridgeSourceUnresolvable
+		defer func() { _ = rows.Close() }()
+
+		if !rows.Next() {
+			if rowsErr := rows.Err(); rowsErr != nil {
+				return sharedPorts.BridgeSourceTarget{}, fmt.Errorf("iterate bridge source target: %w", rowsErr)
 			}
 
+			return sharedPorts.BridgeSourceTarget{}, sharedPorts.ErrBridgeSourceUnresolvable
+		}
+
+		var sourceIDStr, contextIDStr string
+		if scanErr := rows.Scan(&sourceIDStr, &contextIDStr); scanErr != nil {
 			return sharedPorts.BridgeSourceTarget{}, fmt.Errorf("scan bridge source target: %w", scanErr)
+		}
+
+		// A second row is a uniqueness violation. Migration 000032 prevents
+		// new duplicates at the DB layer; this guard catches legacy data
+		// that predates the constraint.
+		if rows.Next() {
+			return sharedPorts.BridgeSourceTarget{}, ErrMultipleFetcherSourcesForConnection
+		}
+
+		if rowsErr := rows.Err(); rowsErr != nil {
+			return sharedPorts.BridgeSourceTarget{}, fmt.Errorf("iterate bridge source target: %w", rowsErr)
 		}
 
 		sourceID, parseErr := uuid.Parse(sourceIDStr)
@@ -150,13 +184,14 @@ func (adapter *BridgeSourceResolverAdapter) ResolveSourceForConnection(
 	if err != nil {
 		wrapped := fmt.Errorf("resolve source for connection: %w", err)
 
-		if errors.Is(err, sharedPorts.ErrBridgeSourceUnresolvable) {
+		switch {
+		case errors.Is(err, sharedPorts.ErrBridgeSourceUnresolvable):
 			libOpentelemetry.HandleSpanBusinessErrorEvent(span, "no fetcher source for connection", err)
-
-			return sharedPorts.BridgeSourceTarget{}, wrapped
+		case errors.Is(err, ErrMultipleFetcherSourcesForConnection):
+			libOpentelemetry.HandleSpanError(span, "multiple fetcher sources for connection", err)
+		default:
+			libOpentelemetry.HandleSpanError(span, "source resolver failed", wrapped)
 		}
-
-		libOpentelemetry.HandleSpanError(span, "source resolver failed", wrapped)
 
 		return sharedPorts.BridgeSourceTarget{}, wrapped
 	}

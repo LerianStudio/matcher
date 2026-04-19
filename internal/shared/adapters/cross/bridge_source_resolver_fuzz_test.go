@@ -115,7 +115,7 @@ func FuzzBridgeSourceResolution(f *testing.F) {
 				FROM reconciliation_sources
 				WHERE type = 'FETCHER' AND config->>'connection_id' = $1::text
 				ORDER BY created_at ASC
-				LIMIT 1`,
+				LIMIT 2`,
 		)).WithArgs(connID.String())
 
 		if takeHappyPath {

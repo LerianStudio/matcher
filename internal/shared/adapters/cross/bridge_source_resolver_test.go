@@ -55,7 +55,7 @@ func TestResolveSourceForConnection_HappyPath_ReturnsTarget(t *testing.T) {
 			FROM reconciliation_sources
 			WHERE type = 'FETCHER' AND config->>'connection_id' = $1::text
 			ORDER BY created_at ASC
-			LIMIT 1`,
+			LIMIT 2`,
 	)).WithArgs(connID.String()).WillReturnRows(
 		sqlmock.NewRows([]string{"id", "context_id"}).
 			AddRow(sourceID.String(), contextID.String()),
@@ -94,7 +94,7 @@ func TestResolveSourceForConnection_NoMatch_ReturnsUnresolvable(t *testing.T) {
 			FROM reconciliation_sources
 			WHERE type = 'FETCHER' AND config->>'connection_id' = $1::text
 			ORDER BY created_at ASC
-			LIMIT 1`,
+			LIMIT 2`,
 	)).WithArgs(connID.String()).WillReturnRows(
 		sqlmock.NewRows([]string{"id", "context_id"}),
 	)
@@ -134,6 +134,45 @@ func TestResolveSourceForConnection_NilAdapter_ReturnsSentinel(t *testing.T) {
 
 	_, err := adapter.ResolveSourceForConnection(context.Background(), uuid.New())
 	require.ErrorIs(t, err, ErrNilBridgeSourceResolverProvider)
+}
+
+// TestResolveSourceForConnection_MultipleSources_ReturnsTypedError covers the
+// legacy-data regression path: migration 000032 now prevents new duplicates,
+// but the adapter still defends against two FETCHER sources sharing a
+// connection_id by returning ErrMultipleFetcherSourcesForConnection instead
+// of silently picking the oldest row.
+func TestResolveSourceForConnection_MultipleSources_ReturnsTypedError(t *testing.T) {
+	t.Parallel()
+
+	db, mock, dbErr := sqlmock.New()
+	require.NoError(t, dbErr)
+	defer func() { _ = db.Close() }()
+
+	provider := testutil.NewMockProviderFromDB(t, db)
+
+	adapter, err := NewBridgeSourceResolverAdapter(provider)
+	require.NoError(t, err)
+
+	connID := uuid.New()
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT id, context_id
+			FROM reconciliation_sources
+			WHERE type = 'FETCHER' AND config->>'connection_id' = $1::text
+			ORDER BY created_at ASC
+			LIMIT 2`,
+	)).WithArgs(connID.String()).WillReturnRows(
+		sqlmock.NewRows([]string{"id", "context_id"}).
+			AddRow(uuid.New().String(), uuid.New().String()).
+			AddRow(uuid.New().String(), uuid.New().String()),
+	)
+	mock.ExpectRollback()
+
+	_, err = adapter.ResolveSourceForConnection(context.Background(), connID)
+	require.ErrorIs(t, err, ErrMultipleFetcherSourcesForConnection)
+
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 // Compile-time interface assertion: the adapter implements the port.
