@@ -2007,8 +2007,6 @@ func applySQLPoolSettings(dbs []*sql.DB, maxLifetime, maxIdle time.Duration) {
 
 type modulesResult struct {
 	outboxDispatcher       *outbox.Dispatcher
-	ingestionEvents        *swappableIngestionPublisher
-	matchingEvents         *swappableMatchPublisher
 	exportWorker           *reportingWorker.ExportWorker
 	cleanupWorker          *reportingWorker.CleanupWorker
 	archivalWorker         *governanceWorker.ArchivalWorker
@@ -2165,15 +2163,12 @@ func initModulesAndMessaging(
 		return nil, err
 	}
 
-	runtimeMatchingPublisher := newSwappableMatchPublisher(matchingPublisher)
-	runtimeIngestionPublisher := newSwappableIngestionPublisher(ingestionPublisher)
-
 	matchingUseCase, err := initMatchingModule(routes, provider, sharedOutboxRepository, sharedRepos, isProduction)
 	if err != nil {
 		return nil, err
 	}
 
-	ingestionUseCase, err := initIngestionModule(cfg, configGetter, settingsResolver, routes, provider, sharedOutboxRepository, runtimeIngestionPublisher, matchingUseCase, sharedRepos, isProduction)
+	ingestionUseCase, err := initIngestionModule(cfg, configGetter, settingsResolver, routes, provider, sharedOutboxRepository, ingestionPublisher, matchingUseCase, sharedRepos, isProduction)
 	if err != nil {
 		return nil, err
 	}
@@ -2324,7 +2319,7 @@ func initModulesAndMessaging(
 	// Each handler dispatches a single event type published via the outbox.
 	handlers := outbox.NewHandlerRegistry()
 
-	if err := registerOutboxHandlers(handlers, runtimeIngestionPublisher, runtimeMatchingPublisher, auditConsumer); err != nil {
+	if err := registerOutboxHandlers(handlers, ingestionPublisher, matchingPublisher, auditConsumer); err != nil {
 		return nil, fmt.Errorf("register outbox handlers: %w", err)
 	}
 
@@ -2360,8 +2355,6 @@ func initModulesAndMessaging(
 
 	return &modulesResult{
 		outboxDispatcher:       dispatcher,
-		ingestionEvents:        runtimeIngestionPublisher,
-		matchingEvents:         runtimeMatchingPublisher,
 		exportWorker:           exportWorker,
 		cleanupWorker:          cleanupWorker,
 		schedulerWorker:        schedulerWorker,

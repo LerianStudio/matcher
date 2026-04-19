@@ -71,6 +71,8 @@ var (
 	errMissingReason                        = errors.New("payload missing reason")
 	errAuditPublisherNotConfigured          = errors.New("audit publisher not configured")
 	errDefaultTenantDiscovererUninitialized = errors.New("default tenant discoverer not initialized")
+	errIngestionPublisherUnavailable        = errors.New("ingestion publisher is unavailable")
+	errMatchPublisherUnavailable            = errors.New("match publisher is unavailable")
 )
 
 // nonRetryableErrors lists all errors that indicate permanent validation failures.
