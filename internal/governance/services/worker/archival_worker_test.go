@@ -911,14 +911,18 @@ func TestArchivePartition_ErrorMarksMetadata(t *testing.T) {
 		Status:         entities.StatusExporting,
 	}
 
-	// The export will fail because the DB query fails.
+	// State-machine now advances EXPORTING -> EXPORTED -> UPLOADING in memory
+	// (each persisted via Update) before streaming starts. Streaming fails
+	// because the DB query fails.
+	deps.archiveRepo.EXPECT().Update(gomock.Any(), gomock.Any()).Return(nil).Times(2)
+
 	deps.sqlMock.ExpectBegin()
 	deps.sqlMock.ExpectExec("SET LOCAL search_path").WillReturnResult(sqlmock.NewResult(0, 0))
 	deps.sqlMock.ExpectQuery("SELECT id, tenant_id").
 		WillReturnError(errors.New("db connection lost"))
 	deps.sqlMock.ExpectRollback()
 
-	// Expect the error to be persisted.
+	// Expect the error to be persisted via handlePartitionError.
 	deps.archiveRepo.EXPECT().Update(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, m *entities.ArchiveMetadata) error {
 			assert.NotEmpty(t, m.ErrorMessage, "error message should be set")
@@ -930,7 +934,7 @@ func TestArchivePartition_ErrorMarksMetadata(t *testing.T) {
 
 	err = w.archivePartition(ctx, metadata)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "export partition")
+	assert.Contains(t, err.Error(), "stream and upload partition")
 }
 
 func TestArchivePartition_ChecksumVerificationFailure(t *testing.T) {
