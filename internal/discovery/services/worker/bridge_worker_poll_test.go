@@ -9,6 +9,8 @@ package worker
 import (
 	"context"
 	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -249,4 +251,202 @@ func TestBridgeWorker_ProcessTenant_MultipleExtractions_AllProcessed(t *testing.
 	count := w.processTenant(context.Background(), tenantID)
 	assert.Equal(t, 3, count)
 	assert.Equal(t, int64(3), orch.callsCount.Load())
+}
+
+// concurrencyTrackingOrchestrator is a BridgeOrchestrator that records the
+// peak number of in-flight BridgeExtraction calls. Used by the parallelism
+// tests to assert that TenantConcurrency bounds the tenant-level fan-out
+// without resorting to brittle wall-clock timing. Each call holds
+// `hold` long, which lets the worker load up several tenant goroutines at
+// once without any individual call returning first. The gauge only ever
+// observes the true peak of concurrent calls — no sleeps in the assertions.
+type concurrencyTrackingOrchestrator struct {
+	hold        time.Duration
+	mu          sync.Mutex
+	inFlight    int64
+	maxInFlight int64
+	totalCalls  atomic.Int64
+}
+
+func (c *concurrencyTrackingOrchestrator) BridgeExtraction(
+	_ context.Context,
+	_ sharedPorts.BridgeExtractionInput,
+) (*sharedPorts.BridgeExtractionOutcome, error) {
+	c.mu.Lock()
+	c.inFlight++
+	if c.inFlight > c.maxInFlight {
+		c.maxInFlight = c.inFlight
+	}
+	c.mu.Unlock()
+
+	c.totalCalls.Add(1)
+
+	if c.hold > 0 {
+		time.Sleep(c.hold)
+	}
+
+	c.mu.Lock()
+	c.inFlight--
+	c.mu.Unlock()
+
+	return &sharedPorts.BridgeExtractionOutcome{
+		IngestionJobID:   uuid.New(),
+		TransactionCount: 1,
+		CustodyDeleted:   true,
+	}, nil
+}
+
+func (c *concurrencyTrackingOrchestrator) peakConcurrent() int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return c.maxInFlight
+}
+
+// TestBridgeWorker_PollCycle_FansOutTenants_UpToConcurrencyCeiling drives the
+// full pollCycle with a miniredis-backed lock and three tenants × ten
+// extractions each. With TenantConcurrency=3 we expect the worker to hold
+// three orchestrator calls in flight at once — one per tenant. Extractions
+// inside a tenant stay sequential (processTenant iterates serially), so
+// the in-flight gauge tops out at exactly TenantConcurrency, never higher.
+//
+// Why not a wall-clock timing assertion: the fan-out cuts cycle time, but
+// on shared CI runners a timing-based assertion would be flaky. The
+// orchestrator's peak-in-flight counter is race-safe and captures exactly
+// the property we care about — that tenants ran in parallel, bounded by
+// the configured ceiling.
+func TestBridgeWorker_PollCycle_FansOutTenants_UpToConcurrencyCeiling(t *testing.T) {
+	t.Parallel()
+
+	const (
+		tenantCount       = 3
+		extractionsPer    = 10
+		tenantConcurrency = 3
+		perCallHold       = 20 * time.Millisecond
+	)
+
+	tenants := make([]string, tenantCount)
+	eligibleByTenant := make(map[string][]*entities.ExtractionRequest, tenantCount)
+
+	for i := range tenantCount {
+		tenantID := uuid.New().String()
+		tenants[i] = tenantID
+
+		extractions := make([]*entities.ExtractionRequest, 0, extractionsPer)
+		connID := uuid.New()
+
+		for range extractionsPer {
+			extractions = append(extractions, completeExtraction(uuid.New(), connID))
+		}
+
+		eligibleByTenant[tenantID] = extractions
+	}
+
+	orch := &concurrencyTrackingOrchestrator{hold: perCallHold}
+	repo := &stubBridgeExtractionRepo{eligibleByTenant: eligibleByTenant}
+	lister := &stubBridgeTenantLister{tenants: tenants}
+
+	w, _ := newBridgeWorkerWithMiniredis(t)
+	w.orchestrator = orch
+	w.extractionRepo = repo
+	w.tenantLister = lister
+	w.cfg.TenantConcurrency = tenantConcurrency
+	w.cfg.BatchSize = extractionsPer
+
+	w.pollCycle(context.Background())
+
+	assert.Equal(t, int64(tenantCount*extractionsPer), orch.totalCalls.Load(),
+		"every eligible extraction across every tenant must have been processed")
+
+	peak := orch.peakConcurrent()
+	assert.LessOrEqual(t, peak, int64(tenantConcurrency),
+		"in-flight orchestrator calls must never exceed TenantConcurrency; peak=%d ceiling=%d",
+		peak, tenantConcurrency)
+
+	// Positive assertion: the cycle must actually have fanned out — if peak
+	// were 1, TenantConcurrency would be doing nothing. Require at least 2
+	// concurrent calls to prove the fan-out is live. With 3 tenants and
+	// perCallHold=20ms, the first tenant's first extraction is still in
+	// flight when the second tenant's first extraction starts, so peak≥2
+	// is a lower-bound guarantee — not a timing approximation.
+	assert.GreaterOrEqual(t, peak, int64(2),
+		"tenant fan-out must produce concurrent orchestrator calls; peak=%d suggests serial processing",
+		peak)
+}
+
+// TestBridgeWorker_PollCycle_ConcurrencyOne_RunsSequentially is the dual of
+// the fan-out test: setting TenantConcurrency=1 forces fully serial
+// behaviour, matching the pre-refactor contract. Guards against someone
+// accidentally inlining a fixed concurrency and breaking the knob.
+func TestBridgeWorker_PollCycle_ConcurrencyOne_RunsSequentially(t *testing.T) {
+	t.Parallel()
+
+	const (
+		tenantCount    = 3
+		extractionsPer = 2
+		perCallHold    = 10 * time.Millisecond
+	)
+
+	tenants := make([]string, tenantCount)
+	eligibleByTenant := make(map[string][]*entities.ExtractionRequest, tenantCount)
+
+	for i := range tenantCount {
+		tenantID := uuid.New().String()
+		tenants[i] = tenantID
+
+		extractions := make([]*entities.ExtractionRequest, 0, extractionsPer)
+		connID := uuid.New()
+
+		for range extractionsPer {
+			extractions = append(extractions, completeExtraction(uuid.New(), connID))
+		}
+
+		eligibleByTenant[tenantID] = extractions
+	}
+
+	orch := &concurrencyTrackingOrchestrator{hold: perCallHold}
+	repo := &stubBridgeExtractionRepo{eligibleByTenant: eligibleByTenant}
+	lister := &stubBridgeTenantLister{tenants: tenants}
+
+	w, _ := newBridgeWorkerWithMiniredis(t)
+	w.orchestrator = orch
+	w.extractionRepo = repo
+	w.tenantLister = lister
+	w.cfg.TenantConcurrency = 1
+	w.cfg.BatchSize = extractionsPer
+
+	w.pollCycle(context.Background())
+
+	assert.Equal(t, int64(tenantCount*extractionsPer), orch.totalCalls.Load())
+	assert.Equal(t, int64(1), orch.peakConcurrent(),
+		"TenantConcurrency=1 must serialize every orchestrator call; any higher peak means the knob is broken")
+}
+
+// TestNormalizeBridgeConfig_FillsDefaultTenantConcurrency documents that a
+// zero or negative TenantConcurrency falls back to
+// bridgeDefaultTenantConcurrency rather than collapsing pollCycle to
+// sequential behaviour silently. Mirrors the other normalization guards.
+func TestNormalizeBridgeConfig_FillsDefaultTenantConcurrency(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		in   int
+		want int
+	}{
+		{"zero defaults to bridgeDefaultTenantConcurrency", 0, bridgeDefaultTenantConcurrency},
+		{"negative defaults to bridgeDefaultTenantConcurrency", -1, bridgeDefaultTenantConcurrency},
+		{"positive value preserved", 7, 7},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			normalized := normalizeBridgeConfig(BridgeWorkerConfig{
+				TenantConcurrency: tc.in,
+			})
+			assert.Equal(t, tc.want, normalized.TenantConcurrency)
+		})
+	}
 }

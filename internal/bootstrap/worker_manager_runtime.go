@@ -77,9 +77,10 @@ type discoveryWorkerRuntimeConfig struct {
 // removed the dead Initial/Max-Backoff knobs along with the inert
 // exponential-backoff helpers.
 type fetcherBridgeWorkerComparableConfig struct {
-	IntervalSec      int
-	BatchSize        int
-	RetryMaxAttempts int
+	IntervalSec       int
+	BatchSize         int
+	TenantConcurrency int
+	RetryMaxAttempts  int
 }
 
 // custodyRetentionWorkerComparableConfig (T-006) is the
@@ -478,8 +479,9 @@ func applyFetcherBridgeRuntimeConfig(worker WorkerLifecycle, cfg *Config) error 
 	}
 
 	if err := bridgeWorker.UpdateRuntimeConfig(discoveryWorker.BridgeWorkerConfig{
-		Interval:  cfg.FetcherBridgeInterval(),
-		BatchSize: cfg.FetcherBridgeBatchSize(),
+		Interval:          cfg.FetcherBridgeInterval(),
+		BatchSize:         cfg.FetcherBridgeBatchSize(),
+		TenantConcurrency: cfg.FetcherBridgeTenantConcurrency(),
 		Retry: discoveryWorker.BridgeRetryBackoff{
 			MaxAttempts: cfg.FetcherBridgeRetryMaxAttempts(),
 		},
@@ -577,9 +579,10 @@ func extractWorkerConfig(name string, cfg *Config) any {
 		return discoveryWorkerRuntimeConfig{Interval: cfg.FetcherDiscoveryInterval()}
 	case workerNameFetcherBridge:
 		return fetcherBridgeWorkerComparableConfig{
-			IntervalSec:      cfg.Fetcher.BridgeIntervalSec,
-			BatchSize:        cfg.Fetcher.BridgeBatchSize,
-			RetryMaxAttempts: cfg.Fetcher.BridgeRetryMaxAttempts,
+			IntervalSec:       cfg.Fetcher.BridgeIntervalSec,
+			BatchSize:         cfg.Fetcher.BridgeBatchSize,
+			TenantConcurrency: cfg.Fetcher.BridgeTenantConcurrency,
+			RetryMaxAttempts:  cfg.Fetcher.BridgeRetryMaxAttempts,
 		}
 	case workerNameCustodyRetention:
 		return custodyRetentionWorkerComparableConfig{

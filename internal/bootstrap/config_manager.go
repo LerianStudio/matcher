@@ -265,6 +265,7 @@ func buildWatchedSystemplaneKeys() []string {
 		"fetcher.max_extraction_bytes",
 		"fetcher.bridge_interval_sec",
 		"fetcher.bridge_batch_size",
+		"fetcher.bridge_tenant_concurrency",
 		"fetcher.bridge_stale_threshold_sec",
 		"fetcher.bridge_retry_max_attempts",
 		"fetcher.custody_retention_sweep_interval_sec",
@@ -433,6 +434,7 @@ func applySystemplaneOverrides(base Config, client *systemplane.Client) Config {
 	base.Fetcher.MaxExtractionBytes = SystemplaneGetInt64(client, "fetcher.max_extraction_bytes", base.Fetcher.MaxExtractionBytes)
 	base.Fetcher.BridgeIntervalSec = SystemplaneGetInt(client, "fetcher.bridge_interval_sec", base.Fetcher.BridgeIntervalSec)
 	base.Fetcher.BridgeBatchSize = SystemplaneGetInt(client, "fetcher.bridge_batch_size", base.Fetcher.BridgeBatchSize)
+	base.Fetcher.BridgeTenantConcurrency = SystemplaneGetInt(client, "fetcher.bridge_tenant_concurrency", base.Fetcher.BridgeTenantConcurrency)
 	base.Fetcher.BridgeStaleThresholdSec = SystemplaneGetInt(client, "fetcher.bridge_stale_threshold_sec", base.Fetcher.BridgeStaleThresholdSec)
 	base.Fetcher.BridgeRetryMaxAttempts = SystemplaneGetInt(client, "fetcher.bridge_retry_max_attempts", base.Fetcher.BridgeRetryMaxAttempts)
 	base.Fetcher.CustodyRetentionSweepIntervalSec = SystemplaneGetInt(client, "fetcher.custody_retention_sweep_interval_sec", base.Fetcher.CustodyRetentionSweepIntervalSec)

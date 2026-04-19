@@ -137,6 +137,7 @@ func defaultConfig() *Config {
 			MaxExtractionBytes:               defaultFetcherMaxExtractionBytes,
 			BridgeIntervalSec:                defaultBridgeIntervalSec,
 			BridgeBatchSize:                  defaultBridgeBatchSize,
+			BridgeTenantConcurrency:          defaultBridgeTenantConcurrency,
 			BridgeStaleThresholdSec:          defaultBridgeStaleThresholdSec,
 			BridgeRetryMaxAttempts:           defaultBridgeRetryMaxAttempts,
 			CustodyRetentionSweepIntervalSec: defaultCustodyRetentionSweepIntervalSec,

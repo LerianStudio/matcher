@@ -717,8 +717,9 @@ func initFetcherBridgeWorker(
 		tenantLister,
 		provider,
 		discoveryWorker.BridgeWorkerConfig{
-			Interval:  cfg.FetcherBridgeInterval(),
-			BatchSize: cfg.FetcherBridgeBatchSize(),
+			Interval:          cfg.FetcherBridgeInterval(),
+			BatchSize:         cfg.FetcherBridgeBatchSize(),
+			TenantConcurrency: cfg.FetcherBridgeTenantConcurrency(),
 			Retry: discoveryWorker.BridgeRetryBackoff{
 				MaxAttempts: cfg.FetcherBridgeRetryMaxAttempts(),
 			},
@@ -732,8 +733,8 @@ func initFetcherBridgeWorker(
 	wireBridgeHeartbeatWriter(ctx, provider, worker, logger)
 
 	logger.Log(ctx, libLog.LevelInfo,
-		fmt.Sprintf("fetcher bridge worker wired (interval=%s batch=%d)",
-			cfg.FetcherBridgeInterval(), cfg.FetcherBridgeBatchSize()))
+		fmt.Sprintf("fetcher bridge worker wired (interval=%s batch=%d tenant_concurrency=%d)",
+			cfg.FetcherBridgeInterval(), cfg.FetcherBridgeBatchSize(), cfg.FetcherBridgeTenantConcurrency()))
 
 	return worker, nil
 }

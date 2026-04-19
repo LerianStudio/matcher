@@ -158,6 +158,7 @@ const (
 	// values an env-only deployment would see.
 	defaultBridgeIntervalSec       = 30
 	defaultBridgeBatchSize         = 50
+	defaultBridgeTenantConcurrency = 4
 	defaultBridgeStaleThresholdSec = 3600
 	defaultBridgeRetryMaxAttempts  = 5
 
@@ -217,7 +218,7 @@ const (
 	// matcherKeyDefsCapacity is the total number of keys returned by
 	// matcherKeyDefs(). Kept in sync manually (no strict upper bound — serves
 	// only as a preallocation hint to avoid repeated slice growth).
-	matcherKeyDefsCapacity = 107
+	matcherKeyDefsCapacity = 108
 )
 
 // validatePositiveInt validates that the value is a positive integer.
@@ -576,6 +577,7 @@ func matcherKeyDefs(cfg *Config) []matcherKeyDef {
 		matcherKeyDef{key: "fetcher.max_extraction_bytes", defaultValue: cfg.Fetcher.MaxExtractionBytes, description: "Max Fetcher extraction payload size in bytes"},
 		matcherKeyDef{key: "fetcher.bridge_interval_sec", defaultValue: cfg.Fetcher.BridgeIntervalSec, description: "Fetcher bridge worker poll cadence in seconds"},
 		matcherKeyDef{key: "fetcher.bridge_batch_size", defaultValue: cfg.Fetcher.BridgeBatchSize, description: "Fetcher bridge worker per-tenant batch size"},
+		matcherKeyDef{key: "fetcher.bridge_tenant_concurrency", defaultValue: cfg.Fetcher.BridgeTenantConcurrency, description: "Fetcher bridge worker tenant-level fan-out ceiling per pollCycle", validator: validatePositiveInt},
 		matcherKeyDef{key: "fetcher.bridge_stale_threshold_sec", defaultValue: cfg.Fetcher.BridgeStaleThresholdSec, description: "Fetcher bridge stale extraction dashboard threshold in seconds"},
 		matcherKeyDef{key: "fetcher.bridge_retry_max_attempts", defaultValue: cfg.Fetcher.BridgeRetryMaxAttempts, description: "Fetcher bridge max retry attempts per extraction"},
 		matcherKeyDef{key: "fetcher.custody_retention_sweep_interval_sec", defaultValue: cfg.Fetcher.CustodyRetentionSweepIntervalSec, description: "Custody retention sweep worker interval in seconds"},

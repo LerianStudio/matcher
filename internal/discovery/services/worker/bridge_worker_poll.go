@@ -7,8 +7,10 @@ package worker
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 
 	"go.opentelemetry.io/otel/attribute"
+	"golang.org/x/sync/errgroup"
 
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libOpentelemetry "github.com/LerianStudio/lib-commons/v5/commons/opentelemetry"
@@ -63,18 +65,47 @@ func (worker *BridgeWorker) pollCycle(ctx context.Context) {
 
 	span.SetAttributes(attribute.Int("bridge.tenant_count", len(tenants)))
 
-	processed := 0
+	// Fan tenants out up to cfg.TenantConcurrency at a time. Extractions
+	// within a single tenant continue to run sequentially inside
+	// processTenant — we bound tenant-level parallelism only, since that
+	// is the axis that exploded cycle time on deployments with many small
+	// tenants. errgroup.SetLimit gives us the semaphore gratis; we do not
+	// use the error-propagation side of the group because processTenant
+	// absorbs every failure it encounters and returns only the processed
+	// count.
+	var processed atomic.Int64
+
+	group, groupCtx := errgroup.WithContext(ctx)
+	group.SetLimit(worker.cfg.TenantConcurrency)
 
 	for _, tenantID := range tenants {
 		if tenantID == "" {
 			continue
 		}
 
-		count := worker.processTenant(ctx, tenantID)
-		processed += count
+		// Capture for the goroutine closure; each iteration gets its own
+		// tenantID since Go 1.22 semantics make the range var per-iteration,
+		// but the explicit local keeps the intent obvious to reviewers.
+		tenantID := tenantID
+
+		group.Go(func() error {
+			processed.Add(int64(worker.processTenant(groupCtx, tenantID)))
+
+			return nil
+		})
 	}
 
-	span.SetAttributes(attribute.Int("bridge.extractions_processed", processed))
+	// Wait is never expected to return an error because every group.Go
+	// closure returns nil (processTenant swallows errors). If that contract
+	// ever changes, the returned error should bubble up to the span; today
+	// discarding it is correct and matches the previous sequential
+	// behaviour.
+	_ = group.Wait()
+
+	span.SetAttributes(
+		attribute.Int("bridge.tenant_concurrency", worker.cfg.TenantConcurrency),
+		attribute.Int64("bridge.extractions_processed", processed.Load()),
+	)
 }
 
 // processTenant drives bridge work for a single tenant. Returns the number

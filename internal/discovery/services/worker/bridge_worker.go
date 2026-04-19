@@ -50,6 +50,17 @@ const (
 	// deployment while still draining reasonable backlog.
 	bridgeDefaultBatchSize = 50
 
+	// bridgeDefaultTenantConcurrency is the default fan-out ceiling for
+	// processing tenants within a single pollCycle. At N tenants × 50
+	// extractions × 1–5s each, fully sequential processing can exceed the
+	// 30s tick. Processing 4 tenants in parallel — while keeping each
+	// tenant's own extraction loop sequential — gives a 4× cycle-time
+	// reduction without piling unbounded concurrent load on the
+	// orchestrator's downstream dependencies (Fetcher, object storage,
+	// ingestion). Operators facing different tenant-shape distributions can
+	// tune this at runtime via fetcher.bridge_tenant_concurrency.
+	bridgeDefaultTenantConcurrency = 4
+
 	// bridgeHeartbeatTTLMultiplier scales the poll interval to derive the
 	// TTL on the liveness heartbeat key. Three cycles is the sweet spot:
 	// one transient Redis or worker stall will NOT blank the dashboard,
@@ -89,6 +100,10 @@ type BridgeWorkerConfig struct {
 	// BatchSize caps how many extractions we process per tenant per cycle.
 	// Falls back to bridgeDefaultBatchSize when <= 0.
 	BatchSize int
+	// TenantConcurrency caps how many tenants the pollCycle processes in
+	// parallel. Extractions within a tenant still run sequentially. Falls
+	// back to bridgeDefaultTenantConcurrency when <= 0.
+	TenantConcurrency int
 	// Retry holds the retry-and-backoff schedule the worker applies to
 	// transient bridgeOne failures (T-005). Zero values get sane defaults
 	// from BridgeRetryBackoff.Normalize.
@@ -102,6 +117,10 @@ func normalizeBridgeConfig(cfg BridgeWorkerConfig) BridgeWorkerConfig {
 
 	if cfg.BatchSize <= 0 {
 		cfg.BatchSize = bridgeDefaultBatchSize
+	}
+
+	if cfg.TenantConcurrency <= 0 {
+		cfg.TenantConcurrency = bridgeDefaultTenantConcurrency
 	}
 
 	cfg.Retry = cfg.Retry.Normalize()
@@ -139,9 +158,11 @@ func bridgeHeartbeatTTL(interval time.Duration) time.Duration {
 // Concurrency model:
 //   - A single Redis distributed lock gates the whole cycle. With multiple
 //     matcher replicas, only one runs a given cycle.
-//   - Within a cycle, tenants are processed sequentially to keep span
-//     trees readable and to avoid fan-out spikes against the orchestrator's
-//     downstream dependencies (Fetcher, object storage, ingestion).
+//   - Within a cycle, tenants are processed in parallel up to
+//     cfg.TenantConcurrency at a time. Extractions within a single tenant
+//     remain sequential so the orchestrator's per-tenant Fetcher /
+//     object-storage / ingestion load stays bounded. Operators tune the
+//     tenant fan-out at runtime via fetcher.bridge_tenant_concurrency.
 //   - The orchestrator's atomic link write is the ultimate defense against
 //     duplicate outcomes — even if two replicas briefly disagree about the
 //     lock, at most one can write the ingestion_job_id.

@@ -44,6 +44,12 @@ const (
 	// defaultFetcherBridgeBatchSize is the default per-tenant batch size for
 	// the bridge worker. Mirrors FetcherConfig.BridgeBatchSize envDefault.
 	defaultFetcherBridgeBatchSize = 50
+
+	// defaultFetcherBridgeTenantConcurrency mirrors
+	// FetcherConfig.BridgeTenantConcurrency envDefault and
+	// discoveryWorker.bridgeDefaultTenantConcurrency so env-driven,
+	// snapshot-driven, and worker-internal fallbacks all agree.
+	defaultFetcherBridgeTenantConcurrency = 4
 )
 
 // ErrConfigNil indicates a nil configuration struct was provided.
@@ -293,6 +299,14 @@ type FetcherConfig struct {
 	// latency under load.
 	BridgeBatchSize int `env:"FETCHER_BRIDGE_BATCH_SIZE" envDefault:"50" mapstructure:"bridge_batch_size"`
 
+	// BridgeTenantConcurrency caps the number of tenants the bridge worker
+	// processes in parallel per pollCycle. Extractions inside a tenant stay
+	// sequential so each tenant's downstream load (Fetcher, object storage,
+	// ingestion) remains bounded; raising this knob only widens the
+	// tenant-level fan-out. Default 4 is the smallest value that keeps
+	// cycle time under the 30s tick for deployments with several tenants.
+	BridgeTenantConcurrency int `env:"FETCHER_BRIDGE_TENANT_CONCURRENCY" envDefault:"4" mapstructure:"bridge_tenant_concurrency"`
+
 	// BridgeStaleThresholdSec partitions the operational dashboard's
 	// bridge readiness counts. COMPLETE+unlinked extractions newer than
 	// this many seconds count as "pending" (worker is expected to drain);
@@ -502,6 +516,19 @@ func (cfg *Config) FetcherBridgeBatchSize() int {
 	}
 
 	return cfg.Fetcher.BridgeBatchSize
+}
+
+// FetcherBridgeTenantConcurrency returns the tenant-level fan-out ceiling
+// for the bridge worker's pollCycle. Falls back to
+// defaultFetcherBridgeTenantConcurrency when the configured value is
+// non-positive so misconfiguration cannot collapse the cycle to fully
+// sequential behaviour silently.
+func (cfg *Config) FetcherBridgeTenantConcurrency() int {
+	if cfg == nil || cfg.Fetcher.BridgeTenantConcurrency <= 0 {
+		return defaultFetcherBridgeTenantConcurrency
+	}
+
+	return cfg.Fetcher.BridgeTenantConcurrency
 }
 
 // FetcherBridgeStaleThreshold returns the duration after which a
