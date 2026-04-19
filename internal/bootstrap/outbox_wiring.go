@@ -53,6 +53,15 @@ func (d *defaultTenantDiscoverer) DiscoverTenants(ctx context.Context) ([]string
 // Verify interface satisfaction at compile time.
 var _ outbox.TenantDiscoverer = (*defaultTenantDiscoverer)(nil)
 
+// NewDefaultTenantDiscoverer wraps the given TenantDiscoverer with matcher's
+// default-tenant behaviour: DiscoverTenants always appends the default tenant
+// ID (public schema) when it isn't already present. Integration-test harnesses
+// use this to mirror production tenant-discovery semantics without rebuilding
+// the full composition root.
+func NewDefaultTenantDiscoverer(inner outbox.TenantDiscoverer) outbox.TenantDiscoverer {
+	return &defaultTenantDiscoverer{inner: inner}
+}
+
 // Sentinel errors for outbox event validation (non-retryable).
 var (
 	errInvalidPayload                       = errors.New("invalid payload format")
