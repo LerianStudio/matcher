@@ -20,6 +20,12 @@ import (
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
 
+// errIteratorNotInitialized indicates an iterator was used after its
+// underlying rows were released or before they were attached. Returned
+// by Scan on all three streaming iterators so production code receives a
+// sentinel instead of a nil deref.
+var errIteratorNotInitialized = errors.New("iterator: rows not initialized")
+
 // matchedRowIterator wraps sql.Rows for streaming matched items.
 // Implements repositories.MatchedRowIterator.
 type matchedRowIterator struct {
@@ -29,10 +35,18 @@ type matchedRowIterator struct {
 }
 
 func (m *matchedRowIterator) Next() bool { //nolint:revive // implements interface
+	if m.rows == nil {
+		return false
+	}
+
 	return m.rows.Next()
 }
 
 func (m *matchedRowIterator) Err() error { //nolint:revive // implements interface
+	if m.rows == nil {
+		return nil
+	}
+
 	return m.rows.Err()
 }
 
@@ -55,6 +69,10 @@ func (m *matchedRowIterator) Close() error { //nolint:revive,varnamelen // imple
 }
 
 func (m *matchedRowIterator) Scan() (*entities.MatchedItem, error) { //nolint:revive // implements interface
+	if m.rows == nil {
+		return nil, errIteratorNotInitialized
+	}
+
 	var item entities.MatchedItem
 	if err := m.rows.Scan(
 		&item.TransactionID,
@@ -79,10 +97,18 @@ type unmatchedRowIterator struct {
 }
 
 func (u *unmatchedRowIterator) Next() bool { //nolint:revive // implements interface
+	if u.rows == nil {
+		return false
+	}
+
 	return u.rows.Next()
 }
 
 func (u *unmatchedRowIterator) Err() error { //nolint:revive // implements interface
+	if u.rows == nil {
+		return nil
+	}
+
 	return u.rows.Err()
 }
 
@@ -105,6 +131,10 @@ func (u *unmatchedRowIterator) Close() error { //nolint:revive,varnamelen // imp
 }
 
 func (u *unmatchedRowIterator) Scan() (*entities.UnmatchedItem, error) { //nolint:revive // implements interface
+	if u.rows == nil {
+		return nil, errIteratorNotInitialized
+	}
+
 	var item entities.UnmatchedItem
 	if err := u.rows.Scan(
 		&item.TransactionID,
@@ -131,10 +161,18 @@ type varianceRowIterator struct {
 }
 
 func (iter *varianceRowIterator) Next() bool { //nolint:revive // implements interface
+	if iter.rows == nil {
+		return false
+	}
+
 	return iter.rows.Next()
 }
 
 func (iter *varianceRowIterator) Err() error { //nolint:revive // implements interface
+	if iter.rows == nil {
+		return nil
+	}
+
 	return iter.rows.Err()
 }
 
@@ -157,6 +195,10 @@ func (iter *varianceRowIterator) Close() error { //nolint:revive // implements i
 }
 
 func (iter *varianceRowIterator) Scan() (*entities.VarianceReportRow, error) { //nolint:revive // implements interface
+	if iter.rows == nil {
+		return nil, errIteratorNotInitialized
+	}
+
 	var (
 		sourceID        uuid.UUID
 		feeScheduleID   uuid.UUID
