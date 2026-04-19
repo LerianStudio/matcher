@@ -18,7 +18,6 @@ import (
 	outbox "github.com/LerianStudio/lib-commons/v5/commons/outbox"
 
 	"github.com/LerianStudio/matcher/internal/auth"
-	"github.com/LerianStudio/matcher/internal/bootstrap"
 )
 
 func TestNewTestOutboxRepository_PublicSchemaLifecycle(t *testing.T) {
@@ -103,25 +102,19 @@ func TestNewTestOutboxRepository_MarkInvalidRemovesPending(t *testing.T) {
 	})
 }
 
-// TestNewTestOutboxRepository_DefaultTenantDiscovered asserts that the test
-// helper mirrors production tenant-discovery semantics: the outbox dispatcher
-// must always see the matcher default tenant (public schema), even when no
-// UUID-shaped tenant schemas exist. Regression guard for the bug where the
-// helper used a bare SchemaResolver and therefore missed the default tenant.
-func TestNewTestOutboxRepository_DefaultTenantDiscovered(t *testing.T) {
+// TestTestDefaultTenantDiscoverer_AppendsDefaultTenant asserts that the test
+// helper's internal discoverer mirrors production tenant-discovery semantics:
+// the outbox dispatcher must always see the matcher default tenant (public
+// schema), even when the inner discoverer returns an empty list. Regression
+// guard for the bug where NewTestOutboxRepository used a bare SchemaResolver
+// and therefore missed the default tenant.
+func TestTestDefaultTenantDiscoverer_AppendsDefaultTenant(t *testing.T) {
 	RunWithDatabase(t, func(t *testing.T, h *TestHarness) {
 		ctx := h.Ctx()
 
-		// Wrap the helper's internal resolver pattern so we can directly
-		// observe DiscoverTenants. The repository's discoverer isn't exposed,
-		// but the helper constructs the exact same chain, so re-running it
-		// verifies the default tenant survives.
-		repo := NewTestOutboxRepository(t, h.Connection)
-		require.NotNil(t, repo)
-
-		discoverer := bootstrap.NewDefaultTenantDiscoverer(
-			&fakeSchemaResolver{tenants: []string{}},
-		)
+		discoverer := &testDefaultTenantDiscoverer{
+			inner: &fakeSchemaResolver{tenants: []string{}},
+		}
 
 		tenants, err := discoverer.DiscoverTenants(ctx)
 		require.NoError(t, err)
@@ -134,7 +127,7 @@ func TestNewTestOutboxRepository_DefaultTenantDiscovered(t *testing.T) {
 }
 
 // fakeSchemaResolver is a minimal TenantDiscoverer used only by the default-
-// tenant regression test; it lets us exercise NewDefaultTenantDiscoverer's
+// tenant regression test; it lets us exercise testDefaultTenantDiscoverer's
 // append-behaviour without depending on live schema discovery.
 type fakeSchemaResolver struct {
 	tenants []string
