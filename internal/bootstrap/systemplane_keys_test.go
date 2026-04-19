@@ -12,6 +12,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/LerianStudio/lib-commons/v5/commons/systemplane"
 )
 
 // TestMatcherKeyDefs_AllKeysUnique ensures no duplicate key registration would occur.
@@ -442,12 +444,29 @@ func TestMatcherKeyDefs_NilCfgDefaults(t *testing.T) {
 	}
 }
 
-// TestRegisterMatcherKeys_NilCfgRejected asserts the exported constructor
-// refuses a nil cfg with a wrapped ErrConfigNil.
-func TestRegisterMatcherKeys_NilCfgRejected(t *testing.T) {
+// TestRegisterMatcherKeys_NilClientRejected asserts the exported constructor
+// refuses a nil systemplane client with a wrapped ErrSystemplaneClientNil.
+// The client nil-check fires before the cfg nil-check so the returned
+// sentinel distinguishes the two bootstrap wiring bugs.
+func TestRegisterMatcherKeys_NilClientRejected(t *testing.T) {
 	t.Parallel()
 
 	err := RegisterMatcherKeys(nil, nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrSystemplaneClientNil)
+}
+
+// TestRegisterMatcherKeys_NilCfgRejected asserts the exported constructor
+// refuses a nil cfg with a wrapped ErrConfigNil when a valid client is passed.
+func TestRegisterMatcherKeys_NilCfgRejected(t *testing.T) {
+	t.Parallel()
+
+	client, err := systemplane.NewForTesting(&noopSystemplaneStore{})
+	require.NoError(t, err, "in-memory systemplane client must initialize")
+
+	t.Cleanup(func() { _ = client.Close() })
+
+	err = RegisterMatcherKeys(client, nil)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrConfigNil)
 }

@@ -749,6 +749,10 @@ func wireBridgeHeartbeatWriter(
 	worker *discoveryWorker.BridgeWorker,
 	logger libLog.Logger,
 ) {
+	if logger == nil {
+		logger = &libLog.NopLogger{}
+	}
+
 	if worker == nil || provider == nil {
 		return
 	}

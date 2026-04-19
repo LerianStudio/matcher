@@ -80,6 +80,10 @@ func (gateway *ExceptionMatchingGateway) CreateForceMatch(
 	ctx context.Context,
 	input exceptionPorts.ForceMatchInput,
 ) error {
+	if gateway == nil || gateway.transactionRepo == nil {
+		return ErrNilTransactionRepository
+	}
+
 	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
 
 	ctx, span := tracer.Start(ctx, "cross.exception_matching_gateway.create_force_match")
@@ -126,6 +130,10 @@ func (gateway *ExceptionMatchingGateway) CreateAdjustment(
 	ctx context.Context,
 	input exceptionPorts.CreateAdjustmentInput,
 ) error {
+	if gateway == nil || gateway.adjustmentRepo == nil {
+		return ErrNilAdjustmentRepository
+	}
+
 	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
 
 	ctx, span := tracer.Start(ctx, "cross.exception_matching_gateway.create_adjustment")

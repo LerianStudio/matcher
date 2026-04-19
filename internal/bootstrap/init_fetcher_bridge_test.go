@@ -434,6 +434,21 @@ func TestNewArtifactHTTPClient_TimeoutHasPad(t *testing.T) {
 	)
 }
 
+// TestWireBridgeHeartbeatWriter_NilLoggerDoesNotPanic asserts the defensive
+// logger substitution when callers forget to pass a logger. The inner
+// `worker == nil || provider == nil` short-circuit must not dereference
+// a nil logger while the guard is evaluated.
+func TestWireBridgeHeartbeatWriter_NilLoggerDoesNotPanic(t *testing.T) {
+	t.Parallel()
+
+	assert.NotPanics(t, func() {
+		// Pass nil for worker+provider+logger. The function short-circuits
+		// via the worker/provider nil check after substituting the NopLogger,
+		// and must not panic on logger use anywhere in its body.
+		wireBridgeHeartbeatWriter(context.Background(), nil, nil, nil)
+	})
+}
+
 // sharedPortsInterfaceCheck ensures the exported interface types still
 // match. Kept lightweight as a compile-time probe; runtime effect is
 // simply "the build stays clean".

@@ -140,6 +140,24 @@ func TestNewExceptionMatchingGateway_NilDependencies(t *testing.T) {
 	})
 }
 
+func TestExceptionMatchingGateway_CreateForceMatch_NilReceiverGuard(t *testing.T) {
+	t.Parallel()
+
+	var gateway *ExceptionMatchingGateway
+
+	err := gateway.CreateForceMatch(context.Background(), exceptionPorts.ForceMatchInput{TransactionID: uuid.New()})
+	require.ErrorIs(t, err, ErrNilTransactionRepository)
+}
+
+func TestExceptionMatchingGateway_CreateAdjustment_NilReceiverGuard(t *testing.T) {
+	t.Parallel()
+
+	var gateway *ExceptionMatchingGateway
+
+	err := gateway.CreateAdjustment(context.Background(), exceptionPorts.CreateAdjustmentInput{TransactionID: uuid.New()})
+	require.ErrorIs(t, err, ErrNilAdjustmentRepository)
+}
+
 func TestExceptionMatchingGateway_CreateForceMatch_Success(t *testing.T) {
 	t.Parallel()
 

@@ -49,6 +49,11 @@ const (
 // ErrConfigNil indicates a nil configuration struct was provided.
 var ErrConfigNil = errors.New("config must be provided")
 
+// ErrSystemplaneClientNil indicates a nil systemplane Client was passed to
+// RegisterMatcherKeys. Defensive guard against a bootstrap wiring bug that
+// would otherwise panic on the first Client.Register call.
+var ErrSystemplaneClientNil = errors.New("systemplane client must be provided")
+
 // AppConfig holds core application metadata.
 type AppConfig struct {
 	EnvName  string `env:"ENV_NAME"  envDefault:"development" mapstructure:"env_name"`

@@ -349,6 +349,10 @@ const systemplaneNamespace = "matcher"
 //
 // Must be called before Client.Start().
 func RegisterMatcherKeys(client *systemplane.Client, cfg *Config) error {
+	if client == nil {
+		return fmt.Errorf("register matcher keys: %w", ErrSystemplaneClientNil)
+	}
+
 	if cfg == nil {
 		return fmt.Errorf("register matcher keys: %w", ErrConfigNil)
 	}
