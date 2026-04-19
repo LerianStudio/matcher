@@ -16,6 +16,10 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/singleflight"
+
+	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 	libRedis "github.com/LerianStudio/lib-commons/v5/commons/redis"
 	"github.com/LerianStudio/lib-commons/v5/commons/tenant-manager/valkey"
 
@@ -81,6 +85,12 @@ type M2MCredentialProvider struct {
 
 	// L2: lib-commons Redis client (nil = local-only mode)
 	redisClient *libRedis.Client
+
+	// flight coalesces concurrent AWS Secrets Manager fetches for the same
+	// tenant. On an L1+L2 miss, N concurrent callers would otherwise each
+	// dispatch their own Secrets Manager RPC — thundering herd. singleflight
+	// routes them all through a single backend fetch.
+	flight singleflight.Group
 }
 
 // NewM2MCredentialProvider creates a credential provider with two-level cache.
@@ -157,25 +167,48 @@ func (provider *M2MCredentialProvider) GetCredentials(ctx context.Context, tenan
 		}
 	}
 
-	// L2: Check distributed cache (Redis/Valkey via lib-commons)
-	if provider.redisClient != nil {
-		creds, found := provider.getFromRedis(ctx, tenantOrgID)
-		if found {
-			return creds, nil
+	// Coalesce concurrent misses for the same tenant through singleflight so
+	// only one goroutine checks L2 / hits AWS Secrets Manager per burst.
+	val, err, _ := provider.flight.Do(tenantOrgID, func() (any, error) {
+		// Re-check L1 inside the flight: another goroutine may have populated
+		// the cache between our miss above and winning the singleflight key.
+		if cached, ok := provider.credCache.Load(tenantOrgID); ok {
+			cc, valid := cached.(*cachedCredentials)
+			if valid && time.Now().UTC().Before(cc.expiresAt) {
+				return cc.creds, nil
+			}
 		}
-	}
 
-	// Source: Fetch from AWS Secrets Manager (authoritative source)
-	creds, err := provider.smClient.GetM2MCredentials(ctx, provider.env, tenantOrgID, provider.applicationName, provider.targetService)
+		// L2: Check distributed cache (Redis/Valkey via lib-commons)
+		if provider.redisClient != nil {
+			creds, found := provider.getFromRedis(ctx, tenantOrgID)
+			if found {
+				return creds, nil
+			}
+		}
+
+		// Source: Fetch from AWS Secrets Manager (authoritative source)
+		creds, fetchErr := provider.smClient.GetM2MCredentials(ctx, provider.env, tenantOrgID, provider.applicationName, provider.targetService)
+		if fetchErr != nil {
+			return nil, fmt.Errorf("fetching M2M credentials for tenant %s: %w", tenantOrgID, fetchErr)
+		}
+
+		// Store in L2 (distributed via lib-commons)
+		provider.storeInRedis(ctx, tenantOrgID, creds)
+
+		// Store in L1 (local)
+		provider.storeInL1(tenantOrgID, creds)
+
+		return creds, nil
+	})
 	if err != nil {
-		return nil, fmt.Errorf("fetching M2M credentials for tenant %s: %w", tenantOrgID, err)
+		return nil, err
 	}
 
-	// Store in L2 (distributed via lib-commons)
-	provider.storeInRedis(ctx, tenantOrgID, creds)
-
-	// Store in L1 (local)
-	provider.storeInL1(tenantOrgID, creds)
+	creds, ok := val.(*ports.M2MCredentials)
+	if !ok {
+		return nil, fmt.Errorf("unexpected M2M credentials singleflight result type: %T", val)
+	}
 
 	return creds, nil
 }
@@ -292,5 +325,16 @@ func (provider *M2MCredentialProvider) storeInRedis(ctx context.Context, tenantO
 	//   - Network isolation (Redis on internal network only)
 	//   - json:"-" tags on M2MCredentials prevent accidental API serialization
 	// Must be addressed before multi-region deployment or any deployment with shared Redis.
-	_ = rds.Set(ctx, key, data, provider.credCacheTTL).Err()
+	if setErr := rds.Set(ctx, key, data, provider.credCacheTTL).Err(); setErr != nil {
+		// Redis is best-effort: a broken L2 should not fail the caller, but a
+		// silent miss also masks infra regressions. Log at DEBUG so operators
+		// can observe the pattern without noise under steady state.
+		logger, _, _, _ := libCommons.NewTrackingFromContext(ctx)
+		if logger != nil {
+			logger.With(
+				libLog.String("tenant_org_id", tenantOrgID),
+				libLog.Err(setErr),
+			).Log(ctx, libLog.LevelDebug, "failed to store M2M credentials in Redis L2 cache")
+		}
+	}
 }
