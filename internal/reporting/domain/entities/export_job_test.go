@@ -498,60 +498,6 @@ func TestExportReportType_IsValid(t *testing.T) {
 	}
 }
 
-func TestIsValidExportFormat(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		format   ExportFormat
-		expected bool
-	}{
-		{name: "CSV is valid", format: ExportFormatCSV, expected: true},
-		{name: "JSON is valid", format: ExportFormatJSON, expected: true},
-		{name: "XML is valid", format: ExportFormatXML, expected: true},
-		{name: "PDF is valid", format: ExportFormatPDF, expected: true},
-		{name: "lowercase csv is invalid", format: "csv", expected: false},
-		{name: "empty string is invalid", format: "", expected: false},
-		{name: "unknown format is invalid", format: "XLSX", expected: false},
-		{name: "whitespace is invalid", format: " ", expected: false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			assert.Equal(t, tt.expected, IsValidExportFormat(tt.format))
-		})
-	}
-}
-
-func TestIsValidReportType(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name       string
-		reportType ExportReportType
-		expected   bool
-	}{
-		{name: "MATCHED is valid", reportType: ExportReportTypeMatched, expected: true},
-		{name: "UNMATCHED is valid", reportType: ExportReportTypeUnmatched, expected: true},
-		{name: "SUMMARY is valid", reportType: ExportReportTypeSummary, expected: true},
-		{name: "VARIANCE is valid", reportType: ExportReportTypeVariance, expected: true},
-		{name: "EXCEPTIONS is valid", reportType: ExportReportTypeExceptions, expected: true},
-		{name: "lowercase matched is invalid", reportType: "matched", expected: false},
-		{name: "empty string is invalid", reportType: "", expected: false},
-		{name: "unknown type is invalid", reportType: "CUSTOM", expected: false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			assert.Equal(t, tt.expected, IsValidReportType(tt.reportType))
-		})
-	}
-}
-
 func TestIsStreamableFormat(t *testing.T) {
 	t.Parallel()
 
