@@ -4803,7 +4803,9 @@ paths:
       - Configuration Field Maps
   /v1/contexts/{contextId}/export-jobs:
     get:
-      description: Lists export jobs for a specific reconciliation context.
+      description: |-
+        Lists export jobs for a specific reconciliation context using forward-only cursor-based pagination.
+        Use the nextCursor value from the response to fetch subsequent pages.
       operationId: listExportJobsByContext
       parameters:
       - description: Request ID for tracing

@@ -1063,10 +1063,11 @@ func TestRepository_ListByContext_DatabaseQuery(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows(exportJobColumns()))
 		mock.ExpectCommit()
 
-		jobs, err := repo.ListByContext(ctx, contextID, 10)
+		jobs, pagination, err := repo.ListByContext(ctx, contextID, nil, 10)
 
 		require.NoError(t, err)
 		assert.Empty(t, jobs)
+		assert.Empty(t, pagination.Next)
 	})
 }
 

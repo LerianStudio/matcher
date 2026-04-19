@@ -41,12 +41,16 @@ type ExportJobRepository interface {
 		limit int,
 	) ([]*entities.ExportJob, libHTTP.CursorPagination, error)
 
-	// ListByContext retrieves export jobs for a specific context.
+	// ListByContext retrieves export jobs for a specific context using forward-only
+	// cursor-based pagination. cursor is the timestamp+ID of the last item from the
+	// previous page (nil for first page). Results are ordered by created_at DESC and
+	// use the same (created_at, id) keyset as List for consistent ordering semantics.
 	ListByContext(
 		ctx context.Context,
 		contextID uuid.UUID,
+		cursor *libHTTP.TimestampCursor,
 		limit int,
-	) ([]*entities.ExportJob, error)
+	) ([]*entities.ExportJob, libHTTP.CursorPagination, error)
 
 	// ListExpired retrieves jobs that have passed their expiration time.
 	ListExpired(ctx context.Context, limit int) ([]*entities.ExportJob, error)

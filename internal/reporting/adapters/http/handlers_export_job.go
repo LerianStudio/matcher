@@ -837,7 +837,8 @@ func (handler *ExportJobHandlers) DownloadExportJob(fiberCtx *fiber.Ctx) error {
 // ListExportJobsByContext handles GET /v1/contexts/:contextId/export-jobs
 // @ID listExportJobsByContext
 // @Summary List export jobs by context
-// @Description Lists export jobs for a specific reconciliation context.
+// @Description Lists export jobs for a specific reconciliation context using forward-only cursor-based pagination.
+// @Description Use the nextCursor value from the response to fetch subsequent pages.
 // @Tags Export Jobs
 // @Produce json
 // @Security BearerAuth
@@ -873,22 +874,20 @@ func (handler *ExportJobHandlers) ListExportJobsByContext(fiberCtx *fiber.Ctx) e
 
 	libHTTP.SetHandlerSpanAttributes(span, tenantID, contextID)
 
-	_, limit, err := libHTTP.ParseOpaqueCursorPagination(fiberCtx)
+	cursor, limit, err := parseTimestampCursorPagination(fiberCtx)
 	if err != nil {
 		return handler.badRequestBiz(ctx, fiberCtx, span, logger, "invalid pagination parameters", err)
 	}
 
-	// Fetch limit+1 to determine if more pages exist without an extra COUNT query.
-	jobs, err := handler.querySvc.ListByContext(ctx, contextID, limit+1)
+	jobs, pagination, err := handler.querySvc.ListByContext(ctx, query.ListByContextInput{
+		ContextID: contextID,
+		Cursor:    cursor,
+		Limit:     limit,
+	})
 	if err != nil {
 		handler.logSpanError(ctx, span, logger, "failed to list export jobs by context", err)
 
 		return respondError(fiberCtx, fiber.StatusInternalServerError, "internal_server_error", "an unexpected error occurred")
-	}
-
-	hasMore := len(jobs) > limit
-	if hasMore {
-		jobs = jobs[:limit]
 	}
 
 	responses := make([]*ExportJobResponse, len(jobs))
@@ -899,8 +898,9 @@ func (handler *ExportJobHandlers) ListExportJobsByContext(fiberCtx *fiber.Ctx) e
 	response := ExportJobListResponse{
 		Items: responses,
 		CursorResponse: sharedhttp.CursorResponse{
-			Limit:   limit,
-			HasMore: hasMore,
+			Limit:      limit,
+			HasMore:    pagination.Next != "",
+			NextCursor: pagination.Next,
 		},
 	}
 

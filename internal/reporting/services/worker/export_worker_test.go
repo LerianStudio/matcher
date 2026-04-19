@@ -1938,8 +1938,8 @@ func (stub *tenantAwareJobRepoStub) List(context.Context, *string, *libHTTP.Time
 	return nil, libHTTP.CursorPagination{}, nil
 }
 
-func (stub *tenantAwareJobRepoStub) ListByContext(context.Context, uuid.UUID, int) ([]*entities.ExportJob, error) {
-	return nil, nil
+func (stub *tenantAwareJobRepoStub) ListByContext(context.Context, uuid.UUID, *libHTTP.TimestampCursor, int) ([]*entities.ExportJob, libHTTP.CursorPagination, error) {
+	return nil, libHTTP.CursorPagination{}, nil
 }
 
 func (stub *tenantAwareJobRepoStub) ListExpired(context.Context, int) ([]*entities.ExportJob, error) {
