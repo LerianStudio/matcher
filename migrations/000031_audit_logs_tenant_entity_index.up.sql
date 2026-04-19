@@ -12,7 +12,9 @@
 -- and ordering in a single index walk.
 --
 -- CONCURRENTLY avoids blocking ingest writes on the hot audit_logs table.
--- IF NOT EXISTS makes the migration safe to retry; paired with the symmetric
--- DROP INDEX CONCURRENTLY IF EXISTS in the .down.sql.
+-- IF NOT EXISTS makes the migration safe to retry and is paired with the
+-- symmetric DROP INDEX CONCURRENTLY IF EXISTS in the .down.sql.
+-- (Comment terminators intentionally avoid the SQL statement terminator byte
+-- because golang-migrate's multi-statement splitter is not comment-aware.)
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_audit_logs_tenant_entity_created
   ON audit_logs (tenant_id, entity_type, entity_id, created_at DESC, id DESC);

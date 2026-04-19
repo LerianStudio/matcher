@@ -18,29 +18,43 @@
 --   outbox.retry_window_sec             (dispatcher timing fixed at boot)
 --   outbox.dispatch_interval_sec        (dispatcher timing fixed at boot)
 --
--- The systemplane v5 table is created lazily by the Client at startup, so
--- the delete is wrapped in an existence check — first-time deploys (where
--- no rows ever existed) become a no-op.
+-- Structure: the original guard used a PL/pgSQL DO block, but golang-migrate
+-- v4's multi-statement parser (used by this project with
+-- MultiStatementEnabled=true) splits naively on the statement terminator byte
+-- and treats the inner terminators in a DO block as statement boundaries.
+-- That produces "unterminated dollar-quoted string" errors at apply time.
+--
+-- Comments in this file intentionally avoid the statement terminator byte for
+-- the same reason -- the splitter is not comment-aware either.
+--
+-- Replacement: two plain top-level statements the splitter handles cleanly.
+--   1. CREATE TABLE IF NOT EXISTS public.systemplane_entries(...) -- no-op on
+--      upgrades (the table already exists), proto-creates the table on
+--      fresh deploys so the following DELETE does not fail on a missing
+--      relation. The schema mirrors lib-commons v5's
+--      systemplane/internal/postgres.ensureSchema so its later CREATE TABLE
+--      IF NOT EXISTS is a no-op too.
+--   2. DELETE FROM public.systemplane_entries -- idempotent on both paths
+--      (removes orphan rows on upgrades, matches zero rows on fresh deploys).
 
-DO $$
-BEGIN
-    IF EXISTS (
-        SELECT 1
-        FROM   information_schema.tables
-        WHERE  table_schema = 'public'
-          AND  table_name   = 'systemplane_entries'
-    ) THEN
-        DELETE FROM public.systemplane_entries
-         WHERE namespace = 'matcher'
-           AND key       IN (
-                'app.log_level',
-                'tenancy.default_tenant_id',
-                'tenancy.default_tenant_slug',
-                'auth.enabled',
-                'auth.host',
-                'auth.token_secret',
-                'outbox.retry_window_sec',
-                'outbox.dispatch_interval_sec'
-           );
-    END IF;
-END$$;
+CREATE TABLE IF NOT EXISTS public.systemplane_entries (
+    namespace  TEXT NOT NULL,
+    key        TEXT NOT NULL,
+    value      JSONB NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_by TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (namespace, key)
+);
+
+DELETE FROM public.systemplane_entries
+ WHERE namespace = 'matcher'
+   AND key       IN (
+        'app.log_level',
+        'tenancy.default_tenant_id',
+        'tenancy.default_tenant_slug',
+        'auth.enabled',
+        'auth.host',
+        'auth.token_secret',
+        'outbox.retry_window_sec',
+        'outbox.dispatch_interval_sec'
+   );
