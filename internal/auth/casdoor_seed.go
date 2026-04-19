@@ -159,7 +159,14 @@ func matcherCasdoorPermissionSpecs() []casdoorPermissionSpec {
 			ActionMatchRun, ActionMatchRead, ActionMatchDelete, ActionManualMatch, ActionAdjustmentCreate,
 		),
 		permissionSpecs(ResourceGovernance,
-			ActionAuditRead, ActionArchiveRead, ActionActorMappingRead, ActionActorMappingWrite, ActionActorMappingDelete,
+			ActionAuditRead, ActionArchiveRead,
+			ActionActorMappingRead, ActionActorMappingWrite, ActionActorMappingDelete,
+			// ActorMappingDeanonymize is registered as an available permission
+			// so Casdoor admins can grant it to specific users/roles, but it
+			// is intentionally omitted from every default role. Resolving a
+			// hashed actor back to cleartext PII should be an explicit,
+			// audited assignment — never an inherited capability.
+			ActionActorMappingDeanonymize,
 		),
 		permissionSpecs(ResourceReporting,
 			ActionDashboardRead, ActionExportRead, ActionExportJobWrite, ActionExportJobRead,

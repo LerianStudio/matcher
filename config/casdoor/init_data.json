@@ -560,6 +560,19 @@
       "isEnabled": true
     },
     {
+      "name": "governance-actor-mapping-deanonymize",
+      "displayName": "Governance Actor Mapping Deanonymize",
+      "description": "Allows actor-mapping:deanonymize on governance.",
+      "resources": [
+        "governance"
+      ],
+      "actions": [
+        "actor-mapping:deanonymize"
+      ],
+      "effect": "Allow",
+      "isEnabled": true
+    },
+    {
       "name": "reporting-dashboard-read",
       "displayName": "Reporting Dashboard Read",
       "description": "Allows dashboard:read on reporting.",
@@ -921,6 +934,7 @@
         "governance-actor-mapping-read",
         "governance-actor-mapping-write",
         "governance-actor-mapping-delete",
+        "governance-actor-mapping-deanonymize",
         "reporting-dashboard-read",
         "reporting-export-read",
         "reporting-export-job-write",

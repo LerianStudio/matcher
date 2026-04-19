@@ -354,6 +354,7 @@ func TestGovernanceModuleActions(t *testing.T) {
 		{name: "ActionActorMappingRead", constant: ActionActorMappingRead, expected: "actor-mapping:read"},
 		{name: "ActionActorMappingWrite", constant: ActionActorMappingWrite, expected: "actor-mapping:write"},
 		{name: "ActionActorMappingDelete", constant: ActionActorMappingDelete, expected: "actor-mapping:delete"},
+		{name: "ActionActorMappingDeanonymize", constant: ActionActorMappingDeanonymize, expected: "actor-mapping:deanonymize"},
 	}
 
 	for _, tt := range tests {
@@ -510,6 +511,7 @@ func TestActionPatternConsistency(t *testing.T) {
 			ActionMatchRun, ActionMatchRead, ActionMatchDelete, ActionManualMatch, ActionAdjustmentCreate,
 			ActionAuditRead, ActionArchiveRead,
 			ActionActorMappingRead, ActionActorMappingWrite, ActionActorMappingDelete,
+			ActionActorMappingDeanonymize,
 			ActionDashboardRead, ActionExportRead, ActionExportJobWrite, ActionExportJobRead,
 			ActionExceptionRead, ActionExceptionResolve, ActionExceptionDispatch, ActionCallbackProcess, ActionDisputeRead, ActionDisputeWrite,
 			ActionCommentWrite,
@@ -633,9 +635,10 @@ func TestActionsAreNotEmpty(t *testing.T) {
 		"ActionAdjustmentCreate":    ActionAdjustmentCreate,
 		"ActionAuditRead":           ActionAuditRead,
 		"ActionArchiveRead":         ActionArchiveRead,
-		"ActionActorMappingRead":    ActionActorMappingRead,
-		"ActionActorMappingWrite":   ActionActorMappingWrite,
-		"ActionActorMappingDelete":  ActionActorMappingDelete,
+		"ActionActorMappingRead":        ActionActorMappingRead,
+		"ActionActorMappingWrite":       ActionActorMappingWrite,
+		"ActionActorMappingDelete":      ActionActorMappingDelete,
+		"ActionActorMappingDeanonymize": ActionActorMappingDeanonymize,
 		"ActionDashboardRead":       ActionDashboardRead,
 		"ActionExportRead":          ActionExportRead,
 		"ActionExportJobWrite":      ActionExportJobWrite,
