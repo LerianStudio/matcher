@@ -5,6 +5,7 @@ package worker
 import (
 	"context"
 	"database/sql"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -391,6 +392,56 @@ func TestSchedulerWorker_StartStopStartStop_Success(t *testing.T) {
 		return dueCalls.Load() > before
 	}, 300*time.Millisecond, 10*time.Millisecond)
 	require.NoError(t, worker.Stop())
+}
+
+// TestSchedulerWorker_StartStop_ConcurrentRace exercises the
+// CompareAndSwap-at-top fix (CQ-69). N concurrent goroutines call Stop() on a
+// single running worker; exactly ONE must observe a nil return (the CAS
+// winner), and the remaining N-1 must observe ErrWorkerNotRunning without
+// blocking forever on doneCh.
+//
+// The pre-fix layout (Load → close → CAS) had a TOCTOU window where two
+// goroutines could observe running=true, both proceed past the load, and both
+// block on doneCh until the run loop exited, then exactly one CAS would
+// succeed — leaving callers unable to distinguish the real stopper from a
+// passive waiter. Mirrors the BridgeWorker concurrent-stop contract.
+func TestSchedulerWorker_StartStop_ConcurrentRace(t *testing.T) {
+	t.Parallel()
+
+	worker, err := NewSchedulerWorker(
+		&stubScheduleRepo{},
+		&stubMatchTrigger{},
+		&stubLockManager{},
+		SchedulerWorkerConfig{Interval: time.Hour}, // long interval — only the immediate-cycle runs.
+		&stubLogger{},
+	)
+	require.NoError(t, err)
+
+	require.NoError(t, worker.Start(context.Background()))
+
+	const concurrentStops = 16
+
+	var (
+		wg     sync.WaitGroup
+		nilCnt atomic.Int64
+	)
+
+	wg.Add(concurrentStops)
+
+	for i := 0; i < concurrentStops; i++ {
+		go func() {
+			defer wg.Done()
+
+			if stopErr := worker.Stop(); stopErr == nil {
+				nilCnt.Add(1)
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	require.Equal(t, int64(1), nilCnt.Load(),
+		"exactly one Stop() must win the CompareAndSwap and return nil; got %d nil returns", nilCnt.Load())
 }
 
 func TestSchedulerWorker_UpdateRuntimeConfig_WhileRunning_ReturnsError(t *testing.T) {

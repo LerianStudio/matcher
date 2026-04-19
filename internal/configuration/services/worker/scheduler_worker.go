@@ -188,9 +188,14 @@ func (worker *SchedulerWorker) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop gracefully shuts down the worker.
+// Stop signals the worker to exit and blocks until the run loop has
+// terminated. Safe to call from any goroutine; multiple concurrent callers
+// race on the leading CompareAndSwap so exactly one observes the running→
+// stopped transition and returns nil. The losers see ErrWorkerNotRunning
+// without blocking on doneCh, eliminating the load→close→CAS TOCTOU window
+// where two concurrent stops could both close stopCh or both report success.
 func (worker *SchedulerWorker) Stop() error {
-	if !worker.running.Load() {
+	if !worker.running.CompareAndSwap(true, false) {
 		return ErrWorkerNotRunning
 	}
 
@@ -198,10 +203,6 @@ func (worker *SchedulerWorker) Stop() error {
 		close(worker.stopCh)
 	})
 	<-worker.doneCh
-
-	if !worker.running.CompareAndSwap(true, false) {
-		return ErrWorkerNotRunning
-	}
 
 	worker.logger.Log(context.Background(), libLog.LevelInfo, "scheduler worker stopped")
 
