@@ -162,6 +162,59 @@ func TestRuntimeBodyLimitMiddleware_RejectsTooLargeBody(t *testing.T) {
 	assert.Equal(t, http.StatusRequestEntityTooLarge, resp.StatusCode)
 }
 
+// TestRuntimeBodyLimitMiddleware_RejectsOnContentLengthWithoutReadingBody
+// exercises the Content-Length fast path: the handler must reject before
+// the body is materialised.
+func TestRuntimeBodyLimitMiddleware_RejectsOnContentLengthWithoutReadingBody(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{Server: ServerConfig{BodyLimitBytes: 10}}
+
+	app := fiber.New()
+	app.Use(runtimeBodyLimitMiddleware(cfg, nil))
+	app.Post("/data", func(c *fiber.Ctx) error {
+		return c.SendString("ok")
+	})
+
+	// Declare a Content-Length that exceeds the limit. Body bytes must remain
+	// untouched for the middleware to reject early.
+	req := httptest.NewRequest(http.MethodPost, "/data", strings.NewReader(strings.Repeat("y", 100)))
+	req.Header.Set("Content-Type", "text/plain")
+	req.ContentLength = 100
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+
+	defer func() { _ = resp.Body.Close() }()
+
+	assert.Equal(t, http.StatusRequestEntityTooLarge, resp.StatusCode)
+}
+
+// TestRuntimeBodyLimitMiddleware_AllowsWhenContentLengthFits ensures the
+// Content-Length fast path accepts requests whose declared length is below
+// the limit without requiring the body to be read.
+func TestRuntimeBodyLimitMiddleware_AllowsWhenContentLengthFits(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{Server: ServerConfig{BodyLimitBytes: 1024}}
+
+	app := fiber.New()
+	app.Use(runtimeBodyLimitMiddleware(cfg, nil))
+	app.Post("/data", func(c *fiber.Ctx) error {
+		return c.SendString("ok")
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/data", strings.NewReader("within"))
+	req.Header.Set("Content-Type", "text/plain")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+
+	defer func() { _ = resp.Body.Close() }()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
 // --- runtimeCORSMiddleware ---
 
 func TestRuntimeCORSMiddleware_SetsHeaders(t *testing.T) {

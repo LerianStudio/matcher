@@ -21,6 +21,19 @@ func runtimeBodyLimitMiddleware(initialCfg *Config, configGetter func() *Config)
 	return func(fiberCtx *fiber.Ctx) error {
 		limit := effectiveRuntimeBodyLimit(initialCfg, configGetter)
 
+		// Fast path: reject based on Content-Length before pulling the body
+		// into memory. fasthttp's ContentLength returns -1 for chunked
+		// encoding and -2 when no Content-Length header is present; in both
+		// cases we cannot trust a pre-read check and must fall through to the
+		// materialised-body comparison below.
+		if cl := fiberCtx.Request().Header.ContentLength(); cl > 0 {
+			if cl > limit {
+				return fiber.ErrRequestEntityTooLarge
+			}
+
+			return fiberCtx.Next()
+		}
+
 		if len(fiberCtx.Body()) > limit {
 			return fiber.ErrRequestEntityTooLarge
 		}

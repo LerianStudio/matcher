@@ -20,9 +20,9 @@ import (
 )
 
 var (
-	errMountSystemplaneAppRequired               = errors.New("mount systemplane api: app is required")
-	errMountSystemplaneTenantExtractorRequired   = errors.New("mount systemplane api: tenant extractor is required — admin plane cannot start without tenant context propagation")
-	errMountSystemplaneAuthorizationRequired     = errors.New("mount systemplane api: authorization required")
+	errMountSystemplaneAppRequired             = errors.New("mount systemplane api: app is required")
+	errMountSystemplaneTenantExtractorRequired = errors.New("mount systemplane api: tenant extractor is required — admin plane cannot start without tenant context propagation")
+	errMountSystemplaneAuthorizationRequired   = errors.New("mount systemplane api: authorization required")
 )
 
 // MountSystemplaneAPI mounts the v5 systemplane admin HTTP routes on the
