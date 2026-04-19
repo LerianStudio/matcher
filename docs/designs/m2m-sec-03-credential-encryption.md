@@ -67,17 +67,32 @@ Match the fetcher-bridge precedent exactly: raw master key in env → local HKDF
 
 **Pseudocode (not an implementation — shape only):**
 ```
-ikm    := base64.StdEncoding.DecodeString(os.Getenv("SYSTEMPLANE_SECRET_MASTER_KEY"))
+ikm, err := base64.StdEncoding.DecodeString(os.Getenv("SYSTEMPLANE_SECRET_MASTER_KEY"))
+if err != nil {
+    return nil, fmt.Errorf("decode master key: %w", err)
+}
+if len(ikm) != 32 {
+    return nil, errCipherInvalidKey // IKM MUST be exactly 32 bytes after decode
+}
+
 reader := hkdf.New(sha256.New, ikm, nil /* salt */, []byte("matcher.m2m.cache.v1"))
 key32  := make([]byte, 32)
-io.ReadFull(reader, key32)
+if _, err := io.ReadFull(reader, key32); err != nil {
+    return nil, fmt.Errorf("derive subkey: %w", err)
+}
 ```
+
+> **MUST:** Cipher construction MUST validate `len(ikm) == 32` after base64 decode; anything else returns `errCipherInvalidKey`. This prevents silent key truncation or padding that would weaken the derived subkey.
 
 ### 2.3 Nonce: 12-byte random per Set
 
 - GCM standard nonce size (`aes.GCM.NonceSize() == 12`).
-- Source: `crypto/rand.Read`. **Fail-closed on error** — if `rand.Read` returns an error, fail the encryption (do not fall back to a zero nonce, do not cache). Silently drop the L2 write (same "best effort" posture as the existing `_ = rds.Set(...)` at [`provider.go:295`](../../internal/shared/adapters/m2m/provider.go#L295)).
+- Source: `crypto/rand.Read`.
 - Collision math: 2⁴⁸ nonces before birthday collision becomes non-negligible. At a worst-case 10 Set/sec (tenant count × cache churn), that's 8.9M years. Non-issue.
+
+> **MUST NOT:** Implementation MUST NOT fall back to a zero nonce on `rand.Read` failure. It MUST return an error and MUST NOT emit a cache entry or ciphertext envelope. Silently drop the L2 write (same "best effort" posture as the existing `_ = rds.Set(...)` at [`provider.go:295`](../../internal/shared/adapters/m2m/provider.go#L295)) and increment the `m2m_cache_encrypt_failures_total{reason="rand_read"}` counter.
+
+Nonce reuse under AES-GCM catastrophically breaks confidentiality and authenticity (two ciphertexts under the same key+nonce leak plaintext XOR and allow forgery). Degrading to "plaintext in L2" by skipping encryption is preferable to writing a ciphertext that is cryptographically compromised — but the design chooses neither. It chooses to refuse to emit a cache entry at all. See §6.1 for the corresponding test requirement.
 
 ### 2.4 Ciphertext Envelope
 
@@ -143,6 +158,21 @@ On any decrypt error (bad version byte, GCM auth-tag failure, truncated envelope
 
 This is a deliberate choice: the cache is an optimization. A decrypt error MUST NOT block credential retrieval.
 
+### 3.4 Rotation axes are INDEPENDENT — MUST NOT combine
+
+The two rotation mechanisms above (§3.1 envelope version byte, §3.2 info-string version) are **deliberately orthogonal** and address different threats:
+
+| Axis | What it changes | Why you rotate it | Migration window |
+|---|---|---|---|
+| **§3.1 Envelope version byte** (`0x01` → `0x02`) | Algorithm, key size, nonce layout, tag placement | Algorithmic break (hypothetical AES-GCM weakness), larger tag, post-quantum migration | One L2 TTL (5 min) |
+| **§3.2 Info-string version** (`.v1` → `.v2`) | HKDF-derived subkey (same master, different domain separator) — OR a fresh master entirely | Master-key rotation, HKDF context hygiene after a scare | One L2 TTL (5 min) |
+
+> **MUST NOT:** Operators MUST NOT rotate both axes simultaneously. Doing so makes it impossible to distinguish a layout-decode failure from an auth-tag failure during the migration window, because every v1 entry will fail for both reasons at once. The `m2m_cache_decrypt_failures_total` counter labels (`reason="layout|auth_tag|base64"`) become uninformative, and rollback is ambiguous (which axis to revert first?).
+>
+> **MUST (ordering):** When both axes need to change, rotate them **sequentially**, separated by at least `2 × credCacheTTL` (default 10 min) to ensure all in-flight entries under the previous configuration have drained via natural TTL expiry before the next change begins. Typical order: algorithm first (§3.1) — because it's the newer, less-tested code path — then master key (§3.2). This lets the envelope-version dispatch validate the new layout under a known-good key before the key itself moves.
+
+The independence also means **either axis can be rotated alone**: changing the envelope layout does not force a master-key rotation, and rotating the master does not force an algorithm change. This is deliberate — coupling them would turn every crypto update into a key-management event and vice versa.
+
 ---
 
 ## 4. API Shape
@@ -181,12 +211,13 @@ func (c *credentialCipher) Encrypt(plaintext []byte) ([]byte, error)
 func (c *credentialCipher) Decrypt(envelope []byte) ([]byte, error)
 ```
 
-**Typed decrypt errors** (package-private, for the counter-label taxonomy in §3.3):
+**Typed errors** (package-private, for construction validation and the decrypt counter-label taxonomy in §3.3):
 ```go
 var (
-    errCipherVersionUnknown  = errors.New("m2m cipher: unknown envelope version")
+    errCipherInvalidKey       = errors.New("m2m cipher: master key must decode to exactly 32 bytes")
+    errCipherVersionUnknown   = errors.New("m2m cipher: unknown envelope version")
     errCipherEnvelopeTooShort = errors.New("m2m cipher: envelope truncated")
-    errCipherAuthFailed      = errors.New("m2m cipher: GCM auth tag verification failed")
+    errCipherAuthFailed       = errors.New("m2m cipher: GCM auth tag verification failed")
 )
 ```
 
@@ -260,6 +291,7 @@ Guardrail: if `m2m_cache_decrypt_failures_total{reason="auth_tag"}` exceeds a Pr
 - **Version dispatch** — envelope with `version=0xFF` returns `errCipherVersionUnknown`; with `version=0x00` (reserved) same.
 - **Truncation** — envelopes shorter than `1 + 12 + 16 = 29` bytes return `errCipherEnvelopeTooShort`; no panic on any `len` from 0 to 28.
 - **Nonce uniqueness** — 10,000 `Encrypt` calls on the same plaintext produce 10,000 distinct envelopes (sanity check on `crypto/rand`).
+- **`rand.Read` failure is fail-closed** — inject a failing `io.Reader` in place of `crypto/rand.Reader` (via a test-only constructor hook); assert `Encrypt` returns an error, emits **no** envelope (return value is zero-length or nil), the caller skips the Redis `Set` (no entry is written), and the `m2m_cache_encrypt_failures_total{reason="rand_read"}` counter is incremented by exactly 1.
 - **Deterministic derivation** — two `newCredentialCipher(sameKey)` instances produce interoperable envelopes (encrypted by one, decrypted by the other).
 - **Info-string domain separation** — hand-construct a cipher with info `"matcher.m2m.cache.v2"` (via test-only constructor); its envelope must **fail** to decrypt on a `v1` instance, even with the same master.
 
