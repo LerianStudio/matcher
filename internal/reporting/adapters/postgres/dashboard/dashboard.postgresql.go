@@ -481,10 +481,11 @@ func (repo *Repository) GetTrendMetrics(
 				}
 
 				if point.Ingested > 0 {
-					// Return match rate as decimal (0.0-1.0) for frontend compatibility
-					point.MatchRate = float64(point.Matched) / float64(point.Ingested)
-					if point.MatchRate > 1.0 {
-						point.MatchRate = 1.0
+					// Return match rate as percentage (0-100) to match
+					// SummaryMetrics.MatchRate and the console chart scale.
+					point.MatchRate = float64(point.Matched) / float64(point.Ingested) * matchRatePercentageScale
+					if point.MatchRate > matchRatePercentageScale {
+						point.MatchRate = matchRatePercentageScale
 					}
 				}
 
@@ -842,9 +843,11 @@ func (repo *Repository) GetSourceBreakdown(
 				sb.UnmatchedTxns = max(sb.TotalTxns-matchedTxns, 0)
 
 				if sb.TotalTxns > 0 {
-					sb.MatchRate = float64(matchedTxns) / float64(sb.TotalTxns)
-					if sb.MatchRate > 1.0 {
-						sb.MatchRate = 1.0
+					// Percentage scale (0-100), aligned with SummaryMetrics
+					// and DailyTrendPoint so the dashboard is consistent.
+					sb.MatchRate = float64(matchedTxns) / float64(sb.TotalTxns) * matchRatePercentageScale
+					if sb.MatchRate > matchRatePercentageScale {
+						sb.MatchRate = matchRatePercentageScale
 					}
 				}
 
