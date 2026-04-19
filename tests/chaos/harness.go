@@ -14,7 +14,6 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -773,15 +772,3 @@ func (h *ChaosHarness) SetEnvForBootstrap(t *testing.T) {
 	}
 }
 
-// SetEnvForBootstrapGlobal sets environment variables globally (for TestMain context).
-// Use SetEnvForBootstrap(t) in tests when possible for automatic cleanup.
-func (h *ChaosHarness) SetEnvForBootstrapGlobal() {
-	envVars, err := h.EnvVarsForBootstrap()
-	if err != nil {
-		panic(fmt.Sprintf("failed to build chaos bootstrap env vars: %v", err))
-	}
-
-	for k, v := range envVars {
-		os.Setenv(k, v)
-	}
-}

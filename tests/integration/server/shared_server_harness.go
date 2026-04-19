@@ -16,6 +16,7 @@ import (
 
 	"github.com/LerianStudio/matcher/internal/bootstrap"
 	"github.com/LerianStudio/matcher/tests/integration"
+	"github.com/LerianStudio/matcher/tests/integration/ratelimit"
 )
 
 // sharedService holds the singleton service instance shared across all tests.
@@ -116,7 +117,7 @@ func (sh *SharedServerHarness) getOrCreateSharedService(t *testing.T) (*bootstra
 		// `client.Get` returns (registeredDefault, true) even when no DB override
 		// exists. Set explicit overrides so integration tests with many
 		// sequential requests from the same test IP do not hit 429.
-		if err := overrideRateLimitsForTests(context.Background(), svc); err != nil {
+		if err := ratelimit.OverrideRateLimitsForTests(context.Background(), svc); err != nil {
 			sharedServiceErr = fmt.Errorf("failed to override rate limits: %w", err)
 			return
 		}

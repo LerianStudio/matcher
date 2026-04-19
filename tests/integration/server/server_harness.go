@@ -13,6 +13,7 @@ import (
 	outboxServices "github.com/LerianStudio/lib-commons/v5/commons/outbox"
 	"github.com/LerianStudio/matcher/internal/bootstrap"
 	"github.com/LerianStudio/matcher/tests/integration"
+	"github.com/LerianStudio/matcher/tests/integration/ratelimit"
 )
 
 // RabbitMQ event routing keys (must match production publishers).
@@ -91,7 +92,7 @@ func NewServerHarness(ctx context.Context, t *testing.T) (*ServerHarness, error)
 	// `client.Get` returns (registeredDefault, true) even when no DB override
 	// exists. Set explicit overrides so integration tests with many sequential
 	// requests from the same test IP do not hit 429.
-	if err := overrideRateLimitsForTests(ctx, svc); err != nil {
+	if err := ratelimit.OverrideRateLimitsForTests(ctx, svc); err != nil {
 		if cleanupErr := baseHarness.Cleanup(ctx); cleanupErr != nil {
 			t.Logf("cleanup error after rate limit override failure: %v", cleanupErr)
 		}
