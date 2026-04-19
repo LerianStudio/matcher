@@ -11,10 +11,18 @@
 -- scan + sort on large partitions. The new composite covers the predicate
 -- and ordering in a single index walk.
 --
--- CONCURRENTLY avoids blocking ingest writes on the hot audit_logs table.
--- IF NOT EXISTS makes the migration safe to retry and is paired with the
--- symmetric DROP INDEX CONCURRENTLY IF EXISTS in the .down.sql.
--- (Comment terminators intentionally avoid the SQL statement terminator byte
--- because golang-migrate's multi-statement splitter is not comment-aware.)
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_audit_logs_tenant_entity_created
+-- NOTE: audit_logs is RANGE-partitioned by created_at (see 000001_init_schema).
+-- PostgreSQL rejects CREATE INDEX CONCURRENTLY on partitioned parents
+-- (SQLSTATE 0A000). We use plain CREATE INDEX, matching the convention
+-- established for the other audit_logs indexes in 000001_init_schema
+-- (idx_audit_logs_tenant / _entity / _created / _tenant_seq_uq, all created
+-- without CONCURRENTLY). PostgreSQL builds the index on the parent and
+-- propagates it to every partition (each child build takes a short
+-- ShareLock on its own partition only). IF NOT EXISTS keeps the
+-- migration retry-safe and is paired with a symmetric DROP INDEX
+-- IF EXISTS in the .down.sql.
+-- (Comment terminators intentionally avoid the SQL statement terminator
+-- byte because golang-migrate's multi-statement splitter is not
+-- comment-aware.)
+CREATE INDEX IF NOT EXISTS idx_audit_logs_tenant_entity_created
   ON audit_logs (tenant_id, entity_type, entity_id, created_at DESC, id DESC);
