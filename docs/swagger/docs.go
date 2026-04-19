@@ -12398,7 +12398,7 @@ const docTemplate = `{
                     "example": "user@example.com"
                 },
                 "changes": {
-                    "description": "Changes made to the entity",
+                    "description": "Changes made to the entity. When the diff exceeded the outbox payload\ncap, Changes carries a truncation marker envelope instead of the full\ndiff, and Truncated + OriginalSize expose the marker metadata as\nfirst-class fields.",
                     "type": "array",
                     "maxItems": 10000,
                     "items": {
@@ -12425,10 +12425,20 @@ const docTemplate = `{
                     "type": "string",
                     "example": "550e8400-e29b-41d4-a716-446655440000"
                 },
+                "originalSize": {
+                    "description": "OriginalSize is the byte size of the original diff before truncation.\nZero when Truncated is false, or when the marker was malformed.",
+                    "type": "integer",
+                    "example": 0
+                },
                 "tenantId": {
                     "description": "Tenant ID that owns this audit log entry",
                     "type": "string",
                     "example": "550e8400-e29b-41d4-a716-446655440001"
+                },
+                "truncated": {
+                    "description": "Truncated is true when the original audit diff exceeded the outbox\npayload cap and was replaced with a truncation marker. Consumers should\ntreat Changes as a metadata envelope (not the full diff) in this case.",
+                    "type": "boolean",
+                    "example": false
                 }
             }
         },

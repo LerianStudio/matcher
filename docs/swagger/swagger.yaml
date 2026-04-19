@@ -1823,7 +1823,11 @@ definitions:
         example: user@example.com
         type: string
       changes:
-        description: Changes made to the entity
+        description: |-
+          Changes made to the entity. When the diff exceeded the outbox payload
+          cap, Changes carries a truncation marker envelope instead of the full
+          diff, and Truncated + OriginalSize expose the marker metadata as
+          first-class fields.
         items:
           type: integer
         maxItems: 10000
@@ -1844,10 +1848,23 @@ definitions:
         description: Unique identifier for the audit log entry
         example: 550e8400-e29b-41d4-a716-446655440000
         type: string
+      originalSize:
+        description: |-
+          OriginalSize is the byte size of the original diff before truncation.
+          Zero when Truncated is false, or when the marker was malformed.
+        example: 0
+        type: integer
       tenantId:
         description: Tenant ID that owns this audit log entry
         example: 550e8400-e29b-41d4-a716-446655440001
         type: string
+      truncated:
+        description: |-
+          Truncated is true when the original audit diff exceeded the outbox
+          payload cap and was replaced with a truncation marker. Consumers should
+          treat Changes as a metadata envelope (not the full diff) in this case.
+        example: false
+        type: boolean
     type: object
   github_com_LerianStudio_matcher_internal_governance_adapters_http_dto.ListAuditLogsResponse:
     description: Paginated list of audit log entries
