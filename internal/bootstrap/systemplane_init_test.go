@@ -7,11 +7,16 @@
 package bootstrap
 
 import (
+	"context"
+	"database/sql/driver"
 	"errors"
 	"testing"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
 )
 
 // TestValidateSystemplaneSecrets_MissingMasterKeyInProd asserts that a production
@@ -127,4 +132,159 @@ func TestSystemplaneGetBool_NilClient(t *testing.T) {
 	got := SystemplaneGetBool(nil, "some.key", true)
 
 	assert.True(t, got)
+}
+
+// recordingLogger records every Log call so tests can assert on WARN
+// emission without depending on a real log sink.
+type recordingLogger struct {
+	libLog.Logger
+	records []recordedLog
+}
+
+type recordedLog struct {
+	level  libLog.Level
+	msg    string
+	fields []libLog.Field
+}
+
+func (rl *recordingLogger) Log(_ context.Context, level libLog.Level, msg string, fields ...libLog.Field) {
+	rl.records = append(rl.records, recordedLog{level: level, msg: msg, fields: fields})
+}
+
+func (rl *recordingLogger) With(_ ...libLog.Field) libLog.Logger { return rl }
+func (rl *recordingLogger) WithGroup(_ string) libLog.Logger     { return rl }
+func (rl *recordingLogger) Enabled(_ libLog.Level) bool          { return true }
+func (rl *recordingLogger) Sync(_ context.Context) error         { return nil }
+
+// TestWarnOnReclassifiedOrphanKeys_NilArgsAreNoOps asserts the guard never
+// panics when the caller omits either dependency.
+func TestWarnOnReclassifiedOrphanKeys_NilArgsAreNoOps(t *testing.T) {
+	t.Parallel()
+
+	// nil db → early return.
+	warnOnReclassifiedOrphanKeys(context.Background(), nil, &recordingLogger{})
+
+	// nil logger → early return (also covers the zero-value case).
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+
+	defer func() { _ = db.Close() }()
+
+	warnOnReclassifiedOrphanKeys(context.Background(), db, nil)
+
+	// No expectations were set, so no queries should have fired.
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+// TestWarnOnReclassifiedOrphanKeys_NoTable_SilentlyReturns asserts the
+// guard does not emit warnings when systemplane_entries has not yet been
+// created (first-time deploys) — this is the expected state before v5's
+// Client.Start runs ensureSchema.
+func TestWarnOnReclassifiedOrphanKeys_NoTable_SilentlyReturns(t *testing.T) {
+	t.Parallel()
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+
+	defer func() { _ = db.Close() }()
+
+	mock.ExpectQuery("SELECT EXISTS").
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+
+	logger := &recordingLogger{}
+
+	warnOnReclassifiedOrphanKeys(context.Background(), db, logger)
+
+	require.NoError(t, mock.ExpectationsWereMet())
+	assert.Empty(t, logger.records, "no warn should fire when the table is missing")
+}
+
+// anyKeyArgs returns a slice of sqlmock.AnyArg matchers matching one
+// positional placeholder per entry in reclassifiedBootstrapOnlyKeys.
+func anyKeyArgs() []driver.Value {
+	matchers := make([]driver.Value, 0, len(reclassifiedBootstrapOnlyKeys))
+	for range reclassifiedBootstrapOnlyKeys {
+		matchers = append(matchers, sqlmock.AnyArg())
+	}
+
+	return matchers
+}
+
+// TestWarnOnReclassifiedOrphanKeys_EmptyTable_NoWarns asserts a clean
+// deployment (table exists, zero orphan rows) stays silent so healthy
+// startup logs don't become noisy.
+func TestWarnOnReclassifiedOrphanKeys_EmptyTable_NoWarns(t *testing.T) {
+	t.Parallel()
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+
+	defer func() { _ = db.Close() }()
+
+	mock.ExpectQuery("SELECT EXISTS").
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectQuery(`SELECT key FROM public\.systemplane_entries`).
+		WithArgs(anyKeyArgs()...).
+		WillReturnRows(sqlmock.NewRows([]string{"key"}))
+
+	logger := &recordingLogger{}
+
+	warnOnReclassifiedOrphanKeys(context.Background(), db, logger)
+
+	require.NoError(t, mock.ExpectationsWereMet())
+	assert.Empty(t, logger.records, "no warn should fire when there are no orphan rows")
+}
+
+// TestWarnOnReclassifiedOrphanKeys_EmitsWarnPerOrphan asserts each surviving
+// orphan key produces one WARN log entry. Covers the primary operational
+// signal that migration 000030 under-cleaned or a peer process wrote a row
+// post-migration.
+func TestWarnOnReclassifiedOrphanKeys_EmitsWarnPerOrphan(t *testing.T) {
+	t.Parallel()
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+
+	defer func() { _ = db.Close() }()
+
+	mock.ExpectQuery("SELECT EXISTS").
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectQuery(`SELECT key FROM public\.systemplane_entries`).
+		WithArgs(anyKeyArgs()...).
+		WillReturnRows(sqlmock.NewRows([]string{"key"}).
+			AddRow("auth.token_secret").
+			AddRow("outbox.retry_window_sec"))
+
+	logger := &recordingLogger{}
+
+	warnOnReclassifiedOrphanKeys(context.Background(), db, logger)
+
+	require.NoError(t, mock.ExpectationsWereMet())
+	require.Len(t, logger.records, 2, "one WARN per observed orphan row")
+
+	for _, rec := range logger.records {
+		assert.Equal(t, libLog.LevelWarn, rec.level)
+		assert.Contains(t, rec.msg, "reclassified bootstrap-only key")
+	}
+}
+
+// TestWarnOnReclassifiedOrphanKeys_CoversMatcherReclassifications asserts
+// the hard-coded key list stays in sync with the documented reclassification
+// set so the drift-detector never misses a class of orphan rows.
+func TestWarnOnReclassifiedOrphanKeys_CoversMatcherReclassifications(t *testing.T) {
+	t.Parallel()
+
+	expected := []string{
+		"app.log_level",
+		"tenancy.default_tenant_id",
+		"tenancy.default_tenant_slug",
+		"auth.enabled",
+		"auth.host",
+		"auth.token_secret",
+		"outbox.retry_window_sec",
+		"outbox.dispatch_interval_sec",
+	}
+
+	assert.ElementsMatch(t, expected, reclassifiedBootstrapOnlyKeys,
+		"reclassifiedBootstrapOnlyKeys must mirror the v5 migration docs")
 }

@@ -82,7 +82,94 @@ func InitSystemplane(
 		return nil, fmt.Errorf("init systemplane: start: %w", err)
 	}
 
+	warnOnReclassifiedOrphanKeys(ctx, db, logger)
+
 	return client, nil
+}
+
+// reclassifiedBootstrapOnlyKeys lists matcher systemplane keys that moved
+// from runtime-mutable to bootstrap-only in the v5 migration. Migration
+// 000030 drops these from systemplane_entries on upgrade; this list is
+// used at startup to WARN about any late-arriving rows that slipped past
+// the migration (e.g. manual SQL, restored backup, competing service).
+//
+// Keep in sync with matcherKeyDefs — any NEW bootstrap-only reclassification
+// should be appended here so ops keep a single source of drift detection.
+var reclassifiedBootstrapOnlyKeys = []string{
+	"app.log_level",
+	"tenancy.default_tenant_id",
+	"tenancy.default_tenant_slug",
+	"auth.enabled",
+	"auth.host",
+	"auth.token_secret",
+	"outbox.retry_window_sec",
+	"outbox.dispatch_interval_sec",
+}
+
+// warnOnReclassifiedOrphanKeys emits a WARN log for each reclassified
+// bootstrap-only key that still has a persisted value in systemplane_entries.
+// The log is best-effort — transient query failures are ignored so a
+// degraded systemplane never blocks startup. Operators see a single line
+// per orphan with enough context to either drop the row manually or
+// re-run migration 000030.
+func warnOnReclassifiedOrphanKeys(ctx context.Context, db *sql.DB, logger libLog.Logger) {
+	if db == nil || logger == nil {
+		return
+	}
+
+	// Table is created lazily by systemplane.NewPostgres -> ensureSchema at
+	// Start time. By the time this runs it should exist, but guard anyway
+	// to avoid a hard failure in degraded setups.
+	var exists bool
+
+	err := db.QueryRowContext(ctx,
+		`SELECT EXISTS (
+		    SELECT 1
+		    FROM   information_schema.tables
+		    WHERE  table_schema = 'public'
+		      AND  table_name   = 'systemplane_entries'
+		)`,
+	).Scan(&exists)
+	if err != nil || !exists {
+		return
+	}
+
+	// Keys are compile-time constants, so it is safe — and avoids the
+	// driver.Value friction of []string arrays — to materialise them into
+	// positional placeholders rather than a single ANY($1) array argument.
+	placeholders := make([]string, 0, len(reclassifiedBootstrapOnlyKeys))
+	args := make([]any, 0, len(reclassifiedBootstrapOnlyKeys))
+
+	for i, key := range reclassifiedBootstrapOnlyKeys {
+		placeholders = append(placeholders, fmt.Sprintf("$%d", i+1))
+		args = append(args, key)
+	}
+
+	query := `SELECT key FROM public.systemplane_entries
+		 WHERE namespace = 'matcher'
+		   AND key IN (` + strings.Join(placeholders, ", ") + `)`
+
+	rows, err := db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var key string
+		if err := rows.Scan(&key); err != nil {
+			return
+		}
+
+		logger.Log(ctx, libLog.LevelWarn,
+			"systemplane: orphan value for reclassified bootstrap-only key; runtime ignores it",
+			libLog.String("namespace", systemplaneNamespace),
+			libLog.String("key", key),
+			libLog.String("action", "drop via SQL or re-run migration 000030"),
+		)
+	}
+
+	_ = rows.Err()
 }
 
 // buildSystemplaneDSN constructs a Postgres DSN from the application config
