@@ -24,6 +24,12 @@ const (
 	matchGroupStatusConfirmed = "CONFIRMED"
 	exceptionStatusResolved   = "RESOLVED"
 	exceptionSeverityCritical = "CRITICAL"
+
+	// matchRatePercentageScale converts a ratio (0.0-1.0) into a percentage
+	// (0-100). SummaryMetrics.MatchRate, DailyTrendPoint.MatchRate, and
+	// SourceBreakdown.MatchRate are all expressed on the percentage scale
+	// to align with MatchRateStats and the console display.
+	matchRatePercentageScale = 100.0
 )
 
 // Repository persists dashboard data in Postgres.
@@ -335,17 +341,18 @@ func (repo *Repository) GetSummaryMetrics(
 				return nil, fmt.Errorf("scanning summary metrics: %w", err)
 			}
 
-			// Match rate as decimal (0.0-1.0) for frontend compatibility
-			// Match rate = matched transactions / total transactions
+			// Match rate as percentage (0-100) to match MatchRateStats and
+			// the console display convention (page renders `toFixed(1)%`).
+			// Computed as (matched / total) * 100.
 			var matchRate float64
 
 			if totalTxn > 0 {
-				rawRate := float64(matchedCount) / float64(totalTxn)
+				rawRate := float64(matchedCount) / float64(totalTxn) * matchRatePercentageScale
 				matchRate = rawRate
 
-				if matchRate > 1.0 {
+				if matchRate > matchRatePercentageScale {
 					logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf(
-						"match rate over 1.0 detected: matched=%d, total=%d, rate=%.6f; clamping to 1.0",
+						"match rate over 100%% detected: matched=%d, total=%d, rate=%.4f; clamping to 100",
 						matchedCount,
 						totalTxn,
 						rawRate,
@@ -358,7 +365,7 @@ func (repo *Repository) GetSummaryMetrics(
 						attribute.Float64("raw_rate", rawRate),
 					))
 
-					matchRate = 1.0
+					matchRate = matchRatePercentageScale
 				}
 			}
 
