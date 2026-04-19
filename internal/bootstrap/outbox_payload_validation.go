@@ -48,34 +48,41 @@ func validateIngestionFailedPayload(payload sharedDomain.IngestionFailedEvent) e
 	)
 }
 
-func validateMatchConfirmedPayload(payload sharedDomain.MatchConfirmedEvent) error {
-	var missingTxIDs error
-	if len(payload.TransactionIDs) == 0 {
-		missingTxIDs = fmt.Errorf("match confirmed: %w", errMissingTransactionIDs)
+// requireAllNonZeroUUIDs returns a wrapped sentinel error when ids is empty or
+// contains any uuid.Nil entry. Prevents malformed slices from masquerading as
+// valid payloads and short-circuiting permanent-error classification.
+func requireAllNonZeroUUIDs(ids []uuid.UUID, sentinel error, ctxName string) error {
+	if len(ids) == 0 {
+		return fmt.Errorf("%s: %w", ctxName, sentinel)
 	}
 
+	for _, id := range ids {
+		if id == uuid.Nil {
+			return fmt.Errorf("%s: %w", ctxName, sentinel)
+		}
+	}
+
+	return nil
+}
+
+func validateMatchConfirmedPayload(payload sharedDomain.MatchConfirmedEvent) error {
 	return errors.Join(
 		requireNonZeroUUID(payload.TenantID, errMissingTenantID, "match confirmed"),
 		requireNonZeroUUID(payload.ContextID, errMissingContextID, "match confirmed"),
 		requireNonZeroUUID(payload.RunID, errMissingMatchRunID, "match confirmed"),
 		requireNonZeroUUID(payload.MatchID, errMissingMatchID, "match confirmed"),
 		requireNonZeroUUID(payload.RuleID, errMissingMatchRuleID, "match confirmed"),
-		missingTxIDs,
+		requireAllNonZeroUUIDs(payload.TransactionIDs, errMissingTransactionIDs, "match confirmed"),
 	)
 }
 
 func validateMatchUnmatchedPayload(payload sharedDomain.MatchUnmatchedEvent) error {
-	var missingTxIDs error
-	if len(payload.TransactionIDs) == 0 {
-		missingTxIDs = fmt.Errorf("match unmatched: %w", errMissingTransactionIDs)
-	}
-
 	return errors.Join(
 		requireNonZeroUUID(payload.TenantID, errMissingTenantID, "match unmatched"),
 		requireNonZeroUUID(payload.ContextID, errMissingContextID, "match unmatched"),
 		requireNonZeroUUID(payload.RunID, errMissingMatchRunID, "match unmatched"),
 		requireNonZeroUUID(payload.MatchID, errMissingMatchID, "match unmatched"),
-		missingTxIDs,
+		requireAllNonZeroUUIDs(payload.TransactionIDs, errMissingTransactionIDs, "match unmatched"),
 		requireNonEmptyString(payload.Reason, errMissingReason, "match unmatched"),
 	)
 }

@@ -17,34 +17,6 @@ import (
 // so operators have a ready-made recommendation.
 const recommendedMemLimitHeadroomPct = 85
 
-// shouldWarnOnGOMEMLIMIT decides whether the current process is a candidate
-// for a startup warning about an unset GOMEMLIMIT. Returns true when:
-//   - GOMEMLIMIT is not set (or is whitespace-only), AND
-//   - the memory-limit reader successfully discovered a non-zero cgroup
-//     ceiling (i.e., we are running in a cgroup-capped container).
-//
-// Returns false on bare-metal / macOS / runtimes with no cgroup files, and
-// when GOMEMLIMIT is already set explicitly.
-//
-// Pure function — no side effects — so it can be unit-tested without
-// touching /sys/fs/cgroup or the process environment.
-func shouldWarnOnGOMEMLIMIT(gomemlimit string, reader memoryLimitReader) bool {
-	if strings.TrimSpace(gomemlimit) != "" {
-		return false
-	}
-
-	if reader == nil {
-		return false
-	}
-
-	limit, _, err := reader()
-	if err != nil {
-		return false
-	}
-
-	return limit > 0
-}
-
 // warnOnMissingGOMEMLIMIT emits a single WARN log line when the process is
 // running in a cgroup-capped container without GOMEMLIMIT configured. The
 // Go runtime's default soft memory limit is math.MaxInt64, which means the
@@ -64,11 +36,14 @@ func warnOnMissingGOMEMLIMIT(
 		return
 	}
 
-	if !shouldWarnOnGOMEMLIMIT(gomemlimit, reader) {
+	if strings.TrimSpace(gomemlimit) != "" || reader == nil {
 		return
 	}
 
-	limit, source, _ := reader()
+	limit, source, err := reader()
+	if err != nil || limit <= 0 {
+		return
+	}
 
 	logger.Log(ctx, libLog.LevelWarn, fmt.Sprintf(
 		"GOMEMLIMIT is not set but the process is running in a cgroup-capped "+

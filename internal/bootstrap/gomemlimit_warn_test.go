@@ -12,74 +12,6 @@ import (
 	"github.com/LerianStudio/matcher/internal/shared/testutil"
 )
 
-func TestShouldWarnOnGOMEMLIMIT(t *testing.T) {
-	t.Parallel()
-
-	containerReader := func() (int64, string, error) {
-		return 500 << 20, "cgroup v2", nil
-	}
-	bareMetalReader := func() (int64, string, error) {
-		return 0, "", errors.New("no cgroup file")
-	}
-	noLimitReader := func() (int64, string, error) {
-		return 0, "cgroup v2", nil
-	}
-
-	tests := []struct {
-		name       string
-		gomemlimit string
-		reader     memoryLimitReader
-		want       bool
-	}{
-		{
-			name:       "containerized AND GOMEMLIMIT unset → warn",
-			gomemlimit: "",
-			reader:     containerReader,
-			want:       true,
-		},
-		{
-			name:       "whitespace GOMEMLIMIT treated as unset",
-			gomemlimit: "   ",
-			reader:     containerReader,
-			want:       true,
-		},
-		{
-			name:       "GOMEMLIMIT set → do not warn",
-			gomemlimit: "450MiB",
-			reader:     containerReader,
-			want:       false,
-		},
-		{
-			name:       "bare metal (reader error) → do not warn",
-			gomemlimit: "",
-			reader:     bareMetalReader,
-			want:       false,
-		},
-		{
-			name:       "cgroup reports no limit (max) → do not warn",
-			gomemlimit: "",
-			reader:     noLimitReader,
-			want:       false,
-		},
-		{
-			name:       "nil reader → do not warn",
-			gomemlimit: "",
-			reader:     nil,
-			want:       false,
-		},
-	}
-
-	for _, tc := range tests {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			got := shouldWarnOnGOMEMLIMIT(tc.gomemlimit, tc.reader)
-			assert.Equal(t, tc.want, got)
-		})
-	}
-}
-
 func TestWarnOnMissingGOMEMLIMIT_EmitsWhenContainerizedAndUnset(t *testing.T) {
 	t.Parallel()
 
@@ -122,4 +54,36 @@ func TestWarnOnMissingGOMEMLIMIT_NilLogger(t *testing.T) {
 
 	// Must not panic.
 	warnOnMissingGOMEMLIMIT(context.Background(), nil, reader, "")
+}
+
+func TestWarnOnMissingGOMEMLIMIT_WarnsOnWhitespaceGOMEMLIMIT(t *testing.T) {
+	t.Parallel()
+
+	logger := &testutil.TestLogger{}
+	reader := func() (int64, string, error) { return 500 << 20, "cgroup v2", nil }
+
+	warnOnMissingGOMEMLIMIT(context.Background(), logger, reader, "   ")
+
+	assert.Len(t, logger.Messages, 1, "whitespace-only GOMEMLIMIT is treated as unset and must still warn")
+}
+
+func TestWarnOnMissingGOMEMLIMIT_SilentWhenCgroupReportsNoLimit(t *testing.T) {
+	t.Parallel()
+
+	logger := &testutil.TestLogger{}
+	reader := func() (int64, string, error) { return 0, "cgroup v2", nil }
+
+	warnOnMissingGOMEMLIMIT(context.Background(), logger, reader, "")
+
+	assert.Empty(t, logger.Messages, "must not warn when cgroup reports zero limit")
+}
+
+func TestWarnOnMissingGOMEMLIMIT_SilentOnNilReader(t *testing.T) {
+	t.Parallel()
+
+	logger := &testutil.TestLogger{}
+
+	warnOnMissingGOMEMLIMIT(context.Background(), logger, nil, "")
+
+	assert.Empty(t, logger.Messages, "must not warn when no reader available")
 }

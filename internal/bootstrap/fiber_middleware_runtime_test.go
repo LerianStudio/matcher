@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -165,19 +166,37 @@ func TestRuntimeBodyLimitMiddleware_RejectsTooLargeBody(t *testing.T) {
 // TestRuntimeBodyLimitMiddleware_RejectsOnContentLengthWithoutReadingBody
 // exercises the Content-Length fast path: the handler must reject before
 // the body is materialised.
+//
+// Proof strategy: the downstream route handler carries a tripwire flag. If
+// the middleware rejected via the CL fast path it returned
+// fiber.ErrRequestEntityTooLarge WITHOUT calling fiberCtx.Next(), so the
+// route handler was never invoked and the tripwire stays false. The flag
+// therefore documents that the middleware did not fall through to the
+// len(fiberCtx.Body()) branch or any downstream consumer that would
+// materialise the body.
+//
+// Note: Fiber's app.Test dumps the full request via httputil.DumpRequest
+// before it reaches our middleware, so a spy reader on req.Body would
+// observe reads that are not attributable to the middleware. Asserting on
+// "Next was never called" is a cleaner, library-independent invariant proof.
 func TestRuntimeBodyLimitMiddleware_RejectsOnContentLengthWithoutReadingBody(t *testing.T) {
 	t.Parallel()
 
 	cfg := &Config{Server: ServerConfig{BodyLimitBytes: 10}}
 
+	var downstreamInvoked atomic.Bool
+
 	app := fiber.New()
 	app.Use(runtimeBodyLimitMiddleware(cfg, nil))
 	app.Post("/data", func(c *fiber.Ctx) error {
+		downstreamInvoked.Store(true)
 		return c.SendString("ok")
 	})
 
-	// Declare a Content-Length that exceeds the limit. Body bytes must remain
-	// untouched for the middleware to reject early.
+	// Declare a Content-Length that exceeds the limit. The body bytes must
+	// match the header so httputil.DumpRequest can serialise the request
+	// without truncation; the assertion below keys on Next-not-called, not
+	// on read counts.
 	req := httptest.NewRequest(http.MethodPost, "/data", strings.NewReader(strings.Repeat("y", 100)))
 	req.Header.Set("Content-Type", "text/plain")
 	req.ContentLength = 100
@@ -188,6 +207,8 @@ func TestRuntimeBodyLimitMiddleware_RejectsOnContentLengthWithoutReadingBody(t *
 	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusRequestEntityTooLarge, resp.StatusCode)
+	assert.False(t, downstreamInvoked.Load(),
+		"middleware must short-circuit on Content-Length; downstream handler (which would read the body) was invoked")
 }
 
 // TestRuntimeBodyLimitMiddleware_AllowsWhenContentLengthFits ensures the

@@ -1166,7 +1166,12 @@ func attachBundleHealthChecks(
 ) {
 	deps.PostgresCheck = newPostgresHealthCheck(postgres)
 	deps.RedisCheck = newRedisHealthCheck(redis)
-	deps.PostgresReplicaCheck = newPostgresReplicaHealthCheck(postgres)
+	// Preserve a DSN-based replica probe installed by assignReplicaHealthCheck.
+	// Overwriting would neutralise its dedicated connection + cleanup pair.
+	if deps.PostgresReplicaCheck == nil {
+		deps.PostgresReplicaCheck = newPostgresReplicaHealthCheck(postgres)
+	}
+
 	deps.RabbitMQCheck = newRabbitMQHealthCheck(rabbitmq)
 }
 

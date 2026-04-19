@@ -429,16 +429,22 @@ func matcherKeyDefs(cfg *Config) []matcherKeyDef {
 	)
 
 	// --- Server ---
+	// The following server keys are intentionally NOT registered because they
+	// are consumed once at startup and have no live-reload path:
+	//   - server.address          (fiber listener bind address)
+	//   - server.tls_cert_file    (ListenTLS argument, read once at boot)
+	//   - server.tls_key_file     (ListenTLS argument, read once at boot)
+	//   - server.tls_terminated_upstream (HSTS flag computed once in NewFiberApp)
+	//   - server.trusted_proxies  (fiber ProxyHeader configured once in NewFiberApp)
+	// Registering them on the systemplane would mislead operators: admin PUTs via
+	// PUT /system/matcher/... would appear to accept changes, but the running
+	// process would continue using the boot-time value. Change these via env
+	// vars and restart the process — same precedent as app.log_level above.
 	defs = append(defs,
-		matcherKeyDef{key: "server.address", defaultValue: cfg.Server.Address, description: "HTTP server listen address (e.g., :4018)"},
 		matcherKeyDef{key: "server.body_limit_bytes", defaultValue: cfg.Server.BodyLimitBytes, description: "Maximum HTTP request body size in bytes (must be positive and not exceed 128 MiB ceiling)", validator: validateBodyLimitBytes},
 		matcherKeyDef{key: "cors.allowed_origins", defaultValue: cfg.Server.CORSAllowedOrigins, description: "Comma-separated list of allowed CORS origins", validator: corsProductionValidator(cfg.App.EnvName)},
 		matcherKeyDef{key: "cors.allowed_methods", defaultValue: cfg.Server.CORSAllowedMethods, description: "Comma-separated list of allowed CORS methods"},
 		matcherKeyDef{key: "cors.allowed_headers", defaultValue: cfg.Server.CORSAllowedHeaders, description: "Comma-separated list of allowed CORS headers"},
-		matcherKeyDef{key: "server.tls_cert_file", defaultValue: cfg.Server.TLSCertFile, description: "Path to TLS certificate file"},
-		matcherKeyDef{key: "server.tls_key_file", defaultValue: cfg.Server.TLSKeyFile, description: "Path to TLS private key file"},
-		matcherKeyDef{key: "server.tls_terminated_upstream", defaultValue: cfg.Server.TLSTerminatedUpstream, description: "Whether TLS is terminated by an upstream proxy"},
-		matcherKeyDef{key: "server.trusted_proxies", defaultValue: cfg.Server.TrustedProxies, description: "Comma-separated list of trusted proxy CIDRs"},
 	)
 
 	// --- Tenancy ---
@@ -501,13 +507,16 @@ func matcherKeyDefs(cfg *Config) []matcherKeyDef {
 	// these values remain bootstrap-only to avoid misleading operators.
 
 	// --- Telemetry ---
+	// telemetry.collector_endpoint intentionally NOT registered: the OTel
+	// exporter is wired once during bootstrap (observability.go). Changing the
+	// collector endpoint at runtime would not re-create the exporter, so an
+	// admin PUT would be silently ineffective. Change via env var and restart.
 	defs = append(defs,
 		matcherKeyDef{key: "telemetry.enabled", defaultValue: cfg.Telemetry.Enabled, description: "Enable OpenTelemetry"},
 		matcherKeyDef{key: "telemetry.service_name", defaultValue: cfg.Telemetry.ServiceName, description: "OTel service name"},
 		matcherKeyDef{key: "telemetry.library_name", defaultValue: cfg.Telemetry.LibraryName, description: "OTel library name"},
 		matcherKeyDef{key: "telemetry.service_version", defaultValue: cfg.Telemetry.ServiceVersion, description: "OTel service version"},
 		matcherKeyDef{key: "telemetry.deployment_env", defaultValue: cfg.Telemetry.DeploymentEnv, description: "OTel deployment environment"},
-		matcherKeyDef{key: "telemetry.collector_endpoint", defaultValue: cfg.Telemetry.CollectorEndpoint, description: "OTel collector endpoint"},
 		matcherKeyDef{key: "telemetry.db_metrics_interval_sec", defaultValue: cfg.Telemetry.DBMetricsIntervalSec, description: "Database metrics collection interval in seconds"},
 	)
 

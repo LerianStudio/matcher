@@ -118,6 +118,8 @@ func TestRuntimeSettings_RateLimit_NilClient(t *testing.T) {
 func TestRuntimeSettings_RateLimit_UnregisteredKeys(t *testing.T) {
 	resolver := newResolverWithUnregisteredKeys(t)
 
+	// Seed admin-tier fields with non-zero values so a regression that only
+	// breaks the admin fallback path cannot silently pass against zero values.
 	fallback := RateLimitConfig{
 		Enabled:           true,
 		Max:               100,
@@ -126,6 +128,8 @@ func TestRuntimeSettings_RateLimit_UnregisteredKeys(t *testing.T) {
 		ExportExpirySec:   60,
 		DispatchMax:       50,
 		DispatchExpirySec: 60,
+		AdminMax:          30,
+		AdminExpirySec:    60,
 	}
 
 	got := resolver.rateLimit(fallback)

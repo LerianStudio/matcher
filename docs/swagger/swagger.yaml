@@ -4804,7 +4804,7 @@ paths:
   /v1/contexts/{contextId}/export-jobs:
     get:
       description: |-
-        Lists export jobs for a specific reconciliation context using forward-only cursor-based pagination.
+        Lists export jobs for a specific reconciliation context using cursor-based pagination.
         Use the nextCursor value from the response to fetch subsequent pages.
       operationId: listExportJobsByContext
       parameters:
@@ -6790,7 +6790,7 @@ paths:
   /v1/export-jobs:
     get:
       description: |-
-        Lists export jobs for the authenticated tenant using forward-only cursor-based pagination.
+        Lists export jobs for the authenticated tenant using cursor-based pagination.
         Use the nextCursor value from the response to fetch subsequent pages.
       operationId: listExportJobs
       parameters:

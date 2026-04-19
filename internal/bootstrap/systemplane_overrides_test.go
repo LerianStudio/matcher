@@ -290,7 +290,10 @@ func TestApplySystemplaneOverrides_Tenancy(t *testing.T) {
 	assert.Equal(t, 45, got.Tenancy.MultiTenantConnectionsCheckIntervalSec)
 }
 
-// TestApplySystemplaneOverrides_ServerAndCORS exercises server/cors/tls keys.
+// TestApplySystemplaneOverrides_ServerAndCORS exercises the live-reloadable
+// server + CORS keys. Bootstrap-only fields (Server.Address, Server.TLS*,
+// Server.TrustedProxies) are covered separately by
+// TestApplySystemplaneOverrides_BootstrapOnlyServerFieldsRemainStatic.
 func TestApplySystemplaneOverrides_ServerAndCORS(t *testing.T) {
 	t.Parallel()
 
@@ -298,28 +301,18 @@ func TestApplySystemplaneOverrides_ServerAndCORS(t *testing.T) {
 	client := newStartedTestClient(t, base)
 
 	setMatcherKey(t, client, "app.env_name", "override-env")
-	setMatcherKey(t, client, "server.address", ":8080")
 	setMatcherKey(t, client, "server.body_limit_bytes", 16*1024*1024)
 	setMatcherKey(t, client, "cors.allowed_origins", "https://app.example.com")
 	setMatcherKey(t, client, "cors.allowed_methods", "GET,POST,DELETE")
 	setMatcherKey(t, client, "cors.allowed_headers", "X-Custom,Content-Type")
-	setMatcherKey(t, client, "server.tls_cert_file", "/override/cert.pem")
-	setMatcherKey(t, client, "server.tls_key_file", "/override/key.pem")
-	setMatcherKey(t, client, "server.tls_terminated_upstream", true)
-	setMatcherKey(t, client, "server.trusted_proxies", "10.0.0.0/8")
 
 	got := applySystemplaneOverrides(*base, client)
 
 	assert.Equal(t, "override-env", got.App.EnvName)
-	assert.Equal(t, ":8080", got.Server.Address)
 	assert.Equal(t, 16*1024*1024, got.Server.BodyLimitBytes)
 	assert.Equal(t, "https://app.example.com", got.Server.CORSAllowedOrigins)
 	assert.Equal(t, "GET,POST,DELETE", got.Server.CORSAllowedMethods)
 	assert.Equal(t, "X-Custom,Content-Type", got.Server.CORSAllowedHeaders)
-	assert.Equal(t, "/override/cert.pem", got.Server.TLSCertFile)
-	assert.Equal(t, "/override/key.pem", got.Server.TLSKeyFile)
-	assert.True(t, got.Server.TLSTerminatedUpstream)
-	assert.Equal(t, "10.0.0.0/8", got.Server.TrustedProxies)
 }
 
 // TestApplySystemplaneOverrides_PoolKnobs covers the tunable postgres/redis
@@ -362,13 +355,13 @@ func TestApplySystemplaneOverrides_MiscAreas(t *testing.T) {
 	base := defaultConfig()
 	client := newStartedTestClient(t, base)
 
-	// Telemetry.
+	// Telemetry. telemetry.collector_endpoint is bootstrap-only and covered by
+	// TestApplySystemplaneOverrides_BootstrapOnlyServerFieldsRemainStatic.
 	setMatcherKey(t, client, "telemetry.enabled", true)
 	setMatcherKey(t, client, "telemetry.service_name", "matcher-override")
 	setMatcherKey(t, client, "telemetry.library_name", "github.com/example/override")
 	setMatcherKey(t, client, "telemetry.service_version", "9.9.9")
 	setMatcherKey(t, client, "telemetry.deployment_env", "qa")
-	setMatcherKey(t, client, "telemetry.collector_endpoint", "otel-collector:4317")
 	setMatcherKey(t, client, "telemetry.db_metrics_interval_sec", 30)
 
 	// Swagger.
@@ -401,7 +394,6 @@ func TestApplySystemplaneOverrides_MiscAreas(t *testing.T) {
 	assert.Equal(t, "github.com/example/override", got.Telemetry.LibraryName)
 	assert.Equal(t, "9.9.9", got.Telemetry.ServiceVersion)
 	assert.Equal(t, "qa", got.Telemetry.DeploymentEnv)
-	assert.Equal(t, "otel-collector:4317", got.Telemetry.CollectorEndpoint)
 	assert.Equal(t, 30, got.Telemetry.DBMetricsIntervalSec)
 
 	assert.True(t, got.Swagger.Enabled)
@@ -431,6 +423,12 @@ func TestApplySystemplaneOverrides_BootstrapOnlyKeysRemainStatic(t *testing.T) {
 	base.Auth.TokenSecret = "initial-secret"
 	base.Outbox.RetryWindowSec = 300
 	base.Outbox.DispatchIntervalSec = 2
+	base.Server.Address = ":4018"
+	base.Server.TLSCertFile = "/boot/cert.pem"
+	base.Server.TLSKeyFile = "/boot/key.pem"
+	base.Server.TLSTerminatedUpstream = true
+	base.Server.TrustedProxies = "10.0.0.0/8"
+	base.Telemetry.CollectorEndpoint = "boot-collector:4317"
 
 	client := newStartedTestClient(t, base)
 	got := applySystemplaneOverrides(*base, client)
@@ -442,6 +440,12 @@ func TestApplySystemplaneOverrides_BootstrapOnlyKeysRemainStatic(t *testing.T) {
 	assert.Equal(t, base.Auth.TokenSecret, got.Auth.TokenSecret)
 	assert.Equal(t, base.Outbox.RetryWindowSec, got.Outbox.RetryWindowSec)
 	assert.Equal(t, base.Outbox.DispatchIntervalSec, got.Outbox.DispatchIntervalSec)
+	assert.Equal(t, base.Server.Address, got.Server.Address)
+	assert.Equal(t, base.Server.TLSCertFile, got.Server.TLSCertFile)
+	assert.Equal(t, base.Server.TLSKeyFile, got.Server.TLSKeyFile)
+	assert.Equal(t, base.Server.TLSTerminatedUpstream, got.Server.TLSTerminatedUpstream)
+	assert.Equal(t, base.Server.TrustedProxies, got.Server.TrustedProxies)
+	assert.Equal(t, base.Telemetry.CollectorEndpoint, got.Telemetry.CollectorEndpoint)
 }
 
 // TestWatchedSystemplaneKeys_CoversMatcherDefs ensures every key in

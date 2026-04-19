@@ -102,7 +102,7 @@ The API is available at `http://localhost:4018`. Swagger UI is accessible at `ht
 
 No configuration files needed — all defaults are baked into the binary and match the docker-compose setup.
 
-For production, override via environment variables. See [`config/.config-map.example`](config/.config-map.example) for bootstrap-only keys (require restart). All other settings are hot-reloadable via the systemplane admin API at `/system/matcher/:key` (read via `GET`, write via `PUT`) and `/system/matcher` (list with inline schema metadata). The admin API is a management-plane surface and is intentionally excluded from the public OpenAPI specification.
+For production, override via environment variables. See [`config/.config-map.example`](config/.config-map.example) for bootstrap-only keys (require restart). Runtime hot-reload is limited to systemplane-managed settings (for example: body limit, rate limits, worker intervals, feature flags, timeouts, export settings, and archival intervals) via `/system/matcher/:key` (`GET`/`PUT`) and `/system/matcher` (list with inline schema metadata). The admin API is a management-plane surface and is intentionally excluded from the public OpenAPI specification.
 
 ### Deployment Notes
 

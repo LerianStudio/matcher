@@ -13,7 +13,7 @@ import (
 	"github.com/LerianStudio/matcher/internal/shared/constants"
 )
 
-// LoggerBundle holds a rebuilt logger and its configured level.
+// LoggerBundle wraps a rebuilt Logger produced by buildLoggerBundle.
 type LoggerBundle struct {
 	Logger libLog.Logger
 }

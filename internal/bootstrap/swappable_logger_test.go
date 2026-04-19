@@ -34,7 +34,7 @@ func (l *spyLogger) WithGroup(name string) libLog.Logger {
 func (l *spyLogger) Enabled(_ libLog.Level) bool  { return true }
 func (l *spyLogger) Sync(_ context.Context) error { return nil }
 
-func TestSwappableLogger_DelegatesLogCalls(t *testing.T) {
+func TestSwappableLogger_DelegatesLogCalls_Success(t *testing.T) {
 	t.Parallel()
 
 	underlying := &spyLogger{}
@@ -46,7 +46,7 @@ func TestSwappableLogger_DelegatesLogCalls(t *testing.T) {
 	assert.Equal(t, "hello", underlying.msgs[0])
 }
 
-func TestSwappableLogger_WithAndGroupPropagateToDelegate(t *testing.T) {
+func TestSwappableLogger_WithAndGroupPropagateToDelegate_Success(t *testing.T) {
 	t.Parallel()
 
 	underlying := &spyLogger{}

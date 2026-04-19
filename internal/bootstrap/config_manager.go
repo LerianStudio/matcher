@@ -169,15 +169,12 @@ func buildWatchedSystemplaneKeys() []string {
 		"app.env_name",
 
 		// Server
-		"server.address",
+		// server.address, server.tls_*, and server.trusted_proxies are
+		// intentionally absent — they are bootstrap-only (see matcherKeyDefs).
 		"server.body_limit_bytes",
 		"cors.allowed_origins",
 		"cors.allowed_methods",
 		"cors.allowed_headers",
-		"server.tls_cert_file",
-		"server.tls_key_file",
-		"server.tls_terminated_upstream",
-		"server.trusted_proxies",
 
 		// Tenancy
 		"tenancy.multi_tenant_enabled",
@@ -210,12 +207,13 @@ func buildWatchedSystemplaneKeys() []string {
 		"redis.write_timeout_ms",
 
 		// Telemetry
+		// telemetry.collector_endpoint is intentionally absent — it is
+		// bootstrap-only (see matcherKeyDefs).
 		"telemetry.enabled",
 		"telemetry.service_name",
 		"telemetry.library_name",
 		"telemetry.service_version",
 		"telemetry.deployment_env",
-		"telemetry.collector_endpoint",
 		"telemetry.db_metrics_interval_sec",
 
 		// Swagger
@@ -337,16 +335,13 @@ func applySystemplaneOverrides(base Config, client *systemplane.Client) Config {
 	// --- App ---
 	base.App.EnvName = SystemplaneGetString(client, "app.env_name", base.App.EnvName)
 
-	// --- Server / CORS / TLS ---
-	base.Server.Address = SystemplaneGetString(client, "server.address", base.Server.Address)
+	// --- Server / CORS ---
+	// Server.Address, Server.TLS*, and Server.TrustedProxies are bootstrap-only
+	// (see matcherKeyDefs) — intentionally not refreshed from systemplane.
 	base.Server.BodyLimitBytes = SystemplaneGetInt(client, "server.body_limit_bytes", base.Server.BodyLimitBytes)
 	base.Server.CORSAllowedOrigins = SystemplaneGetString(client, "cors.allowed_origins", base.Server.CORSAllowedOrigins)
 	base.Server.CORSAllowedMethods = SystemplaneGetString(client, "cors.allowed_methods", base.Server.CORSAllowedMethods)
 	base.Server.CORSAllowedHeaders = SystemplaneGetString(client, "cors.allowed_headers", base.Server.CORSAllowedHeaders)
-	base.Server.TLSCertFile = SystemplaneGetString(client, "server.tls_cert_file", base.Server.TLSCertFile)
-	base.Server.TLSKeyFile = SystemplaneGetString(client, "server.tls_key_file", base.Server.TLSKeyFile)
-	base.Server.TLSTerminatedUpstream = SystemplaneGetBool(client, "server.tls_terminated_upstream", base.Server.TLSTerminatedUpstream)
-	base.Server.TrustedProxies = SystemplaneGetString(client, "server.trusted_proxies", base.Server.TrustedProxies)
 
 	// --- Tenancy ---
 	base.Tenancy.MultiTenantEnabled = SystemplaneGetBool(client, "tenancy.multi_tenant_enabled", base.Tenancy.MultiTenantEnabled)
@@ -379,12 +374,13 @@ func applySystemplaneOverrides(base Config, client *systemplane.Client) Config {
 	base.Redis.WriteTimeoutMs = SystemplaneGetInt(client, "redis.write_timeout_ms", base.Redis.WriteTimeoutMs)
 
 	// --- Telemetry ---
+	// Telemetry.CollectorEndpoint is bootstrap-only (see matcherKeyDefs) —
+	// intentionally not refreshed from systemplane.
 	base.Telemetry.Enabled = SystemplaneGetBool(client, "telemetry.enabled", base.Telemetry.Enabled)
 	base.Telemetry.ServiceName = SystemplaneGetString(client, "telemetry.service_name", base.Telemetry.ServiceName)
 	base.Telemetry.LibraryName = SystemplaneGetString(client, "telemetry.library_name", base.Telemetry.LibraryName)
 	base.Telemetry.ServiceVersion = SystemplaneGetString(client, "telemetry.service_version", base.Telemetry.ServiceVersion)
 	base.Telemetry.DeploymentEnv = SystemplaneGetString(client, "telemetry.deployment_env", base.Telemetry.DeploymentEnv)
-	base.Telemetry.CollectorEndpoint = SystemplaneGetString(client, "telemetry.collector_endpoint", base.Telemetry.CollectorEndpoint)
 	base.Telemetry.DBMetricsIntervalSec = SystemplaneGetInt(client, "telemetry.db_metrics_interval_sec", base.Telemetry.DBMetricsIntervalSec)
 
 	// --- Swagger ---

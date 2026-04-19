@@ -11,15 +11,13 @@ package bootstrap
 // uses this list to scrub the full MATCHER_* override surface before unit tests.
 var matcherOverrideEnvVarKeys = []string{
 	"MATCHER_APP_ENV_NAME",
-	"MATCHER_SERVER_ADDRESS",
+	// Server listener/TLS/trusted-proxies are bootstrap-only (see
+	// matcherKeyDefs in systemplane_keys.go); their MATCHER_* override env
+	// vars are intentionally absent from this list.
 	"MATCHER_SERVER_BODY_LIMIT_BYTES",
 	"MATCHER_CORS_ALLOWED_ORIGINS",
 	"MATCHER_CORS_ALLOWED_METHODS",
 	"MATCHER_CORS_ALLOWED_HEADERS",
-	"MATCHER_SERVER_TLS_CERT_FILE",
-	"MATCHER_SERVER_TLS_KEY_FILE",
-	"MATCHER_SERVER_TLS_TERMINATED_UPSTREAM",
-	"MATCHER_SERVER_TRUSTED_PROXIES",
 	"MATCHER_TENANCY_MULTI_TENANT_ENABLED",
 	"MATCHER_TENANCY_MULTI_TENANT_URL",
 	"MATCHER_TENANCY_MULTI_TENANT_ENVIRONMENT",
@@ -52,7 +50,8 @@ var matcherOverrideEnvVarKeys = []string{
 	"MATCHER_TELEMETRY_LIBRARY_NAME",
 	"MATCHER_TELEMETRY_SERVICE_VERSION",
 	"MATCHER_TELEMETRY_DEPLOYMENT_ENV",
-	"MATCHER_TELEMETRY_COLLECTOR_ENDPOINT",
+	// MATCHER_TELEMETRY_COLLECTOR_ENDPOINT intentionally absent: the OTel
+	// collector endpoint is consumed once at startup (observability.go).
 	"MATCHER_TELEMETRY_DB_METRICS_INTERVAL_SEC",
 	"MATCHER_RATE_LIMIT_ENABLED",
 	"MATCHER_RATE_LIMIT_MAX",

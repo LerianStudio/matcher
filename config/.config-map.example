@@ -133,10 +133,15 @@ INFRA_CONNECT_TIMEOUT_SEC=30
 # + MutableAtRuntime=true). Operate them via the v5 admin API:
 #   PUT /system/matcher/fetcher.bridge_interval_sec                  (bounds [5, 3600])
 #   PUT /system/matcher/fetcher.bridge_batch_size                    (bounds [1, 10000])
+#   PUT /system/matcher/fetcher.bridge_tenant_concurrency            (positive int; default 4)
 #   PUT /system/matcher/fetcher.bridge_stale_threshold_sec           (bounds [60, 86400])
 #   PUT /system/matcher/fetcher.bridge_retry_max_attempts            (bounds [1, 100])
 #   PUT /system/matcher/fetcher.custody_retention_sweep_interval_sec (bounds [60, 86400])
 #   PUT /system/matcher/fetcher.custody_retention_grace_period_sec   (bounds [0, 604800])
+# The tenant-concurrency knob caps per-pollCycle tenant fan-out for the Fetcher
+# bridge worker; the corresponding env var FETCHER_BRIDGE_TENANT_CONCURRENCY
+# seeds bootstrap defaults only — runtime changes flow through the systemplane
+# key above via UpdateRuntimeConfig.
 # .config-map.example documents BOOTSTRAP-only env vars (those that require
 # a service restart). Keep hot-reloadable systemplane keys out of this file.
 

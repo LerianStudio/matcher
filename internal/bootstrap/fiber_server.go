@@ -121,11 +121,6 @@ func NewFiberApp(
 
 	app.Use(requestid.New())
 
-	// Short-circuit removed v4 admin API paths with 410 Gone before any
-	// later middleware does I/O on them. Mounted here rather than later
-	// so an operator still hitting /v1/system/configs after the v5
-	// cutover gets a stable, discoverable error instead of a 404 that
-	// could be confused with a routing regression.
 	app.Use(v4DeprecationShim(logger))
 
 	app.Use(runtimeBodyLimitMiddleware(cfg, configGetter))

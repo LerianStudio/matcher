@@ -2243,7 +2243,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Lists export jobs for a specific reconciliation context using forward-only cursor-based pagination.\nUse the nextCursor value from the response to fetch subsequent pages.",
+                "description": "Lists export jobs for a specific reconciliation context using cursor-based pagination.\nUse the nextCursor value from the response to fetch subsequent pages.",
                 "produces": [
                     "application/json"
                 ],
@@ -5214,7 +5214,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Lists export jobs for the authenticated tenant using forward-only cursor-based pagination.\nUse the nextCursor value from the response to fetch subsequent pages.",
+                "description": "Lists export jobs for the authenticated tenant using cursor-based pagination.\nUse the nextCursor value from the response to fetch subsequent pages.",
                 "produces": [
                     "application/json"
                 ],

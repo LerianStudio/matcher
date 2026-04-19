@@ -12,6 +12,9 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestDefaults_NoDriftBetweenSources ensures the 3 default-value sources stay aligned:
@@ -32,9 +35,7 @@ func TestDefaults_NoDriftBetweenSources(t *testing.T) {
 	t.Parallel()
 
 	cfg := defaultConfig()
-	if cfg == nil {
-		t.Fatal("defaultConfig() returned nil")
-	}
+	require.NotNil(t, cfg, "defaultConfig() returned nil")
 
 	keyDefs := matcherKeyDefs(cfg)
 	bySpKey := make(map[string]any, len(keyDefs))
@@ -45,7 +46,8 @@ func TestDefaults_NoDriftBetweenSources(t *testing.T) {
 
 	drifts := walkAndCompareDefaults(reflect.ValueOf(cfg).Elem(), reflect.TypeOf(*cfg), "", bySpKey)
 	for _, d := range drifts {
-		t.Errorf("drift key=%q: defaultConfig()=%v (%T), matcherKeyDefs()=%v (%T), envDefault=%q",
+		assert.Failf(t, "defaults drift detected",
+			"drift key=%q: defaultConfig()=%v (%T), matcherKeyDefs()=%v (%T), envDefault=%q",
 			d.Key, d.FromStruct, d.FromStruct, d.FromSpDef, d.FromSpDef, d.FromEnvTag)
 	}
 }
@@ -156,16 +158,15 @@ func TestDefaults_EnvDefaultTagsMatchConstants(t *testing.T) {
 	t.Parallel()
 
 	cfg := defaultConfig()
-	if cfg == nil {
-		t.Fatal("defaultConfig() returned nil")
-	}
+	require.NotNil(t, cfg, "defaultConfig() returned nil")
 
 	v := reflect.ValueOf(cfg).Elem()
 	tType := reflect.TypeOf(*cfg)
 
 	mismatches := walkEnvDefaults(v, tType, "")
 	for _, m := range mismatches {
-		t.Errorf("envDefault tag mismatch: field=%q envDefault=%q structValue=%v",
+		assert.Failf(t, "envDefault tag mismatch",
+			"field=%q envDefault=%q structValue=%v",
 			m.Field, m.EnvTag, m.StructValue)
 	}
 }

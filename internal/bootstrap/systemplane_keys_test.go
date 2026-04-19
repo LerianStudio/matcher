@@ -67,6 +67,15 @@ func TestMatcherKeyDefs_NoBootstrapOnlyKeys(t *testing.T) {
 		"auth.token_secret",
 		"outbox.retry_window_sec",
 		"outbox.dispatch_interval_sec",
+		// Server listener + TLS + trusted-proxies + OTel collector: all consumed
+		// once at startup (fiber_server.go, observability.go). Registering them
+		// would mislead operators — PUT would succeed but have no effect.
+		"server.address",
+		"server.tls_cert_file",
+		"server.tls_key_file",
+		"server.tls_terminated_upstream",
+		"server.trusted_proxies",
+		"telemetry.collector_endpoint",
 	}
 
 	for _, d := range matcherKeyDefs(defaultConfig()) {
@@ -316,30 +325,22 @@ func TestMatcherKeyDefs_DefaultsReflectCfgRateLimit(t *testing.T) {
 }
 
 // TestMatcherKeyDefs_DefaultsReflectCfgServer exercises string and bool fields
-// across the server/cors/tls categories.
+// across the server/cors categories. Bootstrap-only server fields
+// (address, tls_*, trusted_proxies) are not registered — see
+// TestMatcherKeyDefs_NoBootstrapOnlyKeys for the exclusion guard.
 func TestMatcherKeyDefs_DefaultsReflectCfgServer(t *testing.T) {
 	t.Parallel()
 
 	cfg := defaultConfig()
-	cfg.Server.Address = ":9999"
 	cfg.Server.BodyLimitBytes = 1024 * 1024
 	cfg.Server.CORSAllowedOrigins = "https://custom.example.com"
 	cfg.Server.CORSAllowedMethods = "GET,POST"
-	cfg.Server.TLSCertFile = "/etc/certs/server.crt"
-	cfg.Server.TLSKeyFile = "/etc/certs/server.key"
-	cfg.Server.TLSTerminatedUpstream = true
-	cfg.Server.TrustedProxies = "10.0.0.0/8,172.16.0.0/12"
 
 	defs := matcherKeyDefs(cfg)
 
-	assert.Equal(t, ":9999", findKeyDef(t, defs, "server.address").defaultValue)
 	assert.Equal(t, 1024*1024, findKeyDef(t, defs, "server.body_limit_bytes").defaultValue)
 	assert.Equal(t, "https://custom.example.com", findKeyDef(t, defs, "cors.allowed_origins").defaultValue)
 	assert.Equal(t, "GET,POST", findKeyDef(t, defs, "cors.allowed_methods").defaultValue)
-	assert.Equal(t, "/etc/certs/server.crt", findKeyDef(t, defs, "server.tls_cert_file").defaultValue)
-	assert.Equal(t, "/etc/certs/server.key", findKeyDef(t, defs, "server.tls_key_file").defaultValue)
-	assert.Equal(t, true, findKeyDef(t, defs, "server.tls_terminated_upstream").defaultValue)
-	assert.Equal(t, "10.0.0.0/8,172.16.0.0/12", findKeyDef(t, defs, "server.trusted_proxies").defaultValue)
 }
 
 // TestMatcherKeyDefs_DefaultsReflectCfgIdempotency covers duration-like int

@@ -13,6 +13,7 @@ var (
 	ErrNilTenantExtractor = errors.New("tenant extractor not initialized")
 	ErrNoActions          = errors.New("authorization actions not configured")
 	ErrEmptyAction        = errors.New("authorization actions contain empty entry")
+	ErrNilAuthClient      = errors.New("auth client required when authentication is enabled")
 )
 
 // ProtectedGroupWithActionsWithMiddleware validates auth-enabled tokens locally before

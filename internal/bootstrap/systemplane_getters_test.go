@@ -46,6 +46,10 @@ func newGetterTestClient(t *testing.T, registerFn func(c *systemplane.Client)) *
 }
 
 // --- SystemplaneGetString ---
+//
+// Note: TestSystemplaneGetString_NilClient lives in systemplane_init_test.go
+// alongside the nil-client tests for Int / Int64 / Bool. This file owns the
+// not-found / correct-type / wrong-type coverage.
 
 // TestSystemplaneGetString_UnregisteredKey asserts the not-found branch
 // returns the fallback when the key was never registered on the client.
@@ -89,6 +93,8 @@ func TestSystemplaneGetString_WrongType(t *testing.T) {
 }
 
 // --- SystemplaneGetInt ---
+//
+// Note: TestSystemplaneGetInt_NilClient lives in systemplane_init_test.go.
 
 // TestSystemplaneGetInt_UnregisteredKey asserts the not-found branch returns
 // the fallback.
@@ -239,6 +245,8 @@ func TestSystemplaneGetInt64_WrongType(t *testing.T) {
 }
 
 // --- SystemplaneGetBool ---
+//
+// Note: TestSystemplaneGetBool_NilClient lives in systemplane_init_test.go.
 
 // TestSystemplaneGetBool_UnregisteredKey asserts the not-found branch
 // returns the fallback.

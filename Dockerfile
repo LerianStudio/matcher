@@ -55,10 +55,13 @@ USER nonroot:nonroot
 
 EXPOSE 4018
 
-# Go runtime memory hint. Not set here — must be configured per-deployment as
-# approximately 90% of the container memory limit (e.g., GOMEMLIMIT=450MiB for
-# a 500MiB pod). Leave unset in the image so operators must consciously size
-# it. Example Kubernetes env:
+# Go runtime memory hint. Not set in the image. Recommended explicit setting is
+# approximately 85% of the container memory limit (e.g., GOMEMLIMIT=425MiB for
+# a 500MiB pod), matching bootstrap guidance in
+# internal/bootstrap/gomemlimit_warn.go.
+# Note: when Fetcher is enabled, bootstrap auto-applies ~85% of the cgroup
+# memory limit if GOMEMLIMIT is unset (see internal/bootstrap/init_fetcher_bridge.go);
+# explicit operator values still take precedence. Example Kubernetes env:
 #   env:
 #     - name: GOMEMLIMIT
 #       valueFrom:

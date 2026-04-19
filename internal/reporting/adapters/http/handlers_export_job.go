@@ -575,7 +575,7 @@ func (handler *ExportJobHandlers) GetExportJob(fiberCtx *fiber.Ctx) error {
 // ListExportJobs handles GET /v1/export-jobs
 // @ID listExportJobs
 // @Summary List export jobs
-// @Description Lists export jobs for the authenticated tenant using forward-only cursor-based pagination.
+// @Description Lists export jobs for the authenticated tenant using cursor-based pagination.
 // @Description Use the nextCursor value from the response to fetch subsequent pages.
 // @Tags Export Jobs
 // @Produce json
@@ -837,7 +837,7 @@ func (handler *ExportJobHandlers) DownloadExportJob(fiberCtx *fiber.Ctx) error {
 // ListExportJobsByContext handles GET /v1/contexts/:contextId/export-jobs
 // @ID listExportJobsByContext
 // @Summary List export jobs by context
-// @Description Lists export jobs for a specific reconciliation context using forward-only cursor-based pagination.
+// @Description Lists export jobs for a specific reconciliation context using cursor-based pagination.
 // @Description Use the nextCursor value from the response to fetch subsequent pages.
 // @Tags Export Jobs
 // @Produce json

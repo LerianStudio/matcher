@@ -34,8 +34,11 @@ import (
 //     authorizer explicitly approved.
 //
 // The function returns the sentinel errors ErrNilTenantExtractor, ErrNoActions,
-// and ErrEmptyAction on invalid input so misconfiguration is caught at startup
-// instead of surfacing as a confusing 500 at request time.
+// ErrEmptyAction, and ErrNilAuthClient on invalid input so misconfiguration is
+// caught at startup instead of surfacing as a confusing 500 at request time.
+// ErrNilAuthClient in particular guards against the "auth enabled but no auth
+// client wired" misconfiguration, which would otherwise degrade into Authorize
+// handlers that respond with 500 on every protected request.
 //
 // This is the canonical chain builder used by bootstrap.protectedRouter to
 // compose the per-route middleware stack. It replaces the previous
@@ -49,6 +52,10 @@ func BuildProtectedAuthChain(
 ) ([]fiber.Handler, error) {
 	if extractor == nil {
 		return nil, ErrNilTenantExtractor
+	}
+
+	if extractor.authEnabled && authClient == nil {
+		return nil, ErrNilAuthClient
 	}
 
 	if len(actions) == 0 {
@@ -68,7 +75,7 @@ func BuildProtectedAuthChain(
 
 	handlers := make([]fiber.Handler, 0, len(actions)+fixedChainOverhead)
 
-	if authClient != nil && extractor.authEnabled {
+	if extractor.authEnabled {
 		handlers = append(handlers, extractor.validateTenantClaims())
 	}
 
