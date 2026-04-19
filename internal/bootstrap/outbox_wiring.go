@@ -97,6 +97,12 @@ var nonRetryableErrors = []error{
 	errMissingAction,
 	errMissingReason,
 	errAuditPublisherNotConfigured,
+	// Publisher-unavailable sentinels classify a misconfigured handler
+	// wiring: the underlying concrete publisher is nil despite the
+	// interface being non-nil. Retries cannot repair wiring — mark these
+	// terminal so the event is flagged invalid immediately.
+	errIngestionPublisherUnavailable,
+	errMatchPublisherUnavailable,
 }
 
 // isNonRetryableOutboxError checks if an error is a permanent validation failure.
@@ -170,6 +176,10 @@ func registerOutboxHandlers(
 // Event publishing functions (one per outbox event type).
 
 func publishIngestionCompleted(ctx context.Context, pub sharedPorts.IngestionEventPublisher, payload []byte) error {
+	if sharedPorts.IsNilValue(pub) {
+		return errIngestionPublisherUnavailable
+	}
+
 	var event sharedDomain.IngestionCompletedEvent
 	if err := json.Unmarshal(payload, &event); err != nil {
 		return fmt.Errorf("ingestion completed %w: %w", errInvalidPayload, err)
@@ -187,6 +197,10 @@ func publishIngestionCompleted(ctx context.Context, pub sharedPorts.IngestionEve
 }
 
 func publishIngestionFailed(ctx context.Context, pub sharedPorts.IngestionEventPublisher, payload []byte) error {
+	if sharedPorts.IsNilValue(pub) {
+		return errIngestionPublisherUnavailable
+	}
+
 	var event sharedDomain.IngestionFailedEvent
 	if err := json.Unmarshal(payload, &event); err != nil {
 		return fmt.Errorf("ingestion failed %w: %w", errInvalidPayload, err)
@@ -204,6 +218,10 @@ func publishIngestionFailed(ctx context.Context, pub sharedPorts.IngestionEventP
 }
 
 func publishMatchConfirmed(ctx context.Context, pub sharedDomain.MatchEventPublisher, payload []byte) error {
+	if sharedPorts.IsNilValue(pub) {
+		return errMatchPublisherUnavailable
+	}
+
 	var event sharedDomain.MatchConfirmedEvent
 	if err := json.Unmarshal(payload, &event); err != nil {
 		return fmt.Errorf("match confirmed %w: %w", errInvalidPayload, err)
@@ -221,6 +239,10 @@ func publishMatchConfirmed(ctx context.Context, pub sharedDomain.MatchEventPubli
 }
 
 func publishMatchUnmatched(ctx context.Context, pub sharedDomain.MatchEventPublisher, payload []byte) error {
+	if sharedPorts.IsNilValue(pub) {
+		return errMatchPublisherUnavailable
+	}
+
 	var event sharedDomain.MatchUnmatchedEvent
 	if err := json.Unmarshal(payload, &event); err != nil {
 		return fmt.Errorf("match unmatched %w: %w", errInvalidPayload, err)

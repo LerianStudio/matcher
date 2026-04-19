@@ -600,6 +600,20 @@ func TestPublishIngestionCompleted_InvalidJSON(t *testing.T) {
 	assert.Equal(t, 0, pub.completed)
 }
 
+func TestPublishIngestionCompleted_TypedNilPublisher(t *testing.T) {
+	t.Parallel()
+
+	// Typed-nil publisher: interface is non-nil but underlying concrete value is nil.
+	// Without the IsNilValue guard this would dereference the nil *fakeIngestionPub.
+	var pub *fakeIngestionPub
+	payload, err := json.Marshal(validIngestionCompletedEvent())
+	require.NoError(t, err)
+
+	err = publishIngestionCompleted(context.Background(), pub, payload)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errIngestionPublisherUnavailable)
+}
+
 func TestPublishIngestionCompleted_ValidationFailure(t *testing.T) {
 	t.Parallel()
 
@@ -655,6 +669,18 @@ func TestPublishIngestionFailed_InvalidJSON(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errInvalidPayload)
 	assert.Equal(t, 0, pub.failed)
+}
+
+func TestPublishIngestionFailed_TypedNilPublisher(t *testing.T) {
+	t.Parallel()
+
+	var pub *fakeIngestionPub
+	payload, err := json.Marshal(validIngestionFailedEvent())
+	require.NoError(t, err)
+
+	err = publishIngestionFailed(context.Background(), pub, payload)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errIngestionPublisherUnavailable)
 }
 
 func TestPublishIngestionFailed_ValidationFailure(t *testing.T) {
@@ -714,6 +740,18 @@ func TestPublishMatchConfirmed_InvalidJSON(t *testing.T) {
 	assert.Equal(t, 0, pub.confirmed)
 }
 
+func TestPublishMatchConfirmed_TypedNilPublisher(t *testing.T) {
+	t.Parallel()
+
+	var pub *fakeMatchPub
+	payload, err := json.Marshal(validMatchConfirmedEvent())
+	require.NoError(t, err)
+
+	err = publishMatchConfirmed(context.Background(), pub, payload)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errMatchPublisherUnavailable)
+}
+
 func TestPublishMatchConfirmed_ValidationFailure(t *testing.T) {
 	t.Parallel()
 
@@ -769,6 +807,18 @@ func TestPublishMatchUnmatched_InvalidJSON(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errInvalidPayload)
 	assert.Equal(t, 0, pub.unmatched)
+}
+
+func TestPublishMatchUnmatched_TypedNilPublisher(t *testing.T) {
+	t.Parallel()
+
+	var pub *fakeMatchPub
+	payload, err := json.Marshal(validMatchUnmatchedEvent())
+	require.NoError(t, err)
+
+	err = publishMatchUnmatched(context.Background(), pub, payload)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errMatchPublisherUnavailable)
 }
 
 func TestPublishMatchUnmatched_ValidationFailure(t *testing.T) {
