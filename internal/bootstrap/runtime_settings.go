@@ -68,6 +68,14 @@ func (resolver *runtimeSettingsResolver) idempotencySuccessTTL(fallback time.Dur
 	return time.Duration(hours) * time.Hour
 }
 
+func (resolver *runtimeSettingsResolver) idempotencyHMACSecret(fallback string) string {
+	if resolver == nil || resolver.client == nil {
+		return fallback
+	}
+
+	return SystemplaneGetString(resolver.client, "idempotency.hmac_secret", fallback)
+}
+
 func (resolver *runtimeSettingsResolver) callbackRateLimitPerMinute(fallback int) int {
 	if resolver == nil || resolver.client == nil {
 		return fallback

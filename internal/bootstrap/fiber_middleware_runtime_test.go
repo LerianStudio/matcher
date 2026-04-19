@@ -227,6 +227,9 @@ func TestRuntimeBodyLimitMiddleware_AllowsWhenContentLengthFits(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/data", strings.NewReader("within"))
 	req.Header.Set("Content-Type", "text/plain")
+	// Set Content-Length explicitly so we unambiguously exercise the
+	// Content-Length fast path (mirrors the rejection test above).
+	req.ContentLength = int64(len("within"))
 
 	resp, err := app.Test(req)
 	require.NoError(t, err)

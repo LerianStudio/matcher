@@ -56,6 +56,7 @@ func TestSwappableLogger_WithAndGroupPropagateToDelegate_Success(t *testing.T) {
 
 	require.Len(t, underlying.msgs, 1)
 	assert.Equal(t, "hello", underlying.msgs[0])
-	assert.Len(t, underlying.groups, 1)
-	assert.Len(t, underlying.fields, 1)
+	assert.Equal(t, []string{"runtime"}, underlying.groups)
+	require.Len(t, underlying.fields, 1)
+	assert.Equal(t, libLog.String("component", "systemplane"), underlying.fields[0])
 }

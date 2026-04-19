@@ -30,12 +30,16 @@ func TestBuildProtectedAuthChain_NoActions(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	chain, err := BuildProtectedAuthChain(nil, extractor, "resource", []string{})
+	// Non-nil authClient so the nil-client guard does not mask the
+	// ErrNoActions check under test.
+	authClient := authMiddleware.NewAuthClient("", false, nil)
+
+	chain, err := BuildProtectedAuthChain(authClient, extractor, "resource", []string{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrNoActions)
 	assert.Nil(t, chain)
 
-	chain, err = BuildProtectedAuthChain(nil, extractor, "resource", nil)
+	chain, err = BuildProtectedAuthChain(authClient, extractor, "resource", nil)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrNoActions)
 	assert.Nil(t, chain)
@@ -49,20 +53,24 @@ func TestBuildProtectedAuthChain_BlankAction(t *testing.T) {
 	)
 	require.NoError(t, err)
 
+	// Non-nil authClient so the nil-client guard does not mask the
+	// ErrEmptyAction check under test.
+	authClient := authMiddleware.NewAuthClient("", false, nil)
+
 	// First position blank.
-	chain, err := BuildProtectedAuthChain(nil, extractor, "resource", []string{"  "})
+	chain, err := BuildProtectedAuthChain(authClient, extractor, "resource", []string{"  "})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrEmptyAction)
 	assert.Nil(t, chain)
 
 	// Middle position blank.
-	chain, err = BuildProtectedAuthChain(nil, extractor, "resource", []string{"read", "", "write"})
+	chain, err = BuildProtectedAuthChain(authClient, extractor, "resource", []string{"read", "", "write"})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrEmptyAction)
 	assert.Nil(t, chain)
 
 	// Tab/space-only action.
-	chain, err = BuildProtectedAuthChain(nil, extractor, "resource", []string{"\t\n  "})
+	chain, err = BuildProtectedAuthChain(authClient, extractor, "resource", []string{"\t\n  "})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrEmptyAction)
 	assert.Nil(t, chain)
@@ -86,8 +94,12 @@ func TestBuildProtectedAuthChain_AuthDisabled_OmitsValidateTenantClaims(t *testi
 	)
 	require.NoError(t, err)
 
-	// Non-nil authClient must not flip the decision — the gating is
-	// extractor.authEnabled, not the presence of the client.
+	// A non-nil authClient is required even when auth is disabled: every
+	// action unconditionally appends Authorize(authClient, ...) to the chain,
+	// and Authorize(nil, ...) degrades into a handler that responds 500 on
+	// every protected request. The gating for validateTenantClaims is
+	// extractor.authEnabled; the gating for chain buildability is a non-nil
+	// client.
 	authClient := authMiddleware.NewAuthClient("http://authz.local", false, nil)
 
 	chain, err := BuildProtectedAuthChain(authClient, extractor, "resource", []string{"read", "write"})
@@ -125,28 +137,44 @@ func TestBuildProtectedAuthChain_AuthEnabled_IncludesValidateTenantClaims(t *tes
 	assert.Len(t, chain, 4, "auth enabled: chain must include validateTenantClaims")
 }
 
-// TestBuildProtectedAuthChain_AuthEnabled_NilAuthClient_Rejected pins the
-// fail-fast guard: when extractor.authEnabled=true, a nil authClient is a
-// protected-route misconfiguration and must be rejected at chain-build time.
-// Without this guard, Authorize(nil) would install a hard-coded 500 handler
-// and every protected request would fail at runtime instead of at startup.
-func TestBuildProtectedAuthChain_AuthEnabled_NilAuthClient_Rejected(t *testing.T) {
+// TestBuildProtectedAuthChain_NilAuthClient_Rejected pins the fail-fast guard:
+// a nil authClient is a protected-route misconfiguration and must be rejected
+// at chain-build time REGARDLESS of whether auth is enabled. Without this
+// guard, Authorize(nil) would install a hard-coded 500 handler and every
+// protected request would fail at runtime instead of at startup — including
+// the auth-disabled path, where the Authorize chain is still appended.
+func TestBuildProtectedAuthChain_NilAuthClient_Rejected(t *testing.T) {
 	t.Parallel()
 
-	extractor, err := NewTenantExtractor(
-		true, // authEnabled=true
-		true,
-		DefaultTenantID,
-		DefaultTenantSlug,
-		testTokenSecret,
-		"development",
-	)
-	require.NoError(t, err)
+	cases := []struct {
+		name        string
+		authEnabled bool
+		tokenSecret string
+	}{
+		{name: "auth enabled", authEnabled: true, tokenSecret: testTokenSecret},
+		{name: "auth disabled", authEnabled: false, tokenSecret: ""},
+	}
 
-	chain, err := BuildProtectedAuthChain(nil, extractor, "resource", []string{"read"})
-	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrNilAuthClient)
-	assert.Nil(t, chain)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			extractor, err := NewTenantExtractor(
+				tc.authEnabled,
+				tc.authEnabled,
+				DefaultTenantID,
+				DefaultTenantSlug,
+				tc.tokenSecret,
+				"development",
+			)
+			require.NoError(t, err)
+
+			chain, err := BuildProtectedAuthChain(nil, extractor, "resource", []string{"read"})
+			require.Error(t, err)
+			assert.ErrorIs(t, err, ErrNilAuthClient)
+			assert.Nil(t, chain)
+		})
+	}
 }
 
 // TestBuildProtectedAuthChain_Order is the behavioural equivalent of the

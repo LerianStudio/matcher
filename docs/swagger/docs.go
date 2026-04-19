@@ -14284,10 +14284,6 @@ const docTemplate = `{
                 "nextCursor": {
                     "type": "string",
                     "example": "eyJpZCI6IjEyMyJ9"
-                },
-                "prevCursor": {
-                    "type": "string",
-                    "example": "eyJpZCI6IjEyMiJ9"
                 }
             }
         },

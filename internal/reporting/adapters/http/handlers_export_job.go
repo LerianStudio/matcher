@@ -377,9 +377,17 @@ type ExportJobResponse struct {
 }
 
 // ExportJobListResponse represents a list of export jobs.
+//
+// The export-jobs list endpoints use forward-only cursor pagination: clients
+// walk results by passing the returned nextCursor as the cursor query param on
+// the next request. prevCursor is intentionally omitted — the underlying
+// keyset query is unidirectional by creation timestamp and exposing a reverse
+// cursor would publish a capability the service does not honour.
 type ExportJobListResponse struct {
-	Items []*ExportJobResponse `json:"items" validate:"omitempty,max=200" maxItems:"200"`
-	sharedhttp.CursorResponse
+	Items      []*ExportJobResponse `json:"items"                validate:"omitempty,max=200" maxItems:"200"`
+	NextCursor string               `json:"nextCursor,omitempty" example:"eyJpZCI6IjEyMyJ9"`
+	Limit      int                  `json:"limit"                example:"20"                                minimum:"1" maximum:"200"`
+	HasMore    bool                 `json:"hasMore"              example:"true"`
 }
 
 // DownloadExportJobResponse represents the response for downloading an export file.
@@ -622,12 +630,10 @@ func (handler *ExportJobHandlers) ListExportJobs(fiberCtx *fiber.Ctx) error {
 	}
 
 	response := ExportJobListResponse{
-		Items: responses,
-		CursorResponse: sharedhttp.CursorResponse{
-			Limit:      limit,
-			HasMore:    pagination.Next != "",
-			NextCursor: pagination.Next,
-		},
+		Items:      responses,
+		NextCursor: pagination.Next,
+		Limit:      limit,
+		HasMore:    pagination.Next != "",
 	}
 
 	if writeErr := libHTTP.Respond(fiberCtx, fiber.StatusOK, response); writeErr != nil {
@@ -896,12 +902,10 @@ func (handler *ExportJobHandlers) ListExportJobsByContext(fiberCtx *fiber.Ctx) e
 	}
 
 	response := ExportJobListResponse{
-		Items: responses,
-		CursorResponse: sharedhttp.CursorResponse{
-			Limit:      limit,
-			HasMore:    pagination.Next != "",
-			NextCursor: pagination.Next,
-		},
+		Items:      responses,
+		NextCursor: pagination.Next,
+		Limit:      limit,
+		HasMore:    pagination.Next != "",
 	}
 
 	if writeErr := libHTTP.Respond(fiberCtx, fiber.StatusOK, response); writeErr != nil {

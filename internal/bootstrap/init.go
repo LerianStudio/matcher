@@ -10,6 +10,7 @@ package bootstrap
 // recording. lib-commons does not abstract global provider accessors.
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -153,6 +154,11 @@ var (
 	errRabbitMQClientRequired   = errors.New("rabbitmq connection is required")
 	errPostgresResolverRequired = errors.New("postgres resolver is nil")
 	errAuthBoundaryLoggerNil    = errors.New("auth boundary logger is nil")
+
+	// errSystemplanePrimaryUnavailable indicates the postgres primary handle
+	// returned nil without a concrete error, blocking systemplane init in
+	// production environments where runtime config is compliance-critical.
+	errSystemplanePrimaryUnavailable = errors.New("systemplane init: postgres primary unavailable")
 
 	// cleanupMetrics holds initialized metrics for cleanup operations.
 	// Lazily initialized on first cleanup call.
@@ -549,9 +555,15 @@ func InitServersWithOptions(opts *Options) (*Service, error) {
 
 	primaryDB, dbErr := postgresConnection.Primary()
 	switch {
-	case dbErr != nil || primaryDB == nil:
+	case dbErr != nil:
 		if IsProductionEnvironment(cfg.App.EnvName) {
 			return nil, fmt.Errorf("systemplane init: postgres primary unavailable: %w", dbErr)
+		}
+
+		logger.Log(ctx, libLog.LevelWarn, "systemplane skipped (no postgres primary); running with static config only")
+	case primaryDB == nil:
+		if IsProductionEnvironment(cfg.App.EnvName) {
+			return nil, errSystemplanePrimaryUnavailable
 		}
 
 		logger.Log(ctx, libLog.LevelWarn, "systemplane skipped (no postgres primary); running with static config only")
@@ -1695,6 +1707,28 @@ func resolveRuntimeIntSetting(
 	return resolverFn(fallback)
 }
 
+func resolveRuntimeStringSetting(
+	_ context.Context,
+	cfg *Config,
+	configGetter func() *Config,
+	settingsResolver *runtimeSettingsResolver,
+	fallbackFn func(*Config) string,
+	resolverFn func(string) string,
+) string {
+	runtimeCfg := runtimeConfigOrFallback(cfg, configGetter)
+
+	fallback := fallbackFn(cfg)
+	if runtimeCfg != nil {
+		fallback = fallbackFn(runtimeCfg)
+	}
+
+	if settingsResolver == nil {
+		return fallback
+	}
+
+	return resolverFn(fallback)
+}
+
 func resolveIdempotencyRetryWindow(ctx context.Context, cfg *Config, configGetter func() *Config, settingsResolver *runtimeSettingsResolver) time.Duration {
 	return resolveRuntimeDurationSetting(ctx, cfg, configGetter, settingsResolver,
 		func(current *Config) time.Duration { return current.IdempotencyRetryWindow() },
@@ -1706,6 +1740,13 @@ func resolveIdempotencySuccessTTL(ctx context.Context, cfg *Config, configGetter
 	return resolveRuntimeDurationSetting(ctx, cfg, configGetter, settingsResolver,
 		func(current *Config) time.Duration { return current.IdempotencySuccessTTL() },
 		settingsResolver.idempotencySuccessTTL,
+	)
+}
+
+func resolveIdempotencyHMACSecret(ctx context.Context, cfg *Config, configGetter func() *Config, settingsResolver *runtimeSettingsResolver) string {
+	return resolveRuntimeStringSetting(ctx, cfg, configGetter, settingsResolver,
+		func(current *Config) string { return current.Idempotency.HMACSecret },
+		settingsResolver.idempotencyHMACSecret,
 	)
 }
 
@@ -2199,8 +2240,13 @@ func initModulesAndMessaging(
 	// so reporting handlers/workers can be constructed even when object storage
 	// is unconfigured (e.g. in tests with EXPORT_WORKER_ENABLED=false). Actual
 	// calls on an unconfigured client return ErrObjectStorageUnavailable at
-	// invocation time.
-	storage = newRuntimeReportingStorageClient(storage)
+	// invocation time. The wrapper also re-resolves the concrete client from
+	// the runtime config on each call, so /system changes to object_storage.*
+	// propagate without a restart.
+	//
+	//nolint:contextcheck // Re-resolution runs on demand after startup ctx is
+	// cancelled; the getter intentionally uses context.TODO() internally, mirroring newRuntimeArchivalStorageClient.
+	storage = newRuntimeReportingStorageClient(cfg, configGetter, storage)
 
 	//nolint:contextcheck // Reporting config accessors are not context-aware.
 	exportWorker, cleanupWorker, err := initReportingModule(
@@ -2635,7 +2681,9 @@ func createIdempotencyRepository(
 			func(ctx context.Context) time.Duration {
 				return resolveIdempotencySuccessTTL(ctx, cfg, configGetter, settingsResolver)
 			},
-			nil,
+			func(ctx context.Context) string {
+				return resolveIdempotencyHMACSecret(ctx, cfg, configGetter, settingsResolver)
+			},
 		)
 	}
 
@@ -2683,24 +2731,72 @@ func reportingStorageRequired(cfg *Config) bool {
 }
 
 // newRuntimeReportingStorageClient wraps the startup-time reporting storage
-// client in a dynamic delegate that always exposes a non-nil interface to the
-// reporting handlers and workers. When no storage is configured, calls fail at
-// invocation time with ErrObjectStorageUnavailable rather than preventing
-// startup.
+// client in a dynamic delegate that resolves the concrete client from the
+// current runtime config on every call. When object_storage.* changes via
+// /system, subsequent reporting operations pick up the new credentials and
+// endpoint without requiring a restart. When no storage is configured, calls
+// fail at invocation time with ErrObjectStorageUnavailable rather than
+// preventing startup.
+//
+// The concrete client is cached keyed on the current config snapshot; it is
+// rebuilt only when the snapshot changes, so routine resolutions incur no S3
+// client reconstruction cost.
 //
 // This mirrors newRuntimeArchivalStorageClient and allows the reporting module
 // to register its routes and workers unconditionally, even when the export and
 // cleanup workers are disabled or the object-storage endpoint is empty.
 func newRuntimeReportingStorageClient(
+	initialCfg *Config,
+	configGetter func() *Config,
 	fallback sharedPorts.ObjectStorageClient,
 ) sharedPorts.ObjectStorageClient {
-	// A trivial non-nil getter guarantees newDynamicObjectStorageClient returns
-	// a non-nil wrapper. The wrapper's current() method defers to the fallback
-	// and, if that is also nil, returns ErrObjectStorageUnavailable at call
-	// time instead of panicking.
+	var (
+		mu           sync.Mutex
+		activeClient sharedPorts.ObjectStorageClient
+		activeKey    string
+	)
+
+	activeClient = fallback
+	activeKey = reportingStorageCacheKey(initialCfg)
+
 	return newDynamicObjectStorageClient(func() sharedPorts.ObjectStorageClient {
-		return fallback
+		cfg := initialCfg
+
+		if configGetter != nil {
+			if runtimeCfg := configGetter(); runtimeCfg != nil {
+				cfg = runtimeCfg
+			}
+		}
+
+		cacheKey := reportingStorageCacheKey(cfg)
+
+		mu.Lock()
+		defer mu.Unlock()
+
+		if activeClient != nil && cacheKey == activeKey {
+			return activeClient
+		}
+
+		client, err := createObjectStorage(context.TODO(), cfg)
+		if err != nil || client == nil {
+			return activeClient
+		}
+
+		activeClient = client
+		activeKey = cacheKey
+
+		return activeClient
 	}, fallback)
+}
+
+func reportingStorageCacheKey(cfg *Config) string {
+	if cfg == nil {
+		return ""
+	}
+
+	secretHash := sha256.Sum256([]byte(cfg.ObjectStorage.SecretAccessKey))
+
+	return fmt.Sprintf("%s|%s|%s|%s|%x|%t|%t", cfg.ObjectStorage.Endpoint, cfg.ObjectStorage.Region, cfg.ObjectStorage.Bucket, cfg.ObjectStorage.AccessKeyID, secretHash[:8], cfg.ObjectStorage.UsePathStyle, allowInsecureObjectStorageEndpoint(cfg))
 }
 
 func initConfigurationModule(
@@ -3410,7 +3506,9 @@ func initExceptionCallbackUseCase(
 			func(ctx context.Context) time.Duration {
 				return resolveIdempotencySuccessTTL(ctx, cfg, configGetter, settingsResolver)
 			},
-			nil,
+			func(ctx context.Context) string {
+				return resolveIdempotencyHMACSecret(ctx, cfg, configGetter, settingsResolver)
+			},
 		)
 	}
 

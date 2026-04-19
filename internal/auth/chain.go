@@ -36,9 +36,12 @@ import (
 // The function returns the sentinel errors ErrNilTenantExtractor, ErrNoActions,
 // ErrEmptyAction, and ErrNilAuthClient on invalid input so misconfiguration is
 // caught at startup instead of surfacing as a confusing 500 at request time.
-// ErrNilAuthClient in particular guards against the "auth enabled but no auth
-// client wired" misconfiguration, which would otherwise degrade into Authorize
-// handlers that respond with 500 on every protected request.
+// ErrNilAuthClient guards against a nil auth client regardless of whether auth
+// is enabled: every action unconditionally appends Authorize(authClient, ...)
+// to the chain, and Authorize(nil, ...) returns a handler that responds with
+// 500 on every protected request. Rejecting nil here is the only way to keep
+// protected routes from silently degrading when auth is disabled but the
+// client was never wired.
 //
 // This is the canonical chain builder used by bootstrap.protectedRouter to
 // compose the per-route middleware stack. It replaces the previous
@@ -54,7 +57,7 @@ func BuildProtectedAuthChain(
 		return nil, ErrNilTenantExtractor
 	}
 
-	if extractor.authEnabled && authClient == nil {
+	if authClient == nil {
 		return nil, ErrNilAuthClient
 	}
 

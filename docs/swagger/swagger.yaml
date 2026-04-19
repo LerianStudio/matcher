@@ -3243,9 +3243,6 @@ definitions:
       nextCursor:
         example: eyJpZCI6IjEyMyJ9
         type: string
-      prevCursor:
-        example: eyJpZCI6IjEyMiJ9
-        type: string
     type: object
   internal_reporting_adapters_http.ExportJobResponse:
     properties:

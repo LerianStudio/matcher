@@ -106,7 +106,7 @@ For production, override via environment variables. See [`config/.config-map.exa
 
 ### Deployment Notes
 
-**GOMEMLIMIT (Go memory hint).** The image does not set `GOMEMLIMIT`. Operators must configure it per-deployment at roughly 90% of the container memory limit (for example, `GOMEMLIMIT=450MiB` for a 500 MiB pod). Go 1.26 auto-detects cgroup CPU via `GOMAXPROCS` but does **not** auto-detect cgroup memory; leaving `GOMEMLIMIT` unset risks OOM-kills from an uncapped Go heap. Kubernetes example:
+**GOMEMLIMIT (Go memory hint).** The image does not set `GOMEMLIMIT`. Operators must configure it per-deployment at roughly 85% of the container memory limit (for example, `GOMEMLIMIT=425MiB` for a 500 MiB pod). Go 1.26 auto-detects cgroup CPU via `GOMAXPROCS` but does **not** auto-detect cgroup memory; leaving `GOMEMLIMIT` unset risks OOM-kills from an uncapped Go heap. Kubernetes example:
 
 ```yaml
 env:
