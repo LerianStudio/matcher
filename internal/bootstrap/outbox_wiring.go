@@ -22,6 +22,14 @@ type defaultTenantDiscoverer struct {
 	inner outbox.TenantDiscoverer
 }
 
+// defaultTenantIDLookup is the package-level seam production uses to read
+// the configured default tenant ID. It indirects through a var rather than
+// calling auth.GetDefaultTenantID() directly so tests can exercise the
+// empty-string short-circuit (which cannot be hit via auth.SetDefaultTenantID
+// because an empty argument resets to the compile-time DefaultTenantID
+// constant). Tests that override this MUST restore it in t.Cleanup.
+var defaultTenantIDLookup = auth.GetDefaultTenantID
+
 // DiscoverTenants returns the list of tenant IDs to dispatch outbox events for,
 // appending the matcher default tenant (public schema) when the wrapped
 // discoverer does not include it. This preserves the invariant that audit
@@ -36,7 +44,7 @@ func (d *defaultTenantDiscoverer) DiscoverTenants(ctx context.Context) ([]string
 		return nil, fmt.Errorf("discover tenants: %w", err)
 	}
 
-	defaultTenantID := auth.GetDefaultTenantID()
+	defaultTenantID := defaultTenantIDLookup()
 	if defaultTenantID == "" {
 		return tenants, nil
 	}

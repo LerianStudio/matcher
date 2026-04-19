@@ -189,6 +189,34 @@ func TestDefaultTenantDiscoverer_NilInner(t *testing.T) {
 	assert.Nil(t, got)
 }
 
+// TestDefaultTenantDiscoverer_EmptyDefaultTenantIDShortCircuit asserts the
+// early-return path when the configured default tenant ID is empty: the
+// wrapper returns the inner list unchanged, with no append and no lookup
+// into the slice. This branch cannot be reached through the public auth
+// API (SetDefaultTenantID("") resets to the compile-time constant, never
+// empty) so the test overrides the package-level defaultTenantIDLookup seam.
+//
+// Cannot use t.Parallel: the seam is a package-global. Parallel tests that
+// also read it (TestDefaultTenantDiscoverer_AppendsDefaultWhenMissing etc.)
+// would race with this override.
+func TestDefaultTenantDiscoverer_EmptyDefaultTenantIDShortCircuit(t *testing.T) {
+	original := defaultTenantIDLookup
+	t.Cleanup(func() { defaultTenantIDLookup = original })
+
+	defaultTenantIDLookup = func() string { return "" }
+
+	tenantA := uuid.NewString()
+	tenantB := uuid.NewString()
+	inner := &fakeTenantDiscoverer{tenants: []string{tenantA, tenantB}}
+	wrapper := &defaultTenantDiscoverer{inner: inner}
+
+	got, err := wrapper.DiscoverTenants(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, []string{tenantA, tenantB}, got,
+		"empty default tenant ID must short-circuit and return the inner list unchanged")
+	assert.Equal(t, 1, inner.calls, "inner discoverer invoked exactly once")
+}
+
 // --- isNonRetryableOutboxError tests ---
 
 func TestIsNonRetryableOutboxError_Nil(t *testing.T) {
