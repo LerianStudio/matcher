@@ -3,6 +3,7 @@ package ports
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -14,24 +15,66 @@ import (
 //go:generate mockgen -destination=mocks/audit_publisher_mock.go -package=mocks . AuditPublisher
 
 // ActorHashLength is the length of the truncated hash for actor pseudonymization.
-// 16 hex characters provide ~64 bits of entropy; collisions reach ~50% probability
-// after ~2^32 unique actors (birthday bound). This is acceptable for audit
-// correlation but not for strong uniqueness guarantees; consumers that rely on
-// ActorHashLength (including audit publishing code) should not treat it as a
-// stable unique identifier and should pair it with additional disambiguators.
-const ActorHashLength = 16
+// 32 hex characters provide ~128 bits of entropy: collisions reach ~50% probability
+// only after ~2^64 unique actors (birthday bound), removing the 64-bit collision
+// risk of the earlier 16-character format. Hashes remain readable in UI and logs.
+//
+// Pre-existing audit_log rows hashed with the 16-character format are NOT
+// re-hashed on upgrade — the audit chain is append-only. New rows produced
+// after the upgrade use the new format.
+const ActorHashLength = 32
 
-// HashActor generates a pseudonymized hash of an actor identifier.
-// Uses SHA-256 truncated to 16 characters for readability while maintaining
-// uniqueness for correlation purposes. The hash is one-way, so the original
-// actor ID cannot be recovered from logs but can still be correlated across events.
-func HashActor(actor string) string {
+// SaltProvider returns the salt used to key the actor hash. The salt is
+// intentionally pulled lazily (not captured at publisher construction) so
+// implementations can derive the salt per-tenant from the ctx, reload from
+// systemplane without publisher reconstruction, or rotate without downtime.
+//
+// Returning an empty string disables salting: the hash degrades to the
+// pre-salt SHA-256 truncation. This is the documented fallback for boot
+// scenarios where the secret has not yet been provisioned — operators see
+// the unsalted hashes in logs, recognise the format, and provision a salt
+// via admin PUT.
+type SaltProvider interface {
+	SaltFor(ctx context.Context) string
+}
+
+// SaltProviderFunc adapts a plain function to SaltProvider.
+type SaltProviderFunc func(ctx context.Context) string
+
+// SaltFor implements SaltProvider.
+func (fn SaltProviderFunc) SaltFor(ctx context.Context) string {
+	if fn == nil {
+		return ""
+	}
+
+	return fn(ctx)
+}
+
+// HashActor generates a pseudonymized hash of an actor identifier using an
+// HMAC-SHA-256 keyed by salt. When salt is empty the function falls back to
+// unsalted SHA-256 for boot-time compatibility; this mode is vulnerable to
+// offline rainbow-table attacks on common actor IDs and should be replaced
+// with a non-empty salt in production deployments.
+//
+// The hash is one-way, so the original actor ID cannot be recovered from
+// logs but can still be correlated across events within a salt lifetime.
+func HashActor(actor, salt string) string {
 	if actor == "" {
 		return ""
 	}
 
-	hash := sha256.Sum256([]byte(actor))
-	fullHex := hex.EncodeToString(hash[:])
+	var digest []byte
+
+	if salt == "" {
+		sum := sha256.Sum256([]byte(actor))
+		digest = sum[:]
+	} else {
+		mac := hmac.New(sha256.New, []byte(salt))
+		mac.Write([]byte(actor))
+		digest = mac.Sum(nil)
+	}
+
+	fullHex := hex.EncodeToString(digest)
 
 	return fullHex[:ActorHashLength]
 }
@@ -50,8 +93,12 @@ type AuditEvent struct {
 	Metadata    map[string]string
 }
 
-// GetActorHash returns the pseudonymized actor hash, deriving it from Actor when needed.
-func (event AuditEvent) GetActorHash() string {
+// ResolveActorHash returns the pseudonymized actor hash, deriving it from
+// Actor when the pre-computed ActorHash field is empty. When salt is empty
+// the digest degrades to unsalted SHA-256 truncated to ActorHashLength hex
+// characters, preserving the legacy correlation behaviour for boot paths
+// that have not yet wired a SaltProvider.
+func (event AuditEvent) ResolveActorHash(salt string) string {
 	if event.ActorHash != "" {
 		return event.ActorHash
 	}
@@ -60,7 +107,7 @@ func (event AuditEvent) GetActorHash() string {
 		return ""
 	}
 
-	return HashActor(event.Actor)
+	return HashActor(event.Actor, salt)
 }
 
 // AuditPublisher publishes exception audit events.

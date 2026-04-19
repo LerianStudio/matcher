@@ -35,18 +35,57 @@ var (
 	ErrTenantIDRequired    = errors.New("tenant id required for audit logging")
 )
 
-// OutboxPublisher publishes exception audit events to the outbox for asynchronous processing.
+// OutboxPublisher publishes exception audit events to the outbox for
+// asynchronous processing. The optional saltProvider keys the actor hash
+// via HMAC-SHA-256; when nil or returning an empty string, actor hashes
+// degrade to unsalted SHA-256 truncations for backwards compatibility.
+// See ports.HashActor for the exact semantics.
 type OutboxPublisher struct {
-	outboxRepo sharedPorts.OutboxRepository
+	outboxRepo    sharedPorts.OutboxRepository
+	saltProvider  ports.SaltProvider
+}
+
+// PublisherOption configures NewOutboxPublisher.
+type PublisherOption func(*OutboxPublisher)
+
+// WithSaltProvider wires a SaltProvider into the publisher so that actor
+// hashes written to the audit outbox are HMAC-keyed by the provider's
+// tenant-aware salt lookup. Passing a nil provider is a no-op; hashes
+// remain unsalted. Callers should register a real provider in production
+// to close the offline rainbow-table attack vector on exfiltrated audit
+// rows.
+func WithSaltProvider(provider ports.SaltProvider) PublisherOption {
+	return func(pub *OutboxPublisher) {
+		pub.saltProvider = provider
+	}
 }
 
 // NewOutboxPublisher creates a new outbox-based audit publisher.
-func NewOutboxPublisher(repo sharedPorts.OutboxRepository) (*OutboxPublisher, error) {
+func NewOutboxPublisher(repo sharedPorts.OutboxRepository, opts ...PublisherOption) (*OutboxPublisher, error) {
 	if repo == nil {
 		return nil, ErrNilOutboxRepository
 	}
 
-	return &OutboxPublisher{outboxRepo: repo}, nil
+	pub := &OutboxPublisher{outboxRepo: repo}
+
+	for _, opt := range opts {
+		if opt != nil {
+			opt(pub)
+		}
+	}
+
+	return pub, nil
+}
+
+// resolveSalt returns the salt for ctx via the configured provider. Nil or
+// missing providers yield an empty string, which HashActor treats as the
+// unsalted fallback.
+func (pub *OutboxPublisher) resolveSalt(ctx context.Context) string {
+	if pub == nil || pub.saltProvider == nil {
+		return ""
+	}
+
+	return pub.saltProvider.SaltFor(ctx)
 }
 
 // PublishExceptionEvent publishes an exception audit event to the outbox.
@@ -86,14 +125,16 @@ func (pub *OutboxPublisher) buildOutboxEvent(
 		return nil, fmt.Errorf("parse tenant id: %w", err)
 	}
 
-	actorHash := event.GetActorHash()
+	salt := pub.resolveSalt(ctx)
+
+	actorHash := event.ResolveActorHash(salt)
 
 	var actor *string
 	if actorHash != "" {
 		actor = &actorHash
 	}
 
-	changes := buildOutboxChangesMap(event)
+	changes := buildOutboxChangesMap(event, salt)
 	changes = truncateAuditChangesIfTooLarge(ctx, changes, event.ExceptionID)
 
 	auditEvent := sharedDomain.AuditLogCreatedEvent{
@@ -165,8 +206,8 @@ func (pub *OutboxPublisher) PublishExceptionEventWithTx(
 	return nil
 }
 
-func buildOutboxChangesMap(event ports.AuditEvent) map[string]any {
-	actorHash := event.GetActorHash()
+func buildOutboxChangesMap(event ports.AuditEvent, salt string) map[string]any {
+	actorHash := event.ResolveActorHash(salt)
 
 	changes := map[string]any{
 		"exception_id": event.ExceptionID.String(),

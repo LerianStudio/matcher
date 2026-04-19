@@ -301,7 +301,7 @@ func TestBuildOutboxChangesMap_AllFields(t *testing.T) {
 		Metadata:    map[string]string{"key": "value"},
 	}
 
-	changes := buildOutboxChangesMap(event)
+	changes := buildOutboxChangesMap(event, "")
 
 	assert.Equal(t, exceptionID.String(), changes["exception_id"])
 	assert.Equal(t, event.Action, changes["action"])
@@ -322,7 +322,7 @@ func TestBuildOutboxChangesMap_MinimalFields(t *testing.T) {
 		OccurredAt:  fixedTime,
 	}
 
-	changes := buildOutboxChangesMap(event)
+	changes := buildOutboxChangesMap(event, "")
 
 	assert.Equal(t, exceptionID.String(), changes["exception_id"])
 	assert.Equal(t, event.Action, changes["action"])
