@@ -279,19 +279,19 @@ func validateBodyLimitBytes(value any) error {
 		return err
 	}
 
-	var n int
+	var bytes int
 
 	switch typed := value.(type) {
 	case int:
-		n = typed
+		bytes = typed
 	case float64:
-		n = int(typed)
+		bytes = int(typed)
 	default:
 		return fmt.Errorf("%w, got %T", errValueNotNumeric, value)
 	}
 
-	if n > keyBodyLimitCeilingBytes {
-		return fmt.Errorf("%w: got %d, ceiling %d", errBodyLimitExceedsCeiling, n, keyBodyLimitCeilingBytes)
+	if bytes > keyBodyLimitCeilingBytes {
+		return fmt.Errorf("%w: got %d, ceiling %d", errBodyLimitExceedsCeiling, bytes, keyBodyLimitCeilingBytes)
 	}
 
 	return nil

@@ -112,16 +112,12 @@ func respondError(fiberCtx *fiber.Ctx, status int, slug, message string) error {
 	return sharedhttp.RespondError(fiberCtx, status, slug, message)
 }
 
-// The helpers below (logSpanError, badRequest, writeServiceError,
-// writeNotFound) are defined as methods on every handler type in the
-// governance package so they can read productionMode from the receiver.
-// Previously they were package-level free functions reading a shared
-// atomic.Bool, which coupled every test in the package to whichever test
-// last constructed a handler.
-
-func (handler *Handler) logSpanError(ctx context.Context, span trace.Span, logger libLog.Logger, message string, err error) {
-	sharedhttp.LogSpanError(ctx, span, logger, handler.productionMode, message, err)
-}
+// The helpers below (badRequest, writeServiceError, writeNotFound) are
+// defined as methods on every handler type in the governance package so
+// they can read productionMode from the receiver. Previously they were
+// package-level free functions reading a shared atomic.Bool, which
+// coupled every test in the package to whichever test last constructed a
+// handler.
 
 //nolint:wrapcheck // HTTP transport response is the terminal error boundary.
 func (handler *Handler) badRequest(

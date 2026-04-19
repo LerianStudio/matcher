@@ -73,7 +73,12 @@ func MountSystemplaneAPI(
 	// wires the actual systemplane routes, so they run first on every request.
 	handlers := buildSystemplaneAuthChain(authClient, tenantExtractor)
 
-	useArgs := make([]any, 0, len(handlers)+2)
+	// nonHandlerSlots accounts for the fixed args prepended/appended around
+	// the variadic handlers: the "/system" path prefix and the admin rate
+	// limiter. Keeping this named avoids an mnd hit on the capacity math.
+	const nonHandlerSlots = 2
+
+	useArgs := make([]any, 0, len(handlers)+nonHandlerSlots)
 	useArgs = append(useArgs, "/system")
 
 	for _, h := range handlers {

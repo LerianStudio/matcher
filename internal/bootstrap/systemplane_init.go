@@ -145,6 +145,7 @@ func warnOnReclassifiedOrphanKeys(ctx context.Context, db *sql.DB, logger libLog
 		args = append(args, key)
 	}
 
+	// #nosec G202 -- placeholders are parameterized positional refs ($1,$2,...), values are bound via QueryContext args
 	query := `SELECT key FROM public.systemplane_entries
 		 WHERE namespace = 'matcher'
 		   AND key IN (` + strings.Join(placeholders, ", ") + `)`
@@ -153,6 +154,7 @@ func warnOnReclassifiedOrphanKeys(ctx context.Context, db *sql.DB, logger libLog
 	if err != nil {
 		return
 	}
+
 	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
@@ -273,13 +275,13 @@ func SystemplaneGetInt64(client *systemplane.Client, key string, fallback int64)
 		return fallback
 	}
 
-	switch n := value.(type) {
+	switch typed := value.(type) {
 	case int64:
-		return n
+		return typed
 	case int:
-		return int64(n)
+		return int64(typed)
 	case float64:
-		return int64(n)
+		return int64(typed)
 	default:
 		return fallback
 	}

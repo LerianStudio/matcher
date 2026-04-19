@@ -516,30 +516,40 @@ func TestOutboxDispatcher_DispatchOnce_AllEventTypes(t *testing.T) {
 
 // TestOutboxDispatcher_ProductionClassifier_MarksInvalidOnMalformedJSON
 // asserts that when the dispatcher is wired with the ACTUAL production
-// classifier (bootstrap.IsNonRetryableOutboxError), malformed JSON
-// payloads are classified as non-retryable and marked INVALID. This
-// differs from TestOutboxDispatcher_MarksInvalidOnBadPayload above,
-// which uses a bespoke "any-error-is-non-retryable" classifier for
-// demonstration purposes — production's classifier only marks INVALID
-// for specific sentinel errors, and a regression that drops one of
-// those sentinels would make the dispatcher retry malformed payloads
-// forever.
+// classifier (bootstrap.IsNonRetryableOutboxError), structurally-invalid
+// payloads (ones that json.Unmarshal cannot decode into the target event
+// type) are classified as non-retryable and marked INVALID. This differs
+// from TestOutboxDispatcher_MarksInvalidOnBadPayload above, which uses
+// a bespoke "any-error-is-non-retryable" classifier for demonstration
+// purposes — production's classifier only marks INVALID for specific
+// sentinel errors, and a regression that drops one of those sentinels
+// would make the dispatcher retry corrupt payloads forever.
+//
+// The payload here is syntactically valid JSON — required because both
+// the JSONB column and NewOutboxEvent's json.Valid guard reject truly
+// malformed bytes at insert time — but structurally wrong for the
+// target event struct. json.Unmarshal returns *json.UnmarshalTypeError
+// in the publishMatchConfirmed handler, which wraps it with
+// errInvalidPayload (the sentinel in nonRetryableErrors that drives
+// the INVALID classification). This exercises the same classifier
+// code path the original truncated-JSON scenario did.
 func TestOutboxDispatcher_ProductionClassifier_MarksInvalidOnMalformedJSON(t *testing.T) {
 	integration.RunWithDatabase(t, func(t *testing.T, h *integration.TestHarness) {
 		ctx := e4t9Ctx(t, h)
 		repo := integration.NewTestOutboxRepository(t, h.Connection)
 
-		// Truncated JSON — json.Unmarshal returns *json.SyntaxError, which
-		// bootstrap wraps with errInvalidPayload before bubbling. That
+		// Valid JSON, wrong shape: a numeric array cannot be decoded into
+		// MatchConfirmedEvent, so json.Unmarshal returns *json.UnmarshalTypeError,
+		// which bootstrap wraps with errInvalidPayload before bubbling. That
 		// sentinel is in nonRetryableErrors, so the production classifier
 		// classifies it non-retryable.
-		malformed := []byte(`{"eventType": "matching.match_confirmed", "tenantId": `)
+		corrupt := []byte(`[1,2,3]`)
 
 		event, err := outboxEntities.NewOutboxEvent(
 			ctx,
 			shared.EventTypeMatchConfirmed,
 			uuid.New(),
-			malformed,
+			corrupt,
 		)
 		require.NoError(t, err)
 
@@ -553,12 +563,12 @@ func TestOutboxDispatcher_ProductionClassifier_MarksInvalidOnMalformedJSON(t *te
 
 		processed := dispatcher.DispatchOnce(ctx)
 		require.Equal(t, 1, processed)
-		assert.Empty(t, cap.matchConfirmed, "malformed payload must not produce a successful publish")
+		assert.Empty(t, cap.matchConfirmed, "corrupt payload must not produce a successful publish")
 
 		fetched, err := repo.GetByID(ctx, created.ID)
 		require.NoError(t, err)
 		assert.Equal(t, outboxEntities.OutboxStatusInvalid, fetched.Status,
-			"production classifier must mark malformed JSON as INVALID, not FAILED/PENDING")
+			"production classifier must mark structurally-invalid payload as INVALID, not FAILED/PENDING")
 		assert.NotEmpty(t, fetched.LastError, "INVALID event must carry the last error for diagnosis")
 	})
 }

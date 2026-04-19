@@ -152,14 +152,14 @@ func (ha *ActorMappingHandler) GetActorMapping(fiberCtx *fiber.Ctx) error {
 	mapping, err := ha.queryUC.GetActorMapping(ctx, actorID)
 	if err != nil {
 		if errors.Is(err, governanceErrors.ErrActorMappingNotFound) {
-			return ha.writeNotFound(ctx, fiberCtx, span, logger, "governance_actor_mapping_not_found", "actor mapping not found", err)
+			return ha.writeNotFound(ctx, fiberCtx, span, logger, err)
 		}
 
 		return ha.writeServiceError(ctx, fiberCtx, span, logger, "failed to get actor mapping", err)
 	}
 
 	if mapping == nil {
-		return ha.writeNotFound(ctx, fiberCtx, span, logger, "governance_actor_mapping_not_found", "actor mapping not found", governanceErrors.ErrActorMappingNotFound)
+		return ha.writeNotFound(ctx, fiberCtx, span, logger, governanceErrors.ErrActorMappingNotFound)
 	}
 
 	if writeErr := libHTTP.Respond(fiberCtx, fiber.StatusOK, dto.ActorMappingToResponse(mapping)); writeErr != nil {
@@ -196,7 +196,7 @@ func (ha *ActorMappingHandler) PseudonymizeActor(fiberCtx *fiber.Ctx) error {
 
 	if err := ha.commandUC.PseudonymizeActor(ctx, actorID); err != nil {
 		if errors.Is(err, governanceErrors.ErrActorMappingNotFound) {
-			return ha.writeNotFound(ctx, fiberCtx, span, logger, "governance_actor_mapping_not_found", "actor mapping not found", err)
+			return ha.writeNotFound(ctx, fiberCtx, span, logger, err)
 		}
 
 		return ha.writeServiceError(ctx, fiberCtx, span, logger, "failed to pseudonymize actor", err)
@@ -232,7 +232,7 @@ func (ha *ActorMappingHandler) DeleteActorMapping(fiberCtx *fiber.Ctx) error {
 
 	if err := ha.commandUC.DeleteActorMapping(ctx, actorID); err != nil {
 		if errors.Is(err, governanceErrors.ErrActorMappingNotFound) {
-			return ha.writeNotFound(ctx, fiberCtx, span, logger, "governance_actor_mapping_not_found", "actor mapping not found", err)
+			return ha.writeNotFound(ctx, fiberCtx, span, logger, err)
 		}
 
 		return ha.writeServiceError(ctx, fiberCtx, span, logger, "failed to delete actor mapping", err)
@@ -243,10 +243,6 @@ func (ha *ActorMappingHandler) DeleteActorMapping(fiberCtx *fiber.Ctx) error {
 
 // Response helpers — see note on *Handler methods in handlers.go for why
 // these live on the receiver rather than in package-global state.
-
-func (ha *ActorMappingHandler) logSpanError(ctx context.Context, span trace.Span, logger libLog.Logger, message string, err error) {
-	sharedhttp.LogSpanError(ctx, span, logger, ha.productionMode, message, err)
-}
 
 //nolint:wrapcheck // HTTP transport response is the terminal error boundary.
 func (ha *ActorMappingHandler) badRequest(
@@ -277,10 +273,13 @@ func (ha *ActorMappingHandler) writeNotFound(
 	fiberCtx *fiber.Ctx,
 	span trace.Span,
 	logger libLog.Logger,
-	slug string,
-	message string,
 	err error,
 ) error {
+	const (
+		slug    = "governance_actor_mapping_not_found"
+		message = "actor mapping not found"
+	)
+
 	sharedhttp.LogSpanError(ctx, span, logger, ha.productionMode, message, err)
 
 	return respondError(fiberCtx, fiber.StatusNotFound, slug, message)

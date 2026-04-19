@@ -257,8 +257,6 @@ func (worker *CleanupWorker) runCleanupJobsParallel(
 			continue
 		}
 
-		job := job
-
 		wg.Add(1)
 
 		sem <- struct{}{}

@@ -156,8 +156,8 @@ func TestSourceBreakdown_SingleSource(t *testing.T) {
 		require.Equal(t, int64(3), sb.MatchedTxns)
 		require.Equal(t, int64(2), sb.UnmatchedTxns)
 
-		// Match rate: 3/5 = 0.6
-		require.InDelta(t, 0.6, sb.MatchRate, 0.01, "60%% match rate")
+		// Match rate: 3/5 = 60% (percentage scale, 0-100)
+		require.InDelta(t, 60.0, sb.MatchRate, 0.01, "60%% match rate")
 
 		// Amounts: matched = 500+600+700 = 1800, unmatched = 250+300 = 550, total = 2350
 		expectedMatched := decimal.NewFromFloat(1800.0)
@@ -229,14 +229,14 @@ func TestSourceBreakdown_MultipleSourceComparison(t *testing.T) {
 		require.Equal(t, int64(5), s1.TotalTxns)
 		require.Equal(t, int64(4), s1.MatchedTxns)
 		require.Equal(t, int64(1), s1.UnmatchedTxns)
-		require.InDelta(t, 0.8, s1.MatchRate, 0.01, "source1: 80%% match rate")
+		require.InDelta(t, 80.0, s1.MatchRate, 0.01, "source1: 80%% match rate")
 
 		// Source 2: 1 matched + 3 unmatched = 4
 		s2 := byID[source2ID]
 		require.Equal(t, int64(4), s2.TotalTxns)
 		require.Equal(t, int64(1), s2.MatchedTxns)
 		require.Equal(t, int64(3), s2.UnmatchedTxns)
-		require.InDelta(t, 0.25, s2.MatchRate, 0.01, "source2: 25%% match rate")
+		require.InDelta(t, 25.0, s2.MatchRate, 0.01, "source2: 25%% match rate")
 
 		// Both should report positive amounts.
 		require.True(t, s1.TotalAmount.GreaterThan(decimal.Zero), "source1 total > 0")

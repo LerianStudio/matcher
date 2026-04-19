@@ -83,7 +83,6 @@ func v4DeprecationShim(logger libLog.Logger) fiber.Handler {
 			)
 		}
 
-		//nolint:wrapcheck // Fiber's JSON is the terminal response boundary.
 		return fiberCtx.Status(fiber.StatusGone).JSON(body)
 	}
 }

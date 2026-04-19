@@ -59,6 +59,30 @@ var (
 	ErrExportWorkerDisabled = errors.New("export worker is disabled")
 )
 
+// ExportJobRuntimeConfig controls runtime-sensitive handler behavior without
+// coupling the reporting package to bootstrap internals.
+type ExportJobRuntimeConfig struct {
+	Enabled       *bool
+	PresignExpiry time.Duration
+}
+
+// ExportJobHandlers provides HTTP handlers for export job operations.
+//
+// productionMode governs SafeError behavior (suppresses internal error
+// details in client responses when true). Stored per-handler rather than
+// on a package-level atomic.Bool to avoid cross-test coupling via shared
+// global state.
+type ExportJobHandlers struct {
+	exportJobUC           *command.ExportJobUseCase
+	querySvc              *query.ExportJobQueryService
+	storage               sharedPorts.ObjectStorageClient
+	contextVerifier       libHTTP.TenantOwnershipVerifier
+	enabled               bool
+	presignExpiry         time.Duration
+	runtimeConfigResolver func(context.Context) ExportJobRuntimeConfig
+	productionMode        bool
+}
+
 // logSpanBusinessEvent records a business-outcome event on the span without marking
 // the span as errored. Use for expected outcomes (validation, not-found, conflict)
 // that are not infrastructure failures.
@@ -128,30 +152,6 @@ func (handler *ExportJobHandlers) handleContextVerificationError(
 	handler.logSpanError(ctx, span, logger, "context verification failed", err)
 
 	return respondContextVerificationError(fiberCtx, err)
-}
-
-// ExportJobRuntimeConfig controls runtime-sensitive handler behavior without
-// coupling the reporting package to bootstrap internals.
-type ExportJobRuntimeConfig struct {
-	Enabled       *bool
-	PresignExpiry time.Duration
-}
-
-// ExportJobHandlers provides HTTP handlers for export job operations.
-//
-// productionMode governs SafeError behavior (suppresses internal error
-// details in client responses when true). Stored per-handler rather than
-// on a package-level atomic.Bool to avoid cross-test coupling via shared
-// global state.
-type ExportJobHandlers struct {
-	exportJobUC           *command.ExportJobUseCase
-	querySvc              *query.ExportJobQueryService
-	storage               sharedPorts.ObjectStorageClient
-	contextVerifier       libHTTP.TenantOwnershipVerifier
-	enabled               bool
-	presignExpiry         time.Duration
-	runtimeConfigResolver func(context.Context) ExportJobRuntimeConfig
-	productionMode        bool
 }
 
 // NewExportJobHandlers creates a new ExportJobHandlers instance.

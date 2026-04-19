@@ -664,10 +664,14 @@ type countingWriter struct {
 }
 
 func (cw *countingWriter) Write(p []byte) (int, error) {
-	n, err := cw.w.Write(p)
-	cw.n += int64(n)
+	written, err := cw.w.Write(p)
+	cw.n += int64(written)
 
-	return n, err
+	if err != nil {
+		return written, fmt.Errorf("archival writer write: %w", err)
+	}
+
+	return written, nil
 }
 
 // streamPartitionUpload streams all rows from the partition through gzip
@@ -748,6 +752,7 @@ func streamPartitionViaPipe(
 		return zero, err
 	}
 
+	//nolint:rowserrcheck // rows.Err() is checked inside encodePartitionRows after iteration completes.
 	rows, err := tx.QueryContext(ctx, query)
 	if err != nil {
 		return zero, fmt.Errorf("query partition %s: %w", metadata.PartitionName, err)
@@ -774,17 +779,34 @@ func streamPartitionViaPipe(
 
 	producerCh := make(chan producerResult, 1)
 
-	go func() {
-		count, encodeErr := encodePartitionRows(rows, gzWriter, hasher)
-		// Closing gzWriter flushes remaining compressed bytes to the pipe.
-		if closeErr := gzWriter.Close(); encodeErr == nil {
-			encodeErr = closeErr
-		}
-		// Close the pipe writer so the uploader observes EOF (or the error).
-		// CloseWithError(nil) is equivalent to Close().
-		_ = pipeWriter.CloseWithError(encodeErr)
-		producerCh <- producerResult{rowCount: count, err: encodeErr}
-	}()
+	runtime.SafeGoWithContextAndComponent(
+		ctx,
+		aw.logger,
+		"governance",
+		"archival_worker.encode_partition_producer",
+		runtime.KeepRunning,
+		func(_ context.Context) {
+			var (
+				count     int64
+				encodeErr error
+			)
+			// Deferred inside the passed function so the pipe always closes
+			// and the consumer unblocks — even if a panic is recovered by the
+			// SafeGo wrapper's outer defer.
+			defer func() {
+				// CloseWithError(nil) is equivalent to Close(); closing the
+				// pipe writer signals EOF (or the error) to the uploader.
+				_ = pipeWriter.CloseWithError(encodeErr)
+				producerCh <- producerResult{rowCount: count, err: encodeErr}
+			}()
+
+			count, encodeErr = encodePartitionRows(rows, gzWriter, hasher)
+			// Closing gzWriter flushes remaining compressed bytes to the pipe.
+			if closeErr := gzWriter.Close(); encodeErr == nil {
+				encodeErr = closeErr
+			}
+		},
+	)
 
 	_, uploadErr := aw.storage.UploadWithOptions(
 		ctx,

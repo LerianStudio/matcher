@@ -34,47 +34,47 @@ type matchedRowIterator struct {
 	span trace.Span
 }
 
-func (m *matchedRowIterator) Next() bool { //nolint:revive // implements interface
-	if m.rows == nil {
+func (it *matchedRowIterator) Next() bool { //nolint:revive // implements interface
+	if it.rows == nil {
 		return false
 	}
 
-	return m.rows.Next()
+	return it.rows.Next()
 }
 
-func (m *matchedRowIterator) Err() error { //nolint:revive // implements interface
-	if m.rows == nil {
+func (it *matchedRowIterator) Err() error { //nolint:revive // implements interface
+	if it.rows == nil {
 		return nil
 	}
 
-	return m.rows.Err()
+	return it.rows.Err()
 }
 
-func (m *matchedRowIterator) Close() error { //nolint:revive,varnamelen // implements interface
-	if m.span != nil {
-		defer m.span.End()
+func (it *matchedRowIterator) Close() error { //nolint:revive // implements interface
+	if it.span != nil {
+		defer it.span.End()
 	}
 
 	var rowsErr error
-	if m.rows != nil {
-		rowsErr = m.rows.Close()
+	if it.rows != nil {
+		rowsErr = it.rows.Close()
 	}
 
 	var txErr error
-	if m.tx != nil {
-		txErr = m.tx.Commit()
+	if it.tx != nil {
+		txErr = it.tx.Commit()
 	}
 
 	return errors.Join(rowsErr, txErr)
 }
 
-func (m *matchedRowIterator) Scan() (*entities.MatchedItem, error) { //nolint:revive // implements interface
-	if m.rows == nil {
+func (it *matchedRowIterator) Scan() (*entities.MatchedItem, error) { //nolint:revive // implements interface
+	if it.rows == nil {
 		return nil, errIteratorNotInitialized
 	}
 
 	var item entities.MatchedItem
-	if err := m.rows.Scan(
+	if err := it.rows.Scan(
 		&item.TransactionID,
 		&item.MatchGroupID,
 		&item.SourceID,
@@ -96,47 +96,47 @@ type unmatchedRowIterator struct {
 	span trace.Span
 }
 
-func (u *unmatchedRowIterator) Next() bool { //nolint:revive // implements interface
-	if u.rows == nil {
+func (it *unmatchedRowIterator) Next() bool { //nolint:revive // implements interface
+	if it.rows == nil {
 		return false
 	}
 
-	return u.rows.Next()
+	return it.rows.Next()
 }
 
-func (u *unmatchedRowIterator) Err() error { //nolint:revive // implements interface
-	if u.rows == nil {
+func (it *unmatchedRowIterator) Err() error { //nolint:revive // implements interface
+	if it.rows == nil {
 		return nil
 	}
 
-	return u.rows.Err()
+	return it.rows.Err()
 }
 
-func (u *unmatchedRowIterator) Close() error { //nolint:revive,varnamelen // implements interface
-	if u.span != nil {
-		defer u.span.End()
+func (it *unmatchedRowIterator) Close() error { //nolint:revive // implements interface
+	if it.span != nil {
+		defer it.span.End()
 	}
 
 	var rowsErr error
-	if u.rows != nil {
-		rowsErr = u.rows.Close()
+	if it.rows != nil {
+		rowsErr = it.rows.Close()
 	}
 
 	var txErr error
-	if u.tx != nil {
-		txErr = u.tx.Commit()
+	if it.tx != nil {
+		txErr = it.tx.Commit()
 	}
 
 	return errors.Join(rowsErr, txErr)
 }
 
-func (u *unmatchedRowIterator) Scan() (*entities.UnmatchedItem, error) { //nolint:revive // implements interface
-	if u.rows == nil {
+func (it *unmatchedRowIterator) Scan() (*entities.UnmatchedItem, error) { //nolint:revive // implements interface
+	if it.rows == nil {
 		return nil, errIteratorNotInitialized
 	}
 
 	var item entities.UnmatchedItem
-	if err := u.rows.Scan(
+	if err := it.rows.Scan(
 		&item.TransactionID,
 		&item.SourceID,
 		&item.Amount,

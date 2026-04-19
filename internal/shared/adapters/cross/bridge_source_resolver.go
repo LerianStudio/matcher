@@ -127,59 +127,7 @@ func (adapter *BridgeSourceResolverAdapter) ResolveSourceForConnection(
 	}
 
 	result, err := pgcommon.WithTenantTxProvider(ctx, adapter.provider, func(tx *sql.Tx) (sharedPorts.BridgeSourceTarget, error) {
-		rows, queryErr := tx.QueryContext(ctx,
-			`SELECT id, context_id
-			FROM reconciliation_sources
-			WHERE type = 'FETCHER' AND config->>'connection_id' = $1::text
-			ORDER BY created_at ASC
-			LIMIT 2`,
-			connectionID.String(),
-		)
-		if queryErr != nil {
-			return sharedPorts.BridgeSourceTarget{}, fmt.Errorf("query bridge source target: %w", queryErr)
-		}
-
-		defer func() { _ = rows.Close() }()
-
-		if !rows.Next() {
-			if rowsErr := rows.Err(); rowsErr != nil {
-				return sharedPorts.BridgeSourceTarget{}, fmt.Errorf("iterate bridge source target: %w", rowsErr)
-			}
-
-			return sharedPorts.BridgeSourceTarget{}, sharedPorts.ErrBridgeSourceUnresolvable
-		}
-
-		var sourceIDStr, contextIDStr string
-		if scanErr := rows.Scan(&sourceIDStr, &contextIDStr); scanErr != nil {
-			return sharedPorts.BridgeSourceTarget{}, fmt.Errorf("scan bridge source target: %w", scanErr)
-		}
-
-		// A second row is a uniqueness violation. Migration 000032 prevents
-		// new duplicates at the DB layer; this guard catches legacy data
-		// that predates the constraint.
-		if rows.Next() {
-			return sharedPorts.BridgeSourceTarget{}, ErrMultipleFetcherSourcesForConnection
-		}
-
-		if rowsErr := rows.Err(); rowsErr != nil {
-			return sharedPorts.BridgeSourceTarget{}, fmt.Errorf("iterate bridge source target: %w", rowsErr)
-		}
-
-		sourceID, parseErr := uuid.Parse(sourceIDStr)
-		if parseErr != nil {
-			return sharedPorts.BridgeSourceTarget{}, fmt.Errorf("parse source id: %w", parseErr)
-		}
-
-		contextID, parseErr := uuid.Parse(contextIDStr)
-		if parseErr != nil {
-			return sharedPorts.BridgeSourceTarget{}, fmt.Errorf("parse context id: %w", parseErr)
-		}
-
-		return sharedPorts.BridgeSourceTarget{
-			SourceID:  sourceID,
-			ContextID: contextID,
-			Format:    bridgeSourceResolverFormatJSON,
-		}, nil
+		return queryBridgeSourceTarget(ctx, tx, connectionID)
 	})
 	if err != nil {
 		wrapped := fmt.Errorf("resolve source for connection: %w", err)
@@ -197,4 +145,68 @@ func (adapter *BridgeSourceResolverAdapter) ResolveSourceForConnection(
 	}
 
 	return result, nil
+}
+
+// queryBridgeSourceTarget runs the tenant-scoped SQL to find the FETCHER
+// reconciliation_source for a given Fetcher connection id. Extracted from
+// ResolveSourceForConnection so the outer method stays within the cyclop
+// complexity budget; behavior is identical.
+func queryBridgeSourceTarget(
+	ctx context.Context,
+	tx *sql.Tx,
+	connectionID uuid.UUID,
+) (sharedPorts.BridgeSourceTarget, error) {
+	rows, queryErr := tx.QueryContext(ctx,
+		`SELECT id, context_id
+		FROM reconciliation_sources
+		WHERE type = 'FETCHER' AND config->>'connection_id' = $1::text
+		ORDER BY created_at ASC
+		LIMIT 2`,
+		connectionID.String(),
+	)
+	if queryErr != nil {
+		return sharedPorts.BridgeSourceTarget{}, fmt.Errorf("query bridge source target: %w", queryErr)
+	}
+
+	defer func() { _ = rows.Close() }()
+
+	if !rows.Next() {
+		if rowsErr := rows.Err(); rowsErr != nil {
+			return sharedPorts.BridgeSourceTarget{}, fmt.Errorf("iterate bridge source target: %w", rowsErr)
+		}
+
+		return sharedPorts.BridgeSourceTarget{}, sharedPorts.ErrBridgeSourceUnresolvable
+	}
+
+	var sourceIDStr, contextIDStr string
+	if scanErr := rows.Scan(&sourceIDStr, &contextIDStr); scanErr != nil {
+		return sharedPorts.BridgeSourceTarget{}, fmt.Errorf("scan bridge source target: %w", scanErr)
+	}
+
+	// A second row is a uniqueness violation. Migration 000032 prevents
+	// new duplicates at the DB layer; this guard catches legacy data
+	// that predates the constraint.
+	if rows.Next() {
+		return sharedPorts.BridgeSourceTarget{}, ErrMultipleFetcherSourcesForConnection
+	}
+
+	if rowsErr := rows.Err(); rowsErr != nil {
+		return sharedPorts.BridgeSourceTarget{}, fmt.Errorf("iterate bridge source target: %w", rowsErr)
+	}
+
+	sourceID, parseErr := uuid.Parse(sourceIDStr)
+	if parseErr != nil {
+		return sharedPorts.BridgeSourceTarget{}, fmt.Errorf("parse source id: %w", parseErr)
+	}
+
+	contextID, parseErr := uuid.Parse(contextIDStr)
+	if parseErr != nil {
+		return sharedPorts.BridgeSourceTarget{}, fmt.Errorf("parse context id: %w", parseErr)
+	}
+
+	return sharedPorts.BridgeSourceTarget{
+		SourceID:  sourceID,
+		ContextID: contextID,
+		Format:    bridgeSourceResolverFormatJSON,
+	}, nil
 }

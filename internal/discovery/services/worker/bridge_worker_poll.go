@@ -83,11 +83,9 @@ func (worker *BridgeWorker) pollCycle(ctx context.Context) {
 			continue
 		}
 
-		// Capture for the goroutine closure; each iteration gets its own
-		// tenantID since Go 1.22 semantics make the range var per-iteration,
-		// but the explicit local keeps the intent obvious to reviewers.
-		tenantID := tenantID
-
+		// Go 1.22 range semantics give each iteration its own tenantID,
+		// so the goroutine closure captures it safely without an explicit
+		// local copy.
 		group.Go(func() error {
 			processed.Add(int64(worker.processTenant(groupCtx, tenantID)))
 
