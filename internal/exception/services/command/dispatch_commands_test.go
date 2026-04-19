@@ -3,7 +3,10 @@
 package command
 
 import (
+	"context"
 	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -906,4 +909,166 @@ func TestDispatch_WithAssignedExceptionIncludesContext(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, "JIRA", result.Target)
+}
+
+// --- BulkDispatch Concurrency ---
+
+// countingExceptionFinder is a thread-safe ExceptionFinder for
+// BulkDispatch parallelism tests. All requested ids resolve to the same
+// pre-built exception so the parallel workers can run without touching
+// gomock (gomock controllers are not safe for parallel use even with
+// AnyTimes matchers when the same call pattern fires from multiple
+// goroutines).
+type countingExceptionFinder struct {
+	exception *entities.Exception
+}
+
+func (f *countingExceptionFinder) FindByID(
+	_ context.Context,
+	_ uuid.UUID,
+) (*entities.Exception, error) {
+	return f.exception, nil
+}
+
+// concurrencyTrackingConnector records the peak number of in-flight
+// Dispatch calls so BulkDispatch's errgroup.SetLimit(10) can be asserted
+// directly. The ready channel gates the start of each call so the
+// pool is guaranteed to hit saturation before any call completes.
+type concurrencyTrackingConnector struct {
+	inFlight    atomic.Int64
+	peak        atomic.Int64
+	totalCalls  atomic.Int64
+	releaseOnce sync.Once
+	ready       chan struct{}
+	release     chan struct{}
+	startCount  atomic.Int64
+}
+
+func newConcurrencyTrackingConnector(saturation int64) *concurrencyTrackingConnector {
+	return &concurrencyTrackingConnector{
+		ready:   make(chan struct{}, saturation),
+		release: make(chan struct{}),
+	}
+}
+
+func (c *concurrencyTrackingConnector) Dispatch(
+	_ context.Context,
+	exceptionID string,
+	_ services.RoutingDecision,
+	_ []byte,
+) (ports.DispatchResult, error) {
+	now := c.inFlight.Add(1)
+	defer c.inFlight.Add(-1)
+
+	for {
+		peak := c.peak.Load()
+		if now <= peak {
+			break
+		}
+
+		if c.peak.CompareAndSwap(peak, now) {
+			break
+		}
+	}
+
+	// Signal that this worker has started and block until release fires.
+	// The test closes release after the ready channel reaches capacity,
+	// which proves the group hit its concurrency bound.
+	c.ready <- struct{}{}
+	c.startCount.Add(1)
+
+	<-c.release
+
+	c.totalCalls.Add(1)
+
+	return ports.DispatchResult{
+		Target:            services.RoutingTargetJira,
+		ExternalReference: "EXT-" + exceptionID,
+		Acknowledged:      true,
+	}, nil
+}
+
+// TestBulkDispatch_RespectsConcurrencyLimit asserts that BulkDispatch
+// caps in-flight Dispatch calls at bulkDispatchConcurrency even when the
+// batch is larger than the limit. A 20-item batch with a connector that
+// blocks on a shared channel must plateau at 10 concurrent calls: if the
+// cap were absent or too high, all 20 workers would enter Dispatch and
+// the test would deadlock (the release channel is only closed after the
+// ready channel reports saturation).
+func TestBulkDispatch_RespectsConcurrencyLimit(t *testing.T) {
+	t.Parallel()
+
+	const batchSize = 20
+
+	exception := newTestDispatchException()
+	finder := &countingExceptionFinder{exception: exception}
+	connector := newConcurrencyTrackingConnector(bulkDispatchConcurrency)
+
+	audit := &stubAuditPublisher{}
+	actor := actorExtractor("dispatcher@example.com")
+
+	uc, err := NewDispatchUseCase(finder, connector, audit, actor, &stubInfraProvider{})
+	require.NoError(t, err)
+
+	ids := make([]uuid.UUID, 0, batchSize)
+	for range batchSize {
+		ids = append(ids, uuid.New())
+	}
+
+	// Drive the release channel on a watchdog goroutine: once the
+	// connector reports saturation it means the group hit the cap, and
+	// we can unblock the pool so the test does not deadlock.
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+
+		// Wait until bulkDispatchConcurrency workers have signalled ready.
+		for range bulkDispatchConcurrency {
+			select {
+			case <-connector.ready:
+			case <-time.After(5 * time.Second):
+				t.Errorf("timed out waiting for dispatch pool to saturate")
+				return
+			}
+		}
+
+		// Pool is saturated -- now prove no additional worker entered
+		// before we release. A brief sleep here is acceptable: the test
+		// is asserting an upper bound, not a lower bound.
+		time.Sleep(50 * time.Millisecond)
+
+		assert.LessOrEqual(t, connector.inFlight.Load(), int64(bulkDispatchConcurrency),
+			"in-flight dispatches must not exceed bulkDispatchConcurrency")
+
+		// Release all workers and drain ready signals as later workers arrive.
+		connector.releaseOnce.Do(func() { close(connector.release) })
+
+		for i := bulkDispatchConcurrency; i < batchSize; i++ {
+			select {
+			case <-connector.ready:
+			case <-time.After(5 * time.Second):
+				t.Errorf("timed out draining ready channel after release")
+				return
+			}
+		}
+	}()
+
+	ctx := ctxWithActor("dispatcher@example.com")
+
+	result, err := uc.BulkDispatch(ctx, BulkDispatchInput{
+		ExceptionIDs: ids,
+		TargetSystem: "JIRA",
+	})
+
+	<-done
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Len(t, result.Succeeded, batchSize, "all dispatches should succeed")
+	assert.Empty(t, result.Failed)
+
+	assert.LessOrEqual(t, connector.peak.Load(), int64(bulkDispatchConcurrency),
+		"peak in-flight dispatches must stay at or below the configured cap")
+	assert.Equal(t, int64(batchSize), connector.totalCalls.Load(),
+		"every dispatched item must complete its connector call")
 }

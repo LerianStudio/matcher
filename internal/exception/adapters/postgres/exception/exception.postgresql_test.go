@@ -5,6 +5,7 @@ package exception
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"errors"
 	"regexp"
 	"testing"
@@ -134,6 +135,94 @@ func TestRepository_FindByID_NullableFields(t *testing.T) {
 	require.Nil(t, result.Reason)
 }
 
+func TestRepository_FindByIDs_Success(t *testing.T) {
+	t.Parallel()
+
+	repo, mock, finish := setupRepository(t)
+	defer finish()
+
+	ctx := context.Background()
+	ids := []uuid.UUID{uuid.New(), uuid.New(), uuid.New()}
+	transactionID := uuid.New()
+	createdAt := time.Now().UTC().Add(-time.Hour)
+	updatedAt := time.Now().UTC()
+
+	// FindByIDs builds `SELECT ... FROM exceptions WHERE id IN ($1,$2,$3)`
+	// via squirrel. The regex tolerates squirrel's exact whitespace.
+	query := `SELECT id, transaction_id, severity, status, external_system, external_issue_id, assigned_to, due_at, resolution_notes, resolution_type, resolution_reason, reason, version, created_at, updated_at FROM exceptions WHERE id IN \(\$1,\$2,\$3\)`
+
+	rows := sqlmock.NewRows([]string{
+		"id",
+		"transaction_id",
+		"severity",
+		"status",
+		"external_system",
+		"external_issue_id",
+		"assigned_to",
+		"due_at",
+		"resolution_notes",
+		"resolution_type",
+		"resolution_reason",
+		"reason",
+		"version",
+		"created_at",
+		"updated_at",
+	})
+
+	for _, id := range ids {
+		rows.AddRow(
+			id.String(),
+			transactionID.String(),
+			"HIGH",
+			"OPEN",
+			sql.NullString{},
+			sql.NullString{},
+			sql.NullString{},
+			sql.NullTime{},
+			sql.NullString{},
+			sql.NullString{},
+			sql.NullString{},
+			sql.NullString{},
+			int64(1),
+			createdAt,
+			updatedAt,
+		)
+	}
+
+	expectedArgs := []driver.Value{ids[0].String(), ids[1].String(), ids[2].String()}
+
+	mock.ExpectQuery(query).
+		WithArgs(expectedArgs...).
+		WillReturnRows(rows)
+
+	result, err := repo.FindByIDs(ctx, ids)
+	require.NoError(t, err)
+	require.Len(t, result, len(ids))
+
+	// The slice ordering mirrors the rows mock returned them in.
+	for i, id := range ids {
+		assert.Equal(t, id, result[i].ID)
+	}
+}
+
+func TestRepository_FindByIDs_EmptyInput(t *testing.T) {
+	t.Parallel()
+
+	repo, _, finish := setupRepository(t)
+	defer finish()
+
+	ctx := context.Background()
+
+	result, err := repo.FindByIDs(ctx, nil)
+	require.NoError(t, err)
+	assert.Empty(t, result)
+
+	result, err = repo.FindByIDs(ctx, []uuid.UUID{})
+	require.NoError(t, err)
+	assert.Empty(t, result)
+	// no sqlmock expectations -- empty input short-circuits before any DB call.
+}
+
 func TestRepository_Update_NotFound(t *testing.T) {
 	t.Parallel()
 
@@ -205,6 +294,13 @@ func TestRepository_NilConnection(t *testing.T) {
 		t.Parallel()
 
 		_, err := repo.FindByID(ctx, uuid.New())
+		require.ErrorIs(t, err, ErrRepoNotInitialized)
+	})
+
+	t.Run("FindByIDs", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := repo.FindByIDs(ctx, []uuid.UUID{uuid.New()})
 		require.ErrorIs(t, err, ErrRepoNotInitialized)
 	})
 

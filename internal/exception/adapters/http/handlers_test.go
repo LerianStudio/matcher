@@ -174,6 +174,27 @@ func (repo *stubExceptionRepo) FindByID(
 	return repo.exception, nil
 }
 
+func (repo *stubExceptionRepo) FindByIDs(
+	ctx context.Context,
+	_ []uuid.UUID,
+) ([]*entities.Exception, error) {
+	repo.seenCtxErr = ctx.Err()
+
+	if repo.returnCtxErr {
+		return nil, fmt.Errorf("context error: %w", ctx.Err())
+	}
+
+	if repo.err != nil {
+		return nil, repo.err
+	}
+
+	if repo.exception == nil {
+		return []*entities.Exception{}, nil
+	}
+
+	return []*entities.Exception{repo.exception}, nil
+}
+
 func (repo *stubExceptionRepo) List(
 	_ context.Context,
 	_ exceptionRepositories.ExceptionFilter,

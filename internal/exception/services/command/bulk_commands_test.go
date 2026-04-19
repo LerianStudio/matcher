@@ -279,3 +279,151 @@ func TestBulkErrors_AreDistinct(t *testing.T) {
 		seen[msg] = i
 	}
 }
+
+// --- N+1 Regression ---
+
+// newOpenException returns an OPEN-status exception suitable for the
+// bulk-resolve path (ValidateResolutionTransition(OPEN -> RESOLVED) succeeds).
+func newOpenException(t *testing.T) *entities.Exception {
+	t.Helper()
+
+	ex, err := entities.NewException(
+		context.Background(),
+		uuid.New(),
+		value_objects.ExceptionSeverityMedium,
+		nil,
+	)
+	require.NoError(t, err)
+
+	return ex
+}
+
+// TestBulkResolve_NPlusOne_Regression asserts the refactor that replaced
+// N FindByID round-trips with a single FindByIDs preload. For a 10-item
+// batch the repository must see exactly one FindByIDs call and zero
+// FindByID calls; the per-item transaction boundary is preserved, so
+// BeginTx and the audit publisher each get hit N times (one UPDATE +
+// one outbox insert inside each small tx).
+func TestBulkResolve_NPlusOne_Regression(t *testing.T) {
+	t.Parallel()
+
+	const batchSize = 10
+
+	ctx := context.Background()
+
+	exceptions := make([]*entities.Exception, 0, batchSize)
+	ids := make([]uuid.UUID, 0, batchSize)
+
+	for range batchSize {
+		ex := newOpenException(t)
+		exceptions = append(exceptions, ex)
+		ids = append(ids, ex.ID)
+	}
+
+	repo := &stubExceptionRepo{findByIDs: exceptions}
+	exec := &stubResolutionExecutor{}
+	audit := &stubAuditPublisher{}
+	provider := &stubInfraProvider{}
+
+	uc, err := NewUseCase(repo, exec, audit, actorExtractor("analyst"), provider)
+	require.NoError(t, err)
+
+	result, resolveErr := uc.BulkResolve(ctx, BulkResolveInput{
+		ExceptionIDs: ids,
+		Resolution:   "RESOLVED",
+	})
+
+	require.NoError(t, resolveErr)
+	require.NotNil(t, result)
+	assert.Len(t, result.Succeeded, batchSize, "all items should succeed")
+	assert.Empty(t, result.Failed)
+
+	assert.Equal(t, 1, repo.findIDsCall,
+		"BulkResolve must issue exactly one FindByIDs preload (was N before refactor)")
+	assert.Equal(t, batchSize, provider.beginTxCall,
+		"per-item transactions are preserved: one BeginTx per exception")
+	assert.Equal(t, batchSize, audit.getCallCount(),
+		"one outbox insert per item (inside each per-item tx)")
+}
+
+// TestBulkAssign_NPlusOne_Regression mirrors the resolve-side guarantee
+// for BulkAssign: one FindByIDs + N per-item transactions.
+func TestBulkAssign_NPlusOne_Regression(t *testing.T) {
+	t.Parallel()
+
+	const batchSize = 10
+
+	ctx := context.Background()
+
+	exceptions := make([]*entities.Exception, 0, batchSize)
+	ids := make([]uuid.UUID, 0, batchSize)
+
+	for range batchSize {
+		ex := newOpenException(t)
+		exceptions = append(exceptions, ex)
+		ids = append(ids, ex.ID)
+	}
+
+	repo := &stubExceptionRepo{findByIDs: exceptions}
+	exec := &stubResolutionExecutor{}
+	audit := &stubAuditPublisher{}
+	provider := &stubInfraProvider{}
+
+	uc, err := NewUseCase(repo, exec, audit, actorExtractor("analyst"), provider)
+	require.NoError(t, err)
+
+	result, assignErr := uc.BulkAssign(ctx, BulkAssignInput{
+		ExceptionIDs: ids,
+		Assignee:     "operator-1",
+	})
+
+	require.NoError(t, assignErr)
+	require.NotNil(t, result)
+	assert.Len(t, result.Succeeded, batchSize)
+	assert.Empty(t, result.Failed)
+
+	assert.Equal(t, 1, repo.findIDsCall,
+		"BulkAssign must issue exactly one FindByIDs preload")
+	assert.Equal(t, batchSize, provider.beginTxCall,
+		"per-item transactions preserved")
+	assert.Equal(t, batchSize, audit.getCallCount(),
+		"one outbox insert per item")
+}
+
+// TestBulkResolve_MissingIDReportedAsNotFound asserts that when FindByIDs
+// returns a subset of the requested ids (the rest were not found), each
+// missing id is reported in Failed with entities.ErrExceptionNotFound
+// rather than silently succeeding. This keeps the not-found flow
+// indistinguishable from the pre-refactor FindByID-per-item path.
+func TestBulkResolve_MissingIDReportedAsNotFound(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	found := newOpenException(t)
+	missingID := uuid.New()
+
+	repo := &stubExceptionRepo{findByIDs: []*entities.Exception{found}}
+	exec := &stubResolutionExecutor{}
+	audit := &stubAuditPublisher{}
+	provider := &stubInfraProvider{}
+
+	uc, err := NewUseCase(repo, exec, audit, actorExtractor("analyst"), provider)
+	require.NoError(t, err)
+
+	result, resolveErr := uc.BulkResolve(ctx, BulkResolveInput{
+		ExceptionIDs: []uuid.UUID{found.ID, missingID},
+		Resolution:   "RESOLVED",
+	})
+
+	require.NoError(t, resolveErr)
+	require.NotNil(t, result)
+	assert.Equal(t, []uuid.UUID{found.ID}, result.Succeeded)
+	require.Len(t, result.Failed, 1)
+	assert.Equal(t, missingID, result.Failed[0].ExceptionID)
+	assert.Contains(t, result.Failed[0].Error, "exception not found")
+
+	assert.Equal(t, 1, repo.findIDsCall, "still only one preload")
+	assert.Equal(t, 1, provider.beginTxCall, "only the found item opens a tx")
+	assert.Equal(t, 1, audit.getCallCount(), "only the found item emits audit")
+}

@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
+	"golang.org/x/sync/errgroup"
 
 	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
@@ -20,6 +22,13 @@ import (
 	"github.com/LerianStudio/matcher/internal/exception/ports"
 	sharedPorts "github.com/LerianStudio/matcher/internal/shared/ports"
 )
+
+// bulkDispatchConcurrency caps the number of parallel Dispatch calls
+// issued by BulkDispatch. Each Dispatch makes one outbound HTTP call to
+// an external connector; bounding concurrency at 10 reduces tail latency
+// on the common "dispatch N exceptions to Jira/ServiceNow" path without
+// saturating connector rate limits or the downstream audit commit pool.
+const bulkDispatchConcurrency = 10
 
 // Dispatch errors.
 var (
@@ -320,6 +329,21 @@ func calculateAgeDays(createdAt time.Time, referenceTime ...time.Time) int {
 }
 
 // BulkDispatch dispatches multiple exceptions to an external system.
+//
+// Per-item Dispatch work (FindByID + external connector call + audit tx)
+// is unchanged. Items run in parallel at bulkDispatchConcurrency to amortise
+// external-HTTP latency -- the common path where BulkDispatch spends most
+// of its wall-clock budget. errgroup.SetLimit bounds in-flight goroutines
+// to 10; the group never short-circuits on error because per-item failures
+// are already accumulated in the shared result, mirroring the original
+// serial semantics where a failed item never halted the batch.
+//
+// Result ordering is intentionally not guaranteed: Succeeded / Failed
+// append under a mutex as workers finish, so two runs of the same input
+// may yield different orderings. The previous serial implementation
+// happened to preserve request order; callers that relied on that
+// implicit contract now need to sort client-side (no existing caller
+// appears to).
 func (uc *DispatchUseCase) BulkDispatch(
 	ctx context.Context,
 	input BulkDispatchInput,
@@ -346,26 +370,51 @@ func (uc *DispatchUseCase) BulkDispatch(
 
 	queue := strings.TrimSpace(input.Queue)
 
+	var mu sync.Mutex
+
+	group, groupCtx := errgroup.WithContext(ctx)
+	group.SetLimit(bulkDispatchConcurrency)
+
 	for _, exceptionID := range dedupedIDs {
-		_, dispatchErr := uc.Dispatch(ctx, DispatchCommand{
-			ExceptionID:  exceptionID,
-			TargetSystem: targetSystem,
-			Queue:        queue,
-		})
-		if dispatchErr != nil {
-			libOpentelemetry.HandleSpanBusinessErrorEvent(span, "bulk dispatch item failed", dispatchErr)
-
-			logger.Log(ctx, libLog.LevelError, fmt.Sprintf("bulk dispatch failed for %s: %v", exceptionID, dispatchErr))
-
-			result.Failed = append(result.Failed, BulkItemFailure{
-				ExceptionID: exceptionID,
-				Error:       dispatchErr.Error(),
+		group.Go(func() error {
+			_, dispatchErr := uc.Dispatch(groupCtx, DispatchCommand{
+				ExceptionID:  exceptionID,
+				TargetSystem: targetSystem,
+				Queue:        queue,
 			})
 
-			continue
-		}
+			mu.Lock()
+			defer mu.Unlock()
 
-		result.Succeeded = append(result.Succeeded, exceptionID)
+			if dispatchErr != nil {
+				libOpentelemetry.HandleSpanBusinessErrorEvent(span, "bulk dispatch item failed", dispatchErr)
+
+				logger.Log(ctx, libLog.LevelError, fmt.Sprintf("bulk dispatch failed for %s: %v", exceptionID, dispatchErr))
+
+				result.Failed = append(result.Failed, BulkItemFailure{
+					ExceptionID: exceptionID,
+					Error:       dispatchErr.Error(),
+				})
+
+				// Return nil so errgroup does not cancel groupCtx: the
+				// failure is already captured in result.Failed, and
+				// per-item failures must not halt peers.
+				return nil
+			}
+
+			result.Succeeded = append(result.Succeeded, exceptionID)
+
+			return nil
+		})
+	}
+
+	// Workers never return non-nil, so Wait only surfaces ctx cancellation
+	// from the parent context. When the caller cancels mid-batch we still
+	// return the partial result accumulated so far.
+	if err := group.Wait(); err != nil {
+		libOpentelemetry.HandleSpanError(span, "bulk dispatch canceled", err)
+
+		return result, fmt.Errorf("bulk dispatch: %w", err)
 	}
 
 	return result, nil

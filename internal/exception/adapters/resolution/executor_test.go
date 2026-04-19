@@ -39,6 +39,21 @@ func (s *stubExceptionRepo) FindByID(_ context.Context, _ uuid.UUID) (*entities.
 	return s.exception, s.err
 }
 
+func (s *stubExceptionRepo) FindByIDs(
+	_ context.Context,
+	_ []uuid.UUID,
+) ([]*entities.Exception, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+
+	if s.exception == nil {
+		return []*entities.Exception{}, nil
+	}
+
+	return []*entities.Exception{s.exception}, nil
+}
+
 func (s *stubExceptionRepo) List(
 	_ context.Context,
 	_ repositories.ExceptionFilter,
