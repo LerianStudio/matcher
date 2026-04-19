@@ -26,9 +26,8 @@ import (
 )
 
 var (
-	errTestBoom            = errors.New("boom error")
-	errTestDatabaseError   = errors.New("database error")
-	errTestDatabaseTimeout = errors.New("database timeout")
+	errTestBoom          = errors.New("boom error")
+	errTestDatabaseError = errors.New("database error")
 )
 
 type stubMatchRunRepo struct {

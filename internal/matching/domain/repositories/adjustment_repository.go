@@ -13,8 +13,6 @@ import (
 	sharedDomain "github.com/LerianStudio/matcher/internal/shared/domain"
 )
 
-//go:generate mockgen -destination=mocks/adjustment_repository_mock.go -package=mocks . AdjustmentRepository
-
 // AdjustmentRepository defines persistence operations for adjustments.
 type AdjustmentRepository interface {
 	Create(ctx context.Context, adjustment *entities.Adjustment) (*entities.Adjustment, error)

@@ -618,7 +618,6 @@ func TestSentinelErrors_Distinct(t *testing.T) {
 	sentinels := []error{
 		ErrNilDB,
 		ErrNowFuncRequired,
-		ErrPartitionNotFound,
 		ErrInvalidLookahead,
 		ErrInvalidPartitionName,
 		ErrRetentionPeriodActive,

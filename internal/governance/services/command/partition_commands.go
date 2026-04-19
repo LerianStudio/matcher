@@ -25,7 +25,6 @@ import (
 var (
 	ErrNilDB                 = errors.New("database connection is required")
 	ErrNowFuncRequired       = errors.New("clock function is required")
-	ErrPartitionNotFound     = errors.New("partition not found")
 	ErrInvalidLookahead      = errors.New("lookahead months must be positive")
 	ErrInvalidPartitionName  = errors.New("invalid partition name format")
 	ErrParseDateFromBound    = errors.New("could not parse dates from partition bound expression")
