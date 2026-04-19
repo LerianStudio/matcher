@@ -257,6 +257,10 @@ func (worker *SchedulerWorker) pollCycle(ctx context.Context) {
 	span.SetAttributes(attribute.Int("scheduler.due_count", len(schedules)))
 
 	for _, schedule := range schedules {
+		if schedule == nil {
+			continue
+		}
+
 		worker.processSchedule(ctx, schedule, now)
 	}
 }

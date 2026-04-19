@@ -317,6 +317,13 @@ func (publisher *EventPublisher) publish(
 		return errPublisherNotInit
 	}
 
+	// Multi-tenant mode relies on the rmq manager to resolve per-tenant
+	// channels. If the manager is nil, dispatch would nil-deref inside
+	// publishMultiTenant — fail fast with the wiring sentinel instead.
+	if publisher.multiTenant && publisher.rmqManager == nil {
+		return errPublisherNotInit
+	}
+
 	logger, tracer, _, _ := libCommons.NewTrackingFromContext(ctx)
 
 	span := trace.SpanFromContext(ctx)

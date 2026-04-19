@@ -219,6 +219,10 @@ func (worker *CleanupWorker) cleanupExpired(ctx context.Context) {
 	now := time.Now().UTC()
 
 	for _, job := range jobs {
+		if job == nil {
+			continue
+		}
+
 		worker.cleanupJob(ctx, job, now)
 	}
 }

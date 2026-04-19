@@ -29,6 +29,10 @@ func (worker *BridgeWorker) persistTerminalFailure(
 	class vo.BridgeErrorClass,
 	originalErr error,
 ) {
+	if extraction == nil {
+		return
+	}
+
 	logger, _ := worker.tracking(ctx)
 
 	extraction.RecordBridgeAttempt()
@@ -75,6 +79,10 @@ func (worker *BridgeWorker) handleTransientFailure(
 	extraction *entities.ExtractionRequest,
 	originalErr error,
 ) {
+	if extraction == nil {
+		return
+	}
+
 	logger, _ := worker.tracking(ctx)
 
 	attempts := extraction.RecordBridgeAttempt()

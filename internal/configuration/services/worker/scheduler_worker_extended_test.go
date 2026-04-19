@@ -41,6 +41,45 @@ func TestPollCycle_NoDueSchedules(t *testing.T) {
 	assert.False(t, trigger.triggerCalled)
 }
 
+func TestPollCycle_SkipsNilSchedules(t *testing.T) {
+	t.Parallel()
+
+	trigger := &stubMatchTrigger{}
+	contextID := uuid.New()
+	tenantID := uuid.New()
+	repo := &stubScheduleRepo{
+		findDueSchedulesFn: func(_ context.Context, _ time.Time) ([]*entities.ReconciliationSchedule, error) {
+			// First element nil: must not panic; second valid so we verify the
+			// loop continues past the skip.
+			return []*entities.ReconciliationSchedule{
+				nil,
+				{
+					ID:             uuid.New(),
+					ContextID:      contextID,
+					CronExpression: "0 * * * *",
+					Enabled:        true,
+					TenantID:       tenantID,
+				},
+			}, nil
+		},
+	}
+
+	w, err := NewSchedulerWorker(
+		repo, trigger, &stubLockManager{},
+		SchedulerWorkerConfig{Interval: time.Hour},
+		&stubLogger{},
+	)
+	require.NoError(t, err)
+
+	assert.NotPanics(t, func() {
+		w.pollCycle(context.Background())
+	})
+
+	assert.True(t, trigger.triggerCalled)
+	assert.Equal(t, contextID, trigger.lastContextID)
+	assert.Equal(t, tenantID, trigger.lastTenantID)
+}
+
 func TestPollCycle_FindDueSchedulesError(t *testing.T) {
 	t.Parallel()
 

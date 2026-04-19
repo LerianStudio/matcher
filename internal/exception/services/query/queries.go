@@ -186,15 +186,20 @@ func (uc *UseCase) GetHistory(
 		return nil, "", fmt.Errorf("fetching audit history: %w", err)
 	}
 
-	entries := make([]HistoryEntry, len(logs))
-	for i, log := range logs {
-		entries[i] = HistoryEntry{
+	entries := make([]HistoryEntry, 0, len(logs))
+
+	for _, log := range logs {
+		if log == nil {
+			continue
+		}
+
+		entries = append(entries, HistoryEntry{
 			ID:        log.ID,
 			Action:    log.Action,
 			ActorID:   log.ActorID,
 			Changes:   log.Changes,
 			CreatedAt: log.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		}
+		})
 	}
 
 	return entries, nextCursor, nil

@@ -458,6 +458,34 @@ func TestCleanupWorker_CleanupExpired_EmptyList(t *testing.T) {
 	assert.False(t, updateCalled.Load())
 }
 
+// TestCleanupWorker_CleanupExpired_SkipsNilJob asserts the defensive
+// nil-guard in the cleanup loop: a repository that leaks a nil element
+// must not cause a nil-deref inside cleanupJob.
+func TestCleanupWorker_CleanupExpired_SkipsNilJob(t *testing.T) {
+	t.Parallel()
+
+	jobRepo, storage, cfg, logger := setupCleanupWorkerMocks(t)
+
+	var listCalled atomic.Bool
+
+	jobRepo.EXPECT().
+		ListExpired(gomock.Any(), cfg.BatchSize).
+		DoAndReturn(func(context.Context, int) ([]*entities.ExportJob, error) {
+			listCalled.Store(true)
+			return []*entities.ExportJob{nil}, nil
+		}).
+		AnyTimes()
+
+	// No Update/Delete should fire — the nil job is skipped before reaching
+	// any repo/storage call.
+	worker, err := NewCleanupWorker(jobRepo, storage, cfg, logger)
+	require.NoError(t, err)
+
+	assert.NotPanics(t, func() {
+		startAndWaitWorker(t, worker, listCalled.Load)
+	})
+}
+
 func TestCleanupWorker_CleanupExpired_ListError(t *testing.T) {
 	t.Parallel()
 

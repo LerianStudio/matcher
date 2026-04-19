@@ -1043,6 +1043,10 @@ func (aw *ArchivalWorker) resumeIncomplete(ctx context.Context) {
 	}
 
 	for _, metadata := range incomplete {
+		if metadata == nil {
+			continue
+		}
+
 		// Set tenant context for each incomplete archive.
 		tenantCtx := context.WithValue(ctx, auth.TenantIDKey, metadata.TenantID.String())
 
