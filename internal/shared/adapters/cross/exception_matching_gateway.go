@@ -150,7 +150,7 @@ func (gateway *ExceptionMatchingGateway) CreateAdjustment(
 		return fmt.Errorf("resolve context ID: %w", err)
 	}
 
-	adjustmentType := mapReasonToAdjustmentType(input.Reason)
+	adjustmentType := mapReasonToAdjustmentType(ctx, logger, input.Reason)
 	transactionID := input.TransactionID
 
 	direction := matchingEntities.AdjustmentDirection(input.Direction)
@@ -243,12 +243,26 @@ func mapSourceLookupError(jobErr, sourceErr error) error {
 	return jobErr
 }
 
-// mapReasonToAdjustmentType maps exception adjustment reasons to matching adjustment types.
-func mapReasonToAdjustmentType(reason string) matchingEntities.AdjustmentType {
+// mapReasonToAdjustmentType maps exception adjustment reasons to matching
+// adjustment types. Unknown reasons fall back to Miscellaneous but emit a
+// WARN so operators can spot unexpected reason codes reaching the gateway
+// (typically a config/console drift).
+func mapReasonToAdjustmentType(
+	ctx context.Context,
+	logger libLog.Logger,
+	reason string,
+) matchingEntities.AdjustmentType {
 	switch reason {
 	case "CURRENCY_CORRECTION":
 		return matchingEntities.AdjustmentTypeFXDifference
 	default:
+		if logger != nil {
+			logger.With(
+				libLog.String("reason", reason),
+				libLog.String("mapped_to", string(matchingEntities.AdjustmentTypeMiscellaneous)),
+			).Log(ctx, libLog.LevelWarn, "adjustment: unmapped reason, defaulting to miscellaneous")
+		}
+
 		return matchingEntities.AdjustmentTypeMiscellaneous
 	}
 }
