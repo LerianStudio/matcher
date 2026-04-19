@@ -1,9 +1,16 @@
+//go:build unit || integration
+
 // Package ratelimit hosts integration-test helpers that need to touch the
 // bootstrap Service directly. It lives in its own subpackage so that
 // tests/integration can be imported by test files inside internal/* without
 // dragging bootstrap (and therefore the full module graph) with it, which
 // would otherwise create an import cycle through packages like
 // internal/discovery/services/worker.
+//
+// The `unit || integration` build tag matches the tags on this package's
+// consumers (override_unit_test.go is `unit`; override_integration.go and
+// override_test.go are `integration`). Without a tag here the default build
+// compiles this file alone, and golangci-lint flags every symbol as unused.
 package ratelimit
 
 import (
