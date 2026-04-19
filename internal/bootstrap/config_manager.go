@@ -137,6 +137,15 @@ func (cm *ConfigManager) WatchSystemplane(client *systemplane.Client) error {
 	return nil
 }
 
+// watchedSystemplaneKeysCache is populated once by the package init and
+// returned unchanged by watchedSystemplaneKeys on every call. The list is
+// immutable after registration, so there's no benefit to rebuilding it per
+// invocation; sharing one slice avoids ~105 allocations per WatchSystemplane
+// wiring without introducing visible behaviour changes.
+//
+// Callers that mutate the returned slice corrupt the cache. Don't do that.
+var watchedSystemplaneKeysCache = buildWatchedSystemplaneKeys()
+
 // watchedSystemplaneKeys returns the subset of systemplane keys whose changes
 // should trigger a Config rebuild via ConfigManager.Update. This list must
 // stay in sync with applySystemplaneOverrides — any key read there should be
@@ -149,9 +158,12 @@ func (cm *ConfigManager) WatchSystemplane(client *systemplane.Client) error {
 // registered keys are purely observational. Each entry here MUST have a
 // corresponding read in applySystemplaneOverrides — the drift is asserted by
 // TestWatchedSystemplaneKeys_CoversMatcherDefs.
-//
-//nolint:funlen // large flat list of runtime-mutable keys; splitting hurts readability.
 func watchedSystemplaneKeys() []string {
+	return watchedSystemplaneKeysCache
+}
+
+//nolint:funlen // large flat list of runtime-mutable keys; splitting hurts readability.
+func buildWatchedSystemplaneKeys() []string {
 	return []string{
 		// App
 		"app.env_name",
