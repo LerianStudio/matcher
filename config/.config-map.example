@@ -130,16 +130,15 @@ INFRA_CONNECT_TIMEOUT_SEC=30
 
 # NOTE: The following Fetcher tunables are NOT listed here because they are
 # runtime-mutable via the systemplane (ApplyWorkerReconcile or ApplyLiveRead
-# + MutableAtRuntime=true). Operate them via:
-#   PUT /v1/system/configs/fetcher.bridge_interval_sec                  (bounds [5, 3600])
-#   PUT /v1/system/configs/fetcher.bridge_batch_size                    (bounds [1, 10000])
-#   PUT /v1/system/configs/fetcher.bridge_stale_threshold_sec           (bounds [60, 86400])
-#   PUT /v1/system/configs/fetcher.bridge_retry_max_attempts            (bounds [1, 100])
-#   PUT /v1/system/configs/fetcher.custody_retention_sweep_interval_sec (bounds [60, 86400])
-#   PUT /v1/system/configs/fetcher.custody_retention_grace_period_sec   (bounds [0, 604800])
-# .config-map.example only documents BOOTSTRAP-only env vars (those that
-# require a service restart). The TestConfigMapExample_SyncWithNonHotReload
-# EnvVars guard fails the build if a hot-reloadable key sneaks in here.
+# + MutableAtRuntime=true). Operate them via the v5 admin API:
+#   PUT /system/matcher/fetcher.bridge_interval_sec                  (bounds [5, 3600])
+#   PUT /system/matcher/fetcher.bridge_batch_size                    (bounds [1, 10000])
+#   PUT /system/matcher/fetcher.bridge_stale_threshold_sec           (bounds [60, 86400])
+#   PUT /system/matcher/fetcher.bridge_retry_max_attempts            (bounds [1, 100])
+#   PUT /system/matcher/fetcher.custody_retention_sweep_interval_sec (bounds [60, 86400])
+#   PUT /system/matcher/fetcher.custody_retention_grace_period_sec   (bounds [0, 604800])
+# .config-map.example documents BOOTSTRAP-only env vars (those that require
+# a service restart). Keep hot-reloadable systemplane keys out of this file.
 
 # ── M2M (Machine-to-Machine) ─────────────────────────────────────────────────
 # Target service name for Secrets Manager M2M credential path.

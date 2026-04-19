@@ -348,7 +348,7 @@ Each aggregate directory follows Pattern A:
 - `{name}_sqlmock_test.go` — sqlmock-based unit tests
 - `errors.go` — adapter-specific sentinel errors
 
-**Flat layout exceptions**: `reporting/adapters/postgres/`, `shared/adapters/postgres/common/`, `governance/adapters/postgres/`, `outbox/adapters/postgres/`
+**Flat layout exceptions**: `reporting/adapters/postgres/`, `shared/adapters/postgres/common/`, `governance/adapters/postgres/`
 
 ### Command/Query Services
 
@@ -390,7 +390,7 @@ Split into `handlers_{feature}.go` when a context has 3+ distinct feature areas.
 
 10. **Air live reload** — Watches `*.go`, `*.sql` in `cmd/`, `internal/`, `pkg/`. Excludes tests, tools, docs, migrations. Builds to `tmp/main`. Config in `.air.toml`.
 
-11. **Workers vs Dispatcher** — Background workers in `services/worker/`. The outbox dispatcher at `outbox/services/dispatcher.go` is an exception (pure infrastructure, not a use case).
+11. **Workers vs Dispatcher** — Background workers in `services/worker/`. The outbox dispatcher is provided by `lib-commons/v5/commons/outbox` and wired in `internal/bootstrap/outbox_wiring.go`; matcher registers one handler per event type rather than owning its own dispatcher package.
 
 12. **Migration naming** — Sequential: `000001_descriptive_name.up.sql` / `.down.sql`. Currently 21 migrations. Always provide rollback. Validate with `make check-migrations`.
 

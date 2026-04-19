@@ -28,8 +28,7 @@ Matcher is a Go service built as a modular monolith using DDD, hexagonal archite
 - [Exception](internal/exception/README.md): Exception lifecycle, disputes, evidence, resolutions
 - [Governance](internal/governance/README.md): Immutable audit logs, hash chains, archival
 - [Reporting](internal/reporting/README.md): Dashboard analytics, export jobs (CSV/PDF)
-- [Outbox](internal/outbox/README.md): Transactional outbox for reliable event publication
-- [Shared Kernel](internal/shared/README.md): Cross-context domain types, fee engine, bridge adapters
+- [Shared Kernel](internal/shared/README.md): Cross-context domain types, fee engine, bridge adapters (hosts the transactional outbox integration with lib-commons/v5/commons/outbox)
 - [Auth](internal/auth/README.md): JWT extraction, RBAC, tenant schema isolation
 - [Test Utilities](internal/testutil/README.md): Shared test helpers
 

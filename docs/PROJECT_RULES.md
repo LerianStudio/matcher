@@ -36,7 +36,7 @@ Architectural constraints and design decisions for the Matcher codebase. This pr
 - **Type-alias pattern**: When a type migrates to `shared/domain/`, the original package re-exports via type alias for backward compatibility.
 - **Worker directories**: `services/worker/` for background jobs (configuration scheduler, governance archival, reporting export/cleanup, discovery poller/worker).
 - **Syncer directories**: `services/syncer/` for data synchronization (discovery syncer).
-- **Outbox dispatcher exception**: Lives at `outbox/services/dispatcher.go` (services root, not in command/query/worker) because it is pure infrastructure.
+- **Outbox dispatcher**: Provided by `lib-commons/v5/commons/outbox`. Wired in `internal/bootstrap/outbox_wiring.go`; matcher registers one handler per event type on the canonical HandlerRegistry instead of hosting its own dispatcher package.
 - **Cross-context communication**: Via shared ports, outbox events, and cross adapters in `internal/shared/adapters/cross/`. Current cross adapters: auto_match, configuration, exception_context_lookup, exception_matching_gateway, ingestion, matching, transaction_repository.
 
 ## 2. Required Libraries
@@ -258,7 +258,7 @@ Every aggregate-based postgres adapter directory uses Pattern A:
 | `{name}.postgresql.go` | Repository implementation |
 | `errors.go` | Adapter-specific sentinel errors |
 
-**Flat layout exceptions**: `reporting/adapters/postgres/` (read-only projections), `shared/adapters/postgres/common/` (utilities), `governance/adapters/postgres/` (audit_log, no model file), `outbox/adapters/postgres/` (repository only).
+**Flat layout exceptions**: `reporting/adapters/postgres/` (read-only projections), `shared/adapters/postgres/common/` (utilities), `governance/adapters/postgres/` (audit_log, no model file).
 
 ### Command/Query Service Files
 

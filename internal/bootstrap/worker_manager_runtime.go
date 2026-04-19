@@ -467,8 +467,8 @@ func applyDiscoveryRuntimeConfig(worker WorkerLifecycle, cfg *Config) error {
 // Wired here as part of Fix 4: prior to this fix the systemplane keys
 // `fetcher.bridge_interval_sec` / `fetcher.bridge_batch_size` were
 // registered with ApplyWorkerReconcile + MutableAtRuntime=true, so an
-// operator changing them via PUT /v1/system/configs saw audit logs but
-// the worker silently kept its old values.
+// operator changing them via PUT /system/matcher/<key> saw audit logs
+// but the worker silently kept its old values.
 func applyFetcherBridgeRuntimeConfig(worker WorkerLifecycle, cfg *Config) error {
 	bridgeWorker, ok := worker.(interface {
 		UpdateRuntimeConfig(discoveryWorker.BridgeWorkerConfig) error

@@ -64,9 +64,9 @@ Readiness uses `HealthDependencies`. Redis is optional by default; dependencies 
 13. Construct the `Service` (server + outbox runner).
 
 The init order is explicit because several modules share infrastructure or publish to the outbox:
-- `outboxRepo` is instantiated once from `internal/shared/adapters/postgres/outbox` and shared across modules.
+- The outbox repository is built from `lib-commons/v5/commons/outbox/postgres` (once per process) and shared across modules via `sharedPorts.OutboxRepository`.
 - Ingestion and matching both depend on the same outbox repository instance for transactional event storage.
-- The dispatcher depends on the outbox repo plus both RabbitMQ publishers.
+- The dispatcher (provided by `lib-commons/v5/commons/outbox`) depends on the outbox repo plus both RabbitMQ publishers.
 
 If you add a module with cross-context dependencies, update this list to keep the wiring order visible.
 
