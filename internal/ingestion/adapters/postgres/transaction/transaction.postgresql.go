@@ -10,6 +10,7 @@ import (
 
 	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 
 	libCommons "github.com/LerianStudio/lib-commons/v5/commons"
 	libLog "github.com/LerianStudio/lib-commons/v5/commons/log"
@@ -1062,7 +1063,13 @@ func (repo *Repository) ExistsBulkBySourceAndExternalID(
 
 	defer span.End()
 
-	const argsPerKey = 2
+	sourceIDs := make([]string, len(keys))
+	externalIDs := make([]string, len(keys))
+
+	for i, key := range keys {
+		sourceIDs[i] = key.SourceID.String()
+		externalIDs[i] = key.ExternalID
+	}
 
 	result, err := pgcommon.WithTenantTxProvider(
 		ctx,
@@ -1070,26 +1077,14 @@ func (repo *Repository) ExistsBulkBySourceAndExternalID(
 		func(tx *sql.Tx) (map[repositories.ExternalIDKey]bool, error) {
 			existsMap := make(map[repositories.ExternalIDKey]bool, len(keys))
 
-			valueStrings := make([]string, 0, len(keys))
-			valueArgs := make([]any, 0, len(keys)*argsPerKey)
+			const query = `
+				SELECT t.source_id, t.external_id
+				FROM transactions t
+				INNER JOIN unnest($1::uuid[], $2::text[]) AS v(source_id, external_id)
+				ON t.source_id = v.source_id AND t.external_id = v.external_id
+			`
 
-			for i, key := range keys {
-				valueStrings = append(
-					valueStrings,
-					fmt.Sprintf("($%d, $%d)", i*argsPerKey+1, i*argsPerKey+argsPerKey),
-				)
-				valueArgs = append(valueArgs, key.SourceID.String(), key.ExternalID)
-			}
-
-			// #nosec G201 -- false positive - valueStrings only contains placeholders ($1, $2, etc.)
-			query := fmt.Sprintf(`
-			SELECT t.source_id, t.external_id
-			FROM transactions t
-			INNER JOIN (VALUES %s) AS v(source_id, external_id)
-			ON t.source_id = v.source_id::uuid AND t.external_id = v.external_id
-		`, strings.Join(valueStrings, ", "))
-
-			rows, err := tx.QueryContext(ctx, query, valueArgs...)
+			rows, err := tx.QueryContext(ctx, query, pq.Array(sourceIDs), pq.Array(externalIDs))
 			if err != nil {
 				return nil, fmt.Errorf("failed to query existing transactions: %w", err)
 			}
