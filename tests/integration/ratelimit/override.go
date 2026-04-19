@@ -1,5 +1,3 @@
-//go:build integration
-
 // Package ratelimit hosts integration-test helpers that need to touch the
 // bootstrap Service directly. It lives in its own subpackage so that
 // tests/integration can be imported by test files inside internal/* without
@@ -11,50 +9,63 @@ package ratelimit
 import (
 	"context"
 	"fmt"
-
-	"github.com/LerianStudio/matcher/internal/bootstrap"
 )
 
-// OverrideRateLimitsForTests writes test-friendly rate limit values to the
-// systemplane client so that sequential integration tests from the same
-// client IP do not hit 429 Too Many Requests responses.
-//
-// Why this is needed: RegisterMatcherKeys registers rate_limit.* keys with
-// compile-time defaults (rate_limit.max=100 per minute). The systemplane
-// client.Get returns these registered defaults with ok=true even when no
-// runtime override exists, which masks env-var-based overrides like
-// RATE_LIMIT_MAX=1000 that tests set. Without this override, a single test
-// run with more than ~100 requests will fail with 429.
-//
-// The systemplane namespace and key names must match those registered in
-// internal/bootstrap/systemplane_keys.go. A matching helper exists in
-// tests/integration/server/rate_limit_override.go for the server subtests.
-func OverrideRateLimitsForTests(ctx context.Context, svc *bootstrap.Service) error {
-	if svc == nil {
-		return nil
-	}
+// systemplaneSetter abstracts the single method of the systemplane client
+// that this package uses. Production wires *systemplane.Client directly;
+// unit tests supply a recording fake without depending on the full client.
+type systemplaneSetter interface {
+	Set(ctx context.Context, namespace, key string, value any, actor string) error
+}
 
-	client := svc.GetSystemplaneClient()
+// rateLimitOverrideNamespace is the systemplane namespace the override
+// writes into. Matches the constant in internal/bootstrap/systemplane_keys.go.
+const rateLimitOverrideNamespace = "matcher"
+
+// rateLimitOverrideActor is the audit actor recorded on every override
+// write so drift between bootstrap-registered keys and test-time Sets is
+// easy to trace in systemplane_history.
+const rateLimitOverrideActor = "integration-test-harness"
+
+// rateLimitOverrideEntry is a single (key, value) pair written to
+// systemplane by applyRateLimitOverrides.
+type rateLimitOverrideEntry struct {
+	key   string
+	value any
+}
+
+// rateLimitOverrides is the canonical list of (key, value) pairs written
+// by OverrideRateLimitsForTests. Exposing it as a package var gives the
+// unit test drift-guard teeth: if a key here disappears from
+// internal/bootstrap/systemplane_keys.go the test notices.
+var rateLimitOverrides = []rateLimitOverrideEntry{
+	{"rate_limit.max", 100000},
+	{"rate_limit.expiry_sec", 60},
+	{"rate_limit.export_max", 10000},
+	{"rate_limit.export_expiry_sec", 60},
+	{"rate_limit.dispatch_max", 10000},
+	{"rate_limit.dispatch_expiry_sec", 60},
+}
+
+// applyRateLimitOverrides writes the canonical override values to the given
+// systemplane client. Extracted from OverrideRateLimitsForTests so it is
+// reachable from a unit test without a full bootstrap.Service and the
+// integration build tag it transitively requires.
+func applyRateLimitOverrides(ctx context.Context, client systemplaneSetter) error {
 	if client == nil {
 		// Graceful degradation: systemplane failed to initialize, static config
 		// from env vars is in effect, no override needed.
 		return nil
 	}
 
-	overrides := []struct {
-		key   string
-		value any
-	}{
-		{"rate_limit.max", 100000},
-		{"rate_limit.expiry_sec", 60},
-		{"rate_limit.export_max", 10000},
-		{"rate_limit.export_expiry_sec", 60},
-		{"rate_limit.dispatch_max", 10000},
-		{"rate_limit.dispatch_expiry_sec", 60},
-	}
-
-	for _, override := range overrides {
-		if err := client.Set(ctx, "matcher", override.key, override.value, "integration-test-harness"); err != nil {
+	for _, override := range rateLimitOverrides {
+		if err := client.Set(
+			ctx,
+			rateLimitOverrideNamespace,
+			override.key,
+			override.value,
+			rateLimitOverrideActor,
+		); err != nil {
 			return fmt.Errorf("systemplane set %s: %w", override.key, err)
 		}
 	}
