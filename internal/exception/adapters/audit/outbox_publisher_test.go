@@ -390,7 +390,11 @@ func TestOutboxPublisher_PublishExceptionEvent_ExactlyAtCap(t *testing.T) {
 	// The exception publisher's buildOutboxChangesMap adds different
 	// envelope overhead depending on whether Notes is empty versus set,
 	// so we binary-search Notes length for the largest value that lands
-	// at or below the cap.
+	// at or below the cap. We capture the successful payload from the
+	// final accepting iteration — re-publishing after the search would
+	// race against the publisher's internal time.Now() call, whose
+	// RFC3339Nano serialization length varies with trailing-zero nanos.
+	var atCapPayload []byte
 	lo, hi := 0, shared.DefaultOutboxMaxPayloadBytes
 	for lo < hi {
 		mid := (lo + hi + 1) / 2
@@ -410,31 +414,17 @@ func TestOutboxPublisher_PublishExceptionEvent_ExactlyAtCap(t *testing.T) {
 		if len(repo.created.Payload) <= shared.DefaultOutboxMaxPayloadBytes &&
 			!strings.Contains(string(repo.created.Payload), `"_truncated":true`) {
 			lo = mid
+			atCapPayload = repo.created.Payload
 		} else {
 			hi = mid - 1
 		}
 	}
 
-	// At the binary-search pivot the payload should be exactly at or just
-	// under the cap with Changes intact — and raising Notes by a single
-	// character should trip the gate.
 	require.Positive(t, lo, "binary search should find a positive Notes length")
+	require.NotNil(t, atCapPayload, "binary search should capture an at-cap payload")
 
-	repo.created = nil
-	atCapEvent := ports.AuditEvent{
-		ExceptionID: testutil.MustDeterministicUUID("exception-exact-cap"),
-		Action:      "update",
-		Actor:       "admin",
-		Notes:       strings.Repeat("x", lo),
-		OccurredAt:  testutil.FixedTime(),
-	}
-
-	err = publisher.PublishExceptionEvent(ctx, atCapEvent)
-	require.NoError(t, err)
-	require.NotNil(t, repo.created)
-
-	assert.NotContains(t, string(repo.created.Payload), `"_truncated":true`)
-	assert.LessOrEqual(t, len(repo.created.Payload), shared.DefaultOutboxMaxPayloadBytes)
+	assert.NotContains(t, string(atCapPayload), `"_truncated":true`)
+	assert.LessOrEqual(t, len(atCapPayload), shared.DefaultOutboxMaxPayloadBytes)
 }
 
 // TestOutboxPublisher_PublishExceptionEvent_OneByteOverCap verifies the
