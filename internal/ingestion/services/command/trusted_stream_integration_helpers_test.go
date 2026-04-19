@@ -123,6 +123,35 @@ func (d *trustedStreamFakeDedupe) MarkSeenWithRetry(
 	return nil
 }
 
+func (d *trustedStreamFakeDedupe) MarkSeenBulk(
+	_ context.Context,
+	_ uuid.UUID,
+	hashes []string,
+	_ time.Duration,
+) (map[string]bool, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	if d.seen == nil {
+		d.seen = map[string]bool{}
+	}
+
+	result := make(map[string]bool, len(hashes))
+
+	for _, hash := range hashes {
+		if d.seen[hash] {
+			result[hash] = false
+
+			continue
+		}
+
+		d.seen[hash] = true
+		result[hash] = true
+	}
+
+	return result, nil
+}
+
 func (d *trustedStreamFakeDedupe) Clear(_ context.Context, _ uuid.UUID, hash string) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()

@@ -99,6 +99,24 @@ func (d *bridgeTestFakeDedupe) MarkSeenWithRetry(_ context.Context, _ uuid.UUID,
 	return nil
 }
 
+func (d *bridgeTestFakeDedupe) MarkSeenBulk(_ context.Context, _ uuid.UUID, hashes []string, _ time.Duration) (map[string]bool, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.seen == nil {
+		d.seen = map[string]bool{}
+	}
+	result := make(map[string]bool, len(hashes))
+	for _, h := range hashes {
+		if d.seen[h] {
+			result[h] = false
+			continue
+		}
+		d.seen[h] = true
+		result[h] = true
+	}
+	return result, nil
+}
+
 func (d *bridgeTestFakeDedupe) Clear(_ context.Context, _ uuid.UUID, hash string) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()

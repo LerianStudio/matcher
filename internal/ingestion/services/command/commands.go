@@ -705,11 +705,14 @@ func (uc *UseCase) filterAndInsertChunk(
 	}
 
 	keys := make([]ingestionRepositories.ExternalIDKey, 0, len(transactions))
+	hashes := make([]string, 0, len(transactions))
+
 	for _, tx := range transactions {
 		keys = append(keys, ingestionRepositories.ExternalIDKey{
 			SourceID:   tx.SourceID,
 			ExternalID: tx.ExternalID,
 		})
+		hashes = append(hashes, uc.dedupe.CalculateHash(tx.SourceID, tx.ExternalID))
 	}
 
 	existsMap, err := uc.transactionRepo.ExistsBulkBySourceAndExternalID(ctx, keys)
@@ -717,17 +720,19 @@ func (uc *UseCase) filterAndInsertChunk(
 		return 0, nil, fmt.Errorf("failed to check existing transactions: %w", err)
 	}
 
+	markedByHash, err := uc.dedupe.MarkSeenBulk(ctx, job.ContextID, hashes, uc.currentDedupeTTL(ctx))
+	if err != nil {
+		return 0, nil, fmt.Errorf("failed to mark transactions seen: %w", err)
+	}
+
 	filtered := make([]*shared.Transaction, 0, len(transactions))
 	markedHashes := make([]string, 0, len(transactions))
 
-	for _, tx := range transactions {
-		hash := uc.dedupe.CalculateHash(tx.SourceID, tx.ExternalID)
-		if err := uc.dedupe.MarkSeenWithRetry(ctx, job.ContextID, hash, uc.currentDedupeTTL(ctx), defaultDedupeRetries); err != nil {
-			if errors.Is(err, ports.ErrDuplicateTransaction) {
-				continue
-			}
-
-			return 0, markedHashes, err
+	for i, tx := range transactions {
+		hash := hashes[i]
+		if !markedByHash[hash] {
+			// Already present in Redis — treat as duplicate.
+			continue
 		}
 
 		markedHashes = append(markedHashes, hash)

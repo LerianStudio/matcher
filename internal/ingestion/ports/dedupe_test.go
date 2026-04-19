@@ -81,6 +81,32 @@ func (m *mockDedupeService) MarkSeenWithRetry(
 	return nil
 }
 
+func (m *mockDedupeService) MarkSeenBulk(
+	_ context.Context,
+	_ uuid.UUID,
+	hashes []string,
+	_ time.Duration,
+) (map[string]bool, error) {
+	if m.seen == nil {
+		m.seen = make(map[string]bool)
+	}
+
+	result := make(map[string]bool, len(hashes))
+
+	for _, hash := range hashes {
+		if m.seen[hash] {
+			result[hash] = false
+
+			continue
+		}
+
+		m.seen[hash] = true
+		result[hash] = true
+	}
+
+	return result, nil
+}
+
 func (m *mockDedupeService) Clear(_ context.Context, _ uuid.UUID, hash string) error {
 	if m.seen != nil {
 		delete(m.seen, hash)

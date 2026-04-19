@@ -129,6 +129,20 @@ func (noopDedupe) MarkSeenWithRetry(
 	return nil
 }
 
+func (noopDedupe) MarkSeenBulk(
+	_ context.Context,
+	_ uuid.UUID,
+	hashes []string,
+	_ time.Duration,
+) (map[string]bool, error) {
+	result := make(map[string]bool, len(hashes))
+	for _, h := range hashes {
+		result[h] = true
+	}
+
+	return result, nil
+}
+
 func (noopDedupe) Clear(_ context.Context, _ uuid.UUID, _ string) error {
 	return nil
 }
@@ -205,6 +219,35 @@ func (f *integrationFakeDedupe) MarkSeenWithRetry(
 	f.duplicates[hash] = true
 
 	return nil
+}
+
+func (f *integrationFakeDedupe) MarkSeenBulk(
+	_ context.Context,
+	_ uuid.UUID,
+	hashes []string,
+	_ time.Duration,
+) (map[string]bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.duplicates == nil {
+		f.duplicates = map[string]bool{}
+	}
+
+	result := make(map[string]bool, len(hashes))
+
+	for _, hash := range hashes {
+		if f.duplicates[hash] {
+			result[hash] = false
+
+			continue
+		}
+
+		f.duplicates[hash] = true
+		result[hash] = true
+	}
+
+	return result, nil
 }
 
 func (f *integrationFakeDedupe) Clear(_ context.Context, _ uuid.UUID, hash string) error {

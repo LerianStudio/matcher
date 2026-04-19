@@ -66,6 +66,24 @@ func (f fakeDedupe) MarkSeenWithRetry(
 	return f.err
 }
 
+func (f fakeDedupe) MarkSeenBulk(
+	_ context.Context,
+	_ uuid.UUID,
+	hashes []string,
+	_ time.Duration,
+) (map[string]bool, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+
+	result := make(map[string]bool, len(hashes))
+	for _, h := range hashes {
+		result[h] = true
+	}
+
+	return result, nil
+}
+
 func (f fakeDedupe) Clear(_ context.Context, _ uuid.UUID, _ string) error {
 	return nil
 }
@@ -89,6 +107,22 @@ func (r *recordingDedupe) MarkSeen(_ context.Context, _ uuid.UUID, _ string, ttl
 func (r *recordingDedupe) MarkSeenWithRetry(_ context.Context, _ uuid.UUID, _ string, ttl time.Duration, _ int) error {
 	r.lastTTL = ttl
 	return nil
+}
+
+func (r *recordingDedupe) MarkSeenBulk(
+	_ context.Context,
+	_ uuid.UUID,
+	hashes []string,
+	ttl time.Duration,
+) (map[string]bool, error) {
+	r.lastTTL = ttl
+
+	result := make(map[string]bool, len(hashes))
+	for _, h := range hashes {
+		result[h] = true
+	}
+
+	return result, nil
 }
 
 func (r *recordingDedupe) Clear(_ context.Context, _ uuid.UUID, _ string) error { return nil }
@@ -1532,6 +1566,20 @@ func (f fakeDedupeWithDuplicate) MarkSeenWithRetry(
 	}
 
 	return nil
+}
+
+func (f fakeDedupeWithDuplicate) MarkSeenBulk(
+	_ context.Context,
+	_ uuid.UUID,
+	hashes []string,
+	_ time.Duration,
+) (map[string]bool, error) {
+	result := make(map[string]bool, len(hashes))
+	for _, h := range hashes {
+		result[h] = h != f.duplicateHash
+	}
+
+	return result, nil
 }
 
 func (f fakeDedupeWithDuplicate) Clear(_ context.Context, _ uuid.UUID, _ string) error {

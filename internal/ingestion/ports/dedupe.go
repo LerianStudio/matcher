@@ -33,6 +33,17 @@ type DedupeService interface {
 		maxRetries int,
 	) error
 
+	// MarkSeenBulk attempts to mark all hashes in a single round trip using a
+	// Lua script. Returns a map keyed by hash where the value is true if the
+	// hash was newly set (the caller should process the transaction) and false
+	// if it was already present (duplicate). TTL=0 means no expiration.
+	MarkSeenBulk(
+		ctx context.Context,
+		contextID uuid.UUID,
+		hashes []string,
+		ttl time.Duration,
+	) (map[string]bool, error)
+
 	// Clear removes a deduplication key, allowing the transaction to be retried.
 	// Used to clean up on failure to prevent zombie locks.
 	Clear(ctx context.Context, contextID uuid.UUID, hash string) error

@@ -107,6 +107,24 @@ func (d *stubDedupe) MarkSeenWithRetry(
 	return d.markErr
 }
 
+func (d *stubDedupe) MarkSeenBulk(
+	_ context.Context,
+	_ uuid.UUID,
+	hashes []string,
+	_ time.Duration,
+) (map[string]bool, error) {
+	if d.markErr != nil {
+		return nil, d.markErr
+	}
+
+	result := make(map[string]bool, len(hashes))
+	for _, h := range hashes {
+		result[h] = true
+	}
+
+	return result, nil
+}
+
 func (d *stubDedupe) Clear(_ context.Context, _ uuid.UUID, _ string) error {
 	return nil
 }
