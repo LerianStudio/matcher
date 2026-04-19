@@ -7,6 +7,16 @@ import (
 	"github.com/LerianStudio/matcher/internal/governance/domain/entities"
 )
 
+// Truncation marker keys embedded by audit publishers when the serialized
+// diff exceeds the outbox payload cap. Kept as local constants to avoid a
+// cross-package dependency cycle (shared/domain is the source of truth and
+// uses the same literal values — see BIZ-36).
+const (
+	auditTruncatedKey    = "_truncated"
+	auditOriginalSizeKey = "_originalSize"
+	auditChangesKey      = "changes"
+)
+
 // AuditLogToResponse converts an AuditLog entity to a response DTO.
 // Returns an empty struct for nil input to ensure consistent JSON structure.
 func AuditLogToResponse(log *entities.AuditLog) AuditLogResponse {
@@ -14,16 +24,73 @@ func AuditLogToResponse(log *entities.AuditLog) AuditLogResponse {
 		return AuditLogResponse{Changes: json.RawMessage("{}")}
 	}
 
+	truncated, originalSize := extractTruncationMarkers(log.Changes)
+
 	return AuditLogResponse{
-		ID:         log.ID.String(),
-		TenantID:   log.TenantID.String(),
-		EntityType: log.EntityType,
-		EntityID:   log.EntityID.String(),
-		Action:     log.Action,
-		ActorID:    log.ActorID,
-		Changes:    log.Changes,
-		CreatedAt:  log.CreatedAt.Format(time.RFC3339),
+		ID:           log.ID.String(),
+		TenantID:     log.TenantID.String(),
+		EntityType:   log.EntityType,
+		EntityID:     log.EntityID.String(),
+		Action:       log.Action,
+		ActorID:      log.ActorID,
+		Changes:      log.Changes,
+		Truncated:    truncated,
+		OriginalSize: originalSize,
+		CreatedAt:    log.CreatedAt.Format(time.RFC3339),
 	}
+}
+
+// extractTruncationMarkers inspects the audit changes envelope for the
+// truncation markers embedded by the configuration and exception audit
+// publishers. The envelope shape produced by the governance consumer is:
+//
+//	{"entity_type":"...", "changes": {"_truncated": true, "_originalSize": N, ...}}
+//
+// Malformed payloads (invalid JSON, unexpected shapes, non-numeric
+// OriginalSize) degrade gracefully: if the _truncated flag is clearly true
+// the caller still sees Truncated=true, but OriginalSize falls back to zero
+// rather than surfacing garbage to API consumers.
+func extractTruncationMarkers(payload []byte) (truncated bool, originalSize int64) {
+	if len(payload) == 0 {
+		return false, 0
+	}
+
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &envelope); err != nil {
+		return false, 0
+	}
+
+	changesRaw, ok := envelope[auditChangesKey]
+	if !ok {
+		return false, 0
+	}
+
+	var changes map[string]json.RawMessage
+	if err := json.Unmarshal(changesRaw, &changes); err != nil {
+		return false, 0
+	}
+
+	truncatedRaw, ok := changes[auditTruncatedKey]
+	if !ok {
+		return false, 0
+	}
+
+	if err := json.Unmarshal(truncatedRaw, &truncated); err != nil || !truncated {
+		return false, 0
+	}
+
+	sizeRaw, ok := changes[auditOriginalSizeKey]
+	if !ok {
+		return true, 0
+	}
+
+	// Tolerate malformed _originalSize (e.g. string or missing) without
+	// dropping the truncation flag — the flag itself is the critical signal.
+	if err := json.Unmarshal(sizeRaw, &originalSize); err != nil {
+		return true, 0
+	}
+
+	return true, originalSize
 }
 
 // AuditLogsToResponse converts a slice of entities to response DTOs.
