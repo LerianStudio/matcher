@@ -35,19 +35,6 @@ var (
 	ErrAuditActorIDTooLong     = errors.New("actor id exceeds maximum length")
 	ErrAuditChangesRequired    = errors.New("changes are required")
 	ErrAuditChangesInvalidJSON = errors.New("changes must be valid JSON")
-
-	// Backward-compatible aliases without the Audit prefix.
-	// Kept to align naming expectations across packages while preserving
-	// canonical shared-kernel sentinel identity.
-	ErrTenantIDRequired   = ErrAuditTenantIDRequired
-	ErrEntityTypeRequired = ErrAuditEntityTypeRequired
-	ErrEntityTypeTooLong  = ErrAuditEntityTypeTooLong
-	ErrEntityIDRequired   = ErrAuditEntityIDRequired
-	ErrActionRequired     = ErrAuditActionRequired
-	ErrActionTooLong      = ErrAuditActionTooLong
-	ErrActorIDTooLong     = ErrAuditActorIDTooLong
-	ErrChangesRequired    = ErrAuditChangesRequired
-	ErrChangesInvalidJSON = ErrAuditChangesInvalidJSON
 )
 
 // AuditLogFilter defines optional filters for listing audit logs.

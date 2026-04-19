@@ -223,20 +223,6 @@ func TestNewAuditLog_TrimsEntityTypeAndAction(t *testing.T) {
 	assert.Equal(t, "create", log.Action)
 }
 
-func TestAuditLogErrorAliases_Identity(t *testing.T) {
-	t.Parallel()
-
-	assert.ErrorIs(t, ErrTenantIDRequired, ErrAuditTenantIDRequired)
-	assert.ErrorIs(t, ErrEntityTypeRequired, ErrAuditEntityTypeRequired)
-	assert.ErrorIs(t, ErrEntityTypeTooLong, ErrAuditEntityTypeTooLong)
-	assert.ErrorIs(t, ErrEntityIDRequired, ErrAuditEntityIDRequired)
-	assert.ErrorIs(t, ErrActionRequired, ErrAuditActionRequired)
-	assert.ErrorIs(t, ErrActionTooLong, ErrAuditActionTooLong)
-	assert.ErrorIs(t, ErrActorIDTooLong, ErrAuditActorIDTooLong)
-	assert.ErrorIs(t, ErrChangesRequired, ErrAuditChangesRequired)
-	assert.ErrorIs(t, ErrChangesInvalidJSON, ErrAuditChangesInvalidJSON)
-}
-
 func TestAuditLogFieldLengthConstants(t *testing.T) {
 	t.Parallel()
 
