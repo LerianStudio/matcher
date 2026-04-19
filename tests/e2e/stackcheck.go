@@ -170,30 +170,44 @@ func (sc *StackChecker) newRedisClient() *redis.Client {
 
 // FlushRateLimitKeys removes all rate limit keys from Redis.
 // This ensures e2e tests start with a clean rate limit state.
+//
+// Key layout: lib-commons' rate limiter stores counters under
+// "{keyPrefix}:ratelimit:{tier}:{identity}" (see ratelimit.RateLimiter.buildKey).
+// Matcher configures the prefix as "matcher" via NewLibRateLimiter, so the
+// pattern that actually matches on a running stack is "matcher:ratelimit:*".
+// We also pre-scan unprefixed "ratelimit:*" so this helper stays correct if
+// a future refactor drops the prefix or if a test stack wires a different
+// one; both branches are deletion-only, so the extra scan is safe.
 func (sc *StackChecker) FlushRateLimitKeys(ctx context.Context) error {
 	client := sc.newRedisClient()
 	defer client.Close()
 
-	const rateLimitPrefix = "ratelimit:*"
 	const scanBatchSize = 100
 
-	var cursor uint64
+	patterns := []string{
+		"matcher:ratelimit:*",
+		"ratelimit:*",
+	}
 
-	for {
-		keys, nextCursor, err := client.Scan(ctx, cursor, rateLimitPrefix, scanBatchSize).Result()
-		if err != nil {
-			return fmt.Errorf("redis scan: %w", err)
-		}
+	for _, pattern := range patterns {
+		var cursor uint64
 
-		if len(keys) > 0 {
-			if err := client.Del(ctx, keys...).Err(); err != nil {
-				return fmt.Errorf("redis batch delete: %w", err)
+		for {
+			keys, nextCursor, err := client.Scan(ctx, cursor, pattern, scanBatchSize).Result()
+			if err != nil {
+				return fmt.Errorf("redis scan %q: %w", pattern, err)
 			}
-		}
 
-		cursor = nextCursor
-		if cursor == 0 {
-			break
+			if len(keys) > 0 {
+				if err := client.Del(ctx, keys...).Err(); err != nil {
+					return fmt.Errorf("redis batch delete: %w", err)
+				}
+			}
+
+			cursor = nextCursor
+			if cursor == 0 {
+				break
+			}
 		}
 	}
 

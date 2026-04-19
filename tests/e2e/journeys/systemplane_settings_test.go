@@ -3,9 +3,11 @@
 package journeys
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -14,69 +16,189 @@ import (
 )
 
 // TestSystemplaneSettings_TenantRateLimitAffectsProtectedRoute exercises the
-// end-to-end runtime-mutation story for a matcher-scoped rate-limit key:
-// snapshot the current value, PUT a throttling-tight value (max=1), hit
-// the protected route twice and expect 200 → 429, then restore the snapshot.
+// end-to-end runtime-mutation story for matcher-scoped rate-limit keys by
+// squeezing the admin rate limiter to 1 request per window, hitting
+// /system/matcher twice, and expecting 200 → 429 before restoring the
+// snapshot. "Tenant" in the name refers to the rate limiter identity: the
+// lib-commons limiter keys buckets by tenant+IP (see rateLimitIdentityFunc),
+// so two requests from the same test share an identity and race the same
+// quota.
+//
+// Why the admin tier (rate_limit.admin_max) and not the global tier
+// (rate_limit.max): after the protectedRouter refactor, the global rate
+// limiter is scoped strictly to protected bounded-context routes and no
+// longer leaks into /system/* via an app-global USE entry. The admin tier,
+// installed by MountSystemplaneAPI on the /system prefix, is the only
+// limiter that governs /system/matcher. Mutating rate_limit.admin_max is
+// therefore the correct single-key knob for throttling /system/* without
+// disturbing the business-plane quota.
+//
+// Prerequisite: docker-compose sets RATE_LIMIT_ENABLED=true so the
+// lib-commons RateLimiter object is actually created at boot. With
+// RATE_LIMIT_ENABLED=false, ratelimit.New returns a nil RateLimiter, the
+// middleware collapses to a pass-through regardless of systemplane values,
+// and this test cannot observe throttling.
+//
+// Counter-reset dependency: the setup PUTs and the readback Eventually
+// increment the same per-identity Redis counter the critical GETs use,
+// so the test flushes ratelimit:* keys RIGHT BEFORE the two critical
+// GETs. Without this the counter is already above max=1 by the time the
+// test expects a 200, and the first "should succeed" assertion fails
+// with a confusing 429.
 //
 // Previously gated behind E2E_ENABLE_SETTINGS_RUNTIME_JOURNEY=1 because the
-// restore path could strand rate_limit.max=1 in shared test infrastructure
-// if cleanup failed. With the error-surfacing cleanup added in ee1788b the
-// failure mode becomes a loud t.Errorf instead of silent pollution, and the
-// test is safe to run unconditionally — it is the best coverage we have of
-// the runtime → HTTP middleware mutation path.
+// restore path could strand throttle-tight values in shared test
+// infrastructure if cleanup failed. With the error-surfacing cleanup added
+// in ee1788b the failure mode becomes a loud t.Errorf instead of silent
+// pollution, and the test is safe to run unconditionally — it is the best
+// coverage we have of the runtime → HTTP middleware mutation path.
 //
 // Cleanup limitation: the v5 admin API exposes no DELETE verb, so keys that
 // were ABSENT before the test (readSystemplaneKeyValue → not found) cannot
 // be restored to absence on cleanup. In practice this never fires because
-// rate_limit.max / rate_limit.expiry_sec are always registered — GET
-// returns the seeded default with ok=true even if no runtime override was
-// ever written. TestSystemplaneSettings_V4PathsRemoved below pins the
-// removal of /v1/system/configs[...] surfaces that would otherwise be
-// candidates for DELETE.
+// rate_limit.enabled / rate_limit.admin_max / rate_limit.admin_expiry_sec
+// are always registered — GET returns the seeded default with ok=true even
+// if no runtime override was ever written. TestSystemplaneSettings_V4PathsRemoved
+// below pins the removal of /v1/system/configs[...] surfaces that would
+// otherwise be candidates for DELETE.
 func TestSystemplaneSettings_TenantRateLimitAffectsProtectedRoute(t *testing.T) {
 	cfg := e2e.GetConfig()
 	require.NotNil(t, cfg)
 
-	// Snapshot current values for restore.
-	origMax, maxFound, err := readSystemplaneKeyValue(cfg.AppBaseURL, "rate_limit.max")
+	// Snapshot current values for restore. We mutate three keys to coerce
+	// the admin rate limiter into a throttling-tight state. rate_limit.enabled
+	// is the master switch that matcher's settingsBackedRateLimitHandler
+	// consults at request time; it must be true for any throttling to apply.
+	origEnabled, enabledFound, err := readSystemplaneKeyValue(cfg.AppBaseURL, "rate_limit.enabled")
 	require.NoError(t, err)
 
-	origExpiry, expiryFound, err := readSystemplaneKeyValue(cfg.AppBaseURL, "rate_limit.expiry_sec")
+	origAdminMax, adminMaxFound, err := readSystemplaneKeyValue(cfg.AppBaseURL, "rate_limit.admin_max")
 	require.NoError(t, err)
+
+	origAdminExpiry, adminExpiryFound, err := readSystemplaneKeyValue(cfg.AppBaseURL, "rate_limit.admin_expiry_sec")
+	require.NoError(t, err)
+
+	// Cleanup flush helper — reusable handle so we can reset the counter
+	// before each restore PUT. Without these flushes the restore PUTs
+	// themselves get throttled against the rate_limit.admin_max=1 we just
+	// set, leaving pollution for the next test in the suite.
+	cleanupFlusher := e2e.NewStackChecker(cfg)
 
 	t.Cleanup(func() {
-		if maxFound {
-			if err := putSystemplaneValues(cfg.AppBaseURL, map[string]any{"rate_limit.max": origMax}); err != nil {
-				t.Errorf("restore rate_limit.max failed: %v (rate_limit.max=1 may persist in systemplane — other tests may be affected)", err)
-			}
-		} else {
-			// Absent originally. v5 admin has no DELETE verb; best we can
-			// do is log the drift so the next operator running the suite
-			// knows why the list response looks unusual.
-			t.Logf("rate_limit.max was absent before the test and stays set; v5 admin has no DELETE verb to revert")
+		cleanupCtx := context.Background()
+
+		// Reset the rate-limit counter BEFORE any restore PUT, otherwise
+		// the restore is itself throttled by the very constraint we are
+		// trying to remove.
+		if flushErr := cleanupFlusher.FlushRateLimitKeys(cleanupCtx); flushErr != nil {
+			t.Logf("cleanup: flush ratelimit keys failed: %v (restore PUTs may be rate-limited)", flushErr)
 		}
 
-		if expiryFound {
-			if err := putSystemplaneValues(cfg.AppBaseURL, map[string]any{"rate_limit.expiry_sec": origExpiry}); err != nil {
-				t.Errorf("restore rate_limit.expiry_sec failed: %v", err)
+		// Restore admin_max FIRST so admin_max=1 stops applying as quickly
+		// as possible. Any partial failure after this point still leaves a
+		// sane quota instead of stranding rate_limit.admin_max=1 across tests.
+		if adminMaxFound {
+			if err := putSystemplaneValues(cfg.AppBaseURL, map[string]any{"rate_limit.admin_max": origAdminMax}); err != nil {
+				t.Errorf("restore rate_limit.admin_max failed: %v (rate_limit.admin_max=1 may persist in systemplane — subsequent /system requests may throttle)", err)
 			}
 		} else {
-			t.Logf("rate_limit.expiry_sec was absent before the test and stays set; v5 admin has no DELETE verb to revert")
+			t.Logf("rate_limit.admin_max was absent before the test and stays set; v5 admin has no DELETE verb to revert")
+		}
+
+		// Wait for the admin_max=ORIG_ADMIN_MAX to propagate before the next PUT,
+		// and flush again so the next PUTs start from a clean counter.
+		time.Sleep(time.Second)
+
+		if flushErr := cleanupFlusher.FlushRateLimitKeys(cleanupCtx); flushErr != nil {
+			t.Logf("cleanup: second flush failed: %v", flushErr)
+		}
+
+		if adminExpiryFound {
+			if err := putSystemplaneValues(cfg.AppBaseURL, map[string]any{"rate_limit.admin_expiry_sec": origAdminExpiry}); err != nil {
+				t.Errorf("restore rate_limit.admin_expiry_sec failed: %v", err)
+			}
+		} else {
+			t.Logf("rate_limit.admin_expiry_sec was absent before the test and stays set; v5 admin has no DELETE verb to revert")
+		}
+
+		// Restore the master switch LAST so throttling is disabled the moment
+		// it needs to be — if the prior restores failed, leaving Enabled=true
+		// with rate_limit.admin_max=1 would poison the suite.
+		if enabledFound {
+			if err := putSystemplaneValues(cfg.AppBaseURL, map[string]any{"rate_limit.enabled": origEnabled}); err != nil {
+				t.Errorf("restore rate_limit.enabled failed: %v (rate limiting may stay enabled — other tests may be affected)", err)
+			}
+		} else {
+			t.Logf("rate_limit.enabled was absent before the test and stays set; v5 admin has no DELETE verb to revert")
 		}
 	})
 
+	// Sequencing note — each PUT/GET against /system/* increments the
+	// per-identity rate-limit counter. Squeezing the throttling-tight max
+	// last, with a Redis flush IMMEDIATELY before the critical GETs, is the
+	// only way to guarantee the first critical GET sees counter ≤ max (allow)
+	// and the second sees counter > max (deny). Setting max tight first would
+	// throttle the readback that verifies propagation; interleaving the
+	// flush between the tight PUT and the GETs gives us a clean zero-counter
+	// starting point after propagation settles.
+	const rateLimitMaxOneRequest = 1
+	flusher := e2e.NewStackChecker(cfg)
+	flushCtx := context.Background()
+
+	// Step 1: enable rate limiting and fix the admin expiry window. admin_max
+	// still high (docker-compose seed or whatever the prior state left), so
+	// these PUTs and the subsequent readback polling will not themselves
+	// throttle.
 	require.NoError(t, putSystemplaneValues(cfg.AppBaseURL, map[string]any{
-		"rate_limit.max":        1,
-		"rate_limit.expiry_sec": 60,
+		"rate_limit.enabled":          true,
+		"rate_limit.admin_expiry_sec": 60,
 	}))
 
-	// Verify the key was set.
-	val, found, err := readSystemplaneKeyValue(cfg.AppBaseURL, "rate_limit.max")
-	require.NoError(t, err)
-	require.True(t, found)
-	assert.Equal(t, float64(1), val)
+	// Step 2: confirm enabled/admin_expiry_sec propagated to the in-memory
+	// cache before squeezing admin_max. The rate limiter middleware reads
+	// from the SAME client the admin API reads from, so once admin GET sees
+	// the new values, the middleware does too.
+	require.Eventually(t, func() bool {
+		enabled, ok, readErr := readSystemplaneKeyValue(cfg.AppBaseURL, "rate_limit.enabled")
+		if readErr != nil || !ok || enabled != true {
+			return false
+		}
 
-	// Hit a protected route twice — second should be throttled.
+		expirySec, ok, readErr := readSystemplaneKeyValue(cfg.AppBaseURL, "rate_limit.admin_expiry_sec")
+		if readErr != nil || !ok || expirySec != float64(60) {
+			return false
+		}
+
+		return true
+	}, 5*time.Second, 100*time.Millisecond, "rate_limit.enabled + admin_expiry_sec must propagate before squeezing admin_max")
+
+	// Step 3: now squeeze admin_max. This PUT itself increments the counter
+	// by the admin-tier middleware invocation, but admin_max is still high
+	// at request time so the PUT succeeds.
+	require.NoError(t, putSystemplaneValues(cfg.AppBaseURL, map[string]any{
+		"rate_limit.admin_max": rateLimitMaxOneRequest,
+	}))
+
+	// Step 4: give LISTEN/NOTIFY time to propagate the new max into the
+	// running middleware. We cannot admin-GET to verify here without
+	// throttling ourselves against the value we just set, so we wait a
+	// conservative interval. 1s is far longer than the observed LISTEN
+	// propagation latency on a healthy local stack (sub-100ms) but keeps
+	// the test stable under CI load.
+	time.Sleep(time.Second)
+
+	// Step 5: flush rate-limit counters so the two critical GETs start from
+	// a known zero baseline. Without this, the counter is already above the
+	// per-request budget from all the setup requests and the first
+	// "expected 200" assertion fails with a spurious 429.
+	require.NoError(
+		t,
+		flusher.FlushRateLimitKeys(flushCtx),
+		"flush ratelimit:* keys before asserting throttle behavior",
+	)
+
+	// Hit a protected route twice — first should succeed (counter=1 ≤ max=1),
+	// second should be throttled (counter=2 > max=1).
 	headers := map[string]string{
 		"Accept": "application/json",
 	}
