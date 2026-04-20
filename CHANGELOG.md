@@ -1,3 +1,79 @@
+## [1.3.0-beta.18](https://github.com/LerianStudio/matcher/compare/v1.3.0-beta.17...v1.3.0-beta.18) (2026-04-20)
+
+
+### Features
+
+* **bootstrap:** add dedicated admin rate-limit tier for /system plane ([2f65348](https://github.com/LerianStudio/matcher/commit/2f653480c13922f9b009be74c619feb4c3be2e76))
+* **bootstrap:** apply global rate limit to systemplane admin API ([773b331](https://github.com/LerianStudio/matcher/commit/773b331bb0fd70bf6266784a58906219ea73489a))
+* **reporting:** cursor-based pagination for export job listings ([0174364](https://github.com/LerianStudio/matcher/commit/0174364a545337710210837c5a07fd17efb4b563))
+* **exception:** double actor-hash width and introduce SaltProvider hook ([1e7ea09](https://github.com/LerianStudio/matcher/commit/1e7ea096ba67ba718108a246b3882735a5d335d6))
+* **systemplane:** drop orphan bootstrap-only rows and warn on future drift ([b4eeb91](https://github.com/LerianStudio/matcher/commit/b4eeb91f5ac68b2e20e8a010385c89026fbdd65c))
+* **outbox:** enforce 1MiB payload cap and truncate oversized audit diffs ([d9dd847](https://github.com/LerianStudio/matcher/commit/d9dd847f55ca427ce5f6fc9413c0c07ca53def1a))
+* **outbox:** expose typed status helpers from shared domain ([897931b](https://github.com/LerianStudio/matcher/commit/897931b57e8d28a817c44cd434d923e7fceccc8e))
+* **bridge-worker:** fan tenants out up to BridgeTenantConcurrency per cycle ([c42df0b](https://github.com/LerianStudio/matcher/commit/c42df0bcce90b2f571eb715dc506dfb07e934d9a))
+* **bootstrap:** guard runtime CORS and body-limit edits via systemplane validators ([ecbb65a](https://github.com/LerianStudio/matcher/commit/ecbb65aae3c77dc117b9be3adf5785f4a39316c2))
+* **systemplane:** migrate admin API and config manager to lib-commons v5 ([dd9bcbf](https://github.com/LerianStudio/matcher/commit/dd9bcbf54fb9b20e0e9c952f55afb42e55c02039))
+* **bootstrap:** reclassify auth, default-tenant, and outbox keys as bootstrap-only ([00f05a1](https://github.com/LerianStudio/matcher/commit/00f05a12b54fe1b12d06284f5ea3ce3bdac7095b))
+* **outbox:** shared truncation helpers, single-marshal redesign, match-event ID guard ([0022fd5](https://github.com/LerianStudio/matcher/commit/0022fd53a3416d7157eac20dd439959b3641c788))
+* **bootstrap:** shim removed v4 admin paths with 410 Gone ([a48cb64](https://github.com/LerianStudio/matcher/commit/a48cb647048e91dc991146ebc9a475a87285d34a))
+* **auth:** split actor-mapping deanonymization into its own RBAC action ([179743d](https://github.com/LerianStudio/matcher/commit/179743db91cc3f9ae280cdf37e5a81bbff9cf52c))
+* **governance:** surface audit truncation markers as first-class DTO fields ([09cb6ce](https://github.com/LerianStudio/matcher/commit/09cb6ce187fe54b41233fc921ce2fbd6d7101866))
+* **bootstrap:** warn on missing GOMEMLIMIT in cgroup-capped containers ([ef0cbda](https://github.com/LerianStudio/matcher/commit/ef0cbda0234feac0a986bd113aa6140a4a4944dd))
+
+
+### Bug Fixes
+
+* address CodeRabbit review feedback on lib-commons v5 migration ([e5408a2](https://github.com/LerianStudio/matcher/commit/e5408a2258f4a682000a243048a6e6056962bdfd))
+* address second round of CodeRabbit review feedback ([d27a6e3](https://github.com/LerianStudio/matcher/commit/d27a6e325521f45acdb65ff0a633e6b23ad3cfcb)), closes [#106](https://github.com/LerianStudio/matcher/issues/106)
+* **dashboard:** align MatchRate to percentage scale across repo ([b851ad2](https://github.com/LerianStudio/matcher/commit/b851ad26537c53870de64753250f4c6a9cc3455b))
+* **bootstrap:** apply typed-nil guard to ingestion and match publish helpers ([d068ab7](https://github.com/LerianStudio/matcher/commit/d068ab743ae970c3bd81b9e1c27a04b0704ba526))
+* **test-harness:** avoid import cycle in outbox helper default-tenant wiring ([54a2ccf](https://github.com/LerianStudio/matcher/commit/54a2ccf9905a6fad5933f7c5c75b85200d81d15a))
+* **security:** bind mock fetcher server to 127.0.0.1 ([a1264ed](https://github.com/LerianStudio/matcher/commit/a1264ed9ff96e351a2c0ba6917b1abd610bcf274))
+* **security:** broaden SSRF deny-list with unspecified, multicast, and CGNAT ([2651d62](https://github.com/LerianStudio/matcher/commit/2651d62936bae6272e9182c37168be085aa0ab80))
+* **docker:** bump Go builder to 1.26.2-alpine for stdlib CVE patches ([03e35ef](https://github.com/LerianStudio/matcher/commit/03e35efb770c229f7fb259a1d4298f78c8284d58))
+* **bootstrap:** classify outbox payload cap and JSON errors as non-retryable ([48a376c](https://github.com/LerianStudio/matcher/commit/48a376ca03efa744a8897156fc1528e862d05035))
+* **migrations:** drop CONCURRENTLY on partitioned audit_logs index ([d65e82d](https://github.com/LerianStudio/matcher/commit/d65e82de28393ed3400c9f007052aac3e6ce325a))
+* **test:** eliminate race in ExactlyAtCap outbox payload test ([77ea37f](https://github.com/LerianStudio/matcher/commit/77ea37fc9816e5fb2766a7745bf1e117e0a04603))
+* **security:** enforce minimum interval between reconciliation schedule firings ([66682b1](https://github.com/LerianStudio/matcher/commit/66682b1dcf43da2b548dae1066075fbbcc33409f))
+* **discovery:** enforce uniqueness of Fetcher connection_id per source ([956ff49](https://github.com/LerianStudio/matcher/commit/956ff49531c653167648f93a0a32c4bd717a5a05))
+* **tests:** extract rate-limit override into subpackage to break import cycle ([cfa0e0e](https://github.com/LerianStudio/matcher/commit/cfa0e0ef7ee8fa08852f396a9e67f8d1cf740f42))
+* **security:** fail bootstrap when systemplane admin API mount fails ([d8d2d50](https://github.com/LerianStudio/matcher/commit/d8d2d5091308689e72604277635d66c8ec173409))
+* **security:** fail closed when CreateAdjustment is missing authenticated user ([e9effc4](https://github.com/LerianStudio/matcher/commit/e9effc4f2886f7f837e79513ef4310462514f67a))
+* **bootstrap:** guard defaultTenantDiscoverer against nil receiver and inner ([83a6150](https://github.com/LerianStudio/matcher/commit/83a6150537419411cfc7c96cf68e76491cdaa807))
+* **test-harness:** guard nil dereferences in integration harnesses ([b367a88](https://github.com/LerianStudio/matcher/commit/b367a880493edf5242483f2a554f1653be6b531a))
+* **nil-safety:** guard nil receivers and dependencies in bootstrap + exception gateway ([961b199](https://github.com/LerianStudio/matcher/commit/961b19957514a539ab7bcb1e2387127b8b6e2ee7))
+* **nil-safety:** guard worker loops and publishers against nil elements ([019b809](https://github.com/LerianStudio/matcher/commit/019b8091f1c0bcf1565a4d4a31061fde4338a636))
+* **scheduler:** harden SchedulerWorker.Stop against concurrent callers ([fae20db](https://github.com/LerianStudio/matcher/commit/fae20db02787c26bdbda75033de4d43f553aeec5))
+* **reporting:** harden streaming iterators against nil rows ([dadeb19](https://github.com/LerianStudio/matcher/commit/dadeb19e01b35f9fe277d3139bb5dfa61aeca77a))
+* **security:** reject dev systemplane master key outside development and test ([c226921](https://github.com/LerianStudio/matcher/commit/c226921d08aa5d38ce52bc52a817a6fee6b3cc7d))
+* **security:** reject URL-safe base64 for systemplane master key ([6319b16](https://github.com/LerianStudio/matcher/commit/6319b16beeaf1bfc91f20a85c4b33a770723b151))
+* **migrations:** replace DO block with plain SQL and strip comment semicolons ([8f03f5d](https://github.com/LerianStudio/matcher/commit/8f03f5ded9acd447010b6c5ed4f67b7b32818d29))
+* **security:** require signed webhook payloads in production deployments ([7a5dad7](https://github.com/LerianStudio/matcher/commit/7a5dad7bff8ec4c51a6c058efa7fa89d91624a3f))
+* **tests:** rewire bridge readiness journey onto v5 systemplane helpers ([e26d62f](https://github.com/LerianStudio/matcher/commit/e26d62fb9af661e61b564bc05e06c958e4912dcf))
+* **security:** scope comment deletion to its owning exception ([a3a40de](https://github.com/LerianStudio/matcher/commit/a3a40dea36a6a996c81aeab3a46523c8a3163f99))
+* **lint:** scope gosec G117/G704 exclusions for OAuth + M2M false positives ([ab75029](https://github.com/LerianStudio/matcher/commit/ab7502920eb4258fa94f4f602413046be5195455))
+* **tests:** swap deleted outbox postgres package for canonical v5 helper ([4d55b13](https://github.com/LerianStudio/matcher/commit/4d55b13b90d1ccbb95282f0113e5f171c4e5e3ae))
+* **security:** tighten dev-mode allowlists for X-User-ID and trusted proxies ([33dcd2d](https://github.com/LerianStudio/matcher/commit/33dcd2dbd48bd58d2bcca7732a823952d986512d))
+* **fee:** trim name whitespace in NewFeeSchedule ([b64f7a6](https://github.com/LerianStudio/matcher/commit/b64f7a66b82be8ad93fb0905e42f27eaa7b4ec26))
+* **security:** use structured logging in exception matching gateway ([ac58f7d](https://github.com/LerianStudio/matcher/commit/ac58f7dedf02583f5ac794389aa962eaad9b0a63))
+* **exception:** warn-log on unmapped adjustment reason codes ([2c863aa](https://github.com/LerianStudio/matcher/commit/2c863aab68a96aee3bedccdc45773ae1e4c9debe))
+
+
+### Performance Improvements
+
+* **audit-logs:** add composite index for tenant+entity+ordering queries ([04e9113](https://github.com/LerianStudio/matcher/commit/04e911361e59b355b601a7a5407f3b264fb5aa48))
+* **m2m:** coalesce concurrent credential fetches via singleflight ([312b535](https://github.com/LerianStudio/matcher/commit/312b535db3e61cf19fa164501483da4952a5f28f))
+* GOMEMLIMIT startup warning + parallel export-job cleanup ([f914316](https://github.com/LerianStudio/matcher/commit/f9143168bd0de1b69b3154eda0a7bce029a9d67d))
+* **domain:** NewTransactionWithDonatedMetadata skips recursive clone ([67b8117](https://github.com/LerianStudio/matcher/commit/67b8117698278ee614f1473ce70c588d5f69a618))
+* **exception:** reduce N+1 in bulk operations via FindByIDs preload ([c0d6d0c](https://github.com/LerianStudio/matcher/commit/c0d6d0c9cc64b2fcd37138856f0a5ad0718e5148))
+* **bootstrap:** reject oversize requests via Content-Length before reading body ([815d7d8](https://github.com/LerianStudio/matcher/commit/815d7d8f8a76ac445c65a327d8365320bb5be4ed))
+* **ingestion:** rewrite ExistsBulkBySourceAndExternalID with unnest arrays ([f4e5fa5](https://github.com/LerianStudio/matcher/commit/f4e5fa562fd7da5c2f3a30586c0f49699b45a922))
+* **ingestion:** single-round-trip dedup via MarkSeenBulk Lua script ([fdf288c](https://github.com/LerianStudio/matcher/commit/fdf288c9d23502105ead6511d95b4d6168f71bb3))
+* **http:** skip url.Values allocation when request has 0-1 query params ([333f0c9](https://github.com/LerianStudio/matcher/commit/333f0c93b8d475191c241d22c37f96f6256822f6))
+* **archival:** stream partition export via io.Pipe to bound memory ([1445f74](https://github.com/LerianStudio/matcher/commit/1445f74fb7e848d9fffa47ae22da66d6be48419f))
+* **bootstrap:** swap runtime CORS middleware to atomic.Pointer snapshot ([772e1d4](https://github.com/LerianStudio/matcher/commit/772e1d463b61e1f988b5c06dc2e57437405b438b))
+* **exception:** switch exception repo reads to WithTenantReadQuery ([722534c](https://github.com/LerianStudio/matcher/commit/722534cad78a807f835f9bd0549ddba8db54dcd4))
+
 ## [Unreleased]
 
 
