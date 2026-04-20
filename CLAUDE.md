@@ -392,7 +392,7 @@ Split into `handlers_{feature}.go` when a context has 3+ distinct feature areas.
 
 11. **Workers vs Dispatcher** — Background workers in `services/worker/`. The outbox dispatcher is provided by `lib-commons/v5/commons/outbox` and wired in `internal/bootstrap/outbox_wiring.go`; matcher registers one handler per event type rather than owning its own dispatcher package.
 
-12. **Migration naming** — Sequential: `000001_descriptive_name.up.sql` / `.down.sql`. Currently 21 migrations. Always provide rollback. Validate with `make check-migrations`.
+12. **Migration naming** — Sequential: `000001_descriptive_name.up.sql` / `.down.sql`. Currently 32 migrations. Always provide rollback. Validate with `make check-migrations`.
 
 ## Configuration
 
@@ -608,4 +608,4 @@ migration window.
 
 **Last Updated**: April 2026
 **Go Version**: module `go 1.26.0`
-**Migrations**: 21 (000001 through 000021)
+**Migrations**: 32 (000001 through 000032)
